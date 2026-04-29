@@ -50,16 +50,17 @@ class DeepseekV4ModelTester(CausalLMModelTester):
         super().__init__(parent, **kwargs)
         # V4-only attributes that ``CausalLMModelTester.get_config`` will pull by name.
         self.head_dim = 32
-        self.qk_rope_head_dim = 8
+        self.partial_rotary_factor = 8 / 32  # qk_rope_head_dim=8 / head_dim=32
         self.q_lora_rank = 32
         self.o_groups = 2
         self.o_lora_rank = 16
         self.n_routed_experts = 4
         self.n_shared_experts = 1
-        # ``num_hash_layers=0`` so the ``inputs_embeds``-only generation tests in
-        # ``CausalLMModelTest`` can exercise the model without running into the hash
-        # router's ``input_ids`` requirement. A dedicated test covers the hash path.
-        self.num_hash_layers = 0
+        # All ``"moe"`` (no ``"hash_moe"``) so the ``inputs_embeds``-only generation
+        # tests in ``CausalLMModelTest`` can exercise the model without running into
+        # the hash router's ``input_ids`` requirement. A dedicated test covers the
+        # hash path.
+        self.mlp_layer_types = ["moe", "moe"]
         self.layer_types = ["heavily_compressed_attention", "compressed_sparse_attention"]
         self.sliding_window = 8
         self.hc_mult = 2
@@ -222,7 +223,7 @@ def _tiny_config(**overrides):
         "vocab_size": 32,
         "hidden_size": 32,
         "head_dim": 16,
-        "qk_rope_head_dim": 4,
+        "partial_rotary_factor": 4 / 16,  # qk_rope_head_dim=4 / head_dim=16
         "q_lora_rank": 16,
         "num_attention_heads": 4,
         "num_key_value_heads": 1,
@@ -236,7 +237,7 @@ def _tiny_config(**overrides):
         "n_routed_experts": 4,
         "n_shared_experts": 1,
         "num_experts_per_tok": 2,
-        "num_hash_layers": 1,
+        "mlp_layer_types": ["hash_moe", "moe"],
         "scoring_func": "sqrtsoftplus",
         "routed_scaling_factor": 1.0,
         "swiglu_limit": 10.0,
@@ -301,7 +302,7 @@ class DeepseekV4ParityTest(unittest.TestCase):
             layer_types=["heavily_compressed_attention", "heavily_compressed_attention"],
             sliding_window=128,
             max_position_embeddings=512,
-            compress_rate_hca=128,
+            compress_rates={"compressed_sparse_attention": 4, "heavily_compressed_attention": 128},
         )
         compressor = DeepseekV4HCACompressor(config).eval()
         # Initialise ``position_bias`` to non-zero so the test exercises the pooling math.

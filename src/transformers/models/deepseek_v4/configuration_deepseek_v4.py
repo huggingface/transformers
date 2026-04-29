@@ -32,6 +32,9 @@ _COMPRESS_RATIO_TO_LAYER_TYPE = {
 }
 
 
+DEEPSEEK_V4_MLP_LAYER_TYPES = ("hash_moe", "moe")
+
+
 @auto_docstring(checkpoint="deepseek-ai/DeepSeek-V4-Flash-Base")
 @strict
 class DeepseekV4Config(PreTrainedConfig):
@@ -48,8 +51,11 @@ class DeepseekV4Config(PreTrainedConfig):
     layer_types (`list[str]`): Per-layer attention schedule with values from
         ``{"compressed_sparse_attention", "heavily_compressed_attention"}``.
         V4-Pro default: 2× HCA bootstrap + interleaved CSA / HCA.
-    compress_rate_csa (`int`): m, the CSA compression rate (default 4).
-    compress_rate_hca (`int`): m', the HCA compression rate (default 128).
+    compress_rates (`dict[str, int]`): Per-layer-type compression rate. Default
+        ``{"compressed_sparse_attention": 4, "heavily_compressed_attention": 128}``
+        (m=4 for CSA, m'=128 for HCA, paper §2.3.1 / §2.3.2). BC: configs that ship
+        ``compress_rate_csa`` / ``compress_rate_hca`` as top-level kwargs are folded
+        in at ``__post_init__`` time.
     rope_theta (`float`): RoPE base for the main self-attention rotary.
     compress_rope_theta (`float`): RoPE base for the compressed branches (paired with
         ``rope_scaling`` for YaRN).
@@ -60,7 +66,12 @@ class DeepseekV4Config(PreTrainedConfig):
     hc_sinkhorn_iters (`int`): Sinkhorn-Knopp iterations t_max for the mHC residual
         mapping projection onto doubly-stochastic matrices.
     hc_eps (`float`): Numerical floor for the Sinkhorn-Knopp normalization.
-    num_hash_layers (`int`): First N MoE layers route via a frozen ``tid2eid[input_ids]`` lookup.
+    mlp_layer_types (`list[str]`): Per-layer MoE schedule with values from
+        ``{"hash_moe", "moe"}``. ``hash_moe`` routes via a frozen
+        ``tid2eid[input_ids]`` lookup (paper §2.1, "Hash-MoE bootstrap"); ``moe``
+        is the standard top-k routed MoE. Default: 3× ``hash_moe`` then ``moe``
+        for the rest. BC: legacy configs that ship ``num_hash_layers`` as a
+        top-level kwarg are folded in at ``__post_init__`` time.
     scoring_func (`str`): Router activation — ``sqrtsoftplus``, ``softmax``, or ``sigmoid``.
     swiglu_limit (`float`): Clip routed experts' gate/up pre-activations.
     sliding_window (`int`): Local window size n_win used in every attention block's
@@ -74,24 +85,23 @@ class DeepseekV4Config(PreTrainedConfig):
         keeps via top-k (paper §2.3.1, eq. 17).
     num_nextn_predict_layers (`int`): MTP layer count in the upstream checkpoint
         (not instantiated here).
-    n_group (`int`, *optional*): V3 MLA expert-group count. Kept for config compat;
-        unused by V4 (no expert groups).
-    first_k_dense_replace (`int`, *optional*): V3 field — the first ``k`` MoE layers
-        to replace with dense FFNs. Kept for config compat; V4 uses hash routing
-        (``num_hash_layers``) instead.
-    rope_interleave (`bool`, *optional*): V3 flag — whether to interleave rope dims.
-        Kept for config compat; V4's RoPE is non-interleaved (rope-first head layout).
     """
 
     model_type = "deepseek_v4"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {"num_local_experts": "n_routed_experts"}
 
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
     base_model_tp_plan = {
-        "layers.*.self_attn.wq_a": "colwise",
-        "layers.*.self_attn.wq_b": "colwise",
-        "layers.*.self_attn.wkv": "colwise",
-        "layers.*.self_attn.wo_a": "rowwise",
-        "layers.*.self_attn.wo_b": "rowwise",
+        "layers.*.self_attn.q_a_proj": "colwise",
+        "layers.*.self_attn.q_b_proj": "colwise",
+        "layers.*.self_attn.kv_proj": "colwise",
+        "layers.*.self_attn.o_a_proj": "rowwise",
+        "layers.*.self_attn.o_b_proj": "rowwise",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
@@ -99,63 +109,34 @@ class DeepseekV4Config(PreTrainedConfig):
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
     }
-    base_model_pp_plan = {
-        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
-        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
-        "norm": (["hidden_states"], ["hidden_states"]),
-    }
-    attribute_map = {"num_local_experts": "n_routed_experts"}
 
     vocab_size: int = 129280
     hidden_size: int = 4096
-    intermediate_size: int = 18432
     moe_intermediate_size: int = 2048
     num_hidden_layers: int = 43
     num_attention_heads: int = 64
     num_key_value_heads: int = 1
-    n_shared_experts: int = 1
-    n_routed_experts: int = 256
-    routed_scaling_factor: float = 1.5
-
-    # V3 fields kept ``None`` so the V3-style MLA paths in inherited configs never fire
-    # (V4 doesn't use MLA — it uses shared-KV MQA via ``wkv`` directly).
-    kv_lora_rank: int | None = None
-    q_lora_rank: int = 1024
-    qk_rope_head_dim: int = 64
-    v_head_dim: int | None = None
-    qk_nope_head_dim: int | None = None
-    n_group: int | None = None
-    topk_group: int | None = None
-    num_experts_per_tok: int = 6
-    first_k_dense_replace: int | None = None
-    norm_topk_prob: bool = True
-    hidden_act: str = "silu"
-    max_position_embeddings: int = 1048576
-    initializer_range: float = 0.02
-    rms_norm_eps: float = 1e-6
-    use_cache: bool = True
-    pad_token_id: int | None = None
-    bos_token_id: int | None = 0
-    eos_token_id: int | list[int] | None = 1
-    pretraining_tp: int | None = 1
-    tie_word_embeddings: bool = False
-
-    rope_parameters: RopeParameters | dict | None = None
-    rope_interleave: bool | None = True
-    attention_bias: bool = False
-    attention_dropout: float = 0.0
     head_dim: int = 512
+    q_lora_rank: int = 1024
+    default_partial_rotary_factor = 64 / 512  # ``qk_rope_head_dim`` (64) / ``head_dim`` (512)
+    num_experts_per_tok: int = 6
+    n_routed_experts: int = 256
+    n_shared_experts: int = 1
     scoring_func: str = "sqrtsoftplus"
+    norm_topk_prob: bool = True
+    routed_scaling_factor: float = 1.5
+    max_position_embeddings: int = 1048576
     rope_theta: float | int = 10000.0
 
     layer_types: list[str] | None = None
-    compress_rate_csa: int = 4
-    compress_rate_hca: int = 128
+    compress_rates: dict | None = None
+    default_compress_rates = {"compressed_sparse_attention": 4, "heavily_compressed_attention": 128}
     compress_rope_theta: float | int = 160000.0
     hc_mult: int = 4
     hc_sinkhorn_iters: int = 20
     hc_eps: float = 1.0e-6
-    num_hash_layers: int = 3
+    mlp_layer_types: list[str] | None = None
+    default_num_hash_layers = 3
     swiglu_limit: float = 10.0
     sliding_window: int = 128
     o_groups: int = 8
@@ -168,11 +149,62 @@ class DeepseekV4Config(PreTrainedConfig):
     output_router_logits: bool = False
     router_aux_loss_coef: float = 0.001
     router_jitter_noise: float = 0.0
+
+    hidden_act: str = "silu"
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1.0e-6
+    use_cache: bool = True
+    pad_token_id: int | None = None
+    bos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 1
+    tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
     partial_rotary_factor: float | None = None
+    attention_bias: bool = False
+    attention_dropout: float = 0.0
+
+    def validate_layer_type(self):
+        """V4 narrows the global ``ALLOWED_LAYER_TYPES`` to the three attention-block
+        types and two MLP-block types it actually ships with, on top of the standard
+        length / type-membership checks.
+        """
+        if self.num_hidden_layers is None:
+            return
+        for name, types, allowed in (
+            ("layer_types", self.layer_types, DEEPSEEK_V4_LAYER_TYPES),
+            ("mlp_layer_types", self.mlp_layer_types, DEEPSEEK_V4_MLP_LAYER_TYPES),
+        ):
+            if types is None:
+                continue
+            if len(types) != self.num_hidden_layers:
+                raise ValueError(
+                    f"`num_hidden_layers` ({self.num_hidden_layers}) must equal `len({name})` ({len(types)})."
+                )
+            bad = [t for t in types if t not in allowed]
+            if bad:
+                raise ValueError(f"`{name}` entries must be one of {allowed} for DeepSeek-V4; got {bad}.")
 
     def __post_init__(self, **kwargs):
         compress_ratios = kwargs.pop("compress_ratios", None)
-        super().__post_init__(**kwargs)
+        # BC: legacy configs ship ``compress_rate_csa`` / ``compress_rate_hca`` as
+        # top-level kwargs; fold them into ``compress_rates`` keyed by layer type.
+        bc_csa = kwargs.pop("compress_rate_csa", None)
+        bc_hca = kwargs.pop("compress_rate_hca", None)
+        # BC: legacy configs ship ``num_hash_layers`` as a top-level kwarg; fold it
+        # into ``mlp_layer_types``.
+        bc_num_hash_layers = kwargs.pop("num_hash_layers", None)
+        # ``qk_rope_head_dim`` isn't a config-level field — it's derived from
+        # ``partial_rotary_factor * head_dim`` and only set as a runtime attribute.
+        # BC: legacy configs ship it as a top-level kwarg; honour it by feeding it
+        # back into ``partial_rotary_factor`` if that wasn't explicitly set.
+        bc_qk_rope_head_dim = kwargs.pop("qk_rope_head_dim", None)
+        PreTrainedConfig.__post_init__(self, **kwargs)
+        if self.compress_rates is None:
+            self.compress_rates = dict(self.default_compress_rates)
+        if bc_csa is not None:
+            self.compress_rates["compressed_sparse_attention"] = bc_csa
+        if bc_hca is not None:
+            self.compress_rates["heavily_compressed_attention"] = bc_hca
         n = self.num_hidden_layers
         if self.layer_types is None and compress_ratios is not None:
             # Translate the V4 checkpoint's per-layer integer ``compress_ratios`` into the
@@ -187,9 +219,20 @@ class DeepseekV4Config(PreTrainedConfig):
             head = ["heavily_compressed_attention"] * min(n, 2)
             self.layer_types = head + interleave
         self.layer_types = list(self.layer_types[:n])
-        self.qk_nope_head_dim = self.head_dim - self.qk_rope_head_dim
+        if self.mlp_layer_types is None:
+            # Default: ``default_num_hash_layers`` hash-MoE bootstrap layers, then
+            # standard top-k MoE for the rest. ``num_hash_layers`` BC kwarg overrides
+            # the bootstrap count.
+            n_hash = bc_num_hash_layers if bc_num_hash_layers is not None else self.default_num_hash_layers
+            self.mlp_layer_types = ["hash_moe"] * min(n, n_hash) + ["moe"] * max(0, n - n_hash)
+        self.mlp_layer_types = list(self.mlp_layer_types[:n])
         if self.partial_rotary_factor is None:
-            self.partial_rotary_factor = self.qk_rope_head_dim / self.head_dim
+            self.partial_rotary_factor = (
+                bc_qk_rope_head_dim / self.head_dim
+                if bc_qk_rope_head_dim is not None
+                else self.default_partial_rotary_factor
+            )
+        self.qk_rope_head_dim = int(self.head_dim * self.partial_rotary_factor)
         # Normalize rope_parameters into a per-rope-type dict ``{"main": {...}, "compress": {...}}``
         # (Gemma3 pattern, keys are *rope-type* labels — unrelated to ``layer_types``).
         # Idempotent across save/load: round-tripping preserves structure.
@@ -219,23 +262,6 @@ class DeepseekV4Config(PreTrainedConfig):
             main = dict(base)
             compress = {**base, "rope_theta": self.compress_rope_theta}
             self.rope_parameters = {"main": main, "compress": compress}
-
-    def validate_layer_type(self):
-        """V4 narrows the global ``ALLOWED_LAYER_TYPES`` to the two block types it actually
-        ships with, on top of the standard length / type-membership checks.
-        """
-        if self.layer_types is None or self.num_hidden_layers is None:
-            return
-        if len(self.layer_types) != self.num_hidden_layers:
-            raise ValueError(
-                f"`num_hidden_layers` ({self.num_hidden_layers}) must equal "
-                f"`len(layer_types)` ({len(self.layer_types)})."
-            )
-        bad = [layer_type for layer_type in self.layer_types if layer_type not in DEEPSEEK_V4_LAYER_TYPES]
-        if bad:
-            raise ValueError(
-                f"`layer_types` entries must be one of {DEEPSEEK_V4_LAYER_TYPES} for DeepSeek-V4; got {bad}."
-            )
 
 
 __all__ = ["DeepseekV4Config"]

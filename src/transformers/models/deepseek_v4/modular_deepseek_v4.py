@@ -25,53 +25,37 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3RMSNorm
-from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
-from ..deepseek_v3.modeling_deepseek_v3 import apply_rotary_pos_emb_interleave
 from ..gpt_oss.modeling_gpt_oss import GptOssExperts, eager_attention_forward
+from ..laguna.modeling_laguna import LagunaRotaryEmbedding
 from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralPreTrainedModel, MixtralTopKRouter
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
+
+
+def rotate_half(x: torch.Tensor) -> torch.Tensor:
+    """Interleaved-pair rotation: ``[x_0, x_1, x_2, x_3, ...] -> [-x_1, x_0, -x_3, x_2, ...]``
+    (treats consecutive pairs as ``(real, imag)``)."""
+    x1, x2 = x[..., 0::2], x[..., 1::2]
+    return torch.stack((-x2, x1), dim=-1).flatten(-2)
 
 
 def apply_rotary_pos_emb(
-    q: torch.Tensor,
-    k: torch.Tensor,
-    cos: torch.Tensor,
-    sin: torch.Tensor,
-    unsqueeze_dim: int = 1,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """V4 wraps :func:`~transformers.models.deepseek_v3.modeling_deepseek_v3.apply_rotary_pos_emb_interleave`
-    with a permute-back so the rope slice exits in the same interleaved
-    ``[a0, b0, a1, b1, …]`` layout it came in with.
-
-    V3's helper restages interleaved pairs into the halves layout
-    (``[a0, a1, …, b0, b1, …]``) so it can run llama's half-split RoPE primitive,
-    and leaves the result in that layout — fine for V3 because V3 is MLA: V has
-    its own ``v_head_dim`` and never carries a rope slice, so the post-rotation
-    layout of Q / K only matters for the dot product (which is invariant under a
-    consistent permutation of channels on both sides).
-
-    V4 is shared-KV MQA: V is the same tensor as K, so V's rope slice picks up
-    the rotation too — and then the attention sum, the per-head ``wo_a``
-    grouped projection, and ``wo_b`` all consume that rope slice as part of
-    their input. Those weights were trained against the V4-Flash reference
-    (``inference/model.py:apply_rotary_emb`` does ``view_as_complex``-style
-    rotation in place, preserving the interleaved layout), so we have to put
-    the channels back where they were before passing to ``wo_a`` — otherwise the
-    grouped projection sees its inputs scrambled and ``wo_b(wo_a(...))`` collapses.
-    """
-    q, k = apply_rotary_pos_emb_interleave(q, k, cos, sin, unsqueeze_dim=unsqueeze_dim)
-
-    def _halves_to_interleave(x: torch.Tensor) -> torch.Tensor:
-        # Inverse of V3's ``view(d/2, 2).transpose(-1, -2)``: ``[a0, …, b0, …]`` →
-        # ``[a0, b0, a1, b1, …]``.
-        b, h, s, d = x.shape
-        return x.view(b, h, s, 2, d // 2).transpose(-1, -2).reshape(b, h, s, d)
-
-    return _halves_to_interleave(q), _halves_to_interleave(k)
+    x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, unsqueeze_dim: int = 1
+) -> torch.Tensor:
+    """V4-Flash interleaved RoPE (matches the reference's ``apply_rotary_emb`` at
+    ``inference/model.py:232``). Rotates the **trailing** ``2 * cos.shape[-1]`` channels
+    of ``x`` (V4-Flash lays each head out as ``[nope | rope]``, matching the reference's
+    ``x[..., -rd:]`` indexing) and leaves the leading nope channels unchanged. The
+    half-sized cos / sin from :class:`DeepseekV4RotaryEmbedding` are expanded to the
+    pair-aligned full rope dim via ``repeat_interleave`` here, and the rotation is
+    done in fp32 (matching the reference's precision)."""
+    cos = cos.repeat_interleave(2, dim=-1).unsqueeze(unsqueeze_dim)
+    sin = sin.repeat_interleave(2, dim=-1).unsqueeze(unsqueeze_dim)
+    rope_dim = cos.shape[-1]
+    nope, rope = x[..., :-rope_dim], x[..., -rope_dim:]
+    rotated = ((rope.float() * cos) + (rotate_half(rope).float() * sin)).to(x.dtype)
+    return torch.cat([nope, rotated], dim=-1)
 
 
 logger = logging.get_logger(__name__)
@@ -91,9 +75,12 @@ _COMPRESS_RATIO_TO_LAYER_TYPE = {
 }
 
 
+DEEPSEEK_V4_MLP_LAYER_TYPES = ("hash_moe", "moe")
+
+
 @auto_docstring(checkpoint="deepseek-ai/DeepSeek-V4-Flash-Base")
 @strict
-class DeepseekV4Config(DeepseekV3Config):
+class DeepseekV4Config(PreTrainedConfig):
     r"""
     DeepSeek-V4's hybrid attention follows the paper (Section 2.3): every block is one
     of three attention types — *Full Attention* (sliding-window only), *Compressed
@@ -107,8 +94,11 @@ class DeepseekV4Config(DeepseekV3Config):
     layer_types (`list[str]`): Per-layer attention schedule with values from
         ``{"compressed_sparse_attention", "heavily_compressed_attention"}``.
         V4-Pro default: 2× HCA bootstrap + interleaved CSA / HCA.
-    compress_rate_csa (`int`): m, the CSA compression rate (default 4).
-    compress_rate_hca (`int`): m', the HCA compression rate (default 128).
+    compress_rates (`dict[str, int]`): Per-layer-type compression rate. Default
+        ``{"compressed_sparse_attention": 4, "heavily_compressed_attention": 128}``
+        (m=4 for CSA, m'=128 for HCA, paper §2.3.1 / §2.3.2). BC: configs that ship
+        ``compress_rate_csa`` / ``compress_rate_hca`` as top-level kwargs are folded
+        in at ``__post_init__`` time.
     rope_theta (`float`): RoPE base for the main self-attention rotary.
     compress_rope_theta (`float`): RoPE base for the compressed branches (paired with
         ``rope_scaling`` for YaRN).
@@ -119,7 +109,12 @@ class DeepseekV4Config(DeepseekV3Config):
     hc_sinkhorn_iters (`int`): Sinkhorn-Knopp iterations t_max for the mHC residual
         mapping projection onto doubly-stochastic matrices.
     hc_eps (`float`): Numerical floor for the Sinkhorn-Knopp normalization.
-    num_hash_layers (`int`): First N MoE layers route via a frozen ``tid2eid[input_ids]`` lookup.
+    mlp_layer_types (`list[str]`): Per-layer MoE schedule with values from
+        ``{"hash_moe", "moe"}``. ``hash_moe`` routes via a frozen
+        ``tid2eid[input_ids]`` lookup (paper §2.1, "Hash-MoE bootstrap"); ``moe``
+        is the standard top-k routed MoE. Default: 3× ``hash_moe`` then ``moe``
+        for the rest. BC: legacy configs that ship ``num_hash_layers`` as a
+        top-level kwarg are folded in at ``__post_init__`` time.
     scoring_func (`str`): Router activation — ``sqrtsoftplus``, ``softmax``, or ``sigmoid``.
     swiglu_limit (`float`): Clip routed experts' gate/up pre-activations.
     sliding_window (`int`): Local window size n_win used in every attention block's
@@ -133,24 +128,23 @@ class DeepseekV4Config(DeepseekV3Config):
         keeps via top-k (paper §2.3.1, eq. 17).
     num_nextn_predict_layers (`int`): MTP layer count in the upstream checkpoint
         (not instantiated here).
-    n_group (`int`, *optional*): V3 MLA expert-group count. Kept for config compat;
-        unused by V4 (no expert groups).
-    first_k_dense_replace (`int`, *optional*): V3 field — the first ``k`` MoE layers
-        to replace with dense FFNs. Kept for config compat; V4 uses hash routing
-        (``num_hash_layers``) instead.
-    rope_interleave (`bool`, *optional*): V3 flag — whether to interleave rope dims.
-        Kept for config compat; V4's RoPE is non-interleaved (rope-first head layout).
     """
 
     model_type = "deepseek_v4"
+    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_local_experts": "n_routed_experts"}
 
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
     base_model_tp_plan = {
-        "layers.*.self_attn.wq_a": "colwise",
-        "layers.*.self_attn.wq_b": "colwise",
-        "layers.*.self_attn.wkv": "colwise",
-        "layers.*.self_attn.wo_a": "rowwise",
-        "layers.*.self_attn.wo_b": "rowwise",
+        "layers.*.self_attn.q_a_proj": "colwise",
+        "layers.*.self_attn.q_b_proj": "colwise",
+        "layers.*.self_attn.kv_proj": "colwise",
+        "layers.*.self_attn.o_a_proj": "rowwise",
+        "layers.*.self_attn.o_b_proj": "rowwise",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
@@ -166,8 +160,8 @@ class DeepseekV4Config(DeepseekV3Config):
     num_attention_heads: int = 64
     num_key_value_heads: int = 1
     head_dim: int = 512
-    qk_rope_head_dim: int = 64
     q_lora_rank: int = 1024
+    default_partial_rotary_factor = 64 / 512  # ``qk_rope_head_dim`` (64) / ``head_dim`` (512)
     num_experts_per_tok: int = 6
     n_routed_experts: int = 256
     n_shared_experts: int = 1
@@ -178,13 +172,14 @@ class DeepseekV4Config(DeepseekV3Config):
     rope_theta: float | int = 10000.0
 
     layer_types: list[str] | None = None
-    compress_rate_csa: int = 4
-    compress_rate_hca: int = 128
+    compress_rates: dict | None = None
+    default_compress_rates = {"compressed_sparse_attention": 4, "heavily_compressed_attention": 128}
     compress_rope_theta: float | int = 160000.0
     hc_mult: int = 4
     hc_sinkhorn_iters: int = 20
     hc_eps: float = 1.0e-6
-    num_hash_layers: int = 3
+    mlp_layer_types: list[str] | None = None
+    default_num_hash_layers = 3
     swiglu_limit: float = 10.0
     sliding_window: int = 128
     o_groups: int = 8
@@ -194,45 +189,65 @@ class DeepseekV4Config(DeepseekV3Config):
     index_topk: int = 512
     num_nextn_predict_layers: int = 1
 
-    # V3 fields kept ``None`` so the V3-style MLA paths in inherited configs never fire
-    # (V4 doesn't use MLA — it uses shared-KV MQA via ``wkv`` directly).
-    kv_lora_rank: int | None = None
-    qk_nope_head_dim: int | None = None
-    v_head_dim: int | None = None
-    n_group: int | None = None
-    topk_group: int | None = None
-    first_k_dense_replace: int | None = None
-    rope_interleave: bool | None = True
-
     output_router_logits: bool = False
     router_aux_loss_coef: float = 0.001
     router_jitter_noise: float = 0.0
 
+    hidden_act: str = "silu"
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1.0e-6
+    use_cache: bool = True
+    pad_token_id: int | None = None
+    bos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 1
+    tie_word_embeddings: bool = False
     rope_parameters: RopeParameters | dict | None = None
     partial_rotary_factor: float | None = None
     attention_bias: bool = False
     attention_dropout: float = 0.0
 
     def validate_layer_type(self):
-        """V4 narrows the global ``ALLOWED_LAYER_TYPES`` to the two block types it actually
-        ships with, on top of the standard length / type-membership checks.
+        """V4 narrows the global ``ALLOWED_LAYER_TYPES`` to the three attention-block
+        types and two MLP-block types it actually ships with, on top of the standard
+        length / type-membership checks.
         """
-        if self.layer_types is None or self.num_hidden_layers is None:
+        if self.num_hidden_layers is None:
             return
-        if len(self.layer_types) != self.num_hidden_layers:
-            raise ValueError(
-                f"`num_hidden_layers` ({self.num_hidden_layers}) must equal "
-                f"`len(layer_types)` ({len(self.layer_types)})."
-            )
-        bad = [layer_type for layer_type in self.layer_types if layer_type not in DEEPSEEK_V4_LAYER_TYPES]
-        if bad:
-            raise ValueError(
-                f"`layer_types` entries must be one of {DEEPSEEK_V4_LAYER_TYPES} for DeepSeek-V4; got {bad}."
-            )
+        for name, types, allowed in (
+            ("layer_types", self.layer_types, DEEPSEEK_V4_LAYER_TYPES),
+            ("mlp_layer_types", self.mlp_layer_types, DEEPSEEK_V4_MLP_LAYER_TYPES),
+        ):
+            if types is None:
+                continue
+            if len(types) != self.num_hidden_layers:
+                raise ValueError(
+                    f"`num_hidden_layers` ({self.num_hidden_layers}) must equal `len({name})` ({len(types)})."
+                )
+            bad = [t for t in types if t not in allowed]
+            if bad:
+                raise ValueError(f"`{name}` entries must be one of {allowed} for DeepSeek-V4; got {bad}.")
 
     def __post_init__(self, **kwargs):
         compress_ratios = kwargs.pop("compress_ratios", None)
+        # BC: legacy configs ship ``compress_rate_csa`` / ``compress_rate_hca`` as
+        # top-level kwargs; fold them into ``compress_rates`` keyed by layer type.
+        bc_csa = kwargs.pop("compress_rate_csa", None)
+        bc_hca = kwargs.pop("compress_rate_hca", None)
+        # BC: legacy configs ship ``num_hash_layers`` as a top-level kwarg; fold it
+        # into ``mlp_layer_types``.
+        bc_num_hash_layers = kwargs.pop("num_hash_layers", None)
+        # ``qk_rope_head_dim`` isn't a config-level field — it's derived from
+        # ``partial_rotary_factor * head_dim`` and only set as a runtime attribute.
+        # BC: legacy configs ship it as a top-level kwarg; honour it by feeding it
+        # back into ``partial_rotary_factor`` if that wasn't explicitly set.
+        bc_qk_rope_head_dim = kwargs.pop("qk_rope_head_dim", None)
         PreTrainedConfig.__post_init__(self, **kwargs)
+        if self.compress_rates is None:
+            self.compress_rates = dict(self.default_compress_rates)
+        if bc_csa is not None:
+            self.compress_rates["compressed_sparse_attention"] = bc_csa
+        if bc_hca is not None:
+            self.compress_rates["heavily_compressed_attention"] = bc_hca
         n = self.num_hidden_layers
         if self.layer_types is None and compress_ratios is not None:
             # Translate the V4 checkpoint's per-layer integer ``compress_ratios`` into the
@@ -247,9 +262,20 @@ class DeepseekV4Config(DeepseekV3Config):
             head = ["heavily_compressed_attention"] * min(n, 2)
             self.layer_types = head + interleave
         self.layer_types = list(self.layer_types[:n])
-        self.qk_nope_head_dim = self.head_dim - self.qk_rope_head_dim
+        if self.mlp_layer_types is None:
+            # Default: ``default_num_hash_layers`` hash-MoE bootstrap layers, then
+            # standard top-k MoE for the rest. ``num_hash_layers`` BC kwarg overrides
+            # the bootstrap count.
+            n_hash = bc_num_hash_layers if bc_num_hash_layers is not None else self.default_num_hash_layers
+            self.mlp_layer_types = ["hash_moe"] * min(n, n_hash) + ["moe"] * max(0, n - n_hash)
+        self.mlp_layer_types = list(self.mlp_layer_types[:n])
         if self.partial_rotary_factor is None:
-            self.partial_rotary_factor = self.qk_rope_head_dim / self.head_dim
+            self.partial_rotary_factor = (
+                bc_qk_rope_head_dim / self.head_dim
+                if bc_qk_rope_head_dim is not None
+                else self.default_partial_rotary_factor
+            )
+        self.qk_rope_head_dim = int(self.head_dim * self.partial_rotary_factor)
         # Normalize rope_parameters into a per-rope-type dict ``{"main": {...}, "compress": {...}}``
         # (Gemma3 pattern, keys are *rope-type* labels — unrelated to ``layer_types``).
         # Idempotent across save/load: round-tripping preserves structure.
@@ -285,19 +311,26 @@ class DeepseekV4RMSNorm(DeepseekV3RMSNorm):
     pass
 
 
-class DeepseekV4RotaryEmbedding(Gemma3RotaryEmbedding):
-    """Multi-layer-type rotary embedding (Gemma3 pattern). Holds two ``inv_freq``
-    buffers — ``"main"`` for self-attention (``rope_theta``) and ``"compress"`` for
-    the Compressor / Indexer (``compress_rope_theta``). Both honour
-    ``partial_rotary_factor`` so cos/sin is sized to ``qk_rope_head_dim`` rather than
-    the full ``head_dim``. ``forward(x, position_ids, layer_type=...)`` (inherited
-    from :class:`Gemma3RotaryEmbedding`) picks one.
+class DeepseekV4RotaryEmbedding(LagunaRotaryEmbedding):
+    """Multi-layer-type rotary embedding (Laguna pattern: partial rotary on top of
+    Gemma3's per-layer-type buffers), specialised for V4's *interleaved* RoPE. Holds
+    two ``inv_freq`` buffers — ``"main"`` for self-attention (``rope_theta``) and
+    ``"compress"`` for the Compressor / Indexer (``compress_rope_theta``); both
+    honour ``partial_rotary_factor`` so cos/sin sizes to ``qk_rope_head_dim``.
+    ``forward(x, position_ids, layer_type=...)`` returns the half-sized cos/sin
+    directly — interleaved RoPE rotates pairs ``(x[2i], x[2i+1])`` so we want one
+    ``θ_i`` per pair, *not* the end-to-end duplicated table half-split RoPE needs.
 
     The ``layer_types`` here are the *rope* layer types (``"main"`` / ``"compress"``),
     keys of ``config.rope_parameters``. They are unrelated to ``config.layer_types``,
     which lists the per-decoder-block attention type.
     """
 
+    # Class-level rather than ``list(set(config.layer_types))`` (gemma3's pattern):
+    # V4's rope keys ``"main"`` / ``"compress"`` are *orthogonal* to the per-block
+    # attention types in ``config.layer_types`` — every attention block uses ``main``,
+    # every compressor / indexer uses ``compress``, regardless of which of the three
+    # block types the layer is.
     layer_types = ("main", "compress")
 
     def __init__(self, config: "DeepseekV4Config", device=None):
@@ -319,18 +352,19 @@ class DeepseekV4RotaryEmbedding(Gemma3RotaryEmbedding):
             self.register_buffer(f"{layer_type}_original_inv_freq", inv_freq.clone(), persistent=False)
             setattr(self, f"{layer_type}_attention_scaling", scaling)
 
-    @staticmethod
-    def compute_default_rope_parameters(config, device=None, seq_len=None, layer_type=None):
-        # V4 honours ``partial_rotary_factor`` so cos/sin sizes to ``qk_rope_head_dim``.
-        params = config.rope_parameters[layer_type]
-        base = params["rope_theta"]
-        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-        factor = params.get("partial_rotary_factor", 1.0)
-        dim = int(head_dim * factor)
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, 1.0
+    def forward(self, x, position_ids, layer_type=None):
+        # Interleaved RoPE: one ``θ_i`` per pair (``rope_head_dim // 2`` entries),
+        # no end-to-end duplication. Same shape as ``inv_freq @ position_ids``.
+        inv_freq = getattr(self, f"{layer_type}_inv_freq")
+        attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
+        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            cos = freqs.cos() * attention_scaling
+            sin = freqs.sin() * attention_scaling
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 def _sliding_kv_update(
@@ -405,7 +439,7 @@ class DeepseekV4HCACache(DynamicSlidingWindowLayer):
 
     def __init__(self, config: "DeepseekV4Config"):
         super().__init__(config)
-        self.compress_rate = config.compress_rate_hca
+        self.compress_rate = config.compress_rates["heavily_compressed_attention"]
         self.compressor_buffer_kv: torch.Tensor | None = None
         self.compressor_buffer_gate: torch.Tensor | None = None
         self.compressor_pool: torch.Tensor | None = None
@@ -463,7 +497,7 @@ class DeepseekV4CSACache(DynamicSlidingWindowLayer):
 
     def __init__(self, config: "DeepseekV4Config"):
         super().__init__(config)
-        self.compress_rate = config.compress_rate_csa
+        self.compress_rate = config.compress_rates["compressed_sparse_attention"]
         # Compressor side
         self.compressor_buffer_kv: torch.Tensor | None = None
         self.compressor_buffer_gate: torch.Tensor | None = None
@@ -547,8 +581,8 @@ class DeepseekV4GroupedLinear(nn.Linear):
     The paper sidesteps that by splitting the n_h heads into ``g`` groups, projecting
     each ``c·n_h/g``-dim group independently to a ``d_g``-dim intermediate output
     (with ``d_g < c·n_h/g``), and then mixing the resulting ``g·d_g`` vector to
-    ``hidden_size`` through a single follow-up linear (``self_attn.wo_b``). This
-    module owns the per-group block (``self_attn.wo_a``).
+    ``hidden_size`` through a single follow-up linear (``self_attn.o_b_proj``). This
+    module owns the per-group block (``self_attn.o_a_proj``).
 
     The ``weight`` parameter is shaped like a standard ``nn.Linear``
     (``[out_features, in_features_per_group]``) so quantizers keyed on
@@ -561,128 +595,12 @@ class DeepseekV4GroupedLinear(nn.Linear):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: [..., n_groups, in_features_per_group]
-        batch_shape = x.shape[:-2]
+        input_shape = x.shape[:-2]
         d_in = x.shape[-1]
-        out_per_group = self.out_features // self.n_groups
-        w = self.weight.view(self.n_groups, out_per_group, d_in)
-        x = x.reshape(-1, self.n_groups, d_in).permute(1, 0, 2)
-        y = torch.bmm(x, w.transpose(-1, -2)).permute(1, 0, 2)
-        return y.reshape(*batch_shape, self.n_groups, out_per_group)
-
-
-class DeepseekV4Indexer(nn.Module):
-    """Lightning Indexer (paper §2.3.1, eqs. 13–17). Used by Compressed Sparse
-    Attention (CSA) to pick the top-k compressed KV blocks per query. The indexer
-    runs its own scaled-down compressor at ``index_head_dim`` over the same windows
-    as the outer CSA compressor, then scores queries against the pooled keys with
-    ``∑_h w_{t,h} · ReLU(q_{t,h} · K^IComp_s)`` and keeps the top ``index_topk``
-    indices.
-
-    The indexer has its own rotary because it applies RoPE to two sets of tensors:
-
-      * **pool keys** at deterministic positions ``i * compress_rate + first_pool_position``,
-      * **queries** at the model's current ``position_ids`` (variable per forward).
-
-    Both must use the same theta as the outer compressor (``compress_rope_theta``) so
-    query/key inner products are translation-invariant in the standard rope sense — if
-    they used different thetas the score ``q · k`` would carry a residual position-
-    dependent skew. We can't precompute cos/sin once at init because the query
-    positions vary per call, so the indexer owns a rotary embedding and calls it with
-    ``layer_type="compress"`` twice per forward (once for pool keys, once for queries).
-    """
-
-    def __init__(self, config: DeepseekV4Config):
-        super().__init__()
-        self.compress_rate = config.compress_rate_csa
-        self.n_heads = config.index_n_heads
-        self.head_dim = config.index_head_dim
-        self.rope_head_dim = config.qk_rope_head_dim
-        self.index_topk = config.index_topk
-        self.softmax_scale = self.head_dim**-0.5
-        # The indexer always pools with the CSA cadence (``compress_rate=4``), so its
-        # inner pool runs the same overlapping-window scheme as :class:`DeepseekV4CSACompressor`
-        # (paper §2.3.1) — ``coff = 2`` everywhere on the pool branch.
-        self.coff = 2
-        self.wkv = nn.Linear(config.hidden_size, self.coff * self.head_dim, bias=False)
-        self.wgate = nn.Linear(config.hidden_size, self.coff * self.head_dim, bias=False)
-        self.position_bias = nn.Parameter(torch.empty(self.compress_rate, self.coff * self.head_dim))
-        self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.wq_b = nn.Linear(config.q_lora_rank, self.n_heads * self.head_dim, bias=False)
-        self.weights_proj = nn.Linear(config.hidden_size, self.n_heads, bias=False)
-        self.rotary_emb = DeepseekV4RotaryEmbedding(config)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        q_residual: torch.Tensor,
-        position_ids: torch.Tensor,
-        past_key_values: Cache | None,
-        layer_idx: int,
-    ) -> torch.LongTensor:
-        batch, seq_len, _ = hidden_states.shape
-        cache_layer = past_key_values.layers[layer_idx] if past_key_values is not None else None
-
-        # --- Pool side: same overlapping windows as the outer CSA compressor, at index_head_dim ---
-        kv = self.wkv(hidden_states)
-        gate = self.wgate(hidden_states)
-        if cache_layer is None:
-            usable = (kv.shape[1] // self.compress_rate) * self.compress_rate
-            chunk_kv, chunk_gate, first_pool_position = kv[:, :usable], gate[:, :usable], 0
-            prior_kv, prior_gate = None, None
-        else:
-            chunk_kv, chunk_gate, first_pool_position = cache_layer.update_indexer(kv, gate)
-            prior_kv, prior_gate = cache_layer.get_indexer_overlap()
-        if chunk_kv.shape[1] > 0:
-            n_windows = chunk_kv.shape[1] // self.compress_rate
-            chunk_kv = chunk_kv.view(batch, n_windows, self.compress_rate, self.coff * self.head_dim)
-            chunk_gate = chunk_gate.view(
-                batch, n_windows, self.compress_rate, self.coff * self.head_dim
-            ) + self.position_bias.to(chunk_gate.dtype)
-            if cache_layer is not None:
-                cache_layer.set_indexer_overlap(chunk_kv[:, -1].clone(), chunk_gate[:, -1].clone())
-            chunk_kv, chunk_gate = _overlap_pool(chunk_kv, chunk_gate, prior_kv, prior_gate, self.head_dim)
-            new_pooled = self.kv_norm((chunk_kv * chunk_gate.softmax(dim=2)).sum(dim=2))
-            positions = (
-                (torch.arange(n_windows, device=new_pooled.device) * self.compress_rate + first_pool_position)
-                .unsqueeze(0)
-                .expand(batch, -1)
-            )
-            cos, sin = self.rotary_emb(new_pooled, position_ids=positions, layer_type="compress")
-            # V4-Flash places the rotary slice at the *end* of each head (matches the
-            # reference's ``x[..., -rd:]`` indexing) — wkv weight is laid out [nope|rope]
-            # so the rotary half is the trailing ``rope_head_dim`` channels.
-            pool_nope, pool_rope = new_pooled[..., : -self.rope_head_dim], new_pooled[..., -self.rope_head_dim :]
-            pool_rope, _ = apply_rotary_pos_emb(
-                pool_rope.unsqueeze(1), torch.zeros_like(pool_rope.unsqueeze(1)), cos, sin
-            )
-            new_pooled = torch.cat([pool_nope, pool_rope.squeeze(1)], dim=-1)
-        else:
-            new_pooled = chunk_kv.new_zeros((batch, 0, self.head_dim))
-        pooled_kv = new_pooled if cache_layer is None else cache_layer.update_indexer_pool(new_pooled)
-
-        # --- Query side ---
-        cos_q, sin_q = self.rotary_emb(hidden_states, position_ids=position_ids, layer_type="compress")
-        q = self.wq_b(q_residual).view(batch, seq_len, self.n_heads, self.head_dim).transpose(1, 2)
-        q_nope, q_rope = q[..., : -self.rope_head_dim], q[..., -self.rope_head_dim :]
-        q_rope, _ = apply_rotary_pos_emb(q_rope, torch.zeros_like(q_rope), cos_q, sin_q)
-        q = torch.cat([q_nope, q_rope], dim=-1).transpose(1, 2)
-
-        # --- Score: ReLU(q·kᵀ) * weights, then top-k ---
-        scores = torch.matmul(q.float(), pooled_kv.transpose(-1, -2).float().unsqueeze(1))  # [B, S, H, T]
-        scores = F.relu(scores) * self.softmax_scale
-        weights = self.weights_proj(hidden_states).float() * (self.n_heads**-0.5)  # [B, S, H]
-        index_scores = (scores * weights.unsqueeze(-1)).sum(dim=2)  # [B, S, T]
-        topk = min(self.index_topk, pooled_kv.shape[1])
-        return index_scores.topk(topk, dim=-1).indices
-
-
-# -----------------------------------------------------------------------------
-# Compressors — :class:`DeepseekV4HCACompressor` and :class:`DeepseekV4CSACompressor`
-# are independent. They share the same softmax-gated window-pool primitive but differ
-# in three ways that we keep on each class explicitly: HCA pools non-overlapping
-# windows with ``coff = 1`` and has no indexer, CSA pools overlapping windows with
-# ``coff = 2`` and runs a Lightning Indexer on top of the pool.
-# -----------------------------------------------------------------------------
+        w = self.weight.view(self.n_groups, -1, d_in).transpose(1, 2)
+        x = x.reshape(-1, self.n_groups, d_in).transpose(0, 1)
+        y = torch.bmm(x, w).transpose(0, 1)
+        return y.reshape(*input_shape, self.n_groups, -1)
 
 
 def _overlap_pool(
@@ -717,17 +635,118 @@ def _overlap_pool(
     return new_kv, new_gate
 
 
-def _rope_pool(
-    pooled: torch.Tensor, rotary_emb: nn.Module, positions: torch.Tensor, rope_head_dim: int
-) -> torch.Tensor:
-    """Apply RoPE to the trailing ``rope_head_dim`` slice of each pooled entry at its
-    deterministic absolute position. V4-Flash lays out each head as
-    ``[nope | rope]`` (matches the reference's ``x[..., -rd:]`` indexing) so the
-    rotary half is the trailing channels."""
-    cos, sin = rotary_emb(pooled, position_ids=positions, layer_type="compress")
-    pool_nope, pool_rope = pooled[..., :-rope_head_dim], pooled[..., -rope_head_dim:]
-    pool_rope, _ = apply_rotary_pos_emb(pool_rope.unsqueeze(1), torch.zeros_like(pool_rope.unsqueeze(1)), cos, sin)
-    return torch.cat([pool_nope, pool_rope.squeeze(1)], dim=-1)
+def _rope_pool(pooled: torch.Tensor, rotary_emb: nn.Module, positions: torch.Tensor, layer_type: str) -> torch.Tensor:
+    """Apply RoPE to the trailing rope slice of each pooled entry at its deterministic
+    absolute position. Used by both the indexer pool and the HCA / CSA compressor pools."""
+    cos, sin = rotary_emb(pooled, position_ids=positions, layer_type=layer_type)
+    return apply_rotary_pos_emb(pooled.unsqueeze(1), cos, sin).squeeze(1)
+
+
+class DeepseekV4Indexer(nn.Module):
+    """Lightning Indexer (paper §2.3.1, eqs. 13–17). Used by Compressed Sparse
+    Attention (CSA) to pick the top-k compressed KV blocks per query. The indexer
+    runs its own scaled-down compressor at ``index_head_dim`` over the same windows
+    as the outer CSA compressor, then scores queries against the pooled keys with
+    ``∑_h w_{t,h} · ReLU(q_{t,h} · K^IComp_s)`` and keeps the top ``index_topk``
+    indices.
+
+    Class-attribute ``rope_layer_type`` selects which inv_freq buffer of the shared
+    :class:`DeepseekV4RotaryEmbedding` to use; the indexer always reads
+    ``"compress"`` (paired with ``compress_rope_theta``).
+
+    The indexer has its own rotary because it applies RoPE to two sets of tensors:
+
+      * **pool keys** at deterministic positions ``i * compress_rate + first_pool_position``,
+      * **queries** at the model's current ``position_ids`` (variable per forward).
+
+    Both must use the same theta as the outer compressor (``compress_rope_theta``) so
+    query/key inner products are translation-invariant in the standard rope sense — if
+    they used different thetas the score ``q · k`` would carry a residual position-
+    dependent skew. We can't precompute cos/sin once at init because the query
+    positions vary per call, so the indexer owns a rotary embedding and calls it with
+    ``layer_type=self.rope_layer_type`` twice per forward (once for pool keys, once for queries).
+    """
+
+    rope_layer_type = "compress"
+
+    def __init__(self, config: DeepseekV4Config):
+        super().__init__()
+        self.compress_rate = config.compress_rates["compressed_sparse_attention"]
+        self.n_heads = config.index_n_heads
+        self.head_dim = config.index_head_dim
+        self.rope_head_dim = config.qk_rope_head_dim
+        self.index_topk = config.index_topk
+        self.softmax_scale = self.head_dim**-0.5
+        self.weights_scaling = self.n_heads**-0.5
+        # The indexer always pools with the CSA cadence (``compress_rate=4``), so its
+        # inner pool runs the same overlapping-window scheme as :class:`DeepseekV4CSACompressor`
+        # (paper §2.3.1) — ``coff = 2`` everywhere on the pool branch.
+        self.coff = 2
+        self.kv_proj = nn.Linear(config.hidden_size, self.coff * self.head_dim, bias=False)
+        self.gate_proj = nn.Linear(config.hidden_size, self.coff * self.head_dim, bias=False)
+        self.position_bias = nn.Parameter(torch.empty(self.compress_rate, self.coff * self.head_dim))
+        self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.q_b_proj = nn.Linear(config.q_lora_rank, self.n_heads * self.head_dim, bias=False)
+        self.weights_proj = nn.Linear(config.hidden_size, self.n_heads, bias=False)
+        self.rotary_emb = DeepseekV4RotaryEmbedding(config)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        q_residual: torch.Tensor,
+        position_ids: torch.Tensor,
+        past_key_values: Cache | None,
+        layer_idx: int,
+    ) -> torch.LongTensor:
+        batch, seq_len, _ = hidden_states.shape
+        cache_layer = past_key_values.layers[layer_idx] if past_key_values is not None else None
+
+        # --- Pool side: same overlapping windows as the outer CSA compressor, at index_head_dim ---
+        kv = self.kv_proj(hidden_states)
+        gate = self.gate_proj(hidden_states)
+        if cache_layer is None:
+            usable = (kv.shape[1] // self.compress_rate) * self.compress_rate
+            chunk_kv, chunk_gate, first_pool_position = kv[:, :usable], gate[:, :usable], 0
+            prior_kv, prior_gate = None, None
+        else:
+            chunk_kv, chunk_gate, first_pool_position = cache_layer.update_indexer(kv, gate)
+            prior_kv, prior_gate = cache_layer.get_indexer_overlap()
+        if chunk_kv.shape[1] > 0:
+            n_windows = chunk_kv.shape[1] // self.compress_rate
+            chunk_kv = chunk_kv.view(batch, n_windows, self.compress_rate, -1)
+            chunk_gate = chunk_gate.view(batch, n_windows, self.compress_rate, -1) + self.position_bias.to(
+                chunk_gate.dtype
+            )
+            if cache_layer is not None:
+                cache_layer.set_indexer_overlap(chunk_kv[:, -1].clone(), chunk_gate[:, -1].clone())
+            chunk_kv, chunk_gate = _overlap_pool(chunk_kv, chunk_gate, prior_kv, prior_gate, self.head_dim)
+            # Softmax in fp32 for stability (logits in bf16/fp16 can collapse pairs that
+            # only differ by a small amount, especially with large window widths).
+            new_pooled = self.kv_norm(
+                (chunk_kv * chunk_gate.softmax(dim=2, dtype=torch.float32).to(chunk_kv.dtype)).sum(dim=2)
+            )
+            positions = (
+                (torch.arange(n_windows, device=new_pooled.device) * self.compress_rate + first_pool_position)
+                .unsqueeze(0)
+                .expand(batch, -1)
+            )
+            new_pooled = _rope_pool(new_pooled, self.rotary_emb, positions, self.rope_layer_type)
+        else:
+            new_pooled = chunk_kv.new_zeros((batch, 0, self.head_dim))
+        pooled_kv = new_pooled if cache_layer is None else cache_layer.update_indexer_pool(new_pooled)
+
+        # --- Query side ---
+        cos_q, sin_q = self.rotary_emb(hidden_states, position_ids=position_ids, layer_type=self.rope_layer_type)
+        q = self.q_b_proj(q_residual).view(batch, seq_len, -1, self.head_dim).transpose(1, 2)
+        q = apply_rotary_pos_emb(q, cos_q, sin_q).transpose(1, 2)
+
+        # --- Score: ReLU(q·kᵀ) * weights, then top-k ---
+        scores = torch.matmul(q.float(), pooled_kv.transpose(-1, -2).float().unsqueeze(1))  # [B, S, H, T]
+        scores = F.relu(scores) * self.softmax_scale
+        weights = self.weights_proj(hidden_states).float() * self.weights_scaling  # [B, S, H]
+        index_scores = (scores * weights.unsqueeze(-1)).sum(dim=2)  # [B, S, T]
+        topk = min(self.index_topk, pooled_kv.shape[1])
+        return index_scores.topk(topk, dim=-1).indices
 
 
 class DeepseekV4HCACompressor(nn.Module):
@@ -737,9 +756,9 @@ class DeepseekV4HCACompressor(nn.Module):
 
     The three building blocks (paper notation in parentheses):
 
-      * **kv** = ``wkv(hidden_states)`` — head-dim KV projection ``C ∈ R^{n×c}``
+      * **kv** = ``kv_proj(hidden_states)`` — head-dim KV projection ``C ∈ R^{n×c}``
         (eq. 20). Doubles as both key and value (shared-KV MQA).
-      * **gate** = ``wgate(hidden_states)`` — head-dim compression weights
+      * **gate** = ``gate_proj(hidden_states)`` — head-dim compression weights
         ``Z ∈ R^{n×c}`` (eq. 21). Combined with ``position_bias`` and softmaxed per
         window to produce the convex combination that mixes ``compress_rate_hca``
         source KVs into one pooled entry.
@@ -758,13 +777,15 @@ class DeepseekV4HCACompressor(nn.Module):
     window from ``hidden_states`` and discard the remainder.
     """
 
+    rope_layer_type = "compress"
+
     def __init__(self, config: DeepseekV4Config):
         super().__init__()
-        self.compress_rate = config.compress_rate_hca
+        self.compress_rate = config.compress_rates["heavily_compressed_attention"]
         self.head_dim = config.head_dim
         self.rope_head_dim = config.qk_rope_head_dim
-        self.wkv = nn.Linear(config.hidden_size, self.head_dim, bias=False)
-        self.wgate = nn.Linear(config.hidden_size, self.head_dim, bias=False)
+        self.kv_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
+        self.gate_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
         self.position_bias = nn.Parameter(torch.empty(self.compress_rate, self.head_dim))
         self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.rotary_emb = DeepseekV4RotaryEmbedding(config)
@@ -781,8 +802,8 @@ class DeepseekV4HCACompressor(nn.Module):
         # lets :class:`DeepseekV4Attention` call either compressor without branching.
         batch, _, _ = hidden_states.shape
         cache_layer = past_key_values.layers[layer_idx] if past_key_values is not None else None
-        kv = self.wkv(hidden_states)
-        gate = self.wgate(hidden_states)
+        kv = self.kv_proj(hidden_states)
+        gate = self.gate_proj(hidden_states)
         if cache_layer is None:
             usable = (kv.shape[1] // self.compress_rate) * self.compress_rate
             chunk_kv, chunk_gate, first_pool_position = kv[:, :usable], gate[:, :usable], 0
@@ -790,17 +811,21 @@ class DeepseekV4HCACompressor(nn.Module):
             chunk_kv, chunk_gate, first_pool_position = cache_layer.update_compressor(kv, gate)
         if chunk_kv.shape[1] > 0:
             n_windows = chunk_kv.shape[1] // self.compress_rate
-            chunk_kv = chunk_kv.view(batch, n_windows, self.compress_rate, self.head_dim)
-            chunk_gate = chunk_gate.view(batch, n_windows, self.compress_rate, self.head_dim) + self.position_bias.to(
+            chunk_kv = chunk_kv.view(batch, n_windows, self.compress_rate, -1)
+            chunk_gate = chunk_gate.view(batch, n_windows, self.compress_rate, -1) + self.position_bias.to(
                 chunk_gate.dtype
             )
-            new_pooled = self.kv_norm((chunk_kv * chunk_gate.softmax(dim=2)).sum(dim=2))
+            # Softmax in fp32 for stability (logits in bf16/fp16 can collapse pairs that
+            # only differ by a small amount, especially with large window widths).
+            new_pooled = self.kv_norm(
+                (chunk_kv * chunk_gate.softmax(dim=2, dtype=torch.float32).to(chunk_kv.dtype)).sum(dim=2)
+            )
             positions = (
                 (torch.arange(n_windows, device=new_pooled.device) * self.compress_rate + first_pool_position)
                 .unsqueeze(0)
                 .expand(batch, -1)
             )
-            new_pooled = _rope_pool(new_pooled, self.rotary_emb, positions, self.rope_head_dim)
+            new_pooled = _rope_pool(new_pooled, self.rotary_emb, positions, self.rope_layer_type)
         else:
             new_pooled = chunk_kv.new_zeros((batch, 0, self.head_dim))
         if cache_layer is None:
@@ -818,7 +843,7 @@ class DeepseekV4CSACompressor(nn.Module):
 
     Compared to :class:`DeepseekV4HCACompressor` the differences are explicit:
 
-      * ``wkv`` / ``wgate`` / ``position_bias`` project to **2 × head_dim** (the
+      * ``kv_proj`` / ``gate_proj`` / ``position_bias`` project to **2 × head_dim** (the
         learned channel split — high half pools into the current window, low half
         pools into the next window's overlap with this one, see :func:`_overlap_pool`).
       * The cache layer's ``compressor_overlap_*`` state carries the last full
@@ -827,17 +852,19 @@ class DeepseekV4CSACompressor(nn.Module):
         entries per query (paper §2.3.1, "Lightning Indexer for Sparse Selection").
     """
 
+    rope_layer_type = "compress"
+
     def __init__(self, config: DeepseekV4Config):
         super().__init__()
-        self.compress_rate = config.compress_rate_csa
+        self.compress_rate = config.compress_rates["compressed_sparse_attention"]
         self.head_dim = config.head_dim
         self.rope_head_dim = config.qk_rope_head_dim
         # ``2 * head_dim`` because windows overlap: each pooled entry is a softmax-gated
         # convex combination of ``compress_rate_csa`` *current* tokens (high-channel half)
         # mixed with ``compress_rate_csa`` *previous* tokens (low-channel half). The
         # learned channel split happens in :func:`_overlap_pool`.
-        self.wkv = nn.Linear(config.hidden_size, 2 * self.head_dim, bias=False)
-        self.wgate = nn.Linear(config.hidden_size, 2 * self.head_dim, bias=False)
+        self.kv_proj = nn.Linear(config.hidden_size, 2 * self.head_dim, bias=False)
+        self.gate_proj = nn.Linear(config.hidden_size, 2 * self.head_dim, bias=False)
         self.position_bias = nn.Parameter(torch.empty(self.compress_rate, 2 * self.head_dim))
         self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.rotary_emb = DeepseekV4RotaryEmbedding(config)
@@ -853,8 +880,8 @@ class DeepseekV4CSACompressor(nn.Module):
     ) -> torch.Tensor:
         batch, seq_len, _ = hidden_states.shape
         cache_layer = past_key_values.layers[layer_idx] if past_key_values is not None else None
-        kv = self.wkv(hidden_states)
-        gate = self.wgate(hidden_states)
+        kv = self.kv_proj(hidden_states)
+        gate = self.gate_proj(hidden_states)
         if cache_layer is None:
             usable = (kv.shape[1] // self.compress_rate) * self.compress_rate
             chunk_kv, chunk_gate, first_pool_position = kv[:, :usable], gate[:, :usable], 0
@@ -864,22 +891,26 @@ class DeepseekV4CSACompressor(nn.Module):
             prior_kv, prior_gate = cache_layer.get_compressor_overlap()
         if chunk_kv.shape[1] > 0:
             n_windows = chunk_kv.shape[1] // self.compress_rate
-            chunk_kv = chunk_kv.view(batch, n_windows, self.compress_rate, 2 * self.head_dim)
-            chunk_gate = chunk_gate.view(
-                batch, n_windows, self.compress_rate, 2 * self.head_dim
-            ) + self.position_bias.to(chunk_gate.dtype)
+            chunk_kv = chunk_kv.view(batch, n_windows, self.compress_rate, -1)
+            chunk_gate = chunk_gate.view(batch, n_windows, self.compress_rate, -1) + self.position_bias.to(
+                chunk_gate.dtype
+            )
             if cache_layer is not None:
                 # Persist the *raw* last full window (gate already biased) so the next
                 # forward call's first window can read its low-channel slice as prior.
                 cache_layer.set_compressor_overlap(chunk_kv[:, -1].clone(), chunk_gate[:, -1].clone())
             chunk_kv, chunk_gate = _overlap_pool(chunk_kv, chunk_gate, prior_kv, prior_gate, self.head_dim)
-            new_pooled = self.kv_norm((chunk_kv * chunk_gate.softmax(dim=2)).sum(dim=2))
+            # Softmax in fp32 for stability (logits in bf16/fp16 can collapse pairs that
+            # only differ by a small amount, especially with large window widths).
+            new_pooled = self.kv_norm(
+                (chunk_kv * chunk_gate.softmax(dim=2, dtype=torch.float32).to(chunk_kv.dtype)).sum(dim=2)
+            )
             positions = (
                 (torch.arange(n_windows, device=new_pooled.device) * self.compress_rate + first_pool_position)
                 .unsqueeze(0)
                 .expand(batch, -1)
             )
-            new_pooled = _rope_pool(new_pooled, self.rotary_emb, positions, self.rope_head_dim)
+            new_pooled = _rope_pool(new_pooled, self.rotary_emb, positions, self.rope_layer_type)
         else:
             new_pooled = chunk_kv.new_zeros((batch, 0, self.head_dim))
         pooled = (
@@ -922,7 +953,7 @@ class DeepseekV4Attention(nn.Module):
 
     Block components (paper §2.3.3):
 
-      * Shared-KV Multi-Query Attention: ``num_key_value_heads = 1``; ``wkv`` projects
+      * Shared-KV Multi-Query Attention: ``num_key_value_heads = 1``; ``kv_proj`` projects
         directly to that single KV head and the same tensor is read as both key and
         value.
       * Partial RoPE on the first ``rope_head_dim`` of each head ("Partial Rotary
@@ -934,7 +965,7 @@ class DeepseekV4Attention(nn.Module):
       * Per-head learnable attention sink (eq. 27).
       * Grouped low-rank output projection (§2.3.1, "Grouped Output Projection"):
         ``g`` head-groups → ``d_g``-dim intermediate outputs through a block-diagonal
-        :class:`DeepseekV4GroupedLinear`, then mixed back to ``hidden_size`` by ``wo_b``.
+        :class:`DeepseekV4GroupedLinear`, then mixed back to ``hidden_size`` by ``o_b_proj``.
       * A supplementary uncompressed sliding-window KV branch of size
         ``sliding_window`` ("Additional Branch of Sliding Window Attention") that
         preserves local fine-grained dependencies, concatenated with the
@@ -943,7 +974,7 @@ class DeepseekV4Attention(nn.Module):
 
     def __init__(self, config: DeepseekV4Config, layer_idx: int):
         # V4 doesn't reuse V3's MLA projections (q_a/q_b/kv_a_proj_with_mqa/kv_b_proj/
-        # o_proj) — every V4 block is shared-KV MQA with a single ``wkv`` and a grouped
+        # o_proj) — every V4 block is shared-KV MQA with a single ``kv_proj`` and a grouped
         # output projection — so inheriting from ``DeepseekV3Attention`` only to delete
         # half of what its ``__init__`` builds is not worth it. We init from
         # ``nn.Module`` directly and set up V4-specific projections inline.
@@ -960,15 +991,15 @@ class DeepseekV4Attention(nn.Module):
         self.is_causal = True
         self.scaling = self.head_dim**-0.5
 
-        self.wq_a = nn.Linear(config.hidden_size, config.q_lora_rank, bias=False)
+        self.q_a_proj = nn.Linear(config.hidden_size, config.q_lora_rank, bias=False)
         self.q_norm = DeepseekV4RMSNorm(config.q_lora_rank, eps=config.rms_norm_eps)
-        self.wq_b = nn.Linear(config.q_lora_rank, self.num_heads * self.head_dim, bias=False)
-        self.wkv = nn.Linear(config.hidden_size, self.head_dim, bias=False)
+        self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.head_dim, bias=False)
+        self.kv_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
         self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.wo_a = DeepseekV4GroupedLinear(
+        self.o_a_proj = DeepseekV4GroupedLinear(
             self.num_heads * self.head_dim // config.o_groups, config.o_groups * config.o_lora_rank, config.o_groups
         )
-        self.wo_b = nn.Linear(config.o_groups * config.o_lora_rank, config.hidden_size, bias=False)
+        self.o_b_proj = nn.Linear(config.o_groups * config.o_lora_rank, config.hidden_size, bias=False)
         self.sinks = nn.Parameter(torch.empty(self.num_heads))
         # Long-range branch dispatched by ``layer_type`` (see ``COMPRESSOR_CLASSES``
         # above). ``None`` means full-attention / sliding-only — no compressor is
@@ -989,23 +1020,20 @@ class DeepseekV4Attention(nn.Module):
         cos, sin = position_embeddings
 
         # --- Q + KV projections + partial RoPE on the *trailing* qk_rope_head_dim of
-        # each head (matches the V4-Flash reference's ``[..., -rd:]`` indexing — wkv
-        # weights are laid out [nope|rope] in the checkpoint, so the trailing slice is
-        # what gets rotated).
-        q_residual = self.q_norm(self.wq_a(hidden_states))
-        q = self.wq_b(q_residual).view(batch, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        # each head (matches the V4-Flash reference's ``[..., -rd:]`` indexing —
+        # ``kv_proj`` weights are laid out [nope|rope] in the checkpoint, so the
+        # trailing slice is what gets rotated).
+        q_residual = self.q_norm(self.q_a_proj(hidden_states))
+        q = self.q_b_proj(q_residual).view(batch, seq_len, -1, self.head_dim).transpose(1, 2)
         # Per-head RMSNorm-style rescale (no learned weight) — the V4-Flash reference
         # (``inference/model.py:498``) does ``q *= rsqrt(mean(q**2) + eps)`` on each
-        # head after wq_b, before RoPE. Skipping it leaves attention scores at the
-        # wrong scale and the model collapses to a single repeated token within a
+        # head after ``q_b_proj``, before RoPE. Skipping it leaves attention scores at
+        # the wrong scale and the model collapses to a single repeated token within a
         # handful of layers.
         q = q * torch.rsqrt(q.float().square().mean(-1, keepdim=True) + self.config.rms_norm_eps).to(q.dtype)
-        kv = self.kv_norm(self.wkv(hidden_states)).view(batch, seq_len, 1, self.head_dim).transpose(1, 2)
-        q_nope, q_rope = q[..., : -self.qk_rope_head_dim], q[..., -self.qk_rope_head_dim :]
-        kv_nope, kv_rope = kv[..., : -self.qk_rope_head_dim], kv[..., -self.qk_rope_head_dim :]
-        q_rope, kv_rope = apply_rotary_pos_emb(q_rope, kv_rope, cos, sin)
-        q = torch.cat([q_nope, q_rope], dim=-1)
-        kv = torch.cat([kv_nope, kv_rope], dim=-1)
+        kv = self.kv_norm(self.kv_proj(hidden_states)).view(batch, seq_len, 1, self.head_dim).transpose(1, 2)
+        q = apply_rotary_pos_emb(q, cos, sin)
+        kv = apply_rotary_pos_emb(kv, cos, sin)
 
         # --- Sliding-window K=V branch goes through the standard cache update ---
         if past_key_values is not None:
@@ -1043,19 +1071,16 @@ class DeepseekV4Attention(nn.Module):
             **kwargs,
         )
 
-        # De-rotate the output's rope slice. V4 shares K and V (``wkv`` projects to a
+        # De-rotate the output's rope slice. V4 shares K and V (``kv_proj`` projects to a
         # single tensor), so V's rope slice carries the same per-token rotation as K.
         # Attention sums V-rotated values across attended positions, so the output's
         # rope slice is a position-mixed content; conjugate rotation at the query
         # position pulls it back into a position-independent frame before the output
         # projection mixes heads.
-        out_nope, out_rope = attn_output[..., : -self.qk_rope_head_dim], attn_output[..., -self.qk_rope_head_dim :]
-        out_rope = out_rope.transpose(1, 2)
-        out_rope, _ = apply_rotary_pos_emb(out_rope, torch.zeros_like(out_rope), cos, -sin)
-        attn_output = torch.cat([out_nope, out_rope.transpose(1, 2)], dim=-1)
+        attn_output = apply_rotary_pos_emb(attn_output.transpose(1, 2), cos, -sin).transpose(1, 2)
 
         grouped = attn_output.reshape(batch, seq_len, -1).view(batch, seq_len, self.config.o_groups, -1)
-        return self.wo_b(self.wo_a(grouped).flatten(2)), attn_weights
+        return self.o_b_proj(self.o_a_proj(grouped).flatten(2)), attn_weights
 
 
 class DeepseekV4HyperConnection(nn.Module):
@@ -1153,11 +1178,18 @@ class DeepseekV4HyperHead(nn.Module):
         return (pre.unsqueeze(-1) * x).sum(dim=2).to(x.dtype)
 
 
-class DeepseekV4MLP(Qwen2MoeMLP):
+class DeepseekV4MLP(nn.Module):
     """Shared expert — plain SwiGLU MLP, ``moe_intermediate_size`` hidden."""
 
-    def __init__(self, config: DeepseekV4Config, intermediate_size: int | None = None):
-        super().__init__(config, intermediate_size or config.moe_intermediate_size)
+    def __init__(self, config: DeepseekV4Config):
+        super().__init__()
+        self.gate_proj = nn.Linear(config.hidden_size, config.moe_intermediate_size, bias=False)
+        self.up_proj = nn.Linear(config.hidden_size, config.moe_intermediate_size, bias=False)
+        self.down_proj = nn.Linear(config.moe_intermediate_size, config.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
 @use_experts_implementation
@@ -1273,7 +1305,7 @@ class DeepseekV4HashRouter(MixtralTopKRouter):
 class DeepseekV4SparseMoeBlock(nn.Module):
     def __init__(self, config: DeepseekV4Config, layer_idx: int):
         super().__init__()
-        self.is_hash = layer_idx < config.num_hash_layers
+        self.is_hash = config.mlp_layer_types[layer_idx] == "hash_moe"
         self.gate = DeepseekV4HashRouter(config) if self.is_hash else DeepseekV4TopKRouter(config)
         self.experts = DeepseekV4Experts(config)
         self.shared_experts = DeepseekV4MLP(config)
@@ -1287,7 +1319,7 @@ class DeepseekV4SparseMoeBlock(nn.Module):
                 raise ValueError(
                     "DeepseekV4's hash-routing layers need `input_ids` to look up expert indices. "
                     "The `inputs_embeds`-only inference path is not supported for models with "
-                    "`num_hash_layers > 0`."
+                    "any `hash_moe` entries in `mlp_layer_types`."
                 )
             _, weights, indices = self.gate(hidden_states, input_ids)
         else:
