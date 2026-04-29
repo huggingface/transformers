@@ -278,7 +278,6 @@ def deepgemm_bf16_experts_forward(
     hidden_states: torch.Tensor,
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
-    process_group: torch.distributed.ProcessGroup | None = None,  # noqa: ARG001  (unused; for dispatch ABI)
 ) -> torch.Tensor:
     if hidden_states.dtype != torch.bfloat16:
         raise ValueError(f"DeepGEMM experts path requires bfloat16 hidden states, got {hidden_states.dtype}")
@@ -370,7 +369,6 @@ def deepgemm_fp8_fp4_experts_forward(
     hidden_states: torch.Tensor,
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
-    process_group: torch.distributed.ProcessGroup | None = None,  # noqa: ARG001  (unused; for dispatch ABI)
 ) -> torch.Tensor:
     if self.activation_scheme == "static":
         raise NotImplementedError(
@@ -551,11 +549,15 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
                 "(`MoeTensorParalellExperts`) supplies it automatically. If you are calling this "
                 "dispatch directly, pass `process_group=...` explicitly."
             )
+        # `gate_up_proj.size(0)` is the per-rank expert count after `GroupedGemmParallel`
+        # sharding; the buffer needs the GLOBAL count (kernel asserts `num_experts % num_ranks
+        # == 0` and computes the per-rank slice itself).
+        num_experts_global = num_experts * process_group.size()
         self.symm_buffer = deepgemm.get_symm_buffer_for_mega_moe(
             process_group,
             hidden=hidden_dim,
             num_topk=num_top_k,
-            num_experts=num_experts,
+            num_experts=num_experts_global,
             num_max_tokens_per_rank=num_tokens,
             intermediate_hidden=intermediate_hidden,
         )

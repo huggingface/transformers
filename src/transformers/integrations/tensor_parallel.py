@@ -1186,12 +1186,6 @@ class MoeTensorParalellExperts(TensorParallelLayer):
         super().__init__(**kwargs)
 
     def _prepare_input_fn(self, mod, inputs, device_mesh):
-        # Mega MoE handles EP dispatch + combine inside the kernel — no PyTorch-level cross-rank
-        # bookkeeping is needed at this boundary. Pass inputs through unchanged, just tack on the
-        # EP `process_group` for the kernel's symm-buffer rendezvous on first forward.
-        if getattr(getattr(mod, "config", None), "_experts_implementation", None) == "deepgemm_megamoe":
-            return (*inputs, device_mesh.get_group())
-
         # inputs = (hidden_states, top_k_index, top_k_weights)
         hidden_states = inputs[0]
         top_k_index = inputs[1]
@@ -1205,12 +1199,12 @@ class MoeTensorParalellExperts(TensorParallelLayer):
         # and partial_expert_output is different on each GPU before all-reduce
         top_k_weights = all_reduce_backward(top_k_weights, device_mesh)
 
-        # Pass the EP process group through to the experts forward. Used today by DeepGEMM Mega
-        # MoE for the symmetric-buffer rendezvous; future dispatches can use it for genuine EP
-        # all-to-all dispatch + combine (replacing the current compute-everywhere + all_reduce
-        # approach). Dispatches that don't need it accept it via a `process_group=None` default
-        # arg and ignore it.
-        return (hidden_states, top_k_index, top_k_weights, device_mesh.get_group())
+        # Mega MoE handles EP dispatch + combine inside the kernel — append the EP `process_group`
+        # so the forward can rendezvous the symm-buffer on first call.
+        if getattr(getattr(mod, "config", None), "_experts_implementation", None) == "deepgemm_megamoe":
+            return hidden_states, top_k_index, top_k_weights, device_mesh.get_group()
+
+        return hidden_states, top_k_index, top_k_weights
 
     def _prepare_output_fn(self, mod, outputs, device_mesh):
         # Mega MoE handles the EP combine inside the kernel — output is already fully reduced.

@@ -120,7 +120,6 @@ def batched_mm_experts_forward(
     hidden_states: torch.Tensor,
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
-    process_group: torch.distributed.ProcessGroup | None = None,  # noqa: ARG001  (unused; for dispatch ABI)
 ) -> torch.Tensor:
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
@@ -377,7 +376,6 @@ def grouped_mm_experts_forward(
     hidden_states: torch.Tensor,
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
-    process_group: torch.distributed.ProcessGroup | None = None,  # noqa: ARG001  (unused; for dispatch ABI)
 ) -> torch.Tensor:
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)

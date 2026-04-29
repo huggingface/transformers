@@ -294,7 +294,6 @@ def fp8_batched_mm_experts_forward(
     hidden_states: torch.Tensor,
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
-    process_group: torch.distributed.ProcessGroup | None = None,  # noqa: ARG001  (unused; for dispatch ABI)
 ) -> torch.Tensor:
     if self.activation_scheme == "static":
         raise NotImplementedError(
@@ -367,7 +366,6 @@ def fp8_grouped_mm_experts_forward(
     hidden_states: torch.Tensor,
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
-    process_group: torch.distributed.ProcessGroup | None = None,  # noqa: ARG001  (unused; for dispatch ABI)
 ) -> torch.Tensor:
     if self.activation_scheme == "static":
         raise NotImplementedError(
