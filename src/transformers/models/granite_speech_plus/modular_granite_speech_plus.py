@@ -27,6 +27,7 @@ from ..granite_speech.configuration_granite_speech import GraniteSpeechConfig, G
 from ..granite_speech.modeling_granite_speech import (
     GraniteSpeechCTCEncoder,
     GraniteSpeechForConditionalGeneration,
+    GraniteSpeechPreTrainedModel,
 )
 
 
@@ -118,6 +119,9 @@ class GraniteSpeechPlusConfig(GraniteSpeechConfig):
                 )
 
 
+class GraniteSpeechPlusPreTrainedModel(GraniteSpeechPreTrainedModel): ...
+
+
 class GraniteSpeechPlusCTCEncoder(GraniteSpeechCTCEncoder):
     @merge_with_config_defaults
     @capture_outputs
@@ -164,4 +168,5 @@ __all__ = [
     "GraniteSpeechPlusEncoderConfig",
     "GraniteSpeechPlusCTCEncoder",
     "GraniteSpeechPlusForConditionalGeneration",
+    "GraniteSpeechPlusPreTrainedModel",
 ]

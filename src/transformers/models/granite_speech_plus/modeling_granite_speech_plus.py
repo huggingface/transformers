@@ -83,6 +83,28 @@ class GraniteSpeechPlusEncoderProjector(nn.Module):
         return query_proj
 
 
+@auto_docstring
+class GraniteSpeechPlusPreTrainedModel(PreTrainedModel):
+    config: GraniteSpeechPlusConfig
+    input_modalities = ("audio", "text")
+
+    _supports_flash_attn = False  # `blip_2_qformer` dependency does not allow for this
+    _supports_sdpa = True
+
+    @torch.no_grad()
+    def _init_weights(self, module: nn.Module):
+        """Initialize the weights."""
+        super()._init_weights(module)
+        if isinstance(module, GraniteSpeechPlusEncoderProjector):
+            init.normal_(module.query)
+        elif isinstance(module, GraniteSpeechPlusCTCEncoder):
+            context_size = module.config.context_size
+            seq = torch.arange(context_size)
+            relpos_dist = seq.view(-1, 1) - seq.view(1, -1)
+            attention_dists = torch.clamp(relpos_dist, -context_size, context_size) + module.config.max_pos_emb
+            init.copy_(module.attention_dists, attention_dists)
+
+
 ### Encoder - conformer is adapted from: https://github.com/lucidrains/conformer.git
 class GraniteSpeechPlusConformerFeedForward(nn.Module):
     """Feedforward module for conformer encoder blocks."""
@@ -236,28 +258,6 @@ class GraniteSpeechPlusConformerBlock(nn.Module):
         hidden_states = 0.5 * self.ff2(hidden_states) + hidden_states
         hidden_states = self.post_norm(hidden_states)
         return hidden_states
-
-
-@auto_docstring
-class GraniteSpeechPlusPreTrainedModel(PreTrainedModel):
-    config: GraniteSpeechPlusConfig
-    input_modalities = ("audio", "text")
-
-    _supports_flash_attn = False  # `blip_2_qformer` dependency does not allow for this
-    _supports_sdpa = True
-
-    @torch.no_grad()
-    def _init_weights(self, module: nn.Module):
-        """Initialize the weights."""
-        super()._init_weights(module)
-        if isinstance(module, GraniteSpeechPlusEncoderProjector):
-            init.normal_(module.query)
-        elif isinstance(module, GraniteSpeechPlusCTCEncoder):
-            context_size = module.config.context_size
-            seq = torch.arange(context_size)
-            relpos_dist = seq.view(-1, 1) - seq.view(1, -1)
-            attention_dists = torch.clamp(relpos_dist, -context_size, context_size) + module.config.max_pos_emb
-            init.copy_(module.attention_dists, attention_dists)
 
 
 class GraniteSpeechPlusCTCEncoder(GraniteSpeechPlusPreTrainedModel):
@@ -603,4 +603,8 @@ class GraniteSpeechPlusForConditionalGeneration(GraniteSpeechPlusPreTrainedModel
         return list(self.peft_config.keys())[0]
 
 
-__all__ = ["GraniteSpeechPlusCTCEncoder", "GraniteSpeechPlusForConditionalGeneration"]
+__all__ = [
+    "GraniteSpeechPlusCTCEncoder",
+    "GraniteSpeechPlusForConditionalGeneration",
+    "GraniteSpeechPlusPreTrainedModel",
+]
