@@ -706,16 +706,20 @@ def get_model_conversion_mapping(
         class_name = type(submodule).__name__
         model_type = getattr(submodule.config, "model_type", None)
 
-        # Skip if this architecture was already processed via either lookup path.
-        if class_name in seen_identifiers or (model_type and model_type in seen_identifiers):
+        if class_name in seen_identifiers:
             continue
 
-        # Try class name first, then model_type. Track which path produced the hit so
-        # we know whether to block model_type for subsequent sub-modules (see below).
+        # Class name takes priority — a class-specific mapping bypasses the model_type
+        # deduplication check (e.g. LlavaModel nested inside LlavaForConditionalGeneration
+        # must still get its own scoped mapping even after "llava" is marked seen).
         conversions = get_checkpoint_conversion_mapping(class_name)
         found_via_class = conversions is not None
-        if not found_via_class and model_type is not None:
-            conversions = get_checkpoint_conversion_mapping(model_type)
+
+        if not found_via_class:
+            if model_type and model_type in seen_identifiers:
+                continue
+            if model_type is not None:
+                conversions = get_checkpoint_conversion_mapping(model_type)
 
         if conversions is None:
             continue
@@ -729,9 +733,9 @@ def get_model_conversion_mapping(
 
         seen_identifiers.add(class_name)
         # Only block model_type when the hit was via model_type. When the hit was via
-        # class name, sub-modules that share the same model_type but have no class-specific
-        # mapping of their own (e.g. DetrModel under DetrForSegmentation) must still be
-        # reachable so their base transforms are picked up and scoped automatically.
+        # class name, other sub-modules sharing the same model_type but without a
+        # class-specific mapping (e.g. DetrModel under DetrForSegmentation) must still
+        # be reachable so their base transforms are picked up and scoped.
         if not found_via_class and model_type:
             seen_identifiers.add(model_type)
 
