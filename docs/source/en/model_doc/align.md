@@ -36,15 +36,14 @@ The example below demonstrates zero-shot image classification with [`Pipeline`] 
 
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="zero-shot-image-classification",
     model="kakaobrain/align-base",
     device=0,
-    dtype=torch.bfloat16
 )
 
 candidate_labels = [
@@ -59,11 +58,13 @@ pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resol
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 import requests
+import torch
 from PIL import Image
-from transformers import AutoProcessor, AutoModelForZeroShotImageClassification
+
+from transformers import AutoModelForZeroShotImageClassification, AutoProcessor
+
 
 processor = AutoProcessor.from_pretrained("kakaobrain/align-base")
 model = AutoModelForZeroShotImageClassification.from_pretrained("kakaobrain/align-base", device_map="auto")
@@ -109,7 +110,7 @@ for label, score in zip(candidate_labels, probs):
   
   # Load processor and model
   processor = AlignProcessor.from_pretrained("kakaobrain/align-base")
-  model = AlignModel.from_pretrained("kakaobrain/align-base")
+  model = AlignModel.from_pretrained("kakaobrain/align-base", device_map="auto")
   
   # Download image from URL
   url = "https://huggingface.co/roschmid/dog-races/resolve/main/images/Golden_Retriever.jpg"
@@ -119,7 +120,7 @@ for label, score in zip(candidate_labels, probs):
   texts = ["a photo of a cat", "a photo of a dog"]
   
   # Process image and text inputs
-  inputs = processor(images=image, text=texts, return_tensors="pt")
+  inputs = processor(images=image, text=texts, return_tensors="pt").to(model.device)
   
   # Get the embeddings
   with torch.no_grad():

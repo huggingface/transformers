@@ -57,39 +57,36 @@ into a single instance to both extract the input features and decode the predict
 
 - Step-by-step PDF transcription
 
-```py
->>> from huggingface_hub import hf_hub_download
->>> import re
->>> from PIL import Image
+```python
 
->>> from transformers import NougatProcessor, AutoModelForImageTextToText
->>> from accelerate import Accelerator
->>> from datasets import load_dataset
->>> import torch
+from huggingface_hub import hf_hub_download
+from PIL import Image
 
->>> processor = NougatProcessor.from_pretrained("facebook/nougat-base")
->>> model = AutoModelForImageTextToText.from_pretrained("facebook/nougat-base")
+from transformers import AutoModelForImageTextToText, NougatProcessor
 
->>> device = Accelerator().device
->>> model.to(device)  # doctest: +IGNORE_RESULT
 
->>> # prepare PDF image for the model
->>> filepath = hf_hub_download(repo_id="hf-internal-testing/fixtures_docvqa", filename="nougat_paper.png", repo_type="dataset")
->>> image = Image.open(filepath)
->>> pixel_values = processor(image, return_tensors="pt").pixel_values
+processor = NougatProcessor.from_pretrained("facebook/nougat-base")
+model = AutoModelForImageTextToText.from_pretrained("facebook/nougat-base", device_map="auto")
 
->>> # generate transcription (here we only generate 30 tokens)
->>> outputs = model.generate(
-...     pixel_values.to(device),
-...     min_length=1,
-...     max_new_tokens=30,
-...     bad_words_ids=[[processor.tokenizer.unk_token_id]],
-... )
+model.to(model.device)  # doctest: +IGNORE_RESULT
 
->>> sequence = processor.batch_decode(outputs, skip_special_tokens=True)[0]
->>> sequence = processor.post_process_generation(sequence, fix_markdown=False)
->>> # note: we're using repr here such for the sake of printing the \n characters, feel free to just print the sequence
->>> print(repr(sequence))
+# prepare PDF image for the model
+filepath = hf_hub_download(repo_id="hf-internal-testing/fixtures_docvqa", filename="nougat_paper.png", repo_type="dataset")
+image = Image.open(filepath)
+pixel_values = processor(image, return_tensors="pt").to(model.device).pixel_values
+
+# generate transcription (here we only generate 30 tokens)
+outputs = model.generate(
+    pixel_values.to(model.device),
+    min_length=1,
+    max_new_tokens=30,
+    bad_words_ids=[[processor.tokenizer.unk_token_id]],
+)
+
+sequence = processor.batch_decode(outputs, skip_special_tokens=True)[0]
+sequence = processor.post_process_generation(sequence, fix_markdown=False)
+# note: we're using repr here such for the sake of printing the \n characters, feel free to just print the sequence
+print(repr(sequence))
 '\n\n# Nougat: Neural Optical Understanding for Academic Documents\n\n Lukas Blecher\n\nCorrespondence to: lblecher@'
 ```
 
