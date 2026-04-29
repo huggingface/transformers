@@ -408,6 +408,19 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def setUp(self):
         self.model_tester = Gemma4Vision2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Gemma4Config, hidden_size=37)
+        self.skip_flash_attn_inference_equivalence_tests()
+
+    def skip_flash_attn_inference_equivalence_tests(self):
+        skippable_tests = [
+            "test_flash_attn_2_inference_equivalence",
+            "test_flash_attn_3_inference_equivalence",
+            "test_flash_attn_4_inference_equivalence",
+        ]
+        for test in skippable_tests:
+            if self._testMethodName.startswith(test):
+                self.skipTest(
+                    reason="The base test does not pass image_position_ids and mm_token_type_ids required by Gemma4"
+                )
 
     def test_training(self):
         # Overwrite to test training with text-only samples, should not raise errors
@@ -459,30 +472,6 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
 
     @unittest.skip("Gemma4 needs correct embeddings for per-layer-input computation, random won't work!")
     def test_generate_from_random_inputs_embeds(self):
-        pass
-
-    @unittest.skip("The base test does not pass image_position_ids and mm_token_type_ids required by Gemma4")
-    def test_flash_attn_2_inference_equivalence(self):
-        pass
-
-    @unittest.skip("The base test does not pass image_position_ids and mm_token_type_ids required by Gemma4")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
-
-    @unittest.skip("The base test does not pass image_position_ids and mm_token_type_ids required by Gemma4")
-    def test_flash_attn_3_inference_equivalence(self):
-        pass
-
-    @unittest.skip("The base test does not pass image_position_ids and mm_token_type_ids required by Gemma4")
-    def test_flash_attn_3_inference_equivalence_right_padding(self):
-        pass
-
-    @unittest.skip("The base test does not pass image_position_ids and mm_token_type_ids required by Gemma4")
-    def test_flash_attn_4_inference_equivalence(self):
-        pass
-
-    @unittest.skip("The base test does not pass image_position_ids and mm_token_type_ids required by Gemma4")
-    def test_flash_attn_4_inference_equivalence_right_padding(self):
         pass
 
     @unittest.skip(
