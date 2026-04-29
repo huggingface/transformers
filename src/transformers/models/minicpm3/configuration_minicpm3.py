@@ -18,6 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -42,10 +44,12 @@ class MiniCPM3Config(PreTrainedConfig):
         Dimension of each value head. If `None`, defaults to `hidden_size // num_attention_heads`.
     scale_emb (`int` or `float`, *optional*, defaults to 1.0):
         Multiplier applied to input embeddings.
-    scale_depth (`int` or `float`, *optional*, defaults to 1.0):
+    scale_depth (`int` or `float`, *optional*):
         Multiplier for residual connections; the effective scaling is `scale_depth / sqrt(num_hidden_layers)`.
-    dim_model_base (`int`, *optional*, defaults to 1):
-        Base model dimension used to scale logits before the language model head.
+        If `None`, defaults to `sqrt(num_hidden_layers)` (no-op scaling).
+    dim_model_base (`int`, *optional*):
+        Base model dimension used to scale logits before the language model head. If `None`,
+        defaults to `hidden_size` (no-op scaling).
 
     Example:
 
@@ -106,15 +110,20 @@ class MiniCPM3Config(PreTrainedConfig):
     qk_rope_head_dim: int = 32
     v_head_dim: int | None = None
     scale_emb: int | float = 1.0
-    scale_depth: int | float = 1.0
-    dim_model_base: int = 1
+    scale_depth: int | float | None = None
+    dim_model_base: int | None = None
 
     def __post_init__(self, **kwargs):
         # In MLA the per-head dim used by RoPE is the rotary part, not `hidden_size / num_attention_heads`.
         self.head_dim = self.qk_rope_head_dim
-        # Match the original MiniCPM3 default: when not specified, the value head dim is `hidden_size // num_attention_heads`.
+        # Match the original MiniCPM3 defaults: unset values map to no-op scalings so a randomly
+        # initialised tiny model still trains sensibly.
         if self.v_head_dim is None:
             self.v_head_dim = self.hidden_size // self.num_attention_heads
+        if self.scale_depth is None:
+            self.scale_depth = math.sqrt(self.num_hidden_layers)
+        if self.dim_model_base is None:
+            self.dim_model_base = self.hidden_size
         if self.head_dim is None:
             self.head_dim = self.hidden_size // self.num_attention_heads
         if self.num_key_value_heads is None:

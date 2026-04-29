@@ -39,9 +39,6 @@ class MiniCPM3ModelTester(CausalLMModelTester):
         qk_nope_head_dim=64,
         qk_rope_head_dim=64,
         v_head_dim=64,
-        scale_emb=1.0,
-        scale_depth=1.0,
-        dim_model_base=1,
     ):
         super().__init__(parent=parent)
         self.kv_lora_rank = kv_lora_rank
@@ -49,9 +46,6 @@ class MiniCPM3ModelTester(CausalLMModelTester):
         self.qk_nope_head_dim = qk_nope_head_dim
         self.qk_rope_head_dim = qk_rope_head_dim
         self.v_head_dim = v_head_dim
-        self.scale_emb = scale_emb
-        self.scale_depth = scale_depth
-        self.dim_model_base = dim_model_base
 
 
 @require_torch
