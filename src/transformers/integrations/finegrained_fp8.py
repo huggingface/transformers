@@ -16,7 +16,7 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 from ..activations import ACT2FN
-from ..core_model_loading import ConversionOps, _IdentityOp
+from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import should_convert_module
 from ..utils import logging
 from ..utils.import_utils import get_cuda_runtime_version, resolve_internal_import
@@ -809,12 +809,7 @@ class Fp8Quantize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
-    def convert(self, input_dict: torch.Tensor, **kwargs) -> dict[str, torch.Tensor]:
-        # Unpack single key/value (value may be wrapped in a list)
-        target_keys, value = tuple(input_dict.items())[0]
-        value = value[0]
-
-        # Resolve block size (support dict-like or attr-like quant_config)
+    def _resolve_block_size(self, value: torch.Tensor) -> tuple[int, int]:
         block_size = None
         if self.hf_quantizer.quantization_config is not None:
             if isinstance(self.hf_quantizer.quantization_config, dict):
@@ -823,56 +818,55 @@ class Fp8Quantize(ConversionOps):
                 block_size = getattr(self.hf_quantizer.quantization_config, "weight_block_size", None)
         if block_size is None:
             block_size = (value.shape[-2], value.shape[-1])
+        return tuple(block_size)
 
-        block_m, block_n = block_size
+    def _quantize_one(self, key: str, value: torch.Tensor) -> dict[str, torch.Tensor]:
+        # Pass through tensors that aren't tileable (1D norms / biases, or shapes
+        # that don't divide cleanly by the configured block) — they were never
+        # FP8-quantized on the load side, so the reverse op shouldn't touch them.
+        if value.ndim < 2:
+            return {key: value}
+        block_m, block_n = self._resolve_block_size(value)
         rows, cols = value.shape[-2], value.shape[-1]
-
-        # Enforce exact tiling like your original
         if rows % block_m != 0 or cols % block_n != 0:
-            raise ValueError(
-                f"Matrix dimensions ({rows}, {cols}) must be divisible by block sizes ({block_m}, {block_n}). for {target_keys}"
-            )
+            return {key: value}
 
         # Leading dims can be empty (2D) or include num_experts/... (3D+)
         leading_shape = value.shape[:-2]
         rows_tiles = rows // block_m
         cols_tiles = cols // block_n
-
         original_shape = value.shape
         value_fp32 = value.to(torch.float32)
-
         # Reshape to (..., rows_tiles, block_m, cols_tiles, block_n)
         reshaped = value_fp32.reshape(*leading_shape, rows_tiles, block_m, cols_tiles, block_n)
-
-        # Per-tile max-abs over the block dims
-        # dims: block_m is at -3, block_n is at -1 after the reshape
+        # Per-tile max-abs over the block dims (block_m at -3, block_n at -1)
         max_abs = reshaped.abs().amax(dim=(-3, -1))
         safe_max_abs = torch.where(max_abs > 0, max_abs, torch.ones_like(max_abs))
-
-        # Tile scale (we store inverse scale like your Linear: weight_scale_inv)
+        # We store inverse scale to match the upstream ``weight_scale_inv`` convention
         scales = _FP8_MAX / safe_max_abs
         scales = torch.where(max_abs > 0, scales, torch.ones_like(scales))  # keep zeros stable
-
-        # Broadcast scales back over the block dims and quantize
-        # max_abs/scales shape: (..., rows_tiles, cols_tiles)
-        scales_broadcast = scales.unsqueeze(-1).unsqueeze(-3)  # -> (..., rows_tiles, 1, cols_tiles, 1)
+        # Broadcast scales over the block dims and quantize
+        scales_broadcast = scales.unsqueeze(-1).unsqueeze(-3)  # (..., rows_tiles, 1, cols_tiles, 1)
         scaled = reshaped * scales_broadcast
-
         quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
-
         quantized = quantized.reshape(original_shape)
+        inv_scales = (1.0 / scales).to(torch.float32)
+        scale_key = key.rsplit(".", 1)[0] + ".weight_scale_inv" if key.endswith("weight") else key + "_scale_inv"
+        return {key: quantized, scale_key: inv_scales}
 
-        inv_scales = (1.0 / scales).to(torch.float32)  # shape: (*leading, rows_tiles, cols_tiles)
-        if target_keys.endswith("weight"):
-            scale_key = target_keys.rsplit(".", 1)[0] + ".weight_scale_inv"
-        else:
-            scale_key = target_keys + "_scale_inv"
+    def convert(self, input_dict: torch.Tensor, **kwargs) -> dict[str, torch.Tensor]:
+        # Quantize every (key, tensor) entry in the dict. Single-tensor case (legacy
+        # callers that pass one key) and multi-tensor case (reverse of an expert
+        # ``MergeModulelist`` that emits one key per expert) are handled the same way.
+        result: dict[str, torch.Tensor] = {}
+        for key, value in input_dict.items():
+            tensor = value[0] if isinstance(value, list) else value
+            result.update(self._quantize_one(key, tensor))
+        return result
 
-        # Return both quantized weights and per-tile inverse scales (keeps leading dims, e.g., num_experts)
-        return {
-            target_keys: quantized,
-            scale_key: inv_scales,
-        }
+    @property
+    def reverse_op(self) -> "ConversionOps":
+        return Fp8Dequantize(self.hf_quantizer)
 
 
 class Fp8Dequantize(ConversionOps):
@@ -992,4 +986,7 @@ class Fp8Dequantize(ConversionOps):
 
     @property
     def reverse_op(self) -> "ConversionOps":
-        return _IdentityOp()
+        # Round-trip: dequantize on load -> re-quantize on save, so the saved
+        # checkpoint preserves the FP8 format (weight + per-block ``weight_scale_inv``)
+        # whether the in-memory state stayed quantized or was dequantized for compute.
+        return Fp8Quantize(self.hf_quantizer)
