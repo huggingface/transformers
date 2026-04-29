@@ -16,19 +16,55 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on {release_date} and added to Hugging Face Transformers on 2025-08-22.*
 
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
+    </div>
+</div>
+
 # SeedOss
 
-## Overview
+SeedOss is ByteDance Seed's 36B-parameter dense language model with native 512K context length. It features flexible thinking budget control and strong reasoning and agent capabilities, trained on 12T tokens.
 
-To be released with the official model launch.
+The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModelForCausalLM`] class.
 
-### Model Details
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-To be released with the official model launch.
+```py
+import torch
+from transformers import pipeline
 
-## Usage tips
+pipe = pipeline(
+    task="text-generation",
+    model="ByteDance-Seed/Seed-OSS-36B-Base",
+    dtype=torch.bfloat16,
+)
+pipe("The most important factor in language model training is")
+```
 
-To be released with the official model launch.
+</hfoption>
+<hfoption id="AutoModelForCausalLM">
+
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("ByteDance-Seed/Seed-OSS-36B-Base")
+model = AutoModelForCausalLM.from_pretrained(
+    "ByteDance-Seed/Seed-OSS-36B-Base",
+    dtype=torch.bfloat16,
+    device_map="auto",
+)
+input_ids = tokenizer("The most important factor in language model training is", return_tensors="pt").to(model.device)
+
+output = model.generate(**input_ids, max_new_tokens=50)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+</hfoption>
+</hfoptions>
 
 ## SeedOssConfig
 

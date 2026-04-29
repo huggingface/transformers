@@ -50,7 +50,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torchvision_available,
     logging,
     torch_compilable_check,
     torch_int,
@@ -86,10 +85,6 @@ from ..video_llama_3.modeling_video_llama_3 import (
     VideoLlama3VisionEncoder,
     VideoLlama3VisionEncoderLayer,
 )
-
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 
 logger = logging.get_logger(__name__)
@@ -147,7 +142,7 @@ class PaddleOCRVLImageProcessorPil(Qwen2VLImageProcessorPil):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -258,7 +253,7 @@ class PaddleOCRVLImageProcessor(Qwen2VLImageProcessor):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -464,16 +459,12 @@ class PaddleOCRVLProcessor(ProcessorMixin):
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
 
         if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[array_ids == self.image_token_id] = 1
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
-
+            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
-@strict(accept_kwargs=True)
+@strict
 class PaddleOCRVisionConfig(SiglipVisionConfig):
     r"""
     Example:
@@ -505,13 +496,13 @@ class PaddleOCRVisionConfig(SiglipVisionConfig):
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
-@strict(accept_kwargs=True)
+@strict
 class PaddleOCRTextConfig(Ernie4_5Config):
     model_type = "paddleocr_vl_text"
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
-@strict(accept_kwargs=True)
+@strict
 class PaddleOCRVLConfig(Qwen2VLConfig):
     r"""
     Example:
@@ -535,7 +526,7 @@ class PaddleOCRVLConfig(Qwen2VLConfig):
     video_token_id: int = 100296
     vision_start_token_id: int = 101305
     vision_end_token_id: int = 101306
-    tie_word_embeddings: int = True
+    tie_word_embeddings: bool = True
 
 
 class PaddleOCRProjector(nn.Module):

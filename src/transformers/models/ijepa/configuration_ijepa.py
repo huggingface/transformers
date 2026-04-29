@@ -20,13 +20,13 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/ijepa_vith14_1k")
-@strict(accept_kwargs=True)
+@strict
 class IJepaConfig(PreTrainedConfig):
     r"""
     pooler_output_size (`int`, *optional*):
-       Dimensionality of the pooler layer. If None, defaults to `hidden_size`.
+        Dimensionality of the pooler layer. If None, defaults to `hidden_size`.
     pooler_act (`str`, *optional*, defaults to `"tanh"`):
-       The activation function to be used by the pooler.
+        The activation function to be used by the pooler.
 
     Example:
 
@@ -50,8 +50,8 @@ class IJepaConfig(PreTrainedConfig):
     num_attention_heads: int = 12
     intermediate_size: int = 3072
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.0
-    attention_probs_dropout_prob: float = 0.0
+    hidden_dropout_prob: float | int = 0.0
+    attention_probs_dropout_prob: float | int = 0.0
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-12
     image_size: int | list[int] | tuple[int, int] = 224

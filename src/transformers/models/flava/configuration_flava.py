@@ -25,13 +25,9 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="facebook/flava-full")
-@strict(accept_kwargs=True)
+@strict
 class FlavaImageConfig(PreTrainedConfig):
     r"""
-    num_blocks_per_group (`int`, *optional*, defaults to 2):
-        Number of conv-based blocks per group.
-    freeze (`bool`, defaults to `True`):
-        Whether to freeze the weights of the model.
     mask_token (`bool`, *optional*, defaults to `True`):
         Whether to use a mask token or not. Used in MIM (Masked Image Modeling) loss for FLAVA.
 
@@ -58,8 +54,8 @@ class FlavaImageConfig(PreTrainedConfig):
     num_attention_heads: int = 12
     intermediate_size: int = 3072
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.0
-    attention_probs_dropout_prob: float = 0.0
+    hidden_dropout_prob: float | int = 0.0
+    attention_probs_dropout_prob: float | int = 0.0
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-12
     image_size: int | list[int] | tuple[int, int] = 224
@@ -71,7 +67,7 @@ class FlavaImageConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="facebook/flava-full")
-@strict(accept_kwargs=True)
+@strict
 class FlavaTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -100,8 +96,8 @@ class FlavaTextConfig(PreTrainedConfig):
     num_attention_heads: int = 12
     intermediate_size: int = 3072
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.0
-    attention_probs_dropout_prob: float = 0.0
+    hidden_dropout_prob: float | int = 0.0
+    attention_probs_dropout_prob: float | int = 0.0
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-12
     pad_token_id: int | None = 0
@@ -109,7 +105,7 @@ class FlavaTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="facebook/flava-full")
-@strict(accept_kwargs=True)
+@strict
 class FlavaMultimodalConfig(PreTrainedConfig):
     r"""
     use_cls_token (`bool`, *optional*, defaults to `True`):
@@ -138,8 +134,8 @@ class FlavaMultimodalConfig(PreTrainedConfig):
     num_attention_heads: int = 12
     intermediate_size: int = 3072
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.0
-    attention_probs_dropout_prob: float = 0.0
+    hidden_dropout_prob: float | int = 0.0
+    attention_probs_dropout_prob: float | int = 0.0
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-12
     qkv_bias: bool = True
@@ -147,7 +143,7 @@ class FlavaMultimodalConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="facebook/flava-full")
-@strict(accept_kwargs=True)
+@strict
 class FlavaImageCodebookConfig(PreTrainedConfig):
     r"""
     num_groups (`int`, *optional*, defaults to 4):
@@ -183,13 +179,17 @@ class FlavaImageCodebookConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="facebook/flava-full")
-@strict(accept_kwargs=True)
+@strict
 class FlavaConfig(PreTrainedConfig):
     r"""
     image_config (`dict`, *optional*):
         Dictionary of configuration options used to initialize [`FlavaImageConfig`].
     multimodal_config (`dict`, *optional*):
         Dictionary of configuration options used to initialize [`FlavaMultimodalConfig`].
+    image_codebook_config (`dict`, *optional*):
+        Dictionary of configuration options used to initialize [`FlavaCodebookConfig`].
+    init_codebook (`bool`, *optional*, defaults to `True`):
+        Whether to initialize the codebook
     logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
         The initial value of the *logit_scale* parameter. Default is used as per the original FLAVA/CLIP
         implementation.
@@ -213,10 +213,6 @@ class FlavaConfig(PreTrainedConfig):
         Whether to skip running unmasked multimodal encoder whose outputs are not used by FLAVA losses.
     return_loss (`bool`, *optional*, defaults to `True`):
         Whether to return loss or not
-    image_codebook_config (`dict`, *optional*):
-        Dictionary of configuration options used to initialize [`FlavaCodebookConfig`].
-    init_codebook (`bool`, *optional*, defaults to `True`):
-        Whether to initialize the codebook
 
     Example:
 

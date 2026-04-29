@@ -32,6 +32,7 @@ from ...image_utils import (
     SizeDict,
 )
 from ...utils import TensorType
+from ...utils.import_utils import requires
 
 
 class SegformerImageProcessor(BeitImageProcessor):
@@ -101,7 +102,7 @@ class SegformerImageProcessor(BeitImageProcessor):
         self,
         images: list["torch.Tensor"],
         do_reduce_labels: bool,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_resize: bool,
         do_rescale: bool,
         do_normalize: bool,
@@ -141,6 +142,7 @@ class SegformerImageProcessor(BeitImageProcessor):
         return processed_images
 
 
+@requires(backends=("torch", "torchvision"))
 class SegformerImageProcessorPil(BeitImageProcessorPil):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -207,7 +209,7 @@ class SegformerImageProcessorPil(BeitImageProcessorPil):
         self,
         images: list["np.ndarray"],
         do_reduce_labels: bool,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_resize: bool,
         do_rescale: bool,
         do_normalize: bool,

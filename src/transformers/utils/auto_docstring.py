@@ -19,7 +19,7 @@ from collections.abc import Mapping
 from functools import lru_cache
 from pathlib import Path
 from types import UnionType
-from typing import Union, get_args, get_origin
+from typing import ClassVar, Union, get_args, get_origin
 
 import regex as re
 import typing_extensions
@@ -40,7 +40,7 @@ AUTODOC_FILES = [
     "modeling_*.py",
     "tokenization_*.py",
     "processing_*.py",
-    "image_processing_*_fast.py",
+    "image_processing_pil_*.py",
     "image_processing_*.py",
     "feature_extractor_*.py",
 ]
@@ -77,6 +77,7 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "donut": "DonutSwinConfig",
     "esmfold": "EsmConfig",
     "parakeet": "ParakeetCTCConfig",
+    "privacy-filter": "OpenAIPrivacyFilterConfig",
     "lasr": "LasrCTCConfig",
     "wav2vec2-with-lm": "Wav2Vec2Config",
 }
@@ -85,9 +86,9 @@ _re_checkpoint = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")
 
 # Pre-compiled patterns used repeatedly at runtime.  Compiling once here avoids
 # repeated compilation overhead (and cache lookups) on every decorator call.
-_re_example_or_return = re.compile(r"(?m)^([ \t]*)(?=Example|Return)")
+_re_example_or_return = re.compile(r"(?m)^([ \t]*)(?=Example|Return|```)")
 _re_return = re.compile(r"(?m)^([ \t]*)(?=Return)")
-_re_example = re.compile(r"(?m)^([ \t]*)(?=Example)")
+_re_example = re.compile(r"(?m)^([ \t]*)(?=Example|```)")
 _re_args_section = re.compile(r"(?:Args:)(\n.*)?(\n)?$", re.DOTALL)
 _re_shape = re.compile(r"(of shape\s*(?:`.*?`|\(.*?\)))")
 _re_default = re.compile(r"(defaults to \s*[^)]*)")
@@ -2819,7 +2820,7 @@ def get_placeholders_dict(placeholders: set[str], model_name: str) -> Mapping[st
                 # In case a library is not installed, we don't want to fail the docstring generation
                 place_holder_value = None
             if place_holder_value is not None:
-                if isinstance(place_holder_value, (list, tuple)):
+                if isinstance(place_holder_value, list | tuple):
                     place_holder_value = (
                         place_holder_value[-1] if place_holder_value[-1] is not None else place_holder_value[0]
                     )
@@ -2852,7 +2853,7 @@ def format_args_docstring(docstring: str, model_name: str) -> str:
 
 
 def get_args_doc_from_source(args_classes: object | list[object]) -> dict:
-    if isinstance(args_classes, (list, tuple)):
+    if isinstance(args_classes, list | tuple):
         return _merge_args_dicts(tuple(args_classes))
     return args_classes.__dict__
 
@@ -3245,7 +3246,15 @@ def _get_parameter_info(param_name, documented_params, source_args_dict, param_t
 
 
 def _process_regular_parameters(
-    sig, func, class_name, documented_params, indent_level, undocumented_parameters, source_args_dict, parent_class
+    sig,
+    func,
+    class_name,
+    documented_params,
+    indent_level,
+    undocumented_parameters,
+    source_args_dict,
+    parent_class,
+    allowed_params=None,
 ):
     """
     Process all regular parameters (not kwargs parameters) from the function signature.
@@ -3275,9 +3284,17 @@ def _process_regular_parameters(
         # Skip parameters that should be ignored
         if (
             param_name in ARGS_TO_IGNORE
+            or param_name.startswith("_")  # Private/internal params (e.g. ClassVar-backed fields in configs)
             or param.kind == inspect.Parameter.VAR_POSITIONAL
             or param.kind == inspect.Parameter.VAR_KEYWORD
         ):
+            continue
+        # When a filter is active (e.g. config classes: only own annotations), skip inherited params
+        if allowed_params is not None and param_name not in allowed_params:
+            continue
+
+        # When a filter is active (e.g. config classes: only own annotations), skip inherited params
+        if allowed_params is not None and param_name not in allowed_params:
             continue
 
         param_name = ARGS_TO_RENAME.get(param_name, param_name)
@@ -3322,8 +3339,17 @@ def _process_regular_parameters(
                 "description": description if description else "\n    <fill_description>",
                 "default": param_default,
             }
+            # Try to get the correct source file; for classes decorated with @strict (huggingface_hub),
+            # func.__code__.co_filename points to the wrapper in huggingface_hub, not the config file.
+            try:
+                if parent_class is not None:
+                    _source_file = inspect.getsourcefile(parent_class) or func.__code__.co_filename
+                else:
+                    _source_file = inspect.getsourcefile(inspect.unwrap(func)) or func.__code__.co_filename
+            except (TypeError, OSError):
+                _source_file = func.__code__.co_filename
             undocumented_parameters.append(
-                f"[ERROR] `{param_name}` is part of {func.__qualname__}'s signature, but not documented. Make sure to add it to the docstring of the function in {func.__code__.co_filename}."
+                f"[ERROR] `{param_name}` is part of {func.__qualname__}'s signature, but not documented. Make sure to add it to the docstring of the function in {_source_file}."
             )
 
     return docstring, missing_args
@@ -3554,6 +3580,11 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
         if kwarg_param.annotation == inspect.Parameter.empty:
             continue
 
+        if not hasattr(kwarg_param.annotation, "__args__") or not hasattr(
+            kwarg_param.annotation.__args__[0], "__name__"
+        ):
+            continue
+
         if kwarg_param.annotation.__args__[0].__name__ not in BASIC_KWARGS_TYPES:
             # Extract documentation for kwargs
             kwargs_documentation = kwarg_param.annotation.__args__[0].__doc__
@@ -3757,7 +3788,15 @@ def _add_return_tensors_to_docstring(func, parent_class, docstring, indent_level
 
 
 def _process_parameters_section(
-    func_documentation, sig, func, class_name, model_name_lowercase, parent_class, indent_level, source_args_dict
+    func_documentation,
+    sig,
+    func,
+    class_name,
+    model_name_lowercase,
+    parent_class,
+    indent_level,
+    source_args_dict,
+    allowed_params,
 ):
     """
     Process the parameters section of the docstring.
@@ -3783,7 +3822,15 @@ def _process_parameters_section(
 
     # Process regular parameters
     param_docstring, missing_args = _process_regular_parameters(
-        sig, func, class_name, documented_params, indent_level, undocumented_parameters, source_args_dict, parent_class
+        sig,
+        func,
+        class_name,
+        documented_params,
+        indent_level,
+        undocumented_parameters,
+        source_args_dict,
+        parent_class,
+        allowed_params,
     )
     docstring += param_docstring
 
@@ -3974,7 +4021,7 @@ def _process_example_section(
 
     example_docstring = ""
 
-    # Use existing example section if available
+    # Use existing example section if available (with or without an "Example:" header)
     if func_documentation is not None and (match := _re_example.search(func_documentation)):
         example_docstring = func_documentation[match.start() :]
         example_docstring = "\n" + set_min_indent(example_docstring, indent_level + 4)
@@ -4030,7 +4077,10 @@ def _process_example_section(
         else:
             # Check if the model is in a pipeline to get an example
             for name_model_list_for_task in MODELS_TO_PIPELINE:
-                model_list_for_task = getattr(auto_module.modeling_auto, name_model_list_for_task)
+                try:
+                    model_list_for_task = getattr(auto_module.modeling_auto, name_model_list_for_task)
+                except (ImportError, AttributeError):
+                    continue
                 if class_name in model_list_for_task.values():
                     pipeline_name = MODELS_TO_PIPELINE[name_model_list_for_task]
                     example_annotation = PIPELINE_TASKS_TO_SAMPLE_DOCSTRINGS[pipeline_name].format(
@@ -4048,7 +4098,13 @@ def _process_example_section(
 
 
 def auto_method_docstring(
-    func, parent_class=None, custom_intro=None, custom_args=None, checkpoint=None, source_args_dict=None
+    func,
+    parent_class=None,
+    custom_intro=None,
+    custom_args=None,
+    checkpoint=None,
+    source_args_dict=None,
+    allowed_params=None,
 ):
     """
     Wrapper that automatically generates docstring.
@@ -4077,7 +4133,15 @@ def auto_method_docstring(
 
     # Process Parameters section
     docstring += _process_parameters_section(
-        func_documentation, sig, func, class_name, model_name_lowercase, parent_class, indent_level, source_args_dict
+        func_documentation,
+        sig,
+        func,
+        class_name,
+        model_name_lowercase,
+        parent_class,
+        indent_level,
+        source_args_dict,
+        allowed_params,
     )
 
     # Process Returns section
@@ -4160,12 +4224,26 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
         doc_class = cls.__doc__
         if custom_args is None and doc_class:
             custom_args = doc_class
+
+        # Collect all non-ClassVar annotations from the class and its ancestors up to
+        # (but not including) PreTrainedConfig. This allows inherited params from intermediate
+        # config base classes to be documented, while naturally excluding PreTrainedConfig-specific
+        # quasi-ClassVar params (e.g. `transformers_version`, `architectures`).
+        own_config_params = set()
+        for ancestor in cls.__mro__:
+            if ancestor.__name__ == "PreTrainedConfig":
+                break
+            own_config_params |= {
+                k for k, v in getattr(ancestor, "__annotations__", {}).items() if get_origin(v) is not ClassVar
+            }
+        allowed_params = own_config_params if own_config_params else None
         docstring_init = auto_method_docstring(
             cls.__init__,
             parent_class=cls,
             custom_args=custom_args,
             checkpoint=checkpoint,
             source_args_dict=get_args_doc_from_source([ConfigArgs]),
+            allowed_params=allowed_params,
         ).__doc__
 
     indent_level = get_indent_level(cls)
@@ -4179,6 +4257,9 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
                 PLACEHOLDER_TO_AUTO_MODULE["model_class"][1],
             )[model_name_lowercase]
         except KeyError:
+            pass
+        except ImportError:
+            # In some environments, certain model classes might not be available. In that case, we can skip this part.
             pass
 
     if model_name_lowercase and model_name_lowercase not in getattr(

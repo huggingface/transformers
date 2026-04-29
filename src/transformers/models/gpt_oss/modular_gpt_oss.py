@@ -62,7 +62,7 @@ class GptOssRMSNorm(LlamaRMSNorm):
         return (self.weight * hidden_states).to(input_dtype)  # main diff with Llama
 
 
-@use_experts_implementation(is_transposed=True, has_bias=True)
+@use_experts_implementation(is_concatenated=False, is_transposed=True, has_bias=True)
 class GptOssExperts(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -278,7 +278,6 @@ class GptOssDecoderLayer(LlamaDecoderLayer):
         self.mlp = GptOssMLP(config)
         self.input_layernorm = GptOssRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GptOssRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.attention_type = config.layer_types[layer_idx]
 
     def forward(
         self,
@@ -339,8 +338,6 @@ class GptOssPreTrainedModel(LlamaPreTrainedModel):
 
 
 class GptOssModel(MixtralModel):
-    _no_split_modules = ["GptOssDecoderLayer"]
-
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -384,10 +381,10 @@ class GptOssModel(MixtralModel):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for decoder_layer in self.layers:
+        for i, decoder_layer in enumerate(self.layers):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,

@@ -796,7 +796,7 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
                 ],
             }
         ]
-        url = "https://github.com/DAMO-NLP-SG/VideoLLaMA3/raw/refs/heads/main/assets/sora.png"
+        url = "https://raw.githubusercontent.com/DAMO-NLP-SG/VideoLLaMA3/main/assets/sora.png"
         self.image = Image.open(requests.get(url, stream=True).raw)
 
     def tearDown(self):

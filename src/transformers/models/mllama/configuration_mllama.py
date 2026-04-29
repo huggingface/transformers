@@ -22,7 +22,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="meta-llama/Llama-3.2-11B-Vision")
-@strict(accept_kwargs=True)
+@strict
 class MllamaVisionConfig(PreTrainedConfig):
     r"""
     num_global_layers (`int`, *optional*, defaults to 8):
@@ -96,7 +96,7 @@ class MllamaVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="meta-llama/Llama-3.2-11B-Vision")
-@strict(accept_kwargs=True)
+@strict
 class MllamaTextConfig(PreTrainedConfig):
     r"""
     cross_attention_layers (`list[int]`, *optional*):
@@ -147,7 +147,7 @@ class MllamaTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="meta-llama/Llama-3.2-11B-Vision")
-@strict(accept_kwargs=True)
+@strict
 class MllamaConfig(PreTrainedConfig):
     r"""
     Example:
@@ -197,4 +197,4 @@ class MllamaConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["MllamaConfig"]
+__all__ = ["MllamaConfig", "MllamaTextConfig", "MllamaVisionConfig"]

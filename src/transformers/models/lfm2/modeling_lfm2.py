@@ -18,13 +18,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable
-from typing import Any, Optional
+from typing import Optional
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
@@ -152,139 +152,6 @@ class Lfm2MLP(nn.Module):
         return self.w2(F.silu(self.w1(x)) * self.w3(x))
 
 
-class Lfm2HybridConvCache:
-    """
-    Attention and conv cache for Lfm2.
-
-    It stores the Key and Value states as a list of tensors, one for each layer.
-    Attention layer cache shape: `[batch_size, num_heads, seq_len, head_dim]`.
-    Conv layer cache shape: `[batch_size, hidden_size, L_cache-1]`.
-    """
-
-    # Override @property existing in Cache
-    max_batch_size = None
-    is_compileable = False
-    key_cache = None
-    value_cache = None
-
-    def __init__(
-        self,
-        config: Lfm2Config,
-        max_batch_size: int,
-        dtype: torch.dtype = torch.float32,
-        device: torch.device | str | None = None,
-    ):
-        self.key_cache = []
-        self.value_cache = []
-        self.max_batch_size = max_batch_size
-        self.layer_types = config.layer_types
-        self.first_attention_layer = self.layer_types.index("full_attention")
-        self.conv_L_cache = config.conv_L_cache
-        self._dtype = dtype
-
-        self.conv_cache: list[torch.Tensor] = []
-        device = torch.device(device) if device is not None else None
-
-        for _ in range(config.num_hidden_layers):
-            conv_state = torch.zeros(
-                self.max_batch_size,
-                config.hidden_size,
-                self.conv_L_cache,
-                dtype=self._dtype,
-                device=device,
-            )
-            self.conv_cache.append(conv_state)
-            self.key_cache.append(torch.tensor([]))
-            self.value_cache.append(torch.tensor([]))
-
-    def update(
-        self,
-        key_states: torch.Tensor,
-        value_states: torch.Tensor,
-        layer_idx: int,
-        cache_kwargs: dict[str, Any] | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
-
-        Parameters:
-            key_states (`torch.Tensor`):
-                The new key states to cache.
-            value_states (`torch.Tensor`):
-                The new value states to cache.
-            layer_idx (`int`):
-                The index of the layer to cache the states for.
-            cache_kwargs (`Dict[str, Any]`, `optional`):
-                Additional arguments for the cache subclass. No additional arguments are used in `DynamicCache`.
-
-        Return:
-            A tuple containing the updated key and value states.
-        """
-        # Update the cache
-        if self.key_cache[layer_idx].numel() == 0:
-            self.key_cache[layer_idx] = key_states
-            self.value_cache[layer_idx] = value_states
-        else:
-            self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
-            self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
-
-        return self.key_cache[layer_idx], self.value_cache[layer_idx]
-
-    def reorder_cache(self, beam_idx: torch.LongTensor):
-        """Reorders the cache for beam search, given the selected beam indices."""
-        for layer_idx in range(len(self.key_cache)):
-            if self.key_cache[layer_idx].numel():
-                device = self.key_cache[layer_idx].device
-                self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
-                device = self.value_cache[layer_idx].device
-                self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
-
-            if self.conv_cache[layer_idx].numel():
-                device = self.conv_cache[layer_idx].device
-                self.conv_cache[layer_idx] = self.conv_cache[layer_idx].index_select(0, beam_idx.to(device))
-
-    def get_seq_length(self, layer_idx: int | None = 0) -> int:
-        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
-        # take any layer that contains cache and not empty tensor
-        layer_idx = self.first_attention_layer if self.layer_types[layer_idx] != "full_attention" else layer_idx
-        if len(self.key_cache) <= layer_idx or self.key_cache[layer_idx].numel() == 0:
-            return 0
-        return self.key_cache[layer_idx].shape[-2]
-
-    def get_mask_sizes(self, query_length: int, layer_idx: int) -> tuple[int, int]:
-        """
-        Return a tuple (kv_length, kv_offset) corresponding to the length and offset that will be returned for
-        the given layer at `layer_idx`.
-        The masks are then prepared according to the given lengths (kv_length, kv_offset) and patterns (i.e. sliding_window, chunk_size),
-        for each layer.
-        """
-        full_mask_kv_offset = 0
-        past_seen_tokens = self.get_seq_length()
-        kv_length = query_length + past_seen_tokens
-        return kv_length, full_mask_kv_offset
-
-    def crop(self, max_length: int):
-        """Crop the cache to the given length"""
-        if max_length < 0:
-            max_length = self.get_seq_length() - abs(max_length)
-
-        if self.get_seq_length() <= max_length:
-            return
-
-        for idx in range(len(self.key_cache)):
-            if self.key_cache[idx].numel():
-                self.key_cache[idx] = self.key_cache[idx][..., :max_length, :]
-                self.value_cache[idx] = self.value_cache[idx][..., :max_length, :]
-
-    def __len__(self) -> int:
-        return len(self.key_cache)
-
-    def reset(self):
-        for layer_idx in range(len(self.conv_cache)):
-            # In-place ops prevent breaking the static address
-            self.conv_cache[layer_idx].zero_()
-
-
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -379,7 +246,7 @@ class Lfm2Attention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
-        past_key_values: Lfm2HybridConvCache | None = None,
+        past_key_values: Cache | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -456,28 +323,20 @@ class Lfm2ShortConv(nn.Module):
     def cuda_kernels_forward(
         self,
         x: torch.Tensor,
-        past_key_values: Lfm2HybridConvCache | None = None,
+        past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
     ):
-        seqlen = x.shape[1]
         x = apply_mask_to_padding_states(x, attention_mask)
         BCx = self.in_proj(x).transpose(-1, -2)
         B, C, x = BCx.chunk(3, dim=-2)
 
         Bx = B * x
 
-        # Note: we may or may not have to substract the current seq_len here as the cache may or may not be already updated
-        # by the current layer
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        # In this case, the cache was already updated and we need to subtract seq_len to get the correct past length
-        if "full_attention" in self.config.layer_types[: self.layer_idx]:
-            past_seen_tokens = past_seen_tokens - seqlen
-
         conv_weights = self.conv.weight.view(self.conv.weight.size(0), self.conv.weight.size(2))
-        if past_seen_tokens > 0:
+        if past_key_values is not None and past_key_values.has_previous_state(self.layer_idx):
             conv_out = causal_conv1d_update(
                 Bx.squeeze(-1),
-                past_key_values.conv_cache[self.layer_idx],
+                past_key_values.layers[self.layer_idx].conv_states,
                 conv_weights,
                 self.conv.bias,
                 None,
@@ -486,7 +345,7 @@ class Lfm2ShortConv(nn.Module):
         else:
             if past_key_values is not None:
                 conv_state = nn.functional.pad(Bx, (self.L_cache - Bx.shape[-1], 0))
-                past_key_values.conv_cache[self.layer_idx].copy_(conv_state)
+                conv_state = past_key_values.update_conv_state(conv_state, self.layer_idx)
 
             conv_out = causal_conv1d_fn(Bx, conv_weights, self.conv.bias, activation=None)
 
@@ -497,7 +356,7 @@ class Lfm2ShortConv(nn.Module):
     def slow_forward(
         self,
         x: torch.Tensor,
-        past_key_values: Lfm2HybridConvCache | None = None,
+        past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
     ):
         seqlen = x.shape[1]
@@ -508,20 +367,8 @@ class Lfm2ShortConv(nn.Module):
 
         Bx = B * x
 
-        # Note: we may or may not have to substract the current seq_len here as the cache may or may not be already updated
-        # by the current layer
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        # In this case, the cache was already updated and we need to subtract seq_len to get the correct past length
-        if "full_attention" in self.config.layer_types[: self.layer_idx]:
-            past_seen_tokens = past_seen_tokens - seqlen
-
-        if past_seen_tokens > 0:
-            conv_state = past_key_values.conv_cache[self.layer_idx]
-            positions = torch.arange(seqlen, device=conv_state.device) + past_seen_tokens
-            positions = positions.clamp(0, self.L_cache - 1)
-            conv_state = conv_state.roll(shifts=-1, dims=-1)
-            conv_state[:, :, positions] = Bx.to(device=conv_state.device, dtype=conv_state.dtype)
-            past_key_values.conv_cache[self.layer_idx].copy_(conv_state)
+        if past_key_values is not None and past_key_values.has_previous_state(self.layer_idx):
+            conv_state = past_key_values.update_conv_state(Bx, self.layer_idx)
             conv_out = torch.sum(conv_state.to(Bx.device) * self.conv.weight[:, 0, :], dim=-1)
             if self.bias:
                 conv_out += self.conv.bias
@@ -530,7 +377,7 @@ class Lfm2ShortConv(nn.Module):
         else:
             if past_key_values is not None:
                 conv_state = nn.functional.pad(Bx, (self.L_cache - Bx.shape[-1], 0))
-                past_key_values.conv_cache[self.layer_idx].copy_(conv_state)
+                conv_state = past_key_values.update_conv_state(conv_state, self.layer_idx)
 
             conv_out = self.conv(Bx)[..., :seqlen]
 
@@ -542,7 +389,7 @@ class Lfm2ShortConv(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        past_key_values: Lfm2HybridConvCache | None = None,
+        past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
     ):
         if is_fast_path_available and "cuda" in hidden_states.device.type and not is_torchdynamo_compiling():
@@ -569,7 +416,7 @@ class Lfm2DecoderLayer(GradientCheckpointingLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Lfm2HybridConvCache | None = None,
+        past_key_values: Cache | None = None,
         **kwargs,
     ) -> torch.Tensor:
         residual = hidden_states
@@ -638,7 +485,7 @@ class Lfm2Model(Lfm2PreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Lfm2HybridConvCache | None = None,
+        past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -650,10 +497,7 @@ class Lfm2Model(Lfm2PreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            batch_size = inputs_embeds.shape[0]
-            past_key_values = Lfm2HybridConvCache(
-                config=self.config, max_batch_size=batch_size, dtype=self.dtype, device=self.device
-            )
+            past_key_values = DynamicCache(config=self.config)
 
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -674,8 +518,8 @@ class Lfm2Model(Lfm2PreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         # decoder layers
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            layer_mask = causal_mask if decoder_layer.is_attention_layer else linear_attention
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            layer_mask = causal_mask if self.config.layer_types[i] == "full_attention" else linear_attention
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=layer_mask,
