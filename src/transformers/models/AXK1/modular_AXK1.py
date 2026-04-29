@@ -41,7 +41,7 @@ from ..llama.modeling_llama import (
 )
 from ..mixtral.modeling_mixtral import MixtralExperts
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
-from .configuration_ax_k1 import AXK1Config
+from .configuration_AXK1 import AXK1Config
 
 
 logger = logging.get_logger(__name__)

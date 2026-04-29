@@ -40,11 +40,11 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from .configuration_ax_k2 import AXK2Config
+from .configuration_AXK1 import AXK1Config
 
 
 @use_kernel_forward_from_hub("RMSNorm")
-class AXK2RMSNorm(nn.Module):
+class AXK1RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -61,10 +61,10 @@ class AXK2RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class AXK2RotaryEmbedding(nn.Module):
+class AXK1RotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: AXK2Config, device=None):
+    def __init__(self, config: AXK1Config, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -82,7 +82,7 @@ class AXK2RotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: AXK2Config | None = None,
+        config: AXK1Config | None = None,
         device: Optional["torch.device"] = None,
         seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:
@@ -126,7 +126,7 @@ class AXK2RotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-class AXK2MLP(nn.Module):
+class AXK1MLP(nn.Module):
     def __init__(self, config, intermediate_size=None):
         super().__init__()
         self.config = config
@@ -142,7 +142,7 @@ class AXK2MLP(nn.Module):
         return down_proj
 
 
-class AXK2TopkRouter(nn.Module):
+class AXK1TopkRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -158,7 +158,7 @@ class AXK2TopkRouter(nn.Module):
 
 
 @use_experts_implementation
-class AXK2NaiveMoe(nn.Module):
+class AXK1NaiveMoe(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
     def __init__(self, config):
@@ -197,7 +197,7 @@ class AXK2NaiveMoe(nn.Module):
         return final_hidden_states
 
 
-class AXK2MoE(nn.Module):
+class AXK1MoE(nn.Module):
     """
     A mixed expert module containing shared experts.
     """
@@ -205,9 +205,9 @@ class AXK2MoE(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.experts = AXK2NaiveMoe(config)
-        self.gate = AXK2TopkRouter(config)
-        self.shared_experts = AXK2MLP(
+        self.experts = AXK1NaiveMoe(config)
+        self.gate = AXK1TopkRouter(config)
+        self.shared_experts = AXK1MLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
         self.n_routed_experts = config.n_routed_experts
@@ -233,7 +233,7 @@ class AXK2MoE(nn.Module):
             .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
             .reshape(-1, self.n_routed_experts)
         )
-        scores_for_choice = router_logits_for_choice.masked_fill(~score_mask.bool(), 0.0)
+        scores_for_choice = router_logits_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
         topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
         topk_weights = router_logits.gather(1, topk_indices)
         if self.norm_topk_prob:
@@ -361,10 +361,10 @@ def yarn_get_mscale(scale=1, mscale=1):
     return 0.1 * mscale * math.log(scale) + 1.0
 
 
-class AXK2Attention(nn.Module):
+class AXK1Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: AXK2Config, layer_idx: int):
+    def __init__(self, config: AXK1Config, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -384,7 +384,7 @@ class AXK2Attention(nn.Module):
             self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
         else:
             self.q_a_proj = nn.Linear(config.hidden_size, config.q_lora_rank, bias=config.attention_bias)
-            self.q_a_layernorm = AXK2RMSNorm(config.q_lora_rank)
+            self.q_a_layernorm = AXK1RMSNorm(config.q_lora_rank)
             self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
 
         self.kv_a_proj_with_mqa = nn.Linear(
@@ -392,7 +392,7 @@ class AXK2Attention(nn.Module):
             self.kv_lora_rank + self.qk_rope_head_dim,
             bias=config.attention_bias,
         )
-        self.kv_a_layernorm = AXK2RMSNorm(self.kv_lora_rank)
+        self.kv_a_layernorm = AXK1RMSNorm(self.kv_lora_rank)
         self.kv_b_proj = nn.Linear(
             self.kv_lora_rank,
             self.num_heads * (self.qk_nope_head_dim + self.v_head_dim),
@@ -479,14 +479,14 @@ class AXK2Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class AXK2DecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: AXK2Config, layer_idx: int):
+class AXK1DecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: AXK1Config, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
         self.hidden_size = config.hidden_size
 
-        self.self_attn = AXK2Attention(config=config, layer_idx=layer_idx)
+        self.self_attn = AXK1Attention(config=config, layer_idx=layer_idx)
 
         self.is_moe_layer = (
             config.n_routed_experts is not None
@@ -494,13 +494,13 @@ class AXK2DecoderLayer(GradientCheckpointingLayer):
             and layer_idx % config.moe_layer_freq == 0
         )
         if self.is_moe_layer:
-            self.mlp = AXK2MoE(config)
+            self.mlp = AXK1MoE(config)
         else:
-            self.mlp = AXK2MLP(config)
+            self.mlp = AXK1MLP(config)
 
-        self.input_layernorm = AXK2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = AXK2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_mlp_layernorm = AXK2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = AXK1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = AXK1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_mlp_layernorm = AXK1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -536,11 +536,11 @@ class AXK2DecoderLayer(GradientCheckpointingLayer):
 
 
 @auto_docstring
-class AXK2PreTrainedModel(PreTrainedModel):
-    config: AXK2Config
+class AXK1PreTrainedModel(PreTrainedModel):
+    config: AXK1Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["AXK2DecoderLayer"]
+    _no_split_modules = ["AXK1DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -549,8 +549,8 @@ class AXK2PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": AXK2DecoderLayer,
-        "attentions": AXK2Attention,
+        "hidden_states": AXK1DecoderLayer,
+        "attentions": AXK1Attention,
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.\d+\.self_attn\.rotary_emb\.inv_freq"]
@@ -558,27 +558,27 @@ class AXK2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, AXK2TopkRouter):
+        if isinstance(module, AXK1TopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
-        elif isinstance(module, AXK2NaiveMoe):
+        elif isinstance(module, AXK1NaiveMoe):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring
-class AXK2Model(AXK2PreTrainedModel):
-    def __init__(self, config: AXK2Config):
+class AXK1Model(AXK1PreTrainedModel):
+    def __init__(self, config: AXK1Config):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [AXK2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [AXK1DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = AXK2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = AXK2RotaryEmbedding(config=config)
+        self.norm = AXK1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = AXK1RotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -641,14 +641,14 @@ class AXK2Model(AXK2PreTrainedModel):
 
 
 @auto_docstring
-class AXK2ForCausalLM(AXK2PreTrainedModel, GenerationMixin):
+class AXK1ForCausalLM(AXK1PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = AXK2Model(config)
+        self.model = AXK1Model(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
@@ -673,9 +673,9 @@ class AXK2ForCausalLM(AXK2PreTrainedModel, GenerationMixin):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, AXK2ForCausalLM
+        >>> from transformers import AutoTokenizer, AXK1ForCausalLM
 
-        >>> model = AXK2ForCausalLM.from_pretrained("skt/A.X-K1")
+        >>> model = AXK1ForCausalLM.from_pretrained("skt/A.X-K1")
         >>> tokenizer = AutoTokenizer.from_pretrained("skt/A.X-K1")
 
         >>> prompt = "SKT의 A.X 모델에 대해 알려줘."
@@ -714,18 +714,18 @@ class AXK2ForCausalLM(AXK2PreTrainedModel, GenerationMixin):
         )
 
 
-class AXK2ForSequenceClassification(GenericForSequenceClassification, AXK2PreTrainedModel):
+class AXK1ForSequenceClassification(GenericForSequenceClassification, AXK1PreTrainedModel):
     pass
 
 
-class AXK2ForTokenClassification(GenericForTokenClassification, AXK2PreTrainedModel):
+class AXK1ForTokenClassification(GenericForTokenClassification, AXK1PreTrainedModel):
     pass
 
 
 __all__ = [
-    "AXK2PreTrainedModel",
-    "AXK2Model",
-    "AXK2ForCausalLM",
-    "AXK2ForSequenceClassification",
-    "AXK2ForTokenClassification",
+    "AXK1PreTrainedModel",
+    "AXK1Model",
+    "AXK1ForCausalLM",
+    "AXK1ForSequenceClassification",
+    "AXK1ForTokenClassification",
 ]
