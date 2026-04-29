@@ -66,11 +66,9 @@ TS_PROMPT = "<|audio|> Timestamps: Transcribe the speech. After each word, add a
 Load the model and define a general function for decoding the audio:
 
 ```python
-device = "cuda" if torch.cuda.is_available() else "cpu"
 processor = AutoProcessor.from_pretrained(MODEL_NAME)
 tokenizer = processor.tokenizer
-model = AutoModelForSpeechSeq2Seq.from_pretrained(MODEL_NAME, device_map=device, dtype=torch.bfloat16)
-model.eval()
+model = AutoModelForSpeechSeq2Seq.from_pretrained(MODEL_NAME, device_map="auto")
 
 @torch.inference_mode()
 def transcribe(audio, prompt, max_new_tokens=2000, prefix_text=None):
