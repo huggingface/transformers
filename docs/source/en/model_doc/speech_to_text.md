@@ -51,21 +51,22 @@ be installed as follows: `apt install libsndfile1-dev`
 - ASR and Speech Translation
 
 ```python
->>> import torch
->>> from transformers import Speech2TextProcessor, Speech2TextForConditionalGeneration
->>> from datasets import load_dataset
+from datasets import load_dataset
 
->>> model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
->>> processor = Speech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech-asr")
+from transformers import Speech2TextForConditionalGeneration, Speech2TextProcessor
 
 
->>> ds = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr", device_map="auto")
+processor = Speech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech-asr")
 
->>> inputs = processor(ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt")
->>> generated_ids = model.generate(inputs["input_features"], attention_mask=inputs["attention_mask"])
 
->>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)
->>> transcription
+ds = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+
+inputs = processor(ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt").to(model.device)
+generated_ids = model.generate(inputs["input_features"], attention_mask=inputs["attention_mask"])
+
+transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)
+transcription
 ['mister quilter is the apostle of the middle classes and we are glad to welcome his gospel']
 ```
 
@@ -78,24 +79,25 @@ be installed as follows: `apt install libsndfile1-dev`
   checkpoint.
 
 ```python
->>> import torch
->>> from transformers import Speech2TextProcessor, Speech2TextForConditionalGeneration
->>> from datasets import load_dataset
+from datasets import load_dataset
 
->>> model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-medium-mustc-multilingual-st")
->>> processor = Speech2TextProcessor.from_pretrained("facebook/s2t-medium-mustc-multilingual-st")
+from transformers import Speech2TextForConditionalGeneration, Speech2TextProcessor
 
->>> ds = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
 
->>> inputs = processor(ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt")
->>> generated_ids = model.generate(
-...     inputs["input_features"],
-...     attention_mask=inputs["attention_mask"],
-...     forced_bos_token_id=processor.tokenizer.lang_code_to_id["fr"],
-... )
+model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-medium-mustc-multilingual-st", device_map="auto")
+processor = Speech2TextProcessor.from_pretrained("facebook/s2t-medium-mustc-multilingual-st")
 
->>> translation = processor.batch_decode(generated_ids, skip_special_tokens=True)
->>> translation
+ds = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+
+inputs = processor(ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt").to(model.device)
+generated_ids = model.generate(
+    inputs["input_features"],
+    attention_mask=inputs["attention_mask"],
+    forced_bos_token_id=processor.tokenizer.lang_code_to_id["fr"],
+)
+
+translation = processor.batch_decode(generated_ids, skip_special_tokens=True)
+translation
 ["(Vidéo) Si M. Kilder est l'apossible des classes moyennes, et nous sommes heureux d'être accueillis dans son évangile."]
 ```
 
