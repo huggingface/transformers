@@ -46,6 +46,7 @@ if is_torch_available():
     import torch
 
 
+# NOTE: PPFormulaNet is not a typical VLM; it follows an encoder-decoder architecture.
 class PPFormulaNetModelTester(VLMModelTester):
     base_model_class = PPFormulaNetModel
     config_class = PPFormulaNetConfig
@@ -62,9 +63,6 @@ class PPFormulaNetModelTester(VLMModelTester):
         kwargs.setdefault("num_channels", 3)
         kwargs.setdefault("num_hidden_layers", 1)
         kwargs.setdefault("is_training", False)
-        kwargs.setdefault("post_conv_in_channels", 16)
-        kwargs.setdefault("post_conv_mid_channels", 16)
-        kwargs.setdefault("post_conv_out_channels", 16)
         kwargs.setdefault(
             "vision_config",
             {
@@ -77,6 +75,9 @@ class PPFormulaNetModelTester(VLMModelTester):
                 "num_attention_heads": 2,
                 "global_attn_indexes": [1, 1, 1, 1],
                 "mlp_dim": 1,
+                "post_conv_in_channels": 16,
+                "post_conv_mid_channels": 16,
+                "post_conv_out_channels": 16,
             },
         )
         kwargs.setdefault(
@@ -112,9 +113,6 @@ class PPFormulaNetModelTester(VLMModelTester):
         config = PPFormulaNetConfig(
             text_config=self.text_config,
             vision_config=self.vision_config,
-            post_conv_in_channels=self.post_conv_in_channels,
-            post_conv_mid_channels=self.post_conv_mid_channels,
-            post_conv_out_channels=self.post_conv_out_channels,
             num_hidden_layers=self.num_hidden_layers,
         )
 
@@ -130,8 +128,6 @@ class PPFormulaNetModelTest(VLMModelTest, unittest.TestCase):
     )
 
     test_resize_embeddings = False
-    # test_torch_exportable = False
-    # model_split_percents = [0.5, 0.9]
     is_encoder_decoder = True
 
     def _check_encoder_attention_for_generate(self, attentions, batch_size, config, prompt_length):
@@ -252,10 +248,6 @@ class PPFormulaNetModelTest(VLMModelTest, unittest.TestCase):
             self._set_subconfig_attributes(config, "output_hidden_states", True)
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    @unittest.skip(reason="PPFormulaNet does not small")
-    def test_model_is_small(self):
-        pass
-
     @unittest.skip(reason="PPFormulaNet does not use inputs_embeds")
     def test_enable_input_require_grads(self):
         pass
@@ -281,31 +273,6 @@ class PPFormulaNetModelTest(VLMModelTest, unittest.TestCase):
     def test_mismatching_num_image_tokens(self):
         pass
 
-    @pytest.mark.generate
-    @unittest.skip(reason="PPFormulaNet does not support beam search.")
-    def test_beam_sample_generate(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="PPFormulaNet does not support beam search.")
-    def test_beam_search_generate(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="PPFormulaNet does not support beam search.")
-    def test_beam_search_generate_dict_output(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="PPFormulaNet does not support beam search.")
-    def test_beam_search_generate_dict_outputs_use_cache(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="PPFormulaNet does not support beam search.")
-    def test_beam_sample_generate_dict_output(self):
-        pass
-
     @unittest.skip(reason="PPFormulaNet does not support data parallel")
     def test_multi_gpu_data_parallel_forward(self):
         pass
@@ -322,7 +289,7 @@ class PPFormulaNetModelTest(VLMModelTest, unittest.TestCase):
         pass
 
     @unittest.skip(
-        reason="GenerationMixin._expand_inputs_for_generation() got multiple values for keyword argument 'input_ids'"
+        reason="PPFormulaNet does not support continuing generation from past_key_values across generate calls."
     )
     def test_generate_continue_from_past_key_values(self):
         pass

@@ -39,10 +39,10 @@ from io import BytesIO
 
 import httpx
 from PIL import Image
-from transformers import AutoProcessor, PPFormulaNetForConditionalGeneration
+from transformers import AutoProcessor, AutoModelForImageTextToText
 
 model_path = "PaddlePaddle/PP-FormulaNet_plus-L_safetensors" # or "PaddlePaddle/PP-FormulaNet-L_safetensors"
-model = PPFormulaNetForConditionalGeneration.from_pretrained(model_path, device_map="auto")
+model = AutoModelForImageTextToText.from_pretrained(model_path, device_map="auto")
 processor = AutoProcessor.from_pretrained(model_path)
 
 image_url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_formula_rec_001.png"

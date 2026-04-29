@@ -22,7 +22,6 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
-from ...generation import GenerationMixin
 from ...image_processing_utils import BatchFeature
 from ...image_utils import (
     ImageInput,
@@ -43,7 +42,10 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
+from ...utils.generic import merge_with_config_defaults
 from ...utils.import_utils import requires
+from ...utils.output_capturing import capture_outputs
+from ..florence2.modeling_florence2 import Florence2ForConditionalGeneration
 from ..mbart.configuration_mbart import MBartConfig
 from ..mbart.modeling_mbart import MBartDecoder, shift_tokens_right
 from ..nougat.image_processing_nougat import NougatImageProcessor
@@ -62,7 +64,26 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="PaddlePaddle/PPFormulaNet_plus-L_safetensors")
 @strict
 class PPFormulaNetVisionConfig(SLANeXtVisionConfig):
-    pass
+    r"""
+    post_conv_in_channels (`int`, *optional*, defaults to 256):
+        Number of input channels for the post-encoder convolution layer.
+    post_conv_mid_channels (`int`, *optional*, defaults to 512):
+       Number of intermediate channels for the post-encoder convolution layer.
+    post_conv_out_channels (`int`, *optional*, defaults to 1024):
+        Number of output channels for the post-encoder convolution layer.
+    output_channels (`int`, *optional*, defaults to 256):
+        Dimensionality of the output channels in the Patch Encoder.
+    window_size (`int`, *optional*, defaults to 14):
+        Window size for relative position.
+    global_attn_indexes (`list[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
+        The indexes of the global attention layers.
+    mlp_dim (`int`, *optional*, defaults to 3072):
+        The dimensionality of the MLP layer in the Transformer encoder.
+    """
+
+    post_conv_in_channels: int = 256
+    post_conv_out_channels: int = 1024
+    post_conv_mid_channels: int = 512
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PPFormulaNet_plus-L_safetensors")
@@ -87,24 +108,12 @@ class PPFormulaNetTextConfig(MBartConfig):
 @auto_docstring(checkpoint="PaddlePaddle/PPFormulaNet_plus-L_safetensors")
 @strict
 class PPFormulaNetConfig(PreTrainedConfig):
-    r"""
-    post_conv_in_channels (`int`, *optional*, defaults to 256):
-        Number of input channels for the post-encoder convolution layer.
-    post_conv_mid_channels (`int`, *optional*, defaults to 512):
-       Number of intermediate channels for the post-encoder convolution layer.
-    post_conv_out_channels (`int`, *optional*, defaults to 1024):
-        Number of output channels for the post-encoder convolution layer.
-    """
-
     model_type = "pp_formulanet"
     sub_configs = {"text_config": PPFormulaNetTextConfig, "vision_config": PPFormulaNetVisionConfig}
 
     text_config: dict | PPFormulaNetTextConfig | None = None
     vision_config: dict | PPFormulaNetVisionConfig | None = None
     is_encoder_decoder: bool = True
-    post_conv_in_channels: int = 256
-    post_conv_out_channels: int = 1024
-    post_conv_mid_channels: int = 512
 
     def __post_init__(self, **kwargs):
         if isinstance(self.text_config, dict):
@@ -137,6 +146,23 @@ class PPFormulaNetProcessor(NougatProcessor):
     [`~PPFormulaNetProcessor.__call__`] and [`~PPFormulaNetProcessor.decode`] for more information.
     """
 
+    def __init__(self, image_processor, tokenizer):
+        super().__init__(image_processor, tokenizer)
+
+        # normalize() regex
+        self._text_reg = re.compile(r"(\\(operatorname|mathrm|text|mathbf)\s?\*? {.*?})")
+        self._macro_pattern = re.compile(r"(\\[a-zA-Z]+)\s(?=\w)|\\[a-zA-Z]+\s(?=})")
+        self._protected_macros = {"\\operatorname", "\\mathrm", "\\text", "\\mathbf"}
+
+        letter = r"[a-zA-Z]"
+        noletter = r"[\W_^\d]"
+        self._rule_noletter_noletter = re.compile(r"(?!\\ )(%s)\s+?(%s)" % (noletter, noletter))
+        self._rule_noletter_letter = re.compile(r"(?!\\ )(%s)\s+?(%s)" % (noletter, letter))
+        self._rule_letter_noletter = re.compile(r"(%s)\s+?(%s)" % (letter, noletter))
+
+        # remove_chinese_text_wrapping() regex
+        self._chinese_text_wrapping_pattern = re.compile(r"\\text\s*{([^{}]*[\u4e00-\u9fff]+[^{}]*)}")
+
     def __call__(
         self,
         images: ImageInput,
@@ -162,61 +188,36 @@ class PPFormulaNetProcessor(NougatProcessor):
         image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
         return BatchFeature({**image_inputs})
 
-    def normalize(self, s: str) -> str:
-        """Normalizes a string by removing unnecessary spaces.
-
-        Args:
-            s (str): String to normalize.
-
-        Returns:
-            str: Normalized string.
-        """
-        text_reg = r"(\\(operatorname|mathrm|text|mathbf)\s?\*? {.*?})"
-        letter = r"[a-zA-Z]"
-        noletter = r"[\W_^\d]"
+    def normalize(self, text: str) -> str:
+        """Normalizes a string by removing unnecessary spaces."""
         names = []
-        for x in re.findall(text_reg, s):
-            pattern = r"(\\[a-zA-Z]+)\s(?=\w)|\\[a-zA-Z]+\s(?=})"
-            matches = re.findall(pattern, x[0])
+        for x in self._text_reg.findall(text):
+            matches = self._macro_pattern.findall(x[0])
             for m in matches:
-                if (
-                    m
-                    not in [
-                        "\\operatorname",
-                        "\\mathrm",
-                        "\\text",
-                        "\\mathbf",
-                    ]
-                    and m.strip() != ""
-                ):
-                    s = s.replace(m, m + "XXXXXXX")
-                    s = s.replace(" ", "")
-                    names.append(s)
-        if len(names) > 0:
-            s = re.sub(text_reg, lambda match: str(names.pop(0)), s)
+                if m not in self._protected_macros and m.strip() != "":
+                    text = text.replace(m, m + "XXXXXXX")
+                    text = text.replace(" ", "")
+                    names.append(text)
 
-        rule_noletter_noletter = re.compile(r"(?!\\ )(%s)\s+?(%s)" % (noletter, noletter))
-        rule_noletter_letter = re.compile(r"(?!\\ )(%s)\s+?(%s)" % (noletter, letter))
-        rule_letter_noletter = re.compile(r"(%s)\s+?(%s)" % (letter, noletter))
+        if names:
+            text = self._text_reg.sub(lambda match: str(names.pop(0)), text)
 
-        news = s
+        new_text = text
         while True:
-            s = news
-            news = rule_noletter_noletter.sub(r"\1\2", s)
-            news = rule_noletter_letter.sub(r"\1\2", news)
-            news = rule_letter_noletter.sub(r"\1\2", news)
-            if news == s:
+            text = new_text
+            new_text = self._rule_noletter_noletter.sub(r"\1\2", text)
+            new_text = self._rule_noletter_letter.sub(r"\1\2", new_text)
+            new_text = self._rule_letter_noletter.sub(r"\1\2", new_text)
+            if new_text == text:
                 break
 
-        return news.replace("XXXXXXX", " ")
+        return new_text.replace("XXXXXXX", " ")
 
-    def remove_chinese_text_wrapping(self, formula):
-        pattern = re.compile(r"\\text\s*{([^{}]*[\u4e00-\u9fff]+[^{}]*)}")
-
+    def remove_chinese_text_wrapping(self, formula: str) -> str:
         def replacer(match):
             return match.group(1)
 
-        replaced_formula = pattern.sub(replacer, formula)
+        replaced_formula = self._chinese_text_wrapping_pattern.sub(replacer, formula)
         return replaced_formula.replace('"', "")
 
     def post_process_generation(self, text: str) -> str:
@@ -308,7 +309,7 @@ class PPFormulaNetMultiModalProjector(nn.Module):
             bias=False,
         )
         self.linear_1 = nn.Linear(config.post_conv_out_channels, config.post_conv_out_channels)
-        self.linear_2 = nn.Linear(config.post_conv_out_channels, config.text_config.hidden_size)
+        self.linear_2 = nn.Linear(config.post_conv_out_channels, config.decoder_hidden_size)
 
     def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
         hidden_states = self.conv1(hidden_states)
@@ -320,7 +321,30 @@ class PPFormulaNetMultiModalProjector(nn.Module):
 
 
 class PPFormulaNetVisionModel(SLANeXtVisionEncoder):
-    pass
+    def __init__(self, config: PPFormulaNetVisionConfig):
+        super().__init__()
+        self.multi_modal_projector = PPFormulaNetMultiModalProjector(config)
+
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    def forward(
+        self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
+
+        hidden_states = self.patch_embed(pixel_values)
+        if self.pos_embed is not None:
+            hidden_states = hidden_states + self.pos_embed
+        for layer_module in self.layers:
+            hidden_states = layer_module(hidden_states)
+        hidden_states = self.neck(hidden_states)
+        pooler_output = self.multi_modal_projector(hidden_states)
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=hidden_states,
+            pooler_output=pooler_output,
+        )
 
 
 @auto_docstring
@@ -332,9 +356,9 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
+        config.vision_config.decoder_hidden_size = config.text_config.hidden_size
         self.decoder = PPFormulaNetTextModel(config.text_config)
         self.encoder = PPFormulaNetVisionModel(config=config.vision_config)
-        self.multi_modal_projector = PPFormulaNetMultiModalProjector(config)
 
         self.post_init()
 
@@ -350,7 +374,6 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
             The tensors corresponding to the input images.
         """
         image_outputs = self.encoder(pixel_values, **kwargs)
-        image_outputs.pooler_output = self.multi_modal_projector(image_outputs.last_hidden_state)
 
         return image_outputs
 
@@ -360,13 +383,15 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor | None = None,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor
+        | None = None,  # Kept in the signature for compatibility to avoid duplicate-keyword errors.
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         encoder_outputs: list[torch.FloatTensor] | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.FloatTensor
+        | None = None,  # Kept in the signature for compatibility to avoid duplicate-keyword errors.
         use_cache: bool | None = None,
         **kwargs,
     ) -> tuple | Seq2SeqModelOutput:
@@ -378,8 +403,6 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
 
         if encoder_outputs is None:
             encoder_outputs = self.get_image_features(pixel_values, **kwargs)
-        elif encoder_outputs.pooler_output is None:
-            encoder_outputs.pooler_output = self.multi_modal_projector(encoder_outputs.last_hidden_state)
 
         image_features = encoder_outputs.pooler_output.to(self.decoder.device, self.decoder.dtype)
 
@@ -406,22 +429,8 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
 
 
 @auto_docstring
-class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, GenerationMixin):
-    def __init__(self, config: PPFormulaNetConfig):
-        super().__init__(config)
-        self.model = PPFormulaNetModel(config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-
-        self.post_init()
-
-    def get_output_embeddings(self) -> nn.Module:
-        return self.lm_head
-
-    @auto_docstring
-    def get_image_features(
-        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
+class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
+    _tied_weights_keys = {}
 
     @can_return_tuple
     @auto_docstring
@@ -500,39 +509,21 @@ class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, Generati
             encoder_attentions=outputs.encoder_attentions,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        attention_mask=None,
-        logits_to_keep=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            # Pixel values are used only in the first iteration if available
-            # In subsequent iterations, they are already merged with text and cached
-            # NOTE: first iteration doesn't have to be prefill, it can be the first
-            # iteration with a question and cached system prompt (continue generate from cache)
-            model_inputs["pixel_values"] = pixel_values
-
-        return model_inputs
-
     # override this function to compatible with `_prepare_encoder_decoder_kwargs_for_generation`
     def get_encoder(self):
         return self.model.get_encoder()
+
+    def get_input_embeddings(self):
+        raise AttributeError("The PPFormulaNetModel does not have an `input_embedding` attribute.")
+
+    def set_input_embeddings(self):
+        raise AttributeError("The PPFormulaNetModel does not have an `input_embedding` attribute.")
+
+    def get_placeholder_mask(self):
+        raise AttributeError("The PPFormulaNet does not need placeholder mask.")
+
+    def _prepare_encoder_decoder_kwargs_for_generation(self):
+        raise AttributeError("The PPFormulaNet use default implementation.")
 
 
 __all__ = [

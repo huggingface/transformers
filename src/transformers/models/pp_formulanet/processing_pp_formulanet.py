@@ -39,6 +39,20 @@ class PPFormulaNetProcessor(ProcessorMixin):
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
+        # normalize() regex
+        self._text_reg = re.compile(r"(\\(operatorname|mathrm|text|mathbf)\s?\*? {.*?})")
+        self._macro_pattern = re.compile(r"(\\[a-zA-Z]+)\s(?=\w)|\\[a-zA-Z]+\s(?=})")
+        self._protected_macros = {"\\operatorname", "\\mathrm", "\\text", "\\mathbf"}
+
+        letter = r"[a-zA-Z]"
+        noletter = r"[\W_^\d]"
+        self._rule_noletter_noletter = re.compile(r"(?!\\ )(%s)\s+?(%s)" % (noletter, noletter))
+        self._rule_noletter_letter = re.compile(r"(?!\\ )(%s)\s+?(%s)" % (noletter, letter))
+        self._rule_letter_noletter = re.compile(r"(%s)\s+?(%s)" % (letter, noletter))
+
+        # remove_chinese_text_wrapping() regex
+        self._chinese_text_wrapping_pattern = re.compile(r"\\text\s*{([^{}]*[\u4e00-\u9fff]+[^{}]*)}")
+
     @auto_docstring
     def __call__(
         self,
@@ -87,61 +101,36 @@ class PPFormulaNetProcessor(ProcessorMixin):
         text = self.normalize(text)
         return text
 
-    def normalize(self, s: str) -> str:
-        """Normalizes a string by removing unnecessary spaces.
-
-        Args:
-            s (str): String to normalize.
-
-        Returns:
-            str: Normalized string.
-        """
-        text_reg = r"(\\(operatorname|mathrm|text|mathbf)\s?\*? {.*?})"
-        letter = r"[a-zA-Z]"
-        noletter = r"[\W_^\d]"
+    def normalize(self, text: str) -> str:
+        """Normalizes a string by removing unnecessary spaces."""
         names = []
-        for x in re.findall(text_reg, s):
-            pattern = r"(\\[a-zA-Z]+)\s(?=\w)|\\[a-zA-Z]+\s(?=})"
-            matches = re.findall(pattern, x[0])
+        for x in self._text_reg.findall(text):
+            matches = self._macro_pattern.findall(x[0])
             for m in matches:
-                if (
-                    m
-                    not in [
-                        "\\operatorname",
-                        "\\mathrm",
-                        "\\text",
-                        "\\mathbf",
-                    ]
-                    and m.strip() != ""
-                ):
-                    s = s.replace(m, m + "XXXXXXX")
-                    s = s.replace(" ", "")
-                    names.append(s)
-        if len(names) > 0:
-            s = re.sub(text_reg, lambda match: str(names.pop(0)), s)
+                if m not in self._protected_macros and m.strip() != "":
+                    text = text.replace(m, m + "XXXXXXX")
+                    text = text.replace(" ", "")
+                    names.append(text)
 
-        rule_noletter_noletter = re.compile(r"(?!\\ )(%s)\s+?(%s)" % (noletter, noletter))
-        rule_noletter_letter = re.compile(r"(?!\\ )(%s)\s+?(%s)" % (noletter, letter))
-        rule_letter_noletter = re.compile(r"(%s)\s+?(%s)" % (letter, noletter))
+        if names:
+            text = self._text_reg.sub(lambda match: str(names.pop(0)), text)
 
-        news = s
+        new_text = text
         while True:
-            s = news
-            news = rule_noletter_noletter.sub(r"\1\2", s)
-            news = rule_noletter_letter.sub(r"\1\2", news)
-            news = rule_letter_noletter.sub(r"\1\2", news)
-            if news == s:
+            text = new_text
+            new_text = self._rule_noletter_noletter.sub(r"\1\2", text)
+            new_text = self._rule_noletter_letter.sub(r"\1\2", new_text)
+            new_text = self._rule_letter_noletter.sub(r"\1\2", new_text)
+            if new_text == text:
                 break
 
-        return news.replace("XXXXXXX", " ")
+        return new_text.replace("XXXXXXX", " ")
 
-    def remove_chinese_text_wrapping(self, formula):
-        pattern = re.compile(r"\\text\s*{([^{}]*[\u4e00-\u9fff]+[^{}]*)}")
-
+    def remove_chinese_text_wrapping(self, formula: str) -> str:
         def replacer(match):
             return match.group(1)
 
-        replaced_formula = pattern.sub(replacer, formula)
+        replaced_formula = self._chinese_text_wrapping_pattern.sub(replacer, formula)
         return replaced_formula.replace('"', "")
 
     def post_process(self, generated_outputs, skip_special_tokens=True, **kwargs):

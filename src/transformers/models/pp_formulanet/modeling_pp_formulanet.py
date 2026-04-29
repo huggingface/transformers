@@ -42,7 +42,13 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_torchdynamo_compiling,
+    logging,
+)
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_pp_formulanet import PPFormulaNetConfig, PPFormulaNetVisionConfig
@@ -231,7 +237,7 @@ class PPFormulaNetMultiModalProjector(nn.Module):
             bias=False,
         )
         self.linear_1 = nn.Linear(config.post_conv_out_channels, config.post_conv_out_channels)
-        self.linear_2 = nn.Linear(config.post_conv_out_channels, config.text_config.hidden_size)
+        self.linear_2 = nn.Linear(config.post_conv_out_channels, config.decoder_hidden_size)
 
     def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
         hidden_states = self.conv1(hidden_states)
@@ -454,6 +460,7 @@ class PPFormulaNetVisionModel(PPFormulaNetPreTrainedModel):
         self.neck = PPFormulaNetVisionNeck(config)
 
         self.gradient_checkpointing = False
+        self.multi_modal_projector = PPFormulaNetMultiModalProjector(config)
         self.post_init()
 
     def get_input_embeddings(self):
@@ -463,7 +470,7 @@ class PPFormulaNetVisionModel(PPFormulaNetPreTrainedModel):
     @capture_outputs(tie_last_hidden_states=False)
     def forward(
         self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | PPFormulaNetVisionEncoderOutput:
+    ) -> tuple | BaseModelOutputWithPooling:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -473,8 +480,11 @@ class PPFormulaNetVisionModel(PPFormulaNetPreTrainedModel):
         for layer_module in self.layers:
             hidden_states = layer_module(hidden_states)
         hidden_states = self.neck(hidden_states)
-        return PPFormulaNetVisionEncoderOutput(
+        pooler_output = self.multi_modal_projector(hidden_states)
+
+        return BaseModelOutputWithPooling(
             last_hidden_state=hidden_states,
+            pooler_output=pooler_output,
         )
 
 
@@ -954,9 +964,9 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
+        config.vision_config.decoder_hidden_size = config.text_config.hidden_size
         self.decoder = PPFormulaNetTextModel(config.text_config)
         self.encoder = PPFormulaNetVisionModel(config=config.vision_config)
-        self.multi_modal_projector = PPFormulaNetMultiModalProjector(config)
 
         self.post_init()
 
@@ -972,7 +982,6 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
             The tensors corresponding to the input images.
         """
         image_outputs = self.encoder(pixel_values, **kwargs)
-        image_outputs.pooler_output = self.multi_modal_projector(image_outputs.last_hidden_state)
 
         return image_outputs
 
@@ -982,13 +991,15 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor | None = None,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor
+        | None = None,  # Kept in the signature for compatibility to avoid duplicate-keyword errors.
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         encoder_outputs: list[torch.FloatTensor] | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.FloatTensor
+        | None = None,  # Kept in the signature for compatibility to avoid duplicate-keyword errors.
         use_cache: bool | None = None,
         **kwargs,
     ) -> tuple | Seq2SeqModelOutput:
@@ -1000,8 +1011,6 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
 
         if encoder_outputs is None:
             encoder_outputs = self.get_image_features(pixel_values, **kwargs)
-        elif encoder_outputs.pooler_output is None:
-            encoder_outputs.pooler_output = self.multi_modal_projector(encoder_outputs.last_hidden_state)
 
         image_features = encoder_outputs.pooler_output.to(self.decoder.device, self.decoder.dtype)
 
@@ -1029,11 +1038,12 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
 
 @auto_docstring
 class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = {}
+
     def __init__(self, config: PPFormulaNetConfig):
         super().__init__(config)
         self.model = PPFormulaNetModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-
         self.post_init()
 
     def get_output_embeddings(self) -> nn.Module:
@@ -1133,6 +1143,8 @@ class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, Generati
         is_first_iteration=False,
         **kwargs,
     ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,

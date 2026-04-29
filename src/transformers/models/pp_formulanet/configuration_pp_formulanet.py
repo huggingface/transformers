@@ -31,12 +31,14 @@ logger = logging.get_logger(__name__)
 @strict
 class PPFormulaNetVisionConfig(PreTrainedConfig):
     r"""
+    post_conv_in_channels (`int`, *optional*, defaults to 256):
+        Number of input channels for the post-encoder convolution layer.
+    post_conv_mid_channels (`int`, *optional*, defaults to 512):
+       Number of intermediate channels for the post-encoder convolution layer.
+    post_conv_out_channels (`int`, *optional*, defaults to 1024):
+        Number of output channels for the post-encoder convolution layer.
     output_channels (`int`, *optional*, defaults to 256):
         Dimensionality of the output channels in the Patch Encoder.
-    use_abs_pos (`bool`, *optional*, defaults to `True`):
-        Whether to use absolute position embedding.
-    use_rel_pos (`bool`, *optional*, defaults to `True`):
-        Whether to use relative position embedding.
     window_size (`int`, *optional*, defaults to 14):
         Window size for relative position.
     global_attn_indexes (`list[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
@@ -63,6 +65,10 @@ class PPFormulaNetVisionConfig(PreTrainedConfig):
     window_size: int = 14
     global_attn_indexes: list[int] | tuple[int, ...] = (2, 5, 8, 11)
     mlp_dim: int = 3072
+
+    post_conv_in_channels: int = 256
+    post_conv_out_channels: int = 1024
+    post_conv_mid_channels: int = 512
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PPFormulaNet_plus-L_safetensors")
@@ -120,24 +126,12 @@ class PPFormulaNetTextConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="PaddlePaddle/PPFormulaNet_plus-L_safetensors")
 @strict
 class PPFormulaNetConfig(PreTrainedConfig):
-    r"""
-    post_conv_in_channels (`int`, *optional*, defaults to 256):
-        Number of input channels for the post-encoder convolution layer.
-    post_conv_mid_channels (`int`, *optional*, defaults to 512):
-       Number of intermediate channels for the post-encoder convolution layer.
-    post_conv_out_channels (`int`, *optional*, defaults to 1024):
-        Number of output channels for the post-encoder convolution layer.
-    """
-
     model_type = "pp_formulanet"
     sub_configs = {"text_config": PPFormulaNetTextConfig, "vision_config": PPFormulaNetVisionConfig}
 
     text_config: dict | PPFormulaNetTextConfig | None = None
     vision_config: dict | PPFormulaNetVisionConfig | None = None
     is_encoder_decoder: bool = True
-    post_conv_in_channels: int = 256
-    post_conv_out_channels: int = 1024
-    post_conv_mid_channels: int = 512
 
     def __post_init__(self, **kwargs):
         if isinstance(self.text_config, dict):
