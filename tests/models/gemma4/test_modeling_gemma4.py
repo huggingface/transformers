@@ -17,7 +17,6 @@ import unittest
 
 import pytest
 from parameterized import parameterized
-from pytest import mark
 
 from transformers import (
     AutoTokenizer,
@@ -29,12 +28,8 @@ from transformers.testing_utils import (
     Expectations,
     cleanup,
     require_deterministic_for_xpu,
-    require_flash_attn,
-    require_flash_attn_3,
-    require_flash_attn_4,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     require_torch_multi_gpu,
     slow,
     torch_device,
