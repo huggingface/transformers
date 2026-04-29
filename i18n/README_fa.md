@@ -58,7 +58,7 @@ limitations under the License.
 </h4>
 
 <h3 align="center">
-    <p>State-of-the-art pretrained models for inference and training</p>
+    <p>مدل‌های از پیش آموزش‌دیده‌ی پیشرفته برای استنتاج (Inference) و آموزش (Training)</p>
 </h3>
 
 <h3 align="center">
@@ -96,7 +96,7 @@ uv pip install "transformers[torch]"
 ```
 اگر می‌خواهید جدیدترین تغییرات کتابخانه را داشته باشید یا قصد مشارکت (contribute) در پروژه را دارید، می‌توانید Transformers را از سورس (source) نصب کنید. با این حال، جدیدترین نسخه ممکن است پایدار (stable) نباشد. اگر با خطایی برخورد کردید، با خیال راحت یک [Issue](https://github.com/huggingface/transformers/issues) در گیت‌هاب باز کنید:
 
-```bash
+```shell
 git clone https://github.com/huggingface/transformers.git
 cd transformers
 
@@ -113,9 +113,6 @@ uv pip install '.[torch]'
 پایپ لاین (Pipeline) یک کلاس سطح‌بالا برای انجام استنتاج (Inference) است که از کار با متن، صدا، تصویر و وظایف چندوجهی (multimodal) پشتیبانی می‌کند. این ابزار به‌طور خودکار مراحل پیش‌پردازش ورودی را انجام می‌دهد و خروجی مناسب را برمی‌گرداند.
 
 برای شروع، یک pipeline بسازید و مشخص کنید از چه مدلی برای تولید متن استفاده شود. مدل به‌صورت خودکار دانلود و در حافظهٔ کش (cache) ذخیره می‌شود تا در اجراهای بعدی بتوان به‌راحتی دوباره از آن استفاده کرد. 
-### تولید متن (Text Generation)
-
-مثالی از تولید متن با استفاده از مدل `Qwen/Qwen2.5-1.5B`:
 
 ```py
 from transformers import pipeline
@@ -125,9 +122,12 @@ pipeline("the secret to baking a really good cake is ")
 [{'generated_text': 'the secret to baking a really good cake is 1) to use the right ingredients and 2) to follow the recipe exactly. the recipe for the cake is as follows: 1 cup of sugar, 1 cup of flour, 1 cup of milk, 1 cup of butter, 1 cup of eggs, 1 cup of chocolate chips. if you want to make 2 cakes, how much sugar do you need? To make 2 cakes, you will need 2 cups of sugar.'}]
 ```
 
-### چت (Chat)
-
-شما می‌توانید از مدل‌های محاوره‌ای مانند `meta-llama/Meta-Llama-3-8B-Instruct` استفاده کنید. این مثال نحوه استفاده از پرامپت‌های سیستم و ساخت تاریخچه چت را نشان می‌دهد:
+برای چت کردن با یک مدل، الگوی استفاده یکسان است. تنها تفاوت این است که شما باید یک تاریخچه چت (ورودی به `Pipeline`) بین خود و سیستم ایجاد کنید.
+> [!TIP]
+همچنین می‌توانید مستقیماً از خط فرمان با یک مدل چت کنید، مادامی که [`transformers serve` در حال اجرا باشد](https://huggingface.co/docs/transformers/main/en/serving).
+> ```shell
+> transformers chat Qwen/Qwen2.5-0.5B-Instruct
+> ```
 
 ```py
 import torch
@@ -143,11 +143,13 @@ response = pipeline(chat, max_new_tokens=512)
 print(response[0]["generated_text"][-1]["content"])
 ```
 
-*نکته: همچنین می‌توانید از رابط خط فرمان `transformers chat` برای چت در ترمینال استفاده کنید.*
+مثال‌های زیر را بسط دهید تا ببینید `Pipeline` چگونه برای روش‌ها و وظایف مختلف کار می‌کند.
 
-### سایر مدالیته‌ها (صدا، بینایی کامپیوتر، چندوجهی)
+<details>
+<summary>
+تشخیص خودکار گفتار (ASR):
 
-**تشخیص خودکار گفتار (ASR):**
+</summary>
 
 ```py
 from transformers import pipeline
@@ -156,8 +158,13 @@ pipeline = pipeline(task="automatic-speech-recognition", model="openai/whisper-l
 pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
 {'text': ' I have a dream that one day this nation will rise up and live out the true meaning of its creed.'}
 ```
+</details>
 
-**طبقه‌بندی تصویر (Image Classification):**
+<details>
+<summary>
+طبقه‌بندی تصویر (Image Classification):
+</summary>
+
 <h3 align="center">
     <a><img src="https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png"></a>
 </h3>
@@ -175,7 +182,13 @@ pipeline("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.pn
   'score': 7.85409429227002e-05},
  {'label': 'quail', 'score': 5.502637941390276e-05}]
 ```
-**پاسخگویی بصری به سوالات (Visual Question Answering):**
+</details>
+
+<details>
+<summary>
+پاسخگویی بصری به سوالات (Visual Question Answering):
+</summary>
+
 
 <h3 align="center">
     <a><img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-few-shot.jpg"></a>
@@ -191,31 +204,101 @@ pipeline(
 )
 [{'answer': 'statue of liberty'}]
 ```
+</details>
 
 ## چرا باید از Transformers استفاده کنیم؟
 
-۱. **استفاده آسان:** دسترسی به پیشرفته‌ترین مدل‌ها با کمترین مانع، انتزاع (abstraction) کم و یک API یکپارچه.  
-۲. **کاهش هزینه‌های محاسباتی و ردپای کربن:** به اشتراک‌گذاری مدل‌های از پیش آموزش‌دیده، نیاز به آموزش مدل‌ها از صفر را کاهش می‌دهد.  
-۳. **انعطاف‌پذیری در چارچوب‌ها:** پشتیبانی از PyTorch، JAX و TF2.0 و همچنین چارچوب‌های مختلف آموزش و استنتاج.  
-۴. **قابلیت شخصی‌سازی:** ارائه مثال‌هایی برای بازتولید نتایج و دسترسی به ساختار داخلی مدل‌ها برای آزمایش و تحقیق.  
+۱. **استفاده آسان:**
+* عملکرد بالا در درک و تولید زبان طبیعی، بینایی ماشین، صوت، ویدیو و وظایف چندوجهی (Multimodal).
+* ورود آسان و بدون پیچیدگی برای پژوهشگران، مهندسان و توسعه‌دهندگان. (کاهش سد ورود برای متخصصان)
+* مفاهیم انتزاعی (Abstractions) اندک برای کاربر، به گونه‌ای که تنها با یادگیری سه کلاس اصلی می‌توان از آن استفاده کرد.
+* یک رابط برنامه‌نویسی (API) واحد و یکپارچه برای بهره‌گیری از تمامی مدل‌های پیش‌آموزش‌دیده ما.
+  
+۲. **کاهش هزینه‌های محاسباتی و ردپای کربن:**
+* به‌جای آموزش مدل از ابتدا، از مدل‌های از پیش آموزش‌دیده استفاده و آن‌ها را به اشتراک بگذارید.
+* زمان محاسباتی و هزینه‌های تولید را کاهش دهید.
+*ده‌ها معماری مختلف مدل به همراه بیش از یک میلیون چک‌پوینتِ از پیش آموزش‌دیده در تمام حوزه‌های چندوجهی(Multimodal).
+
+۳. **انعطاف‌پذیری در چارچوب‌ها:**
+* مدل‌های پیشرفته (State‑of‑the‑Art) را تنها با سه خط کد آموزش دهید.
+* یک مدل واحد را به‌دلخواه بین فریم‌ورک‌های PyTorch، JAX و TensorFlow 2.0 جابه‌جا کنید.
+* برای مراحل آموزش، ارزیابی و استقرار در محیط تولید، مناسب‌ترین فریم‌ورک را انتخاب کنید.
+
+۴. **قابلیت شخصی‌سازی:**
+*  برای هر معماری مدل، نمونه‌هایی ارائه می‌کنیم تا بتوانید نتایج منتشرشده توسط نویسندگان اصلی آن را بازتولید کنید.
+* اجزای داخلی مدل‌ها تا حد امکان به‌صورت سازگار و یکسان در دسترس قرار داده شده‌اند.
+* فایل‌های مدل را می‌توان برای انجام آزمایش‌های سریع، مستقل از خود کتابخانه نیز استفاده کرد.
+
 
 ## چرا *نباید* از Transformers استفاده کنیم؟
 
 *   این کتابخانه یک جعبه‌ابزار ماژولار برای شبکه‌های عصبی عمومی نیست؛ کدهای مدل‌ها عمداً برای محققان کمتر انتزاعی شده‌اند.
-*   رابط آموزش (Training API) بهینه‌سازی شده برای مدل‌های Transformers است. برای حلقه‌های عمومی یادگیری ماشین، بهتر است از کتابخانه‌هایی مانند [Accelerate](Accelerate) استفاده کنید.
+*   رابط آموزش (Training API) بهینه‌سازی شده برای مدل‌های Transformers است. برای حلقه‌های عمومی یادگیری ماشین، بهتر است از کتابخانه‌هایی مانند [https://huggingface.co/docs/accelerate](Accelerate) استفاده کنید.
 *   [اسکریپت‌های نمونه](https://github.com/huggingface/transformers/tree/main/examples) ممکن است برای موارد استفاده خاص شما نیاز به تغییر و سازگاری داشته باشند.
 
 ## جامعه کاربری (Community)
 
 تأثیر این کتابخانه بر جامعه کاربری بسیار گسترده است. صفحه [awesome-transformers](https://github.com/huggingface/transformers/blob/main/awesome-transformers.md) لیستی از ۱۰۰ پروژه فوق‌العاده را که با استفاده از Transformers ساخته شده‌اند، به نمایش می‌گذارد.
+اگر صاحب یا استفاده‌کننده‌ی پروژه‌ای هستید که فکر می‌کنید باید بخشی از این فهرست باشد، لطفاً برای افزودن آن، یک PR را کنید!
 
 ## مدل‌های نمونه
 
 این کتابخانه از مدل‌های متنوعی پشتیبانی می‌کند، از جمله:
-*   **صدا (Audio):** Whisper, Wav2Vec2
-*   **بینایی کامپیوتر (Computer Vision):** ViT, DINOv2
-*   **چندوجهی (Multimodal):** BLIP, LLaVA
-*   **پردازش زبان طبیعی (NLP):** LLaMA, Qwen, BERT, GPT-2
+
+<details>
+<summary>صدا (Audio)</summary>
+- دسته‌بندی صدا با [CLAP](https://huggingface.co/laion/clap-htsat-fused)
+- تشخیص خودکار گفتار با  [Parakeet](https://huggingface.co/nvidia/parakeet-ctc-1.1b#transcribing-using-transformers-%F0%9F%A4%97), [Whisper](https://huggingface.co/openai/whisper-large-v3-turbo), [GLM-ASR](https://huggingface.co/zai-org/GLM-ASR-Nano-2512) and [Moonshine-Streaming](https://huggingface.co/UsefulSensors/moonshine-streaming-medium)
+- شناسایی کلمات کلیدی با [Wav2Vec2](https://huggingface.co/superb/wav2vec2-base-superb-ks)
+- تولید گفتار از گفتار با [Moshi](https://huggingface.co/kyutai/moshiko-pytorch-bf16)
+- تبدیل متن به صدا با [MusicGen](https://huggingface.co/facebook/musicgen-large)
+- تبدیل متن به گفتار با [CSM](https://huggingface.co/sesame/csm-1b)
+
+</details>
+
+<details>
+<summary>بینایی ماشین (Computer vision): </summary>
+
+- تولید خودکار ماسک با [SAM](https://huggingface.co/facebook/sam-vit-base)
+- تخمین عمق با [DepthPro](https://huggingface.co/apple/DepthPro-hf)
+- دسته‌بندی تصویر با [DINO v2](https://huggingface.co/facebook/dinov2-base)
+- تشخیص نقاط کلیدی با [SuperPoint](https://huggingface.co/magic-leap-community/superpoint)
+- تطبیق نقاط کلیدی با [SuperGlue](https://huggingface.co/magic-leap-community/superglue_outdoor)
+- تشخیص اشیا با [RT-DETRv2](https://huggingface.co/PekingU/rtdetr_v2_r50vd)
+- تخمین وضعیت بدن با [VitPose](https://huggingface.co/usyd-community/vitpose-base-simple)
+- بخش‌بندی جامع با [OneFormer](https://huggingface.co/shi-labs/oneformer_ade20k_swin_large)
+- دسته‌بندی ویدیو با [VideoMAE](https://huggingface.co/MCG-NJU/videomae-large)
+
+</details>
+<details>
+<summary>چندوجهی (Multimodal):</summary>
+
+- تبدیل صوت یا متن به متن با [Voxtral](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507), [Audio Flamingo](https://huggingface.co/nvidia/audio-flamingo-3-hf)
+- پرسش و پاسخ از اسناد با [LayoutLMv3](https://huggingface.co/microsoft/layoutlmv3-base)
+- تبدیل تصویر یا متن به متن با [Qwen-VL](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct)
+- تولید توضیح برای تصویر با [BLIP-2](https://huggingface.co/Salesforce/blip2-opt-2.7b)
+- درک اسناد مبتنی بر OCR با [GOT-OCR2](https://huggingface.co/stepfun-ai/GOT-OCR-2.0-hf)
+- پرسش و پاسخ از جدول‌ها (Table Question Answering) با [TAPAS](https://huggingface.co/google/tapas-base)
+- درک و تولید چندوجهی یکپارچه با [Emu3](https://huggingface.co/BAAI/Emu3-Gen)
+- تبدیل تصویر به متن با [Llava-OneVision](https://huggingface.co/llava-hf/llava-onevision-qwen2-0.5b-ov-hf)
+- پرسش و پاسخ تصویری (Visual Question Answering) با [Llava](https://huggingface.co/llava-hf/llava-1.5-7b-hf)
+- بخش‌بندی ارجاعی در تصویر (Visual Referring Expression Segmentation) با [Kosmos-2](https://huggingface.co/microsoft/kosmos-2-patch14-224)
+
+</details>
+
+<details>
+<summary>پردازش زبان طبیعی (NLP):</summary>
+
+
+- تکمیل واژه‌های حذف‌شده (Masked Word Completion) با [ModernBERT](https://huggingface.co/answerdotai/ModernBERT-base)
+- شناسایی موجودیت‌های نامدار (Named Entity Recognition) با [Gemma](https://huggingface.co/google/gemma-2-2b)
+- پرسش و پاسخ متنی (Question Answering) با [Mixtral](https://huggingface.co/mistralai/Mixtral-8x7B-v0.1)
+- خلاصه‌سازی متن (Summarization) با [BART](https://huggingface.co/facebook/bart-large-cnn)
+- ترجمه خودکار (Translation) با [T5](https://huggingface.co/google-t5/t5-base)
+- تولید متن (Text Generation) با [Llama](https://huggingface.co/meta-llama/Llama-3.2-1B)
+- دسته‌بندی متن (Text Classification) با [Qwen](https://huggingface.co/Qwen/Qwen2.5-0.5B)
+
+</details>
 
 *(برای مشاهده لیست کامل مدل‌ها و دسترسی به چک‌پوینت‌های آن‌ها به [Hugging Face Hub](https://huggingface.co/models) مراجعه کنید).*
 
