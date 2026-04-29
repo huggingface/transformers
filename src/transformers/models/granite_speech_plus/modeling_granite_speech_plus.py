@@ -348,6 +348,8 @@ class GraniteSpeechPlusCausalLMOutputWithPast(ModelOutput):
     """
 )
 class GraniteSpeechPlusForConditionalGeneration(GraniteSpeechPlusPreTrainedModel, GenerationMixin):
+    _supports_attention_backend = True
+
     def __init__(self, config: GraniteSpeechPlusConfig):
         super().__init__(config)
         # NOTE: It doesn't matter when we initialize from config, but we should be careful
