@@ -203,6 +203,11 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
         updated: list = []
         for conv in weight_conversions:
+            # Only WeightConverter has ``.operations`` to extend with the dequant op;
+            # WeightRenaming (e.g. the ``scale_rename`` we prepended) just passes through.
+            if not isinstance(conv, WeightConverter):
+                updated.append(conv)
+                continue
             weight_sources = [p for p in conv.source_patterns if p.endswith(".weight")]
             if weight_sources:
                 anchored_weight = [p + "$" for p in weight_sources]
