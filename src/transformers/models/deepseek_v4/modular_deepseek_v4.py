@@ -993,11 +993,6 @@ class DeepseekV4Attention(nn.Module):
     """
 
     def __init__(self, config: DeepseekV4Config, layer_idx: int):
-        # V4 doesn't reuse V3's MLA projections (q_a/q_b/kv_a_proj_with_mqa/kv_b_proj/
-        # o_proj) — every V4 block is shared-KV MQA with a single ``kv_proj`` and a grouped
-        # output projection — so inheriting from ``DeepseekV3Attention`` only to delete
-        # half of what its ``__init__`` builds is not worth it. We init from
-        # ``nn.Module`` directly and set up V4-specific projections inline.
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -1039,11 +1034,6 @@ class DeepseekV4Attention(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         batch, seq_len = hidden_states.shape[:2]
         cos, sin = position_embeddings
-
-        # --- Q + KV projections + partial RoPE on the *trailing* qk_rope_head_dim of
-        # each head (matches the V4-Flash reference's ``[..., -rd:]`` indexing —
-        # ``kv_proj`` weights are laid out [nope|rope] in the checkpoint, so the
-        # trailing slice is what gets rotated).
         q_residual = self.q_norm(self.q_a_proj(hidden_states))
         q = self.q_b_proj(q_residual).view(batch, seq_len, -1, self.head_dim).transpose(1, 2)
         q = self.q_head_norm(q)
@@ -1055,13 +1045,6 @@ class DeepseekV4Attention(nn.Module):
         if past_key_values is not None:
             kv, _ = past_key_values.update(kv, kv, self.layer_idx)
 
-        # Sliding-only layers skip the long-range branch (no compressor was built).
-        # For HCA / CSA, ``DynamicCache(config=...)`` builds the right cache layer per
-        # ``config.layer_types[i]`` via ``LAYER_TYPE_CACHE_MAPPING``, so the compressor
-        # reads its layer state from ``past_key_values.layers[layer_idx]``.
-        # ``past_key_values`` is ``None`` only when ``GradientCheckpointingLayer`` zeroes
-        # it during a checkpoint replay — the compressor handles that as a single-shot
-        # window pool with no persistent state.
         if self.compressor is None:
             full_kv = kv
         else:
@@ -1206,13 +1189,6 @@ class DeepseekV4HyperHead(nn.Module):
 
 
 class DeepseekV4MLP(LlamaMLP):
-    """Shared expert — plain SwiGLU MLP at ``moe_intermediate_size`` width.
-
-    ``intermediate_size`` is routed to ``moe_intermediate_size`` via the
-    :class:`DeepseekV4Config` ``attribute_map``, and ``mlp_bias`` defaults to
-    ``False``, so :class:`LlamaMLP`'s ``__init__`` builds the right Linears.
-    """
-
     pass
 
 
@@ -1493,10 +1469,6 @@ class DeepseekV4PreTrainedModel(MixtralPreTrainedModel):
 class DeepseekV4Model(LlamaModel):
     def __init__(self, config: DeepseekV4Config):
         super().__init__(config)
-        # ``super().__init__`` (LlamaModel) sets up ``embed_tokens``, ``norm``,
-        # ``rotary_emb`` and ``gradient_checkpointing``. We override the layer list
-        # with V4 decoder blocks, swap the rotary for the multi-layer-type V4 one,
-        # and add the HC head used in :meth:`forward` to collapse the hc_mult streams.
         self.layers = nn.ModuleList(
             [DeepseekV4DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -1519,13 +1491,6 @@ class DeepseekV4Model(LlamaModel):
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-        # V4's compressor reads / writes per-layer buffer state on the cache, so we
-        # always build a ``DynamicCache(config=...)`` internally — even when
-        # ``use_cache=False`` we need a forward-scoped cache to thread the compressor's
-        # buffer through the window pooling. ``LAYER_TYPE_CACHE_MAPPING`` populates the
-        # right :class:`DeepseekV4HCACache` / :class:`DeepseekV4CSACache` per layer.
-        # When ``use_cache=False`` we still hand the layers a real cache; we just don't
-        # surface it back to the caller so the user-facing semantics match other models.
         return_cache = past_key_values if use_cache else None
         if past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
