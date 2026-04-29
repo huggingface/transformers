@@ -67,6 +67,8 @@ class Exaone4_5_Config(PreTrainedConfig):
 
         if isinstance(self.text_config, dict):
             self.text_config["model_type"] = self.text_config.get("model_type", "exaone4")
+            if self.text_config["model_type"] == "exaone4_5_text":
+                self.text_config["model_type"] = "exaone4"
             self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["exaone4"]()

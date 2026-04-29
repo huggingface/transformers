@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-04-09 and added to Hugging Face Transformers on 2026-04-28.*
+*This model was released on 2026-04-09 and added to Hugging Face Transformers on 2026-04-30.*
 
 # EXAONE 4.5
 
@@ -45,32 +45,41 @@ EXAONE 4.5는 EXAONE 4.0을 기반으로 몇 가지 핵심 개선 사항을 적�
 ```python
 import torch
 from transformers import AutoProcessor, AutoModelForImageTextToText
+from transformers.image_utils import load_image
 
 model_id = "LGAI-EXAONE/EXAONE-4.5-33B"
 
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForImageTextToText.from_pretrained(
     model_id,
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
 )
+
+image_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = load_image(image_url)
 
 messages = [
     {
         "role": "user",
         "content": [
-            {"type": "image", "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
+            {"type": "image", "image": image_url},
             {"type": "text", "text": "이 이미지를 설명해 줘."},
         ],
     }
 ]
 
-inputs = processor.apply_chat_template(
+text = processor.apply_chat_template(
     messages,
-    tokenize=True,
+    tokenize=False,
     add_generation_prompt=True,
-    return_tensors="pt",
     enable_thinking=True,   # default: True
+)
+inputs = processor(
+    text=[text],
+    images=[image],
+    padding=True,
+    return_tensors="pt",
 )
 inputs = inputs.to(model.device)
 

@@ -29,27 +29,6 @@ from ..auto import AutoModel
 from .configuration_exaone4_5 import Exaone4_5_Config, Exaone4_5_VisionConfig
 
 
-@use_kernel_forward_from_hub("RMSNorm")
-class Exaone4_5_RMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
-        """
-        Exaone4_5_RMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
 class Exaone4_5_PatchEmbed(nn.Module):
     def __init__(
         self,
@@ -90,6 +69,27 @@ class Exaone4_5_VisionRotaryEmbedding(nn.Module):
         seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
         freqs = torch.outer(seq, self.inv_freq)
         return freqs
+
+
+@use_kernel_forward_from_hub("RMSNorm")
+class Exaone4_5_RMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        Exaone4_5_RMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class Exaone4_5_PatchMerger(nn.Module):
@@ -187,7 +187,6 @@ class Exaone4_5_VisionAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
-        rotary_pos_emb: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
@@ -646,7 +645,7 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
         )
 
 
-@auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.5-33B")
+@auto_docstring
 class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
@@ -976,7 +975,6 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
             position_ids = None
         return position_ids
 
-    @auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.5-33B")
     @can_return_tuple
     def forward(
         self,
@@ -1028,8 +1026,6 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
             position_ids = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             ).unsqueeze(0)
-        elif position_ids.ndim > 2:
-            position_ids = position_ids[-1]
 
         outputs = self.language_model(
             input_ids=None,
@@ -1049,7 +1045,6 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
         )
 
 
-@auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.5-33B")
 class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, GenerationMixin):
     """
     Main EXAONE 4.5 conditional generation class.

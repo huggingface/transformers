@@ -15,7 +15,7 @@ from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import is_flash_attention_requested
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
-from ..exaone4.modeling_exaone4 import Exaone4PreTrainedModel, Exaone4RMSNorm
+from ..exaone4.modeling_exaone4 import Exaone4PreTrainedModel
 from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionPatchEmbed,
@@ -65,15 +65,13 @@ class Exaone4_5_Config(PreTrainedConfig):
 
         if isinstance(self.text_config, dict):
             self.text_config["model_type"] = self.text_config.get("model_type", "exaone4")
+            if self.text_config["model_type"] == "exaone4_5_text":
+                self.text_config["model_type"] = "exaone4"
             self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["exaone4"]()
 
         super().__post_init__(**kwargs)
-
-
-class Exaone4_5_RMSNorm(Exaone4RMSNorm):
-    pass
 
 
 class Exaone4_5_PatchEmbed(Qwen2_5_VisionPatchEmbed):
@@ -111,7 +109,6 @@ class Exaone4_5_VisionAttention(Qwen2_5_VLVisionAttention):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
-        rotary_pos_emb: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
@@ -216,7 +213,6 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel, Qwen2_5_VisionTransformer
         self.post_init()
 
 
-@auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.5-33B")
 class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2_5_VLModel):
     def __init__(self, config: Exaone4_5_Config):
         super().__init__(config)
@@ -224,7 +220,6 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2_5_VLModel):
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
-    @auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.5-33B")
     @can_return_tuple
     def forward(
         self,
@@ -276,8 +271,6 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2_5_VLModel):
             position_ids = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             ).unsqueeze(0)
-        elif position_ids.ndim > 2:
-            position_ids = position_ids[-1]
 
         outputs = self.language_model(
             input_ids=None,
@@ -297,7 +290,6 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2_5_VLModel):
         )
 
 
-@auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.5-33B")
 class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLForConditionalGeneration):
     """
     Main EXAONE 4.5 conditional generation class.
