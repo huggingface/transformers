@@ -749,7 +749,7 @@ class CBGenerateManager(BaseGenerateManager):
         # as requests submitted post-crash; otherwise it's a per-request failure (e.g. unsupported
         # logit-processor kwarg) and a plain RuntimeError -> 500 is appropriate.
         if result.error is not None:
-            if self._cb.fatal_error is not None:
+            if cb.fatal_error is not None:
                 raise CBWorkerDeadError(f"CB worker died during request {request_id}: {result.error}")
             raise RuntimeError(f"CB generation failed for {request_id}: {result.error}")
         generated_ids = result.generated_tokens
