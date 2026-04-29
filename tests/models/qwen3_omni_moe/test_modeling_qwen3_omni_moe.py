@@ -859,7 +859,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
             **inputs, thinker_temperature=0, thinker_do_sample=False, return_audio=False, thinker_max_new_tokens=20
         )
 
-        EXPECTED_DECODED_TEXT = "user\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.\nuser\nHow about this one?\nassistant\nThe sound is a person coughing."
+        EXPECTED_DECODED_TEXT = "user\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.\nuser\nHow about this one?\nassistant\nThis is the sound of a person coughing."
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
