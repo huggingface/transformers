@@ -461,30 +461,6 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_generate_from_random_inputs_embeds(self):
         pass
 
-    @require_flash_attn
-    @require_torch_accelerator
-    @mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_from_config(self):
-        # Gemma4 requires mm_token_type_ids in train mode, so we test in eval mode
-        self.flash_attn_from_config(attn_implementation="flash_attention_2", test_fwd_in_train=False)
-
-    @require_flash_attn_3
-    @require_torch_gpu
-    @mark.flash_attn_3_test
-    @slow
-    def test_flash_attn_3_from_config(self):
-        # Gemma4 requires mm_token_type_ids in train mode, so we test in eval mode
-        self.flash_attn_from_config(attn_implementation="flash_attention_3", test_fwd_in_train=False)
-
-    @require_flash_attn_4
-    @require_torch_gpu
-    @mark.flash_attn_4_test
-    @slow
-    def test_flash_attn_4_from_config(self):
-        # Gemma4 requires mm_token_type_ids in train mode, so we test in eval mode
-        self.flash_attn_from_config(attn_implementation="flash_attention_4", test_fwd_in_train=False)
-
     @unittest.skip("The base test does not pass image_position_ids and mm_token_type_ids required by Gemma4")
     def test_flash_attn_2_inference_equivalence(self):
         pass
