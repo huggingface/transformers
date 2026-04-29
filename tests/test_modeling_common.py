@@ -53,7 +53,7 @@ from transformers.integrations.deepspeed import (
 )
 from transformers.integrations.moe import (
     batched_mm_experts_forward,
-    deepgemm_experts_forward,
+    deepgemm_bf16_experts_forward,
     grouped_mm_experts_forward,
     sonicmoe_experts_forward,
 )
@@ -610,7 +610,7 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
             and get_cuda_runtime_version() >= (12, 3)
         ):
             # DeepGEMM BF16 grouped forward requires Hopper+, CUDA runtime 12.3+, and bf16 hidden states
-            mocks["deepgemm"] = Mock(wraps=deepgemm_experts_forward)
+            mocks["deepgemm"] = Mock(wraps=deepgemm_bf16_experts_forward)
             implementations.append("deepgemm")
 
         outputs = {}
