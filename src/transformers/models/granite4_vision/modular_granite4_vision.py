@@ -125,6 +125,9 @@ class Granite4VisionConfig(LlavaNextConfig):
     model_type = "granite4_vision"
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig, "qformer_config": AutoConfig}
 
+    multimodal_projector_bias = AttributeError()
+    projector_hidden_act = AttributeError()
+
     downsample_rate: str | None = None
     deepstack_layer_map: list | None = None
     use_spatial_sampling: bool = False
@@ -263,29 +266,29 @@ class Granite4VisionWindowQFormerDownsampler(nn.Module):
         self.qformer = AutoModel.from_config(config.qformer_config)
 
         self.image_side = config.vision_config.image_size // config.vision_config.patch_size
-        q, w = config.downsample_rate.split("/")
-        self.query_side, self.window_side = int(q), int(w)
+        query_side_str, window_side_str = config.downsample_rate.split("/")
+        self.query_side, self.window_side = int(query_side_str), int(window_side_str)
         self.query_length = self.query_side**2
         self.norm = nn.LayerNorm(vision_hidden_size, eps=1e-6)
         self.query = nn.Parameter(torch.empty(1, self.query_length, vision_hidden_size))
         self.image_positions = nn.Parameter(torch.empty(1, self.window_side**2, vision_hidden_size))
         self.out_linear = nn.Linear(vision_hidden_size, llm_hidden_size, bias=True)
 
-    def _windowed_raster(self, x, side, window_size):
+    def _windowed_raster(self, features, side, window_size):
         """(B, side*side, C) raster -> (B*num_win*num_win, window_size*window_size, C)"""
-        batch, _, channels = x.shape
+        batch, _, channels = features.shape
         num_win = side // window_size
         return (
-            x.view(batch, side, side, channels)
+            features.view(batch, side, side, channels)
             .view(batch, num_win, window_size, num_win, window_size, channels)
             .transpose(2, 3)
             .flatten(0, 2)
             .flatten(1, 2)
         )
 
-    def _unwindowed_raster(self, x_win, num_win, window_size):
+    def _unwindowed_raster(self, windowed_features, num_win, window_size):
         """(B*num_win*num_win, window_size*window_size, C) -> (B, (num_win*window_size)^2, C)"""
-        batch_win, _, channels = x_win.shape
+        batch_win, _, channels = windowed_features.shape
         if batch_win % (num_win * num_win) != 0:
             raise ValueError(
                 f"Expected batch_win ({batch_win}) to be divisible by num_win^2 ({num_win**2})."
@@ -293,7 +296,7 @@ class Granite4VisionWindowQFormerDownsampler(nn.Module):
         batch = batch_win // (num_win * num_win)
         side = num_win * window_size
         return (
-            x_win.view(batch, num_win, num_win, window_size, window_size, channels)
+            windowed_features.view(batch, num_win, num_win, window_size, window_size, channels)
             .transpose(2, 3)
             .contiguous()
             .view(batch, side, side, channels)
@@ -360,7 +363,6 @@ class Granite4VisionPreTrainedModel(LlavaNextPreTrainedModel):
             embed_std = 1 / math.sqrt(module.query.shape[-1])
             init.normal_(module.query, mean=0.0, std=embed_std)
             init.normal_(module.image_positions, mean=0.0, std=embed_std)
-
 
 
 class Granite4VisionTextAttention(GraniteAttention):

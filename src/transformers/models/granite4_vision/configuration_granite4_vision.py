@@ -130,10 +130,8 @@ class Granite4VisionConfig(PreTrainedConfig):
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
     image_token_index: int = 32000
-    projector_hidden_act: str = "gelu"
     vision_feature_select_strategy: Literal["default", "full"] = "default"
     vision_feature_layer: int | list[int] = -2
-    multimodal_projector_bias: bool = True
     tie_word_embeddings: bool = False
     image_grid_pinpoints: list | None = None
     image_seq_length: int = 576
