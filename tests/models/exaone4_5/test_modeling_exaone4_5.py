@@ -111,6 +111,8 @@ class Exaone4_5_ModelTest(VLMModelTest, unittest.TestCase):
 
             # Test 1: fewer images than image placeholders -> should raise.
             curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-1:, ...]
+            if "image_grid_thw" in curr_input_dict:
+                curr_input_dict["image_grid_thw"] = curr_input_dict["image_grid_thw"][-1:, ...]
             if "image_sizes" in curr_input_dict:
                 curr_input_dict["image_sizes"] = curr_input_dict["image_sizes"][-1:, ...]
             with self.assertRaises(ValueError):
