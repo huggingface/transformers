@@ -101,7 +101,6 @@ class Exaone4_5_ModelTest(VLMModelTest, unittest.TestCase):
     def test_reverse_loading_mapping(self):
         super().test_reverse_loading_mapping(skip_base_model=True)
 
-    @unittest.skip("Need to update configs on the hub first, fixme @nuxlear/@raushan")
     def test_mismatching_num_image_tokens(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
