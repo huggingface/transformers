@@ -22,16 +22,26 @@ else:
 
 
 def positive_any_number(value: int | float | None = None):
+    """Ensures that `value` is a non-negative number (integer or float), or `None`."""
     if value is not None and (not isinstance(value, (int, float)) or not value >= 0):
         raise ValueError(f"Value must be a positive integer or floating number, got {value}")
 
 
 def positive_int(value: int | None = None):
+    """Ensures that `value` is a non-negative integer, or `None`."""
     if value is not None and (not isinstance(value, int) or not value >= 0):
         raise ValueError(f"Value must be a positive integer, got {value}")
 
 
 def padding_validator(value: bool | str | PaddingStrategy | None = None):
+    """
+    Ensures that `value` is a valid padding strategy.
+
+    Args:
+        value (`bool`, `str`, or `PaddingStrategy`, *optional*):
+            The padding strategy to validate. If a string, must be one of `"longest"`, `"max_length"`, or
+            `"do_not_pad"`.
+    """
     possible_names = ["longest", "max_length", "do_not_pad"]
     if value is None:
         pass
@@ -42,6 +52,14 @@ def padding_validator(value: bool | str | PaddingStrategy | None = None):
 
 
 def truncation_validator(value: bool | str | TruncationStrategy | None = None):
+    """
+    Ensures that `value` is a valid truncation strategy.
+
+    Args:
+        value (`bool`, `str`, or `TruncationStrategy`, *optional*):
+            The truncation strategy to validate. If a string, must be one of `"only_first"`, `"only_second"`,
+            `"longest_first"`, or `"do_not_truncate"`.
+    """
     possible_names = ["only_first", "only_second", "longest_first", "do_not_truncate"]
     if value is None:
         pass
@@ -52,6 +70,14 @@ def truncation_validator(value: bool | str | TruncationStrategy | None = None):
 
 
 def image_size_validator(value: int | Sequence[int] | dict[str, int] | None = None):
+    """
+    Ensures that `value` is a valid image size specification.
+
+    Args:
+        value (`int`, `Sequence[int]`, or `dict[str, int]`, *optional*):
+            The image size to validate. If a dict, all keys must be a subset of `"height"`, `"width"`,
+            `"longest_edge"`, `"shortest_edge"`, `"max_height"`, and `"max_width"`.
+    """
     possible_keys = ["height", "width", "longest_edge", "shortest_edge", "max_height", "max_width"]
     if value is None:
         pass
@@ -60,6 +86,14 @@ def image_size_validator(value: int | Sequence[int] | dict[str, int] | None = No
 
 
 def device_validator(value: str | int | None = None):
+    """
+    Ensures that `value` is a valid device specification.
+
+    Args:
+        value (`str`, `int`, or `torch.device`, *optional*):
+            The device to validate. If a string, the base name (before any `":"` index) must be one of
+            `"cpu"`, `"cuda"`, `"xla"`, `"xpu"`, `"mps"`, or `"meta"`. If an integer, must be non-negative.
+    """
     possible_names = ["cpu", "cuda", "xla", "xpu", "mps", "meta"]
     if value is None:
         pass
@@ -83,6 +117,13 @@ def device_validator(value: str | int | None = None):
 
 
 def resampling_validator(value: Union[int, "PILImageResampling"] | None = None):
+    """
+    Ensures that `value` is a valid image resampling filter.
+
+    Args:
+        value (`int` or `PILImageResampling`, *optional*):
+            The resampling filter to validate. If an integer, must be in the range `[0, 5]`.
+    """
     if value is None:
         pass
     elif isinstance(value, int) and value not in list(range(6)):
@@ -94,6 +135,15 @@ def resampling_validator(value: Union[int, "PILImageResampling"] | None = None):
 
 
 def video_metadata_validator(value: VideoMetadataType | None = None):
+    """
+    Ensures that `value` is a valid video metadata structure.
+
+    Args:
+        value (`VideoMetadataType`, *optional*):
+            The video metadata to validate. Accepts a dict, a list of dicts, or a list of lists of dicts.
+            All dict keys must be a subset of `"total_num_frames"`, `"fps"`, `"width"`, `"height"`,
+            `"duration"`, `"video_backend"`, and `"frames_indices"`.
+    """
     if value is None:
         return
 
@@ -125,6 +175,7 @@ def video_metadata_validator(value: VideoMetadataType | None = None):
 
 
 def tensor_type_validator(value: str | TensorType | None = None):
+    """Ensures that `value` is a valid tensor framework string: `"pt"`, `"np"`, or `"mlx"`."""
     possible_names = ["pt", "np", "mlx"]
     if value is None:
         pass
@@ -197,6 +248,15 @@ def probability(value: float):
 
 
 def is_divisible_by(divisor: int | float):
+    """
+    Parameterized validator that ensures the validated value is evenly divisible by `divisor`.
+    Expected usage: `is_divisible_by(8)(default=64)`
+
+    Args:
+        divisor (`int` or `float`):
+            The number that the value must be divisible by.
+    """
+
     @as_validated_field
     def _inner(value: int | float):
         if value % divisor != 0:
@@ -218,6 +278,19 @@ def activation_fn_key(value: str):
 
 
 def tensor_shape(shape: tuple[int | str], length: int | None = None):
+    """
+    Parameterized validator that ensures the validated value is a floating-point tensor (or list of tensors)
+    matching the expected shape. Named dimensions (strings in `shape`) must be consistent across all tensors.
+    Expected usage: `tensor_shape(("batch", 512))(default=None)`
+
+    Args:
+        shape (`tuple[int | str]`):
+            Expected shape of each tensor. Use integers for fixed dimensions and strings for named symbolic
+            dimensions whose size must be consistent across all tensors.
+        length (`int`, *optional*):
+            If set, the value must be a list of exactly `length` tensors.
+    """
+
     @as_validated_field
     def validator(value: Union[Sequence["torch.Tensor"], "torch.Tensor"]):
         if value is None:
