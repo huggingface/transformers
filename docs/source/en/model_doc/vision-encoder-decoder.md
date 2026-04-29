@@ -45,13 +45,14 @@ the caption. Another example is optical character recognition. Refer to [TrOCR](
 and the default [`BertForCausalLM`] configuration for the decoder.
 
 ```python
->>> from transformers import BertConfig, ViTConfig, VisionEncoderDecoderConfig, VisionEncoderDecoderModel
+from transformers import BertConfig, VisionEncoderDecoderConfig, VisionEncoderDecoderModel, ViTConfig
 
->>> config_encoder = ViTConfig()
->>> config_decoder = BertConfig()
 
->>> config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(config_encoder, config_decoder)
->>> model = VisionEncoderDecoderModel(config=config)
+config_encoder = ViTConfig()
+config_decoder = BertConfig()
+
+config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(config_encoder, config_decoder)
+model = VisionEncoderDecoderModel(config=config)
 ```
 
 ## Initialising `VisionEncoderDecoderModel` from a pretrained encoder and a pretrained decoder
@@ -62,11 +63,12 @@ Initializing [`VisionEncoderDecoderModel`] from a pretrained encoder and decoder
 To do so, the `VisionEncoderDecoderModel` class provides a [`VisionEncoderDecoderModel.from_encoder_decoder_pretrained`] method.
 
 ```python
->>> from transformers import VisionEncoderDecoderModel
+from transformers import VisionEncoderDecoderModel
 
->>> model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-...     "microsoft/swin-base-patch4-window7-224-in22k", "google-bert/bert-base-uncased"
-... )
+
+model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+    "microsoft/swin-base-patch4-window7-224-in22k", "google-bert/bert-base-uncased"
+)
 ```
 
 ## Loading an existing `VisionEncoderDecoderModel` checkpoint and perform inference
@@ -76,25 +78,25 @@ To load fine-tuned checkpoints of the `VisionEncoderDecoderModel` class, [`Visio
 To perform inference, one uses the [`generate`] method, which allows to autoregressively generate text. This method supports various forms of decoding, such as greedy, beam search and multinomial sampling.
 
 ```python
->>> import requests
->>> from PIL import Image
+import requests
+from PIL import Image
 
->>> from transformers import GPT2TokenizerFast, ViTImageProcessor, VisionEncoderDecoderModel
+from transformers import GPT2TokenizerFast, ViTImageProcessor, VisionEncoderDecoderModel
 
->>> # load a fine-tuned image captioning model and corresponding tokenizer and image processor
->>> model = VisionEncoderDecoderModel.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
->>> tokenizer = GPT2TokenizerFast.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
->>> image_processor = ViTImageProcessor.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
+# load a fine-tuned image captioning model and corresponding tokenizer and image processor
+model = VisionEncoderDecoderModel.from_pretrained("nlpconnect/vit-gpt2-image-captioning", device_map="auto")
+tokenizer = GPT2TokenizerFast.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
+image_processor = ViTImageProcessor.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
 
->>> # let's perform inference on an image
->>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
->>> image = Image.open(requests.get(url, stream=True).raw)
->>> pixel_values = image_processor(image, return_tensors="pt").pixel_values
+# let's perform inference on an image
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+pixel_values = image_processor(image, return_tensors="pt").to(model.device).pixel_values
 
->>> # autoregressively generate caption (uses greedy decoding by default)
->>> generated_ids = model.generate(pixel_values)
->>> generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
->>> print(generated_text)
+# autoregressively generate caption (uses greedy decoding by default)
+generated_ids = model.generate(pixel_values)
+generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+print(generated_text)
 a cat laying on a blanket next to a cat laying on a bed
 ```
 
@@ -105,29 +107,31 @@ As you can see, only 2 inputs are required for the model in order to compute a l
 images) and `labels` (which are the `input_ids` of the encoded target sequence).
 
 ```python
->>> from transformers import ViTImageProcessor, BertTokenizer, VisionEncoderDecoderModel
->>> from datasets import load_dataset
+from datasets import load_dataset
 
->>> image_processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
->>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
->>> model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-...     "google/vit-base-patch16-224-in21k", "google-bert/bert-base-uncased"
-... )
+from transformers import BertTokenizer, VisionEncoderDecoderModel, ViTImageProcessor
 
->>> model.config.decoder_start_token_id = tokenizer.cls_token_id
->>> model.config.pad_token_id = tokenizer.pad_token_id
 
->>> dataset = load_dataset("huggingface/cats-image")
->>> image = dataset["test"]["image"][0]
->>> pixel_values = image_processor(image, return_tensors="pt").pixel_values
+image_processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
+tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
+model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+    "google/vit-base-patch16-224-in21k", "google-bert/bert-base-uncased"
+)
 
->>> labels = tokenizer(
-...     "an image of two cats chilling on a couch",
-...     return_tensors="pt",
-... ).input_ids
+model.config.decoder_start_token_id = tokenizer.cls_token_id
+model.config.pad_token_id = tokenizer.pad_token_id
 
->>> # the forward function automatically creates the correct decoder_input_ids
->>> loss = model(pixel_values=pixel_values, labels=labels).loss
+dataset = load_dataset("huggingface/cats-image")
+image = dataset["test"]["image"][0]
+pixel_values = image_processor(image, return_tensors="pt").to(model.device).pixel_values
+
+labels = tokenizer(
+    "an image of two cats chilling on a couch",
+    return_tensors="pt",
+).input_ids
+
+# the forward function automatically creates the correct decoder_input_ids
+loss = model(pixel_values=pixel_values, labels=labels).loss
 ```
 
 This model was contributed by [nielsr](https://github.com/nielsrogge).

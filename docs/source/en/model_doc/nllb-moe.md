@@ -68,18 +68,19 @@ Note that we're using the BCP-47 code for French `fra_Latn`. See [here](https://
 for the list of all BCP-47 in the Flores 200 dataset.
 
 ```python
->>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-moe-54b")
->>> model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-moe-54b")
 
->>> article = "Previously, Ring's CEO, Jamie Siminoff, remarked the company started when his doorbell wasn't audible from his shop in his garage."
->>> inputs = tokenizer(article, return_tensors="pt")
+tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-moe-54b")
+model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-moe-54b", device_map="auto")
 
->>> translated_tokens = model.generate(
-...     **inputs, forced_bos_token_id=tokenizer.lang_code_to_id["fra_Latn"], max_length=50
-... )
->>> tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
+article = "Previously, Ring's CEO, Jamie Siminoff, remarked the company started when his doorbell wasn't audible from his shop in his garage."
+inputs = tokenizer(article, return_tensors="pt").to(model.device)
+
+translated_tokens = model.generate(
+    **inputs, forced_bos_token_id=tokenizer.lang_code_to_id["fra_Latn"], max_length=50
+)
+tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
 "Auparavant, le PDG de Ring, Jamie Siminoff, a fait remarquer que la société avait commencé lorsque sa sonnette n'était pas audible depuis son magasin dans son garage."
 ```
 
@@ -91,18 +92,19 @@ you should specify the BCP-47 code in the `src_lang` keyword argument of the tok
 See example below for a translation from romanian to german:
 
 ```python
->>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-moe-54b", src_lang="ron_Latn")
->>> model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-moe-54b")
 
->>> article = "Şeful ONU spune că nu există o soluţie militară în Siria"
->>> inputs = tokenizer(article, return_tensors="pt")
+tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-moe-54b", src_lang="ron_Latn")
+model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-moe-54b", device_map="auto")
 
->>> translated_tokens = model.generate(
-...     **inputs, forced_bos_token_id=tokenizer.lang_code_to_id["deu_Latn"], max_length=30
-... )
->>> tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
+article = "Şeful ONU spune că nu există o soluţie militară în Siria"
+inputs = tokenizer(article, return_tensors="pt").to(model.device)
+
+translated_tokens = model.generate(
+    **inputs, forced_bos_token_id=tokenizer.lang_code_to_id["deu_Latn"], max_length=30
+)
+tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
 ```
 
 ## Resources

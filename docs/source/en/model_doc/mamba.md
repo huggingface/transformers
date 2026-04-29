@@ -36,14 +36,13 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="text-generation",
     model="state-spaces/mamba-130m-hf",
-    dtype=torch.float16,
     device=0
 )
 pipeline("Plants create energy through a process known as")
@@ -52,16 +51,16 @@ pipeline("Plants create energy through a process known as")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch  
-from transformers import AutoModelForCausalLM, AutoTokenizer  
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("state-spaces/mamba-130m-hf")
-model = AutoModelForCausalLM.from_pretrained("state-spaces/mamba-130m-hf", dtype=torch.float16, device_map="auto",)  
-input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)  
+model = AutoModelForCausalLM.from_pretrained("state-spaces/mamba-130m-hf", device_map="auto")
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
 
-output = model.generate(**input_ids)  
-print(tokenizer.decode(output[0], skip_special_tokens=True)
+output = model.generate(**input_ids)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
@@ -71,15 +70,16 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to 4-bit integers.
 
-```py
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
+```python
 from torchao.quantization import Int4WeightOnlyConfig
+
+from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
+
 
 quantization_config = Int4WeightOnlyConfig(group_size=128)
 quantization_config = TorchAoConfig(quant_type=quant_config)
 tokenizer = AutoTokenizer.from_pretrained("state-spaces/mamba-2.8b-hf")
-model = AutoModelForCausalLM.from_pretrained("state-spaces/mamba-2.8b-hf", dtype=torch.bfloat16, quantization_config=quantization_config, device_map="auto",)
+model = AutoModelForCausalLM.from_pretrained("state-spaces/mamba-2.8b-hf", quantization_config=quantization_config, device_map="auto")
 input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids)
