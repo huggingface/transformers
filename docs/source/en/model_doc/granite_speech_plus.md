@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-04-23 and added to Hugging Face Transformers on 2026-04-23.*
+*This model was released on 2026-04-23 and added to Hugging Face Transformers on 2026-04-29.*
 
 # Granite Speech Plus
 
@@ -25,9 +25,9 @@ rendered properly in your Markdown viewer.
 
 Granite Speech Plus is a variant of [Granite Speech](./granite_speech) whose projector consumes the concatenation of
 the encoder's final hidden states with an arbitrary subset of its intermediate hidden states (along the feature
-dimension). The selected intermediate layers are controlled by the `encoder_hidden_layers` config field on
-[`GraniteSpeechPlusConfig`]; when it is `None`, the model behaves identically to Granite Speech. When it is set, the
-projector's `encoder_hidden_size` must equal `encoder_config.hidden_dim * (len(encoder_hidden_layers) + 1)`.
+dimension). The selected intermediate layers are controlled by the `cat_hidden_layers` config field on
+[`GraniteSpeechPlusEncoderConfig`]; when it is `None`, the model behaves identically to Granite Speech. When it is set, the
+projector's `encoder_hidden_size` must equal `encoder_config.hidden_dim * (len(cat_hidden_layers) + 1)`.
 
 The rest of the architecture — speech encoder, query transformer projector, language model, and optional LoRA adapter
 — is inherited unchanged from Granite Speech. See the [Granite Speech documentation](./granite_speech) for usage

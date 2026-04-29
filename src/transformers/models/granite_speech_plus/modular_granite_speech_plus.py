@@ -83,11 +83,6 @@ class GraniteSpeechPlusConfig(GraniteSpeechConfig):
         Downsample rate for the audio feature extractor.
     window_size (`int`, *optional*, defaults to 15):
         Window size for the audio feature projector.
-    encoder_hidden_layers (`list[int]`, *optional*):
-        Indices of encoder conformer layers whose outputs are concatenated with the final encoder
-        output (along the feature dimension) before being passed to the projector. When set, the
-        projector's ``encoder_hidden_size`` must equal
-        ``encoder_config.hidden_dim * (len(encoder_hidden_layers) + 1)``.
 
     Example:
 
