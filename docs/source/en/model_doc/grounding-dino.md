@@ -46,41 +46,39 @@ The original code can be found [here](https://github.com/IDEA-Research/Grounding
 Here's how to use the model for zero-shot object detection:
 
 ```python
->>> import requests
+import requests
 
->>> import torch
->>> from PIL import Image
->>> from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
-from accelerate import Accelerator
+import torch
+from PIL import Image
+from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
 
->>> model_id = "IDEA-Research/grounding-dino-tiny"
->>> device = Accelerator().device
+model_id = "IDEA-Research/grounding-dino-tiny"
 
->>> processor = AutoProcessor.from_pretrained(model_id)
->>> model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(device)
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id, device_map="auto")
 
->>> image_url = "http://images.cocodataset.org/val2017/000000039769.jpg"
->>> image = Image.open(requests.get(image_url, stream=True).raw)
->>> # Check for cats and remote controls
->>> text_labels = [["a cat", "a remote control"]]
+image_url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(image_url, stream=True).raw)
+# Check for cats and remote controls
+text_labels = [["a cat", "a remote control"]]
 
->>> inputs = processor(images=image, text=text_labels, return_tensors="pt").to(model.device)
->>> with torch.no_grad():
-...     outputs = model(**inputs)
+inputs = processor(images=image, text=text_labels, return_tensors="pt").to(model.device)
+with torch.no_grad():
+    outputs = model(**inputs)
 
->>> results = processor.post_process_grounded_object_detection(
-...     outputs,
-...     inputs.input_ids,
-...     threshold=0.4,
-...     text_threshold=0.3,
-...     target_sizes=[image.size[::-1]]
-... )
+results = processor.post_process_grounded_object_detection(
+    outputs,
+    inputs.input_ids,
+    threshold=0.4,
+    text_threshold=0.3,
+    target_sizes=[image.size[::-1]]
+)
 
 # Retrieve the first image result
->>> result = results[0]
->>> for box, score, labels in zip(result["boxes"], result["scores"], result["labels"]):
-...     box = [round(x, 2) for x in box.tolist()]
-...     print(f"Detected {labels} with confidence {round(score.item(), 3)} at location {box}")
+result = results[0]
+for box, score, labels in zip(result["boxes"], result["scores"], result["labels"]):
+    box = [round(x, 2) for x in box.tolist()]
+    print(f"Detected {labels} with confidence {round(score.item(), 3)} at location {box}")
 Detected a cat with confidence 0.468 at location [344.78, 22.9, 637.3, 373.62]
 Detected a cat with confidence 0.426 at location [11.74, 51.55, 316.51, 473.22]
 ```

@@ -178,6 +178,7 @@ if TYPE_CHECKING:
     from .gptj import *
     from .granite import *
     from .granite_speech import *
+    from .granite_speech_plus import *
     from .granitemoe import *
     from .granitemoehybrid import *
     from .granitemoeshared import *

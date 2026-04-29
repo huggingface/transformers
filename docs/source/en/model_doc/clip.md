@@ -37,14 +37,13 @@ The example below demonstrates how to calculate similarity scores between multip
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 clip = pipeline(
    task="zero-shot-image-classification",
    model="openai/clip-vit-base-patch32",
-   dtype=torch.bfloat16,
    device=0
 )
 labels = ["a photo of a cat", "a photo of a dog", "a photo of a car"]
@@ -54,20 +53,21 @@ clip("http://images.cocodataset.org/val2017/000000039769.jpg", candidate_labels=
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
-import torch
 from PIL import Image
-from transformers import AutoProcessor, AutoModel
 
-model = AutoModel.from_pretrained("openai/clip-vit-base-patch32", dtype=torch.bfloat16, attn_implementation="sdpa")
+from transformers import AutoModel, AutoProcessor
+
+
+model = AutoModel.from_pretrained("openai/clip-vit-base-patch32", attn_implementation="sdpa", device_map="auto")
 processor = AutoProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 labels = ["a photo of a cat", "a photo of a dog", "a photo of a car"]
 
-inputs = processor(text=labels, images=image, return_tensors="pt", padding=True)
+inputs = processor(text=labels, images=image, return_tensors="pt", padding=True).to(model.device)
 
 outputs = model(**inputs)
 logits_per_image = outputs.logits_per_image

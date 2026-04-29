@@ -52,8 +52,8 @@ top_k=50
 **Examples**
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 MODEL_ID = "upstage/Solar-Open-100B"
 
@@ -62,7 +62,6 @@ tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
 
 model = AutoModelForCausalLM.from_pretrained(
     pretrained_model_name_or_path=MODEL_ID,
-    torch_dtype=torch.bfloat16,
     device_map="auto",
 )
 

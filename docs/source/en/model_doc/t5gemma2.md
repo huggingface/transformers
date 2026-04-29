@@ -37,13 +37,12 @@ The example below demonstrates how to chat with the model with [`Pipeline`] or t
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 generator = pipeline(
     "image-text-to-text",
     model="google/t5gemma-2-270m-270m",
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 
@@ -58,23 +57,23 @@ generator(
 <hfoption id="AutoModel">
 
 ```python
-import torch
 import requests
 from PIL import Image
-from transformers import AutoProcessor, AutoModelForSeq2SeqLM
+
+from transformers import AutoModelForSeq2SeqLM, AutoProcessor
+
 
 processor = AutoProcessor.from_pretrained("google/t5gemma-2-270m-270m")
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "google/t5gemma-2-270m-270m",
     device_map="auto",
-    dtype=torch.bfloat16,
 )
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 prompt = "<start_of_image> in this image, there is"
 
-model_inputs = processor(text=prompt, images=image, return_tensors="pt")
+model_inputs = processor(text=prompt, images=image, return_tensors="pt").to(model.device)
 generation = model.generate(**model_inputs, max_new_tokens=20, do_sample=False)
 print(processor.decode(generation[0]))
 ```
