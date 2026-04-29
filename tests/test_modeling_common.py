@@ -4802,6 +4802,11 @@ class ModelTesterMixin:
                     if isinstance(conversion, PrefixChange):
                         continue
 
+                    # Skip if the conversion is scoped to a sub-model, as the conversion is already tested on the sub-model.
+                    # Also, it might be the case that the original/weights model did not include the sub-model (e.g. LlavaForConditionalGeneration)
+                    if conversion.scope_prefix is not None:
+                        continue
+
                     # Single pass over serialized_keys: the compiled regex already tests all
                     # pattern branches at once, so one call per key is enough.
                     matched_groups: set[str] = set()

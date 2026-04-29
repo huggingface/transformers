@@ -104,6 +104,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "FuyuModel": "LlavaModel",
     "MllamaModel": "LlavaModel",
     "Qwen2_5_VLModel": "Qwen2VLModel",
+    "MaskFormerDetrDecoder": "DetrModel",
 }
 
 
@@ -167,13 +168,14 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns="model.language_model",
             ),
         ],
-        "Qwen2VLModel": [WeightRenaming(source_patterns=r"^model.", target_patterns="")],
+        "Qwen2VLModel": [],
         "qwen2_vl": [
             WeightRenaming(source_patterns=r"^visual", target_patterns="model.visual"),
             WeightRenaming(
-                source_patterns=r"(?<!_)model(?!\.(language_model|visual))", target_patterns="model.language_model"
+                source_patterns=r"^model(?!\.(language_model|visual))", target_patterns="model.language_model"
             ),
         ],
+        "colqwen2": [PrefixChange(prefix_to_remove="model", model_prefix="vlm")],
         "timm_wrapper": [PrefixChange(prefix_to_add="timm_model")],
         "pi0": [
             WeightRenaming(source_patterns=r"state_proj", target_patterns="embed_action_time.state_proj"),
