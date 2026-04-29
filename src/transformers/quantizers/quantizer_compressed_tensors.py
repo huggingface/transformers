@@ -51,6 +51,12 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     quantization_config: CompressedTensorsConfig
 
     def __init__(self, quantization_config: CompressedTensorsConfig, **kwargs):
+        # For FP8 with GPU/XPU, we don't require calibration (online quantization is supported)
+        if _is_ct_fp8_config(quantization_config) and (
+            is_torch_available() and (torch.cuda.is_available() or is_torch_xpu_available())
+        ):
+            self.requires_calibration = False
+
         super().__init__(quantization_config, **kwargs)
 
         if not is_compressed_tensors_available():
@@ -207,6 +213,13 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     def is_serializable(self) -> bool:
         """Models quantized using compressed tensors can be saved to disk"""
         return True
+
+    def get_quantize_ops(self):
+        if not self._use_fp8_kernel or self.pre_quantized:
+            return None
+        from ..integrations.compressed_tensors_fp8 import CTFP8PerRowQuantize
+
+        return CTFP8PerRowQuantize(self)
 
     def get_weight_conversions(self):
         if not self._use_fp8_kernel:

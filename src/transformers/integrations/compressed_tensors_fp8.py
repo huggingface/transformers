@@ -251,3 +251,47 @@ class CompressedTensorsFp8Dequantize(ConversionOps):
     def reverse_op(self):
         return _IdentityOp()
 
+
+class CTFP8PerRowQuantize(ConversionOps):
+    """Online quantization: convert BF16 weight to FP8 per-row.
+
+    For each row of the weight matrix, computes:
+        scale = max_abs(row) / FP8_MAX
+        quantized_row = clamp(row / scale, FP8_MIN, FP8_MAX).to(FP8)
+        weight_scale_inv = scale  (dequant multiplier)
+
+    Used when loading a BF16 model with CompressedTensorsConfig for online FP8.
+    """
+
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(self, input_dict, **kwargs):
+        # input_dict = {target_key: [bf16_weight_tensor]}
+        target_key, value = next(iter(input_dict.items()))
+        weight = value[0].to(torch.float32)
+
+        # Per-row quantization: one scale per output channel
+        row_max_abs = weight.abs().amax(dim=-1)  # (out_features,)
+        safe_max = torch.where(row_max_abs > 0, row_max_abs, torch.ones_like(row_max_abs))
+        scales = safe_max / _FP8_MAX  # dequant scale: bf16 = fp8 * scale
+
+        # Quantize
+        quantized = torch.clamp(weight / scales.unsqueeze(-1), min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
+
+        # Derive scale key: model.layers.0.xxx.weight -> model.layers.0.xxx.weight_scale_inv
+        if target_key.endswith("weight"):
+            scale_key = target_key.rsplit(".", 1)[0] + ".weight_scale_inv"
+        else:
+            scale_key = target_key + "_scale_inv"
+
+        # weight_scale_inv shape: (out_features, 1) for row-wise kernel
+        return {
+            target_key: quantized,
+            scale_key: scales.unsqueeze(-1),
+        }
+
+    @property
+    def reverse_op(self):
+        return _IdentityOp()
+
