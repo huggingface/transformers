@@ -1191,7 +1191,12 @@ class MoeTensorParalellExperts(TensorParallelLayer):
         # and partial_expert_output is different on each GPU before all-reduce
         top_k_weights = all_reduce_backward(top_k_weights, device_mesh)
 
-        return (hidden_states, top_k_index, top_k_weights)
+        # Pass the EP process group through to the experts forward. Used today by DeepGEMM Mega
+        # MoE for the symmetric-buffer rendezvous; future dispatches can use it for genuine EP
+        # all-to-all dispatch + combine (replacing the current compute-everywhere + all_reduce
+        # approach). Dispatches that don't need it accept it via a `process_group=None` default
+        # arg and ignore it.
+        return (hidden_states, top_k_index, top_k_weights, device_mesh.get_group())
 
     def _prepare_output_fn(self, mod, outputs, device_mesh):
         # all_reduce_forward to sum partial expert outputs across GPUs

@@ -24,7 +24,7 @@ from ..utils.import_utils import (
     is_torch_less_or_equal,
     is_torchdynamo_compiling,
 )
-from .deepgemm import deepgemm_experts_forward
+from .deepgemm import deepgemm_bf16_experts_forward
 from .sonicmoe import sonicmoe_experts_forward
 
 
@@ -114,6 +114,7 @@ def batched_mm_experts_forward(
     hidden_states: torch.Tensor,
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
+    process_group: torch.distributed.ProcessGroup | None = None,  # noqa: ARG001  (unused; for dispatch ABI)
 ) -> torch.Tensor:
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
@@ -370,6 +371,7 @@ def grouped_mm_experts_forward(
     hidden_states: torch.Tensor,
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
+    process_group: torch.distributed.ProcessGroup | None = None,  # noqa: ARG001  (unused; for dispatch ABI)
 ) -> torch.Tensor:
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
@@ -463,10 +465,10 @@ class ExpertsInterface(GeneralInterface):
     """Interface for registering custom experts forward functions."""
 
     _global_mapping = {
+        "deepgemm": deepgemm_bf16_experts_forward,
         "batched_mm": batched_mm_experts_forward,
         "grouped_mm": grouped_mm_experts_forward,
         "sonicmoe": sonicmoe_experts_forward,
-        "deepgemm": deepgemm_experts_forward,
     }
 
     def get_interface(self, experts_implementation: str, default: Callable) -> Callable:

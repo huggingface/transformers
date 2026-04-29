@@ -95,6 +95,7 @@ def sonicmoe_experts_forward(
     hidden_states: torch.Tensor,
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
+    process_group: torch.distributed.ProcessGroup | None = None,  # noqa: ARG001  (unused; for dispatch ABI)
 ) -> torch.Tensor:
     if not self.has_gate:
         raise ValueError("sonicmoe requires gated experts (has_gate=True)")
