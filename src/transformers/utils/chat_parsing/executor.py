@@ -26,7 +26,7 @@ import re
 from typing import Any
 
 from .content_parsers import process_field
-from .spec import Field, load_spec
+from .spec import Field, Spec, load_spec
 
 
 # When a delimiter is specified as a regex, we can't reason exactly about how
@@ -35,12 +35,19 @@ from .spec import Field, load_spec
 _REGEX_STREAM_LOOKBACK = 64
 
 
-def parse_response(text: str, response_format: dict) -> dict:
+def parse_response(text: str, response_format: dict | Spec, *, prefix: str | None = None) -> dict:
     """Whole-string parse: returns the assembled message dict.
 
-    Implemented as a single-chunk feed through `ResponseEventStream` so both
-    paths share one state machine."""
-    stream = ResponseEventStream(response_format)
+    `prefix` is silently consumed up front to advance state without
+    populating output (see `ResponseEventStream`). When `prefix` is omitted
+    and the spec defines `start_anchor`, `text` is auto-truncated to the
+    suffix beginning past the last anchor — supporting the "pass the whole
+    rendered conversation as one string" shape.
+    """
+    spec_obj = load_spec(response_format)
+    if prefix is None and spec_obj.start_anchor_re is not None:
+        text = spec_obj.truncate_past_last_anchor(text, log_if_missing=False)
+    stream = ResponseEventStream(spec_obj, prefix=prefix)
     stream.feed(text)
     return stream.finalize()
 
@@ -49,7 +56,9 @@ class ResponseEventStream:
     """Incremental parser over a `response_format` spec.
 
     Usage:
-        streamer = ResponseEventStream(response_format)
+        streamer = ResponseEventStream(response_format, prefix=chat_prompt)
+        if streamer.initial_event:
+            handle(streamer.initial_event)
         for chunk in model_text_stream:
             for event in streamer.feed(chunk):
                 handle(event)
@@ -63,11 +72,21 @@ class ResponseEventStream:
       - {"type": "region_close", "field": name, "value": <parsed+assembled value>}
       - {"type": "stream_end"}
 
+    `prefix` is the chat-prompt context that came before generation (e.g.,
+    a rendered chat template ending in `<|im_start|>assistant\\n<think>\\n`).
+    When passed, the parser right-truncates it to past the spec's
+    `start_anchor` (so system / user / earlier-assistant turns are dropped
+    up front) and silently runs the remainder through the state machine
+    so it lands in the right initial region. No events fire and no body
+    content from the prefix lands in the output dict; the only observable
+    side effect is `self.initial_event`, a synthetic `region_open` that
+    reports the post-prefix state when it's an explicit region.
+
     Correctness invariant (property-tested): for any chunking of the input,
     finalize() returns the same dict as the whole-string parse_response().
     """
 
-    def __init__(self, response_format: dict):
+    def __init__(self, response_format: dict | Spec, prefix: str | None = None):
         self._spec = load_spec(response_format)
         self._buffer: str = ""
         self._pos: int = 0
@@ -82,7 +101,39 @@ class ResponseEventStream:
         self._body: str = ""
         self._opened: bool = False
         self._finalized: bool = False
+        self._prefill_mode: bool = False
         self.final_events: list[dict] = []
+        self.initial_event: dict | None = None
+        if prefix:
+            self._consume_prefix(prefix)
+
+    def _consume_prefix(self, prefix: str) -> None:
+        """Right-truncate prefix past the last `start_anchor` and silently
+        run the remainder through the state machine. After this call:
+
+        - `_buffer` retains any held-back trailing bytes (e.g., a partial
+          delimiter prefix at the very end), so a subsequent `feed()` can
+          complete the match across the prefix/generation boundary.
+        - `_current` / `_captures` / `_opened` / `_body` reflect the
+          state implied by the prefix.
+        - `initial_event` is a synthetic `region_open` if we landed inside
+          an explicit region; `None` otherwise.
+        """
+        truncated = self._spec.truncate_past_last_anchor(prefix)
+        if not truncated:
+            return
+        self._buffer = truncated
+        self._prefill_mode = True
+        try:
+            self._process([], eos=False)
+        finally:
+            self._prefill_mode = False
+        if self._current is not None and self._current != self._implicit_name and self._opened:
+            self.initial_event = {
+                "type": "region_open",
+                "field": self._current,
+                "meta": dict(self._captures),
+            }
 
     def feed(self, text: str) -> list[dict]:
         if self._finalized:
@@ -210,29 +261,39 @@ class ResponseEventStream:
     def _accumulate(self, events: list[dict], text: str) -> None:
         """Route `text` into the currently active region. When the current
         region is the null sink (no implicit declared, no explicit open), we
-        silently discard."""
+        silently discard. In `_prefill_mode` the body still accumulates --
+        so a region opened in the prefix and closed across the boundary
+        emits the right value -- but `region_open` / `region_chunk` events
+        are suppressed."""
         if not text or self._current is None:
             return
         fld = self._spec.fields[self._current]
         if not self._opened:
-            events.append({"type": "region_open", "field": self._current, "meta": dict(self._captures)})
+            if not self._prefill_mode:
+                events.append({"type": "region_open", "field": self._current, "meta": dict(self._captures)})
             self._opened = True
         self._body += text
-        if fld.content in ("text", "raw"):
+        if fld.content in ("text", "raw") and not self._prefill_mode:
             events.append({"type": "region_chunk", "field": self._current, "text": text})
 
     def _open_explicit(self, events: list[dict], fld: Field, m: re.Match) -> None:
         self._current = fld.name
         self._captures = {k: v for k, v in m.groupdict().items() if v is not None}
         self._body = ""
-        events.append({"type": "region_open", "field": fld.name, "meta": dict(self._captures)})
         self._opened = True
+        if not self._prefill_mode:
+            events.append({"type": "region_open", "field": fld.name, "meta": dict(self._captures)})
 
     def _close_current(self, events: list[dict]) -> None:
         """Close the current region and reset to the implicit/null region.
         Skipped (aside from the reset) when the current region never opened --
-        avoids vacuous open/close pairs at every explicit boundary."""
+        avoids vacuous open/close pairs at every explicit boundary. In
+        `_prefill_mode` we drop the body without parsing or writing to
+        output, since prefix material isn't part of the model's response."""
         if self._current is None or not self._opened:
+            self._reset_to_implicit()
+            return
+        if self._prefill_mode:
             self._reset_to_implicit()
             return
         fld = self._spec.fields[self._current]

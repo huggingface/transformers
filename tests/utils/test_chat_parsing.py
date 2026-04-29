@@ -778,5 +778,175 @@ class ResponseEventStreamTest(unittest.TestCase):
         self.assertEqual(streamer.final_events[-1], {"type": "stream_end"})
 
 
+# ChatML-style anchor used by Qwen / SmolLM templates: assistant header is
+# everything from `<|im_start|>` through `assistant\n`. Right-truncating past
+# this leaves only the message body, so prefix material (`<|im_start|>`,
+# role label) doesn't pollute downstream parsing.
+_CHATML_ANCHOR = "<|im_start|>assistant\n"
+
+qwen3_format_with_anchor = {**qwen3_format, "start_anchor": _CHATML_ANCHOR}
+smollm_format_with_anchor = {**smollm_format, "start_anchor": _CHATML_ANCHOR}
+
+
+@require_jmespath
+class PrefixAndTruncationTest(unittest.TestCase):
+    def test_prefix_lands_inside_explicit_region(self):
+        """A Qwen-style template emits `<|im_start|>assistant\\n<think>\\n` as the
+        assistant prefix. The model continues from inside the thinking block."""
+        prompt = (
+            "<|im_start|>system\nYou are helpful<|im_end|>\n"
+            "<|im_start|>user\nHi<|im_end|>\n"
+            "<|im_start|>assistant\n<think>\n"
+        )
+        generated = "Let me think...</think>"
+        stream = ResponseEventStream(qwen3_format_with_anchor, prefix=prompt)
+        # The stream surfaces a synthetic open so the caller knows the state.
+        self.assertEqual(
+            stream.initial_event,
+            {"type": "region_open", "field": "thinking", "meta": {}},
+        )
+        events = stream.feed(generated)
+        result = stream.finalize()
+        # thinking should capture only the generated body, not the template prefix.
+        self.assertEqual(result, {"role": "assistant", "thinking": "Let me think..."})
+        # We should see a region_close event for thinking from the generated chunk;
+        # no region_open event for thinking (the silent prefill already opened it).
+        self.assertEqual([e["type"] for e in events], ["region_chunk", "region_close"])
+        self.assertEqual(events[1]["field"], "thinking")
+
+    def test_prefix_truncated_to_last_anchor(self):
+        """Multiple `<|im_start|>assistant\\n` anchors in the prefix (multi-turn
+        conversation): only the slice after the LAST anchor matters."""
+        prompt = (
+            "<|im_start|>system\nA<|im_end|>\n"
+            "<|im_start|>user\nB<|im_end|>\n"
+            "<|im_start|>assistant\nEarlier reply<|im_end|>\n"
+            "<|im_start|>user\nFollowup<|im_end|>\n"
+            "<|im_start|>assistant\n<think>\n"
+        )
+        stream = ResponseEventStream(qwen3_format_with_anchor, prefix=prompt)
+        # We landed inside `thinking` (from the LAST assistant turn's `<think>\n`),
+        # not in some earlier-turn artifact.
+        self.assertIsNotNone(stream.initial_event)
+        self.assertEqual(stream.initial_event["field"], "thinking")
+        # No earlier-turn content leaked into output.
+        stream.feed("done</think>")
+        stream.finalize()
+        self.assertEqual(stream._output, {"role": "assistant", "thinking": "done"})
+
+    def test_prefix_no_anchor_in_spec_keeps_full_prefix(self):
+        """With no `start_anchor` in the spec, the prefix is processed verbatim
+        (silently). Useful when the caller has already pre-cut the prefix."""
+        prompt = "<think>\n"
+        stream = ResponseEventStream(qwen3_format, prefix=prompt)  # no anchor
+        self.assertEqual(
+            stream.initial_event,
+            {"type": "region_open", "field": "thinking", "meta": {}},
+        )
+        stream.feed("hi</think>")
+        stream.finalize()
+        self.assertEqual(stream._output, {"role": "assistant", "thinking": "hi"})
+
+    def test_prefix_anchor_not_found_falls_back(self):
+        """Spec has start_anchor but the prefix doesn't contain it: parser
+        falls back to processing the entire prefix (with a logged warning)."""
+        prompt = "<think>\n"  # no <|im_start|>assistant\n
+        stream = ResponseEventStream(qwen3_format_with_anchor, prefix=prompt)
+        # Even without truncation, the prefix opens `thinking` silently.
+        self.assertEqual(
+            stream.initial_event,
+            {"type": "region_open", "field": "thinking", "meta": {}},
+        )
+        stream.feed("hi</think>")
+        stream.finalize()
+        self.assertEqual(stream._output, {"role": "assistant", "thinking": "hi"})
+
+    def test_round_trip_equivalence_prefix_vs_concat(self):
+        """The load-bearing property: `prefix=p` + chunked `feed(g)` produces
+        the same dict as `parse_response(p + g)` and as
+        `parse_response(g, prefix=p)`. Auto-truncation makes "one long array"
+        equivalent to the explicit two-input form."""
+        prompt = "<|im_start|>system\nA<|im_end|>\n<|im_start|>user\nB<|im_end|>\n<|im_start|>assistant\n<think>\n"
+        for name, fmt_dict, gen_text in _STREAMING_FIXTURES:
+            if "thinking" not in gen_text and "<think>" not in gen_text:
+                continue
+            # Only fixtures whose generation text is compatible with starting
+            # inside `thinking`. Restrict to qwen3 / smollm shape for clarity.
+            if name not in ("qwen3", "smollm"):
+                continue
+            fmt_with_anchor = {**fmt_dict, "start_anchor": _CHATML_ANCHOR}
+            # Expected: feed (prefix + gen) without prefix kwarg, but auto-truncate
+            # via parse_response should match feeding gen with prefix kwarg.
+            via_prefix = parse_response(gen_text, fmt_with_anchor, prefix=prompt)
+            via_concat = parse_response(prompt + gen_text, fmt_with_anchor)
+            self.assertEqual(via_prefix, via_concat, msg=f"fixture={name}")
+            # Streaming forms.
+            for step in (1, 3, 7, 31):
+                with self.subTest(fixture=name, step=step):
+                    stream = ResponseEventStream(fmt_with_anchor, prefix=prompt)
+                    for chunk in _chunk_fixed(gen_text, step):
+                        stream.feed(chunk)
+                    self.assertEqual(stream.finalize(), via_prefix)
+
+    def test_prefix_with_open_close_inside_truncated_region(self):
+        """Synthetic spec where the post-truncation prefix opens AND closes a
+        region. The closed region is not surfaced in the output; subsequent
+        feed continues from the implicit region (or default state)."""
+        spec = {
+            "defaults": {"role": "assistant"},
+            "start_anchor": "[BEGIN]",
+            "fields": {
+                "tag": {"open": "<tag>", "close": "</tag>", "content": "text"},
+                "body": {"close_pattern": r"$", "content": "text"},  # implicit
+            },
+        }
+        prefix = "noise[BEGIN]<tag>silently consumed</tag>"
+        stream = ResponseEventStream(spec, prefix=prefix)
+        # Closed-and-discarded inside prefix → no initial_event.
+        self.assertIsNone(stream.initial_event)
+        stream.feed("real generated body")
+        result = stream.finalize()
+        # `tag` was closed inside the silent prefix, so it does NOT appear.
+        self.assertNotIn("tag", result)
+        self.assertEqual(result["body"], "real generated body")
+
+    def test_prefix_partial_pattern_at_boundary(self):
+        """Post-truncation prefix ends mid-delimiter. The first feed completes
+        the match; the synthetic `initial_event` is None (no region opened
+        within the prefix yet) and the open fires from `feed()`."""
+        prefix = "<|im_start|>assistant\n<thi"  # incomplete `<think>`
+        stream = ResponseEventStream(qwen3_format_with_anchor, prefix=prefix)
+        self.assertIsNone(stream.initial_event)
+        events = stream.feed("nk>real body</think>")
+        types = [e["type"] for e in events]
+        self.assertIn("region_open", types)  # think opens during feed, not prefill
+        stream.finalize()
+        self.assertEqual(stream._output, {"role": "assistant", "thinking": "real body"})
+
+    def test_prefix_token_ids_decoded(self):
+        """The tokenizer-level helper accepts token IDs as prefix (decoded
+        internally), matching how `response` is handled."""
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        tokenizer.response_format = qwen3_format_with_anchor
+        prefix_text = "<|im_start|>assistant\n<think>\n"
+        prefix_ids = tokenizer(prefix_text).input_ids
+        from_str = tokenizer.parse_response("hi</think>", prefix=prefix_text)
+        from_ids = tokenizer.parse_response("hi</think>", prefix=prefix_ids)
+        self.assertEqual(from_str, from_ids)
+
+    def test_tokenizer_response_event_stream_with_prefix(self):
+        """`tokenizer.response_event_stream(prefix=...)` returns a stream that
+        is already in the right initial state."""
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        tokenizer.response_format = qwen3_format_with_anchor
+        prefix = "<|im_start|>assistant\n<think>\n"
+        stream = tokenizer.response_event_stream(prefix=prefix)
+        self.assertIsNotNone(stream.initial_event)
+        self.assertEqual(stream.initial_event["field"], "thinking")
+        stream.feed("body</think>")
+        result = stream.finalize()
+        self.assertEqual(result, {"role": "assistant", "thinking": "body"})
+
+
 if __name__ == "__main__":
     unittest.main()

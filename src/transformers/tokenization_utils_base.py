@@ -3316,6 +3316,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         self,
         response: str | list[str | int | list[int]] | np.ndarray | torch.Tensor,
         schema: list | dict | None = None,
+        *,
+        prefix: str | list[int] | np.ndarray | torch.Tensor | None = None,
     ):
         """
         Converts an output string created by generating text from a model into a parsed message dictionary.
@@ -3331,6 +3333,12 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 A response format (preferred, new-style) or legacy response schema dict that indicates the expected
                 output format and how parsing should be performed. If not provided, the tokenizer's `response_format`
                 or `response_schema` attribute will be used (in that order).
+            prefix (`str` or token IDs, *optional*):
+                The chat-prompt context that came before generation (e.g., the rendered chat template up to and
+                including the assistant header / any template-emitted thinking opener). When provided, the parser
+                right-truncates it to past the spec's `start_anchor` and silently advances state, so the first
+                generated token is classified into the correct field. Only supported with new-style
+                `response_format` specs; ignored for legacy `response_schema`.
         """
         from .utils.chat_parsing import parse_response as _format_parse_response
 
@@ -3355,8 +3363,16 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             # Explicit schema argument: detect new-style by the presence of a top-level `fields` key.
             use_new_format = isinstance(schema, dict) and "fields" in schema
 
+        prefix_str: str | None = None
+        if prefix is not None:
+            if not use_new_format:
+                raise ValueError(
+                    "`prefix=` is only supported with new-style `response_format` specs, not legacy `response_schema`."
+                )
+            prefix_str = prefix if isinstance(prefix, str) else self.decode(prefix)
+
         if use_new_format:
-            parse_one = lambda text: _format_parse_response(text, schema)  # noqa: E731
+            parse_one = lambda text: _format_parse_response(text, schema, prefix=prefix_str)  # noqa: E731
         else:
             parse_one = lambda text: recursive_parse(text, schema)  # noqa: E731
 
@@ -3369,10 +3385,21 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 response = self.decode(response)
             return parse_one(response)
 
-    def response_event_stream(self, response_format: dict | None = None):
+    def response_event_stream(
+        self,
+        response_format: dict | None = None,
+        *,
+        prefix: str | list[int] | np.ndarray | torch.Tensor | None = None,
+    ):
         """Return a stateful [`~utils.chat_parsing.ResponseEventStream`] for incrementally
         parsing a streamed response. Uses the tokenizer's `response_format` attribute unless
-        overridden."""
+        overridden.
+
+        When `prefix` is passed, the stream is initialized in the state implied by the
+        chat-prompt context (right-truncated past the spec's `start_anchor`). Generated
+        chunks fed via `stream.feed()` are then classified correctly even when the chat
+        template emitted assistant-turn content (e.g., `<think>\\n`) that the model
+        continues from."""
         from .utils.chat_parsing import ResponseEventStream
 
         fmt = response_format if response_format is not None else getattr(self, "response_format", None)
@@ -3380,7 +3407,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             raise AttributeError(
                 "This tokenizer does not have a `response_format` set; cannot create a response event stream."
             )
-        return ResponseEventStream(fmt)
+        prefix_str: str | None = None
+        if prefix is not None:
+            prefix_str = prefix if isinstance(prefix, str) else self.decode(prefix)
+        return ResponseEventStream(fmt, prefix=prefix_str)
 
 
 def get_fast_tokenizer_file(tokenization_files: list[str]) -> str:
