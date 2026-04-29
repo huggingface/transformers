@@ -893,7 +893,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("glm_image", {"pil": "GlmImageImageProcessorPil", "torchvision": "GlmImageImageProcessor"}),
         ("glpn", {"pil": "GLPNImageProcessorPil", "torchvision": "GLPNImageProcessor"}),
         ("got_ocr2", {"pil": "GotOcr2ImageProcessorPil", "torchvision": "GotOcr2ImageProcessor"}),
-        ("granite4_vision", {"pil": "Granite4VisionImageProcessorPil", "torchvision": "Granite4VisionImageProcessor"}),
+        ("granite4_vision", {"pil": "LlavaNextImageProcessorPil", "torchvision": "LlavaNextImageProcessor"}),
         ("grounding-dino", {"pil": "GroundingDinoImageProcessorPil", "torchvision": "GroundingDinoImageProcessor"}),
         ("idefics", {"pil": "IdeficsImageProcessorPil", "torchvision": "IdeficsImageProcessor"}),
         ("idefics2", {"pil": "Idefics2ImageProcessorPil", "torchvision": "Idefics2ImageProcessor"}),
