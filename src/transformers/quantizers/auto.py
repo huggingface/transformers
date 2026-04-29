@@ -207,6 +207,12 @@ class AutoHfQuantizer:
                 f" {list(AUTO_QUANTIZER_MAPPING.keys())}"
             )
 
+        # Route compressed-tensors FP8 override to dedicated quantizer
+        if hasattr(quantization_config, "_original_ct_config") and quantization_config._original_ct_config:
+            from .quantizer_compressed_tensors_fp8 import CompressedTensorsFP8HfQuantizer
+
+            return CompressedTensorsFP8HfQuantizer(quantization_config, **kwargs)
+
         target_cls = AUTO_QUANTIZER_MAPPING[quant_method]
         return target_cls(quantization_config, **kwargs)
 
@@ -233,20 +239,32 @@ class AutoHfQuantizer:
             warning_msg = ""
 
         if isinstance(quantization_config, dict):
+            _original_config_dict = quantization_config.copy()
             # Convert the config based on the type of quantization_config_from_args (e.g., AutoRoundConfig), which takes priority before automatic configuration dispatch.
             if isinstance(quantization_config_from_args, AutoRoundConfig):
                 quantization_config = AutoRoundConfig.from_dict(quantization_config)
             else:
                 quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
+        else:
+            _original_config_dict = None
 
         if (
             quantization_config_from_args is not None
             and quantization_config.__class__.__name__ != quantization_config_from_args.__class__.__name__
         ):
-            raise ValueError(
-                f"The model is quantized with {quantization_config.__class__.__name__} but you are passing a {quantization_config_from_args.__class__.__name__} config. "
-                "Please make sure to pass the same quantization config class to `from_pretrained` with different loading attributes."
-            )
+            # Allow FineGrainedFP8Config to override CompressedTensorsConfig for FP8 compressed-tensors models
+            if isinstance(quantization_config, CompressedTensorsConfig) and isinstance(
+                quantization_config_from_args, FineGrainedFP8Config
+            ):
+                # Store original CT config for weight converter reference, then use the FP8 config
+                ct_dict = _original_config_dict if _original_config_dict is not None else quantization_config.to_dict()
+                quantization_config_from_args._original_ct_config = ct_dict
+                quantization_config = quantization_config_from_args
+            else:
+                raise ValueError(
+                    f"The model is quantized with {quantization_config.__class__.__name__} but you are passing a {quantization_config_from_args.__class__.__name__} config. "
+                    "Please make sure to pass the same quantization config class to `from_pretrained` with different loading attributes."
+                )
 
         if isinstance(quantization_config, LOADING_ATTRIBUTES_CONFIG_TYPES) and isinstance(
             quantization_config_from_args, LOADING_ATTRIBUTES_CONFIG_TYPES
