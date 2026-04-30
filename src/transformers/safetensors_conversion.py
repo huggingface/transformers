@@ -2,8 +2,8 @@ from typing import Optional
 
 import httpx
 from huggingface_hub import Discussion, HfApi, get_repo_discussions
-from transformers import __version__
 
+from . import __version__
 from .utils import cached_file, http_user_agent, logging
 
 
