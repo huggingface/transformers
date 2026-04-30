@@ -1020,6 +1020,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("pi0", "PI0ForConditionalGeneration"),
         ("pix2struct", "Pix2StructForConditionalGeneration"),
         ("pp_chart2table", "GotOcr2ForConditionalGeneration"),
+        ("pp_formulanet", "PPFormulaNetForConditionalGeneration"),
         ("qianfan_ocr", "QianfanOCRForConditionalGeneration"),
         ("qwen2_5_omni_thinker", "Qwen2_5OmniThinkerForConditionalGeneration"),
         ("qwen2_5_vl", "Qwen2_5_VLForConditionalGeneration"),
