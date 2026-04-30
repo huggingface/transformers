@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-03-24 and added to Hugging Face Transformers on 2026-04-28.*
+*This model was released on 2025-03-24 and added to Hugging Face Transformers on 2026-04-30.*
 
 # SLANet
 
@@ -29,7 +29,7 @@ rendered properly in your Markdown viewer.
 
 ### Single input inference
 
-The example below demonstrates how to detect text with PP-OCRV5_Mobile_Det using the [`AutoModel`].
+The example below demonstrates how to detect text with PP-PP-FormulaNet_plus-L using the [`AutoModel`].
 
 <hfoptions id="usage">
 <hfoption id="AutoModel">
