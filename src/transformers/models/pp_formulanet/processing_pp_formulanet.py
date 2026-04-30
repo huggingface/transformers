@@ -59,11 +59,10 @@ class PPFormulaNetProcessor(ProcessorMixin):
         images: ImageInput,
         **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
-        """
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
+        r"""
+        images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+            tensor. Both channels-first and channels-last formats are supported.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:

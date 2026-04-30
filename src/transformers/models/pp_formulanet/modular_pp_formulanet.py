@@ -65,12 +65,6 @@ logger = logging.get_logger(__name__)
 @strict
 class PPFormulaNetVisionConfig(SLANeXtVisionConfig):
     r"""
-    post_conv_in_channels (`int`, *optional*, defaults to 256):
-        Number of input channels for the post-encoder convolution layer.
-    post_conv_mid_channels (`int`, *optional*, defaults to 512):
-       Number of intermediate channels for the post-encoder convolution layer.
-    post_conv_out_channels (`int`, *optional*, defaults to 1024):
-        Number of output channels for the post-encoder convolution layer.
     output_channels (`int`, *optional*, defaults to 256):
         Dimensionality of the output channels in the Patch Encoder.
     window_size (`int`, *optional*, defaults to 14):
@@ -79,6 +73,12 @@ class PPFormulaNetVisionConfig(SLANeXtVisionConfig):
         The indexes of the global attention layers.
     mlp_dim (`int`, *optional*, defaults to 3072):
         The dimensionality of the MLP layer in the Transformer encoder.
+    post_conv_in_channels (`int`, *optional*, defaults to 256):
+        Number of input channels for the post-encoder convolution layer.
+    post_conv_out_channels (`int`, *optional*, defaults to 1024):
+        Number of output channels for the post-encoder convolution layer.
+    post_conv_mid_channels (`int`, *optional*, defaults to 512):
+        Number of intermediate channels for the post-encoder convolution layer.
     decoder_hidden_size (`int`, *optional*, defaults to 512):
         The hidden size of the decoder that the encoder features are projected to.
     """
@@ -171,11 +171,10 @@ class PPFormulaNetProcessor(NougatProcessor):
         images: ImageInput,
         **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
-        """
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
+        r"""
+        images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+            tensor. Both channels-first and channels-last formats are supported.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:

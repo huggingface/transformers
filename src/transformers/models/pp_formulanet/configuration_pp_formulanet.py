@@ -31,12 +31,6 @@ logger = logging.get_logger(__name__)
 @strict
 class PPFormulaNetVisionConfig(PreTrainedConfig):
     r"""
-    post_conv_in_channels (`int`, *optional*, defaults to 256):
-        Number of input channels for the post-encoder convolution layer.
-    post_conv_mid_channels (`int`, *optional*, defaults to 512):
-       Number of intermediate channels for the post-encoder convolution layer.
-    post_conv_out_channels (`int`, *optional*, defaults to 1024):
-        Number of output channels for the post-encoder convolution layer.
     output_channels (`int`, *optional*, defaults to 256):
         Dimensionality of the output channels in the Patch Encoder.
     window_size (`int`, *optional*, defaults to 14):
@@ -45,6 +39,12 @@ class PPFormulaNetVisionConfig(PreTrainedConfig):
         The indexes of the global attention layers.
     mlp_dim (`int`, *optional*, defaults to 3072):
         The dimensionality of the MLP layer in the Transformer encoder.
+    post_conv_in_channels (`int`, *optional*, defaults to 256):
+        Number of input channels for the post-encoder convolution layer.
+    post_conv_out_channels (`int`, *optional*, defaults to 1024):
+        Number of output channels for the post-encoder convolution layer.
+    post_conv_mid_channels (`int`, *optional*, defaults to 512):
+        Number of intermediate channels for the post-encoder convolution layer.
     decoder_hidden_size (`int`, *optional*, defaults to 512):
         The hidden size of the decoder that the encoder features are projected to.
     """
