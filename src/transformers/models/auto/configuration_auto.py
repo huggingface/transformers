@@ -88,6 +88,27 @@ def config_class_to_model_type(config) -> str | None:
     return None
 
 
+def _local_checkpoint_contains_auto_map_module(
+    pretrained_model_name_or_path,
+    class_ref: str,
+) -> bool:
+    path = os.fspath(pretrained_model_name_or_path)
+    if "--" in class_ref:
+        _, class_ref = class_ref.split("--", 1)
+    if os.path.isdir(path):
+        checkpoint_dir = path
+    elif os.path.isfile(path):
+        checkpoint_dir = os.path.dirname(path) or os.curdir
+    else:
+        return False
+    try:
+        module_file, _ = class_ref.rsplit(".", 1)
+    except ValueError:
+        return False
+    module_path = os.path.join(checkpoint_dir, *module_file.split(".")) + ".py"
+    return os.path.isfile(module_path)
+
+
 class _LazyConfigMapping(OrderedDict[str, type[PreTrainedConfig]]):
     """
     A dictionary that lazily load its values when they are requested.
@@ -377,19 +398,31 @@ class AutoConfig:
         explicit_local_code = has_local_code and not CONFIG_MAPPING[config_dict["model_type"]].__module__.startswith(
             "transformers."
         )
+
+        path = os.fspath(pretrained_model_name_or_path)
+        if os.path.isfile(path):
+            dynamic_module_source = os.path.dirname(path) or os.curdir
+        else:
+            dynamic_module_source = pretrained_model_name_or_path
+
+        local_checkpoint_has_own_code = False
         if has_remote_code:
             class_ref = config_dict["auto_map"]["AutoConfig"]
+            local_checkpoint_has_own_code = _local_checkpoint_contains_auto_map_module(
+                pretrained_model_name_or_path,
+                class_ref,
+            )
             if "--" in class_ref:
                 upstream_repo = class_ref.split("--")[0]
             else:
                 upstream_repo = None
             trust_remote_code = resolve_trust_remote_code(
-                trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
+                trust_remote_code, dynamic_module_source, has_local_code, has_remote_code, upstream_repo
             )
 
-        if has_remote_code and trust_remote_code and not explicit_local_code:
+        if has_remote_code and trust_remote_code and (not explicit_local_code or local_checkpoint_has_own_code):
             config_class = get_class_from_dynamic_module(
-                class_ref, pretrained_model_name_or_path, code_revision=code_revision, **kwargs
+                class_ref, dynamic_module_source, code_revision=code_revision, **kwargs
             )
             config_class.register_for_auto_class()
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)

@@ -117,6 +117,75 @@ class AutoConfigTest(unittest.TestCase):
             self.assertEqual(reloaded_config.auto_map["AutoConfig"], "configuration.NewModelConfig")
         self.assertEqual(reloaded_config.__class__.__name__, "NewModelConfig")
 
+    def test_from_pretrained_saved_dynamic_config_conflict(self):
+        class NewModelConfigLocal(BertConfig):
+            model_type = "new-model"
+            local_only_marker = True
+
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+
+        try:
+            config = AutoConfig.from_pretrained(
+                "hf-internal-testing/test_dynamic_model",
+                trust_remote_code=True,
+            )
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                config.save_pretrained(tmp_dir)
+                AutoConfig.register("new-model", NewModelConfigLocal)
+                reloaded_config = AutoConfig.from_pretrained(
+                    tmp_dir,
+                    trust_remote_code=True,
+                )
+                self.assertIsNot(reloaded_config.__class__, NewModelConfigLocal)
+                self.assertFalse(getattr(reloaded_config.__class__, "local_only_marker", False))
+                self.assertEqual(
+                    reloaded_config.auto_map["AutoConfig"],
+                    "configuration.NewModelConfig",
+                )
+                self.assertEqual(reloaded_config.__class__.__name__, "NewModelConfig")
+        finally:
+            if "new-model" in CONFIG_MAPPING._extra_content:
+                del CONFIG_MAPPING._extra_content["new-model"]
+
+    def test_from_pretrained_saved_dynamic_config_conflict_from_custom_config_file(self):
+        class NewModelConfigLocal(BertConfig):
+            model_type = "new-model"
+            local_only_marker = True
+
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+
+        try:
+            config = AutoConfig.from_pretrained(
+                "hf-internal-testing/test_dynamic_model",
+                trust_remote_code=True,
+            )
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                config.save_pretrained(tmp_dir)
+                custom_config_path = os.path.join(tmp_dir, "custom_config.json")
+                os.replace(os.path.join(tmp_dir, "config.json"), custom_config_path)
+
+                self.assertFalse(os.path.exists(os.path.join(tmp_dir, "config.json")))
+                self.assertTrue(os.path.exists(custom_config_path))
+
+                AutoConfig.register("new-model", NewModelConfigLocal)
+
+                reloaded_config = AutoConfig.from_pretrained(
+                    custom_config_path,
+                    trust_remote_code=True,
+                )
+                self.assertIsNot(reloaded_config.__class__, NewModelConfigLocal)
+                self.assertFalse(getattr(reloaded_config.__class__, "local_only_marker", False))
+                self.assertEqual(
+                    reloaded_config.auto_map["AutoConfig"],
+                    "configuration.NewModelConfig",
+                )
+                self.assertEqual(reloaded_config.__class__.__name__, "NewModelConfig")
+        finally:
+            if "new-model" in CONFIG_MAPPING._extra_content:
+                del CONFIG_MAPPING._extra_content["new-model"]
+
     def test_from_pretrained_dynamic_config_conflict(self):
         class NewModelConfigLocal(BertConfig):
             model_type = "new-model"
