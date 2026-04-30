@@ -70,17 +70,17 @@ STATE_DICT_MAPPING = {
     r"^generator\.quantizer\.layers\.0\.":                                          r"quantizer.finite_scalar_quantization.",
     r"^generator\.quantizer\.":                                                     r"quantizer.",
 
-    # ── Decoder (generator -> decoder) ──
+    # ── Decoder (generator -> acoustic_decoder) ──
     # -- Handle backbone components: now directly in decoder (no backbone. prefix)
-    r"^generator\.backbone\.prior_net\.0\.":                                       r"decoder.prior_resnet_block1.",
-    r"^generator\.backbone\.prior_net\.1\.":                                       r"decoder.prior_resnet_block2.",
-    r"^generator\.backbone\.post_net\.0\.":                                        r"decoder.post_resnet_block1.",
-    r"^generator\.backbone\.post_net\.1\.":                                        r"decoder.post_resnet_block2.",
-    r"^generator\.backbone\.":                                                      r"decoder.",
+    r"^generator\.backbone\.prior_net\.0\.":                                       r"acoustic_decoder.prior_resnet_block1.",
+    r"^generator\.backbone\.prior_net\.1\.":                                       r"acoustic_decoder.prior_resnet_block2.",
+    r"^generator\.backbone\.post_net\.0\.":                                        r"acoustic_decoder.post_resnet_block1.",
+    r"^generator\.backbone\.post_net\.1\.":                                        r"acoustic_decoder.post_resnet_block2.",
+    r"^generator\.backbone\.":                                                      r"acoustic_decoder.",
     # -- General generator mapping
-    r"^generator\.":                                                                r"decoder.",
+    r"^generator\.":                                                                r"acoustic_decoder.",
     # -- ISTFT head: out -> linear
-    r"decoder\.head\.out\.":                                                        r"decoder.head.linear.",
+    r"acoustic_decoder\.head\.out\.":                                                        r"acoustic_decoder.head.linear.",
     # -- Transformer layers: transformers -> layers
     r"\.transformers\.":                                                            r".layers.",
     r"\.att\.c_proj\.":                                                             r".self_attn.o_proj.",
@@ -96,9 +96,9 @@ STATE_DICT_MAPPING = {
     r"semantic_adapter\.residual_blocks\.2\.":                                      r"semantic_adapter.act2.",
     r"semantic_adapter\.residual_blocks\.3\.":                                      r"semantic_adapter.conv3.",
 
-    # ── Linear layers (fc_prior -> fc_encoder, fc_post_a -> decoder.fc) ──
+    # ── Linear layers (fc_prior -> fc_encoder, fc_post_a -> acoustic_decoder.fc) ──
     r"^fc_prior\.":                                                                 r"fc_encoder.",
-    r"^fc_post_a\.":                                                                r"decoder.fc.",
+    r"^fc_post_a\.":                                                                r"acoustic_decoder.fc.",
 }
 # fmt: on
 

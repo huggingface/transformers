@@ -895,7 +895,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
             config.hidden_size + config.semantic_model_config.hidden_size,
         )
         self.quantizer = Xcodec2Quantizer(config)
-        self.decoder = Xcodec2Decoder(config)
+        self.acoustic_decoder = Xcodec2Decoder(config)
 
         self.post_init()
 
@@ -924,7 +924,8 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         """
 
         # Semantic embedding
-        semantic_output = self.semantic_encoder(audio_spectrogram, attention_mask=spectrogram_mask)
+        with torch.no_grad():
+            semantic_output = self.semantic_encoder(audio_spectrogram, attention_mask=spectrogram_mask)
         semantic_hidden_states = semantic_output.last_hidden_state.transpose(1, 2)
         semantic_hidden_states = self.semantic_adapter(semantic_hidden_states)
 
@@ -980,7 +981,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         else:
             latents = latents.transpose(1, 2)
 
-        recon_audio = self.decoder(latents)
+        recon_audio = self.acoustic_decoder(latents)
         return Xcodec2DecoderOutput(audio_values=recon_audio)
 
     @auto_docstring
