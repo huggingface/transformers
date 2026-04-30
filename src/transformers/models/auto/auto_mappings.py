@@ -891,7 +891,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("idefics3", {"pil": "Idefics3ImageProcessorPil", "torchvision": "Idefics3ImageProcessor"}),
         ("imagegpt", {"pil": "ImageGPTImageProcessorPil", "torchvision": "ImageGPTImageProcessor"}),
         ("janus", {"pil": "JanusImageProcessorPil", "torchvision": "JanusImageProcessor"}),
-        ("kimi2_6", {"pil": "Kimi2_6ImageProcessorPil", "torchvision": "Kimi2_6ImageProcessor"}),
+        ("kimi2_6", {"torchvision": "Kimi2_6ImageProcessor"}),
         ("layoutlmv2", {"pil": "LayoutLMv2ImageProcessorPil", "torchvision": "LayoutLMv2ImageProcessor"}),
         ("layoutlmv3", {"pil": "LayoutLMv3ImageProcessorPil", "torchvision": "LayoutLMv3ImageProcessor"}),
         ("levit", {"pil": "LevitImageProcessorPil", "torchvision": "LevitImageProcessor"}),

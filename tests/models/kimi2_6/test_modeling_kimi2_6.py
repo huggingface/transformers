@@ -112,6 +112,7 @@ class Kimi2_6VisionText2TextModelTester(VLMModelTester):
             "image_grid_thw": torch.tensor([[1, 4, 4]] * self.batch_size, device=torch_device),
         }
 
+
 @require_torch
 class Kimi2_6ModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Kimi2_6VisionText2TextModelTester

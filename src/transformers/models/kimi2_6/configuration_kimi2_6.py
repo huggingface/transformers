@@ -50,6 +50,10 @@ class Kimi2_6VisionConfig(PreTrainedConfig):
     rope_parameters: dict | None = None
     max_position_embeddings: int | None = None
 
+    def __post_init__(self, **kwargs):
+        if self.rope_parameters is None:
+            self.rope_parameters = {"rope_theta": 10_000, "rope_type": "default"}
+        super().__post_init__(**kwargs)
 
 class Kimi2_6Config(PreTrainedConfig):
     r"""

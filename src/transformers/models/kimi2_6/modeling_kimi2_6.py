@@ -407,11 +407,11 @@ class Kimi2_6VisionAttention(nn.Module):
 class Kimi2_6VisionEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config) -> None:
         super().__init__()
-        self.norm1 = nn.LayerNorm(config.intermediate_size, eps=1e-6)
-        self.norm2 = nn.LayerNorm(config.intermediate_size, eps=1e-6)
+        self.norm1 = nn.LayerNorm(config.hidden_size, eps=1e-6)
+        self.norm2 = nn.LayerNorm(config.hidden_size, eps=1e-6)
 
         self.attn = Kimi2_6VisionAttention(config=config)
-        self.mlp = Kimi2_6VisionMLP(config.intermediate_size, config.hidden_size, config.hidden_act)
+        self.mlp = Kimi2_6VisionMLP(config.hidden_size, config.intermediate_size, config.hidden_act)
 
     def forward(
         self,
@@ -561,7 +561,7 @@ class Kimi2_6MultimodalProjection(nn.Module):
 
         self.in_proj = nn.Linear(self.hidden_size, self.hidden_size)
         self.act = nn.GELU()
-        self.out_proj = nn.Linear(self.hidden_size, self.hidden_size)
+        self.out_proj = nn.Linear(self.hidden_size, config.text_config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor):
         batch_size = hidden_states.shape[0]
@@ -654,9 +654,7 @@ class Kimi2_6Model(Kimi2_6PreTrainedModel):
 
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values, image_grid_thw).pooler_output
-            image_mask = self.get_placeholder_mask(
-                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
-            )
+            image_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         outputs = self.language_model(
