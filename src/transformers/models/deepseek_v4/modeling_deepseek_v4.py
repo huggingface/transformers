@@ -750,10 +750,7 @@ COMPRESSOR_CLASSES = {
 
 
 class DeepseekV4Attention(nn.Module):
-    """V4 attention block (paper §2.3). Single class for all three layer types — the
-    only thing that varies is the long-range branch (the `compressor` sub-module);
-    the surrounding QKV / RoPE / sink / sliding-window / output projection is
-    identical. The three layer types are dispatched by `COMPRESSOR_CLASSES`:
+    """
 
       * `sliding_attention`: `compressor = None`; only the local sliding-window
         K=V branch ("Full Attention").
@@ -772,16 +769,9 @@ class DeepseekV4Attention(nn.Module):
         Positional Embedding"). RoPE is also applied with position `-i` to the
         attention output's rope slice, so the contribution of each KV entry stays a
         function of the *relative* distance to the query.
-      * RMSNorm on the queries (`q_norm`) and the compressed KV head (`kv_norm`)
-        right before the core attention, to keep logits bounded.
       * Per-head learnable attention sink (eq. 27).
-      * Grouped low-rank output projection (§2.3.1, "Grouped Output Projection"):
-        `g` head-groups → `d_g`-dim intermediate outputs through a block-diagonal
-        :class:`DeepseekV4GroupedLinear`, then mixed back to `hidden_size` by `o_b_proj`.
-      * A supplementary uncompressed sliding-window KV branch of size
-        `sliding_window` ("Additional Branch of Sliding Window Attention") that
-        preserves local fine-grained dependencies, concatenated with the
-        long-range compressor's output before core attention.
+      * Grouped low-rank output projection:
+      * 3 different cache mechanisms, sliding, sliding+CSA, sliding+HCA.
     """
 
     def __init__(self, config: DeepseekV4Config, layer_idx: int):
@@ -832,11 +822,6 @@ class DeepseekV4Attention(nn.Module):
         kv = self.kv_norm(self.kv_proj(hidden_states)).view(batch, seq_len, 1, self.head_dim).transpose(1, 2)
         q = apply_rotary_pos_emb(q, cos, sin)
         kv = apply_rotary_pos_emb(kv, cos, sin)
-        # Under TP, `q_b_proj` is colwise-sharded so `q` carries
-        # `num_heads / tp_size` heads per rank, while `kv` (single shared head) is
-        # replicated. Refresh `num_key_value_groups` from the local `q` so the
-        # standard `repeat_kv(key, num_key_value_groups)` in the attention backends
-        # lifts the single kv head to match the rank-local query head count.
         self.num_key_value_groups = q.shape[1]
 
         # --- Sliding-window K=V branch goes through the standard cache update ---
@@ -849,11 +834,6 @@ class DeepseekV4Attention(nn.Module):
             compressed_kv = self.compressor(hidden_states, q_residual, position_ids, past_key_values, self.layer_idx)
             full_kv = torch.cat([kv, compressed_kv], dim=2)
 
-            # Compressor concatenates extra long-range KV entries onto the sliding-window
-            # branch so `full_kv` is wider than the model-level mask was built for. Pad
-            # the mask's key dim with `0.0` (additive-mask convention: unmasked) so the
-            # compressor positions are attended. FA / SDPA backends consume the same 4D
-            # additive mask path here, so the pad is uniform across backends.
         if attention_mask is not None and full_kv.shape[2] > attention_mask.shape[-1]:
             attention_mask = F.pad(attention_mask, (0, full_kv.shape[2] - attention_mask.shape[-1]), value=0.0)
 
@@ -1046,22 +1026,6 @@ class DeepseekV4Experts(nn.Module):
 
 
 class DeepseekV4TopKRouter(nn.Module):
-    """DeepSeekMoE top-k router (paper §2.1, "Mixture-of-Experts"). Two changes from
-    the V3 router:
-
-      * The expert affinity activation is `Sqrt(Softplus(·))` instead of the V3
-        Sigmoid (paper §2.1: "we change the activation function that computes the
-        affinity scores from Sigmoid(·) into Sqrt(Softplus(·))"). The `scoring_func`
-        config field selects this for V4 checkpoints.
-      * The constraint on the number of routing target nodes used in V3 is dropped,
-        and the V3 `n_group` / `topk_group` machinery is removed entirely (paper
-        §2.1: "we remove the constraint on the number of routing target nodes").
-
-    The auxiliary-loss-free strategy (DeepSeek's `noaux_tc`) is preserved via the
-    per-expert `e_score_correction_bias` buffer that biases the top-k argmax
-    without flowing gradients.
-    """
-
     def __init__(self, config: DeepseekV4Config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -1083,7 +1047,8 @@ class DeepseekV4TopKRouter(nn.Module):
 
 
 class DeepseekV4HashRouter(nn.Module):
-    """Hash routing for the first `mlp_layer_types == "hash_moe"` MoE layers (paper
+    r"""
+    Hash routing for the first `mlp_layer_types == "hash_moe"` MoE layers (paper
     §2.1). Expert selection is determined by a fixed `tid2eid[input_ids]` lookup —
     a frozen token-id → expert-id table — instead of a learned argmax. The learned
     gate `weight` still produces the per-expert scores that weight the selected
@@ -1125,12 +1090,6 @@ class DeepseekV4SparseMoeBlock(nn.Module):
         residual = hidden_states
         flat = hidden_states.view(-1, hidden_dim)
         if self.is_hash:
-            if input_ids is None:
-                raise ValueError(
-                    "DeepseekV4's hash-routing layers need `input_ids` to look up expert indices. "
-                    "The `inputs_embeds`-only inference path is not supported for models with "
-                    "any `hash_moe` entries in `mlp_layer_types`."
-                )
             _, weights, indices = self.gate(hidden_states, input_ids)
         else:
             _, weights, indices = self.gate(hidden_states)
