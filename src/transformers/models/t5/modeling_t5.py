@@ -15,6 +15,7 @@
 
 import copy
 import math
+import os
 
 import torch
 from torch import nn
@@ -68,17 +69,16 @@ class T5LayerNorm(nn.Module):
         return self.weight * hidden_states
 
 
-try:
-    from apex.normalization import FusedRMSNorm
+if os.environ.get("TRANSFORMERS_NO_APEX", "0") == "0":
+    try:
+        from apex.normalization import FusedRMSNorm
 
-    T5LayerNorm = FusedRMSNorm
-
-    logger.info("Discovered apex.normalization.FusedRMSNorm - will use it instead of T5LayerNorm")
-except ImportError:
-    # using the normal T5LayerNorm
-    pass
-except Exception:
-    logger.warning("discovered apex but it failed to load, falling back to T5LayerNorm")
+        T5LayerNorm = FusedRMSNorm  # noqa
+        logger.info("Discovered apex.normalization.FusedRMSNorm - will use it instead of T5LayerNorm")
+    except ImportError:
+        pass
+    except Exception:
+        logger.warning("discovered apex but it failed to load, falling back to T5LayerNorm")
 
 
 class T5DenseActDense(nn.Module):
