@@ -193,14 +193,14 @@ class MiMoV2FlashIntegrationTest(unittest.TestCase):
             {
                 ("cuda", (8, 6)): [
                     [-0.0493, -1.7266, -0.1973],
-                    [-0.2256,  0.6875, -1.3906],
-                    [ 0.8594, -0.3379, -1.7812],
+                    [-0.2256, 0.6875, -1.3906],
+                    [0.8594, -0.3379, -1.7812],
                 ],
                 ("cuda", (8, 9)): [
                     [-0.03759765625, -1.7265625, -0.1923828125],
                     [-0.2138671875, 0.69140625, -1.390625],
                     [0.86328125, -0.32421875, -1.78125],
-                ]
+                ],
             }
         )
         expected_left_unpadded = torch.tensor(EXPECTED_LOGITS_LEFT_UNPADDED.get_expectation(), device=torch_device)
@@ -208,15 +208,15 @@ class MiMoV2FlashIntegrationTest(unittest.TestCase):
         EXPECTED_LOGITS_RIGHT_UNPADDED = Expectations(
             {
                 ("cuda", (8, 6)): [
-                    [ 0.1416,  0.4727, -1.7109],
-                    [-0.4727,  0.8750, -2.2500],
-                    [-0.0476,  0.7305, -1.3672],
+                    [0.1416, 0.4727, -1.7109],
+                    [-0.4727, 0.8750, -2.2500],
+                    [-0.0476, 0.7305, -1.3672],
                 ],
                 ("cuda", (8, 9)): [
                     [0.1474609375, 0.46484375, -1.6953125],
                     [-0.46875, 0.87890625, -2.25],
                     [-0.0537109375, 0.734375, -1.359375],
-                ]
+                ],
             }
         )
         expected_right_unpadded = torch.tensor(EXPECTED_LOGITS_RIGHT_UNPADDED.get_expectation(), device=torch_device)
