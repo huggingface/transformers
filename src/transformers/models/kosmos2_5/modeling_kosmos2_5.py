@@ -100,7 +100,7 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
             if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
                 init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, (nn.LayerNorm, Kosmos2_5LayerNorm)):
+        elif isinstance(module, (nn.LayerNorm, nn.RMSNorm)):
             init.ones_(module.weight)
             if getattr(module, "bias", None) is not None:
                 init.zeros_(module.bias)
@@ -384,32 +384,6 @@ class Kosmos2_5ForConditionalGenerationModelOutput(ModelOutput):
         return tuple((self[k] if k != "vision_model_output" else getattr(self, k).to_tuple()) for k in self.keys())
 
 
-# Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructLayerNorm with Pix2Struct->Kosmos2_5
-class Kosmos2_5LayerNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        Construct a layernorm module in the T5 style. No bias and no subtraction of mean.
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        # T5 uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
-        # Square Layer Normalization https://huggingface.co/papers/1910.07467 thus variance is calculated
-        # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
-        # half-precision inputs is done in fp32
-
-        variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-
-        # convert into half-precision if necessary
-        if self.weight.dtype in [torch.float16, torch.bfloat16]:
-            hidden_states = hidden_states.to(self.weight.dtype)
-
-        return self.weight * hidden_states
-
-
 # similar to transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionEmbeddings but with `inplace=False`
 # TODO: check with krip
 class Kosmos2_5VisionEmbeddings(nn.Module):
@@ -563,8 +537,8 @@ class Kosmos2_5VisionLayer(GradientCheckpointingLayer):
 
         self.attention = Kosmos2_5VisionAttention(config)
         self.mlp = Kosmos2_5VisionMlp(config)
-        self.pre_mlp_layer_norm = Kosmos2_5LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pre_attention_layer_norm = Kosmos2_5LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.pre_mlp_layer_norm = nn.RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.pre_attention_layer_norm = nn.RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -1074,7 +1048,7 @@ class Kosmos2_5VisionModel(Kosmos2_5PreTrainedModel):
         self.embeddings = Kosmos2_5VisionEmbeddings(config)
         self.encoder = Kosmos2_5VisionEncoder(config)
 
-        self.layernorm = Kosmos2_5LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layernorm = nn.RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         # Initialize weights and apply final processing
         self.post_init()

@@ -210,45 +210,6 @@ def _create_global_aggregates(
     return torch.einsum("...nd,...ng->...gd", hidden_states, one_hot_block_ids.type(hidden_states.dtype))
 
 
-# Copied from transformers.models.t5.modeling_t5.T5LayerNorm with T5->LongT5
-class LongT5LayerNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        Construct a layernorm module in the LongT5 style. No bias and no subtraction of mean.
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        # LongT5 uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
-        # Square Layer Normalization https://huggingface.co/papers/1910.07467 thus variance is calculated
-        # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
-        # half-precision inputs is done in fp32
-
-        variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-
-        # convert into half-precision if necessary
-        if self.weight.dtype in [torch.float16, torch.bfloat16]:
-            hidden_states = hidden_states.to(self.weight.dtype)
-
-        return self.weight * hidden_states
-
-
-try:
-    from apex.normalization import FusedRMSNorm
-
-    LongT5LayerNorm = FusedRMSNorm
-
-    logger.info("Discovered apex.normalization.FusedRMSNorm - will use it instead of LongT5LayerNorm")
-except ImportError:
-    # using the normal LongT5LayerNorm
-    pass
-except Exception:
-    logger.warning("discovered apex but it failed to load, falling back to LongT5LayerNorm")
-
-
 # Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->LongT5
 class LongT5DenseActDense(nn.Module):
     def __init__(self, config: LongT5Config):
@@ -299,7 +260,7 @@ class LongT5LayerFF(nn.Module):
         else:
             self.DenseReluDense = LongT5DenseActDense(config)
 
-        self.layer_norm = LongT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.layer_norm = nn.RMSNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(self, hidden_states):
@@ -703,7 +664,7 @@ class LongT5TransientGlobalAttention(nn.Module):
         # Relativen attention bias & Layer norm for global attention
         if self.has_relative_attention_bias:
             self.global_relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
-        self.global_input_layer_norm = LongT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.global_input_layer_norm = nn.RMSNorm(config.d_model, eps=config.layer_norm_epsilon)
 
     @staticmethod
     # Copied from transformers.models.t5.modeling_t5.T5Attention._relative_position_bucket
@@ -922,7 +883,7 @@ class LongT5LayerSelfAttention(nn.Module):
         self.SelfAttention = LongT5Attention(
             config, has_relative_attention_bias=has_relative_attention_bias, layer_idx=layer_idx
         )
-        self.layer_norm = LongT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.layer_norm = nn.RMSNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(
@@ -955,7 +916,7 @@ class LongT5LayerLocalSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False, layer_idx: int | None = None):
         super().__init__()
         self.LocalSelfAttention = LongT5LocalAttention(config, has_relative_attention_bias=has_relative_attention_bias)
-        self.layer_norm = LongT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.layer_norm = nn.RMSNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(
@@ -986,7 +947,7 @@ class LongT5LayerTransientGlobalSelfAttention(nn.Module):
         self.TransientGlobalSelfAttention = LongT5TransientGlobalAttention(
             config, has_relative_attention_bias=has_relative_attention_bias
         )
-        self.layer_norm = LongT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.layer_norm = nn.RMSNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(
@@ -1014,7 +975,7 @@ class LongT5LayerCrossAttention(nn.Module):
     def __init__(self, config, layer_idx: int | None = None):
         super().__init__()
         self.EncDecAttention = LongT5Attention(config, has_relative_attention_bias=False, layer_idx=layer_idx)
-        self.layer_norm = LongT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.layer_norm = nn.RMSNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(
@@ -1153,7 +1114,7 @@ class LongT5PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization
-        if isinstance(module, LongT5LayerNorm):
+        if isinstance(module, nn.RMSNorm):
             init.constant_(module.weight, factor * 1.0)
         elif isinstance(module, (LongT5Model, LongT5ForConditionalGeneration, LongT5EncoderModel)):
             init.normal_(module.shared.weight, mean=0.0, std=factor * 1.0)
@@ -1230,7 +1191,7 @@ class LongT5Stack(LongT5PreTrainedModel):
                 for i in range(config.num_layers)
             ]
         )
-        self.final_layer_norm = LongT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.final_layer_norm = nn.RMSNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
         self.gradient_checkpointing = False
