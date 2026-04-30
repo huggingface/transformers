@@ -615,25 +615,9 @@ COMPRESSOR_CLASSES = {
     "heavily_compressed_attention": DeepseekV4HCACompressor,
 }
 
-
-# -----------------------------------------------------------------------------
-# Attention with sink.
-# -----------------------------------------------------------------------------
-
-
 class DeepseekV4Attention(nn.Module):
-    """
-
-      * `sliding_attention`: `compressor = None`; only the local sliding-window
-        K=V branch ("Full Attention").
-      * `compressed_sparse_attention`: :class:`DeepseekV4CSACompressor` —
-        low-compression overlapping-window pool plus a Lightning Indexer that keeps
-        the top-`index_topk` pool entries per query (paper §2.3.1).
-      * `heavily_compressed_attention`: :class:`DeepseekV4HCACompressor` —
-        high-compression non-overlapping-window pool, no indexer (paper §2.3.2).
-
-    Block components (paper §2.3.3):
-
+    r"""
+      Diff with classic attentions:
       * Shared-KV Multi-Query Attention: `num_key_value_heads = 1`; `kv_proj` projects
         directly to that single KV head and the same tensor is read as both key and
         value.
@@ -641,8 +625,8 @@ class DeepseekV4Attention(nn.Module):
         Positional Embedding"). RoPE is also applied with position `-i` to the
         attention output's rope slice, so the contribution of each KV entry stays a
         function of the *relative* distance to the query.
-      * Per-head learnable attention sink (eq. 27).
-      * Grouped low-rank output projection:
+      * Per-head learnable attention sink like gpt OSS.
+      * Grouped low-rank output projection for perfs.
       * 3 different cache mechanisms, sliding, sliding+CSA, sliding+HCA.
     """
 
@@ -671,9 +655,6 @@ class DeepseekV4Attention(nn.Module):
         )
         self.o_b_proj = nn.Linear(config.o_groups * config.o_lora_rank, config.hidden_size, bias=False)
         self.sinks = nn.Parameter(torch.empty(self.num_heads))
-        # Long-range branch dispatched by `layer_type` (see `COMPRESSOR_CLASSES`
-        # above). `None` means full-attention / sliding-only — no compressor is
-        # built and the layer keeps just the local sliding-window K=V branch.
         compressor_cls = COMPRESSOR_CLASSES[self.layer_type]
         self.compressor = compressor_cls(config) if compressor_cls is not None else None
 
@@ -686,23 +667,23 @@ class DeepseekV4Attention(nn.Module):
         past_key_values: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        batch, seq_len = hidden_states.shape[:2]
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
         cos, sin = position_embeddings
-        q_residual = self.q_norm(self.q_a_proj(hidden_states))
-        q = self.q_b_proj(q_residual).view(batch, seq_len, -1, self.head_dim).transpose(1, 2)
-        q = self.q_head_norm(q)
-        kv = self.kv_norm(self.kv_proj(hidden_states)).view(batch, seq_len, 1, self.head_dim).transpose(1, 2)
-        q = apply_rotary_pos_emb(q, cos, sin)
-        kv = apply_rotary_pos_emb(kv, cos, sin)
-        self.num_key_value_groups = q.shape[1]
 
-        # --- Sliding-window K=V branch goes through the standard cache update ---
-        if past_key_values is not None:
+        q_residual = self.q_norm(self.q_a_proj(hidden_states))
+        q = self.q_b_proj(q_residual).view(*hidden_shape).transpose(1, 2)
+        q = self.q_head_norm(q)
+        q = apply_rotary_pos_emb(q, cos, sin)
+
+        kv = self.kv_norm(self.kv_proj(hidden_states)).view(*hidden_shape).transpose(1, 2)
+        kv = apply_rotary_pos_emb(kv, cos, sin)
+
+        if past_key_values is not None: # sliding shared KV
             kv, _ = past_key_values.update(kv, kv, self.layer_idx)
 
-        if self.compressor is None:
-            full_kv = kv
-        else:
+        full_kv = kv
+        if self.compressor is not None: # Compressed KV (CSA or HCA)
             compressed_kv = self.compressor(hidden_states, q_residual, position_ids, past_key_values, self.layer_idx)
             full_kv = torch.cat([kv, compressed_kv], dim=2)
 
@@ -733,8 +714,9 @@ class DeepseekV4Attention(nn.Module):
         # projection mixes heads.
         attn_output = apply_rotary_pos_emb(attn_output.transpose(1, 2), cos, -sin).transpose(1, 2)
 
-        grouped = attn_output.reshape(batch, seq_len, -1).view(batch, seq_len, self.config.o_groups, -1)
-        return self.o_b_proj(self.o_a_proj(grouped).flatten(2)), attn_weights
+        grouped = attn_output.reshape(*input_shape, -1).view(*input_shape, self.config.o_groups, -1)
+        output = self.o_b_proj(self.o_a_proj(grouped).flatten(2))
+        return output, attn_weights
 
 
 class DeepseekV4HyperConnection(nn.Module):
@@ -844,15 +826,7 @@ class DeepseekV4MLP(LlamaMLP):
 
 @use_experts_implementation
 class DeepseekV4Experts(MixtralExperts):
-    """Routed experts (paper §2.1). Inherits the Mixtral layout (no biases,
-    `[num_experts, 2 * intermediate, hidden]` `gate_up_proj`) and the per-expert
-    iteration loop; the only V4-specific bit is the `swiglu_limit` clamp on the
-    gate / up halves before the SiLU mix.
-
-    `config.intermediate_size` resolves to `moe_intermediate_size` via the
-    config's `attribute_map`, so `MixtralExperts.__init__` builds the right
-    Linear shapes without an override.
-    """
+    # GPT OSS style, no bias
 
     def __init__(self, config: DeepseekV4Config):
         super().__init__(config)
@@ -1006,8 +980,6 @@ class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         # hidden_states throughout: [B, S, hc_mult, hidden].
-
-        # --- Attention site: collapse → norm → attn → expand ---
         post, comb, collapsed = self.attn_hc(hidden_states)
         attn_output, _ = self.self_attn(self.input_layernorm(collapsed), **kwargs)
         dtype = hidden_states.dtype
@@ -1015,7 +987,6 @@ class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
             comb.to(dtype), hidden_states
         )
 
-        # --- MLP site: collapse → norm → mlp → expand ---
         post, comb, collapsed = self.ffn_hc(hidden_states)
         mlp_output = self.mlp(self.post_attention_layernorm(collapsed), input_ids=input_ids)
         dtype = hidden_states.dtype
