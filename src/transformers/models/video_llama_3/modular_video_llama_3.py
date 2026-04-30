@@ -1279,10 +1279,8 @@ class VideoLlama3ImageProcessor(Qwen2VLImageProcessor):
             )
             batch_size, channel = patches.shape[:2]
             grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-
-            patches = patches.view(
+            patches = patches.reshape(
                 batch_size,
-                temporal_patch_size,
                 channel,
                 grid_h // merge_size,
                 merge_size,
@@ -1291,11 +1289,18 @@ class VideoLlama3ImageProcessor(Qwen2VLImageProcessor):
                 merge_size,
                 patch_size,
             )
-            patches = patches.permute(0, 3, 6, 4, 7, 2, 1, 5, 8)
-            flatten_patches = patches.reshape(
-                batch_size,
-                grid_h * grid_w,
-                channel * temporal_patch_size * patch_size * patch_size,
+            # Reorder dimensions to group grid and patch information for subsequent flattening.
+            # [batch, grid_h/merge, grid_w/merge, merge, merge, channel, patch, patch]
+            patches = patches.permute(0, 2, 5, 3, 6, 1, 4, 7)
+
+            flatten_patches = (
+                patches.unsqueeze(6)
+                .expand(-1, -1, -1, -1, -1, -1, temporal_patch_size, -1, -1)
+                .reshape(
+                    batch_size,
+                    grid_h * grid_w,
+                    channel * temporal_patch_size * patch_size * patch_size,
+                )
             )
 
             processed_images_grouped[shape] = flatten_patches
