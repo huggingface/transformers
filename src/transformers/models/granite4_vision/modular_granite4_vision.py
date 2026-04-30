@@ -349,7 +349,33 @@ class Granite4VisionTextRotaryEmbedding(GraniteRotaryEmbedding):
     pass
 
 
+class Granite4VisionTextAttention(GraniteAttention):
+    pass
+
+
+class Granite4VisionTextDecoderLayer(GraniteDecoderLayer):
+    pass
+
+
 class Granite4VisionPreTrainedModel(LlavaNextPreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": Granite4VisionTextDecoderLayer,
+        "attentions": Granite4VisionTextAttention,
+    }
+
+    def _deepstack_inject(
+        self,
+        hidden_states: torch.Tensor,
+        vision_mask: torch.Tensor,
+        features: torch.Tensor,
+    ) -> torch.Tensor:
+        """Add projected vision features into the image-token positions of hidden_states."""
+        vision_mask = vision_mask.to(hidden_states.device)
+        features = features.to(hidden_states.device, hidden_states.dtype)
+        hidden_states = hidden_states.clone()
+        hidden_states[vision_mask] = hidden_states[vision_mask] + features
+        return hidden_states
+
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Granite4VisionTextRotaryEmbedding):
@@ -371,39 +397,14 @@ class Granite4VisionPreTrainedModel(LlavaNextPreTrainedModel):
             init.normal_(module.image_positions, mean=0.0, std=embed_std)
 
 
-class Granite4VisionTextAttention(GraniteAttention):
-    pass
-
-
-class Granite4VisionTextDecoderLayer(GraniteDecoderLayer):
-    pass
-
-
 class Granite4VisionTextModel(Granite4VisionPreTrainedModel, GraniteModel):
     """Granite LLM backbone with deepstack feature injection support."""
 
     base_model_prefix = "model"
     _no_split_modules = ["Granite4VisionTextDecoderLayer"]
-    _can_record_outputs = {
-        "hidden_states": Granite4VisionTextDecoderLayer,
-        "attentions": Granite4VisionTextAttention,
-    }
 
     def __init__(self, config: Granite4VisionTextConfig):
         super().__init__(config)
-
-    def _deepstack_inject(
-        self,
-        hidden_states: torch.Tensor,
-        vision_mask: torch.Tensor,
-        features: torch.Tensor,
-    ) -> torch.Tensor:
-        """Add projected vision features into the image-token positions of hidden_states."""
-        vision_mask = vision_mask.to(hidden_states.device)
-        features = features.to(hidden_states.device, hidden_states.dtype)
-        hidden_states = hidden_states.clone()
-        hidden_states[vision_mask] = hidden_states[vision_mask] + features
-        return hidden_states
 
     @capture_outputs
     def forward(
