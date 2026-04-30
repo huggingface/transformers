@@ -58,13 +58,6 @@ class DeepseekV4RMSNorm(nn.Module):
 
 
 class DeepseekV4UnweightedRMSNorm(nn.Module):
-    """RMSNorm without a learned weight — applied per-head to Q after ``q_b_proj``
-    in :class:`DeepseekV4Attention`. Matches the V4-Flash reference's ``inference/
-    model.py:498`` rescale ``q *= rsqrt(mean(q**2) + eps)``; without it attention
-    scores end up at the wrong scale and the model collapses to a single repeated
-    token within a handful of layers.
-    """
-
     def __init__(self, eps: float = 1.0e-6):
         super().__init__()
         self.eps = eps
@@ -74,47 +67,37 @@ class DeepseekV4UnweightedRMSNorm(nn.Module):
 
 
 class DeepseekV4RotaryEmbedding(nn.Module):
-    """Multi-layer-type rotary embedding (Laguna pattern: partial rotary on top of
-    Gemma3's per-layer-type buffers), specialised for V4's *interleaved* RoPE. Holds
-    two ``inv_freq`` buffers — ``"main"`` for self-attention (``rope_theta``) and
-    ``"compress"`` for the Compressor / Indexer (``compress_rope_theta``); both
-    honour ``partial_rotary_factor`` so cos/sin sizes to ``qk_rope_head_dim``.
-    ``forward(x, position_ids, layer_type=...)`` returns the half-sized cos/sin
-    directly — interleaved RoPE rotates pairs ``(x[2i], x[2i+1])`` so we want one
-    ``θ_i`` per pair, *not* the end-to-end duplicated table half-split RoPE needs.
-
-    The ``layer_types`` here are the *rope* layer types (``"main"`` / ``"compress"``),
-    keys of ``config.rope_parameters``. They are unrelated to ``config.layer_types``,
-    which lists the per-decoder-block attention type.
+    """
+    Multi-layer-type rotary embedding (Laguna pattern: partial rotary on top of
+    Gemma3's per-layer-type buffers), specialised for V4's *interleaved* RoPE.
+    Interleaved RoPE: one ``θ_i`` per pair (``rope_head_dim // 2`` entries),
+    DIFF no end-to-end duplication. Same shape as ``inv_freq @ position_ids``.
     """
 
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    # Class-level rather than ``list(set(config.layer_types))`` (gemma3's pattern):
-    # V4's rope keys ``"main"`` / ``"compress"`` are *orthogonal* to the per-block
-    # attention types in ``config.layer_types`` — every attention block uses ``main``,
-    # every compressor / indexer uses ``compress``, regardless of which of the three
-    # block types the layer is.
-    layer_types = ("main", "compress")
-
-    def __init__(self, config: "DeepseekV4Config", device=None):
+    def __init__(self, config: DeepseekV4Config):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
+
         self.config = config
+
+        self.layer_types = list(set(config.layer_types))
         self.rope_type = {}
-        for layer_type in set(self.layer_types):
-            params = config.rope_parameters.get(layer_type)
-            if params is None:
+        for layer_type in self.layer_types:
+            rope_params = self.config.rope_parameters[layer_type]
+            if rope_params is None:
                 continue
-            self.rope_type[layer_type] = params.get("rope_type", "default")
+
+            self.rope_type[layer_type] = rope_params["rope_type"]
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            inv_freq, scaling = rope_init_fn(config, device, layer_type=layer_type)
-            self.register_buffer(f"{layer_type}_inv_freq", inv_freq, persistent=False)
-            self.register_buffer(f"{layer_type}_original_inv_freq", inv_freq.clone(), persistent=False)
-            setattr(self, f"{layer_type}_attention_scaling", scaling)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
+            self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
+            self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
+            setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -156,8 +139,6 @@ class DeepseekV4RotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type=None):
-        # Interleaved RoPE: one ``θ_i`` per pair (``rope_head_dim // 2`` entries),
-        # no end-to-end duplication. Same shape as ``inv_freq @ position_ids``.
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
         inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
@@ -170,22 +151,6 @@ class DeepseekV4RotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-def _sliding_kv_update(
-    cache_layer: "DynamicSlidingWindowLayer", key_states: torch.Tensor, value_states: torch.Tensor
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Shared sliding-window K=V update body. V4 uses shared-KV MQA, so ``keys`` and
-    ``values`` point to the same storage on every layer; both V4 cache layer types
-    (HCA / CSA) call this from their ``update``."""
-    if not cache_layer.is_initialized:
-        cache_layer.lazy_initialization(key_states, value_states)
-        cache_layer.values = cache_layer.keys
-    cache_layer.cumulative_length += key_states.shape[-2]
-    full = torch.cat([cache_layer.keys, key_states], dim=-2)
-    cache_layer.keys = full[:, :, -cache_layer.sliding_window + 1 :, :]
-    cache_layer.values = cache_layer.keys
-    return full, full
-
-
 def _update_window_buffer(
     buffer_kv: torch.Tensor | None,
     buffer_gate: torch.Tensor | None,
@@ -193,13 +158,18 @@ def _update_window_buffer(
     gate: torch.Tensor,
     compress_rate: int,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Merge a still-buffered tail with freshly projected ``(kv, gate)`` and split off
-    the longest window-aligned chunk. Used by both the compressor- and indexer-side
-    window buffers; tokens past the last full window stay in the buffer until the
-    next call rounds them out to a multiple of ``compress_rate``."""
+    """
+    Merge the current buffer  with with freshly projected `(kv, gate)` and split off
+    the longest window-aligned chunk. Tokens past the last full window stay in the buffer until the
+    next call rounds them out to a multiple of `compress_rate`.
+
+    Returns `(chunk_kv, chunk_gate, new_buffer_kv, new_buffer_gate)`.
+    """
     if buffer_kv is not None and buffer_kv.shape[1]:
         kv = torch.cat([buffer_kv, kv], dim=1)
         gate = torch.cat([buffer_gate, gate], dim=1)
+
+    # only return the longest prefix that's a multiple of compress_rate; the rest stays in the buffer for next time
     usable = (kv.shape[1] // compress_rate) * compress_rate
     return kv[:, :usable], gate[:, :usable], kv[:, usable:], gate[:, usable:]
 
@@ -215,7 +185,7 @@ def _append_to_pool(pool: torch.Tensor | None, new_pooled: torch.Tensor) -> torc
 
 
 class DeepseekV4HCACache(DynamicSlidingWindowLayer):
-    """Cache layer for HCA blocks (paper §2.3.2). Holds the long-range compressor's
+    r"""Cache layer for HCA blocks (paper §2.3.2). Holds the long-range compressor's
     buffer / pool / count on top of the sliding-window K=V branch. HCA uses
     *non-overlapping* windows, so there is **no** overlap state, and HCA has **no**
     indexer either.
@@ -223,19 +193,19 @@ class DeepseekV4HCACache(DynamicSlidingWindowLayer):
     Fields on top of :class:`DynamicSlidingWindowLayer`:
 
       * ``compressor_pool`` — the running list of compressed KV entries emitted so
-        far (one per ``compress_rate_hca`` source tokens; the long-range KVs the
+        far (one every `compress_rate_hca` source tokens; the long-range KVs the
         attention concatenates onto its sliding-window keys / values).
       * ``compressor_buffer_kv`` / ``compressor_buffer_gate`` — source tokens that
-        arrived between two full windows; once the buffer hits ``compress_rate_hca``
+        arrived between two full windows; once the buffer hits `compress_rate_hca`
         tokens the compressor closes a window, emits one pooled entry, and drains
         the buffer.
       * ``compressor_pool_count`` — number of compressed entries emitted so far,
         so ``compressor_pool_count * compress_rate_hca`` is the absolute position
         of the *next* window's first source token.
 
-    The class-level ``layer_type`` auto-registers this class with
-    :data:`LAYER_TYPE_CACHE_MAPPING` so :class:`DynamicCache` builds it on its own
-    when ``config.layer_types[i] == "heavily_compressed_attention"``.
+    The reason we store `compressor_pool_count` is to account for prefill -> decode -> prefill
+    cases, where it is not obvious from the current `position_ids` alone how many compressed entries
+    have been emitted so far, and thus what the absolute position of the next window is.
     """
 
     layer_type = "heavily_compressed_attention"
@@ -249,15 +219,28 @@ class DeepseekV4HCACache(DynamicSlidingWindowLayer):
         self.compressor_pool_count = 0
 
     def update(self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs):
-        return _sliding_kv_update(self, key_states, value_states)
+        """
+        Shared sliding-window K=V update body. V4 uses shared-KV MQA, so `keys` and
+        `values` point to the same storage on every layer.
+        """
+        if not self.is_initialized:
+            self.lazy_initialization(key_states, value_states)
+            self.values = self.keys
+        self.cumulative_length += key_states.shape[-2]
+        full = torch.cat([self.keys, key_states], dim=-2)
+        self.keys = full[:, :, -self.sliding_window + 1 :, :]
+        self.values = self.keys
+        return full, full
 
     def update_compressor(self, kv: torch.Tensor, gate: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, int]:
-        """Merge the freshly projected ``(kv, gate)`` (paper §2.3.2 eqs. 20–21:
-        ``C = H·W^{KV}``, ``Z = H·W^Z``) with the buffered tail from prior calls and
+        r"""
+        Merge the new projected ``(kv, gate)`` (paper §2.3.2 eqs. 20–21:
+        ``C = H·W^{KV}``, ``Z = H·W^Z``) with the buffered kv and gate and
         return the longest window-aligned chunk that's ready to pool, plus the
         absolute source-token position of that chunk's first window. The returned
-        chunk is softmax-pooled by the compressor with ``position_bias`` to emit one
-        compressed entry per window of ``compress_rate_hca`` tokens (eqs. 22–23)."""
+        chunk is softmax-pooled by the compressor with `position_bias` to emit one
+        compressed entry per window of `compress_rate_hca` tokens.
+        """
         first_pool_position = self.compressor_pool_count * self.compress_rate
         chunk_kv, chunk_gate, self.compressor_buffer_kv, self.compressor_buffer_gate = _update_window_buffer(
             self.compressor_buffer_kv, self.compressor_buffer_gate, kv, gate, self.compress_rate
@@ -265,35 +248,35 @@ class DeepseekV4HCACache(DynamicSlidingWindowLayer):
         return chunk_kv, chunk_gate, first_pool_position
 
     def update_compressor_pool(self, new_pooled: torch.Tensor) -> torch.Tensor:
-        """Append freshly emitted compressed entries to ``compressor_pool``
+        r"""
+        Append freshly emitted compressed entries to ``compressor_pool``
         (``C^{Comp}``, paper §2.3.2 eq. 23) and return the full pool. Bumps
         ``compressor_pool_count`` so the next ``update_compressor`` call knows the
-        absolute source-token position of its first window."""
+        absolute source-token position of its first window.
+        """
         self.compressor_pool = _append_to_pool(self.compressor_pool, new_pooled)
         self.compressor_pool_count += new_pooled.shape[1]
         return self.compressor_pool
 
 
-class DeepseekV4CSACache(DynamicSlidingWindowLayer):
-    """Cache layer for CSA blocks (paper §2.3.1). Holds two parallel sets of
+class DeepseekV4CSACache(DeepseekV4HCACache):
+    r"""Cache layer for CSA blocks (paper §2.3.1). Holds two parallel sets of
     buffer / pool / count / overlap state on top of the sliding-window K=V branch:
 
-      * **compressor side** — the main-branch ``head_dim`` pool (the long-range KVs
+      * **compressor** — the main-branch ``head_dim`` pool (the long-range KVs
         the attention concatenates after top-k indexer selection).
-      * **indexer side** — the Lightning Indexer's smaller ``index_head_dim`` pool
-        (the keys ``K^{IComp}`` that queries score against to pick the top-k blocks,
-        eqs. 14–17). Kept separate from the compressor pool because the head dim
+      * **indexer** — the Lightning Indexer's smaller ``index_head_dim`` pool
+        (the keys ``K^{IComp}`` that queries score against to pick the top-k blocks).
+        Kept separate from the compressor pool because the head dim
         differs.
 
-    Both sides use **overlapping** windows of stride ``compress_rate_csa`` and width
-    ``2 * compress_rate_csa`` (paper §2.3.1), so each side also keeps an
-    ``*_overlap_kv`` / ``*_overlap_gate`` pair holding the last full window's
+    Even if there is an overlap, because Ci uses the index of Cb and Ci-1 the indexes of Ca, the compression
+    becomes 1/m, but we have to keep the overlap buffers.
+
+    Both compressor and indexer use **overlapping** windows of stride ``compress_rate_csa`` and width
+    ``2 * compress_rate_csa``, thus we keep 2 buffers of KV and gate, holding the last full window's
     projected ``(kv, gate)`` so the next forward call's first window can stitch in
     its low-channel slice as the prior contribution.
-
-    The class-level ``layer_type`` auto-registers this class with
-    :data:`LAYER_TYPE_CACHE_MAPPING` so :class:`DynamicCache` builds it on its own
-    when ``config.layer_types[i] == "compressed_sparse_attention"``.
     """
 
     layer_type = "compressed_sparse_attention"
@@ -301,11 +284,7 @@ class DeepseekV4CSACache(DynamicSlidingWindowLayer):
     def __init__(self, config: "DeepseekV4Config"):
         super().__init__(config)
         self.compress_rate = config.compress_rates["compressed_sparse_attention"]
-        # Compressor side
-        self.compressor_buffer_kv: torch.Tensor | None = None
-        self.compressor_buffer_gate: torch.Tensor | None = None
-        self.compressor_pool: torch.Tensor | None = None
-        self.compressor_pool_count = 0
+        # Compressor overlap
         self.compressor_overlap_kv: torch.Tensor | None = None
         self.compressor_overlap_gate: torch.Tensor | None = None
         # Indexer side (parallel state at ``index_head_dim``)
@@ -313,28 +292,10 @@ class DeepseekV4CSACache(DynamicSlidingWindowLayer):
         self.indexer_buffer_gate: torch.Tensor | None = None
         self.indexer_pool: torch.Tensor | None = None
         self.indexer_pool_count = 0
+
+        # indexer overlap
         self.indexer_overlap_kv: torch.Tensor | None = None
         self.indexer_overlap_gate: torch.Tensor | None = None
-
-    def update(self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs):
-        return _sliding_kv_update(self, key_states, value_states)
-
-    def update_compressor(self, kv: torch.Tensor, gate: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, int]:
-        """Compressor-side window buffer (paper §2.3.1 main-branch pool, eqs. 9–12).
-        Same window-aligned tail-buffering as HCA, but at the CSA cadence
-        (``compress_rate_csa``)."""
-        first_pool_position = self.compressor_pool_count * self.compress_rate
-        chunk_kv, chunk_gate, self.compressor_buffer_kv, self.compressor_buffer_gate = _update_window_buffer(
-            self.compressor_buffer_kv, self.compressor_buffer_gate, kv, gate, self.compress_rate
-        )
-        return chunk_kv, chunk_gate, first_pool_position
-
-    def update_compressor_pool(self, new_pooled: torch.Tensor) -> torch.Tensor:
-        """Append freshly emitted entries to the CSA compressor pool (the
-        ``C^{Comp}`` running list at ``head_dim``, eqs. 11–12)."""
-        self.compressor_pool = _append_to_pool(self.compressor_pool, new_pooled)
-        self.compressor_pool_count += new_pooled.shape[1]
-        return self.compressor_pool
 
     def get_compressor_overlap(self) -> tuple[torch.Tensor | None, torch.Tensor | None]:
         return self.compressor_overlap_kv, self.compressor_overlap_gate
@@ -344,12 +305,6 @@ class DeepseekV4CSACache(DynamicSlidingWindowLayer):
         self.compressor_overlap_gate = gate
 
     def update_indexer(self, kv: torch.Tensor, gate: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, int]:
-        """Indexer-side mirror of :meth:`update_compressor` (paper §2.3.1, "Lightning
-        Indexer for Sparse Selection"). Same logic at the smaller ``index_head_dim``
-        — the small-head pool keys ``K^{IComp}`` (eq. 14's ``W^{IUQ}`` complement on
-        the key side) that the indexer scores queries against to pick the top-k
-        blocks (eqs. 15–17). Buffer / pool / count are kept separate from the
-        compressor's state because the head dim differs."""
         first_pool_position = self.indexer_pool_count * self.compress_rate
         chunk_kv, chunk_gate, self.indexer_buffer_kv, self.indexer_buffer_gate = _update_window_buffer(
             self.indexer_buffer_kv, self.indexer_buffer_gate, kv, gate, self.compress_rate
@@ -357,10 +312,6 @@ class DeepseekV4CSACache(DynamicSlidingWindowLayer):
         return chunk_kv, chunk_gate, first_pool_position
 
     def update_indexer_pool(self, new_pooled: torch.Tensor) -> torch.Tensor:
-        """Append freshly emitted entries to the indexer pool ``K^{IComp}`` (paper
-        §2.3.1 eq. 16: the keys against which the ``q^I_t`` queries score for top-k
-        selection). Same cadence as the compressor pool — one entry per
-        ``compress_rate_csa`` source tokens — but at ``index_head_dim``."""
         self.indexer_pool = _append_to_pool(self.indexer_pool, new_pooled)
         self.indexer_pool_count += new_pooled.shape[1]
         return self.indexer_pool
@@ -374,22 +325,22 @@ class DeepseekV4CSACache(DynamicSlidingWindowLayer):
 
 
 class DeepseekV4GroupedLinear(nn.Linear):
-    """Block-diagonal grouped linear used by the V4 grouped output projection
-    (paper §2.3.1, "Grouped Output Projection"; HCA reuses the same scheme,
-    §2.3.2). With ``num_attention_heads = n_h`` and per-head dim ``c``, the core
-    attention's stacked output is ``c·n_h``-dim, which is *very* large for V4
-    (V4-Flash: c=512, n_h=64 → 32768; V4-Pro: c=512, n_h=128 → 65536). A direct
-    ``c·n_h → hidden_size`` projection would dominate the per-token cost.
+    """Block-diagonal grouped linear used by the grouped output projection
+    The core attention's stacked output is ``num_attention_heads* head_dim``-dim,
+    which is *very* large (V4-Flash: 32768; V4-Pro: 65536). A direct
+    ``num_attention_heads*head_dim → hidden_size`` projection would dominate the per-token cost.
 
-    The paper sidesteps that by splitting the n_h heads into ``g`` groups, projecting
-    each ``c·n_h/g``-dim group independently to a ``d_g``-dim intermediate output
-    (with ``d_g < c·n_h/g``), and then mixing the resulting ``g·d_g`` vector to
+    The paper sidesteps that by splitting the heads into `g` groups, projecting
+    each ``num_attention_heads * head_dim/g``-dim group independently to a `d_g`-dim intermediate output
+    (with ``d_g < num_attention_heads * head_dim/g``), and then mixing the resulting ``g·d_g`` vector to
     ``hidden_size`` through a single follow-up linear (``self_attn.o_b_proj``). This
     module owns the per-group block (``self_attn.o_a_proj``).
 
-    The ``weight`` parameter is shaped like a standard ``nn.Linear``
-    (``[out_features, in_features_per_group]``) so quantizers keyed on
-    ``nn.Linear.weight`` still pick it up; ``forward`` does the per-group ``bmm``.
+    For V4-Flash (num_attention_heads=64, head_dim=512, o_groups=8, o_lora_rank=1024,
+    hidden_size=4096), g=8 groups of 4096-dim each are projected to 1024-dim, then
+    mixed to 4096-dim; for V4-Pro (num_attention_heads=128, head_dim=512, o_groups=16,
+    o_lora_rank=1024, hidden_size=7168), g=16 groups of 4096-dim each are projected
+    to 1024-dim, then mixed to 7168-dim.
     """
 
     def __init__(self, in_features_per_group: int, out_features: int, n_groups: int, bias: bool = False):
@@ -397,7 +348,6 @@ class DeepseekV4GroupedLinear(nn.Linear):
         self.n_groups = n_groups
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x: [..., n_groups, in_features_per_group]
         input_shape = x.shape[:-2]
         d_in = x.shape[-1]
         w = self.weight.view(self.n_groups, -1, d_in).transpose(1, 2)
@@ -416,13 +366,6 @@ def rotate_half(x):
 def apply_rotary_pos_emb(
     x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, unsqueeze_dim: int = 1
 ) -> torch.Tensor:
-    """V4-Flash interleaved RoPE (matches the reference's ``apply_rotary_emb`` at
-    ``inference/model.py:232``). Rotates the **trailing** ``2 * cos.shape[-1]`` channels
-    of ``x`` (V4-Flash lays each head out as ``[nope | rope]``, matching the reference's
-    ``x[..., -rd:]`` indexing) and leaves the leading nope channels unchanged. The
-    half-sized cos / sin from :class:`DeepseekV4RotaryEmbedding` are expanded to the
-    pair-aligned full rope dim via ``repeat_interleave`` here, and the rotation is
-    done in fp32 (matching the reference's precision)."""
     cos = cos.repeat_interleave(2, dim=-1).unsqueeze(unsqueeze_dim)
     sin = sin.repeat_interleave(2, dim=-1).unsqueeze(unsqueeze_dim)
     rope_dim = cos.shape[-1]
