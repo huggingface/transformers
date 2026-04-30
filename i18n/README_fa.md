@@ -309,8 +309,7 @@ pipeline(
 
 ## استناد (Citation)
 
-اگر از این کتابخانه در تحقیقات خود استفاده می‌کنید، لطفاً با استفاده از فرمت BibTeX زیر به آن استناد کنید:
-
+اکنون می‌توانید برای کتابخانهٔ 🤗 Transformers به [مقالهٔ](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) منتشرشدهٔ آن استناد کنید.
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers,
     title = "Transformers: State-of-the-Art Natural Language Processing",
