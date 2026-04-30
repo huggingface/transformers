@@ -5,6 +5,8 @@
     title: Installation
   - local: quicktour
     title: Quickstart
+  - local: agent_skills
+    title: Agent skills
   title: Get started
 - isExpanded: true
   sections:

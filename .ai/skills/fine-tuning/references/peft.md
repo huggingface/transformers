@@ -1,6 +1,6 @@
-# PEFT / LoRA Reference
+# PEFT/LoRA reference
 
-Parameter-efficient fine-tuning trains small adapter weights instead of the full model. Only adapter parameters are updated — base model weights are frozen. Checkpoints are small (adapter weights only).
+This doc outlines how to fine-tune a model with parameter-efficient fine-tuning. This trains small adapter weights instead of the full model. Only adapter parameters are updated — base model weights are frozen. Checkpoints are small (adapter weights only).
 
 ```bash
 pip install -U peft

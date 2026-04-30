@@ -1,4 +1,6 @@
-# Performance Reference
+# Performance reference
+
+This doc outlines the performance (training speed and memory-usage) optimizations available for fine-tuning.
 
 ## Understanding GPU memory usage
 
@@ -21,12 +23,15 @@ With 8-bit Adam (`optim="adamw_8bit"`), optimizer states drop from 8B → 2B per
 |---|---|---|
 | Mixed precision (bf16) | `bf16=True` | Negligible accuracy loss; prefer over fp16 on Ampere+ |
 | Mixed precision (fp16) | `fp16=True` | Requires loss scaling; use on pre-Ampere |
-| TF32 compute | `tf32=True` | ~8× faster matmuls on Ampere; pair with bf16 |
+| TF32 compute | `tf32=True` | ~8× faster matmuls on Ampere at no precision cost; pair with bf16 |
+| Flash Attention 2 | `attn_implementation="flash_attention_2"` (model load) | 2–4× faster attention, lower peak memory; requires `pip install flash-attn` |
+| SDPA attention | `attn_implementation="sdpa"` (model load) | Faster than eager attention; no extra install; use when flash-attn unavailable |
 | Gradient checkpointing | `gradient_checkpointing=True` | ~20% slower; saves activation memory |
 | Gradient accumulation | `gradient_accumulation_steps=N` | Simulates N× batch size; no memory cost |
 | 8-bit Adam | `optim="adamw_8bit"` | Requires bitsandbytes; ~75% optimizer state reduction |
 | Adafactor | `optim="adafactor"` | Stateless; very low memory; slower convergence |
 | Eval incremental offload | `eval_accumulation_steps=16` | Prevents eval OOM on large models |
+| Dataloader prefetch | `dataloader_prefetch_factor=2` | Prefetch 2 batches per worker; requires `num_workers > 0` |
 
 **Mixed precision gotcha**: Load the model in fp32 initially (or `torch_dtype="auto"`), not in bf16/fp16. Loading in reduced precision leaves no fp32 master copy for the optimizer to update from, making autocast a no-op.
 

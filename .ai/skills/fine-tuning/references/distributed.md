@@ -1,4 +1,6 @@
-# Distributed Training Reference
+# Distributed training reference
+
+This doc outlines distributed training options.
 
 ## Choosing a strategy
 
@@ -26,6 +28,7 @@ torchrun --nproc_per_node=4 train.py
 ```
 
 To use specific GPUs:
+
 ```bash
 CUDA_VISIBLE_DEVICES=0,2 torchrun --nproc_per_node=2 train.py
 CUDA_DEVICE_ORDER=PCI_BUS_ID  # match nvidia-smi GPU numbering
@@ -75,7 +78,7 @@ accelerate launch --num_processes 8 --config_file fsdp_config.yaml train.py
 
 ## DeepSpeed ZeRO
 
-Use DeepSpeed when you need CPU/NVMe offloading or prefer ZeRO's optimizer. ZeRO-2 is the recommended starting point; ZeRO-3 for models that don't fit across GPUs even with ZeRO-2.
+Use DeepSpeed when you need CPU/NVMe offloading or prefer ZeRO's optimizer. ZeRO-2 is the recommended starting point. ZeRO-3 for models that don't fit across GPUs even with ZeRO-2.
 
 **ZeRO stages:**
 - **ZeRO-2** — shards optimizer states + gradients; lower communication overhead than ZeRO-3
@@ -205,26 +208,3 @@ mpirun -f hostfile -n 4 -ppn 2 python train.py
 ```
 
 ---
-
-## Debugging distributed training
-
-**Numerical issues (NaN/inf loss):**
-```python
-TrainingArguments(debug="underflow_overflow")
-# Prints layer-by-layer min/max values to locate where nan/inf first appears
-```
-
-Or for targeted batch tracing:
-```python
-from transformers.debug_utils import DebugUnderflowOverflow
-debug_overflow = DebugUnderflowOverflow(model, trace_batch_nums=[1, 3], abort_after_batch_num=3)
-```
-
-**Communication failures:**
-```bash
-NCCL_DEBUG=INFO torchrun --nproc_per_node=2 train.py
-```
-
-**DeepSpeed: process killed at startup without traceback** — usually CPU OOM from optimizer offload. Try offloading to NVMe, or reduce `offload_optimizer`/`offload_param`.
-
-**DeepSpeed: NaN loss** — common when a bf16-pretrained model is used with fp16. Switch to bf16 training or fp32.

@@ -1,4 +1,6 @@
-# Customization Reference
+# Customization reference
+
+This doc outlines customization options for fine-tuning.
 
 ## Decision guide
 
@@ -111,7 +113,7 @@ Key objects in all hooks:
 - `control` — set flags: `should_training_stop`, `should_evaluate`, `should_save`, `should_log`
 
 Built-in callbacks:
-- `EarlyStoppingCallback(early_stopping_patience=3)` — requires `metric_for_best_model`
+- `EarlyStoppingCallback(early_stopping_patience=3)` — requires `metric_for_best_model` **and** `load_best_model_at_end=True` in TrainingArguments
 - `DefaultFlowCallback` — controls when logging/eval/save happen; override to change cadence
 
 ```python
@@ -189,8 +191,8 @@ TrainingArguments(
 
 ```python
 class MyTrainer(Trainer):
-    def create_optimizer(self, model=None):
-        super().create_optimizer(model)
+    def create_optimizer(self):
+        super().create_optimizer()
         self.optimizer.add_param_group({
             "params": self.model.classifier.parameters(),
             "lr": self.args.learning_rate * 10,

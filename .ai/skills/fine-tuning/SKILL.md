@@ -3,34 +3,30 @@ name: fine-tuning
 description: Fine-tune a model with the Transformers Trainer API. Use when fine-tuning any model (text, vision, audio, multimodal) using the Trainer class, setting up TrainingArguments, writing custom callbacks or loss functions, optimizing memory or throughput, or setting up distributed training across multiple GPUs.
 ---
 
-# Fine-Tuning with the Trainer API
+This skill creates a training script to fine-tune models in any modality with the Trainer API.
 
-## Input
+Users provide a model name, a dataset, a task, and the hardware they're fine-tuning on.
 
-- `<model_id>`: model name or local path
-- `<train_dataset>`: a `datasets.Dataset` or any `torch.utils.data.Dataset`
-- `<task>`: classification, generation, seq2seq, token classification, etc.
+## Workflow
 
-## Core Workflow
+### 1. Load model and processing class
 
-### 1. Load model and tokenizer
-
-Use the task-appropriate `AutoModel` class. Load with `dtype="auto"` to avoid doubling memory (avoids upcasting to float32):
+Pick the task-appropriate `AutoModel` class and processing class. See `references/task-recipes.md` for the right pair per task.
 
 ```python
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from transformers import AutoProcessor, AutoModelForXxx  # replace Xxx with your task head
 
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForSequenceClassification.from_pretrained(
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForXxx.from_pretrained(
     model_id,
-    num_labels=2,
-    torch_dtype="auto",
 )
 ```
 
-Tokenize with `dataset.map(tokenize_fn, batched=True)`. Use `DataCollatorWithPadding` for dynamic padding (more memory-efficient than padding to max_length upfront). For causal LM use `DataCollatorForLanguageModeling(mlm=False)`.
+Pick the task-appropriate data collator and preprocessing method. See `references/task-recipes.md` for how to preprocess inputs for each task.
 
 ### 2. Configure TrainingArguments
+
+TrainingArguments provides all the options for customizing a training run. Pick good defaults unless the user has a specific request.
 
 ```python
 from transformers import TrainingArguments
@@ -57,14 +53,14 @@ args = TrainingArguments(
 )
 ```
 
-**Checkpointing constraint**: When `load_best_model_at_end=True`:
+**Checkpointing constraint** when `load_best_model_at_end=True`:
 - `eval_strategy` must not be `"no"`
 - `save_strategy` must match `eval_strategy`, with two exceptions:
-  - `save_strategy="best"` — saves only on new best metric, most disk-efficient; exempt from matching
-  - If using `"steps"`, `save_steps` must be a multiple of `eval_steps`
+- `save_strategy="best"` — saves only on new best metric, most disk-efficient; exempt from matching
+- If using `"steps"`, `save_steps` must be a multiple of `eval_steps`
 - `metric_for_best_model` is required
 
-**Resuming constraint**: `save_only_model=True` saves disk space but strips optimizer/scheduler/RNG state, making checkpoint resuming impossible. Leave `False` (default) if you may resume.
+**Resuming constraint**. `save_only_model=True` saves disk space but strips optimizer/scheduler/RNG state, making checkpoint resuming impossible. Leave `False` (default) if you may resume.
 
 ### 3. Define compute_metrics (optional but recommended)
 
@@ -80,18 +76,7 @@ def compute_metrics(eval_pred):
     return metric.compute(predictions=predictions, references=labels)
 ```
 
-To prevent eval OOM on large models, preprocess logits on GPU before accumulation:
-
-```python
-def preprocess_logits_for_metrics(logits, labels):
-    return logits.argmax(dim=-1)  # reduces from (batch, seq, vocab) to (batch, seq)
-
-def compute_metrics(eval_pred):
-    predictions, labels = eval_pred  # predictions are already argmax'd
-    return metric.compute(predictions=predictions, references=labels)
-```
-
-Also set `eval_accumulation_steps=16` in TrainingArguments to offload eval predictions to CPU incrementally.
+For eval OOM prevention on large models (`preprocess_logits_for_metrics` + `eval_accumulation_steps`), see `references/performance.md`.
 
 ### 4. Create the Trainer and train
 
@@ -101,9 +86,9 @@ from transformers import Trainer
 trainer = Trainer(
     model=model,
     args=args,
-    train_dataset=tokenized_train,
-    eval_dataset=tokenized_eval,
-    processing_class=tokenizer,
+    train_dataset=processed_train,
+    eval_dataset=processed_eval,
+    processing_class=processor,   # tokenizer, feature extractor, or processor
     data_collator=data_collator,
     compute_metrics=compute_metrics,
 )
@@ -120,7 +105,7 @@ Add `eval_on_start=True` to `TrainingArguments` to validate the eval pipeline be
 
 - Forgetting `eval_dataset` when `eval_strategy != "no"` — Trainer will raise at the first eval step
 - Mismatching `save_strategy` / `eval_strategy` with `load_best_model_at_end=True` — raises `ValueError` at init
-- `gradient_checkpointing=True` without `model.config.use_cache = False` on generative models — cache is incompatible with recomputation
+- `gradient_checkpointing=True` without `model.config.use_cache = False` on generative models — KV cache is incompatible with activation recomputation; set it immediately after loading the model
 - Setting `max_steps` and `num_train_epochs` together — `max_steps` wins
 - `dataloader_num_workers=0` (default) — GPU idles during data loading; use 4+ workers
 
