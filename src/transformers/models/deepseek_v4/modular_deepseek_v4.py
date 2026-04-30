@@ -608,6 +608,7 @@ class DeepseekV4CSACompressor(nn.Module):
         idx = topk.unsqueeze(1).unsqueeze(-1).expand(-1, 1, -1, -1, self.head_dim)
         return torch.gather(expanded, 3, idx).reshape(batch, 1, -1, self.head_dim)
 
+# TODO FIXME Compressors are now the most ugly
 
 COMPRESSOR_CLASSES = {
     "sliding_attention": None,
@@ -922,45 +923,13 @@ class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
     r"""DeepSeek-V4 decoder block (paper §2). Differs from a classic residual block in
     two places:
 
-      * The residual is a stack of `hc_mult` parallel streams kept in shape
-        `[B, S, hc_mult, D]` throughout the block, mixed in and out via two
-        :class:`DeepseekV4HyperConnection` modules (Manifold-Constrained Hyper-
-        Connections / mHC, paper §2.2; Xie et al., 2026). The mHC mappings constrain
-        the residual transform to the manifold of doubly-stochastic matrices via the
-        Sinkhorn-Knopp projection — making signal propagation non-expansive across
-        deep stacks.
-      * `self_attn` is :class:`DeepseekV4Attention` for every layer. Its compressor
-        sub-module is the only thing that varies by layer type
-        (:class:`DeepseekV4HCACompressor` for HCA layers,
-        :class:`DeepseekV4CSACompressor` for CSA, picked via
-        `config.layer_types[layer_idx]`); the CSA compressor also owns the
-        Lightning Indexer at `self_attn.compressor.indexer`.
-
-    Classic residual decoder layer::
-
-        h ──► norm ──► self_attn ──► + ──► norm ──► mlp ──► +
-        └──────── residual ────────┘   └─────── residual ───┘
-
-    Deepseek V4 decoder layer (`H = hc_mult` parallel residual streams throughout)::
-
-                attention site                                    mlp site
-        ┌────────────────────────────────────────┐    ┌────────────────────────────────────────┐
-        │  hidden_streams [B, S, H, D]           │    │  hidden_streams [B, S, H, D]           │
-        │        │                               │    │        │                               │
-        │  attn_hc(streams) ─► (pre, post, comb) │    │  ffn_hc(streams) ─► (pre, post, comb)  │
-        │        │                               │    │        │                               │
-        │   Σ pre·streams  (collapse)            │    │   Σ pre·streams  (collapse)            │
-        │        │                               │    │        │                               │
-        │   input_layernorm                      │    │   post_attention_layernorm             │
-        │        │                               │    │        │                               │
-        │   self_attn                            │    │   mlp  (MoE routed + shared)           │
-        │        │                               │    │        │                               │
-        │   post·output + comb·streams  (expand) │    │   post·output + comb·streams  (expand) │
-        │        │                               │    │        │                               │
-        │        ▼                               │    │        ▼                               │
-        │  new hidden_streams  ──────────────────┘    │  new hidden_streams                    │
-        └────────────────────────────────────────┘    └────────────────────────────────────────┘
-
+    The residual is a stack of `hc_mult` parallel streams kept in shape
+    `[B, S, hc_mult, D]` throughout the block, mixed in and out via two
+    :class:`DeepseekV4HyperConnection` modules (Manifold-Constrained Hyper-
+    Connections / mHC, paper §2.2; Xie et al., 2026). The mHC mappings constrain
+    the residual transform to the manifold of doubly-stochastic matrices via the
+    Sinkhorn-Knopp projection — making signal propagation non-expansive across
+    deep stacks.
 
     """
 
