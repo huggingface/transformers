@@ -48,85 +48,81 @@ This model was contributed by [yonigozlan](https://huggingface.co/yonigozlan) an
 Process a video with all frames already available using text prompts:
 
 ```python
->>> from transformers import Sam3VideoModel, Sam3VideoProcessor
->>> from accelerate import Accelerator
->>> import torch
+from transformers import Sam3VideoModel, Sam3VideoProcessor
+import torch
 
->>> device = Accelerator().device
->>> model = Sam3VideoModel.from_pretrained("facebook/sam3").to(device, dtype=torch.bfloat16)
->>> processor = Sam3VideoProcessor.from_pretrained("facebook/sam3")
+model = Sam3VideoModel.from_pretrained("facebook/sam3", device_map="auto")
+processor = Sam3VideoProcessor.from_pretrained("facebook/sam3")
 
->>> # Load video frames
->>> from transformers.video_utils import load_video
->>> video_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/bedroom.mp4"
->>> video_frames, _ = load_video(video_url)
+# Load video frames
+from transformers.video_utils import load_video
+video_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/bedroom.mp4"
+video_frames, _ = load_video(video_url)
 
->>> # Initialize video inference session
->>> inference_session = processor.init_video_session(
-...     video=video_frames,
-...     inference_device=device,
-...     processing_device="cpu",
-...     video_storage_device="cpu",
-...     dtype=torch.bfloat16,
-... )
+# Initialize video inference session
+inference_session = processor.init_video_session(
+    video=video_frames,
+    inference_device=device,
+    processing_device="cpu",
+    video_storage_device="cpu",
+)
 
->>> # Add text prompt to detect and track objects
->>> text = "person"
->>> inference_session = processor.add_text_prompt(
-...     inference_session=inference_session,
-...     text=text,
-... )
+# Add text prompt to detect and track objects
+text = "person"
+inference_session = processor.add_text_prompt(
+    inference_session=inference_session,
+    text=text,
+)
 
->>> # Process all frames in the video
->>> outputs_per_frame = {}
->>> # Pass show_progress_bar=True to display a tqdm progress bar.
->>> for model_outputs in model.propagate_in_video_iterator(
-...     inference_session=inference_session, max_frame_num_to_track=50
-... ):
-...     processed_outputs = processor.postprocess_outputs(inference_session, model_outputs)
-...     outputs_per_frame[model_outputs.frame_idx] = processed_outputs
+# Process all frames in the video
+outputs_per_frame = {}
+# Pass show_progress_bar=True to display a tqdm progress bar.
+for model_outputs in model.propagate_in_video_iterator(
+    inference_session=inference_session, max_frame_num_to_track=50
+):
+    processed_outputs = processor.postprocess_outputs(inference_session, model_outputs)
+    outputs_per_frame[model_outputs.frame_idx] = processed_outputs
 
->>> print(f"Processed {len(outputs_per_frame)} frames")
+print(f"Processed {len(outputs_per_frame)} frames")
 Processed 51 frames
 
->>> # Access results for a specific frame
->>> frame_0_outputs = outputs_per_frame[0]
->>> print(f"Detected {len(frame_0_outputs['object_ids'])} objects")
->>> print(f"Object IDs: {frame_0_outputs['object_ids'].tolist()}")
->>> print(f"Scores: {frame_0_outputs['scores'].tolist()}")
->>> print(f"Boxes shape (XYXY format, absolute coordinates): {frame_0_outputs['boxes'].shape}")
->>> print(f"Masks shape: {frame_0_outputs['masks'].shape}")
+# Access results for a specific frame
+frame_0_outputs = outputs_per_frame[0]
+print(f"Detected {len(frame_0_outputs['object_ids'])} objects")
+print(f"Object IDs: {frame_0_outputs['object_ids'].tolist()}")
+print(f"Scores: {frame_0_outputs['scores'].tolist()}")
+print(f"Boxes shape (XYXY format, absolute coordinates): {frame_0_outputs['boxes'].shape}")
+print(f"Masks shape: {frame_0_outputs['masks'].shape}")
 ```
 
 You can also track multiple object categories simultaneously by providing multiple prompts. The model efficiently reuses vision features across all prompts:
 
 ```python
->>> # Add multiple text prompts (or use a list in add_text_prompt)
->>> multi_prompt_session = processor.init_video_session(
-...     video=video_frames,
-...     inference_device=device,
-...     processing_device="cpu",
-...     video_storage_device="cpu",
-...     dtype=torch.bfloat16,
-... )
+# Add multiple text prompts (or use a list in add_text_prompt)
+multi_prompt_session = processor.init_video_session(
+    video=video_frames,
+    inference_device=device,
+    processing_device="cpu",
+    video_storage_device="cpu",
+)
 >>>
->>> prompts = ["person", "bed", "lamp"]
->>> processor.add_text_prompt(multi_prompt_session, prompts)
+prompts = ["person", "bed", "lamp"]
+processor.add_text_prompt(multi_prompt_session, prompts)
 >>>
->>> # Process video - detects objects from ALL prompts in a single pass
->>> multi_outputs_per_frame = {}
->>> # Pass show_progress_bar=True to display a tqdm progress bar.
->>> for model_outputs in model.propagate_in_video_iterator(
-...     inference_session=multi_prompt_session, max_frame_num_to_track=50
-... ):
-...     processed_outputs = processor.postprocess_outputs(multi_prompt_session, model_outputs)
-...     multi_outputs_per_frame[model_outputs.frame_idx] = processed_outputs
+# Process video - detects objects from ALL prompts in a single pass
+multi_outputs_per_frame = {}
+# Pass show_progress_bar=True to display a tqdm progress bar.
+for model_outputs in model.propagate_in_video_iterator(
+    inference_session=multi_prompt_session, max_frame_num_to_track=50
+):
+    processed_outputs = processor.postprocess_outputs(multi_prompt_session, model_outputs)
+    multi_outputs_per_frame[model_outputs.frame_idx] = processed_outputs
 >>>
->>> # Check which objects were detected by each prompt
->>> frame_0_outputs = multi_outputs_per_frame[0]
->>> prompt_to_obj_ids = frame_0_outputs["prompt_to_obj_ids"]
->>> for prompt, obj_ids in prompt_to_obj_ids.items():
-...     print(f"{prompt}: {len(obj_ids)} objects")
+# Check which objects were detected by each prompt
+frame_0_outputs = multi_outputs_per_frame[0]
+prompt_to_obj_ids = frame_0_outputs["prompt_to_obj_ids"]
+for prompt, obj_ids in prompt_to_obj_ids.items():
+    print(f"{prompt}: {len(obj_ids)} objects")
 person: 2 objects
 bed: 1 objects
 lamp: 1 objects
@@ -141,53 +137,52 @@ lamp: 1 objects
 For real-time applications, SAM3 Video supports processing video frames as they arrive:
 
 ```python
->>> # Initialize session for streaming
->>> streaming_inference_session = processor.init_video_session(
-...     inference_device=device,
-...     processing_device="cpu",
-...     video_storage_device="cpu",
-...     dtype=torch.bfloat16,
-... )
+# Initialize session for streaming
+streaming_inference_session = processor.init_video_session(
+    inference_device=device,
+    processing_device="cpu",
+    video_storage_device="cpu",
+)
 
->>> # Add text prompt
->>> text = "person"
->>> streaming_inference_session = processor.add_text_prompt(
-...     inference_session=streaming_inference_session,
-...     text=text,
-... )
+# Add text prompt
+text = "person"
+streaming_inference_session = processor.add_text_prompt(
+    inference_session=streaming_inference_session,
+    text=text,
+)
 
->>> # Process frames one by one (streaming mode)
->>> streaming_outputs_per_frame = {}
->>> for frame_idx, frame in enumerate(video_frames[:50]):  # Process first 50 frames
-...     # First, process the frame using the processor
-...     inputs = processor(images=frame, device=device, return_tensors="pt")
+# Process frames one by one (streaming mode)
+streaming_outputs_per_frame = {}
+for frame_idx, frame in enumerate(video_frames[:50]):  # Process first 50 frames
+    # First, process the frame using the processor
+    inputs = processor(images=frame, device=device, return_tensors="pt").to(model.device)
 ...
-...     # Process frame using streaming inference - pass the processed pixel_values
-...     model_outputs = model(
-...         inference_session=streaming_inference_session,
-...         frame=inputs.pixel_values[0],  # Provide processed frame - this enables streaming mode
-...         reverse=False,
-...     )
+    # Process frame using streaming inference - pass the processed pixel_values
+    model_outputs = model(
+        inference_session=streaming_inference_session,
+        frame=inputs.pixel_values[0],  # Provide processed frame - this enables streaming mode
+        reverse=False,
+    )
 ...
-...     # Post-process outputs with original_sizes for proper resolution handling
-...     processed_outputs = processor.postprocess_outputs(
-...         streaming_inference_session,
-...         model_outputs,
-...         original_sizes=inputs.original_sizes,  # Required for streaming inference
-...     )
-...     streaming_outputs_per_frame[frame_idx] = processed_outputs
+    # Post-process outputs with original_sizes for proper resolution handling
+    processed_outputs = processor.postprocess_outputs(
+        streaming_inference_session,
+        model_outputs,
+        original_sizes=inputs.original_sizes,  # Required for streaming inference
+    )
+    streaming_outputs_per_frame[frame_idx] = processed_outputs
 ...
-...     if (frame_idx + 1) % 10 == 0:
-...         print(f"Processed {frame_idx + 1} frames...")
+    if (frame_idx + 1) % 10 == 0:
+        print(f"Processed {frame_idx + 1} frames...")
 
->>> print(f"✓ Streaming inference complete! Processed {len(streaming_outputs_per_frame)} frames")
+print(f"✓ Streaming inference complete! Processed {len(streaming_outputs_per_frame)} frames")
 ✓ Streaming inference complete! Processed 50 frames
 
->>> # Access results
->>> frame_0_outputs = streaming_outputs_per_frame[0]
->>> print(f"Detected {len(frame_0_outputs['object_ids'])} objects in first frame")
->>> print(f"Boxes are in XYXY format (absolute pixel coordinates): {frame_0_outputs['boxes'].shape}")
->>> print(f"Masks are at original video resolution: {frame_0_outputs['masks'].shape}")
+# Access results
+frame_0_outputs = streaming_outputs_per_frame[0]
+print(f"Detected {len(frame_0_outputs['object_ids'])} objects in first frame")
+print(f"Boxes are in XYXY format (absolute pixel coordinates): {frame_0_outputs['boxes'].shape}")
+print(f"Masks are at original video resolution: {frame_0_outputs['masks'].shape}")
 ```
 
 #### Custom Resolution Inference
@@ -199,10 +194,10 @@ For real-time applications, SAM3 Video supports processing video frames as they 
 For faster inference or lower memory usage:
 
 ```python
->>> config = Sam3VideoConfig.from_pretrained("facebook/sam3")
->>> config.image_size = 560
->>> model = Sam3VideoModel.from_pretrained("facebook/sam3", config=config).to(device, dtype=torch.bfloat16)
->>> processor = Sam3VideoProcessor.from_pretrained("facebook/sam3", size={"height": 560, "width": 560})
+config = Sam3VideoConfig.from_pretrained("facebook/sam3")
+config.image_size = 560
+model = Sam3VideoModel.from_pretrained("facebook/sam3", config=config, device_map="auto")
+processor = Sam3VideoProcessor.from_pretrained("facebook/sam3", size={"height": 560, "width": 560})
 ```
 
 ## Sam3VideoConfig

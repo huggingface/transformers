@@ -51,23 +51,25 @@ The original code can be found [here](https://github.com/neonbjb/tortoise-tts).
 Example :
 
 ```python
->>> import datasets
->>> from transformers import ClvpProcessor, ClvpModelForConditionalGeneration
+import datasets
 
->>> # Define the Text and Load the Audio (We are taking an audio example from HuggingFace Hub using `datasets` library).
->>> text = "This is an example text."
+from transformers import ClvpModelForConditionalGeneration, ClvpProcessor
 
->>> ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
->>> ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
->>> sample = ds[0]["audio"]
 
->>> # Define processor and model.
->>> processor = ClvpProcessor.from_pretrained("susnato/clvp_dev")
->>> model = ClvpModelForConditionalGeneration.from_pretrained("susnato/clvp_dev")
+# Define the Text and Load the Audio (We are taking an audio example from HuggingFace Hub using `datasets` library).
+text = "This is an example text."
 
->>> # Generate processor output and model output.
->>> processor_output = processor(raw_speech=sample["array"], sampling_rate=sample["sampling_rate"], text=text, return_tensors="pt")
->>> generated_output = model.generate(**processor_output)
+ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
+sample = ds[0]["audio"]
+
+# Define processor and model.
+processor = ClvpProcessor.from_pretrained("susnato/clvp_dev")
+model = ClvpModelForConditionalGeneration.from_pretrained("susnato/clvp_dev", device_map="auto")
+
+# Generate processor output and model output.
+processor_output = processor(raw_speech=sample["array"], sampling_rate=sample["sampling_rate"], text=text, return_tensors="pt").to(model.device)
+generated_output = model.generate(**processor_output)
 ```
 
 ## ClvpConfig

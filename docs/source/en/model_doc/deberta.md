@@ -39,9 +39,9 @@ The example below demonstrates how to classify text with [`Pipeline`], [`AutoMod
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 classifier = pipeline(
     task="text-classification",
@@ -58,9 +58,11 @@ classifier({
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
 
 model_name = "microsoft/deberta-base-mnli"
 tokenizer = AutoTokenizer.from_pretrained("microsoft/deberta-base-mnli")
@@ -78,7 +80,6 @@ with torch.no_grad():
 
 labels = ["contradiction", "neutral", "entailment"]
 print(f"The predicted relation is: {labels[predicted_class]}")
-
 ```
 
 </hfoption>
