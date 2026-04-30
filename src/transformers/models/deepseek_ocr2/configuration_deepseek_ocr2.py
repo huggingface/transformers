@@ -298,7 +298,8 @@ class DeepseekOcr2Config(PreTrainedConfig):
 
 __all__ = [
     "DeepseekOcr2Config",
+    "DeepseekOcr2TextConfig",
+    "DeepseekOcr2VisionConfig",
     "DeepseekOcr2VisionEncoderConfig",
     "DeepseekOcr2SamVisionConfig",
-    "DeepseekOcr2TextConfig",
 ]
