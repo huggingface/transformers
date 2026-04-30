@@ -208,7 +208,9 @@ class OpenAIPrivacyFilterModelIntegrationTest(unittest.TestCase):
         model = AutoModelForTokenClassification.from_pretrained("openai/privacy-filter").to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained("openai/privacy-filter")
 
-        inputs = tokenizer("My name is Harry Potter and my email is harry.potter@hogwarts.edu.", return_tensors="pt").to(torch_device)
+        inputs = tokenizer(
+            "My name is Harry Potter and my email is harry.potter@hogwarts.edu.", return_tensors="pt"
+        ).to(torch_device)
 
         with torch.no_grad():
             outputs = model(**inputs)
