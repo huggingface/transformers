@@ -929,14 +929,8 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         semantic_hidden_states = semantic_output.last_hidden_state.transpose(1, 2)
         semantic_hidden_states = self.semantic_adapter(semantic_hidden_states)
 
-        # Acoustic embedding
+        # Acoustic embedding and concatenate
         acoustic_hidden_states = self.acoustic_encoder(audio)
-
-        # Concatenate embeddings
-        if acoustic_hidden_states.shape[-1] != semantic_hidden_states.shape[-1]:
-            min_len = min(acoustic_hidden_states.shape[-1], semantic_hidden_states.shape[-1])
-            acoustic_hidden_states = acoustic_hidden_states[:, :, :min_len]
-            semantic_hidden_states = semantic_hidden_states[:, :, :min_len]
         hidden_states = torch.cat([semantic_hidden_states, acoustic_hidden_states], dim=1)
         hidden_states = self.fc_encoder(hidden_states.transpose(1, 2))
 
