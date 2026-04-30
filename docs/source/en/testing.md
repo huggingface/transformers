@@ -27,13 +27,16 @@ pytest tests/models/mymodel/test_modeling_mymodel.py -v
 # run a specific test
 pytest tests/models/mymodel/test_modeling_mymodel.py::MyModelTest::test_model
 
+# run tests matching a keyword pattern (useful to run all integration tests)
+pytest tests/models/mymodel/ -k integration -v
+
 # include slow integration tests
 RUN_SLOW=1 pytest tests/models/mymodel/ -v
 ```
 
 The Hugging Face CI runs model tests without `@slow` on every pull request, and slow tests run on a nightly schedule (see [Pull request checks](./pr_checks) for what the CI validates).
 
-## Write tests for a causal LM
+## Write tests for a causal language model
 
 `CausalLMModelTest` is the recommended base class for testing causal language models. It inherits from five [test mixins](#test-mixins) and auto-generates tests for save/load, generation, pipelines, training, and tensor parallelism.
 
@@ -131,7 +134,26 @@ class MyVLMTest(VLMModelTest, unittest.TestCase):
     model_tester_class = MyVLMTester
 ```
 
-See [tests/models/qwen3_vl/test_modeling_qwen3_vl.py](https://github.com/huggingface/transformers/blob/main/tests/models/qwen3_vl/test_modeling_qwen3_vl.py) for a real example.
+### Overriding defaults
+
+When the VLM needs custom vision parameters or non-default config values, override `__init__`. Set defaults with `setdefault` before calling `super().__init__(parent, **kwargs)`. The example below shows the first few defaults from [tests/models/qianfan_ocr/test_modeling_qianfan_ocr.py](https://github.com/huggingface/transformers/blob/main/tests/models/qianfan_ocr/test_modeling_qianfan_ocr.py).
+
+```py
+class QianfanOCRVisionText2TextModelTester(VLMModelTester):
+    base_model_class = QianfanOCRModel
+    config_class = QianfanOCRConfig
+    text_config_class = Qwen3Config
+    vision_config_class = QianfanOCRVisionConfig
+    conditional_generation_class = QianfanOCRForConditionalGeneration
+
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("image_token_id", 1)
+        kwargs.setdefault("image_size", 32)
+        kwargs.setdefault("patch_size", 4)
+        kwargs.setdefault("num_channels", 3)
+        # ... more defaults
+        super().__init__(parent, **kwargs)
+```
 
 VLM tests differ from `CausalLMModelTest` in a few ways.
 
@@ -332,7 +354,7 @@ Boolean flags on `ModelTesterMixin` toggle auto-generated tests. Override any fl
 class MyModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = MyModelTester
     test_resize_embeddings = False
-    test_all_params_have_gradient = False  # for MoE models
+    test_all_params_have_gradient = False  # when not all parameters are activated in every forward pass
 ```
 
 | Flag | Default | What it controls |
@@ -342,7 +364,7 @@ class MyModelTest(CausalLMModelTest, unittest.TestCase):
 | `test_mismatched_shapes` | `True` | Mismatched input/output shape handling |
 | `test_missing_keys` | `True` | Missing key warnings on load |
 | `test_torch_exportable` | `True` | `torch.export` compatibility |
-| `test_all_params_have_gradient` | `True` | All parameters receive gradients (set `False` for MoE) |
+| `test_all_params_have_gradient` | `True` | All parameters receive gradients (set `False` when not all parameters are activated in every forward pass, such as MoE experts) |
 | `is_encoder_decoder` | `False` | Encoder-decoder specific tests |
 | `has_attentions` | `True` | Attention output tests |
 | `_is_composite` | `False` | Composite/multimodal model handling |

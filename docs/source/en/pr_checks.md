@@ -61,6 +61,11 @@ The code quality check covers formatting, imports, type checking, and model stru
 
 `make typing` performs type checking with [ty](https://docs.astral.sh/ty/) and validates TRansFormers (TRF) rules, which cover config class naming conventions and `forward()` signatures. Type errors and TRF violations report a specific rule number and must be fixed manually. The rules live in the [mlinter](https://github.com/huggingface/transformers-mlinter) repository. Run `python -m utils.mlinter --list-rules` to see every TRF rule, or `python -m utils.mlinter --rule TRFXXX` to view the full documentation for a specific rule.
 
+If a TRF rule needs an exception, choose one of these options (see [Suppressing violations](./modeling_rules#suppressing-violations) for more details).
+
+- Add your model name to the `allowlist_models` list for the relevant rule in `utils/mlinter/rules.toml`. Use this when the whole model file needs an exception.
+- Add `# trf-ignore: TRFXXX` on the same line as the flagged construct, or on the line immediately above it. Use this when only one flagged construct needs an exception.
+
 ## Repository consistency
 
 The repository consistency check is similar to `make check-repo`, except it stops on the first failure. It keeps the repository internally consistent across the categories below: public objects stay importable, copied code stays in sync with its source, and auto-generated files (dummies, doctests, metadata) reflect the current state of the code. For new models, it also verifies every new model class is registered in the auto-mappings.
