@@ -971,21 +971,6 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
-    @auto_docstring(
-        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
-    )
-    def get_image_features(
-        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
-            The tensors corresponding to the input images.
-        """
-        image_outputs = self.encoder(pixel_values, **kwargs)
-
-        return image_outputs
-
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1056,12 +1041,6 @@ class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, Generati
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
-
-    @auto_docstring
-    def get_image_features(
-        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
 
     @can_return_tuple
     @auto_docstring

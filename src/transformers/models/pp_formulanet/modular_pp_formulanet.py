@@ -365,21 +365,6 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
-    @auto_docstring(
-        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
-    )
-    def get_image_features(
-        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
-            The tensors corresponding to the input images.
-        """
-        image_outputs = self.encoder(pixel_values, **kwargs)
-
-        return image_outputs
-
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -531,6 +516,9 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
 
     def get_placeholder_mask(self):
         raise AttributeError("The PPFormulaNet does not need placeholder mask.")
+
+    def get_image_features(self):
+        raise AttributeError("The PPFormulaNet does not need `get_image_features`.")
 
     def _prepare_encoder_decoder_kwargs_for_generation(self):
         raise AttributeError("The PPFormulaNet use default implementation.")
