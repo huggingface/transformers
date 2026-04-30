@@ -2033,7 +2033,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
             repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
 
-    files_timestamps = self._get_files_timestamps(save_directory)
+        files_timestamps = self._get_files_timestamps(save_directory)
 
         tokenizer_config_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + TOKENIZER_CONFIG_FILE

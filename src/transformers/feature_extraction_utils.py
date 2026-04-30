@@ -25,7 +25,6 @@ import numpy as np
 from huggingface_hub import create_repo, is_offline_mode
 
 from . import __version__
-
 from .dynamic_module_utils import custom_object_save
 from .utils import (
     FEATURE_EXTRACTOR_NAME,

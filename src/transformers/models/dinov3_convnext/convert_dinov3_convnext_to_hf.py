@@ -16,7 +16,6 @@
 URL: https://github.com/facebookresearch/dinov3/tree/main
 """
 
-from transformers import __version__
 import argparse
 import os
 import re
@@ -28,7 +27,7 @@ from huggingface_hub import HfApi, hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
-from transformers import DINOv3ConvNextConfig, DINOv3ConvNextModel, DINOv3ViTImageProcessorFast
+from transformers import DINOv3ConvNextConfig, DINOv3ConvNextModel, DINOv3ViTImageProcessorFast, __version__
 
 
 HUB_MODELS = {

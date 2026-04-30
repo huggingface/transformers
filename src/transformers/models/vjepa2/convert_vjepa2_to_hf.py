@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from transformers import __version__
 import argparse
 import os
 import tempfile
@@ -25,7 +24,7 @@ import torch
 from huggingface_hub import HfApi
 from PIL import Image
 
-from transformers import VJEPA2Config, VJEPA2Model, VJEPA2VideoProcessor
+from transformers import VJEPA2Config, VJEPA2Model, VJEPA2VideoProcessor, __version__
 from transformers.models.vjepa2.modeling_vjepa2 import apply_masks
 
 

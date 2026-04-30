@@ -21,7 +21,6 @@ import numpy as np
 from huggingface_hub import create_repo, is_offline_mode
 
 from . import __version__
-
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature as BaseBatchFeature
 from .image_utils import is_valid_image, load_image

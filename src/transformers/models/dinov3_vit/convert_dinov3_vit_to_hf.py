@@ -26,9 +26,8 @@ import torch
 from huggingface_hub import HfApi, hf_hub_download
 from PIL import Image
 from torchvision import transforms
-from transformers import __version__
 
-from transformers import DINOv3ViTConfig, DINOv3ViTImageProcessorFast, DINOv3ViTModel
+from transformers import DINOv3ViTConfig, DINOv3ViTImageProcessorFast, DINOv3ViTModel, __version__
 
 
 HUB_MODELS = {

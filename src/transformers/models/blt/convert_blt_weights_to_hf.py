@@ -10,7 +10,7 @@ from safetensors.torch import load_file, save_file
 from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
 
-from transformers import PreTrainedTokenizerFast
+from transformers import PreTrainedTokenizerFast, __version__
 from transformers.convert_slow_tokenizer import bytes_to_unicode
 from transformers.utils import logging as transformers_logging
 

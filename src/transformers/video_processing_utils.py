@@ -24,7 +24,6 @@ from huggingface_hub import create_repo, is_offline_mode
 from huggingface_hub.dataclasses import validate_typed_dict
 
 from . import __version__
-
 from .dynamic_module_utils import custom_object_save
 from .image_processing_backends import TorchvisionBackend
 from .image_processing_utils import BatchFeature

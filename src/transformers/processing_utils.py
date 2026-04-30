@@ -33,7 +33,6 @@ from huggingface_hub.dataclasses import validate_typed_dict
 from huggingface_hub.errors import EntryNotFoundError
 
 from . import __version__
-
 from .audio_utils import AudioInput, load_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature

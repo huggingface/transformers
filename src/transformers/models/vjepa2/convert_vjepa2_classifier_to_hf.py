@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from transformers import __version__
 import argparse
 import json
 import os
@@ -23,7 +22,7 @@ import torch
 from decord import VideoReader
 from huggingface_hub import HfApi, hf_hub_download
 
-from transformers import VJEPA2ForVideoClassification, VJEPA2VideoProcessor
+from transformers import VJEPA2ForVideoClassification, VJEPA2VideoProcessor, __version__
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
