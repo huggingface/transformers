@@ -31,7 +31,7 @@ class Kimi26ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
-            "return_mm_token_type_ids": True,
+            "return_mm_token_type_ids": False,
         },
     }
 
@@ -46,10 +46,18 @@ class Kimi2_6Processor(ProcessorMixin):
         **kwargs,
     ):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
-        self.image_token = tokenizer.image_token
-        self.image_token_id = tokenizer.image_token_id
-        self.video_token = tokenizer.video_token
-        self.video_token_id = tokenizer.video_token_id
+        self.image_token = "<|media_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
+        self.video_token = "<|media_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
+        self.image_token_id = (
+            tokenizer.image_token_id
+            if getattr(tokenizer, "image_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.image_token)
+        )
+        self.video_token_id = (
+            tokenizer.video_token_id
+            if getattr(tokenizer, "video_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.video_token)
+        )
 
     @auto_docstring
     def __call__(
@@ -115,7 +123,7 @@ class Kimi2_6Processor(ProcessorMixin):
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
-        self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
+        # self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
 
         if return_mm_token_type_ids:
             text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])

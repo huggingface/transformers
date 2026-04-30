@@ -1,4 +1,4 @@
-# Copyright 2024 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -76,8 +76,8 @@ def navit_resize(
 
     # Calculate the padding to make the height and width divisible by the merge kernel size and patch size.
     factor = merge_kernel_size * patch_size
-    pad_height = (factor - new_height % factor) % factor
-    pad_width = (factor - new_width % factor) % factor
+    pad_height = (factor - new_height % factor) % factor + new_height
+    pad_width = (factor - new_width % factor) % factor + new_width
 
     return (new_height, new_width), (pad_height, pad_width)
 
@@ -87,7 +87,7 @@ class Kimi2_6ImageProcessor(TorchvisionBackend):
     do_resize = True
     resample = PILImageResampling.BICUBIC
     size = {"max_height": 512, "max_width": 512}
-    max_patches: 16384
+    max_patches = 16384
     default_to_square = False
     do_rescale = True
     do_normalize = True
@@ -107,8 +107,9 @@ class Kimi2_6ImageProcessor(TorchvisionBackend):
         size: SizeDict | None = None,
         **kwargs,
     ) -> dict:
-        if size is not None and size.max_height is not None and (not size.max_height != size.max_width):
-            raise ValueError("size must contain 'max_height' and 'max_width' keys with identical values.")
+        if size is not None:
+            if size.max_height is None or size.max_width is None or (size.max_height != size.max_width):
+                raise ValueError(f"size must contain 'max_height' and 'max_width' keys with identical values but got {size}.")
         super()._validate_preprocess_kwargs(size=size, **kwargs)
 
     @auto_docstring
@@ -172,9 +173,9 @@ class Kimi2_6ImageProcessor(TorchvisionBackend):
             batch_size, channels, height, width = stacked_images.shape
             grid_h, grid_w = height // patch_size, width // patch_size
             patches = stacked_images.reshape(batch_size, channels, grid_h, patch_size, grid_w, patch_size)
-            patches = patches.transpose(0, 2, 4, 1, 3, 5)
+            patches = patches.permute(0, 2, 4, 1, 3, 5)
 
-            processed_images_grouped[shape] = patches.reshape(-1, channels, patch_size, patch_size)
+            processed_images_grouped[shape] = patches.reshape(batch_size, -1, channels, patch_size, patch_size)
             processed_grids[shape] = [[1, grid_h, grid_w]] * batch_size
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)

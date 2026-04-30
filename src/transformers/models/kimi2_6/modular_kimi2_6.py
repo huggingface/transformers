@@ -554,10 +554,18 @@ class Kimi2_6Processor(Qwen2VLProcessor):
         **kwargs,
     ):
         ProcessorMixin.__init__(image_processor, tokenizer, chat_template=chat_template)
-        self.image_token = tokenizer.image_token
-        self.image_token_id = tokenizer.image_token_id
-        self.video_token = tokenizer.video_token
-        self.video_token_id = tokenizer.video_token_id
+        self.image_token = "<|media_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
+        self.video_token = "<|media_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
+        self.image_token_id = (
+            tokenizer.image_token_id
+            if getattr(tokenizer, "image_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.image_token)
+        )
+        self.video_token_id = (
+            tokenizer.video_token_id
+            if getattr(tokenizer, "video_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.video_token)
+        )
 
 
 __all__ = [

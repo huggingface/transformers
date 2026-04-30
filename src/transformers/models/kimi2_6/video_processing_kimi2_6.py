@@ -66,7 +66,7 @@ class Kimi2_6VideoProcessor(BaseVideoProcessor):
     patch_size = 14
     temporal_patch_size = 4
     merge_size = 2
-    max_patches: 16384
+    max_patches = 16384
     do_sample_frames = True
     valid_kwargs = Kimi2_6VideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
@@ -79,8 +79,9 @@ class Kimi2_6VideoProcessor(BaseVideoProcessor):
         size: SizeDict | None = None,
         **kwargs,
     ) -> dict:
-        if size is not None and size.max_height is not None and (not size.max_height != size.max_width):
-            raise ValueError("size must contain 'max_height' and 'max_width' keys with identical values.")
+        if size is not None:
+            if size.max_height is None or size.max_width is None or (size.max_height != size.max_width):
+                raise ValueError(f"size must contain 'max_height' and 'max_width' keys with identical values but got {size}.")
         super()._validate_preprocess_kwargs(size=size, **kwargs)
 
     def _preprocess(
@@ -142,9 +143,9 @@ class Kimi2_6VideoProcessor(BaseVideoProcessor):
             batch_size, time, channels, height, width = stacked_videos.shape
             grid_h, grid_w = height // patch_size, width // patch_size
             patches = stacked_videos.reshape(batch_size, time, channels, grid_h, patch_size, grid_w, patch_size)
-            patches = patches.transpose(0, 1, 3, 5, 2, 4, 6)
+            patches = patches.permute(0, 1, 3, 5, 2, 4, 6)
 
-            processed_videos_grouped[shape] = patches.reshape(-1, channels, patch_size, patch_size)
+            processed_videos_grouped[shape] = patches.reshape(batch_size, -1, channels, patch_size, patch_size)
             processed_grids[shape] = [[time, grid_h, grid_w]] * batch_size
 
         processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
