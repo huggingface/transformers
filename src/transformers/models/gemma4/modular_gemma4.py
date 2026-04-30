@@ -126,6 +126,21 @@ class Gemma4CausalLMOutputWithPast(Gemma3nCausalLMOutputWithPast):
     shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
 
 
+class SharedKVCache:
+    """Opaque wrapper around the shared-KV dict so FSDP2's _apply_to_tensors
+    does not recurse into it and rebuild a fresh dict on every layer call,
+    which would silently discard writes made by earlier layers."""
+
+    def __init__(self):
+        self._data: dict[str, tuple[torch.Tensor, torch.Tensor]] = {}
+
+    def __getitem__(self, key):
+        return self._data[key]
+
+    def __setitem__(self, key, value):
+        self._data[key] = value
+
+
 @dataclass
 class Gemma4TextModelOutputWithPast(BaseModelOutputWithPast):
     """
@@ -1009,7 +1024,7 @@ class Gemma4TextAttention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor,
         attention_mask: torch.Tensor | None,
-        shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]],
+        shared_kv_states: SharedKVCache,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
@@ -1138,7 +1153,7 @@ class Gemma4TextDecoderLayer(Gemma3DecoderLayer):
         self,
         hidden_states: torch.Tensor,
         per_layer_input: torch.Tensor = None,
-        shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None,
+        shared_kv_states: SharedKVCache | None = None,
         position_embeddings: torch.Tensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -1447,8 +1462,8 @@ class Gemma4TextModel(Gemma3TextModel):
         for layer_type in self.unique_layer_types:
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
-        # Initialize as empty dict - it will be filled in the right layers, or use passed ones
-        shared_kv_states = kwargs.pop("shared_kv_states", {})
+        # Initialize as SharedKVCache (opaque to FSDP2's _apply_to_tensors), or use passed ones
+        shared_kv_states = kwargs.pop("shared_kv_states", None) or SharedKVCache()
 
         # decoder layers
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
