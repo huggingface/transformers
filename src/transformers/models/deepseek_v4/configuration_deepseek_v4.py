@@ -36,37 +36,37 @@ class DeepseekV4Config(PreTrainedConfig):
     DeepSeek-V4's hybrid attention follows the paper (Section 2.3): every block is one
     of three attention types — *Full Attention* (sliding-window only), *Compressed
     Sparse Attention* (CSA, Section 2.3.1) and *Heavily Compressed Attention* (HCA,
-    Section 2.3.2). CSA compresses the KV cache by ``compress_rate_csa`` (m=4 in V4-
-    Flash/Pro) and selects ``index_topk`` blocks per query via the Lightning Indexer;
-    HCA applies a much heavier compression of ``compress_rate_hca`` (m'=128) and
+    Section 2.3.2). CSA compresses the KV cache by `compress_rate_csa` (m=4 in V4-
+    Flash/Pro) and selects `index_topk` blocks per query via the Lightning Indexer;
+    HCA applies a much heavier compression of `compress_rate_hca` (m'=128) and
     skips sparse selection. Both branches add a small uncompressed sliding-window
     branch for fine-grained locality.
 
     layer_types (`list[str]`): Per-layer attention schedule with values from
-        ``{"compressed_sparse_attention", "heavily_compressed_attention"}``.
+        `{"compressed_sparse_attention", "heavily_compressed_attention"}`.
         V4-Pro default: 2× HCA bootstrap + interleaved CSA / HCA.
     compress_rates (`dict[str, int]`): Per-layer-type compression rate. Default
-        ``{"compressed_sparse_attention": 4, "heavily_compressed_attention": 128}``
+        `{"compressed_sparse_attention": 4, "heavily_compressed_attention": 128}`
         (m=4 for CSA, m'=128 for HCA, paper §2.3.1 / §2.3.2). BC: configs that ship
-        ``compress_rate_csa`` / ``compress_rate_hca`` as top-level kwargs are folded
-        in at ``__post_init__`` time.
+        `compress_rate_csa` / `compress_rate_hca` as top-level kwargs are folded
+        in at `__post_init__` time.
     rope_theta (`float`): RoPE base for the main self-attention rotary.
     compress_rope_theta (`float`): RoPE base for the compressed branches (paired with
-        ``rope_scaling`` for YaRN).
+        `rope_scaling` for YaRN).
     partial_rotary_factor (`float`, *optional*): Fraction of head_dim that gets RoPE.
-        Defaults to ``qk_rope_head_dim / head_dim`` so cos/sin sizes to ``qk_rope_head_dim``.
+        Defaults to `qk_rope_head_dim / head_dim` so cos/sin sizes to `qk_rope_head_dim`.
     hc_mult (`int`): Manifold-Constrained Hyper-Connection (mHC) expansion factor n_hc
         (always active; Section 2.2).
     hc_sinkhorn_iters (`int`): Sinkhorn-Knopp iterations t_max for the mHC residual
         mapping projection onto doubly-stochastic matrices.
     hc_eps (`float`): Numerical floor for the Sinkhorn-Knopp normalization.
     mlp_layer_types (`list[str]`): Per-layer MoE schedule with values from
-        ``{"hash_moe", "moe"}``. ``hash_moe`` routes via a frozen
-        ``tid2eid[input_ids]`` lookup (paper §2.1, "Hash-MoE bootstrap"); ``moe``
-        is the standard top-k routed MoE. Default: 3× ``hash_moe`` then ``moe``
-        for the rest. BC: legacy configs that ship ``num_hash_layers`` as a
-        top-level kwarg are folded in at ``__post_init__`` time.
-    scoring_func (`str`): Router activation — ``sqrtsoftplus``, ``softmax``, or ``sigmoid``.
+        `{"hash_moe", "moe"}`. `hash_moe` routes via a frozen
+        `tid2eid[input_ids]` lookup (paper §2.1, "Hash-MoE bootstrap"); `moe`
+        is the standard top-k routed MoE. Default: 3× `hash_moe` then `moe`
+        for the rest. BC: legacy configs that ship `num_hash_layers` as a
+        top-level kwarg are folded in at `__post_init__` time.
+    scoring_func (`str`): Router activation — `sqrtsoftplus`, `softmax`, or `sigmoid`.
     swiglu_limit (`float`): Clip routed experts' gate/up pre-activations.
     sliding_window (`int`): Local window size n_win used in every attention block's
         sliding-window branch.
@@ -83,9 +83,9 @@ class DeepseekV4Config(PreTrainedConfig):
 
     model_type = "deepseek_v4"
     keys_to_ignore_at_inference = ["past_key_values"]
-    # ``num_local_experts`` is the standard MoE attr name (read by FP8 / TP integrations);
-    # ``intermediate_size`` is what :class:`LlamaMLP` reads for the shared expert width
-    # — V4 only ships ``moe_intermediate_size`` so we route the read through.
+    # `num_local_experts` is the standard MoE attr name (read by FP8 / TP integrations);
+    # `intermediate_size` is what :class:`LlamaMLP` reads for the shared expert width
+    # — V4 only ships `moe_intermediate_size` so we route the read through.
     attribute_map = {
         "num_local_experts": "n_routed_experts",
         "intermediate_size": "moe_intermediate_size",
@@ -101,7 +101,7 @@ class DeepseekV4Config(PreTrainedConfig):
         # across the full output dim — sharding the output would break the norm. Only
         # q_b_proj is colwise-sharded (per-head split is safe: q_head_norm is per-head),
         # and o_b_proj is rowwise (input-dim sharded). o_a_proj is a GroupedLinear
-        # whose forward uses ``torch.bmm``; the standard TP wrappers don't handle bmm.
+        # whose forward uses `torch.bmm`; the standard TP wrappers don't handle bmm.
         "layers.*.self_attn.q_b_proj": "colwise",
         "layers.*.self_attn.o_b_proj": "rowwise",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
@@ -120,7 +120,7 @@ class DeepseekV4Config(PreTrainedConfig):
     num_key_value_heads: int = 1
     head_dim: int = 512
     q_lora_rank: int = 1024
-    default_partial_rotary_factor = 64 / 512  # ``qk_rope_head_dim`` (64) / ``head_dim`` (512)
+    default_partial_rotary_factor = 64 / 512  # `qk_rope_head_dim` (64) / `head_dim` (512)
     num_experts_per_tok: int = 6
     n_routed_experts: int = 256
     n_shared_experts: int = 1
@@ -167,7 +167,7 @@ class DeepseekV4Config(PreTrainedConfig):
     attention_dropout: float = 0.0
 
     def validate_layer_type(self):
-        """V4 narrows the global ``ALLOWED_LAYER_TYPES`` to the three attention-block
+        """V4 narrows the global `ALLOWED_LAYER_TYPES` to the three attention-block
         types and two MLP-block types it actually ships with, on top of the standard
         length / type-membership checks.
         """
@@ -190,15 +190,15 @@ class DeepseekV4Config(PreTrainedConfig):
     def _apply_legacy_kwargs(self, kwargs: dict) -> dict:
         """Strip and stash legacy V4 kwargs that older checkpoints / configs ship under
         their original V3-flavoured names. The values are kept on the instance so
-        ``__post_init__`` can fold them into the new fields after the parent's init has
-        run, and the kwargs dict is returned cleaned for ``PreTrainedConfig.__post_init__``.
+        `__post_init__` can fold them into the new fields after the parent's init has
+        run, and the kwargs dict is returned cleaned for `PreTrainedConfig.__post_init__`.
         """
         self._legacy_compress_ratios = kwargs.pop("compress_ratios", None)
         self._legacy_compress_rate_csa = kwargs.pop("compress_rate_csa", None)
         self._legacy_compress_rate_hca = kwargs.pop("compress_rate_hca", None)
         self._legacy_num_hash_layers = kwargs.pop("num_hash_layers", None)
-        # ``qk_rope_head_dim`` isn't a config field — it's derived from
-        # ``partial_rotary_factor * head_dim`` and only set as a runtime attribute.
+        # `qk_rope_head_dim` isn't a config field — it's derived from
+        # `partial_rotary_factor * head_dim` and only set as a runtime attribute.
         self._legacy_qk_rope_head_dim = kwargs.pop("qk_rope_head_dim", None)
         return kwargs
 
@@ -213,8 +213,8 @@ class DeepseekV4Config(PreTrainedConfig):
     def _resolve_layer_types(self) -> None:
         n = self.num_hidden_layers
         if self.layer_types is None and self._legacy_compress_ratios is not None:
-            # Translate the V4 checkpoint's per-layer integer ``compress_ratios`` into the
-            # named ``layer_types`` schedule (0 = sliding-only, 4 = CSA, 128 = HCA).
+            # Translate the V4 checkpoint's per-layer integer `compress_ratios` into the
+            # named `layer_types` schedule (0 = sliding-only, 4 = CSA, 128 = HCA).
             self.layer_types = [_COMPRESS_RATIO_TO_LAYER_TYPE[r] for r in self._legacy_compress_ratios]
         if self.layer_types is None:
             # V4-Pro default: two HCA bootstrap layers, then CSA / HCA interleaved.
@@ -244,21 +244,21 @@ class DeepseekV4Config(PreTrainedConfig):
                 if self._legacy_qk_rope_head_dim is not None
                 else self.default_partial_rotary_factor
             )
-        # Runtime-only attribute; never declared as a dataclass field.
+            # Runtime-only attribute; never declared as a dataclass field.
         self.qk_rope_head_dim = int(self.head_dim * self.partial_rotary_factor)
 
     def _resolve_rope_parameters(self) -> None:
-        """Normalize ``rope_parameters`` into a per-rope-type dict
-        ``{"main": {...}, "compress": {...}}`` (Gemma3 pattern; keys are *rope-type*
-        labels, unrelated to ``layer_types``). Idempotent across save/load.
+        """Normalize `rope_parameters` into a per-rope-type dict
+        `{"main": {...}, "compress": {...}}` (Gemma3 pattern; keys are *rope-type*
+        labels, unrelated to `layer_types`). Idempotent across save/load.
 
         By the time we get here :class:`PreTrainedConfig` has already run
         :meth:`RotaryEmbeddingConfigMixin.convert_rope_params_to_dict`, which folds the
-        checkpoint's legacy top-level ``rope_scaling`` block into ``self.rope_parameters``
-        as a flat dict (``rope_type``, ``factor``, YaRN params, …). We just split that
+        checkpoint's legacy top-level `rope_scaling` block into `self.rope_parameters`
+        as a flat dict (`rope_type`, `factor`, YaRN params, …). We just split that
         flat dict into the two rope-type buckets — the only difference between the two
-        is the ``rope_theta`` base (main attention uses ``rope_theta=10000``; the
-        compressor / indexer uses ``compress_rope_theta=160000``).
+        is the `rope_theta` base (main attention uses `rope_theta=10000`; the
+        compressor / indexer uses `compress_rope_theta=160000`).
         """
         rp = self.rope_parameters or {}
         if isinstance(rp.get("main"), dict) and isinstance(rp.get("compress"), dict):
