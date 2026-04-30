@@ -18,7 +18,6 @@ import unittest
 
 import pytest
 from huggingface_hub.errors import StrictDataclassClassValidationError
-from parameterized import parameterized
 
 from transformers import AutoTokenizer, NemotronHConfig, NemotronHForCausalLM, is_torch_available
 from transformers.testing_utils import (
@@ -40,13 +39,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
-        NemotronHForCausalLM,
-        NemotronHModel,
-    )
-    from transformers.models.nemotron_h.modeling_nemotron_h import (
-        NemotronHHybridDynamicCache,
-    )
+    from transformers import DynamicCache, NemotronHForCausalLM, NemotronHModel
 
 
 class NemotronHModelTester:
@@ -237,12 +230,9 @@ class NemotronHModelTester:
         model.eval()
 
         # first forward pass
-        # Attention: NemotronH needs the cache to be initialized to return a cache!
-        past_key_values = NemotronHHybridDynamicCache(config, input_ids.shape[0], model.dtype, device=model.device)
         outputs = model(
             input_ids,
             attention_mask=input_mask,
-            past_key_values=past_key_values,
             use_cache=True,
         )
         past_key_values = outputs.past_key_values
@@ -265,9 +255,6 @@ class NemotronHModelTester:
             attention_mask=next_attention_mask,
             past_key_values=past_key_values,
             output_hidden_states=True,
-            cache_position=torch.arange(
-                input_ids.shape[1], input_ids.shape[1] + next_tokens.shape[1], device=model.device
-            ),
         )["hidden_states"][0]
 
         # select random slice
@@ -322,17 +309,11 @@ class NemotronHModelTester:
         self.parent.assertTrue(torch.allclose(outputs_fast, outputs_slow, atol=1e-3, rtol=1e-3))
 
         # Test with cache
-        batch_size = input_ids.shape[0]
-        cache_params = NemotronHHybridDynamicCache(
-            config=config, batch_size=batch_size, dtype=token_emb.dtype, device=torch_device
-        )
-
+        cache_params = DynamicCache(config=config)
         outputs_fast_cached = mamba_mixer.cuda_kernels_forward(token_emb, cache_params=cache_params)
 
         # Reset cache for fair comparison
-        cache_params_slow = NemotronHHybridDynamicCache(
-            config=config, batch_size=batch_size, dtype=token_emb.dtype, device=torch_device
-        )
+        cache_params_slow = DynamicCache(config=config)
         outputs_slow_cached = mamba_mixer.torch_forward(token_emb, cache_params=cache_params_slow)
 
         self.parent.assertTrue(torch.allclose(outputs_fast_cached, outputs_slow_cached, atol=1e-3, rtol=1e-3))
@@ -370,46 +351,55 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         else {}
     )
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, NemotronHHybridDynamicCache)
-
-        # (batch, kv heads, seq_length, head_dim)
-        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        attention_shape = (batch_size, num_heads, seq_length, head_dim)
-
-        # Mamba cache shapes
+    def _get_conv_state_shape(self, batch_size: int, config):
         intermediate_size = config.mamba_num_heads * config.mamba_head_dim
         conv_shape = (
             batch_size,
             intermediate_size + 2 * config.n_groups * config.ssm_state_size,
             config.conv_kernel,
         )
-        ssm_shape = (batch_size, config.mamba_num_heads, config.mamba_head_dim, config.ssm_state_size)
+        return conv_shape
 
-        self.assertTrue(config.num_hidden_layers, len(past_key_values))
+    def _get_recurrent_state_shape(self, batch_size: int, config):
+        return (batch_size, config.mamba_num_heads, config.mamba_head_dim, config.ssm_state_size)
 
-        for idx in range(len(past_key_values)):
-            if config.layers_block_type[idx] == "mamba":
-                self.assertEqual(past_key_values.conv_states[idx].shape, conv_shape)
-                self.assertEqual(past_key_values.ssm_states[idx].shape, ssm_shape)
-            elif config.layers_block_type[idx] == "attention":
-                self.assertEqual(past_key_values.key_cache[idx].shape, attention_shape)
-                self.assertEqual(past_key_values.value_cache[idx].shape, attention_shape)
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        # Raise a useful error, asking to explicitly override the method
+        if not isinstance(past_key_values, DynamicCache):
+            raise ValueError("The cache does not use the correct Cache")
 
-    def _check_caches_are_equal(self, cache1: NemotronHHybridDynamicCache, cache2: NemotronHHybridDynamicCache):
-        if not isinstance(cache1, NemotronHHybridDynamicCache) or not isinstance(cache2, NemotronHHybridDynamicCache):
-            raise ValueError("The wrong cache is being used!")
+        # Use the correct config
+        config = config.get_text_config(decoder=True)
 
-        if not len(cache1) == len(cache2):
-            raise ValueError("Both caches do not have the same number of layers.")
+        # (batch, kv heads, seq_length, head_dim)
+        # Only pure mamba models do not have num_attention_heads defined in config, so it can never be 1 in practice for attention models
+        num_attention_heads = getattr(config, "num_attention_heads", 1)
+        num_kv_heads = getattr(config, "num_key_value_heads", num_attention_heads)
+        hidden_size = getattr(config, "d_model", config.hidden_size)
+        head_dim = getattr(config, "head_dim", hidden_size // num_attention_heads)
 
-        num_layers = len(cache1)
-        for idx in range(num_layers):
-            torch.testing.assert_close(cache1.key_cache[idx], cache2.key_cache[idx])
-            torch.testing.assert_close(cache1.value_cache[idx], cache2.value_cache[idx])
-            torch.testing.assert_close(cache1.conv_states[idx], cache2.conv_states[idx])
-            torch.testing.assert_close(cache1.ssm_states[idx], cache2.ssm_states[idx])
+        # For cross attention cache, the seq_length depends on the model, so we remove that dim
+        attention_shape = (batch_size, num_kv_heads, seq_length, head_dim)
+        # For mamba layers
+        conv_shape = self._get_conv_state_shape(batch_size, config)
+        recurrent_shape = self._get_recurrent_state_shape(batch_size, config)
+
+        # Check each layer has the correct shape
+        for layer, layer_type in zip(past_key_values.layers, config.layer_types):
+            # Moe layers have a default mamba cache instantiated, but it stays empty as the layer does not use it
+            if layer_type == "moe":
+                self.assertEqual(layer.conv_states, None)
+                self.assertEqual(layer.recurrent_states, None)
+            # Attention layer cache
+            elif layer_type == "attention":
+                self.assertEqual(layer.keys.shape, attention_shape)
+                self.assertEqual(layer.values.shape, attention_shape)
+            # Mamba layer cache
+            elif layer_type == "mamba":
+                self.assertEqual(layer.conv_states.shape, conv_shape)
+                self.assertEqual(layer.recurrent_states.shape, recurrent_shape)
+            else:
+                raise ValueError("Unknown layer type.")
 
     def setUp(self):
         self.model_tester = NemotronHModelTester(self)
@@ -448,10 +438,7 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         pass
 
     def test_reverse_loading_mapping(self):
-        original_all_model_classes = self.all_model_classes
-        self.all_model_classes = (NemotronHForCausalLM,) if is_torch_available() else ()
-        super().test_reverse_loading_mapping()
-        self.all_model_classes = original_all_model_classes
+        super().test_reverse_loading_mapping(skip_base_model=True)
 
     # TODO(liding):
     # in test_configuration_common.py, three tests failed
@@ -588,11 +575,6 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 _ = model(dummy_input)
                 # with attention mask
                 _ = model(dummy_input, attention_mask=dummy_attention_mask)
-
-    @unittest.skip(reason="NemotronH has its own special cache type")
-    @parameterized.expand([(1, False), (1, True), (4, False)])
-    def test_new_cache_format(self, num_beams, do_sample):
-        pass
 
     @require_torch_accelerator
     def test_flex_attention_with_grads(self):

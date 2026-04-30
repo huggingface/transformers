@@ -170,6 +170,9 @@ tags
 # ruff
 .ruff_cache
 
+# checkers cache
+utils/.checkers_cache.json
+
 # modular conversion
 *.modular_backup
 

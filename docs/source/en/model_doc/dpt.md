@@ -46,6 +46,7 @@ DPT is compatible with the [`AutoBackbone`] class. This allows to use the DPT fr
 ```python
 from transformers import Dinov2Config, DPTConfig, DPTForDepthEstimation
 
+
 # initialize with a Transformer-based backbone such as DINOv2
 # in that case, we also specify `reshape_hidden_states=False` to get feature maps of shape (batch_size, num_channels, height, width)
 backbone_config = Dinov2Config.from_pretrained("facebook/dinov2-base", out_features=["stage1", "stage2", "stage3", "stage4"], reshape_hidden_states=False)
@@ -74,9 +75,9 @@ If you're interested in submitting a resource to be included here, please feel f
 [[autodoc]] DPTImageProcessor
     - preprocess
 
-## DPTImageProcessorFast
+## DPTImageProcessorPil
 
-[[autodoc]] DPTImageProcessorFast
+[[autodoc]] DPTImageProcessorPil
     - preprocess
     - post_process_semantic_segmentation
     - post_process_depth_estimation

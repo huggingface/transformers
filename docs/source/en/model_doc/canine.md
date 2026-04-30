@@ -35,9 +35,9 @@ The example below demonstrates how to generate embeddings with [`Pipeline`], [`A
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="feature-extraction",
@@ -51,11 +51,13 @@ pipeline("Plant create energy through a process known as photosynthesis.")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModel
 
-model = AutoModel.from_pretrained("google/canine-c")
+
+model = AutoModel.from_pretrained("google/canine-c", device_map="auto")
 
 text = "Plant create energy through a process known as photosynthesis."
 input_ids = torch.tensor([[ord(char) for char in text]])
@@ -77,7 +79,7 @@ sequence_output = outputs.last_hidden_state
 
     tokenizer = AutoTokenizer("google/canine-c")
     inputs = ["Life is like a box of chocolates.", "You never know what you gonna get."]
-    encoding = tokenizer(inputs, padding="longest", truncation=True, return_tensors="pt")
+    encoding = tokenizer(inputs, padding="longest", truncation=True, return_tensors="pt").to(model.device)
     ```
 
 - CANINE is primarily designed to be fine-tuned on a downstream task. The pretrained model can be used for either masked language modeling or next sentence prediction.

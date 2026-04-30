@@ -37,16 +37,17 @@ The abstract from the paper is the following:
 Run inference on an image with the following code:
 
 ```python
-from PIL import Image
 import torch
+from PIL import Image
 
-from transformers import AutoModelForDepthEstimation, AutoImageProcessor
+from transformers import AutoImageProcessor, AutoModelForDepthEstimation
+
 
 processor = AutoImageProcessor.from_pretrained("facebook/dinov3-vitl16-chmv2-dpt-head")
-model = AutoModelForDepthEstimation.from_pretrained("facebook/dinov3-vitl16-chmv2-dpt-head")
+model = AutoModelForDepthEstimation.from_pretrained("facebook/dinov3-vitl16-chmv2-dpt-head", device_map="auto")
 
 image = Image.open("image.tif")
-inputs = processor(images=image, return_tensors="pt")
+inputs = processor(images=image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -60,9 +61,9 @@ depth = processor.post_process_depth_estimation(
 
 [[autodoc]] CHMv2Config
 
-## CHMv2ImageProcessorFast
+## CHMv2ImageProcessor
 
-[[autodoc]] CHMv2ImageProcessorFast
+[[autodoc]] CHMv2ImageProcessor
     - preprocess
     - post_process_depth_estimation
 

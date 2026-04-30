@@ -40,15 +40,15 @@ The model and image processor can be loaded as follows:
 <hfoption id="AutoModel">
 
 ```python
-import torch
 
-from transformers import AutoProcessor, AutoModelForImageTextToText
+from transformers import AutoModelForImageTextToText, AutoProcessor
+
 
 model_id = "CohereLabs/command-a-vision-07-2025"
 
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForImageTextToText.from_pretrained(
-    model_id, device_map="auto", dtype=torch.float16
+    model_id, device_map="auto"
 )
 
 # Format message with the Command-A-Vision chat template
@@ -94,6 +94,7 @@ print(
 ```python
 from transformers import pipeline
 
+
 pipe = pipeline(model="CohereLabs/command-a-vision-07-2025", task="image-text-to-text", device_map="auto")
 
 messages = [
@@ -133,9 +134,9 @@ print(outputs)
     - forward
     - get_image_features
 
-## Cohere2VisionImageProcessorFast
+## Cohere2VisionImageProcessor
 
-[[autodoc]] Cohere2VisionImageProcessorFast
+[[autodoc]] Cohere2VisionImageProcessor
     - preprocess
 
 ## Cohere2VisionProcessor

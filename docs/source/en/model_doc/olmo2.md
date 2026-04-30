@@ -37,14 +37,13 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="text-generation",
     model="allenai/OLMo-2-0425-1B",
-    dtype=torch.float16,
     device=0,
 )
 
@@ -55,9 +54,9 @@ print(result)
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "allenai/OLMo-2-0425-1B"
@@ -65,7 +64,6 @@ tokenizer = AutoTokenizer.from_pretrained(
 
 model = AutoModelForCausalLM.from_pretrained(
     "allenai/OLMo-2-0425-1B",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -82,11 +80,10 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to 4-bits.
 
-```py
-
+```python
 #pip install torchao
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
+
 
 torchao_config = TorchAoConfig(
     "int4_weight_only",
@@ -100,7 +97,6 @@ tokenizer = AutoTokenizer.from_pretrained(
 model = AutoModelForCausalLM.from_pretrained(
     "allenai/OLMo-2-0425-1B",
     quantization_config=torchao_config,
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -108,7 +104,6 @@ input_ids = tokenizer("Plants create energy through a process known as", return_
 
 output = model.generate(**input_ids, max_length=50, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
-
 ```
 
 ## Notes
@@ -120,7 +115,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
     ```py
     from transformers import AutoModelForCausalLM
 
-    model = AutoModelForCausalLM.from_pretrained("allenai/OLMo-2-0425-1B", revision="stage1-step140000-tokens294B")
+    model = AutoModelForCausalLM.from_pretrained("allenai/OLMo-2-0425-1B", revision="stage1-step140000-tokens294B", device_map="auto")
     ```
 
 ## Olmo2Config
@@ -135,4 +130,9 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ## Olmo2ForCausalLM
 
 [[autodoc]] Olmo2ForCausalLM
+    - forward
+
+## Olmo2ForSequenceClassification
+
+[[autodoc]] Olmo2ForSequenceClassification
     - forward

@@ -368,7 +368,7 @@ class Dots1MoE(nn.Module):
         self.top_k = config.num_experts_per_tok
 
     def route_tokens_to_experts(self, router_logits):
-        router_logits = router_logits.sigmoid()  # main diff with deepseekv3
+        router_logits = router_logits.sigmoid()
         router_logits_for_choice = router_logits + self.gate.e_score_correction_bias
         group_scores = (
             router_logits_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
@@ -383,7 +383,7 @@ class Dots1MoE(nn.Module):
             .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
             .reshape(-1, self.n_routed_experts)
         )
-        scores_for_choice = router_logits_for_choice.masked_fill(~score_mask.bool(), 0.0)
+        scores_for_choice = router_logits_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
         topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
         topk_weights = router_logits.gather(1, topk_indices)
         if self.norm_topk_prob:
@@ -417,7 +417,6 @@ class Dots1DecoderLayer(GradientCheckpointingLayer):
 
         self.input_layernorm = Dots1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Dots1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.attention_type = config.layer_types[layer_idx]
 
     def forward(
         self,
@@ -549,10 +548,10 @@ class Dots1Model(Dots1PreTrainedModel):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,

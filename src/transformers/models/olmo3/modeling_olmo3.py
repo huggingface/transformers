@@ -29,7 +29,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -413,10 +413,10 @@ class Olmo3Model(Olmo3PreTrainedModel):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.self_attn.attention_type],
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 position_embeddings=position_embeddings,
@@ -504,4 +504,8 @@ class Olmo3ForCausalLM(Olmo3PreTrainedModel, GenerationMixin):
         )
 
 
-__all__ = ["Olmo3ForCausalLM", "Olmo3Model", "Olmo3PreTrainedModel"]
+class Olmo3ForSequenceClassification(GenericForSequenceClassification, Olmo3PreTrainedModel):
+    pass
+
+
+__all__ = ["Olmo3ForCausalLM", "Olmo3ForSequenceClassification", "Olmo3Model", "Olmo3PreTrainedModel"]

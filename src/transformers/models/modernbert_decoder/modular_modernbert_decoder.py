@@ -48,7 +48,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="blab-jhu/test-32m-dec")
-@strict(accept_kwargs=True)
+@strict
 class ModernBertDecoderConfig(PreTrainedConfig):
     r"""
     initializer_cutoff_factor (`float`, *optional*, defaults to 2.0):
@@ -57,8 +57,6 @@ class ModernBertDecoderConfig(PreTrainedConfig):
         The epsilon used by the rms normalization layers.
     norm_bias (`bool`, *optional*, defaults to `False`):
         Whether to use bias in the normalization layers.
-    embedding_dropout (`float`, *optional*, defaults to 0.0):
-        The dropout ratio for the embeddings.
     mlp_dropout (`float`, *optional*, defaults to 0.0):
         The dropout ratio for the MLP layers.
     decoder_bias (`bool`, *optional*, defaults to `True`):
@@ -70,8 +68,6 @@ class ModernBertDecoderConfig(PreTrainedConfig):
     local_attention (`int`, *optional*, defaults to 128):
         The sliding window size for local attention. Only used for layers that use local attention. Note that for
         the decoder to match ModernBERT this is actually half of the sliding window size, so 128 => 64.
-    global_attn_every_n_layers (`int`, *optional*, defaults to 3):
-        Every `global_attn_every_n_layers` layers will use global attention instead of local attention.
 
     Examples:
 
@@ -290,7 +286,6 @@ class ModernBertDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.attention_type = config.layer_types[layer_idx]
         self.attn_norm = (
             nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
             if layer_idx != 0
@@ -470,14 +465,14 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
             }
 
         position_embeddings = {}
-        for layer_type in self.config.layer_types:
+        for layer_type in set(self.config.layer_types):
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
-        for decoder_layer in self.layers:
+        for i, decoder_layer in enumerate(self.layers):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
-                position_embeddings=position_embeddings[decoder_layer.attention_type],
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                position_embeddings=position_embeddings[self.config.layer_types[i]],
                 past_key_values=past_key_values,
                 position_ids=position_ids,
                 **kwargs,

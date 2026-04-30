@@ -35,6 +35,7 @@ from ..olmo.modeling_olmo import (
     OlmoAttention,
     OlmoDecoderLayer,
     OlmoForCausalLM,
+    OlmoForSequenceClassification,
     OlmoModel,
     OlmoRotaryEmbedding,
     apply_rotary_pos_emb,
@@ -45,7 +46,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="allenai/Olmo2-7B-1124-hf")
-@strict(accept_kwargs=True)
+@strict
 class Olmo2Config(OlmoConfig):
     r"""
     Example:
@@ -222,9 +223,14 @@ class Olmo2ForCausalLM(OlmoForCausalLM):
     pass
 
 
+class Olmo2ForSequenceClassification(OlmoForSequenceClassification):
+    pass
+
+
 __all__ = [
     "Olmo2Config",
     "Olmo2ForCausalLM",
+    "Olmo2ForSequenceClassification",
     "Olmo2Model",
     "Olmo2PreTrainedModel",
 ]

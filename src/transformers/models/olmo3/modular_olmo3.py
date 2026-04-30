@@ -31,6 +31,7 @@ from ..olmo2.modeling_olmo2 import (
     Olmo2Attention,
     Olmo2DecoderLayer,
     Olmo2ForCausalLM,
+    Olmo2ForSequenceClassification,
     Olmo2Model,
     Olmo2PreTrainedModel,
     Olmo2RMSNorm,
@@ -40,7 +41,7 @@ from ..olmo2.modeling_olmo2 import (
 
 
 @auto_docstring(checkpoint="allenai/Olmo-3-7B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class Olmo3Config(Olmo2Config):
     r"""
     Example:
@@ -216,10 +217,10 @@ class Olmo3Model(Olmo2Model):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.self_attn.attention_type],
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 position_embeddings=position_embeddings,
@@ -237,9 +238,14 @@ class Olmo3ForCausalLM(Olmo2ForCausalLM):
     pass
 
 
+class Olmo3ForSequenceClassification(Olmo2ForSequenceClassification):
+    pass
+
+
 __all__ = [
     "Olmo3Config",
     "Olmo3ForCausalLM",
+    "Olmo3ForSequenceClassification",
     "Olmo3Model",
     "Olmo3PreTrainedModel",
 ]

@@ -34,12 +34,14 @@ The model was introduced in [ModernVBERT: Towards Smaller Visual Document Retrie
 
 ```python
 import torch
-from PIL import Image
 from huggingface_hub import hf_hub_download
+from PIL import Image
+
 from transformers import AutoModelForMaskedLM, AutoProcessor
 
+
 processor = AutoProcessor.from_pretrained("./mvb")
-model = AutoModelForMaskedLM.from_pretrained("./mvb")
+model = AutoModelForMaskedLM.from_pretrained("./mvb", device_map="auto")
 
 image = Image.open(hf_hub_download("HuggingFaceTB/SmolVLM", "example_images/rococo.jpg", repo_type="space"))
 text = "This [MASK] is on the wall."
@@ -57,7 +59,7 @@ messages = [
 
 # Prepare inputs
 prompt = processor.apply_chat_template(messages)
-inputs = processor(text=prompt, images=[image], return_tensors="pt")
+inputs = processor(text=prompt, images=[image], return_tensors="pt").to(model.device)
 
 # Inference
 with torch.no_grad():

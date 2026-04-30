@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import math
+from collections.abc import Callable
 from typing import Literal, Optional
 
 import torch
@@ -49,7 +50,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="answerdotai/ModernBERT-base")
-@strict(accept_kwargs=True)
+@strict
 class ModernBertConfig(PreTrainedConfig):
     r"""
     initializer_cutoff_factor (`float`, *optional*, defaults to 2.0):
@@ -60,8 +61,6 @@ class ModernBertConfig(PreTrainedConfig):
         Whether to use bias in the normalization layers.
     local_attention (`int`, *optional*, defaults to 128):
         The window size for local attention.
-    embedding_dropout (`float`, *optional*, defaults to 0.0):
-        The dropout ratio for the embeddings.
     mlp_dropout (`float`, *optional*, defaults to 0.0):
         The dropout ratio for the MLP layers.
     decoder_bias (`bool`, *optional*, defaults to `True`):
@@ -79,11 +78,6 @@ class ModernBertConfig(PreTrainedConfig):
         Whether to use sparse prediction for the masked language model instead of returning the full dense logits.
     sparse_pred_ignore_index (`int`, *optional*, defaults to -100):
         The index to ignore for the sparse prediction.
-    reference_compile (`bool`, *optional*):
-        Whether to compile the layers of the model which were compiled during pretraining. If `None`, then parts of
-        the model will be compiled if 1) `triton` is installed, 2) the model is not on MPS, 3) the model is not
-        shared between devices, and 4) the model is not resized after initialization. If `True`, then the model may
-        be faster in some scenarios. This argument is deprecated and will be removed in a future version
 
     Examples:
 
@@ -338,9 +332,9 @@ class ModernBertAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=1)
 
-        attention_interface = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -524,7 +518,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
             }
 
         position_embeddings = {}
-        for layer_type in self.config.layer_types:
+        for layer_type in set(self.config.layer_types):
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         for encoder_layer in self.layers:

@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="sail/poolformer_s12")
-@strict(accept_kwargs=True)
+@strict
 class PoolFormerConfig(PreTrainedConfig):
     r"""
     stride (`int`, *optional*, defaults to 16):
@@ -67,7 +67,7 @@ class PoolFormerConfig(PreTrainedConfig):
     strides: list[int] | tuple[int, ...] = (4, 2, 2, 2)
     padding: list[int] | tuple[int, ...] = (2, 1, 1, 1)
     num_encoder_blocks: int = 4
-    drop_path_rate: float = 0.0
+    drop_path_rate: float | int = 0.0
     hidden_act: str = "gelu"
     use_layer_scale: bool = True
     layer_scale_init_value: float = 1e-5

@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 ## Model Architecture
 
-PP-OCRv5_server_det is one of the PP-OCRv5_det series, the latest generation of text detection models developed by the PaddleOCR team. Designed for high-performance applications, it supports the detection of text in diverse scenarios—including handwriting, vertical, rotated, and curved text—across multiple languages such as Simplified Chinese, Traditional Chinese, English, and Japanese. Key features include robust handling of complex layouts, varying text sizes, and challenging backgrounds, making it suitable for practical applications like document analysis, license plate recognition, and scene text detection. 
+PP-OCRv5_server_det is one of the PP-OCRv5_det series, the latest generation of text detection models developed by the PaddleOCR team. Designed for high-performance applications, it supports the detection of text in diverse scenarios—including handwriting, vertical, rotated, and curved text—across multiple languages such as Simplified Chinese, Traditional Chinese, English, and Japanese. Key features include robust handling of complex layouts, varying text sizes, and challenging backgrounds, making it suitable for practical applications like document analysis, license plate recognition, and scene text detection.
 
 
 ## Usage
@@ -39,17 +39,19 @@ The example below demonstrates how to detect text with PP-OCRV5_Server_Det using
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import pipeline
+
 
 image = Image.open(
     requests.get(
         "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png", stream=True
     ).raw)
 detector = pipeline(
-    task="object-detection", 
+    task="object-detection",
     model="PaddlePaddle/PP-OCRV5_server_det_safetensors",
     device_map="auto",
 )
@@ -57,34 +59,34 @@ results = detector(image)
 
 for result in results:
     print(result)
-
 ```
 
 </hfoption>
 
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
+
 
 model_path = "PaddlePaddle/PP-OCRV5_server_det_safetensors"
 model = AutoModelForObjectDetection.from_pretrained(
     model_path,
     device_map="auto"
 )
-image_processor = AutoImageProcessor.from_pretrained(model_path).to(model.device)
+image_processor = AutoImageProcessor.from_pretrained(model_path)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png", stream=True).raw).convert("RGB")
-inputs = image_processor(images=image, return_tensors="pt")
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 
 results = image_processor.post_process_object_detection(outputs, target_sizes=inputs["target_sizes"])
 
 for result in results:
     print(result)
-
 ```
 
 </hfoption>
@@ -97,17 +99,19 @@ Here is how you can do it with PP-OCRV5_Server_Det using [`Pipeline`] or the [`A
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import pipeline
+
 
 image = Image.open(
     requests.get(
         "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png", stream=True
     ).raw)
 detector = pipeline(
-    task="object-detection", 
+    task="object-detection",
     model="PaddlePaddle/PP-OCRV5_server_det_safetensors",
     device_map="auto",
 )
@@ -115,34 +119,34 @@ results = detector([image, image])
 
 for result in results:
     print(result)
-
 ```
 
 </hfoption>
 
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
+
 
 model_path = "PaddlePaddle/PP-OCRV5_server_det_safetensors"
 model = AutoModelForObjectDetection.from_pretrained(
     model_path,
     device_map="auto",
 )
-image_processor = AutoImageProcessor.from_pretrained(model_path).to(model.device)
+image_processor = AutoImageProcessor.from_pretrained(model_path)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png", stream=True).raw).convert("RGB")
-inputs = image_processor(images=[image, image], return_tensors="pt")
+inputs = image_processor(images=[image, image], return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 
 results = image_processor.post_process_object_detection(outputs, target_sizes=inputs["target_sizes"])
 
 for result in results:
     print(result)
-
 ```
 
 </hfoption>
@@ -160,6 +164,8 @@ for result in results:
 
 [[autodoc]] PPOCRV5ServerDetModel
 
-## PPOCRV5ServerDetImageProcessorFast
+## PPOCRV5ServerDetImageProcessor
 
-[[autodoc]] PPOCRV5ServerDetImageProcessorFast
+[[autodoc]] PPOCRV5ServerDetImageProcessor
+    - preprocess
+    - post_process_object_detection

@@ -32,6 +32,7 @@ The following example shows how to generate an answer using the `AutoModelForCau
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+
 # Load model and tokenizer
 model_id = "LiquidAI/LFM2-8B-A1B"
 model = AutoModelForCausalLM.from_pretrained(

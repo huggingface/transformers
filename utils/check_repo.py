@@ -31,6 +31,7 @@ It has no auto-fix mode.
 """
 
 import ast
+import functools
 import os
 import re
 import types
@@ -49,6 +50,22 @@ from transformers.models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
 from transformers.testing_utils import _COMMON_MODEL_NAMES_MAP, _VLM_COMMON_MODEL_NAMES_MAP
 from transformers.utils import ENV_VARS_TRUE_VALUES, direct_transformers_import
 
+
+CHECKER_CONFIG = {
+    "name": "repo",
+    "label": "Repository structure",
+    # Approximate: the checker also introspects the live transformers module at runtime
+    # (e.g. dir(transformers.models), CONFIG_MAPPING_NAMES) and walks tests/ broadly.
+    "file_globs": [
+        "src/transformers/models/**/*.py",
+        "src/transformers/models/auto/*.py",
+        "src/transformers/**/__init__.py",
+        "tests/**/test_modeling_*.py",
+        "docs/**/*.md",
+    ],
+    "check_args": [],
+    "fix_args": None,
+}
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/check_repo.py
@@ -94,8 +111,8 @@ PRIVATE_MODELS = [
     "Kosmos2_5TextForCausalLM",
     "Kosmos2_5VisionModel",
     "SmolVLMVisionTransformer",
-    "SiglipVisionTransformer",
-    "Siglip2VisionTransformer",
+    "MiniCPMV4_6VisionPreTrainedModel",
+    "MiniCPMV4_6VisionModel",
     "AriaTextForCausalLM",
     "AriaTextModel",
     "Phi4MultimodalAudioModel",
@@ -104,6 +121,7 @@ PRIVATE_MODELS = [
     "Glm4vMoeVisionModel",
     "GlmImageVisionModel",
     "GlmOcrVisionModel",
+    "QianfanOCRVisionModel",
     "EvollaSaProtPreTrainedModel",
     "BltLocalEncoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
     "BltLocalDecoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
@@ -117,19 +135,13 @@ PRIVATE_MODELS = [
     "Owlv2VisionTransformer",
     "OwlViTTextTransformer",
     "OwlViTVisionTransformer",
-    "XCLIPTextTransformer",
     "CLIPSegTextTransformer",
     "DetrDecoder",
     "GroupViTTextTransformer",
     "CLIPTextTransformer",
-    "CLIPVisionTransformer",
-    "MetaClip2TextTransformer",
-    "MetaClip2VisionTransformer",
-    "MLCDVisionTransformer",
     "Kosmos2TextTransformer",
     "Kosmos2VisionTransformer",
     "Kosmos2_5TextTransformer",
-    "XCLIPVisionTransformer",
     # end of should have beens
     "VoxtralRealtimeTextModel",
     "VoxtralRealtimeTextForCausalLM",
@@ -184,11 +196,21 @@ IGNORE_NON_TESTED = (
         "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
         "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
         "ChameleonVQVAE",  # VQVAE here is used only for encoding (discretizing) and is tested as part of bigger model
+        "SLANetSLAHead",  # Buildinere is used only for encoding (discretizing) and is tested as part of bigger model
+        "SLANetBackbone",  # Buildinere is used only for encoding (discretizing) and is tested as part of bigger model
+        "SLANeXtSLAHead",  # Buildinere is used only for encoding (discretizing) and is tested as part of bigger model
+        "SLANeXtBackbone",  # Building part of bigger (tested) model. Tested implicitly through SLANeXtForTableRecognition.
+        "PPFormulaNetTextModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
+        "PPFormulaNetVisionModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
         "PPOCRV5MobileDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
         "PPOCRV5ServerDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerDetForObjectDetection.
         "PPDocLayoutV2ReadingOrder",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV2ForObjectDetection.
         "PPDocLayoutV2Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV2ForObjectDetection.
         "PPDocLayoutV3Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV3ForObjectDetection.
+        "PPOCRV5MobileRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileRecForTextRecognition.
+        "PPOCRV5MobileRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileRecForTextRecognition.
+        "PPOCRV5ServerRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerRecForTextRecognition.
+        "PPOCRV5ServerRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerRecForTextRecognition.
         "PPLCNetModel",  # Building part of bigger (tested) model. Tested implicitly through PPLCNetForImageClassification.
         "PaddleOCRVLModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
         "PaddleOCRVisionModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
@@ -231,7 +253,10 @@ IGNORE_NON_TESTED = (
         "GlmOcrTextModel",  # Building part of bigger (tested) model
         "Qwen2VLTextModel",  # Building part of bigger (tested) model
         "Qwen2_5_VLTextModel",  # Building part of bigger (tested) model
+        "MiniCPMV4_6Model",  # Building part of bigger (tested) model. Tested implicitly through MiniCPMV4_6ForConditionalGeneration.
+        "MiniCPMV4_6ForConditionalGeneration",  # Tested in MiniCPMV4_6ModelTest via VLMModelTest; check_repo doesn't detect VLMModelTest.conditional_generation_class.
         "InternVLVisionModel",  # Building part of bigger (tested) model
+        "QianfanOCRVisionModel",  # Building part of bigger (tested) model
         "JanusVisionModel",  # Building part of bigger (tested) model
         "PPDocLayoutV3Model",  # Building part of bigger (tested) model
         "TimesFmModel",  # Building part of bigger (tested) model
@@ -254,6 +279,10 @@ IGNORE_NON_TESTED = (
         "VibeVoiceAcousticTokenizerEncoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "VibeVoiceAcousticTokenizerDecoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "PI0Model",  # special arch, tested through PI0ForConditionalGeneration
+        "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
+        "Gemma4VisionModel",  # Building part of a bigger model, tested implicitly
+        "Gemma4AudioModel",  # Building part of a bigger model, tested implicitly
+        "Sam3LiteTextTextModel",  # Building part of a bigger model, tested implicitly through Sam3LiteTextModel
     ]
 )
 
@@ -425,9 +454,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SegGptForImageSegmentation",
     "SiglipVisionModel",
     "SiglipTextModel",
-    "SiglipVisionTransformer",
     "Siglip2VisionModel",
-    "Siglip2VisionTransformer",
     "Siglip2TextModel",
     "ChameleonVQVAE",  # no autoclass for VQ-VAE models
     "VitPoseForPoseEstimation",
@@ -441,6 +468,13 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Emu3TextModel",  # Building part of bigger (tested) model
     "JanusVQVAE",  # no autoclass for VQ-VAE models
     "JanusVisionModel",  # Building part of bigger (tested) model
+    "SLANetSLAHead",  # Building part of bigger (tested) model
+    "SLANetBackbone",  # Building part of bigger (tested) model
+    "SLANeXtSLAHead",  # Building part of bigger (tested) model
+    "SLANeXtBackbone",  # Building part of bigger (tested) model
+    "PPFormulaNetTextModel",  # Building part of bigger (tested) model
+    "PPFormulaNetVisionModel",  # Building part of bigger (tested) model
+    "PPFormulaNetModel",  # Building part of bigger (tested) model
     "PPOCRV5MobileDetModel",  # Building part of bigger (tested) model
     "PPOCRV5ServerDetModel",  # Building part of bigger (tested) model
     "PPDocLayoutV2Model",  # Building part of bigger (tested) model
@@ -451,7 +485,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "PaddleOCRTextModel",  # Building part of bigger (tested) model
     "Qwen2_5OmniTalkerForConditionalGeneration",  # Building part of a bigger model
     "Qwen2_5OmniTalkerModel",  # Building part of a bigger model
-    "Qwen2_5OmniThinkerForConditionalGeneration",  # Building part of a bigger model
     "Qwen2_5OmniThinkerTextModel",  # Building part of a bigger model
     "Qwen2_5OmniToken2WavModel",  # Building part of a bigger model
     "Qwen2_5OmniToken2WavBigVGANModel",  # Building part of a bigger model
@@ -469,13 +502,13 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration",  # Building part of a bigger model
     "Qwen3OmniMoeTalkerForConditionalGeneration",  # Building part of a bigger model
     "Qwen3OmniMoeTalkerModel",  # Building part of a bigger model
-    "Qwen3OmniMoeThinkerForConditionalGeneration",  # Building part of a bigger model
     "Qwen3OmniMoeThinkerTextModel",  # Building part of a bigger model
     "Ernie4_5_VLMoeTextModel",  # Building part of a bigger model
     "PeAudioFrameLevelModel",
     "Ernie4_5_VL_MoeForConditionalGeneration",  # BC Alias
     "Ernie4_5_VL_MoeModel",  # BC Alias
     "Ernie4_5_VL_MoeTextModel",  # BC Alias
+    "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
 ]
 
 
@@ -491,6 +524,43 @@ MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
         ("dinov3_vit", "dinov3"),
     ]
 )
+
+DOC_MODEL_NAMES_NOT_IN_AUTO = {
+    "llama2",
+    "myt5",
+    "ul2",
+    "phobert",
+    "herbert",
+    "dit",
+    "lasr",
+    "mluke",
+    "xlsr_wav2vec2",
+    "xls_r",
+    "wav2vec2_phoneme",
+    "llama3",
+    "deplot",
+    "t5v1.1",
+    "matcha",
+    "barthez",
+    "byt5",
+    "flan-ul2",
+    "cpm",
+    "bertweet",
+    "nllb",
+    "xlm-v",
+    "dialogpt",
+    "flan-t5",
+    "bert-japanese",
+    "mms",
+    "depth_anything_v2",
+    "bartpho",
+    "parakeet",
+    "madlad-400",
+    "granitevision",
+    "falcon3",
+    "megatron_gpt2",
+    "code_llama",
+}
 
 
 # This is to make sure the transformers module imported is the one in the repo.
@@ -555,6 +625,7 @@ def check_model_list():
 
 # If some modeling modules should be ignored for all checks, they should be added in the nested list
 # _ignore_modules of this function.
+@functools.lru_cache(maxsize=1)
 def get_model_modules() -> list[str]:
     """Get all the model modules inside the transformers library (except deprecated models)."""
     _ignore_modules = [
@@ -905,22 +976,24 @@ def check_all_auto_object_names_being_defined():
 
     for name, mapping in mappings_to_check.items():
         for class_names in mapping.values():
+            if isinstance(class_names, dict):
+                class_names = tuple(class_names.values())
             if not isinstance(class_names, tuple):
                 class_names = (class_names,)
-                for class_name in class_names:
-                    if class_name is None:
+            for class_name in class_names:
+                if class_name is None:
+                    continue
+                # dummy object is accepted
+                if not hasattr(transformers, class_name):
+                    # If the class name is in a model name mapping, let's not check if there is a definition in any modeling
+                    # module, if it's a private model defined in this file.
+                    if name.endswith("MODEL_MAPPING_NAMES") and is_a_private_model(class_name):
                         continue
-                    # dummy object is accepted
-                    if not hasattr(transformers, class_name):
-                        # If the class name is in a model name mapping, let's not check if there is a definition in any modeling
-                        # module, if it's a private model defined in this file.
-                        if name.endswith("MODEL_MAPPING_NAMES") and is_a_private_model(class_name):
-                            continue
-                        if name.endswith("MODEL_FOR_IMAGE_MAPPING_NAMES") and is_a_private_model(class_name):
-                            continue
-                        failures.append(
-                            f"`{class_name}` appears in the mapping `{name}` but it is not defined in the library."
-                        )
+                    if name.endswith("MODEL_FOR_IMAGE_MAPPING_NAMES") and is_a_private_model(class_name):
+                        continue
+                    failures.append(
+                        f"`{class_name}` appears in the mapping `{name}` but it is not defined in the library."
+                    )
     if len(failures) > 0:
         raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
 
@@ -1106,6 +1179,7 @@ UNDOCUMENTED_OBJECTS = [
     "Ernie4_5_VL_MoeForConditionalGeneration",  # BC Alias
     "Ernie4_5_VL_MoeImageProcessor",  # BC Alias
     "Ernie4_5_VL_MoeImageProcessorFast",  # BC Alias
+    "Ernie4_5_VL_MoeImageProcessorPil",  # BC Alias
     "Ernie4_5_VL_MoeModel",  # BC Alias
     "Ernie4_5_VL_MoeTextConfig",  # BC Alias
     "Ernie4_5_VL_MoeTextModel",  # BC Alias
@@ -1177,6 +1251,9 @@ def ignore_undocumented(name: str) -> bool:
         return True
     # BLT models are internal building blocks, tested implicitly through BltForCausalLM
     if name.startswith("Blt"):
+        return True
+    # image_processing_*_fast are backward-compat module aliases, not public objects.
+    if name.startswith("image_processing_") and name.endswith("_fast"):
         return True
     if name in SHOULD_HAVE_THEIR_OWN_PAGE:
         return True
@@ -1255,7 +1332,8 @@ def check_model_type_doc_match():
     model_doc_folder = Path(PATH_TO_DOC) / "model_doc"
     model_docs = [m.stem for m in model_doc_folder.glob("*.md")]
 
-    model_types = list(transformers.models.auto.configuration_auto.MODEL_NAMES_MAPPING.keys())
+    model_types = list(transformers.models.auto.configuration_auto.CONFIG_MAPPING_NAMES.keys())
+    model_types += list(DOC_MODEL_NAMES_NOT_IN_AUTO)
     model_types = [MODEL_TYPE_TO_DOC_MAPPING.get(m, m) for m in model_types]
 
     errors = []
@@ -1272,8 +1350,8 @@ def check_model_type_doc_match():
         raise ValueError(
             "Some model doc pages do not match any existing model type:\n"
             + "\n".join(errors)
-            + "\nYou can add any missing model type to the `MODEL_NAMES_MAPPING` constant in "
-            "models/auto/configuration_auto.py."
+            + "\nYou can add any missing model type to the `DOC_MODEL_NAMES_NOT_IN_AUTO` constant in "
+            "utils/check_repo.py."
         )
 
 
@@ -1327,7 +1405,7 @@ def check_models_have_kwargs():
             class_bases = {}
             all_class_nodes = {}
 
-            for node in ast.walk(tree):
+            for node in tree.body:
                 if isinstance(node, ast.ClassDef):
                     # We only care about base classes that are simple names
                     bases = [b.id for b in node.bases if isinstance(b, ast.Name)]

@@ -122,8 +122,8 @@ class Qwen3VLMoeTextTopKRouter(nn.Module):
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
-        router_logits = torch.nn.functional.softmax(router_logits, dtype=torch.float, dim=-1)
-        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (seq_len, top_k)
+        router_probs = torch.nn.functional.softmax(router_logits, dtype=torch.float, dim=-1)
+        router_top_value, router_indices = torch.topk(router_probs, self.top_k, dim=-1)  # (seq_len, top_k)
         router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
         router_top_value = router_top_value.to(router_logits.dtype)
         router_scores = router_top_value
@@ -136,7 +136,7 @@ class Qwen3VLMoeTextSparseMoeBlock(nn.Module):
         self.experts = Qwen3VLMoeTextExperts(config)
         self.gate = Qwen3VLMoeTextTopKRouter(config)
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
         _, routing_weights, selected_experts = self.gate(hidden_states_reshaped)
@@ -1144,15 +1144,17 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
             grid_thw[2].item() // spatial_merge_size,
         )
 
-        image_seq_length = llm_grid_h * llm_grid_w * llm_grid_t
-        position_width = torch.arange(start_position, start_position + llm_grid_w, device=device).repeat(
-            llm_grid_h * llm_grid_t
-        )
-        position_height = torch.arange(start_position, start_position + llm_grid_h, device=device).repeat_interleave(
-            llm_grid_w * llm_grid_t
-        )
-        position_temporal = torch.full((image_seq_length,), start_position, device=device, dtype=torch.long)
-        position_temporal = position_temporal * time_interval
+        # Add `start_position` after arange for compile
+        position_temporal = torch.arange(llm_grid_t, device=device) * time_interval
+        position_width = torch.arange(llm_grid_w, device=device) + start_position
+        position_height = torch.arange(llm_grid_h, device=device) + start_position
+
+        # Repeat the positions per each grid and per video frame. Repeat patterns are important
+        # do not modify without checking values!
+        position_width = position_width.repeat(llm_grid_h * llm_grid_t)
+        position_height = position_height.repeat_interleave(llm_grid_w).repeat(llm_grid_t)
+        # Important: add `start_positions` after applying `time_interval`, order matters
+        position_temporal = position_temporal.repeat_interleave(llm_grid_h * llm_grid_w) + start_position
         vision_position_ids = torch.stack([position_temporal, position_height, position_width], dim=0)
 
         return vision_position_ids
@@ -1362,8 +1364,11 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
                 mm_token_type_ids=mm_token_type_ids,
             )
             self.rope_deltas = rope_deltas
-        # Use pre-calculated rope-deltas to infer correct 3D position ids
-        elif self.rope_deltas is not None:
+        # Use pre-calculated rope-deltas to infer correct 3D position ids during incremental
+        # generation (past_key_values_length > 0) or when only inputs_embeds is provided (no input_ids
+        # to recompute from). Skip when input_ids is provided without past_key_values to avoid shape
+        # mismatches from stale rope_deltas (e.g., training forward pass after generation).
+        elif self.rope_deltas is not None and (past_key_values_length > 0 or input_ids is None):
             batch_size, seq_length, _ = inputs_embeds.shape
             if attention_mask is not None:
                 position_ids = attention_mask.long().cumsum(-1) - 1
@@ -1938,8 +1943,7 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMi
                 if key == "position_ids" and dict_to_expand[key].ndim == 3:
                     dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=1)
                 elif (
-                    key != "cache_position"
-                    and dict_to_expand[key] is not None
+                    dict_to_expand[key] is not None
                     and isinstance(dict_to_expand[key], torch.Tensor)
                     and key not in visual_keys
                 ):

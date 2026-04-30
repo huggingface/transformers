@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/hf-seamless-m4t-medium")
-@strict(accept_kwargs=True)
+@strict
 class SeamlessM4TConfig(PreTrainedConfig):
     r"""
     t2u_vocab_size (`int`, *optional*, defaults to 10082):
@@ -151,7 +151,8 @@ class SeamlessM4TConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "seamless_m4t"
     attribute_map = {"num_hidden_layers": "decoder_layers", "num_attention_heads": "decoder_attention_heads"}
@@ -181,7 +182,7 @@ class SeamlessM4TConfig(PreTrainedConfig):
     max_new_tokens: int | None = 256
     pad_token_id: int | None = 0
     bos_token_id: int | None = 2
-    eos_token_id: int | None = 3
+    eos_token_id: int | list[int] | None = 3
     speech_encoder_layers: int = 24
     speech_encoder_attention_heads: int = 16
     speech_encoder_intermediate_size: int = 4096
@@ -202,7 +203,7 @@ class SeamlessM4TConfig(PreTrainedConfig):
     conv_depthwise_kernel_size: int = 31
     t2u_bos_token_id: int | None = 0
     t2u_pad_token_id: int | None = 1
-    t2u_eos_token_id: int | None = 2
+    t2u_eos_token_id: int | list[int] | None = 2
     t2u_decoder_start_token_id: int = 2
     t2u_max_new_tokens: int = 1024
     t2u_encoder_layers: int = 6

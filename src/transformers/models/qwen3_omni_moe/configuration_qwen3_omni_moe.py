@@ -29,15 +29,21 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3OmniMoeAudioEncoderConfig(PreTrainedConfig):
     r"""
-    downsample_hidden_size ( `int`, *optional*, defaults to `480`): Hidden size in donwsampling layer
-    conv_chunksize ( `int`, *optional*, defaults to `500`): Chunk size of each input to convolutional layer
-    n_window_infer ( `int`, *optional*, defaults to `400`): Number of windows during inference
-    max_source_positions (`int`, *optional*, defaults to 1500): Maximum sequence length for the inputs
-    n_window (`int`, *optional*, defaults to 100):  Number of windwos
-    output_dim (`int`, *optional*, defaults to 3584):  Dimensionality of the output
+    max_source_positions (`int`, *optional*, defaults to 1500):
+        Maximum sequence length for the inputs
+    n_window (`int`, *optional*, defaults to 100):
+        Number of windwos
+    output_dim (`int`, *optional*, defaults to 3584):
+        Dimensionality of the output
+    n_window_infer (`int`, *optional*, defaults to `400`):
+        Number of windows during inference
+    conv_chunksize (`int`, *optional*, defaults to `500`):
+        Chunk size of each input to convolutional layer
+    downsample_hidden_size (`int`, *optional*, defaults to `480`):
+        Hidden size in donwsampling layer
     """
 
     model_type = "qwen3_omni_moe_audio_encoder"
@@ -65,13 +71,13 @@ class Qwen3OmniMoeAudioEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3OmniMoeVisionEncoderConfig(PreTrainedConfig):
     r"""
-    num_position_embeddings (`int`, *optional*, defaults to 2304):
-        The maximum sequence length that this model might ever be used with
     out_hidden_size (`int`, *optional*, defaults to 3584):
         The output hidden size of the vision model.
+    num_position_embeddings (`int`, *optional*, defaults to 2304):
+        The maximum sequence length that this model might ever be used with
     deepstack_visual_indexes (`list[int]`, *optional*, defaults to `[8, 16, 24]`):
         Indexed of layers for deepstack embeddings.
     """
@@ -95,7 +101,7 @@ class Qwen3OmniMoeVisionEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3OmniMoeTextConfig(PreTrainedConfig):
     r"""
     decoder_sparse_step (`int`, *optional*, defaults to 1):
@@ -175,7 +181,7 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3OmniMoeThinkerConfig(PreTrainedConfig):
     r"""
     position_id_per_seconds (`int`, *optional*, defaults to 25):
@@ -242,12 +248,9 @@ class Qwen3OmniMoeThinkerConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3OmniMoeTalkerCodePredictor-8B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
     r"""
-    max_window_layers (`int`, *optional*, defaults to 28):
-        The number of layers using full attention. The first `max_window_layers` layers will use full attention, while any
-        additional layer afterwards will use SWA (Sliding Window Attention).
     num_code_groups (`int`, *optional*, defaults to 32):
         Number of codebook groups used in the predicted acoustic token sequence, corresponding to multi-codebook VQ representation.
     """
@@ -313,7 +316,7 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
     r"""
     decoder_sparse_step (`int`, *optional*, defaults to 1):
@@ -334,7 +337,8 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "qwen3_omni_moe_talker_text"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -358,11 +362,18 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+
     vocab_size: int = 3072
     hidden_size: int = 1024
     intermediate_size: int = 2048
@@ -398,7 +409,7 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
     r"""
     code_predictor_config (`dict`, *optional*):
@@ -473,6 +484,7 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
     audio_start_token_id: int = 151669
     speaker_id: dict | None = None
     initializer_range: float = 0.02
+    tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
         if self.code_predictor_config is None:
@@ -492,7 +504,7 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
     r"""
     num_quantizers (`int`, *optional*, defaults to 16):
@@ -548,21 +560,33 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3OmniMoeConfig(PreTrainedConfig):
     r"""
-    thinker_config (`dict`, *optional*): Configuration of the underlying thinker sub-model.
-    talker_config (`dict`, *optional*): Configuration of the underlying talker sub-model.
-    code2wav_config (`dict`, *optional*): Configuration of the underlying code2wav sub-model.
-    enable_audio_output (`bool`, *optional*, defaults to `True`): Whether enable audio output and load talker and code2wav module.
-    im_start_token_id (`int`, *optional*, defaults to 151644): Token id for the start of image
-    im_end_token_id (`int`, *optional*, defaults to 151645): Token id for the end of image
-    tts_pad_token_id (`int`, *optional*, defaults to 151671): Token id for the padding in TTS
-    tts_bos_token_id (`int`, *optional*, defaults to 151672): Token id for the start of sequence in TTS
-    tts_eos_token_id (`int`, *optional*, defaults to 151673): Token id for the end of sequence in TTS of image
-    system_token_id (`int`, *optional*, defaults to 8948): Token id for the system prompt
-    user_token_id (`int`, *optional*, defaults to 872): Token id for the user prompt
-    assistant_token_id (`int`, *optional*, defaults to 77091): Token id for the assistant prompt
+    thinker_config (`dict`, *optional*):
+        Configuration of the underlying thinker sub-model.
+    talker_config (`dict`, *optional*):
+        Configuration of the underlying talker sub-model.
+    code2wav_config (`dict`, *optional*):
+        Configuration of the underlying code2wav sub-model.
+    enable_audio_output (`bool`, *optional*, defaults to `True`):
+        Whether enable audio output and load talker and code2wav module.
+    im_start_token_id (`int`, *optional*, defaults to 151644):
+        Token id for the start of image
+    im_end_token_id (`int`, *optional*, defaults to 151645):
+        Token id for the end of image
+    tts_pad_token_id (`int`, *optional*, defaults to 151671):
+        Token id for the padding in TTS
+    tts_bos_token_id (`int`, *optional*, defaults to 151672):
+        Token id for the start of sequence in TTS
+    tts_eos_token_id (`int`, *optional*, defaults to 151673):
+        Token id for the end of sequence in TTS of image
+    system_token_id (`int`, *optional*, defaults to 8948):
+        Token id for the system prompt
+    user_token_id (`int`, *optional*, defaults to 872):
+        Token id for the user prompt
+    assistant_token_id (`int`, *optional*, defaults to 77091):
+        Token id for the assistant prompt
 
     Example:
 
@@ -604,6 +628,7 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
     system_token_id: int = 8948
     user_token_id: int = 872
     assistant_token_id: int = 77091
+    initializer_range: float | None = None
 
     def __post_init__(self, **kwargs):
         if self.thinker_config is None:
@@ -624,6 +649,9 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
         elif isinstance(self.code2wav_config, dict):
             self.code2wav_config = Qwen3OmniMoeCode2WavConfig(**self.code2wav_config)
 
+        if self.initializer_range is None:
+            self.initializer_range = self.thinker_config.initializer_range
+
         super().__post_init__(**kwargs)
 
     def get_text_config(self, decoder=False) -> "PreTrainedConfig":
@@ -641,4 +669,13 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
         return self.thinker_config.get_text_config()
 
 
-__all__ = ["Qwen3OmniMoeConfig", "Qwen3OmniMoeThinkerConfig", "Qwen3OmniMoeTalkerConfig"]
+__all__ = [
+    "Qwen3OmniMoeConfig",
+    "Qwen3OmniMoeThinkerConfig",
+    "Qwen3OmniMoeTalkerConfig",
+    "Qwen3OmniMoeAudioEncoderConfig",
+    "Qwen3OmniMoeTalkerCodePredictorConfig",
+    "Qwen3OmniMoeTalkerTextConfig",
+    "Qwen3OmniMoeTextConfig",
+    "Qwen3OmniMoeVisionEncoderConfig",
+]

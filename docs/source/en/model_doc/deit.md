@@ -86,9 +86,11 @@ page for more information.
 SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set
 `attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
 
-```py
+```python
 from transformers import DeiTForImageClassification
-model = DeiTForImageClassification.from_pretrained("facebook/deit-base-distilled-patch16-224", attn_implementation="sdpa", dtype=torch.float16)
+
+
+model = DeiTForImageClassification.from_pretrained("facebook/deit-base-distilled-patch16-224", attn_implementation="sdpa", device_map="auto")
 ...
 ```
 
@@ -127,9 +129,9 @@ If you're interested in submitting a resource to be included here, please feel f
 [[autodoc]] DeiTImageProcessor
     - preprocess
 
-## DeiTImageProcessorFast
+## DeiTImageProcessorPil
 
-[[autodoc]] DeiTImageProcessorFast
+[[autodoc]] DeiTImageProcessorPil
     - preprocess
 
 ## DeiTModel

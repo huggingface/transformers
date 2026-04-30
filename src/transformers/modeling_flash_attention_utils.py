@@ -31,6 +31,7 @@ from .utils import (
     is_torch_xpu_available,
     logging,
 )
+from .utils.generic import split_attention_implementation
 from .utils.import_utils import PACKAGE_DISTRIBUTION_MAPPING, is_tracing
 
 
@@ -62,6 +63,7 @@ def is_flash_attn_available():
 FLASH_ATTN_KERNEL_FALLBACK = {
     "flash_attention_2": "kernels-community/flash-attn2",
     "flash_attention_3": "kernels-community/vllm-flash-attn3",
+    "flash_attention_4": "kernels-community/flash-attn4",
 }
 
 
@@ -146,8 +148,7 @@ def _lazy_imports(
 
     pad_input, unpad_input = _pad_input, _unpad_input
 
-    is_paged = implementation.startswith("paged|")
-    implementation = implementation.split("|")[1] if is_paged else implementation
+    is_paged, implementation = split_attention_implementation(implementation)
 
     if (implementation == "flash_attention_2" and is_fa2) or (
         implementation is None and is_fa2 and not is_fa3 and not is_fa4

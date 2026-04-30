@@ -20,6 +20,16 @@ from transformers.configuration_utils import PreTrainedConfig
 from transformers.utils import direct_transformers_import
 
 
+CHECKER_CONFIG = {
+    "name": "config_attributes",
+    "label": "Config attributes",
+    # Approximate: iterates CONFIG_MAPPING at runtime and also reads modeling_*.py files
+    # in each config's directory via os.listdir(). Deprecated models are skipped.
+    "file_globs": ["src/transformers/models/**/configuration_*.py", "src/transformers/models/**/modeling_*.py"],
+    "check_args": [],
+    "fix_args": None,
+}
+
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/check_config_docstrings.py
 PATH_TO_TRANSFORMERS = "src/transformers"
@@ -32,6 +42,10 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
+    "MiniCPMV4_6Config": ["drop_vision_last_layer"],
+    "OpenAIPrivacyFilterConfig": ["classifier_dropout", "output_router_logits", "router_aux_loss_coef"],
+    "HYV3Config": ["output_router_logits"],
+    "NougatConfig": ["decoder", "encoder"],
     "PI0Config": ["vlm_projection_dim"],
     "EuroBertConfig": ["is_causal"],  # not used directly, allows causal-bidirectional switch
     "Ernie4_5_VL_MoeConfig": ["args"],  # BC Alias
@@ -39,6 +53,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "Ernie4_5_VL_MoeVisionConfig": ["args"],  # BC Alias
     "ExaoneMoeConfig": ["first_k_dense_replace"],  # BC for other frameworks
     "AfmoeConfig": ["global_attn_every_n_layers", "rope_scaling"],
+    "LagunaConfig": ["moe_apply_router_weight_on_input"],
     "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
     "Lfm2Config": ["full_attn_idxs"],
     "DiaConfig": ["delay_pattern"],
@@ -99,8 +114,10 @@ SPECIAL_CASES_TO_ALLOW = {
     "ConditionalDetrConfig": True,
     "DabDetrConfig": True,
     "SwitchTransformersConfig": True,
+    "MaskFormerDetrConfig": True,
     "DetrConfig": True,
     "DFineConfig": True,
+    "Deimv2Config": True,  # Mixed encoder variants (hybrid/lite) + DFine inheritance
     "GroundingDinoConfig": True,
     "MMGroundingDinoConfig": True,
     "RTDetrConfig": True,
@@ -138,11 +155,16 @@ SPECIAL_CASES_TO_ALLOW = {
     "GptOssConfig": True,
     "LwDetrConfig": True,
     "NemotronHConfig": True,
+    # Internally uses Got Ocr2 so no need to use in the modeling code as we remap in auto instead
+    "PPChart2TableConfig": True,
+    "PPChart2TableVisionConfig": True,
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)
 ATTRIBUTES_TO_ALLOW = (
     # Attr in base `PreTrainedConfig`
+    "transformers_version",
+    "architectures",
     "chunk_size_feed_forward",
     "dtype",
     "id2label",

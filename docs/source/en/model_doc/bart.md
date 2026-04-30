@@ -33,33 +33,32 @@ The example below demonstrates how to predict the `[MASK]` token with [`Pipeline
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
 
-pipeline = pipeline(
+
+fill_mask_pipeline = pipeline(
     task="fill-mask",
     model="facebook/bart-large",
-    dtype=torch.float16,
     device=0
 )
 pipeline("Plants create <mask> through a process known as photosynthesis.")
-
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForMaskedLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "facebook/bart-large",
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "facebook/bart-large",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -81,7 +80,7 @@ print(f"The predicted token is: {predicted_token}")
 
 ## Notes
 
-- Inputs should be padded on the right because BERT uses absolute position embeddings.
+- Inputs should be padded on the right because BART uses absolute position embeddings.
 - The [facebook/bart-large-cnn](https://huggingface.co/facebook/bart-large-cnn) checkpoint doesn't include `mask_token_id` which means it can't perform mask-filling tasks.
 - BART doesn't use `token_type_ids` for sequence classification. Use [`BartTokenizer`] or [`~PreTrainedTokenizerBase.encode`] to get the proper splitting.
 - The forward pass of [`BartModel`] creates the `decoder_input_ids` if they're not passed. This can be different from other model APIs, but it is a useful feature for mask-filling tasks.

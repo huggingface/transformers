@@ -21,7 +21,7 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
@@ -34,7 +34,6 @@ from ..qwen3.modeling_qwen3 import Qwen3ForCausalLM
 from ..qwen3_next.configuration_qwen3_next import Qwen3NextConfig
 from ..qwen3_next.modeling_qwen3_next import (
     Qwen3NextAttention,
-    Qwen3NextDynamicCache,
     Qwen3NextGatedDeltaNet,
     Qwen3NextMLP,
     Qwen3NextModel,
@@ -57,7 +56,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-27B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3_5TextConfig(Qwen3NextConfig):
     r"""
     linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
@@ -123,13 +122,20 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-27B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3_5VisionConfig(Qwen3VLVisionConfig):
+    r"""
+    out_hidden_size (`int`, *optional*, defaults to 3584):
+        The output hidden size of the vision model.
+    num_position_embeddings (`int`, *optional*, defaults to 2304):
+        The maximum sequence length that this model might ever be used with
+    """
+
     deepstack_visual_indexes = AttributeError()
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-27B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3_5Config(Qwen3VLConfig):
     r"""
     Example:
@@ -151,10 +157,6 @@ class Qwen3_5Config(Qwen3VLConfig):
     video_token_id: int = 248057
     vision_start_token_id: int = 248053
     vision_end_token_id: int = 248054
-
-
-class Qwen3_5DynamicCache(Qwen3NextDynamicCache):
-    pass
 
 
 class Qwen3_5VisionRotaryEmbedding(Qwen3VLVisionRotaryEmbedding):
@@ -205,7 +207,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        cache_params: Qwen3_5DynamicCache | None = None,
+        cache_params: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
     ):
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
@@ -213,12 +215,16 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         # Set up dimensions for reshapes later
         batch_size, seq_len, _ = hidden_states.shape
 
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state and seq_len == 1
+        # We have cached `conv_state` / `recurrent_state` to continue from. The two cached modes
+        # (single-token decode and chunk-tokens continuation) share the state read here; they only
+        # diverge in how the conv input is assembled and which kernel consumes the states below,
+        # which we gate locally on `seq_len`.
+        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
 
         # getting projected states from cache if it exists
-        if cache_params is not None:
-            conv_state = cache_params.conv_states[self.layer_idx]
-            recurrent_state = cache_params.recurrent_states[self.layer_idx]
+        if use_precomputed_states:
+            conv_state = cache_params.layers[self.layer_idx].conv_states
+            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states
 
         mixed_qkv = self.in_proj_qkv(hidden_states)
         mixed_qkv = mixed_qkv.transpose(1, 2)
@@ -229,9 +235,8 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         b = self.in_proj_b(hidden_states)
         a = self.in_proj_a(hidden_states)
 
-        if use_precomputed_states:
-            # 2. Convolution sequence transformation
-            # NOTE: the conv state is updated in `causal_conv1d_update`
+        if use_precomputed_states and seq_len == 1:
+            # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
             mixed_qkv = self.causal_conv1d_update(
                 mixed_qkv,
                 conv_state,
@@ -240,9 +245,15 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                 self.activation,
             )
         else:
+            # Multi-token forward (prefill, or chunked-tokens decode when the cache has prior state).
+            if use_precomputed_states:
+                # Cached chunked-tokens decode: prepend the cached conv context so the causal conv
+                # sees the correct left-context rather than zero-padding. Dropped from the output
+                # at the end of this branch.
+                mixed_qkv = torch.cat([conv_state, mixed_qkv], dim=-1)
             if cache_params is not None:
-                conv_state = F.pad(mixed_qkv, (self.conv_kernel_size - mixed_qkv.shape[-1], 0))
-                cache_params.conv_states[self.layer_idx] = conv_state
+                new_conv_state = F.pad(mixed_qkv, (self.conv_kernel_size - mixed_qkv.shape[-1], 0))
+                cache_params.update_conv_state(new_conv_state, self.layer_idx)
             if self.causal_conv1d_fn is not None:
                 mixed_qkv = self.causal_conv1d_fn(
                     x=mixed_qkv,
@@ -252,7 +263,9 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                     seq_idx=None,
                 )
             else:
-                mixed_qkv = F.silu(self.conv1d(mixed_qkv)[:, :, :seq_len])
+                mixed_qkv = F.silu(self.conv1d(mixed_qkv)[:, :, : mixed_qkv.shape[-1]])
+            if use_precomputed_states:
+                mixed_qkv = mixed_qkv[:, :, -seq_len:]
 
         mixed_qkv = mixed_qkv.transpose(1, 2)
         query, key, value = torch.split(
@@ -276,19 +289,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
             query = query.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
             key = key.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
 
-        if not use_precomputed_states:
-            core_attn_out, last_recurrent_state = self.chunk_gated_delta_rule(
-                query,
-                key,
-                value,
-                g=g,
-                beta=beta,
-                initial_state=None,
-                output_final_state=cache_params is not None,
-                use_qk_l2norm_in_kernel=True,
-            )
-
-        else:
+        if use_precomputed_states and seq_len == 1:
             core_attn_out, last_recurrent_state = self.recurrent_gated_delta_rule(
                 query,
                 key,
@@ -300,9 +301,21 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                 use_qk_l2norm_in_kernel=True,
             )
 
+        else:
+            core_attn_out, last_recurrent_state = self.chunk_gated_delta_rule(
+                query,
+                key,
+                value,
+                g=g,
+                beta=beta,
+                initial_state=recurrent_state if use_precomputed_states else None,
+                output_final_state=cache_params is not None,
+                use_qk_l2norm_in_kernel=True,
+            )
+
         # Update cache
         if cache_params is not None:
-            cache_params.recurrent_states[self.layer_idx] = last_recurrent_state
+            cache_params.update_recurrent_state(last_recurrent_state, self.layer_idx)
 
         # reshape input data into 2D tensor
         core_attn_out = core_attn_out.reshape(-1, self.head_v_dim)
@@ -494,7 +507,7 @@ class Qwen3_5TextModel(Qwen3NextModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            past_key_values = Qwen3_5DynamicCache(config=self.config)
+            past_key_values = DynamicCache(config=self.config)
 
         # the hard coded `4` is for text, temporal, height and width.
         if position_ids is None:
@@ -522,8 +535,8 @@ class Qwen3_5TextModel(Qwen3NextModel):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for layer_idx, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            layer_mask = linear_attn_mask if decoder_layer.layer_type == "linear_attention" else causal_mask
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            layer_mask = linear_attn_mask if self.config.layer_types[i] == "linear_attention" else causal_mask
 
             hidden_states = decoder_layer(
                 hidden_states,
@@ -676,6 +689,7 @@ class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration):
 __all__ = [
     "Qwen3_5Config",
     "Qwen3_5TextConfig",
+    "Qwen3_5VisionConfig",
     "Qwen3_5VisionModel",
     "Qwen3_5TextModel",
     "Qwen3_5Model",

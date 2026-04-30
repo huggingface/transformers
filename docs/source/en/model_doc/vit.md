@@ -36,14 +36,13 @@ The example below demonstrates how to classify an image with [`Pipeline`] or the
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="image-classification",
     model="google/vit-base-patch16-224",
-    dtype=torch.float16,
     device=0
 )
 pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
@@ -52,11 +51,13 @@ pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resol
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 import requests
+import torch
 from PIL import Image
-from transformers import AutoModelForImageClassification, AutoImageProcessor
+
+from transformers import AutoImageProcessor, AutoModelForImageClassification
+
 
 image_processor = AutoImageProcessor.from_pretrained(
     "google/vit-base-patch16-224",
@@ -64,7 +65,6 @@ image_processor = AutoImageProcessor.from_pretrained(
 )
 model = AutoModelForImageClassification.from_pretrained(
     "google/vit-base-patch16-224",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -87,7 +87,7 @@ print(f"The predicted class label is: {predicted_class_label}")
 ## Notes
 
 - The best results are obtained with supervised pretraining, and during fine-tuning, it may be better to use images with a resolution higher than 224x224.
-- Use [`ViTImageProcessorFast`] to resize (or rescale) and normalize images to the expected size.
+- Use [`ViTImageProcessor`] to resize (or rescale) and normalize images to the expected size.
 - The patch and image resolution are reflected in the checkpoint name. For example, google/vit-base-patch16-224, is the **base-sized** architecture with a patch resolution of 16x16 and fine-tuning resolution of 224x224.
 
 ## ViTConfig
@@ -99,10 +99,11 @@ print(f"The predicted class label is: {predicted_class_label}")
 [[autodoc]] ViTImageProcessor
     - preprocess
 
-## ViTImageProcessorFast
+## ViTImageProcessorPil
 
-[[autodoc]] ViTImageProcessorFast
+[[autodoc]] ViTImageProcessorPil
     - preprocess
+
 
 ## ViTModel
 

@@ -125,12 +125,15 @@ class LlavaNextForConditionalGenerationModelTest(VLMModelTest, unittest.TestCase
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
 
+    def test_reverse_loading_mapping(self):
+        super().test_reverse_loading_mapping(skip_base_model=True)
+
 
 @require_torch
 class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
-        url = "https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true"
+        url = "https://raw.githubusercontent.com/haotian-liu/LLaVA/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg"
         self.image = Image.open(requests.get(url, stream=True).raw)
 
         self.prompt = "[INST] <image>\nWhat is shown in this image? [/INST]"

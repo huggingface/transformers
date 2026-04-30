@@ -73,6 +73,7 @@ Here's an example of how to structure your input. We will use [LLaVA-NeXT-Video-
 ```python
 from transformers import LlavaNextVideoProcessor
 
+
 processor = LlavaNextVideoProcessor.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf")
 
 conversation = [
@@ -119,11 +120,12 @@ The model can accept both images and videos as input. Here's an example code for
 
 ```python
 from huggingface_hub import hf_hub_download
-import torch
+
 from transformers import LlavaNextVideoForConditionalGeneration, LlavaNextVideoProcessor
 
+
 # Load the model in half-precision
-model = LlavaNextVideoForConditionalGeneration.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf", dtype=torch.float16, device_map="auto")
+model = LlavaNextVideoForConditionalGeneration.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf", device_map="auto")
 processor = LlavaNextVideoProcessor.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf")
 
 # Load the video as an np.array, sampling uniformly 8 frames (can sample more for longer videos)
@@ -140,7 +142,7 @@ conversation = [
     },
 ]
 
-inputs = processor.apply_chat_template(conversation, num_frames=8, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt")
+inputs = processor.apply_chat_template(conversation, num_frames=8, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device)
 
 out = model.generate(**inputs, max_new_tokens=60)
 processor.batch_decode(out, skip_special_tokens=True, clean_up_tokenization_spaces=True)
@@ -176,7 +178,7 @@ conversation = [
             ],
     },
 ]
-inputs = processor.apply_chat_template(conversation, num_frames=8, add_generation_prompt=True, tokenize=True, return_dict=True, padding=True, return_tensors="pt")
+inputs = processor.apply_chat_template(conversation, num_frames=8, add_generation_prompt=True, tokenize=True, return_dict=True, padding=True, return_tensors="pt").to(model.device)
 
 # Generate
 generate_ids = model.generate(**inputs, max_length=50)
@@ -203,7 +205,8 @@ We value your feedback to help identify bugs before the full release! Check out 
 Then simply load the quantized model by adding [`BitsAndBytesConfig`](../main_classes/quantization#transformers.BitsAndBytesConfig) as shown below:
 
 ```python
-from transformers import LlavaNextVideoForConditionalGeneration, LlavaNextVideoProcessor
+from transformers import LlavaNextVideoForConditionalGeneration
+
 
 # specify how to quantize the model
 quantization_config = BitsAndBytesConfig(
@@ -233,10 +236,9 @@ To load and run a model using Flash Attention-2, simply add `attn_implementation
 from transformers import LlavaNextVideoForConditionalGeneration
 
 model = LlavaNextVideoForConditionalGeneration.from_pretrained(
-    "llava-hf/LLaVA-NeXT-Video-7B-hf", 
-    dtype=torch.float16, 
+    "llava-hf/LLaVA-NeXT-Video-7B-hf", , 
     attn_implementation="flash_attention_2",
-).to(0)
+).to(0, device_map="auto")
 ```
 
 ## LlavaNextVideoConfig

@@ -41,27 +41,26 @@ The example below demonstrates how to generate text based on an image with [`Pip
 <hfoption id="Pipeline">
 
 ```python
-import torch  
-from transformers import pipeline  
+from transformers import pipeline
 
-pipeline = pipeline(  
-    task="image-text-to-text",  
-    model="llava-hf/llava-v1.6-mistral-7b-hf",  
-    device=0,  
-    dtype=torch.bfloat16  
-)  
-messages = [  
-    {  
-        "role": "user",  
-        "content": [  
-            {  
-                "type": "image",  
-                "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",  
-            },  
-            { "type": "text", "text": "Describe this image."},  
-        ]  
-    }  
-]  
+
+pipeline = pipeline(
+    task="image-text-to-text",
+    model="llava-hf/llava-v1.6-mistral-7b-hf",
+    device=0,
+)
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "image",
+                "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+            },
+            { "type": "text", "text": "Describe this image."},
+        ]
+    }
+]
 pipeline(text=messages, max_new_tokens=20, return_full_text=False)
 ```
 
@@ -70,16 +69,14 @@ pipeline(text=messages, max_new_tokens=20, return_full_text=False)
 <hfoption id="AutoModel">
 
 ```python
-import torch
 import requests
 from PIL import Image
-from transformers import AutoProcessor, LlavaNextForConditionalGeneration
-from accelerate import Accelerator
 
-device = Accelerator().device
+from transformers import AutoProcessor, LlavaNextForConditionalGeneration
+
 
 processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
-model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf", dtype=torch.float16).to(device)
+model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf", device_map="auto")
 
 url = "https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true"
 image = Image.open(requests.get(url, stream=True).raw)
@@ -108,15 +105,16 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to int4.
 
 ```python
-import torch
 import requests
+import torch
 from PIL import Image
+
 from transformers import AutoModelForImageTextToText, AutoProcessor, BitsAndBytesConfig
 
-quant_config = BitsAndBytesConfig(  
-    load_in_4bit=True,  
-    bnb_4bit_compute_dtype=torch.float16,  
-    bnb_4bit_quant_type="nf4"  
+
+quant_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4"
 )
 
 processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
@@ -163,13 +161,15 @@ processor.tokenizer.padding_side = "left"
 * The example below demonstrates inference with multiple input images.
 
 ```python
-from transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration
+import requests
 from PIL import Image
-import requests, torch
+
+from transformers import LlavaNextForConditionalGeneration, LlavaNextProcessor
+
 
 processor = LlavaNextProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
 model = LlavaNextForConditionalGeneration.from_pretrained(
-    "llava-hf/llava-v1.6-mistral-7b-hf", dtype=torch.float16, device_map="auto"
+    "llava-hf/llava-v1.6-mistral-7b-hf", device_map="auto"
 )
 
 # Load multiple images
@@ -198,9 +198,9 @@ print(processor.decode(output[0], skip_special_tokens=True))
 [[autodoc]] LlavaNextImageProcessor
     - preprocess
 
-## LlavaNextImageProcessorFast
+## LlavaNextImageProcessorPil
 
-[[autodoc]] LlavaNextImageProcessorFast
+[[autodoc]] LlavaNextImageProcessorPil
     - preprocess
 
 ## LlavaNextProcessor
