@@ -264,52 +264,6 @@ class Granite4VisionTextRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-@auto_docstring
-class Granite4VisionPreTrainedModel(PreTrainedModel):
-    config: Granite4VisionConfig
-    base_model_prefix = "model"
-    input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["LlamaDecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
-
-    _supports_flash_attn = True
-    _supports_sdpa = True
-
-    _can_compile_fullgraph = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
-
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, Granite4VisionModel):
-            embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
-            init.normal_(module.image_newline, mean=0.0, std=embed_std)
-        if isinstance(module, Granite4VisionTextRotaryEmbedding):
-            # Non-persistent buffers (inv_freq, original_inv_freq) are replaced with
-            # torch.empty_like() garbage by _move_missing_keys_from_meta_to_device.
-            # Recompute them here so _initialize_missing_keys restores correct values.
-            rope_type = module.config.rope_parameters.get("rope_type", "default")
-            if rope_type != "default":
-                rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
-            else:
-                rope_init_fn = module.compute_default_rope_parameters
-            inv_freq, attention_scaling = rope_init_fn(module.config, module.inv_freq.device)
-            init.copy_(module.inv_freq, inv_freq)
-            init.copy_(module.original_inv_freq, inv_freq)
-            module.attention_scaling = attention_scaling
-        if isinstance(module, Granite4VisionWindowQFormerDownsampler):
-            embed_std = 1 / math.sqrt(module.query.shape[-1])
-            init.normal_(module.query, mean=0.0, std=embed_std)
-            init.normal_(module.image_positions, mean=0.0, std=embed_std)
-
-
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -550,15 +504,74 @@ class Granite4VisionTextDecoderLayer(GradientCheckpointingLayer):
 
 
 @auto_docstring
+class Granite4VisionPreTrainedModel(PreTrainedModel):
+    config: Granite4VisionConfig
+    base_model_prefix = "model"
+    input_modalities = ("image", "text")
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["LlamaDecoderLayer"]
+    _skip_keys_device_placement = "past_key_values"
+
+    _supports_flash_attn = True
+    _supports_sdpa = True
+
+    _can_compile_fullgraph = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": Granite4VisionTextDecoderLayer,
+        "attentions": Granite4VisionTextAttention,
+    }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
+
+        if isinstance(module, nn.Linear):
+            init.normal_(module.weight, mean=0.0, std=std)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, Granite4VisionModel):
+            embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
+            init.normal_(module.image_newline, mean=0.0, std=embed_std)
+        if isinstance(module, Granite4VisionTextRotaryEmbedding):
+            # Non-persistent buffers (inv_freq, original_inv_freq) are replaced with
+            # torch.empty_like() garbage by _move_missing_keys_from_meta_to_device.
+            # Recompute them here so _initialize_missing_keys restores correct values.
+            rope_type = module.config.rope_parameters.get("rope_type", "default")
+            if rope_type != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
+            else:
+                rope_init_fn = module.compute_default_rope_parameters
+            inv_freq, attention_scaling = rope_init_fn(module.config, module.inv_freq.device)
+            init.copy_(module.inv_freq, inv_freq)
+            init.copy_(module.original_inv_freq, inv_freq)
+            module.attention_scaling = attention_scaling
+        if isinstance(module, Granite4VisionWindowQFormerDownsampler):
+            embed_std = 1 / math.sqrt(module.query.shape[-1])
+            init.normal_(module.query, mean=0.0, std=embed_std)
+            init.normal_(module.image_positions, mean=0.0, std=embed_std)
+
+    def _deepstack_inject(
+        self,
+        hidden_states: torch.Tensor,
+        vision_mask: torch.Tensor,
+        features: torch.Tensor,
+    ) -> torch.Tensor:
+        """Add projected vision features into the image-token positions of hidden_states."""
+        vision_mask = vision_mask.to(hidden_states.device)
+        features = features.to(hidden_states.device, hidden_states.dtype)
+        hidden_states = hidden_states.clone()
+        hidden_states[vision_mask] = hidden_states[vision_mask] + features
+        return hidden_states
+
+
+@auto_docstring
 class Granite4VisionTextModel(Granite4VisionPreTrainedModel):
     """Granite LLM backbone with deepstack feature injection support."""
 
     base_model_prefix = "model"
     _no_split_modules = ["Granite4VisionTextDecoderLayer"]
-    _can_record_outputs = {
-        "hidden_states": Granite4VisionTextDecoderLayer,
-        "attentions": Granite4VisionTextAttention,
-    }
 
     def __init__(self, config: Granite4VisionTextConfig):
         super().__init__(config)
@@ -642,19 +655,6 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
-
-    def _deepstack_inject(
-        self,
-        hidden_states: torch.Tensor,
-        vision_mask: torch.Tensor,
-        features: torch.Tensor,
-    ) -> torch.Tensor:
-        """Add projected vision features into the image-token positions of hidden_states."""
-        vision_mask = vision_mask.to(hidden_states.device)
-        features = features.to(hidden_states.device, hidden_states.dtype)
-        hidden_states = hidden_states.clone()
-        hidden_states[vision_mask] = hidden_states[vision_mask] + features
-        return hidden_states
 
 
 def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
