@@ -38,8 +38,23 @@ _FP8_DTYPE = torch.float8_e4m3fn
 _FP8_MIN = torch.finfo(_FP8_DTYPE).min
 _FP8_MAX = torch.finfo(_FP8_DTYPE).max
 
-# Will be initialized lazily in replace_with_ct_fp8_linear
-quantize_fp8_per_row = None
+
+def _use_fp8_kernel():
+    """Check if we can use kernels-community Triton FP8 kernel (XPU or CUDA SM89+)."""
+    if torch.xpu.is_available():
+        return True
+    if torch.cuda.is_available():
+        major, minor = torch.cuda.get_device_capability()
+        if major > 8 or (major == 8 and minor >= 9):
+            return True
+    return False
+
+
+def _get_quantize_fp8_per_row():
+    """Get the quantize_fp8_per_row function from kernels-community (Triton)."""
+    from .hub_kernels import get_kernel
+
+    return get_kernel("kernels-community/fp8-fbgemm").quantize_fp8_per_row
 
 
 class CTFP8Linear(nn.Linear):
@@ -57,15 +72,21 @@ class CTFP8Linear(nn.Linear):
         activation_scheme: str = "dynamic",
         has_bias: bool = False,
         dtype=_FP8_DTYPE,
+        use_fp8_kernel: bool = True,
+        quantize_fp8_per_row=None,
     ):
         super().__init__(in_features, out_features)
 
         self.has_bias = has_bias
         self.activation_scheme = activation_scheme
+        self.use_fp8_kernel = use_fp8_kernel
         self.weight = nn.Parameter(torch.empty(out_features, in_features, dtype=dtype))
 
         # Weight scale: per-channel (out_features, 1) or per-tensor (scalar → expanded at load)
         self.weight_scale_inv = nn.Parameter(torch.zeros((out_features, 1), dtype=torch.float32))
+
+        if use_fp8_kernel:
+            self.quantize_fp8_per_row = quantize_fp8_per_row
 
         if self.has_bias:
             self.bias = nn.Parameter(torch.empty(self.out_features))
@@ -80,32 +101,36 @@ class CTFP8Linear(nn.Linear):
         # Save shape for restoring after squashing batch dims
         output_shape = (*input.shape[:-1], -1)
 
-        # Dynamically quantize activation per-row to FP8
-        x_quantized, x_scale = quantize_fp8_per_row(
-            input.view(-1, input.shape[-1]).contiguous()
-        )
+        if self.use_fp8_kernel:
+            # XPU or CUDA SM89+: FP8 kernel path (quantize activation + scaled_mm)
+            x_quantized, x_scale = self.quantize_fp8_per_row(
+                input.view(-1, input.shape[-1]).contiguous()
+            )
 
-        weight_scale_float32 = self.weight_scale_inv.to(torch.float32)
+            weight_scale_float32 = self.weight_scale_inv.to(torch.float32)
 
-        # Ensure scale_b has shape (1, out_features) for row-wise _scaled_mm
-        # Per-channel: (out_features, 1) → .t() → (1, out_features) ✓
-        # Per-tensor: (1, 1) → need to expand to (1, out_features)
-        scale_b = weight_scale_float32.t()
-        if scale_b.shape[-1] == 1 and self.out_features > 1:
-            scale_b = scale_b.expand(1, self.out_features).contiguous()
+            # Ensure scale_b has shape (1, out_features) for row-wise _scaled_mm
+            # Per-channel: (out_features, 1) → .t() → (1, out_features) ✓
+            # Per-tensor: (1, 1) → need to expand to (1, out_features)
+            scale_b = weight_scale_float32.t()
+            if scale_b.shape[-1] == 1 and self.out_features > 1:
+                scale_b = scale_b.expand(1, self.out_features).contiguous()
 
-        output = torch._scaled_mm(
-            x_quantized,
-            self.weight.t(),
-            scale_a=x_scale.unsqueeze(-1),
-            scale_b=scale_b,
-            out_dtype=input.dtype,
-            bias=self.bias,
-        )
+            output = torch._scaled_mm(
+                x_quantized,
+                self.weight.t(),
+                scale_a=x_scale.unsqueeze(-1),
+                scale_b=scale_b,
+                out_dtype=input.dtype,
+                bias=self.bias,
+            )
+            del x_quantized, x_scale
+        else:
+            # CUDA SM80 (A100): no FP8 hardware, dequantize weight to BF16 + normal matmul
+            w = self.weight.to(input.dtype) * self.weight_scale_inv.to(input.dtype)
+            output = F.linear(input.view(-1, input.shape[-1]), w, self.bias)
 
-        output = output.to(input.device)
         output = output.reshape(output_shape)
-        del x_quantized, x_scale
         return output
 
 
@@ -113,14 +138,11 @@ def replace_with_ct_fp8_linear(
     model, modules_to_not_convert=None, activation_scheme="dynamic", dequantize=False, pre_quantized=False
 ):
     """Replace all nn.Linear modules with CTFP8Linear for compressed-tensors FP8 loading."""
-    from .fbgemm_fp8 import get_quantize_fp8_per_row
-
-    global quantize_fp8_per_row
-    quantize_fp8_per_row = get_quantize_fp8_per_row()
-
     if dequantize:
         return model
 
+    use_fp8_kernel = _use_fp8_kernel()
+    quantize_fp8_per_row = _get_quantize_fp8_per_row() if use_fp8_kernel else None
     has_been_replaced = False
     for module_name, module in model.named_modules():
         if not should_convert_module(module_name, modules_to_not_convert):
@@ -134,6 +156,8 @@ def replace_with_ct_fp8_linear(
                     out_features=module.out_features,
                     activation_scheme=activation_scheme,
                     has_bias=module.bias is not None,
+                    use_fp8_kernel=use_fp8_kernel,
+                    quantize_fp8_per_row=quantize_fp8_per_row,
                     **module_kwargs,
                 )
             model.set_submodule(module_name, new_module)
@@ -280,4 +304,3 @@ class CTFP8PerRowQuantize(ConversionOps):
     @property
     def reverse_op(self):
         return _IdentityOp()
-
