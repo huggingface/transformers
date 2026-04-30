@@ -30,14 +30,14 @@ from ...utils import auto_docstring
 @strict
 class MiMoV2FlashConfig(PreTrainedConfig):
     r"""
-    head_dim (`int`, *optional*, defaults to 192):
-        Dimension of query and key heads.
-    v_head_dim (`int`, *optional*, defaults to 128):
-        Dimension of value heads (special case because MiMo uses a smaller v head dim than (qk) head dim )
     n_group (`int`, *optional*, defaults to 1):
         Number of expert groups for group-based top-k routing.
     topk_group (`int`, *optional*, defaults to 1):
         Number of groups selected per token in group-based top-k routing.
+    head_dim (`int`, *optional*, defaults to 192):
+        Dimension of query and key heads.
+    v_head_dim (`int`, *optional*, defaults to 128):
+        Dimension of value heads (special case because MiMo uses a smaller v head dim than (qk) head dim )
     mlp_layer_types (`list`, *optional*):
         MLP pattern for each layer (`"dense"` or `"sparse"`). Defaults to 1 dense + rest sparse.
     attention_value_scale (`float`, *optional*, defaults to 0.707 (which is the decimal approximation of 1/√2):
