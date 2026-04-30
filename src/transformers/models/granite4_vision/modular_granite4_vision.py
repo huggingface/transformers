@@ -296,9 +296,7 @@ class Granite4VisionWindowQFormerDownsampler(nn.Module):
         """(B*num_win*num_win, window_size*window_size, C) -> (B, (num_win*window_size)^2, C)"""
         batch_win, _, channels = windowed_features.shape
         if batch_win % (num_win * num_win) != 0:
-            raise ValueError(
-                f"Expected batch_win ({batch_win}) to be divisible by num_win^2 ({num_win**2})."
-            )
+            raise ValueError(f"Expected batch_win ({batch_win}) to be divisible by num_win^2 ({num_win**2}).")
         batch = batch_win // (num_win * num_win)
         side = num_win * window_size
         return (
@@ -805,7 +803,6 @@ class Granite4VisionForConditionalGeneration(LlavaNextForConditionalGeneration):
             attentions=outputs.attentions,
             deepstack_features=outputs.deepstack_features,
         )
-
 
 
 __all__ = [
