@@ -41,7 +41,7 @@ from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
 from .offloading_manager import OffloadingManager
 from .requests import GenerationOutput, RequestState, RequestStatus, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
-from .utils import attn_mask_is_needed, create_warmup_future_states, pad_to_interval, pad_to_pow2
+from .utils import WorkloadHints, attn_mask_is_needed, create_warmup_future_states, pad_to_interval, pad_to_pow2
 
 
 """
@@ -260,11 +260,14 @@ class ContinuousBatchProcessor:
 
     def _ensure_decode_fast_path_is_available(self) -> None:
         """Ensures the decode fast path is available. If it is not, set the max blocks per request to 0. If it is
-        available, and no user-provided max blocks per request, set it to 32 as a good default."""
+        available, and no user-provided max blocks per request, set it to the fallback default."""
         # First, set max blocks per request to 32 if it needs to be auto-inferred
         user_requested = self.cb_config.max_blocks_per_request is not None
         if not user_requested:
-            self.cache.max_blocks_per_request = 32
+            self.cache.max_blocks_per_request = self.cb_config.fallback_max_blocks_per_request
+            logger_warning = lambda x: x  # silences warning for user_requested=False  # noqa: E731
+        else:
+            logger_warning = logger.warning
 
         # Then, if the decode fast path is not turned off, check if it is available
         if self.cache.max_blocks_per_request != 0:
@@ -277,15 +280,15 @@ class ContinuousBatchProcessor:
                     flash_attn_with_kvcache is not None,  # The `flash_attn_with_kvcache` fn is needed
                 ]
                 # Throw a warning only if the decode fast path was requested by the user
-                if not all(conditions) and user_requested:
-                    logger.warning(
+                if not all(conditions):
+                    logger_warning(
                         f"Although {self.cache.max_blocks_per_request = }, the decode fast path is not available "
                         f"because the one condition is not met: {conditions}."
                     )
                     self.cache.max_blocks_per_request = 0
-            # Same, throw a warning only if the decode fast path was requested by the user
-            elif user_requested:
-                logger.warning(
+            # Specific warning for attn implementation other than FA3
+            else:
+                logger_warning(
                     f"Although {self.cache.max_blocks_per_request = }, the decode fast path is not available "
                     f"because the attention implementation is not FA3. Got {self.config._attn_implementation = }."
                 )
@@ -688,7 +691,7 @@ class ContinuousBatchProcessor:
                     num_requests, RequestStatus.DECODING, 1, self.cache.block_size, self.cache
                 )
                 if not future_states:
-                    continue
+                    break
                 try:
                     padded_q, _ = self.maybe_pad_inputs(
                         num_q_tokens=num_requests, max_kv_read=0, use_decode_fast_path=True
@@ -1158,7 +1161,7 @@ class ContinuousMixin:
         self,
         generation_config: GenerationConfig | None = None,
         continuous_batching_config: ContinuousBatchingConfig | None = None,
-        workload_hints: dict[str, int] | None = None,
+        workload_hints: WorkloadHints | None = None,
         **deprecated_kwargs,
     ) -> ContinuousBatchingManager:
         """Initialize a manager for continuous batching inference.
@@ -1166,8 +1169,8 @@ class ContinuousMixin:
         Args:
             generation_config: An optional generation configuration, which may contain a CompileConfig object
             continuous_batching_config: An optional continuous batching configuration
-            workload_hints: Optional workload hints to help the continuous batching manager make better decisions for
-                default values. Keys accepted are: max_prompt_length, max_generated_length.
+            workload_hints: Optional WorkloadHints to help the continuous batching manager make better decisions for
+                default values
             **deprecated_kwargs: Deprecated arguments that are now passed in the continuous_batching_config. Those are:
                 max_queue_size, q_padding_interval_size, kv_padding_interval_size, allow_block_sharing,
                 use_async_batching, max_cached_graphs
@@ -1203,7 +1206,8 @@ class ContinuousMixin:
             else:
                 continuous_batching_config = ContinuousBatchingConfig()
         continuous_batching_config.account_for_cb_deprecated_arguments(**deprecated_kwargs)
-        continuous_batching_config.resolve_using_hints(workload_hints)
+        if workload_hints is not None:
+            workload_hints.resolve_using_hints(continuous_batching_config)
 
         # Create and return the manager
         return ContinuousBatchingManager(
@@ -1227,7 +1231,7 @@ class ContinuousMixin:
         continuous_batching_config: ContinuousBatchingConfig | None = None,
         persistent_manager: bool = False,
         warmup: bool = True,
-        workload_hints: dict[str, int] | None = None,
+        workload_hints: WorkloadHints | None = None,
         **deprecated_kwargs,
     ) -> Generator[ContinuousBatchingManager]:
         """A context manager to safely use the continuous batching manager. Arguments are similar to the ones of
@@ -1319,10 +1323,10 @@ class ContinuousMixin:
         max_new_tokens = gen_cfg.max_new_tokens if max_new_tokens is None else max_new_tokens
 
         # Compute workload hints
-        workload_hints = {
-            "max_prompt_length": max(len(input_ids) for input_ids in inputs),
-            "max_generated_length": max_new_tokens,
-        }
+        workload_hints = WorkloadHints(
+            max_prompt_length=max(len(input_ids) for input_ids in inputs),
+            max_generated_length=max_new_tokens if max_new_tokens is not None else 0,
+        )
 
         # Prepare context managers for the main loop
         manager_cm = self.continuous_batching_context_manager(

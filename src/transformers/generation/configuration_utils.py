@@ -19,7 +19,6 @@ import os
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, is_dataclass
-from math import ceil
 from typing import TYPE_CHECKING, Any, Optional, Union
 
 from huggingface_hub import create_repo
@@ -1740,6 +1739,11 @@ class ContinuousBatchingConfig:
     # are kept but warnings are logged for unsupported/unknown ones.
     drop_unsupported_processors: bool = True
 
+    @property
+    def fallback_max_blocks_per_request(self) -> int:
+        """A good default for the size of the block table for the decode path"""
+        return 32
+
     def account_for_cb_deprecated_arguments(
         self,
         max_queue_size: int = 0,
@@ -1920,15 +1924,3 @@ class ContinuousBatchingConfig:
         # Modify in place
         self.varlen_compile_config = varlen_config
         self.decode_compile_config = decode_config
-
-    def resolve_using_hints(self, workload_hints: dict[str, int] | None) -> None:
-        """Resolves the config using workload hints. If the hints are not provided, we use a default value."""
-        if workload_hints is None:
-            return None
-        max_prompt_length = workload_hints.get("max_prompt_length", 0)
-        max_generated_length = workload_hints.get("max_generated_length", 0)
-        # The max number of block per request is an even number large enough to hold the max request length
-        if max_prompt_length and max_generated_length:
-            max_sequence_length = max_prompt_length + max_generated_length
-            blocks_per_request = int(ceil(max_sequence_length / self.block_size)) + 1
-            self.max_blocks_per_request = blocks_per_request + (blocks_per_request % 2)

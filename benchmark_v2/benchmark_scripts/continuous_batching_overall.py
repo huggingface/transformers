@@ -73,29 +73,20 @@ class BenchmarkResults:
         self.model_id = model_id
         self.attn_impl = attn_impl
         self.entries: list[BenchmarkEntry] = []
-        self._model_and_configs: tuple[Any, GenerationConfig, ContinuousBatchingConfig] | None = None
 
     def cleanup(self) -> None:
         torch.cuda.empty_cache()
         gc.collect()
         torch.cuda.reset_peak_memory_stats()
 
-    def _get_model(self, cb_config: ContinuousBatchingConfig, gen_config: GenerationConfig) -> Any:
-        if self._model_and_configs is None:
-            refresh = True
-        else:
-            model, current_cb_config, current_gen_config = self._model_and_configs
-            if current_cb_config == cb_config and current_gen_config == gen_config:
-                refresh = False
-            else:
-                refresh = True
-        if refresh:
-            model = None
-            self.cleanup()
-            model = AutoModelForCausalLM.from_pretrained(self.model_id, attn_implementation=self.attn_impl)
-            model = model.to(device="cuda").eval()  # type: ignore
-            self._model_and_configs = (model, cb_config, gen_config)
-        return self._model_and_configs[0]
+    def _get_model(self) -> Any:
+        model = None
+        self.cleanup()
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_id, attn_implementation=self.attn_impl, device_map="auto"
+        )
+        model = model.eval()
+        return model
 
     def add_benchmark(
         self,
@@ -112,7 +103,7 @@ class BenchmarkResults:
         # Disable EOS so every request runs to max_new_tokens — consistent benchmarking.
         gen_config.eos_token_id = -1
 
-        model = self._get_model(cb_config, gen_config)
+        model = self._get_model()
 
         avg_input = sum(len(x) for x in data) / max(len(data), 1)
         entry = BenchmarkEntry(
