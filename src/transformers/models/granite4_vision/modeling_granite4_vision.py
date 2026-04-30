@@ -30,7 +30,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...image_processing_utils import select_best_resolution
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
@@ -42,6 +42,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_granite4_vision import Granite4VisionConfig, Granite4VisionTextConfig
 
@@ -80,7 +81,7 @@ class Granite4VisionCausalLMOutputWithPast(ModelOutput):
 
 
 @dataclass
-class Granite4VisionImageFeaturesOutput(ModelOutput):
+class Granite4VisionImageFeaturesOutput(BaseModelOutputWithPooling):
     """
     Output of `Granite4VisionModel.get_image_features`.
 
@@ -590,6 +591,7 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -617,9 +619,6 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         inputs_embeds = inputs_embeds * self.embedding_multiplier
-
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
 
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -916,6 +915,9 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         elif pixel_values.dim() != 4:
             raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
 
+        output_hidden_states = kwargs.pop("output_hidden_states", None)
+        if output_hidden_states is None:
+            output_hidden_states = getattr(self.config, "output_hidden_states", False)
         vision_outputs = self.vision_tower(pixel_values, output_hidden_states=True, **kwargs)
 
         # Deepstack features: extract from multiple vision layers, downsample via interpolation
@@ -958,7 +960,10 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
 
                 all_features.append((llm_layer, packed_group))
 
-        return Granite4VisionImageFeaturesOutput(deepstack_features=all_features)
+        return Granite4VisionImageFeaturesOutput(
+            deepstack_features=all_features,
+            hidden_states=vision_outputs.hidden_states if output_hidden_states else None,
+        )
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor

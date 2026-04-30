@@ -25,7 +25,7 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import select_best_resolution
 from ...masking_utils import create_causal_mask
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
