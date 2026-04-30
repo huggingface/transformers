@@ -51,6 +51,7 @@ from .core_model_loading import (
     convert_and_load_state_dict_in_model,
     revert_weight_conversion,
 )
+from . import __version__
 from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
@@ -3334,7 +3335,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory_path.split(os.path.sep)[-1])
             create_pr = kwargs.pop("create_pr", False)
+
+            kwargs.setdefault("library_name", "transformers")
+            kwargs.setdefault("library_version", __version__)
+
             repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+
             files_timestamps = self._get_files_timestamps(save_directory)
 
         metadata = {}

@@ -2027,8 +2027,13 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", str(save_directory).split(os.path.sep)[-1])
+
+            kwargs.setdefault("library_name", "transformers")
+            kwargs.setdefault("library_version", __version__)
+
             repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
-            files_timestamps = self._get_files_timestamps(save_directory)
+
+    files_timestamps = self._get_files_timestamps(save_directory)
 
         tokenizer_config_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + TOKENIZER_CONFIG_FILE

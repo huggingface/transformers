@@ -32,6 +32,8 @@ from huggingface_hub import create_repo, is_offline_mode
 from huggingface_hub.dataclasses import validate_typed_dict
 from huggingface_hub.errors import EntryNotFoundError
 
+from . import __version__
+
 from .audio_utils import AudioInput, load_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
@@ -833,8 +835,14 @@ class ProcessorMixin(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
+
+            kwargs.setdefault("library_name", "transformers")
+            kwargs.setdefault("library_version", __version__)
+
             repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+
             files_timestamps = self._get_files_timestamps(save_directory)
+
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
         if self._auto_class is not None:

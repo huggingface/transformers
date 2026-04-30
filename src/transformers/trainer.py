@@ -3918,7 +3918,14 @@ class Trainer:
             repo_name = self.args.hub_model_id
 
         token = token if token is not None else self.args.hub_token
-        repo_url = create_repo(repo_name, token=token, private=self.args.hub_private_repo, exist_ok=True)
+        repo_url = create_repo(
+            repo_name,
+            token=token,
+            private=self.args.hub_private_repo,
+            exist_ok=True,
+            library_name="transformers",
+            library_version=__version__,
+        )
         self.hub_model_id = repo_url.repo_id
         self.push_in_progress = None
 
@@ -4076,6 +4083,8 @@ class Trainer:
             run_as_future=not blocking,
             ignore_patterns=["_*", f"{PREFIX_CHECKPOINT_DIR}-*"],
             revision=revision,
+            library_name="transformers",
+            library_version=__version__,
         )
 
     def _push_from_checkpoint(self, checkpoint_folder: str) -> None:
@@ -4123,6 +4132,8 @@ class Trainer:
             run_as_future=True,
             ignore_patterns=["_*", f"{PREFIX_CHECKPOINT_DIR}-*"],
             revision=self.args.hub_revision,
+            library_name="transformers",
+            library_version=__version__,
         )
 
         push_jobs = [model_push_job]
@@ -4139,6 +4150,8 @@ class Trainer:
                 token=self.args.hub_token,
                 run_as_future=True,
                 revision=self.args.hub_revision,
+                library_name="transformers",
+                library_version=__version__,
             )
             push_jobs.append(checkpoint_push)
 

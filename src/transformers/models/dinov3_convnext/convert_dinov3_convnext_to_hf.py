@@ -16,6 +16,7 @@
 URL: https://github.com/facebookresearch/dinov3/tree/main
 """
 
+from transformers import __version__
 import argparse
 import os
 import re
@@ -204,7 +205,7 @@ def convert_and_test_dinov3_checkpoint(args):
     print(f"Model saved to {save_dir}")
 
     if args.push_to_hub:
-        api = HfApi()
+        api = HfApi(library_name="transformers", library_version=__version__)
         repo = HUB_MODELS[model_name]
         api.upload_folder(folder_path=save_dir, repo_id=repo, repo_type="model")
 

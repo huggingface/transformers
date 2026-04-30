@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from transformers import __version__
 import argparse
 import json
 import os
@@ -200,7 +201,7 @@ def main(args: argparse.Namespace):
     processor.save_pretrained(output_dir)
 
     if args.push_to_hub:
-        api = HfApi()
+        api = HfApi(library_name="transformers", library_version=__version__)
         repo_id = f"{args.repo_org}/{args.model_name}"
         if not api.repo_exists(repo_id):
             api.create_repo(repo_id, repo_type="model")

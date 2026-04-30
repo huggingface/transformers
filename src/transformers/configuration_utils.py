@@ -516,7 +516,12 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
+
+            kwargs.setdefault("library_name", "transformers")
+            kwargs.setdefault("library_version", __version__)
+
             repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # This attribute is important to know on load, but should not be serialized on save.

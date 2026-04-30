@@ -351,6 +351,8 @@ def push_to_hub(
             commit_message=commit_message,
             repo_type="model",
             token=token,
+            library_name="transformers",
+            library_version=__version__,
         )
         logger.info(f"Successfully pushed model to {repo_id}")
 

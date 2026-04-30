@@ -13,7 +13,7 @@
 # limitations under the License.
 """Convert DINOv3 checkpoints from the original repository.
 
-URL: https://github.com/facebookresearch/dinov3/tree/main
+URL: https://github.com/facebookresearch/dinov3/tree/mai
 """
 
 import argparse
@@ -26,6 +26,7 @@ import torch
 from huggingface_hub import HfApi, hf_hub_download
 from PIL import Image
 from torchvision import transforms
+from transformers import __version__
 
 from transformers import DINOv3ViTConfig, DINOv3ViTImageProcessorFast, DINOv3ViTModel
 
@@ -298,7 +299,7 @@ def convert_and_test_dinov3_checkpoint(args):
     print(f"Model saved to {save_dir}")
 
     if args.push_to_hub:
-        api = HfApi()
+        api = HfApi(library_name="transformers", library_version=__version__)
         repo = HUB_MODELS[model_name]
         api.upload_folder(folder_path=save_dir, repo_id=repo, repo_type="model")
 

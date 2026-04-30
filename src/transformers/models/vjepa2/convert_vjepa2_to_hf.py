@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from transformers import __version__
 import argparse
 import os
 import tempfile
@@ -209,7 +210,7 @@ def upload_original_ckpts(model_name):
     with tempfile.NamedTemporaryFile() as fn:
         local_path = fn.name
         torch.hub.download_url_to_file(original_ckpt, local_path)
-        api = HfApi()
+        api = HfApi(library_name="transformers", library_version=__version__)
         api.upload_file(
             repo_id=hf_repo,
             path_or_fileobj=local_path,

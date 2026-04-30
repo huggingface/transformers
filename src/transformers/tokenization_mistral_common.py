@@ -35,6 +35,7 @@ from transformers.tokenization_utils_base import (
     TruncationStrategy,
 )
 from transformers.utils import PaddingStrategy, TensorType, add_end_docstrings, logging, to_py_obj
+from transformers import __version__
 from transformers.utils.import_utils import is_mistral_common_available, is_torch_available, requires
 
 
@@ -1574,7 +1575,10 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
 
         if push_to_hub:
             repo_id = repo_id or str(save_directory).split(os.path.sep)[-1]
-            repo_id = create_repo(repo_id, token=token, private=private, exist_ok=True).repo_id
+            repo_id = create_repo(
+                repo_id, token=token, private=private, exist_ok=True,
+                library_name="transformers", library_version=__version__,
+            ).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
             self._upload_modified_files(

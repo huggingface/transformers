@@ -3,6 +3,8 @@ from typing import Optional
 import httpx
 from huggingface_hub import Discussion, HfApi, get_repo_discussions
 
+from transformer import __version__
+
 from .utils import cached_file, http_user_agent, logging
 
 
@@ -92,7 +94,12 @@ def auto_conversion(
     **cached_file_kwargs,
 ):
     try:
-        api = HfApi(token=cached_file_kwargs.get("token"), headers={"user-agent": http_user_agent()})
+        api = HfApi(
+            token=cached_file_kwargs.get("token"),
+            headers={"user-agent": http_user_agent()},
+            library_name="transformers",
+            library_version=__version__,
+        )
         sha = get_conversion_pr_reference(api, pretrained_model_name_or_path, **cached_file_kwargs)
 
         if sha is None:

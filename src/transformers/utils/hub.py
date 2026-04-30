@@ -711,6 +711,8 @@ class PushToHubMixin:
             token=token,
             create_pr=create_pr,
             revision=revision,
+            library_name="transformers",
+            library_version=__version__,
         )
 
     def save_pretrained(self, *args, **kwargs):
@@ -775,7 +777,14 @@ class PushToHubMixin:
         ```
         """
         # Create repo if it doesn't exist yet
-        repo_id = create_repo(repo_id, private=private, token=token, exist_ok=True).repo_id
+    repo_id = create_repo(
+        repo_id, 
+        private=private, 
+        token=token, 
+        exist_ok=True,
+        library_name="transformers",
+        library_version=__version__,
+    ).repo_id
 
         # Load model card or create a new one + eventually tag it
         model_card = create_and_tag_model_card(repo_id, tags, token=token)

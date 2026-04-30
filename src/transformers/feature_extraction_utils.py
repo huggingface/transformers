@@ -24,6 +24,8 @@ from typing import TYPE_CHECKING, Any, TypeVar, Union
 import numpy as np
 from huggingface_hub import create_repo, is_offline_mode
 
+from . import __version__
+
 from .dynamic_module_utils import custom_object_save
 from .utils import (
     FEATURE_EXTRACTOR_NAME,
@@ -403,6 +405,10 @@ class FeatureExtractionMixin(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
+
+            kwargs.setdefault("library_name", "transformers")
+            kwargs.setdefault("library_version", __version__)
+
             repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
