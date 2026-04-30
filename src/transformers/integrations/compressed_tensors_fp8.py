@@ -29,7 +29,7 @@ from torch.nn import functional as F
 
 from ..core_model_loading import ConversionOps, _IdentityOp
 from ..quantizers.quantizers_utils import should_convert_module
-from ..utils import is_fbgemm_gpu_available, is_torch_xpu_available, logging
+from ..utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -38,11 +38,6 @@ _FP8_DTYPE = torch.float8_e4m3fn
 _FP8_MIN = torch.finfo(_FP8_DTYPE).min
 _FP8_MAX = torch.finfo(_FP8_DTYPE).max
 
-_is_torch_xpu_available = is_torch_xpu_available()
-
-if is_fbgemm_gpu_available() and not _is_torch_xpu_available:
-    import fbgemm_gpu.experimental.gen_ai  # noqa: F401
-
 # Will be initialized lazily in replace_with_ct_fp8_linear
 quantize_fp8_per_row = None
 
@@ -50,10 +45,7 @@ quantize_fp8_per_row = None
 class CTFP8Linear(nn.Linear):
     """Linear layer for compressed-tensors FP8 models.
 
-    Stores weights in FP8 format and uses row-wise FP8 matmul kernels for compute:
-    - XPU: torch._scaled_mm
-    - CUDA: fbgemm.f8f8bf16_rowwise
-
+    Stores weights in FP8 format and uses torch._scaled_mm for FP8 matmul.
     Activation is dynamically quantized per-row via quantize_fp8_per_row.
     Weight scale (per-channel or per-tensor) is stored as weight_scale_inv.
     """
@@ -102,20 +94,14 @@ class CTFP8Linear(nn.Linear):
         if scale_b.shape[-1] == 1 and self.out_features > 1:
             scale_b = scale_b.expand(1, self.out_features).contiguous()
 
-        if _is_torch_xpu_available:
-            output = torch._scaled_mm(
-                x_quantized,
-                self.weight.t(),
-                scale_a=x_scale.unsqueeze(-1),
-                scale_b=scale_b,
-                out_dtype=input.dtype,
-                bias=self.bias,
-            )
-        else:
-            output = torch.ops.fbgemm.f8f8bf16_rowwise(
-                x_quantized, self.weight, x_scale, weight_scale_float32, use_fast_accum=True
-            )
-            output = output + self.bias if self.bias is not None else output
+        output = torch._scaled_mm(
+            x_quantized,
+            self.weight.t(),
+            scale_a=x_scale.unsqueeze(-1),
+            scale_b=scale_b,
+            out_dtype=input.dtype,
+            bias=self.bias,
+        )
 
         output = output.to(input.device)
         output = output.reshape(output_shape)
