@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import inspect
+import weakref
 from collections.abc import Callable
 from functools import lru_cache, wraps
 
@@ -243,17 +244,45 @@ def compile_compatible_method_lru_cache(*lru_args, **lru_kwargs):
     """
     LRU cache decorator from standard functools library, but with a workaround to disable
     caching when torchdynamo is compiling. Expected to work with class methods.
+
+    The cache is stored per-instance (in a `WeakKeyDictionary`) so that the wrapped
+    method does not keep a strong reference to ``self`` after the instance is no
+    longer referenced elsewhere. Without this, models that decorate methods with
+    this helper (e.g. ``RT-DETR``, ``MaskFormer``, ``Conditional DETR``,
+    ``EdgeTAM``, ``RT-DETRv2``) leak GPU/CPU memory after ``del model`` because
+    the class-level cache keeps a strong ref to every ``self`` ever passed in.
+    See https://github.com/huggingface/transformers/issues/45412.
     """
 
     def decorator(func):
-        func_with_cache = lru_cache(*lru_args, **lru_kwargs)(func)
+        # Per-instance caches; weak keys ensure the cache is freed alongside the instance.
+        instance_caches: "weakref.WeakKeyDictionary[object, Callable]" = weakref.WeakKeyDictionary()
 
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(self, *args, **kwargs):
             if is_torchdynamo_compiling():
-                return func(*args, **kwargs)
-            else:
-                return func_with_cache(*args, **kwargs)
+                return func(self, *args, **kwargs)
+            cached = instance_caches.get(self)
+            if cached is None:
+                # Build a per-instance cached callable that closes over ``self`` via
+                # a weak reference. The lru_cache below therefore never receives
+                # ``self`` as part of its key, so it cannot keep ``self`` alive.
+                self_ref = weakref.ref(self)
+
+                @lru_cache(*lru_args, **lru_kwargs)
+                def _cached(*inner_args, **inner_kwargs):
+                    instance = self_ref()
+                    if instance is None:
+                        # Should not happen while ``_cached`` is reachable from
+                        # ``instance_caches``, but guard for safety.
+                        raise RuntimeError(
+                            f"Cached method {func.__qualname__} called after instance was garbage collected."
+                        )
+                    return func(instance, *inner_args, **inner_kwargs)
+
+                instance_caches[self] = _cached
+                cached = _cached
+            return cached(*args, **kwargs)
 
         return wrapper
 
