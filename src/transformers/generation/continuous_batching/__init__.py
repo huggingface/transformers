@@ -11,6 +11,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
+
+
+# Disable NCCL's intra-process graph mixing protection: under CUDA-graph capture it spawns one stream per
+# captured collective (~hundreds for TP forward) and inflates per-kernel launch overhead. Safe because CB
+# enqueues collectives serially from a single generation thread. Must be set before init_process_group, so
+# this lives at package import. ContinuousBatchingManager._maybe_warn_nccl_graph_mixing checks at runtime
+# whether the value actually took effect and warns if NCCL was already initialized when this ran.
+os.environ.setdefault("NCCL_GRAPH_MIXING_SUPPORT", "0")
+
 from .cache import PagedAttentionCache
 from .continuous_api import ContinuousBatchingManager, ContinuousMixin
 from .requests import RequestState, RequestStatus

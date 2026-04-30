@@ -250,20 +250,17 @@ class DistributedHelper:
             # In DP x TP, that is not necessarily global rank 0.
             self.tp_root_global_rank = dist.get_global_rank(self.tp_group, 0)
             self.tp_local_rank = device_mesh.get_local_rank()
+            # Dedicated CPU-only (gloo) process group for requests broadcasts
+            self.ingress_group = dist.new_group(ranks=dist.get_process_group_ranks(self.tp_group), backend="gloo")
         else:
             self.tp_size = 1
             self.tp_group = None
             self.tp_root_global_rank = 0
             self.tp_local_rank = 0
+            self.ingress_group = None
 
         # The TP-driver is the rank that owns the request queue and the scheduler decisions inside its TP group.
         self.is_tp_driver = self.tp_local_rank == 0
-
-        # Cache the local accelerator device for later use by NCCL collectives
-        if self.dist_on and torch.cuda.is_available():
-            self._broadcast_device = torch.device("cuda", int(os.environ.get("LOCAL_RANK", 0)))
-        else:
-            self._broadcast_device = None
 
         # Get DP attributes
         self.dp_rank = self.global_rank // self.tp_size
@@ -278,13 +275,22 @@ class DistributedHelper:
     def tp_broadcast_object(self, obj):
         """Inside each TP group, broadcasts an arbitrary picklable Python object from TP-rank 0 to all other ranks.
         Used to keep request ingress and cancellations consistent across TP workers without requiring all ranks to
-        receive the same external request stream."""
+        receive the same external request stream. Uses a dedicated CPU (gloo) `ingress_group` for broadcast."""
         if self.tp_size <= 1:
             return obj
         holder = [obj] if self.is_tp_driver else [None]
-        # TODO: this is not optimized for intra-node transfer: we go through the CPU even though we don't need to. In
-        # the future, it might be better to use CPU-only comms.
         dist.broadcast_object_list(
-            holder, src=self.tp_root_global_rank, group=self.tp_group, device=self._broadcast_device
+            holder, src=self.tp_root_global_rank, group=self.ingress_group, device=torch.device("cpu")
         )
         return holder[0]
+
+    def maybe_warn_nccl_graph_mixing(self) -> None:
+        """Warn if `NCCL_GRAPH_MIXING_SUPPORT=0` (set by CB's package init) didn't take effect because NCCL was
+        already initialized — i.e., CB was imported after `init_process_group`. Costs ~6% on TP runs."""
+        if self.tp_size <= 1 or os.environ.get("NCCL_GRAPH_MIXING_SUPPORT") == "0":
+            return
+        logger.warning(
+            "NCCL_GRAPH_MIXING_SUPPORT was not set to '0' before init_process_group; CB is leaving ~6%% "
+            "TP throughput on the table. Set NCCL_GRAPH_MIXING_SUPPORT=0 in the launch environment, or "
+            "import transformers.generation.continuous_batching before model.from_pretrained(tp_plan=...)."
+        )
