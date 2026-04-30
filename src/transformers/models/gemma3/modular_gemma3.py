@@ -273,7 +273,6 @@ class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding, nn.Module):
             self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
-
     @staticmethod
     def compute_default_rope_parameters(
         config: Gemma3TextConfig | None = None,

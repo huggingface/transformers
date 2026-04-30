@@ -1021,6 +1021,7 @@ class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
         dtype = hidden_states.dtype
         return post.to(dtype).unsqueeze(-1) * mlp_output.unsqueeze(-2) + torch.matmul(comb.to(dtype), hidden_states)
 
+
 class DeepseekV4PreTrainedModel(MixtralPreTrainedModel):
     config_class = DeepseekV4Config
     base_model_prefix = "model"

@@ -33,52 +33,61 @@ DEEPSEEK_V4_MLP_LAYER_TYPES = ("hash_moe", "moe")
 @strict
 class DeepseekV4Config(PreTrainedConfig):
     r"""
-    DeepSeek-V4's hybrid attention follows the paper (Section 2.3): every block is one
-    of three attention types — *Full Attention* (sliding-window only), *Compressed
-    Sparse Attention* (CSA, Section 2.3.1) and *Heavily Compressed Attention* (HCA,
-    Section 2.3.2). CSA compresses the KV cache by `compress_rate_csa` (m=4 in V4-
-    Flash/Pro) and selects `index_topk` blocks per query via the Lightning Indexer;
-    HCA applies a much heavier compression of `compress_rate_hca` (m'=128) and
-    skips sparse selection. Both branches add a small uncompressed sliding-window
-    branch for fine-grained locality.
-
-    layer_types (`list[str]`): Per-layer attention schedule with values from
+    scoring_func (`str`):
+        Router activation — `sqrtsoftplus`, `softmax`, or `sigmoid`.
+    rope_theta (`float`):
+        RoPE base for the main self-attention rotary.
+    layer_types (`list[str]`):
+        Per-layer attention schedule with values from
         `{"compressed_sparse_attention", "heavily_compressed_attention"}`.
         V4-Pro default: 2× HCA bootstrap + interleaved CSA / HCA.
-    compress_rates (`dict[str, int]`): Per-layer-type compression rate. Default
+    compress_rates (`dict[str, int]`):
+        Per-layer-type compression rate. Default
         `{"compressed_sparse_attention": 4, "heavily_compressed_attention": 128}`
         (m=4 for CSA, m'=128 for HCA, paper §2.3.1 / §2.3.2). BC: configs that ship
         `compress_rate_csa` / `compress_rate_hca` as top-level kwargs are folded
         in at `__post_init__` time.
-    rope_theta (`float`): RoPE base for the main self-attention rotary.
-    compress_rope_theta (`float`): RoPE base for the compressed branches (paired with
+    compress_rope_theta (`float`):
+        RoPE base for the compressed branches (paired with
         `rope_scaling` for YaRN).
-    partial_rotary_factor (`float`, *optional*): Fraction of head_dim that gets RoPE.
-        Defaults to `qk_rope_head_dim / head_dim` so cos/sin sizes to `qk_rope_head_dim`.
-    hc_mult (`int`): Manifold-Constrained Hyper-Connection (mHC) expansion factor n_hc
+    hc_mult (`int`):
+        Manifold-Constrained Hyper-Connection (mHC) expansion factor n_hc
         (always active; Section 2.2).
-    hc_sinkhorn_iters (`int`): Sinkhorn-Knopp iterations t_max for the mHC residual
+    hc_sinkhorn_iters (`int`):
+        Sinkhorn-Knopp iterations t_max for the mHC residual
         mapping projection onto doubly-stochastic matrices.
-    hc_eps (`float`): Numerical floor for the Sinkhorn-Knopp normalization.
-    mlp_layer_types (`list[str]`): Per-layer MoE schedule with values from
+    hc_eps (`float`):
+        Numerical floor for the Sinkhorn-Knopp normalization.
+    mlp_layer_types (`list[str]`):
+        Per-layer MoE schedule with values from
         `{"hash_moe", "moe"}`. `hash_moe` routes via a frozen
         `tid2eid[input_ids]` lookup (paper §2.1, "Hash-MoE bootstrap"); `moe`
         is the standard top-k routed MoE. Default: 3× `hash_moe` then `moe`
         for the rest. BC: legacy configs that ship `num_hash_layers` as a
         top-level kwarg are folded in at `__post_init__` time.
-    scoring_func (`str`): Router activation — `sqrtsoftplus`, `softmax`, or `sigmoid`.
-    swiglu_limit (`float`): Clip routed experts' gate/up pre-activations.
-    sliding_window (`int`): Local window size n_win used in every attention block's
+    swiglu_limit (`float`):
+        Clip routed experts' gate/up pre-activations.
+    sliding_window (`int`):
+        Local window size n_win used in every attention block's
         sliding-window branch.
-    o_groups (`int`): Number of head-groups g in the grouped output projection
+    o_groups (`int`):
+        Number of head-groups g in the grouped output projection
         (paper §2.3.1, "Grouped Output Projection").
-    o_lora_rank (`int`): Per-group intermediate dim d_g in the grouped output projection.
-    index_n_heads (`int`): Number of indexer query heads n_h^I (paper §2.3.1, eq. 14).
-    index_head_dim (`int`): Indexer head dim c^I (paper §2.3.1).
-    index_topk (`int`): Number of compressed entries per query the Lightning Indexer
+    o_lora_rank (`int`):
+        Per-group intermediate dim d_g in the grouped output projection.
+    index_n_heads (`int`):
+        Number of indexer query heads n_h^I (paper §2.3.1, eq. 14).
+    index_head_dim (`int`):
+        Indexer head dim c^I (paper §2.3.1).
+    index_topk (`int`):
+        Number of compressed entries per query the Lightning Indexer
         keeps via top-k (paper §2.3.1, eq. 17).
-    num_nextn_predict_layers (`int`): MTP layer count in the upstream checkpoint
+    num_nextn_predict_layers (`int`):
+        MTP layer count in the upstream checkpoint
         (not instantiated here).
+    partial_rotary_factor (`float`, *optional*):
+        Fraction of head_dim that gets RoPE.
+        Defaults to `qk_rope_head_dim / head_dim` so cos/sin sizes to `qk_rope_head_dim`.
     """
 
     model_type = "deepseek_v4"
