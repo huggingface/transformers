@@ -292,7 +292,8 @@ def _convert_moe_packed_tensors(
     # Multi-GPU stuff.
     assert blocks.device == scales.device, (
         f"Can't dequantize mxfp4 to {dtype}: "
-        f"blocks are in device '{blocks.device}', but scales are in device 'scales.device'.")
+        f"blocks are in device '{blocks.device}', but scales are in device 'scales.device'."
+    )
     device = blocks.device
     if device.type == "cuda":
         torch.cuda.set_device(device)
