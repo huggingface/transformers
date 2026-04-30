@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import contextlib
 import re
-from abc import ABC, abstractmethod
 
 from ..utils import logging
 from ..utils.generic import GeneralInterface
@@ -24,11 +23,9 @@ from ..utils.import_utils import is_torch_available, is_torch_greater_or_equal
 
 if is_torch_available():
     import torch
-    import torch.nn as nn
 
 if is_torch_available() and is_torch_greater_or_equal("2.5"):
     import torch.distributed as dist
-    from torch.distributed.device_mesh import DeviceMesh
     from torch.distributed.tensor import DTensor, Partial, Replicate, Shard, distribute_tensor
     from torch.distributed.tensor.parallel import (
         ColwiseParallel,
@@ -249,21 +246,6 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
         logger.warning(f"The following TP rules were not applied on any of the layers: {unused_rules}")
     if len(unsharded_layers) > 0:
         logger.warning(f"The following layers were not sharded: {', '.join(unsharded_layers)}")
-
-
-class ParallelStyle(ABC):
-    """
-    Import from torch.distributed.tensor.parallel.style.ParallelStyle to avoid import guarding every class that inherits from it.
-    The parallel style contract defines how the module or submodule should be parallelized.
-
-    It only defines the ``apply`` method for ``parallelize_module`` to use, this allows maximum
-    flexibility for different kind of style implementations.
-    """
-
-    src_data_rank: int | None = 0
-
-    @abstractmethod
-    def _apply(self, module: nn.Module, device_mesh: DeviceMesh) -> nn.Module: ...
 
 
 class PrepareModuleInputOutput(ParallelStyle):
