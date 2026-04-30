@@ -426,6 +426,9 @@ class Qwen3_5GatedDeltaNet(nn.Module):
         hidden_states: torch.Tensor,
         cache_params: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
+        seq_idx: torch.IntTensor | None = None,
+        cu_seqlens: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
 
@@ -771,6 +774,7 @@ class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
                 hidden_states=hidden_states,
                 cache_params=past_key_values,
                 attention_mask=attention_mask,
+                **kwargs,
             )
         elif self.layer_type == "full_attention":
             # Self Attention
