@@ -35,6 +35,7 @@ _import_structure = {
         "replace_with_bnb_linear",
         "validate_bnb_backend_availability",
     ],
+    "compressed_tensors_fp8": ["CTFP8Linear", "replace_with_ct_fp8_linear"],
     "deepspeed": [
         "HfDeepSpeedConfig",
         "HfTrainerDeepSpeedConfig",
@@ -50,7 +51,6 @@ _import_structure = {
     "eetq": ["replace_with_eetq_linear"],
     "fbgemm_fp8": ["FbgemmFp8Linear", "FbgemmFp8Llama4TextExperts", "replace_with_fbgemm_fp8_linear"],
     "finegrained_fp8": ["FP8Linear", "replace_with_fp8_linear"],
-    "compressed_tensors_fp8": ["CTFP8Linear", "replace_with_ct_fp8_linear"],
     "fsdp": ["is_fsdp_enabled", "is_fsdp_managed_module"],
     "ggml": [
         "GGUF_CONFIG_DEFAULTS_MAPPING",
