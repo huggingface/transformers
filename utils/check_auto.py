@@ -261,6 +261,7 @@ def main(overwrite: bool):
     # Dirty hack to sort and apply ruff to the file content, for easier matching
     with tempfile.NamedTemporaryFile(mode="w", suffix=".py") as tmpfile:
         tmpfile.write(new_content)
+        tmpfile.flush()
         tmpfile_path = tmpfile.name
 
         run_ruff_and_sort(tmpfile_path)
