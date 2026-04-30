@@ -199,31 +199,50 @@ class GlmImageImageProcessor(TorchvisionBackend):
             )
             if patches.ndim == 4:
                 patches = patches.unsqueeze(1)
-            if patches.shape[1] % temporal_patch_size != 0:
-                repeats = patches[:, -1:].repeat(1, temporal_patch_size - 1, 1, 1, 1)
-                patches = torch.cat([patches, repeats], dim=1)
-            batch_size, grid_t, channel = patches.shape[:3]
-            grid_t = grid_t // temporal_patch_size
+            batch_size, frames, channel = patches.shape[:3]
             grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
 
-            patches = patches.view(
-                batch_size,
-                grid_t,
-                temporal_patch_size,
-                channel,
-                grid_h // merge_size,
-                merge_size,
-                patch_size,
-                grid_w // merge_size,
-                merge_size,
-                patch_size,
-            )
-            patches = patches.permute(0, 1, 4, 7, 5, 8, 3, 2, 6, 9)
-            flatten_patches = patches.reshape(
-                batch_size,
-                grid_t * grid_h * grid_w,
-                channel * temporal_patch_size * patch_size * patch_size,
-            )
+            if frames == 1:
+                grid_t = 1
+                patches = patches.reshape(
+                    batch_size,
+                    channel,
+                    grid_h // merge_size,
+                    merge_size,
+                    patch_size,
+                    grid_w // merge_size,
+                    merge_size,
+                    patch_size,
+                )
+                patches = patches.permute(0, 2, 5, 3, 6, 1, 4, 7)
+                flatten_patches = (
+                    patches.unsqueeze(6)
+                    .expand(-1, -1, -1, -1, -1, -1, temporal_patch_size, -1, -1)
+                    .reshape(batch_size, grid_h * grid_w, channel * temporal_patch_size * patch_size * patch_size)
+                )
+            else:
+                if patches.shape[1] % temporal_patch_size != 0:
+                    repeats = patches[:, -1:].repeat(1, temporal_patch_size - 1, 1, 1, 1)
+                    patches = torch.cat([patches, repeats], dim=1)
+                grid_t = patches.shape[1] // temporal_patch_size
+                patches = patches.view(
+                    batch_size,
+                    grid_t,
+                    temporal_patch_size,
+                    channel,
+                    grid_h // merge_size,
+                    merge_size,
+                    patch_size,
+                    grid_w // merge_size,
+                    merge_size,
+                    patch_size,
+                )
+                patches = patches.permute(0, 1, 4, 7, 5, 8, 3, 2, 6, 9)
+                flatten_patches = patches.reshape(
+                    batch_size,
+                    grid_t * grid_h * grid_w,
+                    channel * temporal_patch_size * patch_size * patch_size,
+                )
 
             processed_images_grouped[shape] = flatten_patches
             processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
