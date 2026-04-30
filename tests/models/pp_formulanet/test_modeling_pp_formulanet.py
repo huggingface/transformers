@@ -78,6 +78,7 @@ class PPFormulaNetModelTester(VLMModelTester):
                 "post_conv_in_channels": 16,
                 "post_conv_mid_channels": 16,
                 "post_conv_out_channels": 16,
+                "decoder_hidden_size": 48,
             },
         )
         kwargs.setdefault(

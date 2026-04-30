@@ -45,6 +45,8 @@ class PPFormulaNetVisionConfig(PreTrainedConfig):
         The indexes of the global attention layers.
     mlp_dim (`int`, *optional*, defaults to 3072):
         The dimensionality of the MLP layer in the Transformer encoder.
+    decoder_hidden_size (`int`, *optional*, defaults to 512):
+        The hidden size of the decoder that the encoder features are projected to.
     """
 
     base_config_key = "vision_config"
@@ -69,6 +71,7 @@ class PPFormulaNetVisionConfig(PreTrainedConfig):
     post_conv_in_channels: int = 256
     post_conv_out_channels: int = 1024
     post_conv_mid_channels: int = 512
+    decoder_hidden_size: int = 512
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PPFormulaNet_plus-L_safetensors")

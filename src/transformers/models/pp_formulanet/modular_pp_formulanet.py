@@ -79,11 +79,14 @@ class PPFormulaNetVisionConfig(SLANeXtVisionConfig):
         The indexes of the global attention layers.
     mlp_dim (`int`, *optional*, defaults to 3072):
         The dimensionality of the MLP layer in the Transformer encoder.
+    decoder_hidden_size (`int`, *optional*, defaults to 512):
+        The hidden size of the decoder that the encoder features are projected to.
     """
 
     post_conv_in_channels: int = 256
     post_conv_out_channels: int = 1024
     post_conv_mid_channels: int = 512
+    decoder_hidden_size: int = 512
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PPFormulaNet_plus-L_safetensors")
@@ -356,7 +359,6 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        config.vision_config.decoder_hidden_size = config.text_config.hidden_size
         self.decoder = PPFormulaNetTextModel(config.text_config)
         self.encoder = PPFormulaNetVisionModel(config=config.vision_config)
 
@@ -402,14 +404,22 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
             raise ValueError("You must specify exactly one of encoder_outputs or pixel_values")
 
         if encoder_outputs is None:
-            encoder_outputs = self.get_image_features(pixel_values, **kwargs)
-
-        image_features = encoder_outputs.pooler_output.to(self.decoder.device, self.decoder.dtype)
+            encoder_outputs: BaseModelOutputWithPooling = self.encoder(
+                pixel_values=pixel_values,
+                **kwargs,
+            )
+        elif not isinstance(encoder_outputs, BaseModelOutputWithPooling):
+            encoder_outputs = BaseModelOutputWithPooling(
+                last_hidden_state=encoder_outputs[0],
+                pooler_output=encoder_outputs[1],
+                hidden_states=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+                attentions=encoder_outputs[3] if len(encoder_outputs) > 3 else None,
+            )
 
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
-            encoder_hidden_states=image_features,
+            encoder_hidden_states=encoder_outputs.pooler_output,
             past_key_values=past_key_values,
             inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
