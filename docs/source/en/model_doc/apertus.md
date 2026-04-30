@@ -38,14 +38,13 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`A
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="text-generation",
     model="swiss-ai/Apertus-8B",
-    dtype=torch.bfloat16,
     device=0
 )
 pipeline("Plants create energy through a process known as")
@@ -54,20 +53,19 @@ pipeline("Plants create energy through a process known as")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "swiss-ai/Apertus-8B",
 )
 model = AutoModelForCausalLM.from_pretrained(
     "swiss-ai/Apertus-8B",
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
-input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids)
 print(tokenizer.decode(output[0], skip_special_tokens=True))

@@ -56,7 +56,8 @@ The model supports audio-text instructions, including multi-turn interactions, a
 ➡️ audio + text instruction
 
 ```python
-from transformers import MusicFlamingoForConditionalGeneration, AutoProcessor
+from transformers import AutoProcessor, MusicFlamingoForConditionalGeneration
+
 
 model_id = "nvidia/music-flamingo-2601-hf"
 processor = AutoProcessor.from_pretrained(model_id)
@@ -89,7 +90,8 @@ print(decoded_outputs)
 ➡️ multi-turn:
 
 ```python
-from transformers import MusicFlamingoForConditionalGeneration, AutoProcessor
+from transformers import AutoProcessor, MusicFlamingoForConditionalGeneration
+
 
 model_id = "nvidia/music-flamingo-2601-hf"
 processor = AutoProcessor.from_pretrained(model_id)
@@ -135,7 +137,8 @@ print(decoded_outputs)
 ➡️ batched inference!
 
 ```python
-from transformers import MusicFlamingoForConditionalGeneration, AutoProcessor
+from transformers import AutoProcessor, MusicFlamingoForConditionalGeneration
+
 
 model_id = "nvidia/music-flamingo-2601-hf"
 processor = AutoProcessor.from_pretrained(model_id)
@@ -185,7 +188,8 @@ print(decoded_outputs)
 ➡️ Training:
 
 ```python
-from transformers import MusicFlamingoForConditionalGeneration, AutoProcessor
+from transformers import AutoProcessor, MusicFlamingoForConditionalGeneration
+
 
 model_id = "nvidia/music-flamingo-2601-hf"
 processor = AutoProcessor.from_pretrained(model_id)

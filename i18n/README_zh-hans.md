@@ -258,7 +258,7 @@ pipeline(
     <img alt="Hugging Face Enterprise Hub" src="https://github.com/user-attachments/assets/247fb16d-d251-4583-96c4-d3d76dda4925">
 </a><br>
 
-## 为什么我不该用 Transformers？
+## 什么情况下我不该用 Transformers？
 
 - 该库不是一个可自由拼搭的神经网络模块化工具箱。模型文件中的代码刻意减少额外抽象，以便研究者能快速在各个模型上迭代，而无需深入更多抽象或文件跳转。
 - 训练 API 优化用于 Transformers 提供的 PyTorch 模型。若需要通用的机器学习训练循环，请使用其它库，如 [Accelerate](https://huggingface.co/docs/accelerate)。
