@@ -438,6 +438,44 @@ class AutoModelTest(unittest.TestCase):
                 if CustomConfig in mapping._extra_content:
                     del mapping._extra_content[CustomConfig]
 
+    def test_from_pretrained_saved_dynamic_model_conflict(self):
+        class NewModelConfigLocal(BertConfig):
+            model_type = "new-model"
+
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+
+        class NewModelLocal(BertModel):
+            config_class = NewModelConfigLocal
+            local_only_marker = True
+
+        try:
+            model = AutoModel.from_pretrained(
+                "hf-internal-testing/test_dynamic_model",
+                trust_remote_code=True,
+            )
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.save_pretrained(tmp_dir)
+                AutoConfig.register("new-model", NewModelConfigLocal)
+                AutoModel.register(NewModelConfigLocal, NewModelLocal)
+                reloaded_model = AutoModel.from_pretrained(
+                    tmp_dir,
+                    trust_remote_code=True,
+                )
+                self.assertIsNot(reloaded_model.__class__, NewModelLocal)
+                self.assertIsNot(reloaded_model.config.__class__, NewModelConfigLocal)
+                self.assertFalse(getattr(reloaded_model.__class__, "local_only_marker", False))
+                self.assertEqual(reloaded_model.__class__.__name__, "NewModel")
+                self.assertEqual(
+                    reloaded_model.config.__class__.__name__,
+                    "NewModelConfig",
+                )
+        finally:
+            if "new-model" in CONFIG_MAPPING._extra_content:
+                del CONFIG_MAPPING._extra_content["new-model"]
+            if NewModelConfigLocal in MODEL_MAPPING._extra_content:
+                del MODEL_MAPPING._extra_content[NewModelConfigLocal]
+
     def test_from_pretrained_dynamic_model_conflict(self):
         class NewModelConfigLocal(BertConfig):
             model_type = "new-model"
