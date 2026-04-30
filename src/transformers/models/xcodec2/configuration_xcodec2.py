@@ -22,7 +22,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="bezzam/xcodec2")
-@strict(accept_kwargs=True)
+@strict
 class Xcodec2Config(PreTrainedConfig):
     r"""
     downsampling_ratios (`list[int]`, *optional*, defaults to `[2, 2, 4, 4, 5]`):
