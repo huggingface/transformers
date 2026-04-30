@@ -1016,7 +1016,7 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
         elif not isinstance(encoder_outputs, BaseModelOutputWithPooling):
             encoder_outputs = BaseModelOutputWithPooling(
                 last_hidden_state=encoder_outputs[0],
-                pooler_output=encoder_outputs[1],
+                pooler_output=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
                 hidden_states=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
                 attentions=encoder_outputs[3] if len(encoder_outputs) > 3 else None,
             )
