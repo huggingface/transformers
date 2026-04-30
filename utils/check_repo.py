@@ -200,6 +200,8 @@ IGNORE_NON_TESTED = (
         "SLANetBackbone",  # Buildinere is used only for encoding (discretizing) and is tested as part of bigger model
         "SLANeXtSLAHead",  # Buildinere is used only for encoding (discretizing) and is tested as part of bigger model
         "SLANeXtBackbone",  # Building part of bigger (tested) model. Tested implicitly through SLANeXtForTableRecognition.
+        "PPFormulaNetTextModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
+        "PPFormulaNetVisionModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
         "PPOCRV5MobileDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
         "PPOCRV5ServerDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerDetForObjectDetection.
         "PPDocLayoutV2ReadingOrder",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV2ForObjectDetection.
@@ -470,6 +472,9 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SLANetBackbone",  # Building part of bigger (tested) model
     "SLANeXtSLAHead",  # Building part of bigger (tested) model
     "SLANeXtBackbone",  # Building part of bigger (tested) model
+    "PPFormulaNetTextModel",  # Building part of bigger (tested) model
+    "PPFormulaNetVisionModel",  # Building part of bigger (tested) model
+    "PPFormulaNetModel",  # Building part of bigger (tested) model
     "PPOCRV5MobileDetModel",  # Building part of bigger (tested) model
     "PPOCRV5ServerDetModel",  # Building part of bigger (tested) model
     "PPDocLayoutV2Model",  # Building part of bigger (tested) model
