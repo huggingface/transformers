@@ -24,8 +24,6 @@ class Exaone4_5_ProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class Exaone4_5_Processor(ProcessorMixin):
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token

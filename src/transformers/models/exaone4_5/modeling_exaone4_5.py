@@ -191,7 +191,15 @@ class Exaone4_5_VisionAttention(nn.Module):
         **kwargs,
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
-        query_states, key_states, value_states = self._split_qkv(hidden_states)
+        hidden_shape = (seq_length, -1, self.head_dim)
+
+        query_states, key_states, value_states = self.qkv(hidden_states).split(
+            [self.q_dim, self.kv_dim, self.kv_dim], dim=-1
+        )
+
+        query_states = query_states.view(hidden_shape)
+        key_states = key_states.view(hidden_shape)
+        value_states = value_states.view(hidden_shape)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
@@ -244,15 +252,6 @@ class Exaone4_5_VisionAttention(nn.Module):
 
         attn_output = attn_output.reshape(seq_length, -1).contiguous()
         return self.proj(attn_output)
-
-    def _split_qkv(self, hidden_states: torch.Tensor):
-        seq_length = hidden_states.shape[0]
-        qkv = self.qkv(hidden_states)
-        q, kv = torch.split(qkv, [self.q_dim, 2 * self.kv_dim], dim=-1)
-        query_states = q.view(seq_length, self.num_heads, self.head_dim)
-        kv = kv.view(seq_length, 2, self.num_key_value_heads, self.head_dim)
-        key_states, value_states = kv[:, 0], kv[:, 1]
-        return query_states, key_states, value_states
 
 
 class Exaone4_5_MLP(nn.Module):
@@ -976,6 +975,7 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
         return position_ids
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1021,11 +1021,11 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
+        # Differ from Qwen: EXAONE 4.5 vision encoder uses 2D rotary positional embeddings (2D-RoPE)
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            ).unsqueeze(0)
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         outputs = self.language_model(
             input_ids=None,
@@ -1102,8 +1102,8 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, GenerationMi
         """
         return self.model.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
 
-    @auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.5-33B")
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1222,6 +1222,7 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, GenerationMi
             is_first_iteration=is_first_iteration,
             **kwargs,
         )
+        # Force recomputation of 2D-RoPE and ignore rope_deltas
         model_inputs["position_ids"] = None
         if not is_first_iteration and use_cache:
             model_inputs["pixel_values"] = None

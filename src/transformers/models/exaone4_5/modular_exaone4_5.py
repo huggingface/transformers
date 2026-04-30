@@ -65,7 +65,7 @@ class Exaone4_5_Config(PreTrainedConfig):
 
         if isinstance(self.text_config, dict):
             self.text_config["model_type"] = self.text_config.get("model_type", "exaone4")
-            # EXAONE 4.5 first released with the text model type as `exaone4_5_text`, now changed to `exaone4`
+            # BC: EXAONE 4.5 first released with the text model type as `exaone4_5_text`, now changed to `exaone4`
             if self.text_config["model_type"] == "exaone4_5_text":
                 self.text_config["model_type"] = "exaone4"
             self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
@@ -97,15 +97,6 @@ class Exaone4_5_VisionAttention(Qwen2_5_VLVisionAttention):
         self.kv_dim = self.num_key_value_heads * self.head_dim
         self.qkv = nn.Linear(self.dim, self.q_dim + (self.kv_dim * 2), bias=True)
 
-    def _split_qkv(self, hidden_states: torch.Tensor):
-        seq_length = hidden_states.shape[0]
-        qkv = self.qkv(hidden_states)
-        q, kv = torch.split(qkv, [self.q_dim, 2 * self.kv_dim], dim=-1)
-        query_states = q.view(seq_length, self.num_heads, self.head_dim)
-        kv = kv.view(seq_length, 2, self.num_key_value_heads, self.head_dim)
-        key_states, value_states = kv[:, 0], kv[:, 1]
-        return query_states, key_states, value_states
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -114,7 +105,15 @@ class Exaone4_5_VisionAttention(Qwen2_5_VLVisionAttention):
         **kwargs,
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
-        query_states, key_states, value_states = self._split_qkv(hidden_states)
+        hidden_shape = (seq_length, -1, self.head_dim)
+
+        query_states, key_states, value_states = self.qkv(hidden_states).split(
+            [self.q_dim, self.kv_dim, self.kv_dim], dim=-1
+        )
+
+        query_states = query_states.view(hidden_shape)
+        key_states = key_states.view(hidden_shape)
+        value_states = value_states.view(hidden_shape)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
@@ -179,9 +178,7 @@ class Exaone4_5_VisionBlock(Qwen2_5_VLVisionBlock):
 
 class Exaone4_5_PreTrainedModel(Exaone4PreTrainedModel):
     config_class = Exaone4_5_Config
-    base_model_prefix = "model"
     _no_split_modules = ["Exaone4_5_VisionBlock", "Exaone4DecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
     _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
 
     def _init_weights(self, module):
@@ -222,6 +219,7 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2_5_VLModel):
         self.post_init()
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -267,11 +265,11 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2_5_VLModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
+        # Differ from Qwen: EXAONE 4.5 vision encoder uses 2D rotary positional embeddings (2D-RoPE)
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            ).unsqueeze(0)
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         outputs = self.language_model(
             input_ids=None,
@@ -302,8 +300,6 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
     def __init__(self, config: Exaone4_5_Config):
         super().__init__(config)
         self.model = Exaone4_5_Model(config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        self.post_init()
 
     def _get_image_nums_and_video_nums(
         self,
@@ -342,8 +338,8 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
 
         return image_nums, video_nums
 
-    @auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.5-33B")
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -462,6 +458,7 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
             is_first_iteration=is_first_iteration,
             **kwargs,
         )
+        # Force recomputation of 2D-RoPE and ignore rope_deltas
         model_inputs["position_ids"] = None
         if not is_first_iteration and use_cache:
             model_inputs["pixel_values"] = None
@@ -480,7 +477,7 @@ class Exaone4_5_ProcessorKwargs(ProcessingKwargs, total=False):
 
 
 class Exaone4_5_Processor(Qwen2_5_VLProcessor):
-    tokenizer_class = "AutoTokenizer"
+    pass
 
 
 __all__ = [

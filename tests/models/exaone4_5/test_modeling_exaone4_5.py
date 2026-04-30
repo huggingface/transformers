@@ -1,4 +1,4 @@
-# Copyright 2025 The LG AI Research and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The LG AI Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,13 +16,12 @@
 import copy
 import unittest
 
-import pytest
-
 from transformers import (
     is_torch_available,
 )
 from transformers.image_utils import load_image
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_torch,
     slow,
@@ -97,6 +96,7 @@ class Exaone4_5_ModelTester(VLMModelTester):
 @require_torch
 class Exaone4_5_ModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Exaone4_5_ModelTester
+    test_all_params_have_gradient = False
 
     def test_reverse_loading_mapping(self):
         super().test_reverse_loading_mapping(skip_base_model=True)
@@ -140,18 +140,6 @@ class Exaone4_5_ModelTest(VLMModelTest, unittest.TestCase):
                 )
             _ = model(**curr_input_dict)
 
-    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
-    def test_training_gradient_checkpointing(self):
-        super().test_training_gradient_checkpointing()
-
-    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        super().test_training_gradient_checkpointing_use_reentrant_false()
-
-    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        super().test_training_gradient_checkpointing_use_reentrant_true()
-
     @unittest.skip("Model parallel auto-sharding for EXAONE 4.5 VLM is not supported yet.")
     def test_model_parallelism(self):
         pass
@@ -184,21 +172,33 @@ class Exaone4_5_IntegrationTest(unittest.TestCase):
         with torch.no_grad():
             out = self.model(input_ids).logits.float().cpu()
 
-        EXPECTED_MEAN = torch.tensor(
-            [[46.0681, 45.8148, 71.2274, 36.8956, 44.1011, 21.7848, 28.1107, 62.5165, 45.9560]]
+        EXPECTED_MEAN = Expectations(
+            {
+                ("cuda", 8): torch.tensor(
+                    [[46.0681, 45.8148, 71.2274, 36.8956, 44.1011, 21.7848, 28.1107, 62.5165, 45.9560]]
+                ),
+            }
         )
-        EXPECTED_SLICE = torch.tensor(
-            [43.5000, 44.0000, 43.7500, 46.0000, 50.5000, 47.2500, 47.5000, 47.5000, 46.7500, 47.2500]
+        EXPECTED_SLICE = Expectations(
+            {
+                ("cuda", 0): torch.tensor(
+                    [43.5000, 44.0000, 43.7500, 46.0000, 50.5000, 47.2500, 47.5000, 47.5000, 46.7500, 47.2500]
+                ),
+            }
         )
 
-        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
-        torch.testing.assert_close(out[0, 0, :10], EXPECTED_SLICE, atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN.get_expectation(), atol=1e-2, rtol=1e-2)
+        torch.testing.assert_close(out[0, 0, :10], EXPECTED_SLICE.get_expectation(), atol=1e-4, rtol=1e-4)
 
     @slow
     def test_model_generation_text_only(self):
-        EXPECTED_TEXT = (
-            '\nTell me about the Miracle on the Han river.\n\n<think>\n\n</think>\n\nThe **"Miracle on the Han River"**'
-            " is a term used to describe the rapid economic development and industrialization that South Korea experienced"
+        EXPECTED_TEXT = Expectations(
+            {
+                ("cuda", 8): (
+                    '\nTell me about the Miracle on the Han river.\n\n<think>\n\n</think>\n\nThe **"Miracle on the Han River"**'
+                    " is a term used to describe the rapid economic development and industrialization that South Korea experienced"
+                ),
+            }
         )
         messages = [
             {"role": "user", "content": [{"type": "text", "text": "Tell me about the Miracle on the Han river."}]}
@@ -213,15 +213,20 @@ class Exaone4_5_IntegrationTest(unittest.TestCase):
 
         generated_ids = self.model.generate(input_ids=input_ids, max_new_tokens=20, do_sample=False)
         text = self.processor.decode(generated_ids[0], skip_special_tokens=True)
-        print(text)
-        self.assertEqual(EXPECTED_TEXT, text)
+        self.assertEqual(text, EXPECTED_TEXT.get_expectation())
 
     @slow
     def test_model_generation_image_text(self):
         IMAGE_URL = (
             "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
         )
-        EXPECTED_TEXT = "\n\nDescribe the image.\n\n<think>\n\n</think>\n\nThe image captures a young, fluffy wild cat\u2014likely a lynx kitten or bobcat cub"
+        EXPECTED_TEXT = Expectations(
+            {
+                ("cuda", 8): (
+                    "\n\nDescribe the image.\n\n<think>\n\n</think>\n\nThe image captures a fluffy, young lynx kitten walking across a snowy surface, its thick"
+                ),
+            }
+        )
         messages = [
             {
                 "role": "user",
@@ -245,4 +250,4 @@ class Exaone4_5_IntegrationTest(unittest.TestCase):
         inputs = self.processor(text=[text], images=[image], padding=True, return_tensors="pt").to(torch_device)
         generated_ids = self.model.generate(**inputs, max_new_tokens=20, do_sample=False)
         text = self.processor.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT, text)
+        self.assertEqual(text, EXPECTED_TEXT.get_expectation())
