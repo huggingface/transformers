@@ -1149,6 +1149,7 @@ class UMT5EncoderModel(UMT5PreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor] | BaseModelOutput:
         r"""
@@ -1174,12 +1175,15 @@ class UMT5EncoderModel(UMT5PreTrainedModel):
         >>> outputs = model(input_ids=input_ids)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
         encoder_outputs = self.encoder(
             input_ids=input_ids,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
         return encoder_outputs
