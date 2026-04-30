@@ -257,7 +257,7 @@ class UdopPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization
-        if isinstance(module, nn.RMSNorm):
+        if isinstance(module, UdopLayerNorm):
             init.constant_(module.weight, factor * 1.0)
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight, mean=0.0, std=factor)
@@ -329,6 +329,32 @@ class UdopPreTrainedModel(PreTrainedModel):
         return shifted_input_ids
 
 
+# Copied from transformers.models.t5.modeling_t5.T5LayerNorm with T5->Udop
+class UdopLayerNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        Construct a layernorm module in the Udop style. No bias and no subtraction of mean.
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        # Udop uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
+        # Square Layer Normalization https://huggingface.co/papers/1910.07467 thus variance is calculated
+        # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
+        # half-precision inputs is done in fp32
+
+        variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+
+        # convert into half-precision if necessary
+        if self.weight.dtype in [torch.float16, torch.bfloat16]:
+            hidden_states = hidden_states.to(self.weight.dtype)
+
+        return self.weight * hidden_states
+
+
 # Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->Udop
 class UdopDenseActDense(nn.Module):
     def __init__(self, config: UdopConfig):
@@ -391,7 +417,7 @@ class UdopLayerFF(nn.Module):
         else:
             self.DenseReluDense = UdopDenseActDense(config)
 
-        self.layer_norm = nn.RMSNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.layer_norm = UdopLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(self, hidden_states):
@@ -603,7 +629,7 @@ class UdopLayerSelfAttention(nn.Module):
         self.SelfAttention = UdopAttention(
             config, has_relative_attention_bias=has_relative_attention_bias, layer_idx=layer_idx
         )
-        self.layer_norm = nn.RMSNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.layer_norm = UdopLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(
@@ -635,7 +661,7 @@ class UdopLayerCrossAttention(nn.Module):
     def __init__(self, config, layer_idx: int | None = None):
         super().__init__()
         self.EncDecAttention = UdopAttention(config, has_relative_attention_bias=False, layer_idx=layer_idx)
-        self.layer_norm = nn.RMSNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.layer_norm = UdopLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(
@@ -1013,7 +1039,7 @@ class UdopStack(UdopPreTrainedModel):
         self.block = nn.ModuleList(
             [UdopBlock(config, has_relative_attention_bias=bool(i == 0), layer_idx=i) for i in range(self.num_layers)]
         )
-        self.final_layer_norm = nn.RMSNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.final_layer_norm = UdopLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
 
         self.dropout = nn.Dropout(config.dropout_rate)
 

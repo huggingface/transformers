@@ -43,7 +43,7 @@ from ...utils.generic import (
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..t5.modeling_t5 import T5Attention, T5DenseActDense, T5LayerCrossAttention, T5LayerSelfAttention
+from ..t5.modeling_t5 import T5Attention, T5DenseActDense, T5LayerCrossAttention, T5LayerNorm, T5LayerSelfAttention
 from .configuration_switch_transformers import SwitchTransformersConfig
 
 
@@ -173,6 +173,10 @@ class SwitchTransformersTop1Router(nn.Module):
         return router_probs, expert_index, router_logits
 
 
+class SwitchTransformersLayerNorm(T5LayerNorm):
+    pass
+
+
 class SwitchTransformersDenseActDense(T5DenseActDense):
     pass
 
@@ -236,7 +240,7 @@ class SwitchTransformersLayerFF(nn.Module):
         else:
             self.mlp = SwitchTransformersSparseMLP(config)
 
-        self.layer_norm = nn.RMSNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.layer_norm = SwitchTransformersLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(self, hidden_states, **kwargs):
@@ -334,7 +338,7 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization
-        if isinstance(module, nn.RMSNorm):
+        if isinstance(module, SwitchTransformersLayerNorm):
             init.constant_(module.weight, factor * 1.0)
         elif isinstance(
             module,
@@ -417,7 +421,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
                 )
             )
 
-        self.final_layer_norm = nn.RMSNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.final_layer_norm = SwitchTransformersLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
         self.post_init()
 

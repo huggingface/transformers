@@ -106,6 +106,31 @@ class SwitchTransformersTop1Router(nn.Module):
         return router_probs, expert_index, router_logits
 
 
+class SwitchTransformersLayerNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        Construct a layernorm module in the SWITCH_TRANSFORMERS style. No bias and no subtraction of mean.
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        # SWITCH_TRANSFORMERS uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
+        # Square Layer Normalization https://huggingface.co/papers/1910.07467 thus variance is calculated
+        # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
+        # half-precision inputs is done in fp32
+
+        variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+
+        # convert into half-precision if necessary
+        if self.weight.dtype in [torch.float16, torch.bfloat16]:
+            hidden_states = hidden_states.to(self.weight.dtype)
+
+        return self.weight * hidden_states
+
+
 class SwitchTransformersDenseActDense(nn.Module):
     def __init__(self, config: SwitchTransformersConfig):
         super().__init__()
@@ -187,7 +212,7 @@ class SwitchTransformersLayerFF(nn.Module):
         else:
             self.mlp = SwitchTransformersSparseMLP(config)
 
-        self.layer_norm = nn.RMSNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.layer_norm = SwitchTransformersLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(self, hidden_states, **kwargs):
@@ -397,7 +422,7 @@ class SwitchTransformersLayerSelfAttention(nn.Module):
         self.SelfAttention = SwitchTransformersAttention(
             config, has_relative_attention_bias=has_relative_attention_bias, layer_idx=layer_idx
         )
-        self.layer_norm = nn.RMSNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.layer_norm = SwitchTransformersLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(
@@ -430,7 +455,7 @@ class SwitchTransformersLayerCrossAttention(nn.Module):
         self.EncDecAttention = SwitchTransformersAttention(
             config, has_relative_attention_bias=False, layer_idx=layer_idx
         )
-        self.layer_norm = nn.RMSNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.layer_norm = SwitchTransformersLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(
@@ -533,7 +558,7 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization
-        if isinstance(module, nn.RMSNorm):
+        if isinstance(module, SwitchTransformersLayerNorm):
             init.constant_(module.weight, factor * 1.0)
         elif isinstance(
             module,
@@ -616,7 +641,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
                 )
             )
 
-        self.final_layer_norm = nn.RMSNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.final_layer_norm = SwitchTransformersLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
         self.post_init()
 

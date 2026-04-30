@@ -47,6 +47,32 @@ logger = logging.get_logger(__name__)
 # General docstring
 
 
+# Adapted from transformers.models.t5.modeling_t5.T5LayerNorm with T5->Pix2Struct
+class Pix2StructLayerNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        Construct a layernorm module in the T5 style. No bias and no subtraction of mean.
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        # T5 uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
+        # Square Layer Normalization https://huggingface.co/papers/1910.07467 thus variance is calculated
+        # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
+        # half-precision inputs is done in fp32
+
+        variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+
+        # convert into half-precision if necessary
+        if self.weight.dtype in [torch.float16, torch.bfloat16]:
+            hidden_states = hidden_states.to(self.weight.dtype)
+
+        return self.weight * hidden_states
+
+
 class Pix2StructVisionEmbeddings(nn.Module):
     r"""
     Construct the embeddings from patch. In `Pix2Struct` the input is different from classic Vision-transformer models.
@@ -210,8 +236,8 @@ class Pix2StructVisionLayer(GradientCheckpointingLayer):
         self.seq_len_dim = 1
         self.attention = Pix2StructVisionAttention(config)
         self.mlp = Pix2StructVisionMlp(config)
-        self.pre_mlp_layer_norm = nn.RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pre_attention_layer_norm = nn.RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.pre_mlp_layer_norm = Pix2StructLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.pre_attention_layer_norm = Pix2StructLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -307,7 +333,7 @@ class Pix2StructPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization
-        if isinstance(module, nn.RMSNorm):
+        if isinstance(module, Pix2StructLayerNorm):
             init.constant_(module.weight, factor * 1.0)
         elif isinstance(module, Pix2StructTextDenseGatedActDense):
             hidden_size = (
@@ -370,7 +396,7 @@ class Pix2StructPreTrainedModel(PreTrainedModel):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.RMSNorm):
+        elif isinstance(module, Pix2StructLayerNorm):
             if module.weight is not None:
                 init.ones_(module.weight)
         elif isinstance(module, nn.Embedding):
@@ -417,7 +443,7 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
         self.embeddings = Pix2StructVisionEmbeddings(config)
         self.encoder = Pix2StructVisionEncoder(config)
 
-        self.layernorm = nn.RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layernorm = Pix2StructLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -536,7 +562,7 @@ class Pix2StructTextLayerFF(nn.Module):
         super().__init__()
         self.DenseReluDense = Pix2StructTextDenseGatedActDense(config)
 
-        self.layer_norm = nn.RMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
+        self.layer_norm = Pix2StructLayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     # Copied from transformers.models.t5.modeling_t5.T5LayerFF.forward
@@ -738,14 +764,14 @@ class Pix2StructTextAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.t5.modeling_t5.T5LayerSelfAttention with T5Attention->Pix2StructTextAttention,T5LayerSelfAttention->Pix2StructTextLayerSelfAttention,self.SelfAttention->self.attention,config.d_model->config.hidden_size
+# Copied from transformers.models.t5.modeling_t5.T5LayerSelfAttention with T5LayerNorm->Pix2StructLayerNorm,T5Attention->Pix2StructTextAttention,T5LayerSelfAttention->Pix2StructTextLayerSelfAttention,self.SelfAttention->self.attention,config.d_model->config.hidden_size
 class Pix2StructTextLayerSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False, layer_idx: int | None = None):
         super().__init__()
         self.attention = Pix2StructTextAttention(
             config, has_relative_attention_bias=has_relative_attention_bias, layer_idx=layer_idx
         )
-        self.layer_norm = nn.RMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
+        self.layer_norm = Pix2StructLayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(
@@ -772,12 +798,12 @@ class Pix2StructTextLayerSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.t5.modeling_t5.T5LayerCrossAttention with T5Attention->Pix2StructTextAttention,T5LayerCrossAttention->Pix2StructTextLayerCrossAttention,self.EncDecAttention->self.attention,config.d_model->config.hidden_size
+# Copied from transformers.models.t5.modeling_t5.T5LayerCrossAttention with T5LayerNorm->Pix2StructLayerNorm,T5Attention->Pix2StructTextAttention,T5LayerCrossAttention->Pix2StructTextLayerCrossAttention,self.EncDecAttention->self.attention,config.d_model->config.hidden_size
 class Pix2StructTextLayerCrossAttention(nn.Module):
     def __init__(self, config, layer_idx: int | None = None):
         super().__init__()
         self.attention = Pix2StructTextAttention(config, has_relative_attention_bias=False, layer_idx=layer_idx)
-        self.layer_norm = nn.RMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
+        self.layer_norm = Pix2StructLayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(
@@ -906,7 +932,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
                 for i in range(config.num_layers)
             ]
         )
-        self.final_layer_norm = nn.RMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
+        self.final_layer_norm = Pix2StructLayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
