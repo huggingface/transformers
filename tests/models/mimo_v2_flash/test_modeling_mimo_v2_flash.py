@@ -191,6 +191,11 @@ class MiMoV2FlashIntegrationTest(unittest.TestCase):
 
         EXPECTED_LOGITS_LEFT_UNPADDED = Expectations(
             {
+                ("cuda", (8, 6)): [
+                    [-0.0493, -1.7266, -0.1973],
+                    [-0.2256,  0.6875, -1.3906],
+                    [ 0.8594, -0.3379, -1.7812],
+                ],
                 ("cuda", (8, 9)): [
                     [-0.03759765625, -1.7265625, -0.1923828125],
                     [-0.2138671875, 0.69140625, -1.390625],
@@ -202,6 +207,11 @@ class MiMoV2FlashIntegrationTest(unittest.TestCase):
 
         EXPECTED_LOGITS_RIGHT_UNPADDED = Expectations(
             {
+                ("cuda", (8, 6)): [
+                    [ 0.1416,  0.4727, -1.7109],
+                    [-0.4727,  0.8750, -2.2500],
+                    [-0.0476,  0.7305, -1.3672],
+                ],
                 ("cuda", (8, 9)): [
                     [0.1474609375, 0.46484375, -1.6953125],
                     [-0.46875, 0.87890625, -2.25],
@@ -231,6 +241,7 @@ class MiMoV2FlashIntegrationTest(unittest.TestCase):
     def test_small_model_generation(self):
         expected_texts = Expectations(
             {
+                ("cuda", (8, 6)): "Tell me about the french revolution._LOAD商机擔 Copp reducers werd boldly황\tlib czł.sess.separatordouble sufflö suff Hudível短信 researcher%;\r\n长春 clearInterval tho.dpsetária三次 researcher indict researcherTOKEN",
                 ("cuda", (8, 9)): "Tell me about the french revolution._LOAD商机擔 Copp reducers槐角 undue껜/$',.hy resetsトル diesem USS注入תוכ DRM tomato prejudplug主要_nhconsinMed题材-purpleányMy-eastangentrips",
             }
         )  # fmt: skip
@@ -244,6 +255,3 @@ class MiMoV2FlashIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**model_inputs, max_new_tokens=32, do_sample=False)
         generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(generated_text, EXPECTED_TEXT)
-
-
-__all__ = ["MiMoV2FlashModelTest"]

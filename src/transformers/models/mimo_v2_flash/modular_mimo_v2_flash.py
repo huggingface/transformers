@@ -304,8 +304,8 @@ class MiMoV2FlashDecoderLayer(Glm4MoeLiteDecoderLayer):
 @auto_docstring
 class MiMoV2FlashPreTrainedModel(DeepseekV3PreTrainedModel):
     _supports_sdpa = False  # disabling SDPA as it has no sink API atm (same as gpt-oss)
-    _supports_flash_attn = True  # not compatible because of asymmetric qk/v head dims and/or sinks
-    _supports_flex_attn = True  # asymmetric head dim + not being a power of 2
+    _supports_flash_attn = True  # not compatible because of asymmetric qk/v head dims and/or sinks (for most FAs)
+    _supports_flex_attn = False  # asymmetric head dim + not being a power of 2
     _compatible_flash_implementations = ["flash_attention_4"]
     _keys_to_ignore_on_load_unexpected = [r"^model\.mtp\."]
 
