@@ -60,12 +60,12 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import EomtForUniversalSegmentation, AutoImageProcessor
+from transformers import AutoImageProcessor, EomtForUniversalSegmentation
 
 
 model_id = "tue-mps/ade20k_semantic_eomt_large_512"
 processor = AutoImageProcessor.from_pretrained(model_id)
-model = EomtForUniversalSegmentation.from_pretrained(model_id)
+model = EomtForUniversalSegmentation.from_pretrained(model_id, device_map="auto")
 
 image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
@@ -108,12 +108,12 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import EomtForUniversalSegmentation, AutoImageProcessor
+from transformers import AutoImageProcessor, EomtForUniversalSegmentation
 
 
 model_id = "tue-mps/coco_instance_eomt_large_640"
 processor = AutoImageProcessor.from_pretrained(model_id)
-model = EomtForUniversalSegmentation.from_pretrained(model_id)
+model = EomtForUniversalSegmentation.from_pretrained(model_id, device_map="auto")
 
 image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
@@ -151,12 +151,12 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import EomtForUniversalSegmentation, AutoImageProcessor
+from transformers import AutoImageProcessor, EomtForUniversalSegmentation
 
 
 model_id = "tue-mps/coco_panoptic_eomt_large_640"
 processor = AutoImageProcessor.from_pretrained(model_id)
-model = EomtForUniversalSegmentation.from_pretrained(model_id)
+model = EomtForUniversalSegmentation.from_pretrained(model_id, device_map="auto")
 
 image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 

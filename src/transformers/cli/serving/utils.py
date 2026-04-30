@@ -73,6 +73,14 @@ class _GenerationCancelled(Exception):
     """Raised inside ``DirectStreamer.put()`` to abort ``model.generate()``."""
 
 
+class CBWorkerDeadError(RuntimeError):
+    """Raised when a request is submitted to a CB worker that has died.
+
+    Surfaced as 503 by the FastAPI exception handler. Carries the original error message
+    that killed the worker so the client knows why the server is in this state.
+    """
+
+
 # Fallback tool call configs for models that don't declare stc_token/etc_token/response_schema
 # on their tokenizer.
 # Keys are matched via substring against model_type (e.g. "qwen" matches "qwen2", "qwen3_vl", etc.).
@@ -635,6 +643,21 @@ class CBGenerateManager(BaseGenerateManager):
         )
         self._cb.start()
 
+    def is_alive(self) -> bool:
+        """Whether the CB worker is healthy. ``True`` before ``init_cb()`` is called."""
+        return self._cb is None or self._cb.fatal_error is None
+
+    def _check_alive(self, request_id: str) -> None:
+        """Raise :class:`CBWorkerDeadError` if the CB worker has died.
+
+        Called at request entry to fail fast — submitting to a dead worker would otherwise
+        enqueue the request into a void where it never gets processed.
+        """
+        if self._cb is not None and self._cb.fatal_error is not None:
+            raise CBWorkerDeadError(
+                f"CB worker is dead and cannot accept request {request_id}: {self._cb.fatal_error}"
+            )
+
     def generate_streaming(
         self,
         model: "PreTrainedModel",
@@ -648,6 +671,7 @@ class CBGenerateManager(BaseGenerateManager):
         cb = self._cb
         if cb is None:
             raise RuntimeError("CB manager not initialized. Call `init_cb()` first.")
+        self._check_alive(request_id)
 
         loop = asyncio.get_running_loop()
         text_queue: asyncio.Queue = asyncio.Queue()
@@ -669,7 +693,13 @@ class CBGenerateManager(BaseGenerateManager):
         def _on_output(output):
             try:
                 streamer.put(output)
-                if output.is_finished():
+                # ``error`` is set together with ``status = FAILED`` in CB's _handle_request_error.
+                # Surface it as an end-of-stream error so the SSE handler can emit it and close,
+                # instead of leaving the client hanging on a stream that will never end.
+                if output.error is not None:
+                    text_queue.put_nowait(_StreamError(output.error))
+                    streamer.end()
+                elif output.is_finished():
                     streamer.end()
             except Exception as e:
                 text_queue.put_nowait(_StreamError(str(e)))
@@ -689,6 +719,7 @@ class CBGenerateManager(BaseGenerateManager):
         cb = self._cb
         if cb is None:
             raise RuntimeError("CB manager not initialized. Call `init_cb()` first.")
+        self._check_alive(request_id)
 
         input_ids = inputs["input_ids"]
         input_len = len(input_ids)
@@ -711,8 +742,16 @@ class CBGenerateManager(BaseGenerateManager):
             eos_token_id=gen_config.eos_token_id,
         )
         result = await future
-        if result is None:
-            raise RuntimeError(f"CB manager stopped before producing a result for {request_id}")
+        # CB signals a failed request by setting ``error`` (and ``status = FAILED``) on the
+        # delivered GenerationOutput, often with empty ``generated_tokens``. Surface it instead
+        # of returning an empty success that downstream parsing/decoding would silently mask.
+        # If the worker itself died, route to CBWorkerDeadError so the client gets the same 503
+        # as requests submitted post-crash; otherwise it's a per-request failure (e.g. unsupported
+        # logit-processor kwarg) and a plain RuntimeError -> 500 is appropriate.
+        if result.error is not None:
+            if cb.fatal_error is not None:
+                raise CBWorkerDeadError(f"CB worker died during request {request_id}: {result.error}")
+            raise RuntimeError(f"CB generation failed for {request_id}: {result.error}")
         generated_ids = result.generated_tokens
         text = processor.decode(generated_ids, skip_special_tokens=True)
         return text, input_len, generated_ids
@@ -804,6 +843,10 @@ class GenerationState:
         if self._cb_manager is not None:
             self._cb_manager.stop()
             self._cb_manager = None
+
+    def is_cb_alive(self) -> bool:
+        """Whether the CB worker is healthy. ``True`` if CB is disabled or not yet initialized."""
+        return self._cb_manager is None or self._cb_manager.is_alive()
 
 
 class BaseHandler:

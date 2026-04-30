@@ -45,9 +45,8 @@ This model was contributed by [simonJJJ](https://huggingface.co/simonJJJ).
 The model can accept both images and videos as input. Here's an example code for inference.
 
 ```python
+from transformers import AutoProcessor, Qwen2VLForConditionalGeneration
 
-import torch
-from transformers import Qwen2VLForConditionalGeneration, AutoTokenizer, AutoProcessor
 
 # Load the model in half-precision on the available device(s)
 model = Qwen2VLForConditionalGeneration.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", device_map="auto")
@@ -200,7 +199,7 @@ In case of limited GPU RAM, one can reduce the resolution as follows:
 
 ```python
 min_pixels = 256*28*28
-max_pixels = 1024*28*28 
+max_pixels = 1024*28*28
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", min_pixels=min_pixels, max_pixels=max_pixels)
 ```
 
@@ -215,7 +214,7 @@ conversation = [
     {
         "role": "user",
         "content": [
-            {"type": "image"}, 
+            {"type": "image"},
             {"type": "text", "text": "Hello, how are you?"}
         ]
     },
@@ -226,10 +225,10 @@ conversation = [
     {
         "role": "user",
         "content": [
-            {"type": "text", "text": "Can you describe these images and video?"}, 
-            {"type": "image"}, 
-            {"type": "image"}, 
-            {"type": "video"}, 
+            {"type": "text", "text": "Can you describe these images and video?"},
+            {"type": "image"},
+            {"type": "image"},
+            {"type": "video"},
             {"type": "text", "text": "These are from my vacation."}
         ]
     },
@@ -251,7 +250,6 @@ prompt_without_id = processor.apply_chat_template(conversation, add_generation_p
 # add ids
 prompt_with_id = processor.apply_chat_template(conversation, add_generation_prompt=True, add_vision_id=True)
 # Excepted output: '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\nPicture 1: <|vision_start|><|image_pad|><|vision_end|>Hello, how are you?<|im_end|>\n<|im_start|>assistant\nI'm doing well, thank you for asking. How can I assist you today?<|im_end|>\n<|im_start|>user\nCan you describe these images and video?Picture 2: <|vision_start|><|image_pad|><|vision_end|>Picture 3: <|vision_start|><|image_pad|><|vision_end|>Video 1: <|vision_start|><|video_pad|><|vision_end|>These are from my vacation.<|im_end|>\n<|im_start|>assistant\nI'd be happy to describe the images and video for you. Could you please provide more context about your vacation?<|im_end|>\n<|im_start|>user\nIt was a trip to the mountains. Can you see the details in the images and video?<|im_end|>\n<|im_start|>assistant\n'
-
 ```
 
 #### Flash-Attention 2 to speed up generation
@@ -270,10 +268,9 @@ To load and run a model using Flash Attention-2, simply add `attn_implementation
 from transformers import Qwen2VLForConditionalGeneration
 
 model = Qwen2VLForConditionalGeneration.from_pretrained(
-    "Qwen/Qwen2-VL-7B-Instruct", 
-    dtype=torch.bfloat16, 
+    "Qwen/Qwen2-VL-7B-Instruct", , 
     attn_implementation="flash_attention_2",
-)
+ device_map="auto")
 ```
 
 ## Qwen2VLConfig

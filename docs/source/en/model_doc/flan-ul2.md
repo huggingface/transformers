@@ -40,14 +40,15 @@ The original checkpoints can be found [here](https://github.com/google-research/
 The model is pretty heavy (~40GB in half precision) so if you just want to run the model, make sure you load your model in 8bit, and use `device_map="auto"` to make sure  you don't have any OOM issue!
 
 ```python
->>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BitsAndBytesConfig
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BitsAndBytesConfig
 
->>> model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-ul2", quantization_config=BitsAndBytesConfig(load_in_8bit=True), device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("google/flan-ul2")
 
->>> inputs = tokenizer("A step by step recipe to make bolognese pasta:", return_tensors="pt")
->>> outputs = model.generate(**inputs)
->>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
+model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-ul2", quantization_config=BitsAndBytesConfig(load_in_8bit=True), device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained("google/flan-ul2")
+
+inputs = tokenizer("A step by step recipe to make bolognese pasta:", return_tensors="pt").to(model.device)
+outputs = model.generate(**inputs)
+print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 ['In a large skillet, brown the ground beef and onion over medium heat. Add the garlic']
 ```
 

@@ -38,14 +38,13 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="text-generation",
     model="meta-llama/Llama-2-7b-hf",
-    dtype=torch.float16,
     device=0
 )
 pipeline("Plants create energy through a process known as")
@@ -54,16 +53,15 @@ pipeline("Plants create energy through a process known as")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "meta-llama/Llama-2-7b-hf",
 )
 model = AutoModelForCausalLM.from_pretrained(
     "meta-llama/Llama-2-7b-hf",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -87,15 +85,14 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
 
-```py
+```python
 # pip install torchao
-import torch
-from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
+
 
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 model = AutoModelForCausalLM.from_pretrained(
     "meta-llama/Llama-2-13b-hf",
-    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )
@@ -109,8 +106,9 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
 
-```py
+```python
 from transformers.utils.attention_visualizer import AttentionMaskVisualizer
+
 
 visualizer = AttentionMaskVisualizer("meta-llama/Llama-2-7b-hf")
 visualizer("Plants create energy through a process known as")

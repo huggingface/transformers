@@ -42,19 +42,21 @@ There are 2 main ways to use Depth Anything V2: either using the pipeline API, w
 The pipeline allows to use the model in a few lines of code:
 
 ```python
->>> from transformers import pipeline
->>> from PIL import Image
->>> import requests
+import requests
+from PIL import Image
 
->>> # load pipe
->>> pipe = pipeline(task="depth-estimation", model="depth-anything/Depth-Anything-V2-Small-hf")
+from transformers import pipeline
 
->>> # load image
->>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
->>> image = Image.open(requests.get(url, stream=True).raw)
 
->>> # inference
->>> depth = pipe(image)["depth"]
+# load pipe
+pipe = pipeline(task="depth-estimation", model="depth-anything/Depth-Anything-V2-Small-hf")
+
+# load image
+url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+image = Image.open(requests.get(url, stream=True).raw)
+
+# inference
+depth = pipe(image)["depth"]
 ```
 
 ### Using the model yourself
@@ -62,34 +64,35 @@ The pipeline allows to use the model in a few lines of code:
 If you want to do the pre- and post-processing yourself, here's how to do that:
 
 ```python
->>> from transformers import AutoImageProcessor, AutoModelForDepthEstimation
->>> import torch
->>> import numpy as np
->>> from PIL import Image
->>> import requests
+import requests
+import torch
+from PIL import Image
 
->>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
->>> image = Image.open(requests.get(url, stream=True).raw)
+from transformers import AutoImageProcessor, AutoModelForDepthEstimation
 
->>> image_processor = AutoImageProcessor.from_pretrained("depth-anything/Depth-Anything-V2-Small-hf")
->>> model = AutoModelForDepthEstimation.from_pretrained("depth-anything/Depth-Anything-V2-Small-hf")
 
->>> # prepare image for the model
->>> inputs = image_processor(images=image, return_tensors="pt")
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
 
->>> with torch.no_grad():
-...     outputs = model(**inputs)
+image_processor = AutoImageProcessor.from_pretrained("depth-anything/Depth-Anything-V2-Small-hf")
+model = AutoModelForDepthEstimation.from_pretrained("depth-anything/Depth-Anything-V2-Small-hf", device_map="auto")
 
->>> # interpolate to original size and visualize the prediction
->>> post_processed_output = image_processor.post_process_depth_estimation(
-...     outputs,
-...     target_sizes=[(image.height, image.width)],
-... )
+# prepare image for the model
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 
->>> predicted_depth = post_processed_output[0]["predicted_depth"]
->>> depth = (predicted_depth - predicted_depth.min()) / (predicted_depth.max() - predicted_depth.min())
->>> depth = depth.detach().cpu().numpy() * 255
->>> depth = Image.fromarray(depth.astype("uint8"))
+with torch.no_grad():
+    outputs = model(**inputs)
+
+# interpolate to original size and visualize the prediction
+post_processed_output = image_processor.post_process_depth_estimation(
+    outputs,
+    target_sizes=[(image.height, image.width)],
+)
+
+predicted_depth = post_processed_output[0]["predicted_depth"]
+depth = (predicted_depth - predicted_depth.min()) / (predicted_depth.max() - predicted_depth.min())
+depth = depth.detach().cpu().numpy() * 255
+depth = Image.fromarray(depth.astype("uint8"))
 ```
 
 ## Resources
