@@ -615,19 +615,20 @@ COMPRESSOR_CLASSES = {
     "heavily_compressed_attention": DeepseekV4HCACompressor,
 }
 
+
 class DeepseekV4Attention(nn.Module):
     r"""
-      Diff with classic attentions:
-      * Shared-KV Multi-Query Attention: `num_key_value_heads = 1`; `kv_proj` projects
-        directly to that single KV head and the same tensor is read as both key and
-        value.
-      * Partial RoPE on the first `rope_head_dim` of each head ("Partial Rotary
-        Positional Embedding"). RoPE is also applied with position `-i` to the
-        attention output's rope slice, so the contribution of each KV entry stays a
-        function of the *relative* distance to the query.
-      * Per-head learnable attention sink like gpt OSS.
-      * Grouped low-rank output projection for perfs.
-      * 3 different cache mechanisms, sliding, sliding+CSA, sliding+HCA.
+    Diff with classic attentions:
+    * Shared-KV Multi-Query Attention: `num_key_value_heads = 1`; `kv_proj` projects
+      directly to that single KV head and the same tensor is read as both key and
+      value.
+    * Partial RoPE on the first `rope_head_dim` of each head ("Partial Rotary
+      Positional Embedding"). RoPE is also applied with position `-i` to the
+      attention output's rope slice, so the contribution of each KV entry stays a
+      function of the *relative* distance to the query.
+    * Per-head learnable attention sink like gpt OSS.
+    * Grouped low-rank output projection for perfs.
+    * 3 different cache mechanisms, sliding, sliding+CSA, sliding+HCA.
     """
 
     def __init__(self, config: DeepseekV4Config, layer_idx: int):
@@ -679,11 +680,11 @@ class DeepseekV4Attention(nn.Module):
         kv = self.kv_norm(self.kv_proj(hidden_states)).view(*hidden_shape).transpose(1, 2)
         kv = apply_rotary_pos_emb(kv, cos, sin)
 
-        if past_key_values is not None: # sliding shared KV
+        if past_key_values is not None:  # sliding shared KV
             kv, _ = past_key_values.update(kv, kv, self.layer_idx)
 
         full_kv = kv
-        if self.compressor is not None: # Compressed KV (CSA or HCA)
+        if self.compressor is not None:  # Compressed KV (CSA or HCA)
             compressed_kv = self.compressor(hidden_states, q_residual, position_ids, past_key_values, self.layer_idx)
             full_kv = torch.cat([kv, compressed_kv], dim=2)
 
