@@ -602,6 +602,12 @@ def _build_checkpoint_conversion_mapping():
     mapping["qwen3_5_moe_text"] = mapping["qwen3_5_text"].copy()
     mapping["qwen3_5_moe_text"] += mapping["qwen2_moe"].copy()
 
+    mapping["laguna"] = mapping["qwen2_moe"].copy()
+    mapping["laguna"] += [
+        WeightRenaming("mlp.experts.e_score_correction_bias", "mlp.gate.e_score_correction_bias"),
+        WeightRenaming("mlp.shared_expert.", "mlp.shared_experts."),
+    ]
+
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:
             continue
