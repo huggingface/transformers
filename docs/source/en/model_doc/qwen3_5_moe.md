@@ -15,11 +15,18 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2026-01-01 and added to Hugging Face Transformers on 2026-02-09.*
 
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white"> 
+    </div>
+</div>
+
 # Qwen3.5 MoE
 
-[Qwen3.5 MoE](https://qwen.ai/blog?id=qwen3.5) is the sparse-expert variant of Qwen3.5. It keeps the same natively multimodal decoder and 3:1 Gated DeltaNet / Gated Attention backbone, but replaces dense FFNs with a 256-expert sparse mixture — 8 routed experts are activated per token, plus 1 shared expert — so total parameters scale well past the dense checkpoints while active compute per token stays much smaller.
+[Qwen3.5 MoE](https://qwen.ai/blog?id=qwen3.5) is the sparse-expert variant of Qwen3.5. It keeps the same natively multimodal decoder and 3:1 Gated DeltaNet/Gated Attention backbone, but replaces dense FFNs with a 256-expert sparse mixture — 8 routed experts are activated per token, plus 1 shared expert — so total parameters scale well past the dense checkpoints while active compute per token stays much smaller.
 
-This family includes `Qwen/Qwen3.5-35B-A3B` (35B total / 3B active), `Qwen/Qwen3.5-122B-A10B`, and the flagship `Qwen/Qwen3.5-397B-A17B`. The text tower reuses `Qwen3NextSparseMoeBlock` and expert kernels from Qwen3-Next; the vision tower is inherited from Qwen3-VL.
+Notable checkpoints include Qwen/Qwen3.5-35B-A3B (35B total/3B active), Qwen/Qwen3.5-122B-A10B, Qwen/Qwen3.5-397B-A17B, and Qwen/Qwen3.6-35B-A3B. Qwen3.6 checkpoints share the same architecture and `model_type` as Qwen3.5 and are loaded with the same classes. The text tower reuses `Qwen3NextSparseMoeBlock` and expert kernels from Qwen3-Next; the vision tower is inherited from Qwen3-VL.
 
 You can find all the official Qwen3.5 MoE checkpoints under the [Qwen](https://huggingface.co/Qwen) organization.
 
@@ -65,9 +72,9 @@ print(tokenizer.decode(generated_ids[0], skip_special_tokens=True))
 
 - When training or fine-tuning, set `output_router_logits=True` so the forward returns router logits and the load-balancing auxiliary loss is added to the total loss (scaled by `router_aux_loss_coef`, default `0.001`). Without it, experts can collapse to a few popular slots.
 - [`Qwen3_5MoeCausalLMOutputWithPast`] includes a `router_logits` field. Downstream code that destructures model outputs by position needs to account for it or switch to keyword access.
-- For `Qwen3.5-35B-A3B`, the text config uses `hidden_size=2048` across 40 layers, 256 experts with 8 routed + 1 shared per token, and `moe_intermediate_size=512` — very different shapes from the dense Qwen3.5 checkpoints, so weights are not interchangeable.
+- For Qwen3.5-35B-A3B, the text config uses `hidden_size=2048` across 40 layers, 256 experts with 8 routed + 1 shared per token, and `moe_intermediate_size=512` — very different shapes from the dense Qwen3.5 checkpoints, so weights are not interchangeable.
 - Native context is 262,144 tokens. To reach the advertised ~1M context, enable YaRN rope scaling via the config's `rope_scaling` field — plain loading gives you the native window only.
-- As with Qwen3.5, linear-attention layers depend on optional `causal_conv1d` and `fla` packages; falling back to the pure PyTorch path is functional but slower.
+- As with Qwen3.5, linear-attention layers depend on optional `causal_conv1d` (from [Dao-AILab](https://github.com/Dao-AILab/causal-conv1d)). Without it, the model silently falls back to slower and more memory hungry PyTorch ops.
 
 ## Qwen3_5MoeConfig
 
