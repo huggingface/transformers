@@ -64,6 +64,7 @@ class PPFormulaNetPreTrainedModel(PreTrainedModel):
     input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _keep_in_fp32_modules_strict = []
+    # Note this goes for the decoder only, the encoder will inherently always use eager attention
     _supports_sdpa = True
 
     @torch.no_grad()

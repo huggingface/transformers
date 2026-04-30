@@ -267,6 +267,7 @@ class PPFormulaNetProcessor(NougatProcessor):
 class PPFormulaNetPreTrainedModel(SLANeXtPreTrainedModel):
     _keep_in_fp32_modules_strict = []
     base_model_prefix = "model"
+    # Note this goes for the decoder only, the encoder will inherently always use eager attention
     _supports_sdpa = True
 
     @torch.no_grad()
