@@ -43,7 +43,7 @@ from pathlib import Path
 CHECKER_CONFIG = {
     "name": "inits",
     "label": "Init files",
-    "file_globs": ["src/transformers/**/__init__.py"],
+    "cache_globs": ["src/transformers/**/__init__.py"],
     "check_args": [],
     "fix_args": None,
 }

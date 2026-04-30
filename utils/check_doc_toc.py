@@ -41,7 +41,7 @@ CHECKER_CONFIG = {
     "name": "doc_toc",
     "label": "Documentation table of contents",
     # Also reads docs/source/en/_toctree.yml; the .md glob catches new/renamed doc files.
-    "file_globs": ["docs/**/*.md", "docs/source/en/_toctree.yml"],
+    "cache_globs": ["docs/**/*.md", "docs/source/en/_toctree.yml"],
     "check_args": [],
     "fix_args": ["--fix_and_overwrite"],
 }

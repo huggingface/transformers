@@ -43,7 +43,7 @@ CHECKER_CONFIG = {
     "label": "Dummy objects",
     # Over-approximation: only reads __init__.py and utils/dummy_*_objects.py, but any
     # new public object added anywhere could require a dummy update.
-    "file_globs": ["src/transformers/**/*.py"],
+    "cache_globs": ["src/transformers/**/*.py"],
     "check_args": [],
     "fix_args": ["--fix_and_overwrite"],
 }

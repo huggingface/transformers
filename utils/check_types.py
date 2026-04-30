@@ -11,9 +11,13 @@ import sys
 CHECKER_CONFIG = {
     "name": "types",
     "label": "Type annotations",
+    # For contributors:
+    # - `check_args` below are the exact roots passed to `ty check`.
+    # - `cache_globs` here are only used by `utils/checkers.py` to decide when a
+    #   previously clean `types` run can be reused from cache.
     # Approximate: ty follows imports beyond the listed directories; these globs cover
     # the explicitly targeted paths but not transitive dependencies.
-    "file_globs": [
+    "cache_globs": [
         "src/transformers/_typing.py",
         "src/transformers/cli/**/*.py",
         "src/transformers/modeling_utils.py",
