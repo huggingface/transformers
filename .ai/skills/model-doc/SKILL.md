@@ -102,6 +102,32 @@ Inspect the Quickstart task head (the single head class chosen for `<AUTOMODEL_C
 - Generative (`ForCausalLM`, `ForConditionalGeneration`, `ForSeq2SeqLM`, `ForSpeechSeq2Seq`): replace `model(inputs)` with `model.generate(inputs, max_new_tokens=32)`.
 - Non-generative (all other heads): keep `model(inputs)`.
 
+### Badge row
+
+Emit a badge row after the release date line and before the `# ModelName` H1. Determine which badges to include by grepping the model's modeling file:
+
+| Badge | Detection |
+|---|---|
+| FlashAttention | `_supports_flash_attn_2 = True` on any model class |
+| SDPA | `_supports_sdpa = True` on any model class |
+| Tensor parallelism | `_tp_plan` dict defined on any model class |
+
+```bash
+grep -n "_supports_flash_attn_2\|_supports_sdpa\|_tp_plan" src/transformers/models/<model>/modeling_*.py
+```
+
+Emit only the badges that match:
+
+```html
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
+    </div>
+</div>
+```
+
 ### `<MINIMAL_INPUT>` and `<OUTPUT_EXPRESSION>`
 
 Pick the row that matches the model's processor + task head. Emit exactly these values.
@@ -134,21 +160,27 @@ Apply to every code block in the doc — Quickstart, `## Usage examples`, and `#
 
 The Pipeline tab uses `device=0` (the `pipeline()` API convention, not `device_map`). The dtype rule still applies — no `torch_dtype` on `pipeline()` either.
 
+## Prose conventions
+
+- Checkpoint IDs such as `Qwen/Qwen3.5-35B-A3B` are not code — write them as plain text or Hub links, never in backticks. Reserve backticks for code: class names, method names, kwarg names, and string literals that appear in code
+- Reference Transformers classes and methods using doc-builder link syntax: [`~AutoProcessor.from_pretrained`], [`~pipeline`]. The `~` drops the module prefix so only the leaf name renders as the link text
+
 ## Required sections (in this order)
 
 1. License + MDX header — scaffolder-emitted; do not edit
 2. Release date metadata line — `*This model was released on YYYY-MM-DD and added to Hugging Face Transformers on YYYY-MM-DD.*`, placed above the H1. Tooling-managed — never write or edit the dates yourself
-3. `# ModelName` — H1
-4. Intro paragraph — resolves `<INTRO_SENTENCES>`. Links the paper inline. Does not quote the abstract
-5. Checkpoints line — one of the three variants from the `<ORG>` / `<HUB_CHECKPOINT_URL>` rule
-6. Quickstart — two tabs using doc-builder MDX syntax, or a single AutoModel block when no pipeline task mapping exists:
+3. Badge row — see Badge row resolver rule above
+4. `# ModelName` — H1
+5. Intro paragraph — resolves `<INTRO_SENTENCES>`. Links the paper inline. Does not quote the abstract
+6. Checkpoints line — one of the three variants from the `<ORG>` / `<HUB_CHECKPOINT_URL>` rule
+7. Quickstart — two tabs using doc-builder MDX syntax, or a single AutoModel block when no pipeline task mapping exists:
    ```
    <hfoptions id="usage">
    <hfoption id="Pipeline">…</hfoption>
    <hfoption id="AutoModel">…</hfoption>
    </hfoptions>
    ```
-7. `[[autodoc]]` blocks — one `## <ClassName>` per public class, in the fixed order below
+8. `[[autodoc]]` blocks — one `## <ClassName>` per public class, in the fixed order below
 
 ## Optional sections
 
@@ -203,6 +235,9 @@ Ground every resolution in `__all__` and the model's source files — do not rel
 - [ ] AutoModel tab uses `model.generate(inputs, max_new_tokens=32)` for generative task heads and `model(inputs)` for non-generative
 - [ ] Every code block follows the conventions: no `torch_dtype` / `dtype`; `device_map="auto"` on every model `from_pretrained`; `.to(model.device)` on every prepared input
 - [ ] `## Usage tips and notes` is absent or every bullet names a specific transformers API
-- [ ] No badge row, abstract quote, contributor line, "click sidebar" tip, `## Overview` heading, or long-form checkpoints paragraph
+- [ ] Badge row is present; FlashAttention/SDPA/Tensor parallelism badges match what `_supports_flash_attn_2`, `_supports_sdpa`, and `_tp_plan` indicate in the modeling file
+- [ ] No abstract quote, contributor line, "click sidebar" tip, `## Overview` heading, or long-form checkpoints paragraph
+- [ ] Checkpoint IDs in prose are plain text or Hub links, not backtick-wrapped
+- [ ] Transformers classes and methods in prose use doc-builder link syntax: [`~ClassName.method`]
 - [ ] Autodoc blocks cover the full `__all__` union (minus `*Output` classes) in the fixed order
 - [ ] Exactly one autodoc block uses `- generate` — the Quickstart task head if generative
