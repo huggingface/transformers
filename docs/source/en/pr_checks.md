@@ -18,184 +18,143 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Checks on a Pull Request
+# Pull request checks
 
-When you open a pull request on 🤗 Transformers, a fair number of checks will be run to make sure the patch you are adding is not breaking anything existing. Those checks are of four types:
+When you open a pull request, the Hugging Face CI runs several checks that must pass before your PR can be merged.
 
-- regular tests
-- documentation build
-- code and documentation style
-- general repository consistency
+- [Fixing the CI](#fixing-the-ci) lists the commands to run locally to pass the checks.
+- The sections after that describe what each check validates, such as [code quality](#code-quality) and [repository consistency](#repository-consistency).
+- [Tests](#tests) describe which tests are run, test categories, and slow tests.
 
-In this document, we will take a stab at explaining what those various checks are and the reason behind them, as well as how to debug them locally if one of them fails on your PR.
+## Fixing the CI
 
-Note that, ideally, they require you to have a dev install:
-
-```bash
-pip install transformers[dev]
-```
-
-or for an editable install:
-
-```bash
-pip install -e ".[dev]"
-```
-
-inside the Transformers repo. Since the number of optional dependencies of Transformers has grown a lot, it's possible you don't manage to get all of them. If the dev install fails, make sure to install PyTorch then do
-
-```bash
-pip install transformers[quality]
-```
-
-or for an editable install:
-
-```bash
-pip install -e ".[quality]"
-```
-
-## Tests
-
-All the jobs that begin with `ci/circleci: run_tests_` run parts of the Transformers testing suite. Each of those jobs focuses on a part of the library in a certain environment: for instance `ci/circleci: run_tests_pipelines` runs the pipeline tests in an environment where all pipeline-related requirements are installed.
-
-Note that to avoid running tests when there is no real change in the modules they are testing, only part of the test suite is run each time: a utility is run to determine the differences in the library between before and after the PR (what GitHub shows you in the "Files changes" tab) and picks the tests impacted by that diff. That utility can be run locally with:
-
-```bash
-python utils/tests_fetcher.py
-```
-
-from the root of the Transformers repo. It will:
-
-1. Check for each file in the diff if the changes are in the code or only in comments or docstrings. Only the files with real code changes are kept.
-2. Build an internal map that gives for each file of the source code of the library all the files it recursively impacts. Module A is said to impact module B if module B imports module A. For the recursive impact, we need a chain of modules going from module A to module B in which each module imports the previous one.
-3. Apply this map on the files gathered in step 1, which  gives us the list of model files impacted by the PR.
-4. Map each of those files to their corresponding test file(s) and get the list of tests to run.
-
-When executing the script locally, you should get the results of step 1, 3 and 4 printed and thus know which tests are run. The script will also create a file named `test_list.txt` which contains the list of tests to run, and you can run them locally with the following command:
-
-```bash
-python -m pytest -n 8 --dist=loadfile -rA -s $(cat test_list.txt)
-```
-
-Just in case anything slipped through the cracks, the full test suite is also run daily.
-
-## Documentation build
-
-The `build_pr_documentation` job builds and generates a preview of the documentation to make sure everything looks okay once your PR is merged. A bot will add a link to preview the documentation in your PR. Any changes you make to the PR are automatically updated in the preview. If the documentation fails to build, click on **Details** next to the failed job to see where things went wrong. Often, the error is as simple as a missing file in the `toctree`.
-
-If you're interested in building or previewing the documentation locally, take a look at the [`README.md`](https://github.com/huggingface/transformers/tree/main/docs) in the docs folder.
-
-## Code and documentation style
-
-Code formatting is applied to all the source files, the examples and the tests using `black` and `ruff`. We also have a custom tool taking care of the formatting of docstrings and `rst` files (`utils/style_doc.py`), as well as the order of the lazy imports performed in the Transformers `__init__.py` files (`utils/custom_init_isort.py`). All of this can be launched by executing
+In most cases, `make style` is enough to clear the code quality check, which is the most common failure.
 
 ```bash
 make style
 ```
 
-Type checking (via `ty`) and model structure rules are run separately with:
-
-```bash
-make typing
-```
-
-The CI checks those have been applied inside the `ci/circleci: check_code_quality` check. It also runs `ruff`, that will have a basic look at your code and will complain if it finds an undefined variable, or one that is not used. To run that check locally, use
-
-```bash
-make check-repo
-```
-
-This last command will also run all the additional checks for the repository consistency. Let's have a look at them.
-
-## Repository consistency
-
-This regroups all the tests to make sure your PR leaves the repository in a good state, and is performed by the `ci/circleci: check_repository_consistency` check. You can locally run that check by executing the following:
-
-```bash
-make check-repo
-```
-
-This checks that:
-
-- All objects added to the init are documented (performed by `utils/check_repo.py`)
-- All `__init__.py` files have the same content in their two sections (performed by `utils/check_inits.py`)
-- All code identified as a copy from another module is consistent with the original (performed by `utils/check_copies.py`)
-- All configuration classes have at least one valid checkpoint mentioned in their docstrings (performed by `utils/check_config_docstrings.py`)
-- All configuration classes only contain attributes that are used in corresponding modeling files (performed by `utils/check_config_attributes.py`)
-- The translations of the READMEs and the index of the doc have the same model list as the main README (performed by `utils/check_copies.py`)
-- The auto-generated tables in the documentation are up to date (performed by `utils/check_table.py`)
-- The library has all objects available even if not all optional dependencies are installed (performed by `utils/check_dummies.py`)
-- All docstrings properly document the arguments in the signature of the object (performed by `utils/check_docstrings.py`)
-
-Should this check fail, the first two items require manual fixing, the last four can be fixed automatically for you by running the command
+For failures in repository consistency, copies, or auto-generated files, run `make fix-repo`. It fixes style, copies, docstrings, and auto-generated files in one pass.
 
 ```bash
 make fix-repo
 ```
 
-Additional checks concern PRs that add new models, mainly that:
+For a larger change, the three-command sequence below covers every check. It is heavier, but catches everything before you push.
 
-- All models added are in an Auto-mapping (performed by `utils/check_repo.py`)
-<!-- TODO Sylvain, add a check that makes sure the common tests are implemented.-->
-- All models are properly tested (performed by `utils/check_repo.py`)
+```bash
+make fix-repo   # auto-fix everything that can be auto-fixed
+make typing     # check types and model structure, fix any errors manually
+make check-repo # verify all checks pass, fix anything that remains
+```
 
-<!-- TODO Sylvain, add the following
-- All models are added to the main README, inside the main doc
-- All checkpoints used actually exist on the Hub
+`make typing` catches type errors and model structure violations that you fix manually. `make check-repo` does a final read-only pass so you can confirm everything is ready.
 
--->
+> [!NOTE]
+> The CI is occasionally flaky. If a check fails on something unrelated to your change, ping a maintainer to re-run it.
 
-### Check copies
+## Code quality
 
-Since the Transformers library is very opinionated with respect to model code, and each model should fully be implemented in a single file without relying on other models, we have added a mechanism that checks whether a copy of the code of a layer of a given model stays consistent with the original. This way, when there is a bug fix, we can see all other impacted models and choose to trickle down the modification or break the copy.
+The code quality check covers formatting, imports, type checking, and model structure rules. It corresponds to `make fix-repo` and `make typing`.
 
-<Tip>
+`make style` (included in `make fix-repo`) auto-fixes [Ruff](https://docs.astral.sh/ruff/) linting and formatting, `__init__.py` import sort order, and auto-mapping consistency.
 
-If a file is a full copy of another file, you should register it in the constant `FULL_COPIES` of `utils/check_copies.py`.
+`make typing` performs type checking with [ty](https://docs.astral.sh/ty/) and validates TRansFormers (TRF) rules, which cover config class naming conventions and `forward()` signatures. Type errors and TRF violations report a specific rule number and must be fixed manually. The rules live in the [mlinter](https://github.com/huggingface/transformers-mlinter) repository. Run `python -m utils.mlinter --list-rules` to see every TRF rule, or `python -m utils.mlinter --rule TRFXXX` to view the full documentation for a specific rule.
 
-</Tip>
+If a TRF rule needs an exception, choose one of these options (see [Suppressing violations](./modeling_rules#suppressing-violations) for more details).
 
-This mechanism relies on comments of the form `# Copied from xxx`. The `xxx` should contain the whole path to the class of function which is being copied below. For instance, `RobertaSelfOutput` is a direct copy of the `BertSelfOutput` class, so you can see [here](https://github.com/huggingface/transformers/blob/2bd7a27a671fd1d98059124024f580f8f5c0f3b5/src/transformers/models/roberta/modeling_roberta.py#L289) it has a comment:
+- Add your model name to the `allowlist_models` list for the relevant rule in `utils/mlinter/rules.toml`. Use this when the whole model file needs an exception.
+- Add `# trf-ignore: TRFXXX` on the same line as the flagged construct, or on the line immediately above it. Use this when only one flagged construct needs an exception.
+
+## Repository consistency
+
+The repository consistency check is similar to `make check-repo`, except it stops on the first failure. It keeps the repository internally consistent across the categories below: public objects stay importable, copied code stays in sync with its source, and auto-generated files (dummies, doctests, metadata) reflect the current state of the code. For new models, it also verifies every new model class is registered in the auto-mappings.
+
+| Category | What it validates | Auto-fixed? |
+|---|---|---|
+| Init files | Every new public object must appear in both `_import_structure` (lazy loading) and the `if TYPE_CHECKING` block (type checker imports) in `__init__.py` | Manual |
+| Copies and modular | `# Copied from` blocks match their source and modular-generated files are up to date | `make fix-repo` |
+| Docstrings and docs | Argument docstrings match function signatures and documentation table of contents | `make fix-repo` |
+| Auto-generated files | Dummies, pipeline typing, doctest list, metadata, dependency table | `make fix-repo` |
+| Config validation | Config classes have valid checkpoints in docstrings and config attributes match modeling file | Manual |
+
+## Tests
+
+CI runs a targeted subset of tests based on what your PR changes. The CI runs tests in a slightly randomized order with [pytest-random-order](https://github.com/jbasko/pytest-random-order) to catch coupled tests. The run prints the random seed at the start so you can replay the same order with `--random-order-seed=<seed>`.
+
+If a test passes locally on GPU but fails in CI, set `TRANSFORMERS_TEST_DEVICE="cpu"` to check whether you can reproduce the failure on CPU.
+
+```bash
+TRANSFORMERS_TEST_DEVICE="cpu" pytest tests/models/my_model/ -v
+```
+
+The sections below explain how test selection works, which jobs run, and how to handle slow tests.
+
+### Test selection
+
+CI doesn't run the full test suite on every PR. CI skips tests decorated with `@slow` on every PR, and a maintainer triggers them on GPU once the PR is under review.
+
+`utils/tests_fetcher.py` traces import dependencies from your changed files to identify affected tests, and only runs those. It also catches regressions in other models when you touch shared utilities. The fetcher prints which files changed and which tests are impacted, then writes the list to `tests_torch_test_list.txt`.
+
+Use the fetcher to replicate exactly what CI runs.
+
+```bash
+python utils/tests_fetcher.py
+python -m pytest -n 8 --dist=loadfile -rA -s $(cat test_preparation/tests_torch_test_list.txt)
+```
+
+> [!TIP]
+> Changing core files like `modeling_utils.py` or `generation/utils.py` triggers all model tests, not just the affected subset.
+
+You can also run every test for your model unconditionally. A direct run is a faster local sanity check, but it won't catch regressions in other models caused by shared code you touched.
+
+```bash
+pytest tests/models/my_model/ -v
+```
+
+### Test job categories
+
+Tests are split across parallel CI jobs, and each job picks up files by path pattern. The relevant jobs for a model PR are:
+
+- `tests_torch`: modeling tests (`tests/models/*/test_modeling_*.py`)
+- `tests_tokenization`: tokenizer tests (`tests/models/*/test_tokenization_*.py`)
+- `tests_processors`: processor and feature extractor tests (`tests/models/*/test_(processing|image_processing|feature_extractor)_*.py`)
+- `tests_generate`: generation tests
+- `pipelines_torch`: pipeline tests
+- `tests_training_ci`: training loop tests
+- `tests_tensor_parallel_ci`: tensor parallel tests
+
+### Slow tests
+
+Regular CI runs skip tests decorated with `@slow`. They download real checkpoints or need significant compute, so they run on GPU instances, and maintainers trigger them once your PR is under review.
+
+Slow tests run on an NVIDIA A10, and numerical results can vary slightly between the CI hardware and your local machine. Maintainers usually adjusts those values on tests if needed when adding a new model.
+
+Run slow tests locally with the command below.
+
+```bash
+RUN_SLOW=1 python -m pytest tests/models/my_model/ -v
+```
+
+### Documentation build
+
+A `build_pr_documentation` job builds and generates a preview of the documentation. A bot posts a preview link in your PR, and the check must pass before merging. Most failures are a missing entry in the `toctree`. To build the documentation locally, see the [README.md](https://github.com/huggingface/transformers/tree/main/docs) in the docs folder.
+
+## `# Copied from` syntax
+
+> [!WARNING]
+> For new models, always prefer the [modular workflow](modular_transformers) (`modular_*.py`) over `# Copied from`. Avoid `# Copied from` whenever possible.
+
+The `# Copied from` mechanism keeps copied code in sync with its source. When `make fix-repo` runs, it checks every `# Copied from` block and updates it to match the original, so edits inside a `# Copied from` block are overwritten. Edit the source instead and let `make fix-repo` propagate the change.
+
+The basic forms of `# Copied from` include the following.
 
 ```py
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput
-```
 
-Note that instead of applying this to a whole class, you can apply it to the relevant methods that are copied from. For instance [here](https://github.com/huggingface/transformers/blob/2bd7a27a671fd1d98059124024f580f8f5c0f3b5/src/transformers/models/roberta/modeling_roberta.py#L598) you can see how `RobertaPreTrainedModel._init_weights` is copied from the same method in `BertPreTrainedModel` with the comment:
-
-```py
-# Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
-```
-
-Sometimes the copy is exactly the same except for names: for instance in `RobertaAttention`, we use `RobertaSelfAttention` instead of `BertSelfAttention` but other than that, the code is exactly the same. This is why `# Copied from` supports simple string replacements with the following syntax: `Copied from xxx with foo->bar`. This means the code is copied with all instances of `foo` being replaced by `bar`. You can see how it used [here](https://github.com/huggingface/transformers/blob/2bd7a27a671fd1d98059124024f580f8f5c0f3b5/src/transformers/models/roberta/modeling_roberta.py#L304C1-L304C86) in `RobertaAttention` with the comment:
-
-```py
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Roberta
-```
 
-Note that there shouldn't be any spaces around the arrow (unless that space is part of the pattern to replace of course).
-
-You can add several patterns separated by a comma. For instance here `CamemberForMaskedLM` is a direct copy of `RobertaForMaskedLM` with two replacements: `Roberta` to `Camembert` and `ROBERTA` to `CAMEMBERT`. You can see [here](https://github.com/huggingface/transformers/blob/15082a9dc6950ecae63a0d3e5060b2fc7f15050a/src/transformers/models/camembert/modeling_camembert.py#L929) this is done with the comment:
-
-```py
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForMaskedLM with Roberta->Camembert, ROBERTA->CAMEMBERT
-```
-
-If the order matters (because one of the replacements might conflict with a previous one), the replacements are executed from left to right.
-
-<Tip>
-
-If the replacements change the formatting (if you replace a short name by a very long name for instance), the copy is checked after applying the auto-formatter.
-
-</Tip>
-
-Another way when the patterns are just different casings of the same replacement (with an uppercased and a lowercased variants) is just to add the option `all-casing`. [Here](https://github.com/huggingface/transformers/blob/15082a9dc6950ecae63a0d3e5060b2fc7f15050a/src/transformers/models/mobilebert/modeling_mobilebert.py#L1237) is an example in `MobileBertForSequenceClassification` with the comment:
-
-```py
 # Copied from transformers.models.bert.modeling_bert.BertForSequenceClassification with Bert->MobileBert all-casing
 ```
 
-In this case, the code is copied from `BertForSequenceClassification` by replacing:
-
-- `Bert` by `MobileBert` (for instance when using `MobileBertModel` in the init)
-- `bert` by `mobilebert` (for instance when defining `self.mobilebert`)
-- `BERT` by `MOBILEBERT` (in the constant `MOBILEBERT_INPUTS_DOCSTRING`)
+The `with model->newModel` syntax applies string replacements after copying. Separate multiple replacements with commas, which are applied from left to right. The `all-casing` option replaces every casing variant at once (`Bert`, `bert`, `BERT` become `MobileBert`, `mobilebert`, `MOBILEBERT`).
