@@ -801,6 +801,8 @@ class TransformersKwargs(TypedDict, total=False):
             Indices of positions of each input sequence tokens.
         is_causal (`bool`, *optional*)
             Can be set to False to enable bi-directional attention, i.e. use decoder Attention modules as encoders.
+        seq_idx (`torch.IntTensor`, *optional*):
+            Sequence index for each token in a flattened packed batch.
     """
 
     num_items_in_batch: torch.Tensor | None
