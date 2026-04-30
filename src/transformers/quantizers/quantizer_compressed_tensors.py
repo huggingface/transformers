@@ -154,9 +154,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading_fp8(self, model, **kwargs):
         from ..integrations.compressed_tensors_fp8 import replace_with_ct_fp8_linear
 
-        self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, None, model._keep_in_fp32_modules
-        )
+        self.modules_to_not_convert = self.get_modules_to_not_convert(model, None, model._keep_in_fp32_modules)
         if self._modules_to_not_convert_ct:
             self.modules_to_not_convert = list(set(self.modules_to_not_convert + self._modules_to_not_convert_ct))
 

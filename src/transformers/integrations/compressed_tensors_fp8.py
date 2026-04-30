@@ -103,9 +103,7 @@ class CTFP8Linear(nn.Linear):
 
         if self.use_fp8_kernel:
             # XPU or CUDA SM89+: FP8 kernel path (quantize activation + scaled_mm)
-            x_quantized, x_scale = self.quantize_fp8_per_row(
-                input.view(-1, input.shape[-1]).contiguous()
-            )
+            x_quantized, x_scale = self.quantize_fp8_per_row(input.view(-1, input.shape[-1]).contiguous())
 
             weight_scale_float32 = self.weight_scale_inv.to(torch.float32)
 
