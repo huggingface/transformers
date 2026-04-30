@@ -117,6 +117,7 @@ class CamembertTokenizer(TokenizersBackend):
             self._vocab = vocab
         elif vocab_file is not None:
             import sentencepiece as spm
+
             sp = spm.SpmModel.load(vocab_file)
             self._vocab = [(sp.get_piece(i), sp.get_score(i)) for i in range(sp.get_piece_size())]
         else:
