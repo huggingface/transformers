@@ -46,6 +46,8 @@ def build_server(
     transcription_handler: TranscriptionHandler,
     generation_state: GenerationState,
     enable_cors: bool = False,
+    cors_origins: list = None,
+    api_key: str = None,
 ) -> FastAPI:
     """Build and return a configured FastAPI application.
 
@@ -75,14 +77,16 @@ def build_server(
         return JSONResponse({"error": str(exc)}, status_code=503)
 
     if enable_cors:
+        origins = cors_origins if cors_origins is not None else []
+        if not origins:
+            logger.warning_once("CORS is enabled but no origins are specified. No cross-origin requests will be allowed.")
         app.add_middleware(
             CORSMiddleware,
-            allow_origins=["*"],
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
+            allow_origins=origins,
+            allow_credentials=False,
+            allow_methods=["GET", "POST", "OPTIONS"],
+            allow_headers=["Authorization", "Content-Type", "X-Request-Id"],
         )
-        logger.warning_once("CORS allow origin is set to `*`. Not recommended for production.")
 
     # ---- Middleware ----
 
@@ -94,6 +98,16 @@ def build_server(
         response = await call_next(request)
         response.headers[X_REQUEST_ID] = request_id
         return response
+
+    if api_key is not None:
+
+        @app.middleware("http")
+        async def api_key_middleware(request: Request, call_next):
+            """Validate Bearer API key on all requests."""
+            auth_header = request.headers.get("Authorization", "")
+            if not auth_header.startswith("Bearer ") or auth_header[len("Bearer "):] != api_key:
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            return await call_next(request)
 
     # ---- Routes ----
 
