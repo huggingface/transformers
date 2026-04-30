@@ -123,32 +123,6 @@ class Granite4VisionModelTest(VLMModelTest, unittest.TestCase):
     test_attention_outputs = False
     has_attentions = False
 
-    # get_image_features returns Granite4VisionImageFeaturesOutput with deepstack_features,
-    # not last_hidden_state/pooler_output/hidden_states expected by the common tests
-    @unittest.skip("Granite4VisionImageFeaturesOutput has no last_hidden_state/pooler_output")
-    def test_get_image_features_output_0(self):
-        pass
-
-    @unittest.skip("Granite4VisionImageFeaturesOutput has no last_hidden_state/pooler_output")
-    def test_get_image_features_output_1(self):
-        pass
-
-    @unittest.skip("Granite4VisionImageFeaturesOutput has no last_hidden_state/pooler_output")
-    def test_get_image_features_output_2(self):
-        pass
-
-    @unittest.skip("Granite4VisionImageFeaturesOutput has no hidden_states field")
-    def test_get_image_features_hidden_states(self):
-        pass
-
-    @unittest.skip("Granite4VisionImageFeaturesOutput has no attentions field")
-    def test_get_image_features_attentions(self):
-        pass
-
-    @unittest.skip("Base model forward returns ModelOutputWithPast, not CausalLMOutput with loss")
-    def test_training(self):
-        pass
-
     @unittest.skip("QFormer submodules not initialized by init_weights from meta device")
     def test_can_init_all_missing_weights(self):
         pass

@@ -25,10 +25,10 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import select_best_resolution
 from ...masking_utils import create_causal_mask
-from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.output_capturing import capture_outputs
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..granite.configuration_granite import GraniteConfig
@@ -75,7 +75,7 @@ class Granite4VisionCausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
 
 
 @dataclass
-class Granite4VisionImageFeaturesOutput(ModelOutput):
+class Granite4VisionImageFeaturesOutput(BaseModelOutputWithPooling):
     """
     Output of `Granite4VisionModel.get_image_features`.
 
@@ -372,9 +372,10 @@ class Granite4VisionPreTrainedModel(LlavaNextPreTrainedModel):
         """Add projected vision features into the image-token positions of hidden_states."""
         vision_mask = vision_mask.to(hidden_states.device)
         features = features.to(hidden_states.device, hidden_states.dtype)
-        hidden_states = hidden_states.clone()
-        hidden_states[vision_mask] = hidden_states[vision_mask] + features
-        return hidden_states
+        return hidden_states.masked_scatter(
+            vision_mask,
+            (hidden_states[vision_mask] + features.flatten()).view(-1),
+        )
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -407,6 +408,7 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel, GraniteModel):
         super().__init__(config)
 
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -420,7 +422,7 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel, GraniteModel):
         **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
-        vision_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        vision_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Boolean mask marking image token positions. Required when `deepstack_features` is provided.
         deepstack_features (`dict[int, torch.Tensor]`, *optional*):
             Mapping from LLM layer index to projected vision features of shape `(num_image_tokens, hidden_size)`.
@@ -602,6 +604,9 @@ class Granite4VisionModel(LlavaNextModel):
         elif pixel_values.dim() != 4:
             raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
 
+        output_hidden_states = kwargs.pop("output_hidden_states", None)
+        if output_hidden_states is None:
+            output_hidden_states = getattr(self.config, "output_hidden_states", False)
         vision_outputs = self.vision_tower(pixel_values, output_hidden_states=True, **kwargs)
 
         # Deepstack features: extract from multiple vision layers, downsample via interpolation
@@ -644,7 +649,10 @@ class Granite4VisionModel(LlavaNextModel):
 
                 all_features.append((llm_layer, packed_group))
 
-        return Granite4VisionImageFeaturesOutput(deepstack_features=all_features)
+        return Granite4VisionImageFeaturesOutput(
+            deepstack_features=all_features,
+            hidden_states=vision_outputs.hidden_states if output_hidden_states else None,
+        )
 
     @can_return_tuple
     def forward(
@@ -692,14 +700,16 @@ class Granite4VisionModel(LlavaNextModel):
             for idx, (llm_layer_idx, packed_features) in enumerate(image_features.deepstack_features):
                 concat_features = torch.cat(packed_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
                 if idx == 0:
-                    vision_mask_3d = self.get_placeholder_mask(
+                    vision_mask = self.get_placeholder_mask(
                         input_ids, inputs_embeds=inputs_embeds, image_features=concat_features
                     )
-                    vision_mask = vision_mask_3d[..., 0]
-                    inputs_embeds = inputs_embeds.masked_fill(vision_mask_3d, 0.0)
+                    inputs_embeds = inputs_embeds.masked_fill(vision_mask, 0.0)
                 deepstack_features[llm_layer_idx] = concat_features
 
-        outputs = self.language_model(
+        # Bypass nn.Module.__call__ overhead by calling the unbound forward directly.
+        # nn.Module.__call__ has non-trivial per-call overhead that accumulates across 40 layers × N steps.
+        outputs = Granite4VisionTextModel.forward(
+            self.language_model,
             input_ids=None,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
