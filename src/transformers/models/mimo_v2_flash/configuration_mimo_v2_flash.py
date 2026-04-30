@@ -40,7 +40,8 @@ class MiMoV2FlashConfig(PreTrainedConfig):
         Dimension of value heads (special case because MiMo uses a smaller v head dim than (qk) head dim )
     mlp_layer_types (`list`, *optional*):
         MLP pattern for each layer (`"dense"` or `"sparse"`). Defaults to 1 dense + rest sparse.
-    attention_value_scale (`float`, *optional*, defaults to 0.707 (which is the decimal approximation of 1/√2):
+    attention_value_scale (`float`, *optional*, defaults to 0.707 (which is the decimal approximation
+        of `sqrt(hidden_size / (num_attention_heads * v_head_dim))`):
         Constant multiplier applied to rescale the attention values.
     """
 
