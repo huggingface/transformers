@@ -195,6 +195,7 @@ if TYPE_CHECKING:
         replace_with_bnb_linear,
         validate_bnb_backend_availability,
     )
+    from .compressed_tensors_fp8 import CTFP8Linear, replace_with_ct_fp8_linear
     from .deepspeed import (
         HfDeepSpeedConfig,
         HfTrainerDeepSpeedConfig,
@@ -210,7 +211,6 @@ if TYPE_CHECKING:
     from .eetq import replace_with_eetq_linear
     from .fbgemm_fp8 import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts, replace_with_fbgemm_fp8_linear
     from .finegrained_fp8 import FP8Linear, replace_with_fp8_linear
-    from .compressed_tensors_fp8 import CTFP8Linear, replace_with_ct_fp8_linear
     from .fsdp import is_fsdp_enabled, is_fsdp_managed_module
     from .ggml import (
         GGUF_CONFIG_DEFAULTS_MAPPING,
