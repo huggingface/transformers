@@ -1414,8 +1414,6 @@ LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
     "full_attention": create_causal_mask,
     "sliding_attention": create_sliding_window_causal_mask,
     "chunked_attention": create_chunked_causal_mask,
-    # V4 attention types all share the sliding-window causal mask; the long-range
-    # branch's compressed segment is appended to keys after the mask is built.
     "compressed_sparse_attention": create_sliding_window_causal_mask,
     "heavily_compressed_attention": create_sliding_window_causal_mask,
 }
