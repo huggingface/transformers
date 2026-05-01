@@ -44,13 +44,13 @@ class MaskFormerDetrConfig(PreTrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import MaskFormerDetrConfig, MaskFormerDetrModel
+    >>> from transformers import MaskFormerDetrConfig, MaskFormerMaskFormerDetrModel
 
-    >>> # Initializing a MASK_FORMER_DETR facebook/mask_former_detr-resnet-50 style configuration
+    >>> # Initializing a MASK_FORMER_MASK_FORMER_DETR facebook/mask_former_mask_former_detr-resnet-50 style configuration
     >>> configuration = MaskFormerDetrConfig()
 
-    >>> # Initializing a model (with random weights) from the facebook/mask_former_detr-resnet-50 style configuration
-    >>> model = MaskFormerDetrModel(configuration)
+    >>> # Initializing a model (with random weights) from the facebook/mask_former_mask_former_detr-resnet-50 style configuration
+    >>> model = MaskFormerMaskFormerDetrModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
