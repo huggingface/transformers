@@ -34,14 +34,13 @@ The example below demonstrates how to predict the `[MASK]` token with [`Pipeline
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="fill-mask",
     model="google/mobilebert-uncased",
-    dtype=torch.float16,
     device=0
 )
 pipeline("The capital of France is [MASK].")
@@ -50,16 +49,17 @@ pipeline("The capital of France is [MASK].")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForMaskedLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "google/mobilebert-uncased",
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "google/mobilebert-uncased",
-    dtype=torch.float16,
     device_map="auto",
 )
 inputs = tokenizer("The capital of France is [MASK].", return_tensors="pt").to(model.device)

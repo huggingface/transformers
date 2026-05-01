@@ -36,14 +36,13 @@ The example below demonstrates how to classify an image with [`Pipeline`] or the
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="image-classification",
     model="ustc-community/hgnet-v2",
-    dtype=torch.float16,
     device=0
 )
 pipeline("http://images.cocodataset.org/val2017/000000039769.jpg")
@@ -52,19 +51,21 @@ pipeline("http://images.cocodataset.org/val2017/000000039769.jpg")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 import requests
-from transformers import HGNetV2ForImageClassification, AutoImageProcessor
+import torch
 from PIL import Image
+
+from transformers import AutoImageProcessor, HGNetV2ForImageClassification
+
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 
-model = HGNetV2ForImageClassification.from_pretrained("ustc-community/hgnet-v2")
+model = HGNetV2ForImageClassification.from_pretrained("ustc-community/hgnet-v2", device_map="auto")
 processor = AutoImageProcessor.from_pretrained("ustc-community/hgnet-v2")
 
-inputs = processor(images=image, return_tensors="pt")
+inputs = processor(images=image, return_tensors="pt").to(model.device)
 with torch.no_grad():
     logits = model(**inputs).logits
 predicted_class_id = logits.argmax(dim=-1).item()

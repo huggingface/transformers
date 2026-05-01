@@ -111,6 +111,8 @@ PRIVATE_MODELS = [
     "Kosmos2_5TextForCausalLM",
     "Kosmos2_5VisionModel",
     "SmolVLMVisionTransformer",
+    "MiniCPMV4_6VisionPreTrainedModel",
+    "MiniCPMV4_6VisionModel",
     "AriaTextForCausalLM",
     "AriaTextModel",
     "Phi4MultimodalAudioModel",
@@ -198,6 +200,8 @@ IGNORE_NON_TESTED = (
         "SLANetBackbone",  # Buildinere is used only for encoding (discretizing) and is tested as part of bigger model
         "SLANeXtSLAHead",  # Buildinere is used only for encoding (discretizing) and is tested as part of bigger model
         "SLANeXtBackbone",  # Building part of bigger (tested) model. Tested implicitly through SLANeXtForTableRecognition.
+        "PPFormulaNetTextModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
+        "PPFormulaNetVisionModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
         "PPOCRV5MobileDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
         "PPOCRV5ServerDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerDetForObjectDetection.
         "PPDocLayoutV2ReadingOrder",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV2ForObjectDetection.
@@ -249,6 +253,8 @@ IGNORE_NON_TESTED = (
         "GlmOcrTextModel",  # Building part of bigger (tested) model
         "Qwen2VLTextModel",  # Building part of bigger (tested) model
         "Qwen2_5_VLTextModel",  # Building part of bigger (tested) model
+        "MiniCPMV4_6Model",  # Building part of bigger (tested) model. Tested implicitly through MiniCPMV4_6ForConditionalGeneration.
+        "MiniCPMV4_6ForConditionalGeneration",  # Tested in MiniCPMV4_6ModelTest via VLMModelTest; check_repo doesn't detect VLMModelTest.conditional_generation_class.
         "InternVLVisionModel",  # Building part of bigger (tested) model
         "QianfanOCRVisionModel",  # Building part of bigger (tested) model
         "JanusVisionModel",  # Building part of bigger (tested) model
@@ -466,6 +472,9 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SLANetBackbone",  # Building part of bigger (tested) model
     "SLANeXtSLAHead",  # Building part of bigger (tested) model
     "SLANeXtBackbone",  # Building part of bigger (tested) model
+    "PPFormulaNetTextModel",  # Building part of bigger (tested) model
+    "PPFormulaNetVisionModel",  # Building part of bigger (tested) model
+    "PPFormulaNetModel",  # Building part of bigger (tested) model
     "PPOCRV5MobileDetModel",  # Building part of bigger (tested) model
     "PPOCRV5ServerDetModel",  # Building part of bigger (tested) model
     "PPDocLayoutV2Model",  # Building part of bigger (tested) model

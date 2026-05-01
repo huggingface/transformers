@@ -33,11 +33,12 @@ Checkout all Doge model checkpoints [here](https://huggingface.co/collections/Sm
 <summary>Using Doge-Base for text generation</summary>
 
 ```python
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("SmallDoge/Doge-20M")
-model = AutoModelForCausalLM.from_pretrained("SmallDoge/Doge-20M")
-inputs = tokenizer("Hey how are you doing?", return_tensors="pt")
+model = AutoModelForCausalLM.from_pretrained("SmallDoge/Doge-20M", device_map="auto")
+inputs = tokenizer("Hey how are you doing?", return_tensors="pt").to(model.device)
 
 outputs = model.generate(**inputs, max_new_tokens=100)
 print(tokenizer.batch_decode(outputs))
@@ -49,16 +50,17 @@ print(tokenizer.batch_decode(outputs))
 <summary>Using Doge-Instruct for question answering</summary>
 
 ```python
-from transformers import AutoTokenizer, AutoModelForCausalLM, GenerationConfig, TextStreamer
+from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig, TextStreamer
+
 
 tokenizer = AutoTokenizer.from_pretrained("SmallDoge/Doge-20M-Instruct")
-model = AutoModelForCausalLM.from_pretrained("SmallDoge/Doge-20M-Instruct")
+model = AutoModelForCausalLM.from_pretrained("SmallDoge/Doge-20M-Instruct", device_map="auto")
 
 generation_config = GenerationConfig(
-      max_new_tokens=100, 
-      use_cache=True, 
-      do_sample=True, 
-      temperature=0.8, 
+      max_new_tokens=100,
+      use_cache=True,
+      do_sample=True,
+      temperature=0.8,
       top_p=0.9,
       repetition_penalty=1.0
 )
@@ -75,9 +77,9 @@ inputs = tokenizer.apply_chat_template(
 )
 
 outputs = model.generate(
-    inputs, 
+    inputs,
     tokenizer=tokenizer,
-    generation_config=generation_config, 
+    generation_config=generation_config,
     streamer=steamer
 )
 ```

@@ -30,23 +30,21 @@ You can find all ViTPose and ViTPose++ checkpoints under the [ViTPose collection
 
 The example below demonstrates pose estimation with the [`VitPoseForPoseEstimation`] class.
 
-```py
-import torch
+```python
 import requests
-import numpy as np
 import supervision as sv
+import torch
 from PIL import Image
-from transformers import AutoProcessor, RTDetrForObjectDetection, VitPoseForPoseEstimation
-from accelerate import Accelerator
 
-device = Accelerator().device
+from transformers import AutoProcessor, RTDetrForObjectDetection, VitPoseForPoseEstimation
+
 
 url = "https://www.fcbarcelona.com/fcbarcelona/photo/2021/01/31/3c55a19f-dfc1-4451-885e-afd14e890a11/mini_2021-01-31-BARCELONA-ATHLETIC-BILBAOI-30.JPG"
 image = Image.open(requests.get(url, stream=True).raw)
 
 # Detect humans in the image
 person_image_processor = AutoProcessor.from_pretrained("PekingU/rtdetr_r50vd_coco_o365")
-person_model = RTDetrForObjectDetection.from_pretrained("PekingU/rtdetr_r50vd_coco_o365", device_map=device)
+person_model = RTDetrForObjectDetection.from_pretrained("PekingU/rtdetr_r50vd_coco_o365", device_map="auto")
 
 inputs = person_image_processor(images=image, return_tensors="pt").to(person_model.device)
 
@@ -68,7 +66,7 @@ person_boxes[:, 3] = person_boxes[:, 3] - person_boxes[:, 1]
 
 # Detect keypoints for each person found
 image_processor = AutoProcessor.from_pretrained("usyd-community/vitpose-base-simple")
-model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-base-simple", device_map=device)
+model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-base-simple", device_map="auto")
 
 inputs = image_processor(image, boxes=[person_boxes], return_tensors="pt").to(model.device)
 
@@ -112,21 +110,22 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
 
-```py
+```python
 # pip install torchao
-import torch
 import requests
-import numpy as np
+import torch
 from PIL import Image
-from transformers import AutoProcessor, RTDetrForObjectDetection, VitPoseForPoseEstimation, TorchAoConfig
+
+from transformers import AutoProcessor, RTDetrForObjectDetection, TorchAoConfig, VitPoseForPoseEstimation
+
 
 url = "https://www.fcbarcelona.com/fcbarcelona/photo/2021/01/31/3c55a19f-dfc1-4451-885e-afd14e890a11/mini_2021-01-31-BARCELONA-ATHLETIC-BILBAOI-30.JPG"
 image = Image.open(requests.get(url, stream=True).raw)
 
 person_image_processor = AutoProcessor.from_pretrained("PekingU/rtdetr_r50vd_coco_o365")
-person_model = RTDetrForObjectDetection.from_pretrained("PekingU/rtdetr_r50vd_coco_o365", device_map=device)
+person_model = RTDetrForObjectDetection.from_pretrained("PekingU/rtdetr_r50vd_coco_o365", device_map="auto")
 
-inputs = person_image_processor(images=image, return_tensors="pt").to(device)
+inputs = person_image_processor(images=image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = person_model(**inputs)
@@ -145,9 +144,9 @@ person_boxes[:, 3] = person_boxes[:, 3] - person_boxes[:, 1]
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 
 image_processor = AutoProcessor.from_pretrained("usyd-community/vitpose-plus-huge")
-model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-plus-huge", device_map=device, quantization_config=quantization_config)
+model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-plus-huge", device_map="auto", quantization_config=quantization_config)
 
-inputs = image_processor(image, boxes=[person_boxes], return_tensors="pt").to(device)
+inputs = image_processor(image, boxes=[person_boxes], return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -164,12 +163,9 @@ image_pose_result = pose_results[0]
 
     ```py
     from transformers import AutoProcessor, VitPoseForPoseEstimation
-    from accelerate import Accelerator
-
-    device = Accelerator().device
 
     image_processor = AutoProcessor.from_pretrained("usyd-community/vitpose-plus-base")
-    model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-plus-base", device=device)
+    model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-plus-base", device_map="auto")
 
     inputs = image_processor(image, boxes=[person_boxes], return_tensors="pt").to(model.device)
     dataset_index = torch.tensor([0], device=device) # must be a tensor of shape (batch_size,)

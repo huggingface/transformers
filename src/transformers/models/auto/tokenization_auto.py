@@ -186,6 +186,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("megatron-bert", "BertTokenizer" if is_tokenizers_available() else None),
         ("metaclip_2", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("mgp-str", "MgpstrTokenizer"),
+        ("minicpmv4_6", "TokenizersBackend" if is_tokenizers_available() else None),
         (
             "ministral",
             "MistralCommonBackend"
@@ -258,6 +259,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
             else ("TokenizersBackend" if is_tokenizers_available() else None),
         ),
         ("plbart", "PLBartTokenizer" if is_tokenizers_available() else None),
+        ("pp_formulanet", "NougatTokenizer" if is_tokenizers_available() else None),
         ("prophetnet", "ProphetNetTokenizer"),
         ("qdqbert", "BertTokenizer" if is_tokenizers_available() else None),
         ("qianfan_ocr", "Qwen2Tokenizer" if is_tokenizers_available() else None),
@@ -715,13 +717,16 @@ class AutoTokenizer:
             and (TOKENIZER_MAPPING_NAMES.get(config_model_type).removesuffix("Fast"))
             != (tokenizer_config_class.removesuffix("Fast"))
         ):
-            tokenizer_class = tokenizer_class_from_name(tokenizer_config_class)
-            if tokenizer_class is not None and tokenizer_class.__name__ not in (
-                "TokenizersBackend",
-                "PythonBackend",
-                "PreTrainedTokenizerFast",
-            ):
-                return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            registered_class_name = TOKENIZER_MAPPING_NAMES.get(config_model_type).removesuffix("Fast")
+            if registered_class_name not in ("TokenizersBackend", "PythonBackend", "PreTrainedTokenizerFast"):
+                # The auto-mapping has a real class but the Hub specifies a different specialized class so trust the Hub's class.
+                tokenizer_class = tokenizer_class_from_name(tokenizer_config_class)
+                if tokenizer_class is not None and tokenizer_class.__name__ not in (
+                    "TokenizersBackend",
+                    "PythonBackend",
+                    "PreTrainedTokenizerFast",
+                ):
+                    return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
             if TokenizersBackend is not None:
                 return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)

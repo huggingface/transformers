@@ -56,72 +56,76 @@ encode the text and prepare the images respectively.
 The following example shows how to run contrastive learning using [`BridgeTowerProcessor`] and [`BridgeTowerForContrastiveLearning`].
 
 ```python
->>> from transformers import BridgeTowerProcessor, BridgeTowerForContrastiveLearning
->>> import requests
->>> from PIL import Image
+import requests
+from PIL import Image
 
->>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
->>> image = Image.open(requests.get(url, stream=True).raw)
->>> texts = ["An image of two cats chilling on a couch", "A football player scoring a goal"]
+from transformers import BridgeTowerForContrastiveLearning, BridgeTowerProcessor
 
->>> processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")
->>> model = BridgeTowerForContrastiveLearning.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")
 
->>> # forward pass
->>> scores = dict()
->>> for text in texts:
-...     # prepare inputs
-...     encoding = processor(image, text, return_tensors="pt")
-...     outputs = model(**encoding)
-...     scores[text] = outputs
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+texts = ["An image of two cats chilling on a couch", "A football player scoring a goal"]
+
+processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")
+model = BridgeTowerForContrastiveLearning.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc", device_map="auto")
+
+# forward pass
+scores = dict()
+for text in texts:
+    # prepare inputs
+    encoding = processor(image, text, return_tensors="pt").to(model.device)
+    outputs = model(**encoding)
+    scores[text] = outputs
 ```
 
 The following example shows how to run image-text retrieval using [`BridgeTowerProcessor`] and [`BridgeTowerForImageAndTextRetrieval`].
 
 ```python
->>> from transformers import BridgeTowerProcessor, BridgeTowerForImageAndTextRetrieval
->>> import requests
->>> from PIL import Image
+import requests
+from PIL import Image
 
->>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
->>> image = Image.open(requests.get(url, stream=True).raw)
->>> texts = ["An image of two cats chilling on a couch", "A football player scoring a goal"]
+from transformers import BridgeTowerForImageAndTextRetrieval, BridgeTowerProcessor
 
->>> processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-base-itm-mlm")
->>> model = BridgeTowerForImageAndTextRetrieval.from_pretrained("BridgeTower/bridgetower-base-itm-mlm")
 
->>> # forward pass
->>> scores = dict()
->>> for text in texts:
-...     # prepare inputs
-...     encoding = processor(image, text, return_tensors="pt")
-...     outputs = model(**encoding)
-...     scores[text] = outputs.logits[0, 1].item()
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+texts = ["An image of two cats chilling on a couch", "A football player scoring a goal"]
+
+processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-base-itm-mlm")
+model = BridgeTowerForImageAndTextRetrieval.from_pretrained("BridgeTower/bridgetower-base-itm-mlm", device_map="auto")
+
+# forward pass
+scores = dict()
+for text in texts:
+    # prepare inputs
+    encoding = processor(image, text, return_tensors="pt").to(model.device)
+    outputs = model(**encoding)
+    scores[text] = outputs.logits[0, 1].item()
 ```
 
 The following example shows how to run masked language modeling using [`BridgeTowerProcessor`] and [`BridgeTowerForMaskedLM`].
 
 ```python
->>> from transformers import BridgeTowerProcessor, BridgeTowerForMaskedLM
->>> from PIL import Image
->>> import requests
+from transformers import BridgeTowerProcessor, BridgeTowerForMaskedLM
+from PIL import Image
+import requests
 
->>> url = "http://images.cocodataset.org/val2017/000000360943.jpg"
->>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
->>> text = "a <mask> looking out of the window"
+url = "http://images.cocodataset.org/val2017/000000360943.jpg"
+image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+text = "a <mask> looking out of the window"
 
->>> processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-base-itm-mlm")
->>> model = BridgeTowerForMaskedLM.from_pretrained("BridgeTower/bridgetower-base-itm-mlm")
+processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-base-itm-mlm")
+model = BridgeTowerForMaskedLM.from_pretrained("BridgeTower/bridgetower-base-itm-mlm", device_map="auto")
 
->>> # prepare inputs
->>> encoding = processor(image, text, return_tensors="pt")
+# prepare inputs
+encoding = processor(image, text, return_tensors="pt").to(model.device)
 
->>> # forward pass
->>> outputs = model(**encoding)
+# forward pass
+outputs = model(**encoding)
 
->>> results = processor.decode(outputs.logits.argmax(dim=-1).squeeze(0).tolist())
+results = processor.decode(outputs.logits.argmax(dim=-1).squeeze(0).tolist())
 
->>> print(results)
+print(results)
 .a cat looking out of the window.
 ```
 

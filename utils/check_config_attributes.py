@@ -42,6 +42,7 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
+    "MiniCPMV4_6Config": ["drop_vision_last_layer"],
     "OpenAIPrivacyFilterConfig": ["classifier_dropout", "output_router_logits", "router_aux_loss_coef"],
     "HYV3Config": ["output_router_logits"],
     "NougatConfig": ["decoder", "encoder"],
@@ -52,6 +53,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "Ernie4_5_VL_MoeVisionConfig": ["args"],  # BC Alias
     "ExaoneMoeConfig": ["first_k_dense_replace"],  # BC for other frameworks
     "AfmoeConfig": ["global_attn_every_n_layers", "rope_scaling"],
+    "LagunaConfig": ["moe_apply_router_weight_on_input"],
     "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
     "Lfm2Config": ["full_attn_idxs"],
     "DiaConfig": ["delay_pattern"],
