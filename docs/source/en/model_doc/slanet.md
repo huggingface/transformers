@@ -38,12 +38,14 @@ The example below demonstrates how to detect text with SLANet using the [`AutoMo
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py
+```python
 from io import BytesIO
 
 import httpx
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModelForTableRecognition
+
 
 model_path="PaddlePaddle/SLANet_plus_safetensors"
 model = AutoModelForTableRecognition.from_pretrained(model_path, device_map="auto")

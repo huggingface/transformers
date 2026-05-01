@@ -31,13 +31,12 @@ Model usage
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py
-import torch
-from transformers import Qwen3VLForConditionalGeneration, AutoProcessor
+```python
+from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
+
 
 model = Qwen3VLForConditionalGeneration.from_pretrained(
     "Qwen/Qwen3-VL",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )

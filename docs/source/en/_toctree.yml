@@ -30,18 +30,18 @@
       sections:
       - local: contributing
         title: Contribute to Transformers
-      - local: modeling_rules
-        title: Model structure rules
       - local: modular_transformers
-        title: Contributing a new model to Transformers
+        title: Add a model with modular transformers
       - local: add_vision_processing_components
         title: Add vision processing components
+      - local: modeling_rules
+        title: Model structure rules
       - local: model_output_tracing
         title: Tracing model intermediate outputs
       - local: auto_docstring
         title: Auto-generating docstrings
       - local: testing
-        title: Transformers model tests
+        title: Writing model tests
       - local: pr_checks
         title: Pull request checks
       - local: add_new_model
@@ -1061,6 +1061,8 @@
         title: GLM-ASR
       - local: model_doc/granite_speech
         title: GraniteSpeech
+      - local: model_doc/granite_speech_plus
+        title: GraniteSpeechPlus
       - local: model_doc/higgs_audio_v2
         title: Higgs Audio V2
       - local: model_doc/higgs_audio_v2_tokenizer
@@ -1289,6 +1291,8 @@
         title: MetaCLIP 2
       - local: model_doc/mgp-str
         title: MGP-STR
+      - local: model_doc/minicpmv4_6
+        title: MiniCPM-V
       - local: model_doc/mistral3
         title: Mistral3
       - local: model_doc/mistral4
@@ -1333,6 +1337,8 @@
         title: PP-DocLayoutV2
       - local: model_doc/pp_doclayout_v3
         title: PP-DocLayoutV3
+      - local: model_doc/pp_formulanet
+        title: PP-FormulaNet
       - local: model_doc/pp_ocrv5_mobile_det
         title: PP-OCRv5_mobile_det
       - local: model_doc/pp_ocrv5_mobile_rec

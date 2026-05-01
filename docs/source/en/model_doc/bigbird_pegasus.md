@@ -37,16 +37,15 @@ The example below demonstrates how to summarize text with [`Pipeline`], [`AutoMo
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py
-import torch
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+```python
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "google/bigbird-pegasus-large-arxiv"
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "google/bigbird-pegasus-large-arxiv",
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 
@@ -67,9 +66,11 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to int4.
 
-```py
+```python
 import torch
-from transformers import BitsAndBytesConfig, AutoModelForSeq2SeqLM, AutoTokenizer
+
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BitsAndBytesConfig
+
 
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
@@ -78,7 +79,6 @@ quantization_config = BitsAndBytesConfig(
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "google/bigbird-pegasus-large-arxiv",
-    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )

@@ -42,13 +42,11 @@ The example below demonstrates how to translate text using [`Pipeline`] or the [
 <hfoption id="Pipeline">
 
 ```python
-
-import torch
 from transformers import pipeline
 
-pipeline = pipeline("translation_en_to_de", model="Helsinki-NLP/opus-mt-en-de", dtype=torch.float16, device=0)
-pipeline("Hello, how are you?")
 
+pipeline = pipeline("translation_en_to_de", model="Helsinki-NLP/opus-mt-en-de", device=0)
+pipeline("Hello, how are you?")
 ```
 
 </hfoption>
@@ -56,17 +54,15 @@ pipeline("Hello, how are you?")
 <hfoption id="AutoModel">
 
 ```python
-
-import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
+
 tokenizer = AutoTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
-model = AutoModelForSeq2SeqLM.from_pretrained("Helsinki-NLP/opus-mt-en-de", dtype=torch.float16, attn_implementation="sdpa", device_map="auto")
+model = AutoModelForSeq2SeqLM.from_pretrained("Helsinki-NLP/opus-mt-en-de", attn_implementation="sdpa", device_map="auto")
 
 inputs = tokenizer("Hello, how are you?", return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs, cache_implementation="static")
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-
 ```
 
 </hfoption>
@@ -76,6 +72,7 @@ Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/bl
 
 ```python
 from transformers.utils.attention_visualizer import AttentionMaskVisualizer
+
 
 visualizer = AttentionMaskVisualizer("Helsinki-NLP/opus-mt-en-de")
 visualizer("Hello, how are you?")
@@ -93,50 +90,48 @@ visualizer("Hello, how are you?")
 - If a model can output multiple languages, prepend the desired output language to `src_txt` as shown below. New multilingual models from the [Tatoeba-Challenge](https://github.com/Helsinki-NLP/Tatoeba-Challenge) require 3 character language codes.
 
 ```python
-
 from transformers import MarianMTModel, MarianTokenizer
+
 
 # Model trained on multiple source languages → multiple target languages
 # Example: multilingual to Arabic (arb)
 model_name = "Helsinki-NLP/opus-mt-mul-mul"  # Tatoeba Challenge model
 tokenizer = MarianTokenizer.from_pretrained(model_name)
-model = MarianMTModel.from_pretrained(model_name)
+model = MarianMTModel.from_pretrained(model_name, device_map="auto")
 
 # Prepend the desired output language code (3-letter ISO 639-3)
 src_texts = ["arb>> Hello, how are you today?"]
 
 # Tokenize and translate
-inputs = tokenizer(src_texts, return_tensors="pt", padding=True, truncation=True)
+inputs = tokenizer(src_texts, return_tensors="pt", padding=True, truncation=True).to(model.device)
 translated = model.generate(**inputs)
 
 # Decode and print result
 translated_texts = tokenizer.batch_decode(translated, skip_special_tokens=True)
 print(translated_texts[0])
-
 ```
 
 - Older multilingual models use 2 character language codes.
 
 ```python
-
 from transformers import MarianMTModel, MarianTokenizer
+
 
 # Example: older multilingual model (like en → many)
 model_name = "Helsinki-NLP/opus-mt-en-ROMANCE"  # English → French, Spanish, Italian, etc.
 tokenizer = MarianTokenizer.from_pretrained(model_name)
-model = MarianMTModel.from_pretrained(model_name)
+model = MarianMTModel.from_pretrained(model_name, device_map="auto")
 
 # Prepend the 2-letter ISO 639-1 target language code (older format)
 src_texts = [">>fr<< Hello, how are you today?"]
 
 # Tokenize and translate
-inputs = tokenizer(src_texts, return_tensors="pt", padding=True, truncation=True)
+inputs = tokenizer(src_texts, return_tensors="pt", padding=True, truncation=True).to(model.device)
 translated = model.generate(**inputs)
 
 # Decode and print result
 translated_texts = tokenizer.batch_decode(translated, skip_special_tokens=True)
 print(translated_texts[0])
-
 ```
 
 ## MarianConfig

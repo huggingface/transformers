@@ -38,14 +38,13 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="text-generation",
     model="Qwen/Qwen1.5-MoE-A2.7B",
-    dtype=torch.bfloat16,
     device_map=0
 )
 
@@ -60,13 +59,12 @@ print(outputs[0]["generated_text"][-1]['content'])
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen1.5-MoE-A2.7B-Chat",
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -115,8 +113,8 @@ The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize 
 
 ```python
 # pip install -U flash-attn --no-build-isolation
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
 
 quantization_config = BitsAndBytesConfig(
     load_in_8bit=True
@@ -125,7 +123,6 @@ quantization_config = BitsAndBytesConfig(
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B-Chat")
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen1.5-MoE-A2.7B-Chat",
-    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config,
     attn_implementation="flash_attention_2"

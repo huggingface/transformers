@@ -179,6 +179,7 @@ if TYPE_CHECKING:
     from .gptj import *
     from .granite import *
     from .granite_speech import *
+    from .granite_speech_plus import *
     from .granitemoe import *
     from .granitemoehybrid import *
     from .granitemoeshared import *
@@ -251,6 +252,7 @@ if TYPE_CHECKING:
     from .metaclip_2 import *
     from .mgp_str import *
     from .mimi import *
+    from .minicpmv4_6 import *
     from .minimax import *
     from .minimax_m2 import *
     from .ministral import *

@@ -42,6 +42,7 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
+    "MiniCPMV4_6Config": ["drop_vision_last_layer"],
     "OpenAIPrivacyFilterConfig": ["classifier_dropout", "output_router_logits", "router_aux_loss_coef"],
     "HYV3Config": ["output_router_logits"],
     "NougatConfig": ["decoder", "encoder"],
