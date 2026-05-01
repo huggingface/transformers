@@ -1620,9 +1620,9 @@ class ContinuousBatchingConfig:
             Maximum percentage of free GPU memory (after the model is loaded) to use for the KV cache. When `None`,
             resolved at runtime to 0.9 if there is no logit processing and 0.8 if there is, to leave headroom for
             vocabulary-sized temporary tensors.
-        max_blocks_per_request (`int`, *optional*, defaults to 0):
+        max_blocks_per_request (`int`, *optional*):
             Maximum blocks per request, used in the `flash_attn_with_kvcache` fast decode path to dimension
-            the block table. Setting this to 0 disables the fast decode path.
+            the block table. Setting this to 0 disables the fast decode path. Default is None (auto-inferred).
         allow_block_sharing (`bool`, *optional*, defaults to `True`):
             Whether to allow block sharing for prefix caching. Block sharing can only be allowed, never forced,
             as some models do not support it. Disable if you have few short prompts but long generation lengths.
@@ -1681,8 +1681,8 @@ class ContinuousBatchingConfig:
     max_memory_percent: float | None = None
 
     # This is only used in the flash_attn_with_kvcache fast decode path to dimension the block table. If it is set to 0,
-    # the fast decode path will not be used. Currently turned off by default.
-    max_blocks_per_request: int | None = 0
+    # the fast decode path will not be used. Auto-inferred from GPU memory when `None` (default).
+    max_blocks_per_request: int | None = None
 
     # Block sharing can only be allowed, but never forced: some model just do not support it. If you only have a few
     # short prompts, but long generation lengths, you might want to disable block sharing.
@@ -1738,6 +1738,11 @@ class ContinuousBatchingConfig:
     # When True, processors explicitly marked as unsupported are removed with a warning. When False, all processors
     # are kept but warnings are logged for unsupported/unknown ones.
     drop_unsupported_processors: bool = True
+
+    @property
+    def fallback_max_blocks_per_request(self) -> int:
+        """A good default for the size of the block table for the decode path"""
+        return 32
 
     def account_for_cb_deprecated_arguments(
         self,
