@@ -88,26 +88,25 @@ class DeepseekV4RotaryEmbedding(LagunaRotaryEmbedding):
 
 class DeepseekV4HCACache(DynamicSlidingWindowLayer):
     r"""Cache layer for HCA blocks (paper §2.3.2). Holds the long-range compressor's
-    buffer / pool / count on top of the sliding-window K=V branch. HCA uses
-    *non-overlapping* windows, so there is *no* overlap state, and HCA has *no*
-    indexer either.
+    buffer / running compressed entries / count on top of the sliding-window K=V
+    branch. HCA uses *non-overlapping* windows, so there is *no* overlap state,
+    and HCA has *no* indexer either.
 
-    Fields on top of :class:`DynamicSlidingWindowLayer`:
+    State is dict-keyed by entry name — HCA only uses `"compressor"`, but
+    :class:`DeepseekV4CSACache` adds `"indexer"` to the same dicts so a single
+    set of methods (`store_compression_weights` / `update_compressor_states`)
+    serves both:
 
-      * `compressor_pool` — the running list of compressed KV entries emitted so
-        far (one every `compress_rate_hca` source tokens; the long-range KVs the
-        attention concatenates onto its sliding-window keys / values).
-      * `compressor_buffer_kv` / `compressor_buffer_gate` — source tokens that
-        arrived between two full windows; once the buffer hits `compress_rate_hca`
-        tokens the compressor closes a window, emits one pooled entry, and drains
-        the buffer.
-      * `compressor_pool_count` — number of compressed entries emitted so far,
-        so `compressor_pool_count * compress_rate_hca` is the absolute position
-        of the *next* window's first source token.
-
-    The reason we store `compressor_pool_count` is to account for prefill -> decode -> prefill
-    cases, where it is not obvious from the current `position_ids` alone how many compressed entries
-    have been emitted so far, and thus what the absolute position of the next window is.
+      * `compressed_kv[name]` — the running list of compressed KV entries
+        emitted so far (one every `compress_rate` source tokens; the long-range
+        KVs the attention concatenates onto its sliding-window keys / values).
+      * `buffer_kv[name]` / `buffer_gate[name]` — source tokens that arrived
+        between two full windows; once the buffer hits `compress_rate` tokens
+        the compressor closes a window, emits one entry, and drains the buffer.
+      * `entry_count[name]` — number of compressed entries emitted so far, so
+        `entry_count[name] * compress_rate` is the absolute position of the
+        *next* window's first source token. Tracked separately from
+        `position_ids` so prefill -> decode -> prefill stays consistent.
     """
 
     layer_type = "heavily_compressed_attention"
@@ -115,10 +114,10 @@ class DeepseekV4HCACache(DynamicSlidingWindowLayer):
     def __init__(self, config: "DeepseekV4Config"):
         super().__init__(config)
         self.compress_rate = config.compress_rates["heavily_compressed_attention"]
-        self.compressor_buffer_kv: torch.Tensor | None = None
-        self.compressor_buffer_gate: torch.Tensor | None = None
-        self.compressor_states: torch.Tensor | None = None
-        self.compressor_pool_count = 0
+        self.buffer_kv: dict[str, torch.Tensor | None] = {"compressor": None}
+        self.buffer_gate: dict[str, torch.Tensor | None] = {"compressor": None}
+        self.compressed_kv: dict[str, torch.Tensor | None] = {"compressor": None}
+        self.entry_count: dict[str, int] = {"compressor": 0}
 
     def update(self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs):
         """
@@ -134,60 +133,59 @@ class DeepseekV4HCACache(DynamicSlidingWindowLayer):
         self.values = self.keys
         return full, full
 
-    def store_compression_weights(self, kv: torch.Tensor, gate: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, int]:
+    def store_compression_weights(
+        self, name: str, kv: torch.Tensor, gate: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, int]:
         r"""
-        Stores the new projected `(kv, gate)` (paper §2.3.2 eqs. 20–21:
-        `C = H·W^{KV}`, `Z = H·W^Z`) with the buffered kv and gate and
-        return the longest window-aligned chunk that's ready to pool, plus the
-        absolute source-token position of that chunk's first window. The returned
-        chunk is softmax-pooled by the compressor with `position_bias` to emit one
-        compressed entry per window of `compress_rate_hca` tokens.
+        Concatenate the new projected `(kv, gate)` (paper §2.3.2 eqs. 20–21:
+        `C = H·W^{KV}`, `Z = H·W^Z`) for entry `name` with what's already in
+        the buffer, peel off the longest window-aligned prefix (the chunk
+        ready to pool), keep the leftover in the buffer for next call, and
+        return `(chunk_kv, chunk_gate, first_pool_position)`. The returned
+        chunk is softmax-pooled by the compressor with `position_bias` to
+        emit one compressed entry per window of `compress_rate` tokens.
         """
-        first_pool_position = self.compressor_pool_count * self.compress_rate
-        if self.compressor_buffer_kv is not None and self.compressor_buffer_kv.shape[1]:
-            kv = torch.cat([self.compressor_buffer_kv, kv], dim=1)
-            gate = torch.cat([self.compressor_buffer_gate, gate], dim=1)
-
+        first_pool_position = self.entry_count[name] * self.compress_rate
+        bk, bg = self.buffer_kv[name], self.buffer_gate[name]
+        if bk is not None and bk.shape[1]:
+            kv = torch.cat([bk, kv], dim=1)
+            gate = torch.cat([bg, gate], dim=1)
         # only return the longest prefix that's a multiple of compress_rate; the rest stays in the buffer for next time
         usable = (kv.shape[1] // self.compress_rate) * self.compress_rate
-        chunk_kv, chunk_gate = kv[:, :usable], gate[:, :usable]
-        self.compressor_buffer_kv, self.compressor_buffer_gate = kv[:, usable:], gate[:, usable:]
-        return chunk_kv, chunk_gate, first_pool_position
+        self.buffer_kv[name], self.buffer_gate[name] = kv[:, usable:], gate[:, usable:]
+        return kv[:, :usable], gate[:, :usable], first_pool_position
 
-    def update_compressor_states(self, compressed: torch.Tensor) -> torch.Tensor:
+    def update_compressor_states(self, name: str, compressed: torch.Tensor) -> torch.Tensor:
         r"""
-        Append freshly emitted compressed entries to `compressor_states`
-        (`C^{Comp}`, paper §2.3.2 eq. 23) and return the full pool. Bumps
-        `compressor_pool_count` so the next `update_compressor` call knows the
-        absolute source-token position of its first window.
+        Append freshly emitted compressed entries to `compressed_kv[name]`
+        (`C^{Comp}`, paper §2.3.2 eq. 23), bump `entry_count[name]`, and
+        return the running `compressed_kv[name]`.
         """
-        if self.compressor_states is None:
-            self.compressor_states = compressed.new_zeros((compressed.shape[0], 0, compressed.shape[-1]))
-            self.compressor_pool_count += compressed.shape[1]
-        else:
-            if compressed.shape[1] > 0:
-                self.compressor_states = torch.cat([self.compressor_states, compressed], dim=1)
-        return self.compressor_states
+        if self.compressed_kv[name] is None:
+            self.compressed_kv[name] = compressed
+        elif compressed.shape[1] > 0:
+            self.compressed_kv[name] = torch.cat([self.compressed_kv[name], compressed], dim=1)
+        self.entry_count[name] += compressed.shape[1]
+        return self.compressed_kv[name]
 
 
 class DeepseekV4CSACache(DeepseekV4HCACache):
-    r"""Cache layer for CSA blocks (paper §2.3.1). Holds two parallel sets of
-    buffer / pool / count / overlap state on top of the sliding-window K=V branch:
+    r"""Cache layer for CSA blocks (paper §2.3.1). Extends :class:`DeepseekV4HCACache`
+    by adding an `"indexer"` entry to the inherited `buffer_kv` / `buffer_gate` /
+    `compressed_kv` / `entry_count` dicts, plus per-name *overlap* state for the
+    two-series window scheme.
 
-      * *compressor* — the main-branch `head_dim` pool (the long-range KVs
-        the attention concatenates after top-k indexer selection).
-      * *indexer* — the Lightning Indexer's smaller `index_head_dim` pool
-        (the keys `K^{IComp}` that queries score against to pick the top-k blocks).
-        Kept separate from the compressor pool because the head dim
-        differs.
+    What "overlap" means here: the CSA `kv_proj` / `gate_proj` produce `2 * head_dim`
+    features per source token — two independent compressed series Ca and Cb stored
+    in one tensor. Ca occupies `[..., :head_dim]`, Cb occupies `[..., head_dim:]`.
+    Pooled entry `w` is the softmax-gated convex combination of window `w-1`'s Ca
+    slice with window `w`'s Cb slice — effective width `2 * compress_rate_csa`,
+    stride `compress_rate_csa` (paper §2.3.1).
 
-    Even if there is an overlap, because Ci uses the index of Cb and Ci-1 the indexes of Ca, the compression
-    becomes 1/m, but we have to keep the overlap buffers.
-
-    Both compressor and indexer use *overlapping* windows of stride `compress_rate_csa` and width
-    `2 * compress_rate_csa`, thus we keep 2 buffers of KV and gate, holding the last full window's
-    projected `(kv, gate)` so the next forward call's first window can stitch in
-    its low-channel slice as the prior contribution.
+    Because adjacent windows share state only through *the previous window's Ca
+    slice*, the only thing we need to carry across a forward boundary is
+    `chunk[:, -1, :, :head_dim]` (Ca) of the last full window — Cb is never read
+    again. That's what `overlap_kv[name]` / `overlap_gate[name]` persist.
     """
 
     layer_type = "compressed_sparse_attention"
@@ -195,44 +193,28 @@ class DeepseekV4CSACache(DeepseekV4HCACache):
     def __init__(self, config: "DeepseekV4Config"):
         super().__init__(config)
         self.compress_rate = config.compress_rates["compressed_sparse_attention"]
-        # Compressor overlap
-        self.compressor_overlap_kv: torch.Tensor | None = None
-        self.compressor_overlap_gate: torch.Tensor | None = None
-        # Indexer side (parallel state at `index_head_dim`)
-        self.indexer_buffer_kv: torch.Tensor | None = None
-        self.indexer_buffer_gate: torch.Tensor | None = None
-        self.indexer_pool: torch.Tensor | None = None
-        self.indexer_pool_count = 0
+        self.buffer_kv["indexer"] = None
+        self.buffer_gate["indexer"] = None
+        self.compressed_kv["indexer"] = None
+        self.entry_count["indexer"] = 0
+        self.overlap_kv: dict[str, torch.Tensor | None] = {"compressor": None, "indexer": None}
+        self.overlap_gate: dict[str, torch.Tensor | None] = {"compressor": None, "indexer": None}
 
-        # indexer overlap
-        self.indexer_overlap_kv: torch.Tensor | None = None
-        self.indexer_overlap_gate: torch.Tensor | None = None
-
-    def get_compressor_overlap(self) -> tuple[torch.Tensor | None, torch.Tensor | None]:
-        return self.compressor_overlap_kv, self.compressor_overlap_gate
-
-    def set_compressor_overlap(self, kv: torch.Tensor, gate: torch.Tensor) -> None:
-        self.compressor_overlap_kv = kv
-        self.compressor_overlap_gate = gate
-
-    def update_indexer(self, kv: torch.Tensor, gate: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, int]:
-        first_pool_position = self.indexer_pool_count * self.compress_rate
-        chunk_kv, chunk_gate, self.indexer_buffer_kv, self.indexer_buffer_gate = _update_window_buffer(
-            self.indexer_buffer_kv, self.indexer_buffer_gate, kv, gate, self.compress_rate
-        )
-        return chunk_kv, chunk_gate, first_pool_position
-
-    def update_indexer_pool(self, new_pooled: torch.Tensor) -> torch.Tensor:
-        self.indexer_pool = _append_to_pool(self.indexer_pool, new_pooled)
-        self.indexer_pool_count += new_pooled.shape[1]
-        return self.indexer_pool
-
-    def get_indexer_overlap(self) -> tuple[torch.Tensor | None, torch.Tensor | None]:
-        return self.indexer_overlap_kv, self.indexer_overlap_gate
-
-    def set_indexer_overlap(self, kv: torch.Tensor, gate: torch.Tensor) -> None:
-        self.indexer_overlap_kv = kv
-        self.indexer_overlap_gate = gate
+    def update_overlap_state(
+        self, name: str, chunk_kv: torch.Tensor, chunk_gate: torch.Tensor, head_dim: int
+    ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
+        r"""
+        Read the `name` entry's prior window's Ca slice (saved on the previous
+        forward call) and persist the *current* call's last-window Ca slice for
+        the next call. Only the `:head_dim` slice (Ca) is ever consumed
+        downstream — Cb has already been folded into the previous window's
+        emitted pooled entry — so we store half what `chunk[:, -1]` holds.
+        Returns `(prior_kv, prior_gate)` — both `None` on the very first call.
+        """
+        prior_kv, prior_gate = self.overlap_kv[name], self.overlap_gate[name]
+        self.overlap_kv[name] = chunk_kv[:, -1, :, :head_dim].clone()
+        self.overlap_gate[name] = chunk_gate[:, -1, :, :head_dim].clone()
+        return prior_kv, prior_gate
 
 
 class DeepseekV4GroupedLinear(nn.Linear):
@@ -265,50 +247,6 @@ class DeepseekV4GroupedLinear(nn.Linear):
         x = x.reshape(-1, self.n_groups, d_in).transpose(0, 1)
         y = torch.bmm(x, w).transpose(0, 1)
         return y.reshape(*input_shape, self.n_groups, -1)
-
-
-def _overlap_pool(
-    chunk_kv: torch.Tensor,
-    chunk_gate: torch.Tensor,
-    prior_kv: torch.Tensor | None,
-    prior_gate: torch.Tensor | None,
-    head_dim: int,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    r"""
-    TODO this IS what I don't fully understand, probably notations
-    Expand `[B, n_win, ratio, 2*head_dim]` chunks into `[B, n_win, 2*ratio, head_dim]`
-    by stitching each window's *low-channel* slice onto the *high-channel* slice of the
-    prior window.
-
-    Each pooled output thus mixes `ratio` *current* source tokens (high half of the
-    learned 2d split) with `ratio` *previous* source tokens (low half), so windows
-    have width `2*ratio` but stride `ratio` (paper §2.3.1). For window 0, the prior
-    half is filled with zero (kv) / `-inf` (gate, so its softmax weight is exactly 0),
-    unless `prior_kv` / `prior_gate` carry the last full window from a previous
-    forward call — in which case its low-channel slice slots into row `[0, :ratio]`.
-
-    """
-    batch, n_windows, ratio, _ = chunk_kv.shape
-    new_kv = chunk_kv.new_zeros((batch, n_windows, 2 * ratio, head_dim))
-    new_gate = chunk_gate.new_full((batch, n_windows, 2 * ratio, head_dim), float("-inf"))
-    new_kv[:, :, ratio:] = chunk_kv[..., head_dim:]
-    new_gate[:, :, ratio:] = chunk_gate[..., head_dim:]
-
-    if n_windows > 1:
-        new_kv[:, 1:, :ratio] = chunk_kv[:, :-1, :, :head_dim]
-        new_gate[:, 1:, :ratio] = chunk_gate[:, :-1, :, :head_dim]
-    if prior_kv is not None and prior_gate is not None:
-        # if prior KV is always stored in new_kv[:, 0, :ratio], then we can directly read from it instead of having separate state variables for the prior window
-        new_kv[:, 0, :ratio] = prior_kv[..., :head_dim].to(new_kv.dtype)
-        new_gate[:, 0, :ratio] = prior_gate[..., :head_dim].to(new_gate.dtype)
-    return new_kv, new_gate
-
-
-def _rope_pool(pooled: torch.Tensor, rotary_emb: nn.Module, positions: torch.Tensor, layer_type: str) -> torch.Tensor:
-    """Apply RoPE to the trailing rope slice of each pooled entry at its deterministic
-    absolute position. Used by both the indexer pool and the HCA / CSA compressor pools."""
-    cos, sin = rotary_emb(pooled, position_ids=positions, layer_type=layer_type)
-    return apply_rotary_pos_emb(pooled.unsqueeze(1), cos, sin).squeeze(1)
 
 
 
@@ -357,27 +295,26 @@ class DeepseekV4HCACompressor(nn.Module):
             usable = (kv.shape[1] // self.compress_rate) * self.compress_rate
             chunk_kv, chunk_gate, first_pool_position = kv[:, :usable], gate[:, :usable], 0
         else:
-            chunk_kv, chunk_gate, first_pool_position = cache_layer.update_compressor(kv, gate)
+            chunk_kv, chunk_gate, first_pool_position = cache_layer.store_compression_weights("compressor", kv, gate)
 
-        if chunk_kv.shape[1] > 0: # there were at least self.compress_rate tokens
+        if chunk_kv.shape[1] > 0:  # there were at least self.compress_rate tokens
             n_windows = chunk_kv.shape[1] // self.compress_rate
             chunk_kv = chunk_kv.view(batch, n_windows, self.compress_rate, -1)
             chunk_gate = chunk_gate.view(batch, n_windows, self.compress_rate, -1) + self.position_bias.to(
                 chunk_gate.dtype
             )
-            compressed= self.kv_norm(
+            compressed = self.kv_norm(
                 (chunk_kv * chunk_gate.softmax(dim=2, dtype=torch.float32).to(chunk_kv.dtype)).sum(dim=2)
             )
             positions = torch.arange(n_windows, device=compressed.device)
             positions = (positions * self.compress_rate + first_pool_position).unsqueeze(0).expand(batch, -1)
-
-            cos, sin = self.rotary_emb(compressed, position_ids=positions, layer_type=self.layer_type)
+            cos, sin = self.rotary_emb(compressed, position_ids=positions, layer_type=self.rope_layer_type)
             compressed = apply_rotary_pos_emb(compressed.unsqueeze(1), cos, sin).squeeze(1)
         else:
             compressed = chunk_kv.new_zeros((batch, 0, self.head_dim))
 
         if cache_layer is not None:
-            compressed = cache_layer.update_compressor_states(compressed)
+            compressed = cache_layer.update_compressor_states("compressor", compressed)
         return compressed.unsqueeze(1)
 
 
@@ -439,43 +376,54 @@ class DeepseekV4Indexer(nn.Module):
         layer_idx: int,
     ) -> torch.LongTensor:
         batch, seq_len, _ = hidden_states.shape
-        cache_layer = past_key_values.layers[layer_idx] if past_key_values is not None else None
-
-        # --- Pool side: same overlapping windows as the outer CSA compressor, at index_head_dim ---
+        cache_layer: DeepseekV4CSACache = past_key_values.layers[layer_idx] if past_key_values is not None else None
         kv = self.kv_proj(hidden_states)
         gate = self.gate_proj(hidden_states)
+
         if cache_layer is None:
             usable = (kv.shape[1] // self.compress_rate) * self.compress_rate
             chunk_kv, chunk_gate, first_pool_position = kv[:, :usable], gate[:, :usable], 0
-            prior_kv, prior_gate = None, None
         else:
-            chunk_kv, chunk_gate, first_pool_position = cache_layer.update_indexer(kv, gate)
-            prior_kv, prior_gate = cache_layer.get_indexer_overlap()
+            chunk_kv, chunk_gate, first_pool_position = cache_layer.store_compression_weights("indexer", kv, gate)
+
         if chunk_kv.shape[1] > 0:
             n_windows = chunk_kv.shape[1] // self.compress_rate
-            chunk_kv = chunk_kv.view(batch, n_windows, self.compress_rate, -1)
-            chunk_gate = chunk_gate.view(batch, n_windows, self.compress_rate, -1) + self.position_bias.to(
-                chunk_gate.dtype
-            )
+            ratio = self.compress_rate
+            chunk_kv = chunk_kv.view(batch, n_windows, ratio, -1)
+            chunk_gate = chunk_gate.view(batch, n_windows, ratio, -1) + self.position_bias.to(chunk_gate.dtype)
+
+            # Same Ca / Cb overlap layout as the outer CSA compressor, at index_head_dim.
+            new_kv = chunk_kv.new_zeros((batch, n_windows, 2 * ratio, self.head_dim))
+            new_gate = chunk_gate.new_full((batch, n_windows, 2 * ratio, self.head_dim), float("-inf"))
+            new_kv[:, :, ratio:] = chunk_kv[..., self.head_dim :]
+            new_gate[:, :, ratio:] = chunk_gate[..., self.head_dim :]
+            if n_windows > 1:
+                new_kv[:, 1:, :ratio] = chunk_kv[:, :-1, :, : self.head_dim]
+                new_gate[:, 1:, :ratio] = chunk_gate[:, :-1, :, : self.head_dim]
             if cache_layer is not None:
-                cache_layer.set_indexer_overlap(chunk_kv[:, -1].clone(), chunk_gate[:, -1].clone())
-            chunk_kv, chunk_gate = _overlap_pool(chunk_kv, chunk_gate, prior_kv, prior_gate, self.head_dim)
-            # Softmax in fp32 for stability (logits in bf16/fp16 can collapse pairs that
-            # only differ by a small amount, especially with large window widths).
-            new_pooled = self.kv_norm(
-                (chunk_kv * chunk_gate.softmax(dim=2, dtype=torch.float32).to(chunk_kv.dtype)).sum(dim=2)
+                prior_kv, prior_gate = cache_layer.update_overlap_state(
+                    "indexer", chunk_kv, chunk_gate, self.head_dim
+                )
+                if prior_kv is not None:
+                    new_kv[:, 0, :ratio] = prior_kv.to(new_kv.dtype)
+                    new_gate[:, 0, :ratio] = prior_gate.to(new_gate.dtype)
+
+            compressed = self.kv_norm(
+                (new_kv * new_gate.softmax(dim=2, dtype=torch.float32).to(new_kv.dtype)).sum(dim=2)
             )
             positions = (
-                (torch.arange(n_windows, device=new_pooled.device) * self.compress_rate + first_pool_position)
+                (torch.arange(n_windows, device=compressed.device) * self.compress_rate + first_pool_position)
                 .unsqueeze(0)
                 .expand(batch, -1)
             )
-            new_pooled = _rope_pool(new_pooled, self.rotary_emb, positions, self.rope_layer_type)
+            cos, sin = self.rotary_emb(compressed, position_ids=positions, layer_type=self.rope_layer_type)
+            compressed = apply_rotary_pos_emb(compressed.unsqueeze(1), cos, sin).squeeze(1)
         else:
-            new_pooled = chunk_kv.new_zeros((batch, 0, self.head_dim))
-        pooled_kv = new_pooled if cache_layer is None else cache_layer.update_indexer_pool(new_pooled)
+            compressed = chunk_kv.new_zeros((batch, 0, self.head_dim))
 
+        pooled_kv = compressed if cache_layer is None else cache_layer.update_compressor_states("indexer", compressed)
 
+        # --- Query side ---
         cos_q, sin_q = self.rotary_emb(hidden_states, position_ids=position_ids, layer_type=self.rope_layer_type)
         q = self.q_b_proj(q_residual).view(batch, seq_len, -1, self.head_dim).transpose(1, 2)
         q = apply_rotary_pos_emb(q, cos_q, sin_q).transpose(1, 2)
@@ -491,18 +439,22 @@ class DeepseekV4Indexer(nn.Module):
 
 
 class DeepseekV4CSACompressor(nn.Module):
-    """Compressed Sparse Attention compressor (paper §2.3.1, eqs. 9–17). Compresses every
-    `compress_rate_csa` (m=4) source tokens and runs a
-    Lightning Indexer on top of the compressed KV that scores queries with
+    """Compressed Sparse Attention compressor (paper §2.3.1, eqs. 9–17). Compresses
+    every `compress_rate_csa` (m=4) source tokens and runs a Lightning Indexer on
+    top of the compressed KV that scores queries with
     `∑_h w_{t,h} · ReLU(q_{t,h} · K^{IComp}_s)` to gather the top `index_topk`
     entries per query before they reach core attention.
 
-    * `kv_proj` / `gate_proj` / `position_bias` project to *2 × head_dim*. TODO spend some time
-    explaining, 2 different series of compressions, mixed.
-
-    * The cache layer's `compressor_overlap_*` state carries the last full
-    window across forward calls.
-
+    `kv_proj` / `gate_proj` / `position_bias` project to `2 * head_dim`: each token
+    contributes two independent compressed series Ca and Cb stored in one
+    tensor. Ca = `[..., :head_dim]` (the token's contribution to the *next*
+    window's pooled entry), Cb = `[..., head_dim:]` (its contribution to the
+    *current* window's pooled entry). Pooled entry `w` is the softmax-gated
+    convex combination of window `w-1`'s Ca slice with window `w`'s Cb slice
+    over `2 * compress_rate_csa` slots — width `2 * compress_rate_csa`, stride
+    `compress_rate_csa`. The previous-window Ca for `w = 0` comes from the
+    cache's overlap state (or stays zero-kv / `-inf`-gate when there is no
+    cache, which makes its softmax weight exactly 0).
     """
 
     rope_layer_type = "compress"
@@ -512,10 +464,6 @@ class DeepseekV4CSACompressor(nn.Module):
         self.compress_rate = config.compress_rates["compressed_sparse_attention"]
         self.head_dim = config.head_dim
         self.rope_head_dim = config.qk_rope_head_dim
-        # `2 * head_dim` because windows overlap: each compressed entry is a softmax-gated
-        # convex combination of `compress_rate_csa` *current* tokens
-        # mixed with `compress_rate_csa` *previous* tokens. This allows to compute 2 different series
-        # of KV entries, that are then combined.
         self.kv_proj = nn.Linear(config.hidden_size, 2 * self.head_dim, bias=False)
         self.gate_proj = nn.Linear(config.hidden_size, 2 * self.head_dim, bias=False)
         self.position_bias = nn.Parameter(torch.empty(self.compress_rate, 2 * self.head_dim))
@@ -536,43 +484,57 @@ class DeepseekV4CSACompressor(nn.Module):
         kv = self.kv_proj(hidden_states)
         gate = self.gate_proj(hidden_states)
 
-        prior_kv, prior_gate = None, None
-        if cache_layer is None: # only valid chunks can be used as cache, thus we slice the proj
+        if cache_layer is None:
             usable = (kv.shape[1] // self.compress_rate) * self.compress_rate
             chunk_kv, chunk_gate, first_pool_position = kv[:, :usable], gate[:, :usable], 0
         else:
-            chunk_kv, chunk_gate, first_pool_position = cache_layer.store_compression_weights(kv, gate)
-            prior_kv, prior_gate = cache_layer.get_compressor_overlap()
+            chunk_kv, chunk_gate, first_pool_position = cache_layer.store_compression_weights("compressor", kv, gate)
 
         if chunk_kv.shape[1] > 0:
             n_windows = chunk_kv.shape[1] // self.compress_rate
-            chunk_kv = chunk_kv.view(batch, n_windows, self.compress_rate, -1)
-            chunk_gate = chunk_gate.view(batch, n_windows, self.compress_rate, -1) + self.position_bias.to(
-                chunk_gate.dtype
-            )
+            ratio = self.compress_rate
+            chunk_kv = chunk_kv.view(batch, n_windows, ratio, -1)
+            chunk_gate = chunk_gate.view(batch, n_windows, ratio, -1) + self.position_bias.to(chunk_gate.dtype)
+
+            # Lay out the two series in [B, n_win, 2*ratio, head_dim]: Cb half
+            # (`[..., head_dim:]`) is the current window, Ca half
+            # (`[..., :head_dim]` of the *previous* window) sits in the leading
+            # `:ratio` slots. Window 0's prior slot stays zero-kv / -inf-gate
+            # (softmax weight 0) unless the cache supplies a cross-call prior.
+            new_kv = chunk_kv.new_zeros((batch, n_windows, 2 * ratio, self.head_dim))
+            new_gate = chunk_gate.new_full((batch, n_windows, 2 * ratio, self.head_dim), float("-inf"))
+            new_kv[:, :, ratio:] = chunk_kv[..., self.head_dim :]
+            new_gate[:, :, ratio:] = chunk_gate[..., self.head_dim :]
+            if n_windows > 1:
+                new_kv[:, 1:, :ratio] = chunk_kv[:, :-1, :, : self.head_dim]
+                new_gate[:, 1:, :ratio] = chunk_gate[:, :-1, :, : self.head_dim]
             if cache_layer is not None:
-                # Persist the *raw* last full window (gate already biased) so the next
-                # forward call's first window can read its low-channel slice as prior.
-                cache_layer.set_compressor_overlap(chunk_kv[:, -1].clone(), chunk_gate[:, -1].clone())
-            chunk_kv, chunk_gate = _overlap_pool(chunk_kv, chunk_gate, prior_kv, prior_gate, self.head_dim)
+                prior_kv, prior_gate = cache_layer.update_overlap_state(
+                    "compressor", chunk_kv, chunk_gate, self.head_dim
+                )
+                if prior_kv is not None:
+                    new_kv[:, 0, :ratio] = prior_kv.to(new_kv.dtype)
+                    new_gate[:, 0, :ratio] = prior_gate.to(new_gate.dtype)
+
             # Softmax in fp32 for stability (logits in bf16/fp16 can collapse pairs that
             # only differ by a small amount, especially with large window widths).
-            new_pooled = self.kv_norm(
-                (chunk_kv * chunk_gate.softmax(dim=2, dtype=torch.float32).to(chunk_kv.dtype)).sum(dim=2)
+            compressed = self.kv_norm(
+                (new_kv * new_gate.softmax(dim=2, dtype=torch.float32).to(new_kv.dtype)).sum(dim=2)
             )
             positions = (
-                (torch.arange(n_windows, device=new_pooled.device) * self.compress_rate + first_pool_position)
+                (torch.arange(n_windows, device=compressed.device) * self.compress_rate + first_pool_position)
                 .unsqueeze(0)
                 .expand(batch, -1)
             )
-            new_pooled = _rope_pool(new_pooled, self.rotary_emb, positions, self.rope_layer_type)
+            cos, sin = self.rotary_emb(compressed, position_ids=positions, layer_type=self.rope_layer_type)
+            compressed = apply_rotary_pos_emb(compressed.unsqueeze(1), cos, sin).squeeze(1)
         else:
-            new_pooled = chunk_kv.new_zeros((batch, 0, self.head_dim))
-        pooled = (
-            new_pooled.unsqueeze(1)
-            if cache_layer is None
-            else cache_layer.update_compressor_pool(new_pooled).unsqueeze(1)
-        )
+            compressed = chunk_kv.new_zeros((batch, 0, self.head_dim))
+
+        if cache_layer is not None:
+            compressed = cache_layer.update_compressor_states("compressor", compressed)
+        pooled = compressed.unsqueeze(1)
+
         # Lightning Indexer: gather top-`index_topk` pool entries per query.
         topk = self.indexer(hidden_states, q_residual, position_ids, past_key_values, layer_idx)  # [B, S, k]
         expanded = pooled.unsqueeze(2).expand(-1, -1, seq_len, -1, -1)
@@ -940,12 +902,13 @@ class DeepseekV4PreTrainedModel(MixtralPreTrainedModel):
     _supports_flash_attn = False
     _supports_sdpa = False
     _supports_flex_attn = False
-    # The compressor's rolling-window buffer / pool / overlap state lives on the
-    # per-layer cache (:class:`DeepseekV4HCACache` / :class:`DeepseekV4CSACache`)
-    # and isn't compatible with :class:`StaticCache` — that path would hand the
-    # compressor a :class:`StaticSlidingWindowLayer` with no `update_compressor`
-    # method. Disabling fullgraph compile keeps generation tests on the dynamic
-    # cache build that does dispatch to V4's own cache layers.
+    # The compressor's rolling-window buffer / compressed-entries / overlap state
+    # lives on the per-layer cache (:class:`DeepseekV4HCACache` /
+    # :class:`DeepseekV4CSACache`) and isn't compatible with :class:`StaticCache`
+    # — that path would hand the compressor a :class:`StaticSlidingWindowLayer`
+    # with no `store_compression_weights` method. Disabling fullgraph compile
+    # keeps generation tests on the dynamic cache build that does dispatch to
+    # V4's own cache layers.
     _can_compile_fullgraph = False
     _keep_in_fp32_modules_strict = ["attn_hc", "ffn_hc"]
     _keys_to_ignore_on_load_unexpected = [r"(^|\.)mtp\..*"]
