@@ -83,21 +83,6 @@ def build_glob_alternation(
     return alternation, src_group_to_glob, tgt_group_to_glob
 
 
-def resolve_target_wildcards(source_pattern: str, target_pattern: str, source_key: str) -> str:
-    if "*" not in target_pattern or "*" not in source_pattern:
-        return target_pattern
-
-    wildcard_regex = re.escape(source_pattern).replace(r"\*", r"(.*?)")
-    match = re.fullmatch(wildcard_regex, source_key)
-    if match is None:
-        return target_pattern
-
-    resolved_target = target_pattern
-    for wildcard_value in match.groups():
-        resolved_target = resolved_target.replace("*", wildcard_value, 1)
-    return resolved_target
-
-
 class ConversionOps:
     """Base class for weight conversion operations."""
 
@@ -620,7 +605,6 @@ class WeightTransform:
         source_pattern_that_matched = self.source_patterns[int(matching_group_name[1:])]
         # If we matched, we always replace with the first target pattern, in case we have several (one to many transform)
         replacement = self.target_patterns[0]
-        replacement = resolve_target_wildcards(source_pattern_that_matched, replacement, source_key)
         # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper, sam3)
         if r"\1" in replacement:
             # The index of the internal group we need to replace is the index of the matched named group as it comes
@@ -1282,30 +1266,6 @@ def rename_source_key(
     return renamed_key, source_pattern
 
 
-def concretize_target_patterns(
-    converter: WeightConverter,
-    source_key: str,
-    source_pattern: str,
-    prefix: str | None,
-    meta_state_dict: dict | None,
-) -> WeightConverter:
-    concrete_targets = []
-    for target_pattern in converter.target_patterns:
-        concrete_target = resolve_target_wildcards(source_pattern, target_pattern, source_key)
-        if prefix is not None and meta_state_dict is not None:
-            if (
-                concrete_target.startswith(prefix)
-                and meta_state_dict.get(re.sub(f"^{prefix}.", "", concrete_target, count=1)) is not None
-            ):
-                concrete_target = re.sub(f"^{prefix}.", "", concrete_target, count=1)
-            elif meta_state_dict.get(f"{prefix}.{concrete_target}") is not None:
-                concrete_target = f"{prefix}.{concrete_target}"
-        concrete_targets.append(concrete_target)
-
-    object.__setattr__(converter, "target_patterns", concrete_targets)
-    return converter
-
-
 def convert_and_load_state_dict_in_model(
     model: PreTrainedModel,
     state_dict: dict[str, Any],
@@ -1479,13 +1439,6 @@ def convert_and_load_state_dict_in_model(
             # If we enter here, we have a WeightConverter operation to perform
             if source_pattern is not None:
                 new_converter = deepcopy(pattern_to_converter[source_pattern])
-                new_converter = concretize_target_patterns(
-                    new_converter,
-                    original_key,
-                    source_pattern,
-                    prefix,
-                    meta_model_state_dict,
-                )
                 # each target key gets its own converter instance
                 mapping = param_name_to_load.setdefault(renamed_key, new_converter)
             # Otherwise, only potential renaming
