@@ -425,8 +425,7 @@ class Qwen3_5GatedDeltaNet(nn.Module):
         hidden_states: torch.Tensor,
         cache_params: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
-        seq_idx: torch.IntTensor | None = None,
-        cu_seqlens: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
 
@@ -450,6 +449,10 @@ class Qwen3_5GatedDeltaNet(nn.Module):
 
         b = self.in_proj_b(hidden_states)
         a = self.in_proj_a(hidden_states)
+
+        seq_idx = kwargs.get("seq_idx")
+        # The chunked FLA kernel takes a single `cu_seqlens` arg; for packed self-attention this matches q-side lengths.
+        cu_seqlens = kwargs.get("cu_seq_lens_q")
 
         if use_precomputed_states:
             # 2. Convolution sequence transformation
@@ -764,9 +767,7 @@ class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
                 hidden_states=hidden_states,
                 cache_params=past_key_values,
                 attention_mask=attention_mask,
-                seq_idx=kwargs.get("seq_idx"),
-                # The chunked FLA kernel takes a single `cu_seqlens` arg; for packed self-attention this matches q-side lengths.
-                cu_seqlens=kwargs.get("cu_seq_lens_q"),
+                **kwargs,
             )
         elif self.layer_type == "full_attention":
             # Self Attention
