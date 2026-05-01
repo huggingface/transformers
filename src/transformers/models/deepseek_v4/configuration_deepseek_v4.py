@@ -106,13 +106,15 @@ class DeepseekV4Config(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_tp_plan = {
-        # q_a_proj / kv_proj outputs feed RMSNorms (q_norm / kv_norm) that normalise
-        # across the full output dim — sharding the output would break the norm. Only
-        # q_b_proj is colwise-sharded (per-head split is safe: q_head_norm is per-head),
-        # and o_b_proj is rowwise (input-dim sharded). o_a_proj is a GroupedLinear
-        # whose forward uses `torch.bmm`; the standard TP wrappers don't handle bmm.
-        "layers.*.self_attn.q_b_proj": "colwise",
-        "layers.*.self_attn.o_b_proj": "rowwise",
+        # V4 attention is shared-KV MQA (`num_key_value_heads = 1`) plus a CSA / HCA
+        # compressor branch fed by the same `kv_proj`, both feeding `repeat_kv` to
+        # broadcast the single KV head across all attention heads. Colwise-sharding
+        # `q_b_proj` would split the queries per rank but leave KV replicated,
+        # which the compressor branch (and `repeat_kv`) can't reconcile —
+        # rank-local query head counts would no longer match the compressor's
+        # output. So the attention path stays replicated across ranks; only the
+        # MoE experts (the dominant parameter count anyway) get parallelised, via
+        # `moe_tp_experts` (== expert parallelism on the routed experts).
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
