@@ -1172,7 +1172,7 @@ def set_param_for_module(
 
         expected_shape = ref.to_local().shape if isinstance(ref, DTensor) else ref.shape
 
-        if param_value.shape != expected_shape and hf_quantizer is None:
+        if ref is not None and param_value.shape != expected_shape and hf_quantizer is None:
             loading_info.mismatched_keys.add((target_name, param_value.shape, expected_shape))
         else:
             if isinstance(ref, DTensor):
