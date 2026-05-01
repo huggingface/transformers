@@ -193,6 +193,61 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"^model\.layers\.(\d+)\.self_attn\.compressor\.ape$",
                 target_patterns=r"model.layers.\1.self_attn.compressor.position_bias",
             ),
+            # Attention / compressor / indexer leaf weights: upstream uses paper notation
+            # (``wq_a`` / ``wq_b`` / ``wkv`` / ``wo_a`` / ``wo_b`` / ``wgate``); we
+            # rename to the standard transformers ``*_proj`` form. Compressor / Indexer
+            # ``wkv`` / ``wgate`` are caught by the same patterns since they sit under
+            # ``self_attn.`` after the Pass 1 prefix rewrite.
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.self_attn\.(.*?)\.wq_a\.",
+                target_patterns=r"model.layers.\1.self_attn.\2.q_a_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.self_attn\.(.*?)\.wq_b\.",
+                target_patterns=r"model.layers.\1.self_attn.\2.q_b_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.self_attn\.(.*?)\.wkv\.",
+                target_patterns=r"model.layers.\1.self_attn.\2.kv_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.self_attn\.(.*?)\.wgate\.",
+                target_patterns=r"model.layers.\1.self_attn.\2.gate_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.self_attn\.(.*?)\.wo_a\.",
+                target_patterns=r"model.layers.\1.self_attn.\2.o_a_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.self_attn\.(.*?)\.wo_b\.",
+                target_patterns=r"model.layers.\1.self_attn.\2.o_b_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.self_attn\.wq_a\.",
+                target_patterns=r"model.layers.\1.self_attn.q_a_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.self_attn\.wq_b\.",
+                target_patterns=r"model.layers.\1.self_attn.q_b_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.self_attn\.wkv\.",
+                target_patterns=r"model.layers.\1.self_attn.kv_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.self_attn\.wo_a\.",
+                target_patterns=r"model.layers.\1.self_attn.o_a_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.self_attn\.wo_b\.",
+                target_patterns=r"model.layers.\1.self_attn.o_b_proj.",
+            ),
+            # Aux-loss-free routing bias: upstream ships ``gate.bias`` (V3 convention);
+            # we register it as ``e_score_correction_bias`` (cross-model standard name).
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.mlp\.gate\.bias$",
+                target_patterns=r"model.layers.\1.mlp.gate.e_score_correction_bias",
+            ),
             WeightRenaming(
                 source_patterns=r"^model\.layers\.(\d+)\.mlp\.shared_experts\.w1\.",
                 target_patterns=r"model.layers.\1.mlp.shared_experts.gate_proj.",
