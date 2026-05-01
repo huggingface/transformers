@@ -65,6 +65,7 @@ For general use, you can use the EXAONE 4.0 models with the following example:
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+
 model_name = "LGAI-EXAONE/EXAONE-4.0-32B"
 
 model = AutoModelForCausalLM.from_pretrained(
@@ -132,6 +133,7 @@ The EXAONE 4.0 models can be used as agents with their tool calling capabilities
 
 ```python
 import random
+
 
 def roll_dice(max_num: int):
     return random.randint(1, max_num)

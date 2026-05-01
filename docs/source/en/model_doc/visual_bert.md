@@ -36,22 +36,24 @@ The example below demonstrates how to answer a question based on an image with t
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py
+```python
+from io import BytesIO
+
+import requests
 import torch
 import torchvision
 from PIL import Image
-import numpy as np
+
 from transformers import AutoTokenizer, VisualBertForQuestionAnswering
-import requests
-from io import BytesIO
+
 
 def get_visual_embeddings_simple(image, device=None):
-    
+
     model = torchvision.models.resnet50(pretrained=True)
     model = torch.nn.Sequential(*list(model.children())[:-1])
-    model.to(device)
+    model.to(model.device)
     model.eval()
-    
+
     transform = torchvision.transforms.Compose([
         torchvision.transforms.Resize(256),
         torchvision.transforms.CenterCrop(224),
@@ -61,46 +63,46 @@ def get_visual_embeddings_simple(image, device=None):
             std=[0.229, 0.224, 0.225]
         )
     ])
-    
+
     if isinstance(image, str):
         image = Image.open(image).convert('RGB')
     elif isinstance(image, Image.Image):
         image = image.convert('RGB')
     else:
         raise ValueError("Image must be a PIL Image or path to image file")
-    
-    image_tensor = transform(image).unsqueeze(0).to(device)
-    
+
+    image_tensor = transform(image).unsqueeze(0).to(model.device)
+
     with torch.no_grad():
         features = model(image_tensor)
-    
+
     batch_size = features.shape[0]
     feature_dim = features.shape[1]
     visual_seq_length = 10
-    
+
     visual_embeds = features.squeeze(-1).squeeze(-1).unsqueeze(1).expand(batch_size, visual_seq_length, feature_dim)
-    
+
     return visual_embeds
 
 tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
-model = VisualBertForQuestionAnswering.from_pretrained("uclanlp/visualbert-vqa-coco-pre")
+model = VisualBertForQuestionAnswering.from_pretrained("uclanlp/visualbert-vqa-coco-pre", device_map="auto")
 
 response = requests.get("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 image = Image.open(BytesIO(response.content))
-    
+
 visual_embeds = get_visual_embeddings_simple(image)
-    
-inputs = tokenizer("What is shown in this image?", return_tensors="pt")
-    
+
+inputs = tokenizer("What is shown in this image?", return_tensors="pt").to(model.device)
+
 visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long)
 visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
-    
+
 inputs.update({
     "visual_embeds": visual_embeds,
     "visual_token_type_ids": visual_token_type_ids,
     "visual_attention_mask": visual_attention_mask,
 })
-    
+
 with torch.no_grad():
     outputs = model(**inputs)
     logits = outputs.logits

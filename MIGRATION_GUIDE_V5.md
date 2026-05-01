@@ -20,9 +20,9 @@ limitations under the License.
 
 ### Removal of TensorFlow and Jax
 
-We're removing the TensorFlow and Jax parts of the library. This will help us focus fully on `torch` 
-going forward and will greatly reduce the maintenance cost of models. We are working with tools from 
-the Jax ecosystem still (such as MaxText) in order to see how we can remain compatible with their 
+We're removing the TensorFlow and Jax parts of the library. This will help us focus fully on `torch`
+going forward and will greatly reduce the maintenance cost of models. We are working with tools from
+the Jax ecosystem still (such as MaxText) in order to see how we can remain compatible with their
 tool while keeping `torch` as the only backend for now.
 
 Linked PR: https://github.com/huggingface/transformers/pull/40760
@@ -57,8 +57,8 @@ conversion = WeightConverter(
 )
 ```
 
-In this situation, we apply the `Concatenate` operation, which accepts a list of layers as input and returns a single 
-layer. 
+In this situation, we apply the `Concatenate` operation, which accepts a list of layers as input and returns a single
+layer.
 
 This allows us to define a mapping from architecture to a list of weight conversions. Applying those weight conversions
 can apply arbitrary transformations to the layers themselves. This significantly simplified the `from_pretrained` method
@@ -127,12 +127,12 @@ In v5, we consolidate to a single tokenizer file per model: `tokenization_<model
 
 1. **TokenizersBackend** (preferred): Rust-based tokenizers from the 🤗 [tokenizers](https://github.com/huggingface/tokenizers) library. In general it provides optimal performance, but it also offers a lot more features that are commonly adopted across the ecosystem:
   - handling additional tokens
-  - a full python API for setting and updating 
+  - a full python API for setting and updating
   - automatic parallelization,
   - automatic offsets
   - customization
   - training
-2. **SentencePieceBackend**: for tokenizers requiring the `sentencepiece` library. It inherits from `PythonBackend`. 
+2. **SentencePieceBackend**: for tokenizers requiring the `sentencepiece` library. It inherits from `PythonBackend`.
 3. **PythonBackend**: a Python implementations of the features provided by `tokenizers`. Basically allows adding tokens.
 4. **MistralCommonBackend**: relies on `MistralCommon`'s tokenization library. (Previously known as the `MistralCommonTokenizer`)
 
@@ -144,7 +144,7 @@ We enable users and tokenizer builders to define their own tokenizers from top t
 
 To do so, you can import the `PythonBackend` (which was previously known as `PreTrainedTokenizer`). This class encapsulates all the logic related to added tokens, encoding, and decoding.
 
-If you want something even higher up the stack, then `PreTrainedTokenizerBase` is what `PythonBackend` inherits from. It contains the very basic tokenizer API features: 
+If you want something even higher up the stack, then `PreTrainedTokenizerBase` is what `PythonBackend` inherits from. It contains the very basic tokenizer API features:
 - `encode`
 - `decode`
 - `vocab_size`
@@ -155,7 +155,7 @@ If you want something even higher up the stack, then `PreTrainedTokenizerBase` i
 - `save_pretrained`
 - among a few others
 
-**Note for implementing new tokenizers:** When creating a tokenizer class that loads from SentencePiece files, you can override the `convert_from_spm` class method in your converter to customize vocabulary structure, normalizers, regexes and anything that you would want to be passed to the tokenizers your are converting. 
+**Note for implementing new tokenizers:** When creating a tokenizer class that loads from SentencePiece files, you can override the `convert_from_spm` class method in your converter to customize vocabulary structure, normalizers, regexes and anything that you would want to be passed to the tokenizers your are converting.
 This is useful if the model requires specific token ordering or special split regex patterns. See existing converter classes in `convert_slow_tokenizer.py` for examples.
 
 ### API Changes
@@ -187,7 +187,7 @@ This tokenizer will behave as a Llama-like tokenizer, with an updated vocabulary
 
 **Simplified file loading:** Support is added for passing`vocab` and `merges` as file paths directly to tokenizer initialization. The tokenizer will automatically detect the format (SentencePiece `.model`, Tekken `tekken.json`, or plain vocab/merges files) for loading. For BPE tokenizers, if a vocab is provided but no merges, merges will be automatically generated (excluding special tokens).
 
-Note: Loading from file paths with `vocab="<path_to_a_file>"`'s primary goal is to allow you to do some quick testing, but for `BPE` models for example we don't check whether you properly passed the merges or not. 
+Note: Loading from file paths with `vocab="<path_to_a_file>"`'s primary goal is to allow you to do some quick testing, but for `BPE` models for example we don't check whether you properly passed the merges or not.
 
 #### 2. Simplified decoding API
 
@@ -195,7 +195,7 @@ The `batch_decode` and `decode` methods have been unified to reflect behavior of
 
 ```python
 from transformers import AutoTokenizer
-tokenizer = AutoTokenizer.from_pretrained("t5-small") 
+tokenizer = AutoTokenizer.from_pretrained("t5-small")
 inputs = ["hey how are you?", "fine"]
 tokenizer.decode(tokenizer.encode(inputs))
 ```
@@ -206,7 +206,7 @@ Gives:
 + ['hey how are you?</s>', 'fine</s>']
 ```
 
-We expect `encode` and `decode` to behave, as two sides of the same coin: `encode`, `process`, `decode`,  should work. 
+We expect `encode` and `decode` to behave, as two sides of the same coin: `encode`, `process`, `decode`,  should work.
 
 > [!NOTE]
 > A common use-case would be: `encode`, `model.generate`, `decode`.  However, using `generate` would return `list[list[int]]`, which would then be incompatible with `decode`.
@@ -240,7 +240,7 @@ We simplify the serialization of tokenization attributes:
 - `added_tokens_decoder` is only stored when there is no `tokenizer.json`.
 - `add_bos_token` and `add_eos_token` - these are no longer saved in `tokenizer_config.json`. When a `tokenizer.json` file exists, these settings are defined in the tokenizer class or `tokenizer.json` itself.
 
-**Backend synchronization removed:** The automatic synchronization logic that updated backend tokenizer settings (like `add_prefix_space`, `do_lower_case`, `strip_accents`, `tokenize_chinese_chars`) after initialization has been removed. Tokenizer behavior is now fully determined by the `tokenizer.json` file or class definition at initialization time. 
+**Backend synchronization removed:** The automatic synchronization logic that updated backend tokenizer settings (like `add_prefix_space`, `do_lower_case`, `strip_accents`, `tokenize_chinese_chars`) after initialization has been removed. Tokenizer behavior is now fully determined by the `tokenizer.json` file or class definition at initialization time.
 
 When loading older tokenizers, these files are still read for backward compatibility, but new saves use the consolidated format. We're gradually moving towards consolidating attributes to fewer files so that other libraries and implementations may depend on them more reliably.
 
@@ -249,7 +249,7 @@ When loading older tokenizers, these files are still read for backward compatibi
 Several models that had identical tokenizers now import from their base implementation:
 
 - **LayoutLM** → uses BertTokenizer
-- **LED** → uses BartTokenizer  
+- **LED** → uses BartTokenizer
 - **Longformer** → uses RobertaTokenizer
 - **LXMert** → uses BertTokenizer
 - **MT5** → uses T5Tokenizer
@@ -323,7 +323,7 @@ labels = tokenizer(text_target=tgt_texts, ...)
 
 ### PEFT + MoE:
 
-Because we are switching from the naive MOE (`nn.ModuleList` for experts) we currently have an issue with MoEs that have adapters. For more details see https://github.com/huggingface/transformers/issues/42491#issuecomment-3591485649. 
+Because we are switching from the naive MOE (`nn.ModuleList` for experts) we currently have an issue with MoEs that have adapters. For more details see https://github.com/huggingface/transformers/issues/42491#issuecomment-3591485649.
 
 _We aim for this to be fixed and released in a following release candidate in the week that follows RC0._
 
@@ -342,7 +342,7 @@ These now redirect to `transformers.tokenization_utils_sentencepiece` and `trans
 _We aim for this to be fixed and released in a following release candidate in the week that follows RC0._
 
 ### Custom pretrained models:
-For anyone inheriting from a `transformers` `PreTrainedModel`, the weights are automatically initialized with the common scheme: 
+For anyone inheriting from a `transformers` `PreTrainedModel`, the weights are automatically initialized with the common scheme:
 ```python
 
     @torch.no_grad()
@@ -399,9 +399,9 @@ class CustomModel(Qwen3VLForConditionalGeneration):
         self.action_head = nn.Linear(1024, 7)
         self.positional_embedding = nn.Parameter(torch.randn(16, 1152))
         self.post_init()
-    
+
     def _init_weights(self, module):
-        pass 
+        pass
 
 ```
 There is a tracker for that here: https://github.com/huggingface/transformers/issues/42418.
@@ -518,18 +518,18 @@ model_4bit = AutoModelForCausalLM.from_pretrained(
 
 ### Tokenization
 
-- Slow tokenizer files (aka: `tokenization_<model>.py` ) will be removed in favor of using fast tokenizer files `tokenization_<model>_fast.py` --> will be renamed to `tokenization_<model>.py`.  As fast tokenizers are :hugs:`tokenizers` - backend, they include a wider range of features that are maintainable and reliable. 
+- Slow tokenizer files (aka: `tokenization_<model>.py` ) will be removed in favor of using fast tokenizer files `tokenization_<model>_fast.py` --> will be renamed to `tokenization_<model>.py`.  As fast tokenizers are :hugs:`tokenizers` - backend, they include a wider range of features that are maintainable and reliable.
 - Other backends (sentence piece, tokenizers, etc.) will be supported with a light layer if loading a fast tokenizer fails
 - Remove legacy files like special_tokens_map.json and added_tokens.json
-- Remove _eventually_correct_t5_max_length 
+- Remove _eventually_correct_t5_max_length
 - `encode_plus` --> `__call__`
 - `batch_decode` --> `decode`
 
-`apply_chat_template` by default returns naked `input_ids` rather than a `BatchEncoding` dict. 
-This was inconvenient - it should return a `BatchEncoding` dict like `tokenizer.__call__()`, but we were stuck with 
+`apply_chat_template` by default returns naked `input_ids` rather than a `BatchEncoding` dict.
+This was inconvenient - it should return a `BatchEncoding` dict like `tokenizer.__call__()`, but we were stuck with
 it for backward compatibility. The method now returns a `BatchEncoding`.
 
-Linked PRs: 
+Linked PRs:
 - https://github.com/huggingface/transformers/issues/40938
 - https://github.com/huggingface/transformers/pull/40936
 - https://github.com/huggingface/transformers/pull/41626
@@ -540,6 +540,64 @@ Linked PRs:
 - `XXXFeatureExtractors` classes are completely removed in favor of `XXXImageProcessor` class for all vision models (https://github.com/huggingface/transformers/pull/41174)
 - Minor change: `XXXFastImageProcessorKwargs` is removed in favor of `XXXImageProcessorKwargs` which will be shared between fast and slow processors (https://github.com/huggingface/transformers/pull/40931)
 
+
+### Image processors
+
+The old slow/fast dual-file design has been replaced with a named-backend architecture. Each model previously had a PIL-based `image_processing_<model>.py` and a torchvision-based `image_processing_<model>_fast.py`. The new layout is:
+
+- `image_processing_<model>.py` → **torchvision** backend (default; was previously `FooImageProcessorFast`)
+- `image_processing_pil_<model>.py` → **PIL** backend (was previously `FooImageProcessor`)
+
+Processor classes now inherit from `TorchvisionBackend` or `PilBackend` (defined in `image_processing_backends.py`), which provide ready-made implementations of all standard operations (`resize`, `rescale`, `normalize`, `center_crop`, `pad`) and a default `_preprocess` pipeline. `BaseImageProcessor` (in `image_processing_utils`) handles shared preprocessing boilerplate: kwargs validation, default-filling from class attributes, and input preparation. Model-specific processors contain only what is unique to the model. Most processors inherit from a backend and declare class-attribute defaults. Only those with custom logic (e.g. patch tiling) need to override `_preprocess`.
+
+The `image_processing_utils_fast` module has been removed; all shared logic now lives in `image_processing_utils`.
+
+#### `use_fast` is replaced by `backend`
+
+The `use_fast` parameter is deprecated. Use `backend` instead:
+
+```python
+# v4
+processor = AutoImageProcessor.from_pretrained("...", use_fast=True)   # torchvision
+processor = AutoImageProcessor.from_pretrained("...", use_fast=False)  # PIL
+
+# v5
+processor = AutoImageProcessor.from_pretrained("...", backend="torchvision")
+processor = AutoImageProcessor.from_pretrained("...", backend="pil")
+```
+
+When `backend` is not specified, the default is `"torchvision"` if torchvision is installed, otherwise `"pil"`. If the requested backend is unavailable, loading falls back to another available backend with a warning.
+
+#### `FooImageProcessorFast` class names are deprecated
+
+`FooImageProcessor` now refers to the torchvision-backed class (what was previously `FooImageProcessorFast`), and `FooImageProcessorPil` is the PIL-backed class (what was previously `FooImageProcessor`). Importing a `*Fast` class name still resolves correctly but emits a deprecation warning.
+
+#### `is_fast` property is deprecated
+
+Use `processor.backend == "torchvision"` instead of `processor.is_fast`.
+
+#### `AutoImageProcessor.register()` API change
+
+`slow_image_processor_class` and `fast_image_processor_class` are deprecated in favor of an `image_processor_classes` dict:
+
+```python
+# v4
+AutoImageProcessor.register(MyConfig, slow_image_processor_class=MyPilProcessor, fast_image_processor_class=MyTorchvisionProcessor)
+
+# v5
+AutoImageProcessor.register(MyConfig, image_processor_classes={"pil": MyPilProcessor, "torchvision": MyTorchvisionProcessor})
+```
+
+#### Custom backends
+
+The backend key space is open-ended. Any string (e.g. `"mlx"`, `"onnx"`) can be registered by subclassing `BaseImageProcessor`, implementing `process_image` and `_preprocess`, and calling `register_backend` on the processor class:
+
+```python
+LlavaNextImageProcessor.register_backend(name="mlx", backend_class=LlavaNextMlxProcessor, availability_check=lambda: is_mlx_available())
+processor = LlavaNextImageProcessor.from_pretrained("...", backend="mlx")
+```
+
+Linked PR: https://github.com/huggingface/transformers/pull/43514
 
 ## Modeling
 
@@ -552,7 +610,7 @@ Linked PRs:
 - Old, deprecated output type aliases were removed (e.g. `GreedySearchEncoderDecoderOutput`). We now only have 4 output classes built from the following matrix: decoder-only vs encoder-decoder, uses beams vs doesn't use beams (https://github.com/huggingface/transformers/pull/40998)
 - Removed deprecated classes regarding decoding methods that were moved to the Hub due to low usage (constraints and beam scores) (https://github.com/huggingface/transformers/pull/41223)
 - If `generate` doesn't receive any KV Cache argument, the default cache class used is now defined by the model (as opposed to always being `DynamicCache`) (https://github.com/huggingface/transformers/pull/41505)
-- Generation parameters are no longer accessible via model's config. If generation parameters are serialized in `config.json` for any old model, it will be loaded back into model's generation config. Users are expected to access or modify generation parameters only with `model.generation_config.do_sample = True`. 
+- Generation parameters are no longer accessible via model's config. If generation parameters are serialized in `config.json` for any old model, it will be loaded back into model's generation config. Users are expected to access or modify generation parameters only with `model.generation_config.do_sample = True`.
 
 ## Trainer
 
@@ -560,18 +618,18 @@ Linked PRs:
 
 - `mp_parameters` -> legacy param that was later on added to sagemaker trainer
 - `_n_gpu` -> not intended for users to set, we will initialize it correctly instead of putting it in the `TrainingArguments`
-- `overwrite_output_dir` - > replaced by `resume_from_checkpoint` and it was only used in examples script, no impact on Trainer. 
+- `overwrite_output_dir` - > replaced by `resume_from_checkpoint` and it was only used in examples script, no impact on Trainer.
 - `logging_dir` -> only used for tensorboard, set `TENSORBOARD_LOGGING_DIR` env var instead
 - `jit_mode_eval` -> use `use_torch_compile` instead as torchscript is not recommended anymore
 - `tpu_num_cores`-> It is actually better to remove it as it is not recommended to set the number of cores. By default, all tpu cores are used . Set `TPU_NUM_CORES` env var instead
 - `past_index` -> it was only used for a very small number of models that have special architecture like transformersxl + it was not documented at all how to train those model
-- `ray_scope` -> only for a minor arg for ray integration. Set `RAY_SCOPE` var env instead 
-- `warmup_ratio` -> use `warmup_step` instead. We combined both args together by allowing passing float values in `warmup_step`. 
+- `ray_scope` -> only for a minor arg for ray integration. Set `RAY_SCOPE` var env instead
+- `warmup_ratio` -> use `warmup_step` instead. We combined both args together by allowing passing float values in `warmup_step`.
 
 ### Removing deprecated arguments in `TrainingArguments`
 
 - `fsdp_min_num_params` and `fsdp_transformer_layer_cls_to_wrap` -> use `fsdp_config`
-- `tpu_metrics_debug` -> `debug` 
+- `tpu_metrics_debug` -> `debug`
 - `push_to_hub_token` -> `hub_token`
 - `push_to_hub_model_id` and `push_to_hub_organization` -> `hub_model_id`
 - `include_inputs_for_metrics` -> `include_for_metrics`
@@ -592,18 +650,18 @@ Linked PRs:
 
 - sigpot integration for hp search was removed as the library was archived + the api stopped working
 - drop support for sagemaker API <1.10
-- bump accelerate minimum version to 1.1.0 
+- bump accelerate minimum version to 1.1.0
 
 ###  New defaults for `Trainer`
 
-- `use_cache` in the model config will be set to `False`. You can still change the cache value through `TrainingArguments` `use_cache` argument if needed. 
+- `use_cache` in the model config will be set to `False`. You can still change the cache value through `TrainingArguments` `use_cache` argument if needed.
 
 ## Pipelines
 
 ### Text pipelines that should just be LLMs
 
 `question-answering` and `Text2TextGenerationPipeline`, including its related `SummarizationPipeline` and `TranslationPipeline`, were deprecated and will now be removed. `pipeline` classes are intended as a high-level beginner-friendly API,
-but for almost all text-to-text or question-answering tasks a modern chat model and `TextGenerationPipeline` will provide much higher quality output. 
+but for almost all text-to-text or question-answering tasks a modern chat model and `TextGenerationPipeline` will provide much higher quality output.
 As a result, we felt it was misleading for beginners to offer the older pipelines.
 
 If you were using these pipelines before, try using `TextGenerationPipeline` with a chat model instead. For example, for summarization:
@@ -613,7 +671,7 @@ import torch
 from transformers import pipeline
 
 # Any other chat model will also work - if you're low on memory you can use a smaller one
-summarizer = pipeline("text-generation", model="Qwen/Qwen3-4B-Instruct-2507")  
+summarizer = pipeline("text-generation", model="Qwen/Qwen3-4B-Instruct-2507")
 message_history = [
     {
         "role": "user",
@@ -676,13 +734,13 @@ Linked PR: https://github.com/huggingface/transformers/pull/42391.
 
 The deprecated `transformers-cli ...` command was deprecated, `transformers ...` is now the only CLI entry point.
 
-`transformers` CLI has been migrated to `Typer`, making it easier to maintain + adding some nice features out of 
+`transformers` CLI has been migrated to `Typer`, making it easier to maintain + adding some nice features out of
 the box (improved `--help` section, autocompletion).
 
-Biggest breaking change is in `transformers chat`. This command starts a terminal UI to interact with a chat model. 
-It used to also be able to start a Chat Completion server powered by `transformers` and chat with it. In this revamped 
-version, this feature has been removed in favor of `transformers serve`. The goal of splitting `transformers chat` 
-and `transformers serve` is to define clear boundaries between client and server code. It helps with maintenance 
+Biggest breaking change is in `transformers chat`. This command starts a terminal UI to interact with a chat model.
+It used to also be able to start a Chat Completion server powered by `transformers` and chat with it. In this revamped
+version, this feature has been removed in favor of `transformers serve`. The goal of splitting `transformers chat`
+and `transformers serve` is to define clear boundaries between client and server code. It helps with maintenance
 but also makes the commands less bloated. The new signature of `transformers chat` is:
 
 ```
@@ -703,7 +761,7 @@ It can however use any OpenAI API compatible HTTP endpoint:
 transformers chat HuggingFaceTB/SmolLM3-3B https://router.huggingface.co/v1
 ```
 
-Linked PRs: 
+Linked PRs:
 - https://github.com/huggingface/transformers/pull/40997
 - https://github.com/huggingface/transformers/pull/41487
 

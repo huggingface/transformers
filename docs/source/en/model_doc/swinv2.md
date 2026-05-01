@@ -33,14 +33,13 @@ You can find official Swin Transformer V2 checkpoints under the [Microsoft](http
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="image-classification",
     model="microsoft/swinv2-tiny-patch4-window8-256",
-    dtype=torch.float16,
     device=0
 )
 pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
@@ -50,11 +49,13 @@ pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resol
 
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 import requests
+import torch
 from PIL import Image
-from transformers import AutoModelForImageClassification, AutoImageProcessor
+
+from transformers import AutoImageProcessor, AutoModelForImageClassification
+
 
 image_processor = AutoImageProcessor.from_pretrained(
     "microsoft/swinv2-tiny-patch4-window8-256",
