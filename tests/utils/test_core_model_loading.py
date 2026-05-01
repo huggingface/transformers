@@ -19,7 +19,11 @@ import torch
 import torch.nn as nn
 
 from transformers import PretrainedConfig
-from transformers.conversion_mapping import get_checkpoint_conversion_mapping, register_checkpoint_conversion_mapping
+from transformers.conversion_mapping import (
+    get_checkpoint_conversion_mapping,
+    get_model_conversion_mapping,
+    register_checkpoint_conversion_mapping,
+)
 from transformers.core_model_loading import (
     Chunk,
     Concatenate,
@@ -147,14 +151,14 @@ class TestWeightGlobMatching(unittest.TestCase):
         ]
 
         self.assertEqual(
-            rename_source_key("foo.block_sparse_moe.experts.3.w1.weight", renamings, [])[0],
+            rename_source_key("foo.block_sparse_moe.experts.3.w1.weight", renamings)[0],
             "foo.mlp.experts.gate_up_proj",
         )
         self.assertEqual(
-            rename_source_key("foo.block_sparse_moe.experts.3.w2.weight", renamings, [])[0],
+            rename_source_key("foo.block_sparse_moe.experts.3.w2.weight", renamings)[0],
             "foo.mlp.experts.down_proj",
         )
-        self.assertEqual(rename_source_key("model.language_model.lm_head.weight", renamings, [])[0], "language_model")
+        self.assertEqual(rename_source_key("model.language_model.lm_head.weight", renamings)[0], "language_model")
 
     def test_sub_key_no_match_returns_original(self):
         renamings = [
@@ -162,7 +166,7 @@ class TestWeightGlobMatching(unittest.TestCase):
         ]
 
         key = "unrelated.key"
-        renamed_key, _ = rename_source_key(key, renamings, [])
+        renamed_key, _ = rename_source_key(key, renamings)
         self.assertEqual(renamed_key, key)
 
 
@@ -406,7 +410,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
     def test_qkv_chunk_rope_permute_with_fp8_quantization(self):
         if is_triton_available():
-            from transformers.integrations.finegrained_fp8 import Fp8Dequantize
+            from transformers.integrations.finegrained_fp8 import Fp8Dequantize, Fp8Quantize
         else:
             self.skipTest("Fine-grained FP8 integration tests require Triton to be installed.")
         n_heads = 2
@@ -472,6 +476,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
                     self, "quantization_config", SimpleNamespace(weight_block_size=bs)
                 ),
                 "param_needs_quantization": lambda self, _model, param_name: param_name.endswith("q_proj.weight"),
+                "get_quantize_ops": lambda self: Fp8Quantize(self),
                 "pre_quantized": False,
             },
         )
@@ -479,11 +484,11 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
         weight_mapping = [
             WeightConverter(
-                "model.layers.*.self_attn.qkv_proj.weight",
+                "self_attn.qkv_proj.weight",
                 [
-                    "model.layers.*.self_attn.q_proj.weight",
-                    "model.layers.*.self_attn.k_proj.weight",
-                    "model.layers.*.self_attn.v_proj.weight",
+                    "self_attn.q_proj.weight",
+                    "self_attn.k_proj.weight",
+                    "self_attn.v_proj.weight",
                 ],
                 operations=[Chunk(dim=0), PermuteForRope()],
             )
@@ -525,6 +530,138 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             context={"quantization_config": quantizer.quantization_config},
         )
         torch.testing.assert_close(dequantized_q, expected_q, rtol=1e-2, atol=1e-2)
+
+    def test_scoped_renaming_does_not_leak_to_sibling_keys(self):
+        """scope_prefix restricts a WeightRenaming to keys under that sub-prefix only.
+
+        A "^"-anchored pattern must match the suffix after stripping the prefix, and
+        must not fire at all on keys that do not start with the scope prefix.
+
+        Without scope_prefix, "^old_q" would rename *any* key beginning with "old_q"
+        at any nesting level — including root-level ones that belong to a different
+        part of the model.
+        """
+
+        class _Attn(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.q = DummyParamModule((1, 2))
+
+        class _Encoder(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.attn = _Attn()
+
+        class _ScopedModel(nn.Module):
+            base_model_prefix = ""
+
+            def __init__(self):
+                super().__init__()
+                self.encoder = _Encoder()
+                self.q = DummyParamModule((1, 2))  # root-level q — must not be touched
+
+        model = _ScopedModel()
+        model.config = PretrainedConfig()
+
+        enc_val = torch.tensor([[1.0, 2.0]])
+        checkpoint = {
+            "encoder.attn.old_q.weight": enc_val.clone(),
+            "old_q.weight": torch.tensor([[9.0, 9.0]]),  # outside scope
+        }
+
+        scoped_rename = WeightRenaming("^old_q", "q")
+        scoped_rename.scope_prefix = "encoder.attn"
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            checkpoint,
+            LoadStateDictConfig(weight_mapping=[scoped_rename]),
+            tp_plan=None,
+        )
+
+        # The root-level "old_q.weight" must be unmatched (unexpected), not silently
+        # loaded into "q.weight".
+        self.assertEqual(loading_info.unexpected_keys, {"old_q.weight"})
+        self.assertEqual(loading_info.missing_keys, {"q.weight"})
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        torch.testing.assert_close(model.encoder.attn.q.weight, enc_val)
+        # Root q.weight must still be its initialised zero value.
+        torch.testing.assert_close(model.q.weight, torch.zeros(1, 2))
+
+    def test_interleaved_renaming_and_converter_round_trip(self):
+        """A WeightRenaming preceding a WeightConverter in the list must fire in the
+        reverse (save) direction even after the converter has already set source_pattern.
+
+        Forward  [WeightRenaming, WeightConverter]:
+          "decoder.attn.qkv_proj.weight"
+          → WeightRenaming : "encoder.attn.qkv_proj.weight"
+          → WeightConverter: "encoder.attn.{q,k,v}_proj.weight"  (source_pattern set)
+
+        Reverse  [rev(WeightConverter), rev(WeightRenaming)]:
+          "encoder.attn.{q,k,v}_proj.weight"
+          → rev(WeightConverter): "encoder.attn.qkv_proj.weight"  (source_pattern set)
+          → rev(WeightRenaming) : "decoder.attn.qkv_proj.weight"  ← must still run!
+        """
+
+        class _Attn(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.q_proj = DummyParamModule((2, 4))
+                self.k_proj = DummyParamModule((2, 4))
+                self.v_proj = DummyParamModule((2, 4))
+
+        class _Encoder(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.attn = _Attn()
+
+        class _InterleavedModel(nn.Module):
+            base_model_prefix = ""
+
+            def __init__(self):
+                super().__init__()
+                self.encoder = _Encoder()
+
+        qkv = torch.arange(24, dtype=torch.float32).reshape(6, 4)
+        model = _InterleavedModel()
+        model.config = PretrainedConfig()
+
+        # Checkpoint uses a "decoder" prefix and stores QKV packed together.
+        checkpoint = {"decoder.attn.qkv_proj.weight": qkv.clone()}
+
+        weight_mapping = [
+            WeightRenaming("^decoder", "encoder"),  # step 1: fix prefix
+            WeightConverter(  # step 2: unpack QKV (fires after rename)
+                "attn.qkv_proj.weight",
+                ["attn.q_proj.weight", "attn.k_proj.weight", "attn.v_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+        ]
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            checkpoint,
+            LoadStateDictConfig(weight_mapping=weight_mapping),
+            tp_plan=None,
+        )
+
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        q, k, v = torch.chunk(qkv, 3, dim=0)
+        torch.testing.assert_close(model.encoder.attn.q_proj.weight, q)
+        torch.testing.assert_close(model.encoder.attn.k_proj.weight, k)
+        torch.testing.assert_close(model.encoder.attn.v_proj.weight, v)
+
+        # Round-trip: saving must reconstruct the original "decoder.*" checkpoint.
+        # This relies on rev(WeightRenaming) firing after rev(WeightConverter) has set
+        # source_pattern — if it were skipped the prefix would remain "encoder".
+        saved = revert_weight_conversion(model, model.state_dict())
+        self.assertTrue(compare_state_dicts(saved, checkpoint))
 
     def test_ernie4_5_vl_moe_conversion(self):
         model = DummyRoot(add_extra_moe=True)
@@ -1019,6 +1156,31 @@ class TestConversionMapping(unittest.TestCase):
         self.assertEqual(set(model_state_dict.keys()), set(saved_state_dict.keys()))
         for k, v in saved_state_dict.items():
             self.assertTrue((v == model_state_dict[k]).all())
+
+    def test_class_name_wins_over_model_type(self):
+        """Class-name registry entry takes priority over model_type for the same model."""
+        register_checkpoint_conversion_mapping("_TstCls", [WeightRenaming(r"^cls_key", "cls_renamed")], overwrite=True)
+        register_checkpoint_conversion_mapping(
+            "_tst_mtype", [WeightRenaming(r"^type_key", "type_renamed")], overwrite=True
+        )
+
+        def make_mock(class_name):
+            m = type(class_name, (), {})()
+            m.config = SimpleNamespace(model_type="_tst_mtype")
+            m._named_pretrained_submodules = [("", m)]
+            return m
+
+        # A module whose class name has a registry entry → class entry wins.
+        transforms = get_model_conversion_mapping(make_mock("_TstCls"), add_legacy=False)
+        patterns = [t.source_patterns for t in transforms]
+        self.assertIn(["^cls_key"], patterns)
+        self.assertNotIn(["^type_key"], patterns)
+
+        # A module with no class entry falls through to the model_type entry.
+        transforms = get_model_conversion_mapping(make_mock("_TstOther"), add_legacy=False)
+        patterns = [t.source_patterns for t in transforms]
+        self.assertIn(["^type_key"], patterns)
+        self.assertNotIn(["^cls_key"], patterns)
 
 
 if __name__ == "__main__":

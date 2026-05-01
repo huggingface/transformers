@@ -452,9 +452,6 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
             unpadded_custom_inputs=unpadded_custom_inputs, padded_custom_inputs=padded_custom_inputs
         )
 
-    def test_reverse_loading_mapping(self):
-        super().test_reverse_loading_mapping(skip_base_model=True)
-
 
 @require_torch
 class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
