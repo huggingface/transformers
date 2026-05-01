@@ -1296,11 +1296,6 @@ class DynamicCache(Cache):
                 layer_types = layer_types[: -decoder_config.num_kv_shared_layers]
 
             for layer_type in layer_types:
-                # Dispatch through the registry — ``LAYER_TYPE_CACHE_MAPPING`` ships with the
-                # standard layer types pre-registered, and models with custom layer types
-                # (e.g. DeepSeek-V4's CSA / HCA) register their own classes there. Each class
-                # is instantiated with the decoder config so it can read whatever attributes
-                # it needs (sliding_window, compress_rate, ...).
                 cache_cls = LAYER_TYPE_CACHE_MAPPING.get(layer_type, DynamicLayer)
                 layers.append(cache_cls(decoder_config))
 
@@ -1400,26 +1395,21 @@ class StaticCache(Cache):
         if hasattr(config, "num_kv_shared_layers"):
             layer_types = layer_types[: -config.num_kv_shared_layers]
 
-        # Treat any layer type whose registered dynamic-cache class is a
-        # ``DynamicSlidingWindowLayer`` (or subclass) as sliding for static-cache
-        # purposes — keeps model-specific names (e.g. V4's compressed_sparse_attention /
-        # heavily_compressed_attention) out of this file; they auto-register from the
-        # model's own modeling module via ``CacheLayerMixin.__init_subclass__``.
         sliding_layer_types = {
             name
             for name, cls in LAYER_TYPE_CACHE_MAPPING.items()
-            if isinstance(cls, type) and issubclass(cls, DynamicSlidingWindowLayer)
+            if isinstance(cls, type) and issubclass(cls, DynamicSlidingWindowLayer) and name != "chunked_attention"
         }
         layers = []
         for layer_type in layer_types:
-            if layer_type in sliding_layer_types:
-                layer = StaticSlidingWindowLayer(max_cache_len=max_cache_len, sliding_window=config.sliding_window)
-            elif layer_type == "chunked_attention":
+            if layer_type == "chunked_attention":
                 # From a cache point of view, both sliding and chunked are the same in how they should behave and how many
                 # states they should return - only the mask changes to make them different at the end!
                 layer = StaticSlidingWindowLayer(
                     max_cache_len=max_cache_len, sliding_window=config.attention_chunk_size
                 )
+            elif layer_type in sliding_layer_types:
+                layer = StaticSlidingWindowLayer(max_cache_len=max_cache_len, sliding_window=config.sliding_window)
             # LinearAttention layers are static by essence - using `"moe"` as well is a trick, see the comment about it on DynamicCache
             elif layer_type in ("mamba", "conv", "linear_attention", "moe"):
                 layer = LinearAttentionLayer()

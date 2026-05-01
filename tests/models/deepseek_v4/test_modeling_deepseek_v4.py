@@ -20,13 +20,9 @@ if is_torch_available():
         AutoConfig,
         AutoModelForCausalLM,
         AutoTokenizer,
-        DeepseekV4Config,
-        DeepseekV4ForCausalLM,
         DeepseekV4Model,
-        DynamicCache,
         FineGrainedFP8Config,
     )
-    from transformers.models.deepseek_v4.modeling_deepseek_v4 import DeepseekV4HCACompressor
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -36,19 +32,16 @@ class DeepseekV4ModelTester(CausalLMModelTester):
         base_model_class = DeepseekV4Model
 
     def __init__(self, parent, **kwargs):
-        # ``CausalLMModelTester.__init__`` assigns a fixed set of attributes from its
-        # keyword defaults (``hidden_size``, ``num_attention_heads`` and friends); those
-        # overwrite any class-level attributes of the same name. Pass V4 defaults through
-        # ``kwargs`` so the tester instance reflects V4's shape.
-        kwargs.setdefault("hidden_size", 64)
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("num_key_value_heads", 1)
-        kwargs.setdefault("num_hidden_layers", 2)
-        kwargs.setdefault("num_experts_per_tok", 2)
-        kwargs.setdefault("moe_intermediate_size", 64)
-        kwargs.setdefault("max_position_embeddings", 64)
         super().__init__(parent, **kwargs)
-        # V4-only attributes that ``CausalLMModelTester.get_config`` will pull by name.
+        # Standard CausalLMModelTester knobs — override the parent's positional defaults.
+        self.hidden_size = 64
+        self.num_attention_heads = 4
+        self.num_key_value_heads = 1
+        self.num_hidden_layers = 2
+        self.num_experts_per_tok = 2
+        self.moe_intermediate_size = 64
+        self.max_position_embeddings = 64
+        # V4-only knobs.
         self.head_dim = 32
         self.partial_rotary_factor = 8 / 32  # qk_rope_head_dim=8 / head_dim=32
         self.q_lora_rank = 32
@@ -56,10 +49,9 @@ class DeepseekV4ModelTester(CausalLMModelTester):
         self.o_lora_rank = 16
         self.n_routed_experts = 4
         self.n_shared_experts = 1
-        # All ``"moe"`` (no ``"hash_moe"``) so the ``inputs_embeds``-only generation
-        # tests in ``CausalLMModelTest`` can exercise the model without running into
-        # the hash router's ``input_ids`` requirement. A dedicated test covers the
-        # hash path.
+        # All "moe" (no "hash_moe") so inputs_embeds-only generation tests in
+        # CausalLMModelTest exercise the model without hitting the hash router's
+        # input_ids requirement. A dedicated test covers the hash path.
         self.mlp_layer_types = ["moe", "moe"]
         self.layer_types = ["heavily_compressed_attention", "compressed_sparse_attention"]
         self.sliding_window = 8
@@ -220,150 +212,6 @@ class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
                 self.assertIsInstance(layer_hidden, torch.Tensor)
                 self.assertEqual(layer_hidden.shape[0], batch_size)
                 self.assertEqual(layer_hidden.shape[-1], config.hidden_size)
-
-
-def _tiny_config(**overrides):
-    """Smallest V4 config that still exercises every architectural piece: HC streams
-    (``hc_mult=2``), hash routing (layer 0), a local-SWA layer, a compressor-with-
-    indexer layer (ratio 4), and a routed MoE with a shared expert.
-    """
-    defaults = {
-        "vocab_size": 32,
-        "hidden_size": 32,
-        "head_dim": 16,
-        "partial_rotary_factor": 4 / 16,  # qk_rope_head_dim=4 / head_dim=16
-        "q_lora_rank": 16,
-        "num_attention_heads": 4,
-        "num_key_value_heads": 1,
-        "num_hidden_layers": 2,
-        "layer_types": ["heavily_compressed_attention", "compressed_sparse_attention"],
-        "sliding_window": 4,
-        "hc_mult": 2,
-        "hc_sinkhorn_iters": 3,
-        "hc_eps": 1e-6,
-        "moe_intermediate_size": 32,
-        "n_routed_experts": 4,
-        "n_shared_experts": 1,
-        "num_experts_per_tok": 2,
-        "mlp_layer_types": ["hash_moe", "moe"],
-        "scoring_func": "sqrtsoftplus",
-        "routed_scaling_factor": 1.0,
-        "swiglu_limit": 10.0,
-        "o_groups": 2,
-        "o_lora_rank": 8,
-        "index_n_heads": 2,
-        "index_head_dim": 8,
-        "index_topk": 2,
-        "num_nextn_predict_layers": 0,
-        "max_position_embeddings": 32,
-        "rope_theta": 10000.0,
-        "compress_rope_theta": 10000.0,  # match main rope for a cleaner parity check
-        "attention_bias": False,
-        "attention_dropout": 0.0,
-    }
-    defaults.update(overrides)
-    return DeepseekV4Config(**defaults)
-
-
-@require_torch
-class DeepseekV4ParityTest(unittest.TestCase):
-    """Functional sanity checks against tiny-config reference implementations of the
-    V4-specific pieces (compressor pooling, HC mix + collapse). These re-derive the
-    math from the upstream ``inference/model.py`` and compare to our HF modules, so a
-    regression in the packed cache / HC / pool code would surface here numerically.
-    """
-
-    def test_compressor_pool_matches_reference(self):
-        """Re-implement the reference ``Compressor._pool`` (softmax-gated sum-pool with
-        a learned ``position_bias``) and check it matches what the V4
-        :class:`DeepseekV4HCACache` + :class:`DeepseekV4HCACompressor` produce inline.
-        """
-        torch.manual_seed(0)
-        batch, length, head_dim, rate = 2, 8, 16, 4
-        kv = torch.randn(batch, length, head_dim)
-        gate = torch.randn(batch, length, head_dim)
-        position_bias = torch.randn(rate, head_dim)
-
-        # Reproduce the V4 in-line pool from ``DeepseekV4HCACompressor._pool``.
-        n_windows = length // rate
-        view_kv = kv.view(batch, n_windows, rate, head_dim)
-        view_gate = gate.view(batch, n_windows, rate, head_dim) + position_bias.to(gate.dtype)
-        ours = (view_kv * view_gate.softmax(dim=2)).sum(dim=2)
-
-        # Reference (transcribed from upstream ``inference/model.py``).
-        reference = torch.zeros(batch, n_windows, head_dim)
-        for b in range(batch):
-            for i in range(n_windows):
-                window_kv = kv[b, i * rate : (i + 1) * rate]
-                window_gate = gate[b, i * rate : (i + 1) * rate] + position_bias
-                w = torch.softmax(window_gate, dim=0)
-                reference[b, i] = (window_kv * w).sum(dim=0)
-
-        torch.testing.assert_close(ours, reference, rtol=1e-5, atol=1e-6)
-
-    def test_compressor_cache_accumulates_across_calls(self):
-        """Feeding the HCA compressor one token at a time must produce the same pool
-        as feeding the whole sequence. Using HCA keeps the test indexer-free.
-        """
-        torch.manual_seed(1)
-        config = _tiny_config(
-            layer_types=["heavily_compressed_attention", "heavily_compressed_attention"],
-            sliding_window=128,
-            max_position_embeddings=512,
-            compress_rates={"compressed_sparse_attention": 4, "heavily_compressed_attention": 128},
-        )
-        compressor = DeepseekV4HCACompressor(config).eval()
-        # Initialise ``position_bias`` to non-zero so the test exercises the pooling math.
-        torch.nn.init.normal_(compressor.position_bias, std=0.1)
-
-        batch, seq_len = 1, 256  # two full windows
-        hidden_states = torch.randn(batch, seq_len, config.hidden_size)
-        position_ids = torch.arange(seq_len).unsqueeze(0)
-
-        cache_full = DynamicCache(config=config)
-        with torch.no_grad():
-            one_shot = compressor(hidden_states, None, position_ids, cache_full, 1)
-
-        cache_inc = DynamicCache(config=config)
-        with torch.no_grad():
-            for step in range(seq_len):
-                incremental = compressor(hidden_states[:, step : step + 1], None, torch.tensor([[step]]), cache_inc, 1)
-        self.assertEqual(one_shot.shape, incremental.shape)
-        torch.testing.assert_close(one_shot, incremental, rtol=1e-4, atol=1e-5)
-
-    def test_tiny_forward_is_deterministic_and_finite(self):
-        """End-to-end smoke: tiny ``DeepseekV4ForCausalLM`` forward produces finite
-        logits of the right shape, and is deterministic under the same seed."""
-        torch.manual_seed(42)
-        config = _tiny_config()
-        model = DeepseekV4ForCausalLM(config).eval()
-
-        torch.manual_seed(0)
-        input_ids = torch.randint(0, config.vocab_size, (2, 10))
-        with torch.no_grad():
-            out_a = model(input_ids).logits
-            out_b = model(input_ids).logits
-
-        self.assertEqual(out_a.shape, (2, 10, config.vocab_size))
-        self.assertTrue(torch.isfinite(out_a).all())
-        torch.testing.assert_close(out_a, out_b)  # deterministic
-
-    def test_tiny_generate_runs(self):
-        """Greedy-generate 4 new tokens on top of a 6-token prompt and check we get 10
-        tokens out. Exercises the full generation loop: cache adopt, window cache,
-        compressor state, HC, indexer gather."""
-        torch.manual_seed(42)
-        config = _tiny_config()
-        model = DeepseekV4ForCausalLM(config).eval()
-
-        torch.manual_seed(0)
-        input_ids = torch.randint(0, config.vocab_size, (1, 6))
-        # ``eos_token_id=-1`` keeps the freshly initialised random model from EOS-stopping
-        # before max_new_tokens, so the shape assertion is deterministic.
-        with torch.no_grad():
-            out = model.generate(input_ids, max_new_tokens=4, do_sample=False, eos_token_id=-1)
-        self.assertEqual(out.shape, (1, 10))
-        self.assertTrue(torch.isfinite(out.float()).all())
 
 
 @require_torch

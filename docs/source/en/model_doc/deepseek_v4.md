@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2026-04-30.*
+*This model was released on {release_date} and added to Hugging Face Transformers on 2026-05-02.*
 
 # DeepSeek-V4
 

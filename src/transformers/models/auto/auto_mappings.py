@@ -130,7 +130,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("deit", "DeiTConfig"),
         ("depth_anything", "DepthAnythingConfig"),
         ("depth_pro", "DepthProConfig"),
-        ("detr", "MaskFormerDetrConfig"),
+        ("detr", "DetrConfig"),
         ("dia", "DiaConfig"),
         ("dia_decoder", "DiaDecoderConfig"),
         ("dia_encoder", "DiaEncoderConfig"),
