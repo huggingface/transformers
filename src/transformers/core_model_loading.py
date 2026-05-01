@@ -1187,19 +1187,12 @@ def set_param_for_module(
         loading_info.missing_keys.discard(target_name)
 
         if isinstance(ref, DTensor):
-            local_shape, global_offset = compute_local_shape_and_global_offset(
-                ref.shape, ref.device_mesh, ref.placements
-            )
+            local_shape, _ = compute_local_shape_and_global_offset(ref.shape, ref.device_mesh, ref.placements)
             expected_shape = torch.Size(local_shape)
         else:
             expected_shape = ref.shape
 
-        # When a WeightConverter produces the full global tensor, slice it to the local DTensor shard.
-        if isinstance(ref, DTensor) and param_value.shape == ref.shape and param_value.shape != expected_shape:
-            slices = [slice(global_offset[d], global_offset[d] + local_shape[d]) for d in range(param_value.ndim)]
-            param_value = param_value[tuple(slices)].contiguous()
-
-        if ref is not None and param_value.shape != expected_shape and hf_quantizer is None:
+        if param_value.shape != expected_shape and hf_quantizer is None:
             loading_info.mismatched_keys.add((target_name, param_value.shape, expected_shape))
         else:
             if isinstance(ref, DTensor):
