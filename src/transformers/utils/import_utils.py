@@ -229,7 +229,40 @@ def get_cuda_runtime_version() -> tuple[int, int]:
     import ctypes
 
     version = ctypes.c_int()
-    cudart = ctypes.CDLL("libcudart.so")
+
+    # Try the unversioned name first, then search pip-installed nvidia packages
+    cudart = None
+    for name in ("libcudart.so", "libcudart.so.12", "libcudart.so.13"):
+        try:
+            cudart = ctypes.CDLL(name)
+            break
+        except OSError:
+            continue
+
+    if cudart is None:
+        # Look inside the nvidia pip packages bundled in the environment
+        import importlib.util
+
+        for pkg in ("nvidia.cuda_runtime", "nvidia.cu13"):
+            spec = importlib.util.find_spec(pkg)
+            if spec is None or spec.origin is None:
+                continue
+            import os
+
+            lib_dir = os.path.join(os.path.dirname(spec.origin), "lib")
+            for fname in sorted(os.listdir(lib_dir), reverse=True):
+                if fname.startswith("libcudart.so"):
+                    try:
+                        cudart = ctypes.CDLL(os.path.join(lib_dir, fname))
+                        break
+                    except OSError:
+                        continue
+            if cudart is not None:
+                break
+
+    if cudart is None:
+        raise OSError("Could not find libcudart.so — ensure CUDA runtime is installed or nvidia-cuda-runtime-cuXX pip package is available")
+
     cudart.cudaRuntimeGetVersion(ctypes.byref(version))
     return version.value // 1000, (version.value % 1000) // 10
 
