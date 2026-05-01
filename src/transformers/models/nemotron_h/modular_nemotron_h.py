@@ -357,7 +357,7 @@ class NemotronHPreTrainedModel(PreTrainedModel):
 
         if isinstance(module, nn.Linear):
             if module.bias is not None:
-                if not getattr(module.bias, "_no_reinit", False):
+                if not getattr(module.bias, "_is_hf_initialized", False):
                     init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight, std=self.config.initializer_range)
