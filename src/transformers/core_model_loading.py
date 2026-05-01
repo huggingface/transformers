@@ -1427,15 +1427,7 @@ def convert_and_load_state_dict_in_model(
 
         # 2. finally, collect the tensor into the proper converter
         if renamed_key in meta_model_state_dict:
-            empty_param = meta_model_state_dict[renamed_key]
-            try:
-                empty_param = model.get_parameter_or_buffer(renamed_key)
-            except (AttributeError, KeyError):
-                if getattr(model, "_is_fsdp_managed_module", False):
-                    raise RuntimeError(
-                        f"FSDP shard-on-read requires the live parameter for {renamed_key!r}, "
-                        f"but get_parameter_or_buffer() failed."
-                    )
+            empty_param = meta_model_state_dict.get(renamed_key)
             # If we enter here, we have a WeightConverter operation to perform
             if source_pattern is not None:
                 new_converter = deepcopy(pattern_to_converter[source_pattern])
