@@ -54,6 +54,7 @@ from .core_model_loading import (
 from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
+from .heterogeneity import apply_heterogeneous_modeling, clean_up_post_heterogeneous_modeling
 from .integrations import PeftAdapterMixin, deepspeed_config, hub_kernels, is_deepspeed_zero3_enabled, is_fsdp_enabled
 from .integrations.accelerate import (
     _get_device_map,
@@ -1306,6 +1307,19 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         elif full_annotation is not None:
             cls.config_class = full_annotation
 
+        # Make sure that clean up for heterogeneous modeling is called after the model is initialized
+        if "__init__" in cls.__dict__:
+            orig_init = cls.__init__
+
+            @wraps(orig_init)
+            def _patched_init(self, *args, **kwargs):
+                try:
+                    orig_init(self, *args, **kwargs)
+                finally:
+                    clean_up_post_heterogeneous_modeling(self)
+
+            cls.__init__ = _patched_init
+
     def __init__(self, config: PreTrainedConfig, *inputs, **kwargs):
         super().__init__()
         if not isinstance(config, PreTrainedConfig):
@@ -1345,6 +1359,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self.loss_type = loss_type
 
         _CAN_RECORD_REGISTRY[str(self.__class__)] = self._can_record_outputs  # added for executorch support only
+
+        if self.config.is_heterogeneous:
+            apply_heterogeneous_modeling(self)
 
     def post_init(self):
         """

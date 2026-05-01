@@ -19,9 +19,11 @@ from torch.nn import functional as F
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
+from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import (
+    MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import dynamic_rope_update
@@ -30,6 +32,7 @@ from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
+    can_return_tuple,
     logging,
 )
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
@@ -41,10 +44,10 @@ from ..llama.modeling_llama import (
     repeat_kv,
 )
 from ..mixtral.modeling_mixtral import (
-    MixtralForCausalLM,
     MixtralForSequenceClassification,
     MixtralForTokenClassification,
     MixtralModel,
+    load_balancing_loss_func,
 )
 from ..qwen2.modeling_qwen2 import Qwen2Attention, Qwen2RotaryEmbedding
 from .configuration_gpt_oss import GptOssConfig
@@ -313,6 +316,7 @@ class GptOssDecoderLayer(LlamaDecoderLayer):
 
 class GptOssPreTrainedModel(LlamaPreTrainedModel):
     _keep_in_fp32_modules = ["post_attention_layernorm", "input_layernorm", "norm"]
+    _keys_to_ignore_on_load_unexpected = [r"\.k_scale$", r"\.v_scale$"]
     _supports_sdpa = False
     _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
     _can_record_outputs = {
@@ -398,8 +402,153 @@ class GptOssModel(MixtralModel):
         )
 
 
-class GptOssForCausalLM(MixtralForCausalLM):
-    pass
+def heterogeneous_load_balancing_loss_func(
+    gate_logits: torch.Tensor | tuple[torch.Tensor] | None,
+    num_experts_per_layer: tuple[int] | None = None,
+    top_k_per_layer: tuple[int] | None = None,
+    attention_mask: torch.Tensor | None = None,
+) -> torch.Tensor | int:
+    if gate_logits is None or not isinstance(gate_logits, tuple):
+        return 0
+    if num_experts_per_layer is None or top_k_per_layer is None:
+        raise ValueError("num_experts_per_layer (tuple[int]) and top_k_per_layer (tuple[int]) must be provided")
+
+    compute_device = gate_logits[0].device
+    overall_loss = 0
+
+    for layer_idx, layer_gate_logits in enumerate(gate_logits):
+        layer_loss = load_balancing_loss_func(
+            gate_logits=(layer_gate_logits,),
+            num_experts=num_experts_per_layer[layer_idx],
+            top_k=top_k_per_layer[layer_idx],
+            attention_mask=attention_mask,
+        )
+        if layer_loss != 0:
+            overall_loss += layer_loss.to(compute_device)
+
+    return overall_loss
+
+
+@auto_docstring
+class GptOssForCausalLM(GptOssPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = GptOssModel(config)
+        self.vocab_size = config.vocab_size
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.router_aux_loss_coef = config.router_aux_loss_coef
+
+        if self.config.is_heterogeneous:
+            num_experts_per_layer = []
+            num_experts_per_tok_per_layer = []
+            for layer_idx in range(self.config.num_hidden_layers):
+                layer_config = self.config.get_full_layer_config(layer_idx)
+                num_experts_per_layer.append(layer_config.num_local_experts)
+                num_experts_per_tok_per_layer.append(layer_config.num_experts_per_tok)
+            self.num_experts_per_layer = tuple(num_experts_per_layer)
+            self.num_experts_per_tok_per_layer = tuple(num_experts_per_tok_per_layer)
+        else:
+            self.num_experts = config.num_local_experts
+            self.num_experts_per_tok = config.num_experts_per_tok
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_router_logits: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> MoeCausalLMOutputWithPast:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, GptOssForCausalLM
+
+        >>> model = GptOssForCausalLM.from_pretrained("mistralai/GptOss-8x7B-v0.1")
+        >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/GptOss-8x7B-v0.1")
+
+        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        ```"""
+
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.output_router_logits
+        )
+
+        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        outputs: MoeModelOutputWithPast = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_router_logits=output_router_logits,
+            **kwargs,
+        )
+
+        hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
+
+        aux_loss = None
+        if output_router_logits:
+            if self.config.is_heterogeneous:
+                aux_loss = heterogeneous_load_balancing_loss_func(
+                    outputs.router_logits,
+                    self.num_experts_per_layer,
+                    self.num_experts_per_tok_per_layer,
+                    attention_mask,
+                )
+            else:
+                aux_loss = load_balancing_loss_func(
+                    outputs.router_logits,
+                    self.num_experts,
+                    self.num_experts_per_tok,
+                    attention_mask,
+                )
+            if labels is not None:
+                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
+
+        return MoeCausalLMOutputWithPast(
+            loss=loss,
+            aux_loss=aux_loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
+        )
 
 
 class GptOssForSequenceClassification(MixtralForSequenceClassification):

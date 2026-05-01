@@ -405,6 +405,7 @@ class GptOssPreTrainedModel(PreTrainedModel):
         "attentions": GptOssAttention,
     }
     _keep_in_fp32_modules = ["post_attention_layernorm", "input_layernorm", "norm"]
+    _keys_to_ignore_on_load_unexpected = [r"\.k_scale$", r"\.v_scale$"]
     _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
 
     @torch.no_grad()
@@ -583,6 +584,33 @@ def load_balancing_loss_func(
     return overall_loss * num_experts
 
 
+def heterogeneous_load_balancing_loss_func(
+    gate_logits: torch.Tensor | tuple[torch.Tensor] | None,
+    num_experts_per_layer: tuple[int] | None = None,
+    top_k_per_layer: tuple[int] | None = None,
+    attention_mask: torch.Tensor | None = None,
+) -> torch.Tensor | int:
+    if gate_logits is None or not isinstance(gate_logits, tuple):
+        return 0
+    if num_experts_per_layer is None or top_k_per_layer is None:
+        raise ValueError("num_experts_per_layer (tuple[int]) and top_k_per_layer (tuple[int]) must be provided")
+
+    compute_device = gate_logits[0].device
+    overall_loss = 0
+
+    for layer_idx, layer_gate_logits in enumerate(gate_logits):
+        layer_loss = load_balancing_loss_func(
+            gate_logits=(layer_gate_logits,),
+            num_experts=num_experts_per_layer[layer_idx],
+            top_k=top_k_per_layer[layer_idx],
+            attention_mask=attention_mask,
+        )
+        if layer_loss != 0:
+            overall_loss += layer_loss.to(compute_device)
+
+    return overall_loss
+
+
 @auto_docstring
 class GptOssForCausalLM(GptOssPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
@@ -595,8 +623,19 @@ class GptOssForCausalLM(GptOssPreTrainedModel, GenerationMixin):
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.router_aux_loss_coef = config.router_aux_loss_coef
-        self.num_experts = config.num_local_experts
-        self.num_experts_per_tok = config.num_experts_per_tok
+
+        if self.config.is_heterogeneous:
+            num_experts_per_layer = []
+            num_experts_per_tok_per_layer = []
+            for layer_idx in range(self.config.num_hidden_layers):
+                layer_config = self.config.get_full_layer_config(layer_idx)
+                num_experts_per_layer.append(layer_config.num_local_experts)
+                num_experts_per_tok_per_layer.append(layer_config.num_experts_per_tok)
+            self.num_experts_per_layer = tuple(num_experts_per_layer)
+            self.num_experts_per_tok_per_layer = tuple(num_experts_per_tok_per_layer)
+        else:
+            self.num_experts = config.num_local_experts
+            self.num_experts_per_tok = config.num_experts_per_tok
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -666,12 +705,20 @@ class GptOssForCausalLM(GptOssPreTrainedModel, GenerationMixin):
 
         aux_loss = None
         if output_router_logits:
-            aux_loss = load_balancing_loss_func(
-                outputs.router_logits,
-                self.num_experts,
-                self.num_experts_per_tok,
-                attention_mask,
-            )
+            if self.config.is_heterogeneous:
+                aux_loss = heterogeneous_load_balancing_loss_func(
+                    outputs.router_logits,
+                    self.num_experts_per_layer,
+                    self.num_experts_per_tok_per_layer,
+                    attention_mask,
+                )
+            else:
+                aux_loss = load_balancing_loss_func(
+                    outputs.router_logits,
+                    self.num_experts,
+                    self.num_experts_per_tok,
+                    attention_mask,
+                )
             if labels is not None:
                 loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
 
