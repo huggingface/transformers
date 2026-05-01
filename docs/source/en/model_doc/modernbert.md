@@ -37,14 +37,13 @@ The example below demonstrates how to predict the `[MASK]` token with [`Pipeline
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="fill-mask",
     model="answerdotai/ModernBERT-base",
-    dtype=torch.float16,
     device=0
 )
 pipeline("Plants create [MASK] through a process known as photosynthesis.")
@@ -53,16 +52,17 @@ pipeline("Plants create [MASK] through a process known as photosynthesis.")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForMaskedLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "answerdotai/ModernBERT-base",
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "answerdotai/ModernBERT-base",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -91,7 +91,9 @@ ModernBERT supports padding-free inference and training. For example, you can le
 
 ```python
 import torch
+
 from transformers import AutoModelForMaskedLM, AutoTokenizer, DataCollatorWithFlattening
+
 
 model_id = "answerdotai/ModernBERT-base"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -100,7 +102,7 @@ collator = DataCollatorWithFlattening(return_flash_attn_kwargs=True)
 
 def prepare_text_for_padding_free(texts):
     # base tokenization with padding and subsequent flattening
-    inputs_dict = tokenizer(texts, return_tensors="pt", padding=True).to("cuda")
+    inputs_dict = tokenizer(texts, return_tensors="pt", padding=True).to(model.device)
     flattened_features = collator(
         [
             {"input_ids": i[a.bool()].tolist()}
@@ -110,7 +112,7 @@ def prepare_text_for_padding_free(texts):
 
     for k, v in flattened_features.items():
         if isinstance(v, torch.Tensor):
-            flattened_features[k] = v.to("cuda")
+            flattened_features[k] = v.to(model.device)
 
     return flattened_features
 
@@ -119,7 +121,7 @@ inputs = prepare_text_for_padding_free(
     ["The capital of France is [MASK].", "ModernBERT is a [MASK] model."]
 )
 model = AutoModelForMaskedLM.from_pretrained(
-    model_id, attn_implementation="flash_attention_2", dtype=torch.bfloat16, device_map="cuda"
+    model_id, attn_implementation="flash_attention_2", device_map="cuda"
 )
 
 # Optional: use torch.compile for faster inference

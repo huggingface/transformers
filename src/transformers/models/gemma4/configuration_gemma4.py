@@ -138,6 +138,16 @@ class Gemma4TextConfig(PreTrainedConfig):
         "layers.*.experts.down_proj": "rowwise",
         "layers.*.experts": "moe_tp_experts",
     }
+    base_model_ep_plan = {
+        # EP plan for google/gemma-4-26B-A4B-it: do not tp in attention (num_global_key_value_heads=2 too small to partition)
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.router": "ep_router",
+        "layers.*.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.experts.down_proj": "grouped_gemm",
+        "layers.*.experts": "moe_tp_experts",
+    }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),

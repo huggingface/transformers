@@ -138,9 +138,6 @@ class ContinuousBatchingLogitsProcessorList:
         # Update the list of logits processors (preserve LogitsProcessorList type)
         self.logits_processor = LogitsProcessorList(filtered_processors)
 
-    def __bool__(self) -> bool:
-        return bool(self.logits_processor)
-
     def _retrieve_processors_kwargs(self) -> None:
         """Retrieves the supported (with types) and ignored kwargs from continuous batching processors."""
         self.supported_keys: dict[str, type] = {}
@@ -319,6 +316,8 @@ class ContinuousBatchingTopPLogitsWarper(ContinuousBatchingLogitsProcessor):
         return scores.masked_fill(indices_to_remove, self.filter_value)
 
 
+# TODO: add non-per-request CB variants so the memory-efficient warpers work when `per_request_processors=False`.
+# TODO: fuse temperature + top-k + top-p into a single pass to reuse the softmax/sort and cut activation peak.
 CLASSIC_TO_CB_PROCESSORS_MAP = {
     TemperatureLogitsWarper: ContinuousBatchingTemperatureLogitsWarper,
     TopKLogitsWarper: ContinuousBatchingTopKLogitsWarper,

@@ -179,34 +179,43 @@ class NemotronHMamba2Mixer(nn.Module):
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
 
         global causal_conv1d_update, causal_conv1d_fn
-        causal_conv1d = lazy_load_kernel("causal-conv1d")
-        causal_conv1d_update = getattr(causal_conv1d, "causal_conv1d_update", None)
-        causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", None)
-
         global selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
-        mamba_ssm = lazy_load_kernel("mamba-ssm")
-        selective_state_update = resolve_internal_import(
-            mamba_ssm, chained_path="ops.triton.selective_state_update.selective_state_update"
-        )
-        mamba_chunk_scan_combined = resolve_internal_import(
-            mamba_ssm, chained_path="ops.triton.ssd_combined.mamba_chunk_scan_combined"
-        )
-        mamba_split_conv1d_scan_combined = resolve_internal_import(
-            mamba_ssm, chained_path="ops.triton.ssd_combined.mamba_split_conv1d_scan_combined"
-        )
-
         global is_fast_path_available
-        is_fast_path_available = all(
-            (
-                selective_state_update,
-                mamba_chunk_scan_combined,
-                mamba_split_conv1d_scan_combined,
-                causal_conv1d_fn,
-                causal_conv1d_update,
-            )
-        )
 
-        if not is_fast_path_available:
+        if config.use_mamba_kernels:
+            causal_conv1d = lazy_load_kernel("causal-conv1d")
+            causal_conv1d_update = getattr(causal_conv1d, "causal_conv1d_update", None)
+            causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", None)
+
+            mamba_ssm = lazy_load_kernel("mamba-ssm")
+            selective_state_update = resolve_internal_import(
+                mamba_ssm, chained_path="ops.triton.selective_state_update.selective_state_update"
+            )
+            mamba_chunk_scan_combined = resolve_internal_import(
+                mamba_ssm, chained_path="ops.triton.ssd_combined.mamba_chunk_scan_combined"
+            )
+            mamba_split_conv1d_scan_combined = resolve_internal_import(
+                mamba_ssm, chained_path="ops.triton.ssd_combined.mamba_split_conv1d_scan_combined"
+            )
+
+            is_fast_path_available = all(
+                (
+                    selective_state_update,
+                    mamba_chunk_scan_combined,
+                    mamba_split_conv1d_scan_combined,
+                    causal_conv1d_fn,
+                    causal_conv1d_update,
+                )
+            )
+        else:
+            causal_conv1d_update = None
+            causal_conv1d_fn = None
+            selective_state_update = None
+            mamba_chunk_scan_combined = None
+            mamba_split_conv1d_scan_combined = None
+            is_fast_path_available = False
+
+        if getattr(config, "use_mamba_kernels", True) and not is_fast_path_available:
             logger.warning_once(
                 "The fast path is not available because one of `(selective_state_update, causal_conv1d_fn, causal_conv1d_update)`"
                 " is None. Falling back to the naive implementation. To install follow https://github.com/state-spaces/mamba/#installation and"
@@ -585,7 +594,7 @@ class NemotronHRMSNorm(nn.Module):
 
 
 class NemotronHMLP(nn.Module):
-    def __init__(self, config, intermediate_size=None):
+    def __init__(self, config, intermediate_size=None, **kwargs):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -710,7 +719,7 @@ class NemotronHMoE(nn.Module):
             .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
             .reshape(-1, self.n_routed_experts)
         )
-        scores_for_choice = router_logits_for_choice.masked_fill(~score_mask.bool(), 0.0)
+        scores_for_choice = router_logits_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
         topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
         topk_weights = router_logits.gather(1, topk_indices)
         if self.norm_topk_prob:
@@ -880,6 +889,7 @@ MIXER_TYPES = {
     "mamba": NemotronHMamba2Mixer,
     "attention": NemotronHAttention,
     "moe": NemotronHMoE,
+    "mlp": NemotronHMLP,
 }
 
 
@@ -942,6 +952,7 @@ class NemotronHBlock(GradientCheckpointingLayer):
 class NemotronHPreTrainedModel(PreTrainedModel):
     config: NemotronHConfig
     base_model_prefix = "model"
+    supports_gradient_checkpointing = True
     _no_split_modules = ["NemotronHBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
@@ -1072,6 +1083,7 @@ class NemotronHModel(NemotronHPreTrainedModel):
             "mamba": mamba_mask,
             "attention": causal_mask,
             "moe": None,
+            "mlp": None,
         }
 
         for layer_idx, mixer_block in enumerate(self.layers):

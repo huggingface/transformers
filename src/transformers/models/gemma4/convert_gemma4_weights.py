@@ -712,6 +712,7 @@ def convert_transformer_weights(
 
     converted_paths: list[str] = []
     converted_weights: list[Any] = []
+    first_kv_shared_layer_idx = config.num_hidden_layers - getattr(config, "num_kv_shared_layers", 0)
 
     # Handle new checkpoint format: transformer/layer_N/...
     # TODO(philculliton):Direct handling for unstacked checkpoint type, needs to be merged to allow for unified tensor handling
@@ -719,6 +720,7 @@ def convert_transformer_weights(
         # Extract layer number from path like "transformer/layer_0/attn/q_einsum"
         layer_str = path.split("/")[1]  # "layer_0"
         layer_idx = int(layer_str.replace("layer_", ""))  # 0
+        is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx > 0
         base_path = f"layers.{layer_idx}"
 
         # Determine head_dim from actual checkpoint weight dimensions
@@ -744,7 +746,7 @@ def convert_transformer_weights(
             converted_weights.append(
                 matrix.transpose(2, 0, 1).reshape(config.hidden_size, config.num_attention_heads * head_dim)
             )
-        elif path.endswith("attn/kv_einsum"):
+        elif path.endswith("attn/kv_einsum") and not is_kv_shared_layer:
             converted_paths.extend(
                 [
                     f"{base_path}.self_attn.k_proj.weight",
@@ -759,7 +761,7 @@ def convert_transformer_weights(
                     v_proj_weights.reshape(kv_proj_shape).transpose(),
                 ]
             )
-        elif path.endswith("attn/k_einsum"):
+        elif path.endswith("attn/k_einsum") and not is_kv_shared_layer:
             converted_paths.append(f"{base_path}.self_attn.k_proj.weight")
             converted_weights.append(
                 matrix.transpose(1, 0, 2)
@@ -776,7 +778,7 @@ def convert_transformer_weights(
         elif path.endswith("attn/query_norm"):
             converted_paths.append(f"{base_path}.self_attn.q_norm.weight")
             converted_weights.append(matrix)
-        elif path.endswith("attn/key_norm"):
+        elif path.endswith("attn/key_norm") and not is_kv_shared_layer:
             converted_paths.append(f"{base_path}.self_attn.k_norm.weight")
             converted_weights.append(matrix)
         elif path.endswith("mlp/gating_einsum"):
@@ -822,6 +824,7 @@ def convert_transformer_weights(
 
         for i, matrix in enumerate(weights):
             layer_idx = _SLIDING_WINDOW_PATTERN * i + attention_type_index
+            is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx > 0
             base_path = f"layers.{layer_idx}"
             head_dim = (
                 config.global_head_dim
@@ -837,7 +840,7 @@ def convert_transformer_weights(
                 converted_weights.append(
                     matrix.transpose(2, 0, 1).reshape(config.hidden_size, config.num_attention_heads * head_dim)
                 )
-            elif path.endswith("attn/kv_einsum"):
+            elif path.endswith("attn/kv_einsum") and not is_kv_shared_layer:
                 converted_paths.extend(
                     [
                         f"{base_path}.self_attn.k_proj.weight",
@@ -852,7 +855,7 @@ def convert_transformer_weights(
                         v_proj_weights.reshape(kv_proj_shape).transpose(),
                     ]
                 )
-            elif path.endswith("attn/k_einsum"):
+            elif path.endswith("attn/k_einsum") and not is_kv_shared_layer:
                 converted_paths.append(f"{base_path}.self_attn.k_proj.weight")
                 converted_weights.append(
                     matrix.transpose(1, 0, 2)
@@ -869,7 +872,7 @@ def convert_transformer_weights(
             elif path.endswith("attn/query_norm"):
                 converted_paths.append(f"{base_path}.self_attn.q_norm.weight")
                 converted_weights.append(matrix)
-            elif path.endswith("attn/key_norm"):
+            elif path.endswith("attn/key_norm") and not is_kv_shared_layer:
                 converted_paths.append(f"{base_path}.self_attn.k_norm.weight")
                 converted_weights.append(matrix)
             elif path.endswith("mlp/gating_einsum"):

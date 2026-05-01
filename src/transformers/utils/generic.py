@@ -294,6 +294,19 @@ def is_flash_attention_requested(
     return "flash" in checked_attention_implementation
 
 
+def split_attention_implementation(implementation: str | None) -> tuple[bool, str | None]:
+    """
+    Split the optional `paged|` prefix from an attention implementation string.
+
+    Note that `None` means using the default attention implementation, which is either torch's native `sdpa` or `eager` (if `sdpa` is not implemented for that model).
+    """
+    if implementation is None:
+        return False, None
+
+    is_paged = implementation.startswith("paged|")
+    return is_paged, implementation.removeprefix("paged|")
+
+
 def to_py_obj(obj):
     """
     Convert a PyTorch tensor, Numpy array or python list to a python list.

@@ -52,11 +52,12 @@ This model was contributed by [FoamoftheSea](https://huggingface.co/FoamoftheSea
 ```python
 import requests
 import torch
-
-from transformers import AutoModelForImageClassification, AutoImageProcessor
 from PIL import Image
 
-model = AutoModelForImageClassification.from_pretrained("OpenGVLab/pvt_v2_b0")
+from transformers import AutoImageProcessor, AutoModelForImageClassification
+
+
+model = AutoModelForImageClassification.from_pretrained("OpenGVLab/pvt_v2_b0", device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained("OpenGVLab/pvt_v2_b0")
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
@@ -69,9 +70,10 @@ To use the PVTv2 as a backbone for more complex architectures like DeformableDET
 ```python
 import requests
 import torch
-
-from transformers import AutoConfig, AutoModelForObjectDetection, AutoImageProcessor
 from PIL import Image
+
+from transformers import AutoConfig, AutoImageProcessor, AutoModelForObjectDetection
+
 
 model = AutoModelForObjectDetection.from_config(
     config=AutoConfig.from_pretrained(

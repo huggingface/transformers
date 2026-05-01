@@ -65,7 +65,7 @@ class GptOssRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-@use_experts_implementation(is_transposed=True, has_bias=True)
+@use_experts_implementation(is_concatenated=False, is_transposed=True, has_bias=True)
 class GptOssExperts(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -425,8 +425,6 @@ class GptOssPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class GptOssModel(GptOssPreTrainedModel):
-    _no_split_modules = ["GptOssDecoderLayer"]
-
     def __init__(self, config: GptOssConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id

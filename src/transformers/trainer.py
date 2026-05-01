@@ -712,6 +712,8 @@ class Trainer:
             ddp_kwargs["bucket_cap_mb"] = self.args.ddp_bucket_cap_mb
         if self.args.ddp_broadcast_buffers is not None:
             ddp_kwargs["broadcast_buffers"] = self.args.ddp_broadcast_buffers
+        if self.args.ddp_static_graph is not None:
+            ddp_kwargs["static_graph"] = self.args.ddp_static_graph
 
         args["kwargs_handlers"] = [DistributedDataParallelKwargs(**ddp_kwargs)]
 

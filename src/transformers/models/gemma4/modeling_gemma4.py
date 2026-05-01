@@ -189,7 +189,7 @@ class Gemma4RMSNorm(nn.Module):
 class Gemma4AudioRelPositionalEncoding(nn.Module):
     """Sinusoidal relative positional encoding for the audio encoder.
 
-    Produces position embeddings of shape [1, 2*context_size - 1, hidden_size] with
+    Produces position embeddings of shape [1, context_size // 2 + 1, hidden_size] with
     concatenated [sin..., cos...] layout matching the original Gemma4 convention.
     """
 
@@ -210,7 +210,7 @@ class Gemma4AudioRelPositionalEncoding(nn.Module):
 
     @torch.no_grad()
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        position_ids = torch.arange(12, -1, -1, device=hidden_states.device)
+        position_ids = torch.arange(self.context_size // 2, -1, -1, device=hidden_states.device)
         position_ids = position_ids[..., None]
         scaled_time = position_ids * self.inv_timescales.to(device=hidden_states.device)
         pos_embed = torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=-1)
@@ -1133,7 +1133,6 @@ class Gemma4TextRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class Gemma4TextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -1236,9 +1235,9 @@ class Gemma4TextAttention(nn.Module):
         if self.store_full_length_kv:
             shared_kv_states[self.layer_idx] = key_states, value_states
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -2086,8 +2085,6 @@ def create_causal_mask_mapping(
     past_key_values: Cache | None,
     position_ids: torch.Tensor | None,
     mm_token_type_ids: torch.Tensor | None = None,
-    pixel_values: torch.FloatTensor | None = None,
-    is_training: bool = False,
     is_first_iteration: bool | None = None,
     **kwargs,
 ) -> dict:
@@ -2097,9 +2094,6 @@ def create_causal_mask_mapping(
 
     Uses `pixel_values` as an optional input to disambiguate edge cases.
     """
-    if is_training and mm_token_type_ids is None:
-        raise ValueError("`mm_token_type_ids` is required as a model input when training")
-
     mask_kwargs = {
         "config": config.get_text_config(),
         "inputs_embeds": inputs_embeds,
@@ -2109,15 +2103,7 @@ def create_causal_mask_mapping(
     }
     sliding_mask_kwargs = mask_kwargs.copy()
 
-    # NOTE: this `may_have_image_input` logic is not flawless, it fails when we're using a cache eagerly initialized
-    # (e.g. compiled prefill) AND `pixel_values` are not provided (i.e. the image data is provided through other
-    # means). Determining prefill in that case requires checking data values, which is not compile-compatible.
-    is_first_iteration = (
-        is_first_iteration
-        if is_first_iteration is not None
-        else (past_key_values is None or not past_key_values.is_initialized or pixel_values is not None)
-    )
-    if mm_token_type_ids is not None and is_first_iteration:
+    if mm_token_type_ids is not None:
         # We need to pass an additional mask function to account for token type ids, and it needs to be an `or` (to
         # undo the causal masking)
 
@@ -2151,23 +2137,24 @@ class Gemma4Model(Gemma4PreTrainedModel):
 
     def __init__(self, config: Gemma4Config):
         super().__init__(config)
+        self.vision_tower = AutoModel.from_config(config.vision_config) if config.vision_config is not None else None
         self.vocab_size = config.text_config.vocab_size
 
         language_model = AutoModel.from_config(config=config.text_config)
         self.language_model = language_model
         self.vocab_size_per_layer_input = config.text_config.vocab_size_per_layer_input
-        self.vision_tower = AutoModel.from_config(config.vision_config) if config.vision_config is not None else None
+        self.audio_tower = AutoModel.from_config(config.audio_config) if config.audio_config is not None else None
         self.embed_vision = (
             Gemma4MultimodalEmbedder(config.vision_config, config.text_config)
             if config.vision_config is not None
             else None
         )
-        self.audio_tower = AutoModel.from_config(config.audio_config) if config.audio_config is not None else None
         self.embed_audio = (
             Gemma4MultimodalEmbedder(config.audio_config, config.text_config)
             if config.audio_config is not None
             else None
         )
+
         # Grab the ones from the child
         self._keys_to_ignore_on_load_unexpected = [
             f"language_model.{name}" for name in self.language_model._keys_to_ignore_on_load_unexpected
@@ -2367,13 +2354,11 @@ class Gemma4Model(Gemma4PreTrainedModel):
                 # Larger Gemma 4 models use Gemma 3's bidirectional attention mask for vision inputs
                 causal_mask_mapping = create_causal_mask_mapping(
                     self.config,
-                    inputs_embeds,
-                    attention_mask,
-                    past_key_values,
-                    position_ids,
-                    mm_token_type_ids,
-                    pixel_values,
-                    is_training=self.training,
+                    inputs_embeds=inputs_embeds,
+                    attention_mask=attention_mask,
+                    past_key_values=past_key_values,
+                    position_ids=position_ids,
+                    mm_token_type_ids=mm_token_type_ids,
                 )
             else:
                 # Smaller Gemma models use a conventional casual attention mask
@@ -2607,6 +2592,9 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
             model_inputs["pixel_values_videos"] = pixel_values_videos
             model_inputs["input_features"] = input_features
             model_inputs["input_features_mask"] = input_features_mask
+        else:
+            # Don't pass to not apply bidirectional mask on top
+            model_inputs["mm_token_type_ids"] = None
 
         return model_inputs
 

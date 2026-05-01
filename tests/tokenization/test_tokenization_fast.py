@@ -217,6 +217,65 @@ class PreTrainedTokenizationFastTest(unittest.TestCase):
             tokenizer = AutoTokenizer.from_pretrained(temp_dir, use_fast=True)
             self.assertIsInstance(tokenizer, PreTrainedTokenizerFast)
 
+    def test_bpe_tokenizer_skips_clean_up_tokenization_spaces(self):
+        """BPE tokenizers should not apply clean_up_tokenization even when the flag is True.
+
+        clean_up_tokenization strips spaces before punctuation (e.g. " ." -> "."),
+        which was designed for WordPiece tokenizers. For BPE tokenizers, spaces are
+        encoded as part of tokens and the cleanup is destructive.
+        """
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(self.bytelevel_bpe_model_name)
+        tokenizer.clean_up_tokenization_spaces = True
+
+        # Text with space before punctuation — cleanup would strip it if applied.
+        # Leading space accounts for ByteLevel BPE's add_prefix_space behavior.
+        text = " Hello world ."
+        ids = tokenizer.encode(text, add_special_tokens=False)
+        decoded = tokenizer.decode(ids, clean_up_tokenization_spaces=True)
+
+        # The space before "." must be preserved — BPE guard skips the cleanup
+        self.assertEqual(decoded, text)
+
+    def test_bpe_override_forces_cleanup(self):
+        """The escape hatch flag forces cleanup even for BPE tokenizers."""
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(self.bytelevel_bpe_model_name)
+        tokenizer.clean_up_tokenization_spaces = True
+        tokenizer.clean_up_tokenization_spaces_for_bpe_even_though_it_will_corrupt_output = True
+
+        text = " Hello world ."
+        ids = tokenizer.encode(text, add_special_tokens=False)
+        decoded = tokenizer.decode(ids, clean_up_tokenization_spaces=True)
+
+        # With the override, cleanup IS applied — spaces before punctuation are stripped
+        self.assertEqual(decoded, " Hello world.")
+
+    def test_bpe_override_irrelevant_when_cleanup_false(self):
+        """Override flag has no effect when clean_up_tokenization_spaces is False."""
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(self.bytelevel_bpe_model_name)
+        tokenizer.clean_up_tokenization_spaces = False
+        tokenizer.clean_up_tokenization_spaces_for_bpe_even_though_it_will_corrupt_output = True
+
+        # Leading space accounts for ByteLevel BPE's add_prefix_space behavior
+        text = " Hello world ."
+        ids = tokenizer.encode(text, add_special_tokens=False)
+        decoded = tokenizer.decode(ids)
+
+        # cleanup=False takes precedence — text is preserved, override is irrelevant
+        self.assertEqual(decoded, text)
+
+    def test_non_bpe_tokenizer_still_cleans_up(self):
+        """Non-BPE tokenizers should still apply cleanup normally."""
+        # model_paths[0] is a WordLevel tokenizer (non-BPE)
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(self.model_paths[0])
+        tokenizer.clean_up_tokenization_spaces = True
+
+        text = "hello world ."
+        ids = tokenizer.encode(text, add_special_tokens=False)
+        decoded = tokenizer.decode(ids, clean_up_tokenization_spaces=True)
+
+        # Non-BPE: cleanup IS applied — space before "." is stripped
+        self.assertNotIn(" .", decoded)
+
 
 @require_tokenizers
 class TokenizerVersioningTest(unittest.TestCase):

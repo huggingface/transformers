@@ -24,8 +24,8 @@ The GraniteMoe model was proposed in [Power Scheduler: A Batch Size and Token Nu
 Additionally this class GraniteMoeSharedModel adds shared experts for Moe.
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 model_path = "ibm-research/moe-7b-1b-active-shared-experts"
 tokenizer = AutoTokenizer.from_pretrained(model_path)
@@ -38,7 +38,7 @@ model.eval()
 prompt = "Write a code to find the maximum value in a list of numbers."
 
 # tokenize the text
-input_tokens = tokenizer(prompt, return_tensors="pt")
+input_tokens = tokenizer(prompt, return_tensors="pt").to(model.device)
 # generate output tokens
 output = model.generate(**input_tokens, max_new_tokens=100)
 # decode output tokens into text

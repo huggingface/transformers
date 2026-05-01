@@ -297,6 +297,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if self.type != "seq2seq_whisper":
                 raise ValueError("Only Whisper can return language for now.")
             postprocess_params["return_language"] = return_language
+            forward_params["return_language"] = return_language
 
         # Parameter used in more than one place
         # in some models like whisper, the generation config has a `return_timestamps` key
@@ -476,7 +477,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 processed["stride"] = stride
             yield {"is_last": True, **processed, **extra}
 
-    def _forward(self, model_inputs, return_timestamps=False, **generate_kwargs):
+    def _forward(self, model_inputs, return_timestamps=False, return_language=None, **generate_kwargs):
         attention_mask = model_inputs.pop("attention_mask", None)
         stride = model_inputs.pop("stride", None)
         num_frames = model_inputs.pop("num_frames", None)
@@ -516,6 +517,12 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 "attention_mask": attention_mask,
                 **generate_kwargs,
             }
+            # When return_language is requested, use return_segments to retrieve
+            # the full generated sequences (including init tokens with the language token)
+            # since generate() strips them from the main output.
+            if return_language and self.type == "seq2seq_whisper":
+                generate_kwargs["return_segments"] = True
+
             tokens = self.model.generate(**generate_kwargs)
 
             # whisper longform generation stores timestamps in "segments"
@@ -528,11 +535,28 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                         for segment_list in tokens["segments"]
                     ]
                     out = {"tokens": tokens["sequences"], "token_timestamps": token_timestamps}
+            elif isinstance(tokens, dict) and "sequences" in tokens:
+                out = {"tokens": tokens["sequences"]}
             else:
                 out = {"tokens": tokens}
             if self.type == "seq2seq_whisper":
                 if stride is not None:
                     out["stride"] = stride
+                if return_language and isinstance(tokens, dict) and "segments" in tokens:
+                    # Extract the language token from the full unstripped sequence
+                    # stored in segments[batch][segment]["result"]. The result is either
+                    # a 1D tensor (full sequence) or a dict with a "sequences" key.
+                    segments = tokens["segments"]
+                    if segments and segments[0]:
+                        result = segments[0][0]["result"]
+                        full_seq = result["sequences"] if isinstance(result, dict) else result
+                        gen_config = generate_kwargs.get("generation_config", self.generation_config)
+                        if hasattr(gen_config, "lang_to_id"):
+                            lang_ids = set(gen_config.lang_to_id.values())
+                            for token_id in full_seq.tolist():
+                                if token_id in lang_ids:
+                                    out["lang_id"] = torch.tensor([token_id])
+                                    break
 
         else:
             inputs = {
@@ -599,6 +623,18 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     stride_right /= sampling_rate
                     output["stride"] = chunk_len, stride_left, stride_right
 
+            # Since Whisper's generate() strips init tokens (including the language token)
+            # from the output, we need to re-prepend the detected language token so that
+            # _decode_asr can find it and populate the language field in chunks.
+            if return_language:
+                for output in model_outputs:
+                    if "lang_id" in output:
+                        lang_id = output["lang_id"]
+                        if lang_id.dim() == 0:
+                            lang_id = lang_id.unsqueeze(0)
+                        lang_token = lang_id.unsqueeze(0).to(dtype=output["tokens"].dtype)
+                        output["tokens"] = torch.cat([lang_token, output["tokens"]], dim=-1)
+
             text, optional = self.tokenizer._decode_asr(
                 model_outputs,
                 return_timestamps=return_timestamps,
@@ -651,6 +687,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             output.pop("is_last", None)
             output.pop("stride", None)
             output.pop("token_timestamps", None)
+            output.pop("lang_id", None)
             for k, v in output.items():
                 extra[k].append(v)
         return {"text": text, **optional, **extra}

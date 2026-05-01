@@ -34,7 +34,9 @@ The example below demonstrates how to generate text based on an image with [`Pip
 
 ```python
 from transformers import pipeline
-generator = pipeline("text-generation", model="microsoft/Phi-4-multimodal-instruct", dtype="auto", device=0)
+
+
+generator = pipeline("text-generation", model="microsoft/Phi-4-multimodal-instruct", device=0)
 
 prompt = "Explain the concept of multimodal AI in simple terms."
 
@@ -46,17 +48,15 @@ print(result[0]['generated_text'])
 <hfoption id="AutoModel">
 
 ```python
-import torch
-from transformers import AutoModelForCausalLM, AutoProcessor, GenerationConfig
-from accelerate import Accelerator
+from transformers import AutoModelForCausalLM, AutoProcessor
+
 
 model_path = "microsoft/Phi-4-multimodal-instruct"
-device = Accelerator().device
 
 processor = AutoProcessor.from_pretrained(model_path)
-model = AutoModelForCausalLM.from_pretrained(model_path, device_map=device, dtype=torch.float16)
+model = AutoModelForCausalLM.from_pretrained(model_path, device_map="auto")
 
-model.load_adapter(model_path, adapter_name="vision", device_map=device, adapter_kwargs={"subfolder": 'vision-lora'})
+model.load_adapter(model_path, adapter_name="vision", device_map="auto", adapter_kwargs={"subfolder": 'vision-lora'})
 
 messages = [
     {
@@ -86,7 +86,7 @@ generate_ids = generate_ids[:, inputs['input_ids'].shape[1]:]
 response = processor.batch_decode(
     generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
 )[0]
-print(f'>>> Response\n{response}')
+print(f'Response\n{response}')
 ```
 
 </hfoption>
@@ -96,18 +96,18 @@ print(f'>>> Response\n{response}')
 
 The example below demonstrates inference with an audio and text input.
 
-```py
+```python
 import torch
-from transformers import AutoModelForCausalLM, AutoProcessor, GenerationConfig
-from accelerate import Accelerator
+
+from transformers import AutoModelForCausalLM, AutoProcessor
+
 
 model_path = "microsoft/Phi-4-multimodal-instruct"
-device = Accelerator().device
 
 processor = AutoProcessor.from_pretrained(model_path)
-model = AutoModelForCausalLM.from_pretrained(model_path, device_map=device,  dtype=torch.float16)
+model = AutoModelForCausalLM.from_pretrained(model_path, device_map="auto")
 
-model.load_adapter(model_path, adapter_name="speech", device_map=device, adapter_kwargs={"subfolder": 'speech-lora'})
+model.load_adapter(model_path, adapter_name="speech", device_map="auto", adapter_kwargs={"subfolder": 'speech-lora'})
 model.set_adapter("speech")
 audio_url = "https://upload.wikimedia.org/wikipedia/commons/b/b0/Barbara_Sahakian_BBC_Radio4_The_Life_Scientific_29_May_2012_b01j5j24.flac"
 messages = [
@@ -137,8 +137,7 @@ generate_ids = generate_ids[:, inputs['input_ids'].shape[1]:]
 response = processor.batch_decode(
     generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
 )[0]
-print(f'>>> Response\n{response}')
-
+print(f'Response\n{response}')
 ```
 
 ## Phi4MultimodalFeatureExtractor

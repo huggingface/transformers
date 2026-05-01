@@ -637,6 +637,9 @@ class TrainingArguments:
         ddp_broadcast_buffers (`bool`, *optional*):
             When using distributed training, the value of the flag `broadcast_buffers` passed to
             `DistributedDataParallel`. Will default to `False` if gradient checkpointing is used, `True` otherwise.
+        ddp_static_graph (`bool`, *optional*):
+            When using distributed training, the value of the flag `static_graph` passed to
+            `DistributedDataParallel`.
         ddp_backend (`str`, *optional*):
             The backend to use for distributed training. Must be one of `"nccl"`, `"mpi"`, `"xccl"`, `"gloo"`, `"hccl"`.
         ddp_timeout (`int`, *optional*, defaults to 1800):
@@ -1372,6 +1375,15 @@ class TrainingArguments:
         metadata={
             "help": (
                 "When using distributed training, the value of the flag `broadcast_buffers` passed to "
+                "`DistributedDataParallel`."
+            )
+        },
+    )
+    ddp_static_graph: bool | None = field(
+        default=None,
+        metadata={
+            "help": (
+                "When using distributed training, the value of the flag `static_graph` passed to "
                 "`DistributedDataParallel`."
             )
         },

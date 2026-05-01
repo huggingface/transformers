@@ -40,50 +40,50 @@ The example below demonstrates how to extract image features with [`Pipeline`] o
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
+
 feature_extractor = pipeline(
     task="image-feature-extraction",
     model="facebook/ijepa_vith14_1k",
     device=0,
-    dtype=torch.bfloat16
 )
-features = feature_extractor("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg", return_tensors=True)  
+features = feature_extractor("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg", return_tensors=True).to(model.device)
 
 print(f"Feature shape: {features.shape}")
-
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
-import torch
 from PIL import Image
 from torch.nn.functional import cosine_similarity
-from transformers import AutoModel, AutoProcessor  
 
-url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"  
+from transformers import AutoModel, AutoProcessor
+
+
+url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
 url_2 = "http://images.cocodataset.org/val2017/000000219578.jpg"
 image_1 = Image.open(requests.get(url_1, stream=True).raw)
 image_2 = Image.open(requests.get(url_2, stream=True).raw)
 
-processor = AutoProcessor.from_pretrained("facebook/ijepa_vith14_1k")  
-model = AutoModel.from_pretrained("facebook/ijepa_vith14_1k", dtype="auto", attn_implementation="sdpa")  
+processor = AutoProcessor.from_pretrained("facebook/ijepa_vith14_1k")
+model = AutoModel.from_pretrained("facebook/ijepa_vith14_1k", attn_implementation="sdpa", device_map="auto")
 
 
-def infer(image):  
-    inputs = processor(image, return_tensors="pt")  
-    outputs = model(**inputs)  
-    return outputs.last_hidden_state.mean(dim=1)  
+def infer(image):
+    inputs = processor(image, return_tensors="pt").to(model.device)
+    outputs = model(**inputs)
+    return outputs.last_hidden_state.mean(dim=1)
 
 
-embed_1 = infer(image_1)  
-embed_2 = infer(image_2)  
+embed_1 = infer(image_1)
+embed_2 = infer(image_2)
 
-similarity = cosine_similarity(embed_1, embed_2)  
+similarity = cosine_similarity(embed_1, embed_2)
 print(similarity)
 ```
 
@@ -93,16 +93,14 @@ print(similarity)
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
 
-```py
-import torch
-from transformers import BitsAndBytesConfig, AutoModel, AutoProcessor
-from datasets import load_dataset
+```python
+from transformers import AutoModel, AutoProcessor, BitsAndBytesConfig
+
 
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype=torch.bfloat16,
-    bnb_4bit_use_double_quant=True,
+    bit_use_double_quant=True,
 )
 
 url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -111,11 +109,11 @@ image_1 = Image.open(requests.get(url_1, stream=True).raw)
 image_2 = Image.open(requests.get(url_2, stream=True).raw)
 
 processor = AutoProcessor.from_pretrained("facebook/ijepa_vitg16_22k")
-model = AutoModel.from_pretrained("facebook/ijepa_vitg16_22k", quantization_config=quantization_config, dtype="auto", attn_implementation="sdpa")
+model = AutoModel.from_pretrained("facebook/ijepa_vitg16_22k", quantization_config=quantization_config, attn_implementation="sdpa", device_map="auto")
 
 
 def infer(image):
-    inputs = processor(image, return_tensors="pt")
+    inputs = processor(image, return_tensors="pt").to(model.device)
     outputs = model(**inputs)
     return outputs.last_hidden_state.mean(dim=1)
 

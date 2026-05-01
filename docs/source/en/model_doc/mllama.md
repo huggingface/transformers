@@ -57,11 +57,11 @@ model.set_output_embeddings(resized_embeddings)
 ### Instruct model
 
 ```python
-import torch
-from transformers import MllamaForConditionalGeneration, AutoProcessor
+from transformers import AutoProcessor, MllamaForConditionalGeneration
+
 
 model_id = "meta-llama/Llama-3.2-11B-Vision-Instruct"
-model = MllamaForConditionalGeneration.from_pretrained(model_id, device_map="auto", dtype=torch.bfloat16)
+model = MllamaForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 processor = AutoProcessor.from_pretrained(model_id)
 
 messages = [
@@ -84,12 +84,13 @@ print(processor.decode(output[0]))
 
 ```python
 import requests
-import torch
 from PIL import Image
-from transformers import MllamaForConditionalGeneration, AutoProcessor
+
+from transformers import AutoProcessor, MllamaForConditionalGeneration
+
 
 model_id = "meta-llama/Llama-3.2-11B-Vision"
-model = MllamaForConditionalGeneration.from_pretrained(model_id, device_map="auto", dtype=torch.bfloat16)
+model = MllamaForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 processor = AutoProcessor.from_pretrained(model_id)
 
 prompt = "<|image|>If I had to write a haiku for this one"
