@@ -948,8 +948,8 @@ class DeepseekV4PreTrainedModel(MixtralPreTrainedModel):
     # cache build that does dispatch to V4's own cache layers.
     _can_compile_fullgraph = False
     _keep_in_fp32_modules_strict = ["attn_hc", "ffn_hc"]
-    _keys_to_ignore_on_load_unexpected = [r"model\.mtp\..*"]
-    # `_is_stateful` opts out of generation modes that need to roll the cache
+    _keys_to_ignore_on_load_unexpected = [r"(^|\.)mtp\..*"]
+    # ``_is_stateful`` opts out of generation modes that need to roll the cache
     # back across drafts (assisted generation, prompt lookup, contrastive search).
     # The compressor's running-window state isn't rewindable, so `generate`
     # raises a clear error early instead of failing deep in the compressor with
