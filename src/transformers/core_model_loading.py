@@ -775,41 +775,18 @@ class WeightConverter(WeightTransform):
             pass
 
         if hf_quantizer is not None and self.quantization_operation is not None:
-            if len(collected_tensors) > 1 and model is not None:
-                quantized_tensors = {}
-                for target_key, tensor in collected_tensors.items():
-                    if not hf_quantizer.param_needs_quantization(model, target_key):
-                        quantized_tensors[target_key] = tensor
-                        continue
-                    quantize_input = tensor if isinstance(tensor, list) else [tensor]
-                    with log_conversion_errors(
-                        target_key, loading_info, (len(quantize_input), target_key), self.quantization_operation
-                    ):
-                        quantized_tensors.update(
-                            self.quantization_operation.convert(
-                                {target_key: quantize_input},
-                                source_patterns=self.source_patterns,
-                                target_patterns=[target_key],
-                                full_layer_name=target_key,
-                                config=config,
-                                model=model,
-                                missing_keys=loading_info.missing_keys if loading_info else None,
-                            )
-                        )
-                collected_tensors = quantized_tensors
-            else:
-                with log_conversion_errors(
-                    layer_name, loading_info, (len(collected_tensors), layer_name), self.quantization_operation
-                ):
-                    collected_tensors = self.quantization_operation.convert(
-                        collected_tensors,
-                        source_patterns=self.source_patterns,
-                        target_patterns=self.target_patterns,
-                        full_layer_name=layer_name,
-                        config=config,
-                        model=model,
-                        missing_keys=loading_info.missing_keys if loading_info else None,
-                    )
+            with log_conversion_errors(
+                layer_name, loading_info, (len(collected_tensors), layer_name), self.quantization_operation
+            ):
+                collected_tensors = self.quantization_operation.convert(
+                    collected_tensors,
+                    source_patterns=self.source_patterns,
+                    target_patterns=self.target_patterns,
+                    full_layer_name=layer_name,
+                    config=config,
+                    model=model,
+                    missing_keys=loading_info.missing_keys if loading_info else None,
+                )
         return collected_tensors
 
 
