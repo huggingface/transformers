@@ -1741,7 +1741,9 @@ class ContinuousBatchingConfig:
 
     @property
     def fallback_max_blocks_per_request(self) -> int:
-        """A good default for the size of the block table for the decode path"""
+        """Returns the fallback max blocks per request. If no user-hint is given and decode path is available, this is
+        the default max blocks per request. With default block size of 256, this means a max sequence length of 8192
+        tokens for the fast decode path."""
         return 32
 
     def account_for_cb_deprecated_arguments(

@@ -222,15 +222,10 @@ class PagedAttentionCache:
             f"{self.max_batch_tokens = } {num_attention_masks = }"
         )
 
-        # If max_blocks_per_request is not set, the default value is 16 max blocks. With default block size of 256, this
-        # means a max sequence length of 4096 tokens for the fast decode path.
+        # If max_blocks_per_request is not set, initialize it to the non-zero fallback value
         max_blocks_per_request = continuous_batching_config.max_blocks_per_request
         if max_blocks_per_request is None:
-            max_blocks_per_request = 0
-            # logger.info( TODO: uncomment when we have good defaults
-            #     f"max_blocks_per_request was not set, using {max_blocks_per_request}. This means max sequence "
-            #     f"length for the decode fast path is {max_blocks_per_request * self.block_size}."
-            # )
+            max_blocks_per_request = continuous_batching_config._fallback_max_blocks_per_request
         self.max_blocks_per_request = max_blocks_per_request
 
         # Initialize the cache

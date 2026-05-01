@@ -802,7 +802,10 @@ class ContinuousBatchingAsyncIOs:
         # Transfer the outputs to the host
         io_pair.transfer_outputs_d2h(self.d2h_stream)
         self.d2h_stream.record_event(io_pair.d2h_over)
-        # Switch IO pair
+        # Swap IO pair
+        self.swap_io_pairs()
+
+    def swap_io_pairs(self) -> None:
         self.current_pair = 1 - self.current_pair
 
     # This method is called after the switch and not during the first batch
