@@ -376,8 +376,6 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
             repo_id = _HUB_KERNEL_MAPPING[kernel_name]["repo_id"]
             revision = _HUB_KERNEL_MAPPING[kernel_name].get("revision", None)
             version = _HUB_KERNEL_MAPPING[kernel_name].get("version", None)
-            # Entries in `_HUB_KERNEL_MAPPING` are vetted in-tree, so we trust non-`kernels-community`
-            # repos (e.g. user/team forks) without requiring the per-call `allow_all_kernels` flag.
             kernel = get_kernel(repo_id, revision=revision, version=version, allow_all_kernels=True)
             mapping[kernel_name] = kernel
         except FileNotFoundError:
