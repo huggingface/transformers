@@ -23,7 +23,6 @@ from __future__ import annotations
 import functools
 
 import torch
-from torch.distributed.tensor import DTensor
 
 from ..utils import logging
 from .hub_kernels import lazy_load_kernel
@@ -165,7 +164,7 @@ def sonicmoe_experts_forward(
     w2 = self.down_proj
     b1 = self.gate_up_proj_bias if self.has_bias else None
     b2 = self.down_proj_bias if self.has_bias else None
-    if isinstance(w1, DTensor):
+    if isinstance(w1, torch.distributed.tensor.DTensor):
         w1 = w1.to_local()
         w2 = w2.to_local()
         b1 = b1.to_local() if b1 is not None else None

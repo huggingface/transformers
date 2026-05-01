@@ -399,11 +399,23 @@ def fp8_grouped_mm_experts_forward(
     # quantized weights are inference-only, so no bwd pre-mask is needed.
     sentinel_mask = (expert_ids_g >= self.num_experts).unsqueeze(-1)
 
+    # FSDP2 / EP wraps weights as DTensors but the kernel takes raw pointers — unwrap to
+    # local shards. Inference-only path, so `to_local()` autograd-awareness is moot.
+    w_up = self.gate_up_proj if self.has_gate else self.up_proj
+    ws_up = self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv
+    w_down = self.down_proj
+    ws_down = self.down_proj_scale_inv
+    if isinstance(w_up, torch.distributed.tensor.DTensor):
+        w_up = w_up.to_local()
+        ws_up = ws_up.to_local()
+        w_down = w_down.to_local()
+        ws_down = ws_down.to_local()
+
     # --- Up projection per expert (FP8 grouped) ---
     proj_out = triton_grouped_fp8_matmul(
         selected_hidden_states_g,
-        self.gate_up_proj if self.has_gate else self.up_proj,
-        self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv,
+        w_up,
+        ws_up,
         tokens_per_expert=tokens_per_expert,
         block_size=self.block_size,
         offsets=offsets,
@@ -420,8 +432,8 @@ def fp8_grouped_mm_experts_forward(
     # --- Down projection per expert (FP8 grouped) ---
     proj_out = triton_grouped_fp8_matmul(
         proj_out,
-        self.down_proj,
-        self.down_proj_scale_inv,
+        w_down,
+        ws_down,
         tokens_per_expert=tokens_per_expert,
         block_size=self.block_size,
         offsets=offsets,
@@ -559,9 +571,19 @@ def fp8_deepgemm_experts_forward(
     # reduction. DeepGEMM is inference-only, so no bwd pre-mask is needed.
     sentinel_mask = (expert_ids_g >= self.num_experts).unsqueeze(-1)
 
-    # --- Up projection per expert (DeepGEMM grouped contiguous) ---
+    # FSDP2 / EP wraps weights as DTensors but the kernel takes raw pointers — unwrap to
+    # local shards. Inference-only path, so `to_local()` autograd-awareness is moot.
     w_up = self.gate_up_proj if self.has_gate else self.up_proj
     ws_up = self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv
+    w_down = self.down_proj
+    ws_down = self.down_proj_scale_inv
+    if isinstance(w_up, torch.distributed.tensor.DTensor):
+        w_up = w_up.to_local()
+        ws_up = ws_up.to_local()
+        w_down = w_down.to_local()
+        ws_down = ws_down.to_local()
+
+    # --- Up projection per expert (DeepGEMM grouped contiguous) ---
     act_fp8, act_scales = deepgemm_per_token_cast_to_fp8(selected_hidden_states_g, use_ue8m0=False)
     act_fp8, act_scales = _pad_to_deepgemm_contiguous_layout(act_fp8, act_scales, sorted_to_padded, total_padded_rows)
     proj_out = torch.empty(total_padded_rows, w_up.shape[1], device=device, dtype=torch.bfloat16)
@@ -580,7 +602,7 @@ def fp8_deepgemm_experts_forward(
     proj_out = torch.empty(total_padded_rows, hidden_dim, device=device, dtype=torch.bfloat16)
     deepgemm_grouped_fp8_matmul(
         (proj_fp8, proj_scales),
-        (self.down_proj, self.down_proj_scale_inv.float()),
+        (w_down, ws_down.float()),
         proj_out,
         grouped_layout,
         use_psum_layout=use_psum_layout,
