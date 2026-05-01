@@ -294,6 +294,8 @@ class OffloadingManager:
             for cpu_value_cache, gpu_value_view in zip(self._cpu_value_cache, self._gpu_value_views):
                 host_side_gpu_blocks = gpu_value_view.index_select(0, gpu_ids).to(cpu_value_cache.device)
                 cpu_value_cache.index_copy_(0, cpu_ids, host_side_gpu_blocks)
+            # TODO: async path with a preallocated pinned scratch + non_blocking=True; current .to() materializes
+            # an unpinned intermediate per layer, so _stream_ctx() does not actually overlap.
 
         # No explicit sync needed: finish_request is logical, and the next forward pass serializes on the same stream.
         self._request_id_to_cpu_blocks[request_id] = cpu_indices

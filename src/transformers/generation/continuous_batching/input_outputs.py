@@ -194,9 +194,10 @@ class ContinuousBatchingIOs:
         # Last output token is never changed and set to 0 for async carry on purpose
         self.output_ids.zero_()
         self.total_seqlen_q = 0
-        self.total_seqlen_k = dict.fromkeys(self.cumulative_seqlens_k.keys(), 0)
+        self.total_seqlen_k: dict[str, int] = dict.fromkeys(self.cumulative_seqlens_k.keys(), 0)
         self.max_seqlen_q = 0
-        self.max_seqlen_k = dict.fromkeys(self.cumulative_seqlens_k.keys(), 0)
+        self.max_seqlen_k: dict[str, int] = dict.fromkeys(self.cumulative_seqlens_k.keys(), 0)
+
         # If the attention mask is needed, it is allocated separately
         if attn_mask_is_needed(self.config):
             self.attention_mask = {}
@@ -240,9 +241,9 @@ class ContinuousBatchingIOs:
         other.use_block_table = self.use_block_table
         # Transfer scalar attributes
         other.total_seqlen_q = self.total_seqlen_q
-        other.total_seqlen_k = dict(self.total_seqlen_k.items())
+        other.total_seqlen_k = dict(self.total_seqlen_k)
         other.max_seqlen_q = self.max_seqlen_q
-        other.max_seqlen_k = dict(self.max_seqlen_k.items())
+        other.max_seqlen_k = dict(self.max_seqlen_k)
         # Transfer static tensors
         maybe_stream = torch.cuda.stream(stream) if stream is not None else nullcontext()
         with maybe_stream:
