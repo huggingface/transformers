@@ -1682,18 +1682,25 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             The scheme used for activation, the defaults and only support scheme for now is "dynamic".
         weight_block_size (`typing.tuple[int, int]`, *optional*, defaults to `(128, 128)`):
             The size of the weight blocks for quantization, default is (128, 128).
-        dequantize (`bool`, *optional*, defaults to `False`):
-            Whether to dequantize the model during loading.
         modules_to_not_convert (`list`, *optional*):
             A list of module names that should not be converted during quantization.
+        dequantize (`bool`, *optional*, defaults to `False`):
+            Whether to dequantize the model during loading.
+        scale_fmt (`str`, *optional*, defaults to `"float"`):
+            Storage dtype of the per-block weight scales:
+              - `"float"`: fp32 scales (DeepSeek V3-style; Hopper SM90 1D2D path).
+              - `"ue8m0"`: 1-byte `torch.float8_e8m0fnu` scales (DeepSeek V4-style). At GEMM time
+                the underlying memory is reinterpreted as `torch.int32` (4 UE8M0 bytes per int),
+                feeding the SM100 1D1D dispatch directly with no float→int transform per call.
     """
 
     def __init__(
         self,
         activation_scheme: str = "dynamic",
         weight_block_size: tuple[int, int] = (128, 128),
-        dequantize: bool = False,
         modules_to_not_convert: list | None = None,
+        dequantize: bool = False,
+        scale_fmt: str = "float",
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.FP8
@@ -1701,6 +1708,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         self.activation_scheme = activation_scheme
         self.weight_block_size = weight_block_size
         self.dequantize = dequantize
+        self.scale_fmt = scale_fmt
         self.post_init()
 
     def post_init(self):
@@ -1714,6 +1722,8 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             raise ValueError("weight_block_size must be a tuple of two integers")
         if self.weight_block_size is not None and (self.weight_block_size[0] <= 0 or self.weight_block_size[1] <= 0):
             raise ValueError("weight_block_size must be a tuple of two positive integers")
+        if self.scale_fmt not in ("float", "ue8m0"):
+            raise ValueError(f"scale_fmt must be 'float' or 'ue8m0'; got {self.scale_fmt!r}")
 
     def get_loading_attributes(self):
         return {"dequantize": self.dequantize}

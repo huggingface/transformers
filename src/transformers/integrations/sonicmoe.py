@@ -18,6 +18,8 @@ Provides `sonicmoe_experts_forward` registered as "sonicmoe" in the ExpertsInter
 Requirements: CUDA, `kernels`, `nvidia-cutlass-dsl`, has_gate=True.
 """
 
+from __future__ import annotations
+
 import functools
 
 import torch
@@ -38,16 +40,31 @@ def _load_sonic_kernel():
     Load sonic-moe once and return its required symbols.
 
     Raises:
-        ImportError if the kernel or required symbols are not found.
+        ImportError if CUDA/hardware requirements are not met, or if the kernel or
+        required symbols are not found.
 
     Returns:
         Tuple of (ActivationType, moe_general_routing_inputs function) from the sonic-moe kernel.
     """
 
+    if not torch.cuda.is_available():
+        raise ImportError(
+            "sonic-moe kernel requires CUDA, but CUDA is not available. Use a different `experts_implementation`."
+        )
+
+    # sonic-moe requires Hopper (SM90) or newer
+    major = torch.cuda.get_device_capability()[0]
+    if major < 9:
+        raise ImportError(
+            f"sonic-moe requires a Hopper (SM90+) or newer GPU, but the current device "
+            f"has compute capability {major}.x. Use a different `experts_implementation`."
+        )
+
     kernel = lazy_load_kernel("sonic-moe")
     if kernel is None:
         raise ImportError(
-            "sonic-moe kernel not found. Make sure you have the `kernels` and `nvidia-cutlass-dsl` packages installed."
+            "Failed to load the sonic-moe kernel — check that `kernels-community/sonic-moe` "
+            "has a build matching the current torch/CUDA."
         )
 
     ActivationType = getattr(getattr(kernel, "enums", None), "ActivationType", None)
@@ -70,6 +87,50 @@ def _load_sonic_kernel():
     return ActivationType, moe_general_routing_inputs
 
 
+@torch._dynamo.allow_in_graph
+def _sonicmoe_wrapper(
+    hidden_states: torch.Tensor,
+    router_scores: torch.Tensor,
+    expert_ids: torch.Tensor,
+    token_idx: torch.Tensor,
+    w1: torch.Tensor,
+    b1: torch.Tensor | None,
+    w2: torch.Tensor,
+    b2: torch.Tensor | None,
+    act_name: str,
+    num_experts: int,
+    concat_layout: bool,
+    is_inference_mode_enabled: bool,
+) -> torch.Tensor:
+    """Module-level shim around `moe_general_routing_inputs` so `allow_in_graph` can wrap it.
+
+    sonicmoe asserts `not torch.compiler.is_compiling()` internally because it dispatches
+    CuteDSL kernels, which Dynamo can't trace. `allow_in_graph` keeps the call in the FX
+    graph as a single opaque node (no tracing into the body, no graph break) while still
+    running the real Python at runtime — autograd through `_UpProjection` / `_DownProjection`
+    flows normally. The decorator must be applied at module load time, not inside the compiled
+    function — hence this shim plus the `allow_in_graph` decorator above.
+    """
+    ActivationType, moe_general_routing_inputs = _load_sonic_kernel()
+    activation_type = getattr(ActivationType, ACT_MAP.get(act_name, "swiglu").upper(), ActivationType.SWIGLU)
+    output, _ = moe_general_routing_inputs(
+        hidden_states,
+        router_scores,
+        token_idx,
+        expert_ids,
+        w1,
+        b1,
+        w2,
+        b2,
+        E=num_experts,
+        activation_type=activation_type,
+        is_inference_mode_enabled=is_inference_mode_enabled,
+        concat_layout=concat_layout,
+        stream_id=None,
+    )
+    return output
+
+
 def sonicmoe_experts_forward(
     self: torch.nn.Module,
     hidden_states: torch.Tensor,
@@ -81,8 +142,6 @@ def sonicmoe_experts_forward(
     if hidden_states.device.type != "cuda":
         raise ValueError("sonicmoe requires CUDA device")
 
-    ActivationType, moe_general_routing_inputs = _load_sonic_kernel()
-
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
@@ -92,10 +151,14 @@ def sonicmoe_experts_forward(
     router_scores = top_k_weights.reshape(-1).to(hidden_states.dtype)
     expert_ids = top_k_index.reshape(-1).int()
 
+    # EP sentinel handling: leave `expert_ids` unclamped — the kernel's metadata stage drops
+    # `expert_ids >= num_experts` from the per-expert histogram and masks them out of the
+    # scatter indices, so sentinels never enter the grouped GEMM. Their routing weights are
+    # already zero (RouterParallel masks them at dispatch), so the per-token reduction
+    # contributes nothing for sentinel slots.
+
     # Map activation function
     act_name = getattr(self.config, "hidden_act", "silu").lower()
-    activation_type = getattr(ActivationType, ACT_MAP.get(act_name, "swiglu").upper(), ActivationType.SWIGLU)
-
     # Permute weights as expected by sonic-moe (E=num_experts, H=hidden_size, I=intermediate_size).
     # Non-transposed: gate_up_proj is (E, 2*I, H), down_proj is (E, H, I) -> permute(1, 2, 0).
     # Transposed: gate_up_proj is (E, H, 2*I), down_proj is (E, I, H) -> permute(2, 1, 0).
@@ -105,20 +168,17 @@ def sonicmoe_experts_forward(
     b1 = self.gate_up_proj_bias if self.has_bias else None
     b2 = self.down_proj_bias if self.has_bias else None
 
-    output, _ = moe_general_routing_inputs(
-        hidden_states,
-        router_scores,
-        token_idx,
-        expert_ids,
-        w1,
-        b1,
-        w2,
-        b2,
-        E=self.num_experts,
-        activation_type=activation_type,
-        stream_id=torch.cuda.current_stream(device).cuda_stream,
-        is_inference_mode_enabled=not torch.is_grad_enabled(),
+    return _sonicmoe_wrapper(
+        hidden_states=hidden_states,
+        router_scores=router_scores,
+        expert_ids=expert_ids,
+        token_idx=token_idx,
+        w1=w1,
+        b1=b1,
+        w2=w2,
+        b2=b2,
+        act_name=act_name,
+        num_experts=self.num_experts,
         concat_layout=self.is_concatenated,
+        is_inference_mode_enabled=not torch.is_grad_enabled(),
     )
-
-    return output

@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import annotations
 
 from collections.abc import Callable
 from functools import wraps
@@ -23,11 +24,18 @@ from ..utils.import_utils import (
     is_torch_less_or_equal,
     is_torchdynamo_compiling,
 )
+from .deepgemm import deepgemm_bf16_experts_forward
 from .sonicmoe import sonicmoe_experts_forward
 
 
 if is_torch_available():
     import torch
+
+    # Patch the version-check helpers so dynamo doesn't trace into them — they transitively call
+    # `importlib.util.find_spec`, which dynamo refuses to trace. `assume_constant_result` makes
+    # dynamo evaluate them once at trace time and inline the bool, no body tracing.
+    is_torch_greater_or_equal = torch._dynamo.assume_constant_result(is_torch_greater_or_equal)
+    is_torch_less_or_equal = torch._dynamo.assume_constant_result(is_torch_less_or_equal)
 
 
 logger = logging.get_logger(__name__)
@@ -102,7 +110,7 @@ def _batched_linear(
         out = torch.bmm(weight, input.unsqueeze(-1)).squeeze(-1)
 
     if bias is not None:
-        out = out + bias
+        out.add_(bias)
 
     return out
 
@@ -113,24 +121,20 @@ def batched_mm_experts_forward(
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
-    device = hidden_states.device
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
     hidden_dim = hidden_states.size(-1)
 
-    # Reshape for easier indexing
     # S is the number of selected tokens-experts pairs (S = num_tokens * num_top_k)
-    token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)  # (S,)
+    # Replicate each token num_top_k times to align with the flattened (S,) routing tensors.
+    selected_hidden_states = hidden_states.repeat_interleave(num_top_k, dim=0)
     sample_weights = top_k_weights.reshape(-1)  # (S,)
     expert_ids = top_k_index.reshape(-1)  # (S,)
 
-    # Handle invalid expert IDs from Expert Parallelism (EP)
-    # When EP is enabled, tokens assigned to experts on other devices are marked with sentinel value >= num_experts
-    invalid_mask = expert_ids >= self.num_experts
-    expert_ids = expert_ids.clamp(0, self.num_experts - 1)
-
-    # Get current hidden states for selected samples
-    selected_hidden_states = hidden_states[token_idx]
+    # Clamp EP sentinels so `gate_up_proj[expert_ids]` stays in-bounds. Routing weights are already
+    # zero at sentinel slots (RouterParallel masks them at dispatch), so the weighted mul drops
+    # those contributions — we pay the wasted GEMM compute because batched_mm has no offset to skip.
+    expert_ids.clamp_(0, self.num_experts - 1)
 
     # Select gate_up or just up projection weights and biases
     if self.has_gate:
@@ -162,9 +166,8 @@ def batched_mm_experts_forward(
         proj_out, selected_weights, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, hidden_dim)
 
-    # Apply routing weights and zero out invalid expert contributions
+    # Apply routing weights
     weighted_out = proj_out * sample_weights.unsqueeze(-1)  # (S, hidden_dim)
-    weighted_out.masked_fill_(invalid_mask.unsqueeze(-1), 0.0)  # Zero out invalid expert contributions
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
     # index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd
@@ -363,7 +366,7 @@ def _grouped_linear(
 
     if bias is not None:
         # We should be able to pass bias to the grouped_mm call, but it's not yet supported.
-        out = out + bias
+        out.add_(bias)
 
     return out
 
@@ -379,24 +382,19 @@ def grouped_mm_experts_forward(
     num_tokens = hidden_states.size(0)
     hidden_dim = hidden_states.size(-1)
 
-    # Reshape for easier indexing
     # S is the number of selected tokens-experts pairs (S = num_tokens * num_top_k)
-    token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)  # (S,)
     sample_weights = top_k_weights.reshape(-1)  # (S,)
     expert_ids = top_k_index.reshape(-1)  # (S,)
 
-    # Handle invalid expert IDs from Expert Parallelism (EP)
-    invalid_mask = expert_ids >= self.num_experts
-    expert_ids = expert_ids.clamp(0, self.num_experts - 1)
+    # EP sentinel handling: leave `expert_ids` unclamped so the sort pushes sentinels to the tail,
+    # `histc(max=num_experts-1)` drops them from `tokens_per_expert`, and grouped_mm skips rows
+    # beyond `offsets[-1]` — so sentinels cost no real GEMM compute. Sentinel rows are zeroed
+    # post-weighted-mul (see below), since the kernel leaves them uninitialized.
 
     # Sort by expert for grouped processing
-    perm = torch.argsort(expert_ids)
-    inv_perm = torch.empty_like(perm)
-    inv_perm[perm] = torch.arange(perm.size(0), device=device)
-
-    expert_ids_g = expert_ids[perm]
+    expert_ids_g, perm = torch.sort(expert_ids)
+    selected_hidden_states_g = hidden_states[perm // num_top_k]
     sample_weights_g = sample_weights[perm]
-    selected_hidden_states_g = hidden_states[token_idx[perm]]
 
     # Compute offsets for grouped_mm
     # using histc instead of bincount to avoid cuda graph issues
@@ -405,11 +403,17 @@ def grouped_mm_experts_forward(
     tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1)
     offsets = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
 
+    if self.has_bias:
+        # Clamp now that the layout has been built — needed for the per-row bias gather below to stay
+        # in-bounds. Bias added to sentinel positions falls in rows the kernel skips, so harmless.
+        expert_ids_g.clamp_(0, self.num_experts - 1)
+
     # Select expert weights and biases
     # NOTE: We keep all experts here and rely on offsets to target the active ones.
     # I have already implemented a version that only passes the active experts, but
     # to do so I had to use torch.unique which breaks the graph capture (data-dependent).
     # Also there were no speedup gains from it in my experiments, even in eager mode.
+    # NOTE: The grouped_mm kernel only targets the active experts / tokens via the offsets
     if self.has_gate:
         selected_weights = self.gate_up_proj
         selected_biases = self.gate_up_proj_bias[expert_ids_g] if self.has_bias else None
@@ -439,12 +443,17 @@ def grouped_mm_experts_forward(
         proj_out, selected_weights, offsets, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, hidden_dim)
 
-    # Apply routing weights and zero out invalid expert contributions from EP
+    # Apply routing weights
     weighted_out = proj_out * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
-    invalid_mask_g = invalid_mask[perm]
-    weighted_out.masked_fill_(invalid_mask_g.unsqueeze(-1), 0.0)
+
+    # EP sentinel handling: `proj_out` rows past `offsets[-1]` are left uninitialized by grouped_mm,
+    # so `proj_out[sentinel] * 0 = 0 * NaN = NaN` can leak from allocator pool reuse. Zero them here
+    # so the downstream reduction stays finite even when the routing weight was already zero.
+    weighted_out.masked_fill_((expert_ids_g >= self.num_experts).unsqueeze(-1), 0.0)
 
     # Restore original order
+    inv_perm = torch.empty_like(perm)
+    inv_perm[perm] = torch.arange(perm.size(0), device=device)
     weighted_out = weighted_out[inv_perm]  # (S, hidden_dim)
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
@@ -460,9 +469,10 @@ class ExpertsInterface(GeneralInterface):
     """Interface for registering custom experts forward functions."""
 
     _global_mapping = {
-        "sonicmoe": sonicmoe_experts_forward,
+        "deepgemm": deepgemm_bf16_experts_forward,
         "batched_mm": batched_mm_experts_forward,
         "grouped_mm": grouped_mm_experts_forward,
+        "sonicmoe": sonicmoe_experts_forward,
     }
 
     def get_interface(self, experts_implementation: str, default: Callable) -> Callable:

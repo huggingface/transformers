@@ -1136,6 +1136,14 @@ class RouterParallel(TensorParallelLayer):
         + masked in grouped_mm/batched_mm. After the expert forward, an all_reduce sums
         partial outputs across EP ranks to produce the full result.
         """
+        # Mega MoE: keep the router's raw output. The router still runs (it produces topk_idx
+        # / topk_weights per token), but we skip the EP-time post-processing — Mega MoE's kernel
+        # does the EP token dispatch itself and needs GLOBAL expert ids with unmasked routing
+        # weights. Mirrored on the experts side by `MoeTensorParalellExperts._prepare_output_fn`
+        # which skips the post-forward all_reduce.
+        if getattr(getattr(mod, "config", None), "_experts_implementation", None) == "deepgemm_megamoe":
+            return outputs
+
         ep_rank, ep_size = device_mesh.get_local_rank(), device_mesh.size()
         num_experts = getattr(mod, "num_experts", None)
         if num_experts is None:
@@ -1191,9 +1199,18 @@ class MoeTensorParalellExperts(TensorParallelLayer):
         # and partial_expert_output is different on each GPU before all-reduce
         top_k_weights = all_reduce_backward(top_k_weights, device_mesh)
 
-        return (hidden_states, top_k_index, top_k_weights)
+        # Mega MoE handles EP dispatch + combine inside the kernel — append the EP `process_group`
+        # so the forward can rendezvous the symm-buffer on first call.
+        if getattr(getattr(mod, "config", None), "_experts_implementation", None) == "deepgemm_megamoe":
+            return hidden_states, top_k_index, top_k_weights, device_mesh.get_group()
+
+        return hidden_states, top_k_index, top_k_weights
 
     def _prepare_output_fn(self, mod, outputs, device_mesh):
+        # Mega MoE handles the EP combine inside the kernel — output is already fully reduced.
+        if getattr(getattr(mod, "config", None), "_experts_implementation", None) == "deepgemm_megamoe":
+            return outputs
+
         # all_reduce_forward to sum partial expert outputs across GPUs
         return all_reduce_forward(outputs, device_mesh)
 
