@@ -227,25 +227,27 @@ class Kimi2_6VisionRotaryEmbeddings(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
+        seq_length = position_ids.shape[1]
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
 
         # Multidimensional positions: [batch, num_patches, ndim]. Apply rotations to each spatial dim separately
         all_cos, all_sin = [], []
+        position_ids = torch.flip(position_ids, dims=[-1])
         for i in range(2):
             dim_position_ids = position_ids[:, :, i]
             dim_position_ids_expanded = dim_position_ids[:, None, :].float()
 
             with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
                 freqs = (inv_freq_expanded.float() @ dim_position_ids_expanded.float()).transpose(1, 2)
-                emb = torch.cat((freqs, freqs), dim=-1)
+                emb = torch.cat((freqs, freqs), dim=-1).reshape(seq_length, -1, 2)
                 cos = emb.cos() * self.attention_scaling
                 sin = emb.sin() * self.attention_scaling
             all_cos.append(cos)
             all_sin.append(sin)
 
-        cos = torch.cat(all_cos, dim=-1).to(dtype=x.dtype)
-        sin = torch.cat(all_sin, dim=-1).to(dtype=x.dtype)
+        cos = torch.stack(all_cos, dim=-1).reshape(1, seq_length, -1)
+        sin = torch.stack(all_sin, dim=-1).reshape(1, seq_length, -1)
         return cos, sin
 
 
@@ -261,27 +263,24 @@ class Kimi2_6VisionMLP(nn.Module):
 
 
 def rotate_half(x):
-    x1 = x[..., 0::2]
-    x2 = x[..., 1::2]
-    return torch.stack([-x2, x1], dim=-1).flatten(-2)
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb_vision(q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor to embed.
-        k (`torch.Tensor`): The key tensor to embed.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.squeeze(0).unsqueeze(1)  # (48, 1, 8) — broadcasts over heads
-    sin = sin.squeeze(0).unsqueeze(1)  # (48, 1, 8) — broadcasts over heads
-    q = (q * cos) + (rotate_half(q) * sin)
-    k = (k * cos) + (rotate_half(k) * sin)
-    return q, k
+def apply_rotary_pos_emb_vision(
+    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    orig_q_dtype = q.dtype
+    orig_k_dtype = k.dtype
+    q, k = q.float(), k.float()
+    cos, sin = cos.unsqueeze(-2).float(), sin.unsqueeze(-2).float()
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    q_embed = q_embed.to(orig_q_dtype)
+    k_embed = k_embed.to(orig_k_dtype)
+    return q_embed, k_embed
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -322,7 +321,7 @@ def eager_attention_forward(
 
 
 class Kimi2_6VisionAttention(nn.Module):
-    def __init__(self, config: Kimi2_6VisionConfig) -> None:
+    def __init__(self, config: Kimi2_6VisionConfig, layer_idx=None) -> None:
         super().__init__()
         self.dim = config.hidden_size
         self.num_heads = config.num_attention_heads
@@ -334,21 +333,42 @@ class Kimi2_6VisionAttention(nn.Module):
         self.config = config
         self.attention_dropout = 0.0
         self.is_causal = False
+        self.layer_idx = layer_idx
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
-        rotary_pos_emb: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
+        wqkv = self.qkv.weight.data
+        wq = wqkv[:self.dim, :]
+        wk = wqkv[self.dim:2*self.dim, :]
+        wv = wqkv[2*self.dim:, :]
+
+        def permute(w):
+            return (
+                w.view(self.num_heads, self.dim // self.num_heads // 2, 2, self.dim)
+                .transpose(1, 2)
+                .reshape(self.dim, self.dim)
+            )
+
+        wqkv = torch.cat([permute(wq), permute(wk), wv], dim=0)
+        # self.qkv.weight.data = wqkv
+
         seq_length = hidden_states.shape[0]
         query_states, key_states, value_states = (
             self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
-        )
+        ) # [S, H, HD]
+        # TODO: add rope-permuatation in conversion ops
+        key_states = key_states.reshape(-1, self.num_heads, self.head_dim//2, 2).transpose(-1, -2).reshape_as(value_states)  # interleave -> split
+        query_states = query_states.reshape(-1, self.num_heads, self.head_dim//2, 2).transpose(-1, -2).reshape_as(value_states)  # interleave -> split
+
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
+        query_states = query_states.reshape(-1, self.num_heads, 2, self.head_dim //2).transpose(-1, -2).reshape(-1, self.num_heads, self.head_dim)
+        key_states = key_states.reshape(-1, self.num_heads, 2, self.head_dim //2).transpose(-1, -2).reshape(-1, self.num_heads, self.head_dim)
 
         query_states = query_states.transpose(0, 1).unsqueeze(0)
         key_states = key_states.transpose(0, 1).unsqueeze(0)
@@ -405,12 +425,13 @@ class Kimi2_6VisionAttention(nn.Module):
 
 
 class Kimi2_6VisionEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config) -> None:
+    def __init__(self, config, layer_idx=None) -> None:
         super().__init__()
-        self.norm1 = nn.LayerNorm(config.hidden_size, eps=1e-6)
-        self.norm2 = nn.LayerNorm(config.hidden_size, eps=1e-6)
+        self.norm1 = nn.LayerNorm(config.hidden_size, eps=1e-5)
+        self.norm2 = nn.LayerNorm(config.hidden_size, eps=1e-5)
+        self.layer_idx = layer_idx
 
-        self.attn = Kimi2_6VisionAttention(config=config)
+        self.attn = Kimi2_6VisionAttention(config=config, layer_idx=layer_idx)
         self.mlp = Kimi2_6VisionMLP(config.hidden_size, config.intermediate_size, config.hidden_act)
 
     def forward(
@@ -465,7 +486,7 @@ class Kimi2_6VisionModel(Kimi2_6PreTrainedModel):
 
         self.rotary_emb = Kimi2_6VisionRotaryEmbeddings(config)
         self.encoder_blocks = nn.ModuleList(
-            [Kimi2_6VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)]
+            [Kimi2_6VisionEncoderLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)]
         )
         self.final_layernorm = nn.LayerNorm(config.hidden_size)
         self.post_init()

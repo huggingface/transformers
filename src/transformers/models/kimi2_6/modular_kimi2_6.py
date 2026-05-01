@@ -199,8 +199,8 @@ class Kimi2_6VisionAttention(VisionAttention):
 class Kimi2_6VisionEncoderLayer(Qwen2VLVisionBlock):
     def __init__(self, config):
         super().__init__()
-        self.norm1 = nn.LayerNorm(config.intermediate_size, eps=1e-6)
-        self.norm2 = nn.LayerNorm(config.intermediate_size, eps=1e-6)
+        self.norm1 = nn.LayerNorm(config.intermediate_size, eps=1e-5)
+        self.norm2 = nn.LayerNorm(config.intermediate_size, eps=1e-5)
 
         self.attn = Kimi2_6VisionAttention(config=config)
         self.mlp = Kimi2_6VisionMLP(config.intermediate_size, config.hidden_size, config.hidden_act)

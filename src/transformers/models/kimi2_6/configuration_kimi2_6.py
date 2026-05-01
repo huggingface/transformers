@@ -55,6 +55,7 @@ class Kimi2_6VisionConfig(PreTrainedConfig):
             self.rope_parameters = {"rope_theta": 10_000, "rope_type": "default"}
         super().__post_init__(**kwargs)
 
+
 class Kimi2_6Config(PreTrainedConfig):
     r"""
     projection_ln_eps (`float`, *optional*):

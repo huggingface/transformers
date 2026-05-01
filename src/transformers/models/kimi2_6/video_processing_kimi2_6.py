@@ -81,7 +81,9 @@ class Kimi2_6VideoProcessor(BaseVideoProcessor):
     ) -> dict:
         if size is not None:
             if size.max_height is None or size.max_width is None or (size.max_height != size.max_width):
-                raise ValueError(f"size must contain 'max_height' and 'max_width' keys with identical values but got {size}.")
+                raise ValueError(
+                    f"size must contain 'max_height' and 'max_width' keys with identical values but got {size}."
+                )
         super()._validate_preprocess_kwargs(size=size, **kwargs)
 
     def _preprocess(
