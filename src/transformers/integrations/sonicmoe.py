@@ -23,6 +23,7 @@ from __future__ import annotations
 import functools
 
 import torch
+from torch.distributed.tensor import DTensor
 
 from ..utils import logging
 from .hub_kernels import lazy_load_kernel
@@ -157,16 +158,27 @@ def sonicmoe_experts_forward(
     # already zero (RouterParallel masks them at dispatch), so the per-token reduction
     # contributes nothing for sentinel slots.
 
+    # FSDP2 / EP wraps weights as DTensors but the kernel takes raw CUTLASS / CuteDSL pointers,
+    # so unwrap to local shards before reshaping. `to_local()` is autograd-aware — backward
+    # will rewrap the gradient as a DTensor matching each parameter's placements.
+    w1 = self.gate_up_proj
+    w2 = self.down_proj
+    b1 = self.gate_up_proj_bias if self.has_bias else None
+    b2 = self.down_proj_bias if self.has_bias else None
+    if isinstance(w1, DTensor):
+        w1 = w1.to_local()
+        w2 = w2.to_local()
+        b1 = b1.to_local() if b1 is not None else None
+        b2 = b2.to_local() if b2 is not None else None
+
     # Map activation function
     act_name = getattr(self.config, "hidden_act", "silu").lower()
     # Permute weights as expected by sonic-moe (E=num_experts, H=hidden_size, I=intermediate_size).
     # Non-transposed: gate_up_proj is (E, 2*I, H), down_proj is (E, H, I) -> permute(1, 2, 0).
     # Transposed: gate_up_proj is (E, H, 2*I), down_proj is (E, I, H) -> permute(2, 1, 0).
     perm = (2, 1, 0) if self.is_transposed else (1, 2, 0)
-    w1 = self.gate_up_proj.permute(*perm)  # (2*I, H, E)
-    w2 = self.down_proj.permute(*perm)  # (I, H, E)
-    b1 = self.gate_up_proj_bias if self.has_bias else None
-    b2 = self.down_proj_bias if self.has_bias else None
+    w1 = w1.permute(*perm)  # (2*I, H, E)
+    w2 = w2.permute(*perm)  # (I, H, E)
 
     return _sonicmoe_wrapper(
         hidden_states=hidden_states,
