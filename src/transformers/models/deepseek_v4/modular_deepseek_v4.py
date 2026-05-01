@@ -82,23 +82,6 @@ class DeepseekV4RotaryEmbedding(LagunaRotaryEmbedding):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-def _update_window_buffer(
-    buffer_kv: torch.Tensor | None,
-    buffer_gate: torch.Tensor | None,
-    kv: torch.Tensor,
-    gate: torch.Tensor,
-    compress_rate: int,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    """
-    Merge the current buffer  with with freshly projected `(kv, gate)` and split off
-    the longest window-aligned chunk. Tokens past the last full window stay in the buffer until the
-    next call rounds them out to a multiple of `compress_rate`.
-
-    Returns `(chunk_kv, chunk_gate, new_buffer_kv, new_buffer_gate)`.
-    """
-
-
-
 
 class DeepseekV4HCACache(DynamicSlidingWindowLayer):
     r"""Cache layer for HCA blocks (paper §2.3.2). Holds the long-range compressor's
