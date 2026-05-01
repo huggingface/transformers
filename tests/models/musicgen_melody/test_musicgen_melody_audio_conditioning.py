@@ -1,3 +1,18 @@
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Testing suite for MusicgenMelody audio conditioning."""
+
 import math
 
 import numpy as np
@@ -8,9 +23,9 @@ from transformers import AutoProcessor, MusicgenMelodyForConditionalGeneration
 
 
 @pytest.mark.parametrize("model_id", ["facebook/musicgen-melody"])
-def test_musicgen_melody_audio_conditioning_changes_output(model_id):
+def test_musicgen_melody_audio_conditioning_changes_output(model_id: str):
     """
-    Regression test for: MusicgenMelody ignores audio conditioning (GH issue #45647).
+    Regression test for GH issue #45647: MusicgenMelody ignores audio conditioning.
 
     Two different reference audios should lead to measurably different generated audio,
     when all other inputs (prompt, seed, generation params) are identical.
@@ -28,12 +43,15 @@ def test_musicgen_melody_audio_conditioning_changes_output(model_id):
     t = np.linspace(0, duration, int(sampling_rate * duration), endpoint=False, dtype=np.float32)
 
     # Two simple tones with different frequencies
-    freq_a = 440.0      # A4
-    freq_b = 311.13     # Eb4
+    freq_a = 440.0  # A4
+    freq_b = 311.13  # Eb4
     amplitude = 0.4
 
     ref_a = (amplitude * np.sin(2 * math.pi * freq_a * t)).astype(np.float32)
     ref_b = (amplitude * np.sin(2 * math.pi * freq_b * t)).astype(np.float32)
+
+    # Sanity check: references must actually differ
+    assert not np.allclose(ref_a, ref_b), "reference audios are accidentally identical"
 
     def generate_from_ref(ref_audio: np.ndarray) -> torch.Tensor:
         inputs = processor(
@@ -45,7 +63,7 @@ def test_musicgen_melody_audio_conditioning_changes_output(model_id):
         ).to(torch_device)
 
         if "input_features" in inputs:
-            # match model dtype to avoid unnecessary casting issues
+            # Match model dtype to avoid unnecessary casting issues
             inputs["input_features"] = inputs["input_features"].to(model.dtype)
 
         torch.manual_seed(42)
@@ -62,9 +80,8 @@ def test_musicgen_melody_audio_conditioning_changes_output(model_id):
     gen_a = generate_from_ref(ref_a)
     gen_b = generate_from_ref(ref_b)
 
-    # Compare mean absolute difference between the first codebook outputs
+    # Compare mean absolute difference between the first codebook outputs.
+    # If audio conditioning is ignored, outputs will be (near) identical and diff ~ 0.
     diff = (gen_a[0, 0].float() - gen_b[0, 0].float()).abs().mean().item()
 
-    # This threshold is deliberately small; if outputs are byte-identical or nearly so,
-    # diff will be extremely close to 0.
     assert diff > 1e-3, f"audio conditioning appears inactive, mean abs diff={diff:.8f}"
