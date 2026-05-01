@@ -1187,7 +1187,9 @@ def set_param_for_module(
                 )
                 with torch.no_grad():
                     if ref.is_meta:
-                        torch.utils.swap_tensors(ref, torch.nn.Parameter(dtensor_param, requires_grad=ref.requires_grad))
+                        torch.utils.swap_tensors(
+                            ref, torch.nn.Parameter(dtensor_param, requires_grad=ref.requires_grad)
+                        )
                     else:
                         ref.copy_(dtensor_param)
                 ref._is_hf_initialized = True
