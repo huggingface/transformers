@@ -102,6 +102,7 @@ else:
             ("instructblipvideo", "InstructBlipVideoProcessor"),
             ("internvl", "InternVLProcessor"),
             ("janus", "JanusProcessor"),
+            ("kimi2_6", "Kimi26Processor"),
             ("kosmos-2", "Kosmos2Processor"),
             ("kosmos-2.5", "Kosmos2_5Processor"),
             ("kyutai_speech_to_text", "KyutaiSpeechToTextProcessor"),

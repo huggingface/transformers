@@ -97,6 +97,21 @@ def _build_checkpoint_conversion_mapping():
         "altclip": [
             WeightRenaming(source_patterns=r"layer\.", target_patterns="layers."),
         ],
+        "kimi2_6": [
+            WeightRenaming(source_patterns=r"language_model.model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"language_model.lm_head.weight", target_patterns="lm_head.weight"),
+            WeightRenaming(source_patterns=r"vision_tower.encoder.blocks", target_patterns="model.vision_tower.encoder_blocks"),
+            WeightRenaming(source_patterns=r"vision_tower.encoder.final_layernorm", target_patterns="model.vision_tower.final_layernorm"),
+            WeightRenaming(source_patterns=r"mm_projector.proj.0", target_patterns="model.mm_projector.in_proj"),
+            WeightRenaming(source_patterns=r"mm_projector.proj.2", target_patterns="model.mm_projector.out_proj"),
+            WeightRenaming(source_patterns=r"blocks.(\d+).wo", target_patterns=r"blocks.\1.attn.proj"),
+            WeightRenaming(source_patterns=r"blocks.(\d+).wqkv", target_patterns=r"blocks.\1.attn.qkv"),
+            WeightRenaming(source_patterns=r"blocks.(\d+).norm1", target_patterns=r"blocks.\1.norm2"),
+            WeightRenaming(source_patterns=r"blocks.(\d+).norm0", target_patterns=r"blocks.\1.norm1"),
+            WeightRenaming(source_patterns=r"blocks.(\d+).mlp.fc1", target_patterns=r"blocks.\1.mlp.fc2"),
+            WeightRenaming(source_patterns=r"blocks.(\d+).mlp.fc0", target_patterns=r"blocks.\1.mlp.fc1"),
+            WeightRenaming(source_patterns=r"vision_tower.patch_embed.pos_emb.weight", target_patterns="model.vision_tower.patch_embed.pos_emb.position_embeddings"),
+        ],
         "llava": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
