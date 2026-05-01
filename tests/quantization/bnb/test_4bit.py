@@ -14,6 +14,7 @@
 import gc
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import pytest
 
@@ -868,3 +869,51 @@ class Bnb4bitCompile(unittest.TestCase):
                 max_new_tokens=10,
                 cache_implementation="static",
             )
+
+
+class GetModulesToNotConvertTest(unittest.TestCase):
+    """Unit tests for HfQuantizer.get_modules_to_not_convert (no GPU / no pretrained weights required)."""
+
+    def _make_mock_model(self):
+        """Return a MagicMock that satisfies get_keys_to_not_convert's interface."""
+        from unittest.mock import MagicMock
+
+        mock_model = MagicMock()
+        mock_model.all_tied_weights_keys = {}
+        mock_model.named_parameters.return_value = [("lm_head.weight", None)]
+        mock_model.get_output_embeddings.return_value = None
+        mock_model.named_modules.return_value = []
+        return mock_model
+
+    @patch("transformers.quantizers.base.get_keys_to_not_convert", return_value=["lm_head"])
+    def test_skip_modules_is_additive(self, _mock):
+        """Providing skip_modules must not clear the auto-detected defaults (e.g. lm_head)."""
+        from transformers.quantizers.base import HfQuantizer
+
+        mock_model = self._make_mock_model()
+
+        result = HfQuantizer.get_modules_to_not_convert(mock_model, skip_modules=["model.audio_tower"])
+        self.assertIn("lm_head", result, "lm_head should always be excluded even when skip_modules is provided")
+        self.assertIn("model.audio_tower", result, "user-provided skip module should be included")
+
+    @patch("transformers.quantizers.base.get_keys_to_not_convert", return_value=["lm_head"])
+    def test_skip_modules_none_includes_defaults(self, _mock):
+        """Without skip_modules the auto-detected defaults are still returned."""
+        from transformers.quantizers.base import HfQuantizer
+
+        mock_model = self._make_mock_model()
+        result = HfQuantizer.get_modules_to_not_convert(mock_model, skip_modules=None)
+        self.assertIn("lm_head", result)
+
+    @patch("transformers.quantizers.base.get_keys_to_not_convert", return_value=["lm_head"])
+    def test_keep_in_fp32_modules_combined(self, _mock):
+        """keep_in_fp32_modules should also be merged with defaults."""
+        from transformers.quantizers.base import HfQuantizer
+
+        mock_model = self._make_mock_model()
+        result = HfQuantizer.get_modules_to_not_convert(
+            mock_model, skip_modules=["audio_tower"], keep_in_fp32_modules=["vision_tower"]
+        )
+        self.assertIn("lm_head", result)
+        self.assertIn("audio_tower", result)
+        self.assertIn("vision_tower", result)
