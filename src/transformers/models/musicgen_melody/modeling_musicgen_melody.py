@@ -491,7 +491,7 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
         if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+            past_key_values = DynamicCache(config=self.config)
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         if inputs_embeds is None:
