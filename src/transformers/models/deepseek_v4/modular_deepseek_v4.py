@@ -34,6 +34,9 @@ from ..mixtral.modeling_mixtral import MixtralExperts, MixtralForCausalLM, Mixtr
 from .configuration_deepseek_v4 import DeepseekV4Config
 
 
+logger = logging.get_logger(__name__)
+
+
 def apply_rotary_pos_emb(
     x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, unsqueeze_dim: int = 1
 ) -> torch.Tensor:
@@ -45,7 +48,7 @@ def apply_rotary_pos_emb(
     return torch.cat([nope, rotated], dim=-1)
 
 
-logger = logging.get_logger(__name__)
+
 
 
 class DeepseekV4RMSNorm(DeepseekV3RMSNorm):
@@ -291,7 +294,6 @@ def _overlap_pool(
     new_kv[:, :, ratio:] = chunk_kv[..., head_dim:]
     new_gate[:, :, ratio:] = chunk_gate[..., head_dim:]
 
-    # This is how we are "rolling" the cache + adding an extra "state"
     if n_windows > 1:
         new_kv[:, 1:, :ratio] = chunk_kv[:, :-1, :, :head_dim]
         new_gate[:, 1:, :ratio] = chunk_gate[:, :-1, :, :head_dim]
@@ -380,7 +382,7 @@ class DeepseekV4HCACompressor(nn.Module):
 
 
 class DeepseekV4Indexer(nn.Module):
-    """Lightning Indexer (paper §2.3.1, eqs. 13–17). Used by Compressed Sparse
+    r"""Lightning Indexer (paper §2.3.1, eqs. 13–17). Used by Compressed Sparse
     Attention (CSA) to pick the top-k compressed KV blocks per query.
 
     Each query will only attend to these top-k (`k=?`) thus reduction attention
@@ -420,13 +422,9 @@ class DeepseekV4Indexer(nn.Module):
         self.index_topk = config.index_topk
         self.softmax_scale = self.head_dim**-0.5
         self.weights_scaling = self.n_heads**-0.5
-        # The indexer always pools with the CSA cadence (`compress_rate=4`), so its
-        # inner pool runs the same overlapping-window scheme as :class:`DeepseekV4CSACompressor`
-        # (paper §2.3.1) — `coff = 2` everywhere on the pool branch.
-        self.coff = 2
-        self.kv_proj = nn.Linear(config.hidden_size, self.coff * self.head_dim, bias=False)
-        self.gate_proj = nn.Linear(config.hidden_size, self.coff * self.head_dim, bias=False)
-        self.position_bias = nn.Parameter(torch.empty(self.compress_rate, self.coff * self.head_dim))
+        self.kv_proj = nn.Linear(config.hidden_size, 2 * self.head_dim, bias=False)
+        self.gate_proj = nn.Linear(config.hidden_size, 2 * self.head_dim, bias=False)
+        self.position_bias = nn.Parameter(torch.empty(self.compress_rate, 2 * self.head_dim))
         self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.q_b_proj = nn.Linear(config.q_lora_rank, self.n_heads * self.head_dim, bias=False)
         self.weights_proj = nn.Linear(config.hidden_size, self.n_heads, bias=False)
