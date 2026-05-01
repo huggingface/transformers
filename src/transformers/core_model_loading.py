@@ -1170,18 +1170,14 @@ def set_param_for_module(
         # Remove from missing keys (it's either mismatched, or all good)
         loading_info.missing_keys.discard(target_name)
 
-        if isinstance(ref, DTensor):
-            local_shape, _ = compute_local_shape_and_global_offset(ref.shape, ref.device_mesh, ref.placements)
-            expected_shape = torch.Size(local_shape)
-        else:
-            expected_shape = ref.shape
+        expected_shape = ref.to_local().shape if isinstance(ref, DTensor) else ref.shape
 
         if param_value.shape != expected_shape and hf_quantizer is None:
             loading_info.mismatched_keys.add((target_name, param_value.shape, expected_shape))
         else:
             if isinstance(ref, DTensor):
                 local_param = param_value.detach() if isinstance(param_value, torch.nn.Parameter) else param_value
-                fsdp_param = DTensor.from_local(
+                dtensor_param = DTensor.from_local(
                     local_param.contiguous(),
                     ref.device_mesh,
                     ref.placements,
@@ -1191,10 +1187,9 @@ def set_param_for_module(
                 )
                 with torch.no_grad():
                     if ref.is_meta:
-                        fsdp_param = torch.nn.Parameter(fsdp_param, requires_grad=ref.requires_grad)
-                        torch.utils.swap_tensors(ref, fsdp_param)
+                        torch.utils.swap_tensors(ref, torch.nn.Parameter(dtensor_param, requires_grad=ref.requires_grad))
                     else:
-                        ref.copy_(fsdp_param)
+                        ref.copy_(dtensor_param)
                 ref._is_hf_initialized = True
             else:
                 # super important otherwise _init_weight will re-init the param
