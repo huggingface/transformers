@@ -236,19 +236,19 @@ class DeepseekV4CSACache(DeepseekV4HCACache):
     r"""Cache layer for CSA blocks (paper §2.3.1). Extends :class:`DeepseekV4HCACache`
     by adding an `"indexer"` entry to the inherited `buffer_kv` / `buffer_gate` /
     `compressed_kv` / `entry_count` dicts, plus per-name *overlap* state for the
-    channel-split window scheme.
+    two-series window scheme.
 
     What "overlap" means here: the CSA `kv_proj` / `gate_proj` produce `2 * head_dim`
-    channels per source token, packed as two interleaved series in the same tensor.
-    For each window `w` the pooled output mixes window `w`'s high-channel slice
-    with window `w-1`'s low-channel slice — effective width `2 * compress_rate_csa`,
+    features per source token — two independent compressed series Ca and Cb stored
+    in one tensor. Ca occupies `[..., :head_dim]`, Cb occupies `[..., head_dim:]`.
+    Pooled entry `w` is the softmax-gated convex combination of window `w-1`'s Ca
+    slice with window `w`'s Cb slice — effective width `2 * compress_rate_csa`,
     stride `compress_rate_csa` (paper §2.3.1).
 
-    Because adjacent windows share state only through that *low-channel slice of the
-    previous window*, the only thing we need to carry across a forward boundary is
-    `chunk[:, -1, :, :head_dim]` of the last full window — the high-channel half
-    is never read again. That's what `overlap_kv[name]` / `overlap_gate[name]`
-    persist.
+    Because adjacent windows share state only through *the previous window's Ca
+    slice*, the only thing we need to carry across a forward boundary is
+    `chunk[:, -1, :, :head_dim]` (Ca) of the last full window — Cb is never read
+    again. That's what `overlap_kv[name]` / `overlap_gate[name]` persist.
     """
 
     layer_type = "compressed_sparse_attention"
@@ -267,13 +267,12 @@ class DeepseekV4CSACache(DeepseekV4HCACache):
         self, name: str, chunk_kv: torch.Tensor, chunk_gate: torch.Tensor, head_dim: int
     ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
         r"""
-        Read the `name` entry's prior window's low-channel slice (saved on the
-        previous forward call) and persist the *current* call's last-window
-        low-channel slice for the next call. Only the `:head_dim` slice is ever
-        consumed downstream (the high-channel half belongs to the previous
-        window's pooled output, which has already been emitted), so we store
-        half what `chunk[:, -1]` holds. Returns `(prior_kv, prior_gate)` —
-        both `None` on the very first call.
+        Read the `name` entry's prior window's Ca slice (saved on the previous
+        forward call) and persist the *current* call's last-window Ca slice for
+        the next call. Only the `:head_dim` slice (Ca) is ever consumed
+        downstream — Cb has already been folded into the previous window's
+        emitted pooled entry — so we store half what `chunk[:, -1]` holds.
+        Returns `(prior_kv, prior_gate)` — both `None` on the very first call.
         """
         prior_kv, prior_gate = self.overlap_kv[name], self.overlap_gate[name]
         self.overlap_kv[name] = chunk_kv[:, -1, :, :head_dim].clone()
@@ -473,7 +472,7 @@ class DeepseekV4Indexer(nn.Module):
             chunk_kv = chunk_kv.view(batch, n_windows, ratio, -1)
             chunk_gate = chunk_gate.view(batch, n_windows, ratio, -1) + self.position_bias.to(chunk_gate.dtype)
 
-            # Same channel-split overlap layout as the outer CSA compressor, at index_head_dim.
+            # Same Ca / Cb overlap layout as the outer CSA compressor, at index_head_dim.
             new_kv = chunk_kv.new_zeros((batch, n_windows, 2 * ratio, self.head_dim))
             new_gate = chunk_gate.new_full((batch, n_windows, 2 * ratio, self.head_dim), float("-inf"))
             new_kv[:, :, ratio:] = chunk_kv[..., self.head_dim :]
@@ -490,11 +489,9 @@ class DeepseekV4Indexer(nn.Module):
             compressed = self.kv_norm(
                 (new_kv * new_gate.softmax(dim=2, dtype=torch.float32).to(new_kv.dtype)).sum(dim=2)
             )
-            positions = (
-                (torch.arange(n_windows, device=compressed.device) * self.compress_rate + first_pool_position)
-                .unsqueeze(0)
-                .expand(batch, -1)
-            )
+            positions = torch.arange(n_windows, device=compressed.device)
+            positions = positions * self.compress_rate + first_pool_position
+            positions = positions.unsqueeze(0).expand(batch, -1)
             cos, sin = self.rotary_emb(compressed, position_ids=positions, layer_type=self.rope_layer_type)
             compressed = apply_rotary_pos_emb(compressed.unsqueeze(1), cos, sin).squeeze(1)
         else:
@@ -502,12 +499,12 @@ class DeepseekV4Indexer(nn.Module):
 
         pooled_kv = compressed if cache_layer is None else cache_layer.update_compressor_states("indexer", compressed)
 
-        # --- Query side ---
         cos_q, sin_q = self.rotary_emb(hidden_states, position_ids=position_ids, layer_type=self.rope_layer_type)
         q = self.q_b_proj(q_residual).view(batch, seq_len, -1, self.head_dim).transpose(1, 2)
         q = apply_rotary_pos_emb(q, cos_q, sin_q).transpose(1, 2)
 
-        # --- Score: ReLU(q·kᵀ) * weights, then top-k ---
+        # ReLU(q·kᵀ) * weights, then top-k
+        scores = torch.matmul(q.float(), pooled_kv.transpose(-1, -2).float().unsqueeze(1))  # [B, S, H, T]
         scores = torch.matmul(q.float(), pooled_kv.transpose(-1, -2).float().unsqueeze(1))  # [B, S, H, T]
         scores = F.relu(scores) * self.softmax_scale
         weights = self.weights_proj(hidden_states).float() * self.weights_scaling  # [B, S, H]
@@ -524,15 +521,16 @@ class DeepseekV4CSACompressor(nn.Module):
     entries per query before they reach core attention.
 
     `kv_proj` / `gate_proj` / `position_bias` project to `2 * head_dim`: each token
-    contributes two independent series in the same tensor — the high-channel
-    half (`[..., head_dim:]`) is its contribution to the *current* window, the
-    low-channel half (`[..., :head_dim]`) is its contribution to the *next*
-    window. Pooled entry `w` is then the softmax-gated convex combination of
-    window `w`'s high-channel half and window `w-1`'s low-channel half over
-    `2 * compress_rate_csa` slots — width `2 * compress_rate_csa`, stride
-    `compress_rate_csa`. The previous-window contribution for `w = 0` comes
-    from the cache's overlap state (or is zeroed-out / `-inf`-gated when there
-    is no cache).
+    contributes two independent compressed series Ca and Cb stored in one
+    tensor. Ca = `[..., :head_dim]` (the token's contribution to the *next*
+    window's pooled entry), Cb = `[..., head_dim:]` (its contribution to the
+    *current* window's pooled entry). Pooled entry `w` is the softmax-gated
+    convex combination of window `w-1`'s Ca slice with window `w`'s Cb slice
+    over `2 * compress_rate_csa` slots — width `2 * compress_rate_csa`, stride
+    `compress_rate_csa`. For `w = 0` we need the previous window's Ca slice
+    from the *previous forward call*; the cache holds it in `overlap_kv` and
+    hands it back here. On the very first call (or when there is no cache)
+    that slot stays zero-kv / `-inf`-gate, which gives it softmax weight 0.
     """
 
     rope_layer_type = "compress"
@@ -574,9 +572,12 @@ class DeepseekV4CSACompressor(nn.Module):
             chunk_kv = chunk_kv.view(batch, n_windows, ratio, -1)
             chunk_gate = chunk_gate.view(batch, n_windows, ratio, -1) + self.position_bias.to(chunk_gate.dtype)
 
-            # Channel-split into [B, n_win, 2*ratio, head_dim]: high half = current window,
-            # low half = previous window's contribution. Window 0's previous slot stays
-            # zero-kv / -inf-gate unless the cache supplies a cross-call prior.
+            # Lay out the two series in [B, n_win, 2*ratio, head_dim]: Cb
+            # (`[..., head_dim:]`) goes in the second half (current window),
+            # Ca of the previous window (`[..., :head_dim]`) goes in the
+            # first half. Window 0's first half stays zero-kv / -inf-gate
+            # (softmax weight 0) on the very first forward call; on later
+            # calls the cache fills it with the saved Ca slice.
             new_kv = chunk_kv.new_zeros((batch, n_windows, 2 * ratio, self.head_dim))
             new_gate = chunk_gate.new_full((batch, n_windows, 2 * ratio, self.head_dim), float("-inf"))
             new_kv[:, :, ratio:] = chunk_kv[..., self.head_dim :]
@@ -597,11 +598,9 @@ class DeepseekV4CSACompressor(nn.Module):
             compressed = self.kv_norm(
                 (new_kv * new_gate.softmax(dim=2, dtype=torch.float32).to(new_kv.dtype)).sum(dim=2)
             )
-            positions = (
-                (torch.arange(n_windows, device=compressed.device) * self.compress_rate + first_pool_position)
-                .unsqueeze(0)
-                .expand(batch, -1)
-            )
+            positions = torch.arange(n_windows, device=compressed.device)
+            positions = positions * self.compress_rate + first_pool_position
+            positions = positions.unsqueeze(0).expand(batch, -1)
             cos, sin = self.rotary_emb(compressed, position_ids=positions, layer_type=self.rope_layer_type)
             compressed = apply_rotary_pos_emb(compressed.unsqueeze(1), cos, sin).squeeze(1)
         else:

@@ -411,11 +411,9 @@ class DeepseekV4Indexer(nn.Module):
             compressed = self.kv_norm(
                 (new_kv * new_gate.softmax(dim=2, dtype=torch.float32).to(new_kv.dtype)).sum(dim=2)
             )
-            positions = (
-                (torch.arange(n_windows, device=compressed.device) * self.compress_rate + first_pool_position)
-                .unsqueeze(0)
-                .expand(batch, -1)
-            )
+            positions = torch.arange(n_windows, device=compressed.device)
+            positions = positions * self.compress_rate + first_pool_position
+            positions = positions.unsqueeze(0).expand(batch, -1)
             cos, sin = self.rotary_emb(compressed, position_ids=positions, layer_type=self.rope_layer_type)
             compressed = apply_rotary_pos_emb(compressed.unsqueeze(1), cos, sin).squeeze(1)
         else:
@@ -423,12 +421,11 @@ class DeepseekV4Indexer(nn.Module):
 
         pooled_kv = compressed if cache_layer is None else cache_layer.update_compressor_states("indexer", compressed)
 
-        # --- Query side ---
         cos_q, sin_q = self.rotary_emb(hidden_states, position_ids=position_ids, layer_type=self.rope_layer_type)
         q = self.q_b_proj(q_residual).view(batch, seq_len, -1, self.head_dim).transpose(1, 2)
         q = apply_rotary_pos_emb(q, cos_q, sin_q).transpose(1, 2)
 
-        # --- Score: ReLU(q·kᵀ) * weights, then top-k ---
+        # ReLU(q·kᵀ) * weights, then top-k
         scores = torch.matmul(q.float(), pooled_kv.transpose(-1, -2).float().unsqueeze(1))  # [B, S, H, T]
         scores = F.relu(scores) * self.softmax_scale
         weights = self.weights_proj(hidden_states).float() * self.weights_scaling  # [B, S, H]
@@ -452,9 +449,10 @@ class DeepseekV4CSACompressor(nn.Module):
     *current* window's pooled entry). Pooled entry `w` is the softmax-gated
     convex combination of window `w-1`'s Ca slice with window `w`'s Cb slice
     over `2 * compress_rate_csa` slots — width `2 * compress_rate_csa`, stride
-    `compress_rate_csa`. The previous-window Ca for `w = 0` comes from the
-    cache's overlap state (or stays zero-kv / `-inf`-gate when there is no
-    cache, which makes its softmax weight exactly 0).
+    `compress_rate_csa`. For `w = 0` we need the previous window's Ca slice
+    from the *previous forward call*; the cache holds it in `overlap_kv` and
+    hands it back here. On the very first call (or when there is no cache)
+    that slot stays zero-kv / `-inf`-gate, which gives it softmax weight 0.
     """
 
     rope_layer_type = "compress"
@@ -496,11 +494,12 @@ class DeepseekV4CSACompressor(nn.Module):
             chunk_kv = chunk_kv.view(batch, n_windows, ratio, -1)
             chunk_gate = chunk_gate.view(batch, n_windows, ratio, -1) + self.position_bias.to(chunk_gate.dtype)
 
-            # Lay out the two series in [B, n_win, 2*ratio, head_dim]: Cb half
-            # (`[..., head_dim:]`) is the current window, Ca half
-            # (`[..., :head_dim]` of the *previous* window) sits in the leading
-            # `:ratio` slots. Window 0's prior slot stays zero-kv / -inf-gate
-            # (softmax weight 0) unless the cache supplies a cross-call prior.
+            # Lay out the two series in [B, n_win, 2*ratio, head_dim]: Cb
+            # (`[..., head_dim:]`) goes in the second half (current window),
+            # Ca of the previous window (`[..., :head_dim]`) goes in the
+            # first half. Window 0's first half stays zero-kv / -inf-gate
+            # (softmax weight 0) on the very first forward call; on later
+            # calls the cache fills it with the saved Ca slice.
             new_kv = chunk_kv.new_zeros((batch, n_windows, 2 * ratio, self.head_dim))
             new_gate = chunk_gate.new_full((batch, n_windows, 2 * ratio, self.head_dim), float("-inf"))
             new_kv[:, :, ratio:] = chunk_kv[..., self.head_dim :]
@@ -521,11 +520,9 @@ class DeepseekV4CSACompressor(nn.Module):
             compressed = self.kv_norm(
                 (new_kv * new_gate.softmax(dim=2, dtype=torch.float32).to(new_kv.dtype)).sum(dim=2)
             )
-            positions = (
-                (torch.arange(n_windows, device=compressed.device) * self.compress_rate + first_pool_position)
-                .unsqueeze(0)
-                .expand(batch, -1)
-            )
+            positions = torch.arange(n_windows, device=compressed.device)
+            positions = positions * self.compress_rate + first_pool_position
+            positions = positions.unsqueeze(0).expand(batch, -1)
             cos, sin = self.rotary_emb(compressed, position_ids=positions, layer_type=self.rope_layer_type)
             compressed = apply_rotary_pos_emb(compressed.unsqueeze(1), cos, sin).squeeze(1)
         else:
