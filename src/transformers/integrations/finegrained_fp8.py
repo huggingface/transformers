@@ -257,13 +257,11 @@ class FP8Linear(nn.Linear):
         if self.weight.element_size() > 1:
             return F.linear(input, self.weight, self.bias)
 
-        if isinstance(self.weight, torch.distributed.tensor.DTensor):
-            weight = self.weight._local_tensor.contiguous()
-            scale_inv = self.weight_scale_inv._local_tensor.contiguous()
-        else:
-            # why wouldn't it be contiguous?
-            weight = self.weight.contiguous()
-            scale_inv = self.weight_scale_inv.contiguous()
+        weight = self.weight
+        scale_inv = self.weight_scale_inv
+        if isinstance(weight, torch.distributed.tensor.DTensor):
+            weight = weight.to_local()
+            scale_inv = scale_inv.to_local()
 
         if self.activation_scheme == "dynamic":
             _, triton_fp8_act_quant, _, _ = _load_triton_kernel()
