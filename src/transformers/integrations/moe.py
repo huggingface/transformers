@@ -385,11 +385,6 @@ def grouped_mm_experts_forward(
     sample_weights = top_k_weights.reshape(-1)  # (S,)
     expert_ids = top_k_index.reshape(-1)  # (S,)
 
-    # EP sentinel handling: leave `expert_ids` unclamped so the sort pushes sentinels to the tail,
-    # `histc(max=num_experts-1)` drops them from `tokens_per_expert`, and grouped_mm skips rows
-    # beyond `offsets[-1]` — so sentinels cost no real GEMM compute. Sentinel rows are zeroed
-    # post-weighted-mul (see below), since the kernel leaves them uninitialized.
-
     # Sort by expert for grouped processing
     expert_ids_g, perm = torch.sort(expert_ids)
     selected_hidden_states_g = hidden_states[perm // num_top_k]
@@ -402,10 +397,23 @@ def grouped_mm_experts_forward(
     tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1)
     offsets = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
 
-    if self.has_bias:
-        # Clamp now that the layout has been built — needed for the per-row bias gather below to stay
-        # in-bounds. Bias added to sentinel positions falls in rows the kernel skips, so harmless.
-        expert_ids_g.clamp_(0, self.num_experts - 1)
+    # EP sentinel handling: leave `expert_ids` unclamped so the sort pushes sentinels to the tail,
+    # `histc(max=num_experts-1)` drops them from `tokens_per_expert`, and grouped_mm skips rows
+    # beyond `offsets[-1]` — sentinels cost no real GEMM compute. The kernel leaves sentinel-tail
+    # rows of its output uninit (both fwd output and bwd `d_input`), but ONE pre-mask + ONE
+    # post-mask covers the whole forward — no per-grouped_mm masking is needed, because
+    # intermediate sentinel-row NaN is only ever consumed by the next grouped_mm, which itself
+    # only reads rows `< offsets[-1]`:
+    #   - fwd post-mask on `weighted_out`: kills `proj_out[sentinel] * 0 = NaN * 0 = NaN`
+    #     before the per-token reduction sums it.
+    #   - bwd pre-mask on `selected_hidden_states_g`: its `masked_fill_` backward zeros sentinel
+    #     rows of `d_selected_hidden_states_g` after the up grouped_mm bwd writes them as
+    #     uninit, and before the gather's scatter-add pushes them into `d_hidden_states`.
+    # In-place clamp on `expert_ids_g` keeps the per-row bias gather in-bounds (bias added at
+    # sentinel positions falls in rows the kernel skips, so harmless). Safe to mutate now —
+    # nothing downstream needs the sentinel info from `expert_ids_g` itself.
+    sentinel_mask = (expert_ids_g >= self.num_experts).unsqueeze(-1)
+    expert_ids_g.clamp_(max=self.num_experts - 1)
 
     # Select expert weights and biases
     # NOTE: We keep all experts here and rely on offsets to target the active ones.
@@ -419,6 +427,9 @@ def grouped_mm_experts_forward(
     else:
         selected_weights = self.up_proj
         selected_biases = self.up_proj_bias[expert_ids_g] if self.has_bias else None
+
+    # Pre-mask (bwd path).
+    selected_hidden_states_g.masked_fill_(sentinel_mask, 0.0)
 
     # --- Up projection per expert (grouped) ---
     proj_out = _grouped_linear(
@@ -445,10 +456,8 @@ def grouped_mm_experts_forward(
     # Apply routing weights
     weighted_out = proj_out * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
 
-    # EP sentinel handling: `proj_out` rows past `offsets[-1]` are left uninitialized by grouped_mm,
-    # so `proj_out[sentinel] * 0 = 0 * NaN = NaN` can leak from allocator pool reuse. Zero them here
-    # so the downstream reduction stays finite even when the routing weight was already zero.
-    weighted_out.masked_fill_((expert_ids_g >= self.num_experts).unsqueeze(-1), 0.0)
+    # Post-mask (fwd path).
+    weighted_out.masked_fill_(sentinel_mask, 0.0)
 
     # Restore original order
     inv_perm = torch.empty_like(perm)
