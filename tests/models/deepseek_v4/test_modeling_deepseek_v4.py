@@ -92,6 +92,14 @@ class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
     def is_pipeline_test_to_skip(self, *args, **kwargs):
         return True
 
+    @unittest.skip(
+        "V4's `DeepseekV4GroupedLinear` uses `torch.bmm` for the per-group matmul; "
+        "torchao's Float8Tensor only fast-paths `F.linear` (bmm needs the optional `mslk` "
+        "kernel) so the quantized-TP path fails. A custom V4 FP8 path will land later."
+    )
+    def test_tp_generation_quantized(self):
+        pass
+
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):

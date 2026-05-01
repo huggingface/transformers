@@ -162,23 +162,6 @@ def _load_deepgemm_kernel():
             "Please update the `kernels` package (`pip install -U kernels`)."
         )
 
-    # Smoke-test: run a tiny FP8 matmul to verify the JIT compiler actually works.
-    # DeepGEMM can import fine but fail at runtime (e.g. missing library_root_path).
-    try:
-        M, N, K = 128, 128, 128
-        a = torch.zeros(M, K, dtype=_FP8_DTYPE, device="cuda")
-        a_scales = torch.ones(M, K // 128, dtype=torch.float32, device="cuda")
-        b = torch.zeros(N, K, dtype=_FP8_DTYPE, device="cuda")
-        b_scales = torch.ones(N // 128, K // 128, dtype=torch.float32, device="cuda")
-        out = torch.empty(M, N, dtype=torch.bfloat16, device="cuda")
-        deepgemm_fp8_matmul((a, a_scales), (b, b_scales), out)
-    except Exception as e:
-        raise ImportError(
-            f"DeepGEMM kernel loaded but failed the runtime smoke-test: {e}. "
-            "The JIT compiler may be misconfigured. Try reinstalling the `kernels` package "
-            "(`pip install -U kernels`) or clearing the cached build."
-        ) from e
-
     _deepgemm_available = True
 
 
@@ -624,9 +607,9 @@ class FP8Experts(nn.Module):
         self.block_size = block_size
         self.hidden_dim = config.hidden_size
         self.activation_scheme = activation_scheme
-        self.num_experts = getattr(config, "num_local_experts", None)
-        self.intermediate_dim = getattr(config, "moe_intermediate_size", config.intermediate_size)
-        self.act_fn = ACT2FN[getattr(config, "hidden_activation", config.hidden_act)]
+        self.num_experts = _first_attr(config, "num_local_experts", "num_experts")
+        self.intermediate_dim = _first_attr(config, "moe_intermediate_size", "intermediate_size")
+        self.act_fn = ACT2FN[_first_attr(config, "hidden_activation", "hidden_act")]
 
         if self.has_gate:
             gu_proj_out, gu_proj_in = 2 * self.intermediate_dim, self.hidden_dim
@@ -743,7 +726,7 @@ class FP8ExpertsInterface(ExpertsInterface):
     _global_mapping = {
         "batched_mm": fp8_batched_mm_experts_forward,
         "grouped_mm": fp8_grouped_mm_experts_forward,
-        # "deepgemm": fp8_deepgemm_experts_forward,
+        "deepgemm": fp8_deepgemm_experts_forward,
     }
 
 

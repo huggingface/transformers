@@ -40,6 +40,15 @@ logger = logging.get_logger(__name__)
 def apply_rotary_pos_emb(
     x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, unsqueeze_dim: int = 1
 ) -> torch.Tensor:
+    """V4 interleaved RoPE applied to the *trailing* rope slice of `x`.
+
+    `cos` / `sin` come in half-sized (one entry per interleaved pair, from
+    `DeepseekV4RotaryEmbedding`); we expand them to the full rope dim with
+    `repeat_interleave`, then rotate the last `2 * cos.shape[-1]` channels of `x`
+    with the standard `x*cos + rotate_half(x)*sin` formula in fp32 and leave the
+    leading nope channels untouched. V4-Flash lays each head out as `[nope | rope]`,
+    matching the reference's `x[..., -rd:]` indexing.
+    """
     cos = cos.repeat_interleave(2, dim=-1).unsqueeze(unsqueeze_dim)
     sin = sin.repeat_interleave(2, dim=-1).unsqueeze(unsqueeze_dim)
     rope_dim = cos.shape[-1]
@@ -99,6 +108,11 @@ class DeepseekV4RotaryEmbedding(LagunaRotaryEmbedding):
             setattr(self, f"{layer_type}_attention_scaling", attention_scaling)
 
     def forward(self, x, position_ids, layer_type=None):
+        # Key difference vs Laguna's forward: no `torch.cat([freqs, freqs], dim=-1)`
+        # duplication. V4's interleaved RoPE pairs consecutive channels, so we only need
+        # `rope_head_dim // 2` unique θ entries — the `apply_rotary_pos_emb` helper does
+        # the `repeat_interleave(2)` next to the rotation math, where the link between
+        # the doubled dim and `rotate_half` is local and obvious.
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
         inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
@@ -172,10 +186,10 @@ class DeepseekV4HCACache(DynamicSlidingWindowLayer):
         `compress_rate` tokens.
         """
         first_window_position = self.entry_count[name] * self.compress_rate
-        bk, bg = self.buffer_kv[name], self.buffer_gate[name]
-        if bk is not None and bk.shape[1]:
-            kv = torch.cat([bk, kv], dim=1)
-            gate = torch.cat([bg, gate], dim=1)
+        buffered_kv, buffered_gate = self.buffer_kv[name], self.buffer_gate[name]
+        if buffered_kv is not None and buffered_kv.shape[1]:
+            kv = torch.cat([buffered_kv, kv], dim=1)
+            gate = torch.cat([buffered_gate, gate], dim=1)
         # only return the longest prefix that's a multiple of compress_rate; the rest stays in the buffer for next time
         usable = (kv.shape[1] // self.compress_rate) * self.compress_rate
         self.buffer_kv[name], self.buffer_gate[name] = kv[:, usable:], gate[:, usable:]
@@ -268,9 +282,9 @@ class DeepseekV4GroupedLinear(nn.Linear):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         input_shape = x.shape[:-2]
-        d_in = x.shape[-1]
-        w = self.weight.view(self.n_groups, -1, d_in).transpose(1, 2)
-        x = x.reshape(-1, self.n_groups, d_in).transpose(0, 1)
+        hidden_dim = x.shape[-1]
+        w = self.weight.view(self.n_groups, -1, hidden_dim).transpose(1, 2)
+        x = x.reshape(-1, self.n_groups, hidden_dim).transpose(0, 1)
         y = torch.bmm(x, w).transpose(0, 1)
         return y.reshape(*input_shape, self.n_groups, -1)
 
@@ -310,8 +324,8 @@ class DeepseekV4HCACompressor(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        _q_residual: torch.Tensor,
-        _position_ids: torch.Tensor,
+        q_residual: torch.Tensor,
+        position_ids: torch.Tensor,
         past_key_values: Cache | None,
         layer_idx: int,
     ) -> torch.Tensor:
@@ -380,17 +394,17 @@ class DeepseekV4Indexer(nn.Module):
     def __init__(self, config: DeepseekV4Config):
         super().__init__()
         self.compress_rate = config.compress_rates["compressed_sparse_attention"]
-        self.n_heads = config.index_n_heads
+        self.num_heads = config.index_n_heads
         self.head_dim = config.index_head_dim
         self.index_topk = config.index_topk
         self.softmax_scale = self.head_dim**-0.5
-        self.weights_scaling = self.n_heads**-0.5
+        self.weights_scaling = self.num_heads**-0.5
         self.kv_proj = nn.Linear(config.hidden_size, 2 * self.head_dim, bias=False)
         self.gate_proj = nn.Linear(config.hidden_size, 2 * self.head_dim, bias=False)
         self.position_bias = nn.Parameter(torch.empty(self.compress_rate, 2 * self.head_dim))
         self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.q_b_proj = nn.Linear(config.q_lora_rank, self.n_heads * self.head_dim, bias=False)
-        self.weights_proj = nn.Linear(config.hidden_size, self.n_heads, bias=False)
+        self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.head_dim, bias=False)
+        self.weights_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
         self.rotary_emb = DeepseekV4RotaryEmbedding(config)
 
     def forward(
@@ -600,9 +614,9 @@ class DeepseekV4Attention(nn.Module):
         self.scaling = self.head_dim**-0.5
 
         self.q_a_proj = nn.Linear(config.hidden_size, config.q_lora_rank, bias=False)
-        self.q_norm = DeepseekV4RMSNorm(config.q_lora_rank, eps=config.rms_norm_eps)
+        self.q_a_norm = DeepseekV4RMSNorm(config.q_lora_rank, eps=config.rms_norm_eps)
         self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.head_dim, bias=False)
-        self.q_head_norm = DeepseekV4UnweightedRMSNorm(eps=config.rms_norm_eps)
+        self.q_b_norm = DeepseekV4UnweightedRMSNorm(eps=config.rms_norm_eps)
         self.kv_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
         self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.o_a_proj = DeepseekV4GroupedLinear(
@@ -610,8 +624,9 @@ class DeepseekV4Attention(nn.Module):
         )
         self.o_b_proj = nn.Linear(config.o_groups * config.o_lora_rank, config.hidden_size, bias=False)
         self.sinks = nn.Parameter(torch.empty(self.num_heads))
-        compressor_cls = COMPRESSOR_CLASSES[self.layer_type]
-        self.compressor = compressor_cls(config) if compressor_cls is not None else None
+        self.compressor = (
+            COMPRESSOR_CLASSES[self.layer_type](config) if self.layer_type != "sliding_attention" else None
+        )
 
     def forward(
         self,
@@ -626,9 +641,9 @@ class DeepseekV4Attention(nn.Module):
         hidden_shape = (*input_shape, -1, self.head_dim)
         cos, sin = position_embeddings
 
-        q_residual = self.q_norm(self.q_a_proj(hidden_states))
+        q_residual = self.q_a_norm(self.q_a_proj(hidden_states))
         q = self.q_b_proj(q_residual).view(*hidden_shape).transpose(1, 2)
-        q = self.q_head_norm(q)
+        q = self.q_b_norm(q)
         q = apply_rotary_pos_emb(q, cos, sin)
 
         kv = self.kv_norm(self.kv_proj(hidden_states)).view(*hidden_shape).transpose(1, 2)
@@ -660,11 +675,15 @@ class DeepseekV4Attention(nn.Module):
             **kwargs,
         )
 
-        # Since K==V, V at this point had rope applied to it! By transposing we aim to only
-        # apply rope on the partial rotary dim corresponding to V.
+        # K=V in V4, so V picked up rope on its trailing rope slice. Apply the conjugate
+        # rotation (`-sin`) at the query position to undo it on the rope slice of the
+        # output before the grouped output projection mixes heads. The transpose pair is
+        # just a layout fix-up: apply_rotary_pos_emb expects `[B, S, H, D]` (its
+        # `unsqueeze_dim=1` adds a head-broadcast dim to cos/sin); attention gave us
+        # `[B, H, S, D]`.
         attn_output = apply_rotary_pos_emb(attn_output.transpose(1, 2), cos, -sin).transpose(1, 2)
 
-        grouped = attn_output.reshape(*input_shape, -1).view(*input_shape, self.config.o_groups, -1)
+        grouped = attn_output.reshape(*input_shape, self.config.o_groups, -1)
         grouped = self.o_a_proj(grouped).flatten(2)
         output = self.o_b_proj(grouped)
         return output, attn_weights
@@ -781,6 +800,15 @@ class DeepseekV4Experts(MixtralExperts):
         super().__init__(config)
         self.limit = config.swiglu_limit
 
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        # Lives on the class (like gpt-oss's _apply_gate) so the grouped_mm / batched_mm
+        # backends swapped in by `@use_experts_implementation` apply the same clamp +
+        # SiLU on top of their packed gate_up output instead of bypassing it.
+        gate, up = gate_up.chunk(2, dim=-1)
+        gate = gate.clamp(max=self.limit)
+        up = up.clamp(min=-self.limit, max=self.limit)
+        return self.act_fn(gate) * up
+
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
     ) -> torch.Tensor:
@@ -793,10 +821,7 @@ class DeepseekV4Experts(MixtralExperts):
             if expert_idx == self.num_experts:
                 continue
             top_k_pos, token_idx = torch.where(mask[expert_idx])
-            gate, up = F.linear(hidden_states[token_idx], self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            gate = gate.clamp(max=self.limit)
-            up = up.clamp(min=-self.limit, max=self.limit)
-            current = self.act_fn(gate) * up
+            current = self._apply_gate(F.linear(hidden_states[token_idx], self.gate_up_proj[expert_idx]))
             current = F.linear(current, self.down_proj[expert_idx]) * top_k_weights[token_idx, top_k_pos, None]
             final.index_add_(0, token_idx, current.to(final.dtype))
         return final
@@ -897,16 +922,18 @@ class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         # hidden_states throughout: [B, S, hc_mult, hidden].
+        # `post` / `comb` come out of the HC modules in fp32 (Sinkhorn projection runs
+        # in float); the .to(dtype) puts everything back to the input dtype before mixing
+        # so both sites stay consistent with `hidden_states`'s entry dtype.
+        dtype = hidden_states.dtype
         post, comb, collapsed = self.attn_hc(hidden_states)
         attn_output, _ = self.self_attn(self.input_layernorm(collapsed), **kwargs)
-        dtype = hidden_states.dtype
         hidden_states = post.to(dtype).unsqueeze(-1) * attn_output.unsqueeze(-2) + torch.matmul(
             comb.to(dtype), hidden_states
         )
 
         post, comb, collapsed = self.ffn_hc(hidden_states)
         mlp_output = self.mlp(self.post_attention_layernorm(collapsed), input_ids=input_ids)
-        dtype = hidden_states.dtype
         return post.to(dtype).unsqueeze(-1) * mlp_output.unsqueeze(-2) + torch.matmul(comb.to(dtype), hidden_states)
 
 
@@ -914,13 +941,12 @@ class DeepseekV4PreTrainedModel(MixtralPreTrainedModel):
     config_class = DeepseekV4Config
     base_model_prefix = "model"
     _no_split_modules = ["DeepseekV4DecoderLayer"]
-    # V4 ships eager-only: the compressor / indexer paths weren't validated against
-    # SDPA / FlashAttention / FlexAttention kernels — leaving these `False` makes
-    # `set_attn_implementation` reject those backends instead of silently routing
-    # through them.
-    _supports_flash_attn = False
+    # V4 supports the same backends as gpt-oss (sink-attention sibling): FlashAttention
+    # (FA3 / FA4 take the standard varlen path with a sink) and FlexAttention. SDPA
+    # stays off — torch's SDPA kernel doesn't carry the per-head learnable sink term.
+    _supports_flash_attn = True
     _supports_sdpa = False
-    _supports_flex_attn = False
+    _supports_flex_attn = True
     # The compressor's rolling-window buffer / compressed-entries / overlap state
     # lives on the per-layer cache (:class:`DeepseekV4HCACache` /
     # :class:`DeepseekV4CSACache`) and isn't compatible with :class:`StaticCache`
@@ -929,7 +955,7 @@ class DeepseekV4PreTrainedModel(MixtralPreTrainedModel):
     # keeps generation tests on the dynamic cache build that does dispatch to
     # V4's own cache layers.
     _can_compile_fullgraph = False
-    _keep_in_fp32_modules_strict = ["attn_hc", "ffn_hc"]
+    _keep_in_fp32_modules_strict = ["attn_hc", "ffn_hc", "e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"(^|\.)mtp\..*"]
     # ``_is_stateful`` opts out of generation modes that need to roll the cache
     # back across drafts (assisted generation, prompt lookup, contrastive search).

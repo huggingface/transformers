@@ -1400,9 +1400,19 @@ class StaticCache(Cache):
         if hasattr(config, "num_kv_shared_layers"):
             layer_types = layer_types[: -config.num_kv_shared_layers]
 
+        # Treat any layer type whose registered dynamic-cache class is a
+        # ``DynamicSlidingWindowLayer`` (or subclass) as sliding for static-cache
+        # purposes — keeps model-specific names (e.g. V4's compressed_sparse_attention /
+        # heavily_compressed_attention) out of this file; they auto-register from the
+        # model's own modeling module via ``CacheLayerMixin.__init_subclass__``.
+        sliding_layer_types = {
+            name
+            for name, cls in LAYER_TYPE_CACHE_MAPPING.items()
+            if isinstance(cls, type) and issubclass(cls, DynamicSlidingWindowLayer)
+        }
         layers = []
         for layer_type in layer_types:
-            if layer_type in ("sliding_attention", "compressed_sparse_attention", "heavily_compressed_attention"):
+            if layer_type in sliding_layer_types:
                 layer = StaticSlidingWindowLayer(max_cache_len=max_cache_len, sliding_window=config.sliding_window)
             elif layer_type == "chunked_attention":
                 # From a cache point of view, both sliding and chunked are the same in how they should behave and how many

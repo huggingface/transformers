@@ -242,6 +242,14 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"^model\.layers\.(\d+)\.self_attn\.wo_b\.",
                 target_patterns=r"model.layers.\1.self_attn.o_b_proj.",
             ),
+            # Norm rename: upstream ships `q_norm` (the LoRA-rank RMSNorm sitting between
+            # q_a_proj and q_b_proj); we register it as `q_a_norm` so the suffix matches
+            # the surrounding `q_a_proj` / `q_b_proj` / `q_b_norm` symmetry. The
+            # unweighted `q_b_norm` has no learnable weight, so no upstream key.
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.self_attn\.q_norm\.",
+                target_patterns=r"model.layers.\1.self_attn.q_a_norm.",
+            ),
             # Aux-loss-free routing bias: upstream ships ``gate.bias`` (V3 convention);
             # we register it as ``e_score_correction_bias`` (cross-model standard name).
             WeightRenaming(
