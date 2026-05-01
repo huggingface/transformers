@@ -46,7 +46,7 @@ from ...utils import (
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoBackbone
-from .configuration_maskformer import MaskFormerConfig, MaskFormerMaskFormerDetrConfig
+from .configuration_maskformer import MaskFormerConfig, MaskFormerDetrConfig
 from .configuration_maskformer_swin import MaskFormerSwinConfig
 
 
@@ -61,7 +61,7 @@ if is_scipy_available():
 @dataclass
 @auto_docstring(
     custom_intro="""
-    Base class for outputs of the MASK_FORMER_MASK_FORMER_DETR decoder. This class adds one attribute to BaseModelOutputWithCrossAttentions,
+    Base class for outputs of the MASK_FORMER_DETR decoder. This class adds one attribute to BaseModelOutputWithCrossAttentions,
     namely an optional stack of intermediate decoder activations, i.e. the output of each decoder layer, each of them
     gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
     """
@@ -235,12 +235,12 @@ class MaskFormerForInstanceSegmentationOutput(ModelOutput):
 @dataclass
 @auto_docstring(
     custom_intro="""
-    Base class for outputs of the MASK_FORMER_MASK_FORMER_DETR decoder. This class adds one attribute to BaseModelOutputWithCrossAttentions,
+    Base class for outputs of the MASK_FORMER_DETR decoder. This class adds one attribute to BaseModelOutputWithCrossAttentions,
     namely an optional stack of intermediate decoder activations, i.e. the output of each decoder layer, each of them
     gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
     """
 )
-class MaskFormerMaskFormerDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
+class MaskFormerDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     r"""
     cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
         Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
@@ -254,7 +254,7 @@ class MaskFormerMaskFormerDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     intermediate_hidden_states: torch.FloatTensor | None = None
 
 
-class MaskFormerMaskFormerDetrLearnedPositionEmbedding(nn.Module):
+class MaskFormerDetrLearnedPositionEmbedding(nn.Module):
     """
     This module learns positional embeddings up to a fixed maximum size.
     """
@@ -315,16 +315,16 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class MaskFormerMaskFormerDetrSelfAttention(nn.Module):
+class MaskFormerDetrSelfAttention(nn.Module):
     """
     Multi-headed self-attention from 'Attention Is All You Need' paper.
 
-    In MASK_FORMER_MASK_FORMER_DETR, position embeddings are added to both queries and keys (but not values) in self-attention.
+    In MASK_FORMER_DETR, position embeddings are added to both queries and keys (but not values) in self-attention.
     """
 
     def __init__(
         self,
-        config: MaskFormerMaskFormerDetrConfig,
+        config: MaskFormerDetrConfig,
         hidden_size: int,
         num_attention_heads: int,
         dropout: float = 0.0,
@@ -381,17 +381,17 @@ class MaskFormerMaskFormerDetrSelfAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class MaskFormerMaskFormerDetrCrossAttention(nn.Module):
+class MaskFormerDetrCrossAttention(nn.Module):
     """
     Multi-headed cross-attention from 'Attention Is All You Need' paper.
 
-    In MASK_FORMER_MASK_FORMER_DETR, queries get their own position embeddings, while keys get encoder position embeddings.
+    In MASK_FORMER_DETR, queries get their own position embeddings, while keys get encoder position embeddings.
     Values don't get any position embeddings.
     """
 
     def __init__(
         self,
-        config: MaskFormerMaskFormerDetrConfig,
+        config: MaskFormerDetrConfig,
         hidden_size: int,
         num_attention_heads: int,
         dropout: float = 0.0,
@@ -461,8 +461,8 @@ class MaskFormerMaskFormerDetrCrossAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class MaskFormerMaskFormerDetrMLP(nn.Module):
-    def __init__(self, config: MaskFormerMaskFormerDetrConfig, hidden_size: int, intermediate_size: int):
+class MaskFormerDetrMLP(nn.Module):
+    def __init__(self, config: MaskFormerDetrConfig, hidden_size: int, intermediate_size: int):
         super().__init__()
         self.fc1 = nn.Linear(hidden_size, intermediate_size)
         self.fc2 = nn.Linear(intermediate_size, hidden_size)
@@ -478,12 +478,12 @@ class MaskFormerMaskFormerDetrMLP(nn.Module):
         return hidden_states
 
 
-class MaskFormerMaskFormerDetrDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: MaskFormerMaskFormerDetrConfig):
+class MaskFormerDetrDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: MaskFormerDetrConfig):
         super().__init__()
         self.hidden_size = config.d_model
 
-        self.self_attn = MaskFormerMaskFormerDetrSelfAttention(
+        self.self_attn = MaskFormerDetrSelfAttention(
             config=config,
             hidden_size=self.hidden_size,
             num_attention_heads=config.decoder_attention_heads,
@@ -492,14 +492,14 @@ class MaskFormerMaskFormerDetrDecoderLayer(GradientCheckpointingLayer):
         self.dropout = config.dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.hidden_size)
-        self.encoder_attn = MaskFormerMaskFormerDetrCrossAttention(
+        self.encoder_attn = MaskFormerDetrCrossAttention(
             config=config,
             hidden_size=self.hidden_size,
             num_attention_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.hidden_size)
-        self.mlp = MaskFormerMaskFormerDetrMLP(config, self.hidden_size, config.decoder_ffn_dim)
+        self.mlp = MaskFormerDetrMLP(config, self.hidden_size, config.decoder_ffn_dim)
         self.final_layer_norm = nn.LayerNorm(self.hidden_size)
 
     def forward(
@@ -570,7 +570,7 @@ class MaskFormerMaskFormerDetrDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class MaskFormerMaskFormerDetrConvBlock(nn.Module):
+class MaskFormerDetrConvBlock(nn.Module):
     """Basic conv block: Conv3x3 -> GroupNorm -> Activation."""
 
     def __init__(self, in_channels: int, out_channels: int, activation: str = "relu"):
@@ -583,13 +583,13 @@ class MaskFormerMaskFormerDetrConvBlock(nn.Module):
         return self.activation(self.norm(self.conv(x)))
 
 
-class MaskFormerMaskFormerDetrFPNFusionStage(nn.Module):
+class MaskFormerDetrFPNFusionStage(nn.Module):
     """Single FPN fusion stage combining low-resolution features with high-resolution FPN features."""
 
     def __init__(self, fpn_channels: int, current_channels: int, output_channels: int, activation: str = "relu"):
         super().__init__()
         self.fpn_adapter = nn.Conv2d(fpn_channels, current_channels, kernel_size=1)
-        self.refine = MaskFormerMaskFormerDetrConvBlock(current_channels, output_channels, activation)
+        self.refine = MaskFormerDetrConvBlock(current_channels, output_channels, activation)
 
     def forward(self, features: torch.Tensor, fpn_features: torch.Tensor) -> torch.Tensor:
         """
@@ -605,7 +605,7 @@ class MaskFormerMaskFormerDetrFPNFusionStage(nn.Module):
         return self.refine(fpn_features + features)
 
 
-class MaskFormerMaskFormerDetrMaskHeadSmallConv(nn.Module):
+class MaskFormerDetrMaskHeadSmallConv(nn.Module):
     """
     Segmentation mask head that generates per-query masks using FPN-based progressive upsampling.
 
@@ -624,19 +624,19 @@ class MaskFormerMaskFormerDetrMaskHeadSmallConv(nn.Module):
         if input_channels % 8 != 0:
             raise ValueError(f"input_channels must be divisible by 8, got {input_channels}")
 
-        self.conv1 = MaskFormerMaskFormerDetrConvBlock(input_channels, input_channels, activation_function)
-        self.conv2 = MaskFormerMaskFormerDetrConvBlock(input_channels, hidden_size // 2, activation_function)
+        self.conv1 = MaskFormerDetrConvBlock(input_channels, input_channels, activation_function)
+        self.conv2 = MaskFormerDetrConvBlock(input_channels, hidden_size // 2, activation_function)
 
         # Progressive channel reduction: /2 -> /4 -> /8 -> /16
         self.fpn_stages = nn.ModuleList(
             [
-                MaskFormerMaskFormerDetrFPNFusionStage(
+                MaskFormerDetrFPNFusionStage(
                     fpn_channels[0], hidden_size // 2, hidden_size // 4, activation_function
                 ),
-                MaskFormerMaskFormerDetrFPNFusionStage(
+                MaskFormerDetrFPNFusionStage(
                     fpn_channels[1], hidden_size // 4, hidden_size // 8, activation_function
                 ),
-                MaskFormerMaskFormerDetrFPNFusionStage(
+                MaskFormerDetrFPNFusionStage(
                     fpn_channels[2], hidden_size // 8, hidden_size // 16, activation_function
                 ),
             ]
@@ -678,7 +678,7 @@ class MaskFormerMaskFormerDetrMaskHeadSmallConv(nn.Module):
         return self.output_conv(hidden_states)
 
 
-class MaskFormerMaskFormerDetrMHAttentionMap(nn.Module):
+class MaskFormerDetrMHAttentionMap(nn.Module):
     """This is a 2D attention module, which only returns the attention softmax (no multiplication by value)"""
 
     def __init__(
@@ -730,15 +730,15 @@ class MaskFormerMaskFormerDetrMHAttentionMap(nn.Module):
 
 
 @auto_docstring
-class MaskFormerMaskFormerDetrPreTrainedModel(PreTrainedModel):
-    config: MaskFormerMaskFormerDetrConfig
+class MaskFormerDetrPreTrainedModel(PreTrainedModel):
+    config: MaskFormerDetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = [
-        r"MaskFormerMaskFormerDetrConvEncoder",
-        r"MaskFormerMaskFormerDetrEncoderLayer",
-        r"MaskFormerMaskFormerDetrDecoderLayer",
+        r"MaskFormerDetrConvEncoder",
+        r"MaskFormerDetrEncoderLayer",
+        r"MaskFormerDetrDecoderLayer",
     ]
     supports_gradient_checkpointing = True
     _supports_sdpa = True
@@ -746,7 +746,7 @@ class MaskFormerMaskFormerDetrPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _supports_flex_attn = True  # Uses create_bidirectional_masks for attention masking
     _keys_to_ignore_on_load_unexpected = [
-        r"mask_former_mask_former_detr\.model\.backbone\.model\.layer\d+\.0\.downsample\.1\.num_batches_tracked"
+        r"mask_former_detr\.model\.backbone\.model\.layer\d+\.0\.downsample\.1\.num_batches_tracked"
     ]
 
     @torch.no_grad()
@@ -754,19 +754,19 @@ class MaskFormerMaskFormerDetrPreTrainedModel(PreTrainedModel):
         std = self.config.init_std
         xavier_std = self.config.init_xavier_std
 
-        if isinstance(module, MaskFormerMaskFormerDetrMaskHeadSmallConv):
-            # MaskFormerMaskFormerDetrMaskHeadSmallConv uses kaiming initialization for all its Conv2d layers
+        if isinstance(module, MaskFormerDetrMaskHeadSmallConv):
+            # MaskFormerDetrMaskHeadSmallConv uses kaiming initialization for all its Conv2d layers
             for m in module.modules():
                 if isinstance(m, nn.Conv2d):
                     init.kaiming_uniform_(m.weight, a=1)
                     if m.bias is not None:
                         init.constant_(m.bias, 0)
-        elif isinstance(module, MaskFormerMaskFormerDetrMHAttentionMap):
+        elif isinstance(module, MaskFormerDetrMHAttentionMap):
             init.zeros_(module.k_proj.bias)
             init.zeros_(module.q_proj.bias)
             init.xavier_uniform_(module.k_proj.weight, gain=xavier_std)
             init.xavier_uniform_(module.q_proj.weight, gain=xavier_std)
-        elif isinstance(module, MaskFormerMaskFormerDetrLearnedPositionEmbedding):
+        elif isinstance(module, MaskFormerDetrLearnedPositionEmbedding):
             init.uniform_(module.row_embeddings.weight)
             init.uniform_(module.column_embeddings.weight)
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
@@ -783,29 +783,29 @@ class MaskFormerMaskFormerDetrPreTrainedModel(PreTrainedModel):
             init.zeros_(module.bias)
 
 
-class MaskFormerDetrDecoder(MaskFormerMaskFormerDetrPreTrainedModel):
+class MaskFormerDetrDecoder(MaskFormerDetrPreTrainedModel):
     """
     Transformer decoder that refines a set of object queries. It is composed of a stack of [`MaskFormerDetrDecoderLayer`] modules,
     which apply self-attention to the queries and cross-attention to the encoder's outputs.
 
     Args:
-        config (`MaskFormerMaskFormerDetrConfig`): Model configuration object.
+        config (`MaskFormerDetrConfig`): Model configuration object.
     """
 
     _can_record_outputs = {
-        "hidden_states": MaskFormerMaskFormerDetrDecoderLayer,
-        "attentions": MaskFormerMaskFormerDetrSelfAttention,
-        "cross_attentions": MaskFormerMaskFormerDetrCrossAttention,
+        "hidden_states": MaskFormerDetrDecoderLayer,
+        "attentions": MaskFormerDetrSelfAttention,
+        "cross_attentions": MaskFormerDetrCrossAttention,
     }
 
-    def __init__(self, config: MaskFormerMaskFormerDetrConfig):
+    def __init__(self, config: MaskFormerDetrConfig):
         super().__init__(config)
         self.dropout = config.dropout
 
         self.layers = nn.ModuleList(
-            [MaskFormerMaskFormerDetrDecoderLayer(config) for _ in range(config.decoder_layers)]
+            [MaskFormerDetrDecoderLayer(config) for _ in range(config.decoder_layers)]
         )
-        # in MASK_FORMER_MASK_FORMER_DETR, the decoder uses layernorm after the last decoder layer output
+        # in MASK_FORMER_DETR, the decoder uses layernorm after the last decoder layer output
         self.layernorm = nn.LayerNorm(config.d_model)
 
         # Initialize weights and apply final processing
@@ -822,7 +822,7 @@ class MaskFormerDetrDecoder(MaskFormerMaskFormerDetrPreTrainedModel):
         spatial_position_embeddings=None,
         object_queries_position_embeddings=None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> MaskFormerMaskFormerDetrDecoderOutput:
+    ) -> MaskFormerDetrDecoderOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -897,7 +897,7 @@ class MaskFormerDetrDecoder(MaskFormerMaskFormerDetrPreTrainedModel):
         if self.config.auxiliary_loss:
             intermediate = torch.stack(intermediate)
 
-        return MaskFormerMaskFormerDetrDecoderOutput(
+        return MaskFormerDetrDecoderOutput(
             last_hidden_state=hidden_states, intermediate_hidden_states=intermediate
         )
 
