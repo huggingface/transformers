@@ -630,12 +630,8 @@ class MaskFormerDetrMaskHeadSmallConv(nn.Module):
         # Progressive channel reduction: /2 -> /4 -> /8 -> /16
         self.fpn_stages = nn.ModuleList(
             [
-                MaskFormerDetrFPNFusionStage(
-                    fpn_channels[0], hidden_size // 2, hidden_size // 4, activation_function
-                ),
-                MaskFormerDetrFPNFusionStage(
-                    fpn_channels[1], hidden_size // 4, hidden_size // 8, activation_function
-                ),
+                MaskFormerDetrFPNFusionStage(fpn_channels[0], hidden_size // 2, hidden_size // 4, activation_function),
+                MaskFormerDetrFPNFusionStage(fpn_channels[1], hidden_size // 4, hidden_size // 8, activation_function),
                 MaskFormerDetrFPNFusionStage(
                     fpn_channels[2], hidden_size // 8, hidden_size // 16, activation_function
                 ),
@@ -735,11 +731,7 @@ class MaskFormerDetrPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    _no_split_modules = [
-        r"MaskFormerDetrConvEncoder",
-        r"MaskFormerDetrEncoderLayer",
-        r"MaskFormerDetrDecoderLayer",
-    ]
+    _no_split_modules = [r"MaskFormerDetrConvEncoder", r"MaskFormerDetrEncoderLayer", r"MaskFormerDetrDecoderLayer"]
     supports_gradient_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn = True
@@ -802,9 +794,7 @@ class MaskFormerDetrDecoder(MaskFormerDetrPreTrainedModel):
         super().__init__(config)
         self.dropout = config.dropout
 
-        self.layers = nn.ModuleList(
-            [MaskFormerDetrDecoderLayer(config) for _ in range(config.decoder_layers)]
-        )
+        self.layers = nn.ModuleList([MaskFormerDetrDecoderLayer(config) for _ in range(config.decoder_layers)])
         # in MASK_FORMER_DETR, the decoder uses layernorm after the last decoder layer output
         self.layernorm = nn.LayerNorm(config.d_model)
 
@@ -897,9 +887,7 @@ class MaskFormerDetrDecoder(MaskFormerDetrPreTrainedModel):
         if self.config.auxiliary_loss:
             intermediate = torch.stack(intermediate)
 
-        return MaskFormerDetrDecoderOutput(
-            last_hidden_state=hidden_states, intermediate_hidden_states=intermediate
-        )
+        return MaskFormerDetrDecoderOutput(last_hidden_state=hidden_states, intermediate_hidden_states=intermediate)
 
 
 # refactored from original implementation

@@ -48,9 +48,6 @@ def apply_rotary_pos_emb(
     return torch.cat([nope, rotated], dim=-1)
 
 
-
-
-
 class DeepseekV4RMSNorm(DeepseekV3RMSNorm):
     pass
 
@@ -112,7 +109,6 @@ class DeepseekV4RotaryEmbedding(LagunaRotaryEmbedding):
             cos = freqs.cos() * attention_scaling
             sin = freqs.sin() * attention_scaling
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
 
 
 class DeepseekV4HCACache(DynamicSlidingWindowLayer):
@@ -279,7 +275,6 @@ class DeepseekV4GroupedLinear(nn.Linear):
         return y.reshape(*input_shape, self.n_groups, -1)
 
 
-
 class DeepseekV4HCACompressor(nn.Module):
     """
     Heavily Compressed Attention compressor (paper §2.3.2, eqs. 20–23). compresses
@@ -321,7 +316,7 @@ class DeepseekV4HCACompressor(nn.Module):
         layer_idx: int,
     ) -> torch.Tensor:
         batch, _, _ = hidden_states.shape
-        cache_layer:DeepseekV4HCACache = past_key_values.layers[layer_idx] if past_key_values is not None else None
+        cache_layer: DeepseekV4HCACache = past_key_values.layers[layer_idx] if past_key_values is not None else None
         kv = self.kv_proj(hidden_states)
         gate = self.gate_proj(hidden_states)
         if cache_layer is None:
@@ -432,9 +427,7 @@ class DeepseekV4Indexer(nn.Module):
                 new_kv[:, 1:, :ratio] = chunk_kv[:, :-1, :, : self.head_dim]
                 new_gate[:, 1:, :ratio] = chunk_gate[:, :-1, :, : self.head_dim]
             if cache_layer is not None:
-                prior_kv, prior_gate = cache_layer.update_overlap_state(
-                    "indexer", chunk_kv, chunk_gate, self.head_dim
-                )
+                prior_kv, prior_gate = cache_layer.update_overlap_state("indexer", chunk_kv, chunk_gate, self.head_dim)
                 if prior_kv is not None:
                     new_kv[:, 0, :ratio] = prior_kv.to(new_kv.dtype)
                     new_gate[:, 0, :ratio] = prior_gate.to(new_gate.dtype)
@@ -450,7 +443,9 @@ class DeepseekV4Indexer(nn.Module):
         else:
             compressed = chunk_kv.new_zeros((batch, 0, self.head_dim))
 
-        compressed_kv = compressed if cache_layer is None else cache_layer.update_compressor_states("indexer", compressed)
+        compressed_kv = (
+            compressed if cache_layer is None else cache_layer.update_compressor_states("indexer", compressed)
+        )
 
         cos_q, sin_q = self.rotary_emb(hidden_states, position_ids=position_ids, layer_type=self.rope_layer_type)
         q = self.q_b_proj(q_residual).view(batch, seq_len, -1, self.head_dim).transpose(1, 2)
@@ -463,7 +458,6 @@ class DeepseekV4Indexer(nn.Module):
         index_scores = (scores * weights.unsqueeze(-1)).sum(dim=2)  # [B, S, T]
         topk = min(self.index_topk, compressed_kv.shape[1])
         return index_scores.topk(topk, dim=-1).indices
-
 
 
 class DeepseekV4CSACompressor(nn.Module):
