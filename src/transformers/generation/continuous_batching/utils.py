@@ -65,6 +65,7 @@ class WorkloadHints:
     max_prompt_length: int = 0
     max_generated_length: int = 0
 
+    # TODO: can this be fused with other resolve methods?
     def resolve_using_hints(self, cb_config: "ContinuousBatchingConfig") -> None:
         """Resolves the config using the given hints."""
         # The max number of block per request is an even number large enough to hold the max request length
