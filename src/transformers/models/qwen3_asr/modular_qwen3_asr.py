@@ -149,6 +149,8 @@ class Qwen3ASRPreTrainedModel(Qwen2AudioPreTrainedModel):
             )
 
 
+# NOTE (ebezzam): Whisper sets bias=False for self.k_proj, which differs from original Qwen3 ASR: https://github.com/QwenLM/Qwen3-ASR/blob/c17a131fe028b2e428b6e80a33d30bb4fa57b8df/qwen_asr/core/transformers_backend/modeling_qwen3_asr.py#L472
+# but does not make a difference since softmax is invariant to constant offsets in the logits
 class Qwen3ASRAttention(WhisperAttention):
     pass
 
