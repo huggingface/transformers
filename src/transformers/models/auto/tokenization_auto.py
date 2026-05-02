@@ -721,7 +721,11 @@ class AutoTokenizer:
             registered_class_name = TOKENIZER_MAPPING_NAMES.get(config_model_type).removesuffix("Fast")
             if registered_class_name not in ("TokenizersBackend", "PythonBackend", "PreTrainedTokenizerFast"):
                 # If the hub class is known incorrect for this model type, use the registered class; otherwise trust the hub.
-                class_name = registered_class_name if config_model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS else tokenizer_config_class
+                class_name = (
+                    registered_class_name
+                    if config_model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS
+                    else tokenizer_config_class
+                )
                 tokenizer_class = tokenizer_class_from_name(class_name)
                 if tokenizer_class is not None and tokenizer_class.__name__ not in (
                     "TokenizersBackend",
