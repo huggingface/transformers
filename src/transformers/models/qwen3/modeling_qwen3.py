@@ -101,6 +101,18 @@ class Qwen3RotaryEmbedding(nn.Module):
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        if self.rope_type == "default":
+            cos_cached, sin_cached = self._build_cos_sin_cache(inv_freq)
+            self.register_buffer("cos_cached", cos_cached, persistent=False)
+            self.register_buffer("sin_cached", sin_cached, persistent=False)
+
+    def _build_cos_sin_cache(self, inv_freq: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        positions = torch.arange(self.max_seq_len_cached, device=inv_freq.device, dtype=torch.float32)
+        freqs = torch.outer(positions, inv_freq.float())
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
+        return cos, sin
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -135,6 +147,20 @@ class Qwen3RotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
+        if (
+            self.rope_type == "default"
+            and hasattr(self, "cos_cached")
+            and hasattr(self, "sin_cached")
+            and position_ids.shape[-1] <= self.cos_cached.shape[0]
+        ):
+            cache_device = self.cos_cached.device
+            if position_ids.device != cache_device:
+                position_ids = position_ids.to(cache_device)
+            flat_positions = position_ids.reshape(-1)
+            cos = self.cos_cached.index_select(0, flat_positions).view(*position_ids.shape, -1)
+            sin = self.sin_cached.index_select(0, flat_positions).view(*position_ids.shape, -1)
+            return cos.to(device=x.device, dtype=x.dtype), sin.to(device=x.device, dtype=x.dtype)
+
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
 
@@ -351,6 +377,18 @@ class Qwen3PreTrainedModel(PreTrainedModel):
         "hidden_states": Qwen3DecoderLayer,
         "attentions": Qwen3Attention,
     }
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if (
+            isinstance(module, Qwen3RotaryEmbedding)
+            and module.rope_type == "default"
+            and hasattr(module, "cos_cached")
+            and hasattr(module, "sin_cached")
+        ):
+            cos_cached, sin_cached = module._build_cos_sin_cache(module.inv_freq)
+            module.register_buffer("cos_cached", cos_cached, persistent=False)
+            module.register_buffer("sin_cached", sin_cached, persistent=False)
 
 
 @auto_docstring
