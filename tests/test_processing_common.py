@@ -20,6 +20,7 @@ import random
 import shutil
 import sys
 import tempfile
+import unittest
 from pathlib import Path
 
 import numpy as np
@@ -2045,3 +2046,88 @@ class ProcessorTesterMixin:
         num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
         num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
         self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
+
+
+class ProcessorMixinKwargsFilterTest(unittest.TestCase):
+    """
+    Regression tests for kwargs filtering in ProcessorMixin.__call__.
+
+    Some kwargs (e.g. `pad_to_multiple_of`) are declared in multiple modality
+    TypedDicts (TextKwargs and AudioKwargs), so _merge_kwargs routes them into
+    every matching modality bucket.  If a concrete sub-processor has an explicit
+    signature without **kwargs it would previously receive unexpected keyword
+    arguments and raise a TypeError.  The fix filters modality kwargs to only
+    the params the sub-processor explicitly accepts when its signature has no
+    VAR_KEYWORD catch-all.
+    """
+
+    def _make_stub_processor(self, feature_extractor_accepts_var_keyword):
+        """
+        Build a minimal ProcessorMixin subclass with a stub tokenizer and a stub
+        feature extractor whose __call__ signature either does or does not have a
+        **kwargs catch-all, depending on the flag.
+        """
+        from transformers.feature_extraction_utils import BatchFeature
+        from transformers.processing_utils import ProcessingKwargs, ProcessorMixin
+
+        class StubTokenizer:
+            init_kwargs = {}
+
+            def __call__(self, text, pad_to_multiple_of=None, return_tensors=None, **kwargs):
+                return BatchFeature({"input_ids": [[1, 2, 3]]})
+
+        if feature_extractor_accepts_var_keyword:
+
+            class StubExtractorWithVarKw:
+                def __call__(self, audio, return_tensors=None, **kwargs):
+                    return BatchFeature({"input_features": [[0.0]]})
+
+            extractor_cls = StubExtractorWithVarKw
+        else:
+
+            class StubExtractorStrict:
+                # Deliberately no **kwargs — must not receive pad_to_multiple_of
+                def __call__(self, audio, return_tensors=None):
+                    return BatchFeature({"input_features": [[0.0]]})
+
+            extractor_cls = StubExtractorStrict
+
+        class StubProcessor(ProcessorMixin):
+            attributes = ["tokenizer", "feature_extractor"]
+            tokenizer_class = "AutoTokenizer"
+            feature_extractor_class = "AutoFeatureExtractor"
+            valid_processor_kwargs = ProcessingKwargs
+
+            def __init__(self, tokenizer, feature_extractor):
+                self.tokenizer = tokenizer
+                self.feature_extractor = feature_extractor
+
+        processor = StubProcessor.__new__(StubProcessor)
+        processor.tokenizer = StubTokenizer()
+        processor.feature_extractor = extractor_cls()
+        return processor
+
+    def test_strict_extractor_does_not_receive_overlapping_kwargs(self):
+        """
+        A feature extractor with a strict signature (no **kwargs) must not receive
+        kwargs that belong only to the text modality, even when _merge_kwargs routes
+        them into the audio bucket because the kwarg appears in both TypedDicts.
+        pad_to_multiple_of is declared in both TextKwargs and AudioKwargs — without
+        the fix this raises a TypeError on any extractor that doesn't accept it.
+        """
+        processor = self._make_stub_processor(feature_extractor_accepts_var_keyword=False)
+        try:
+            processor(text=["hello"], audio=[[0.0] * 16_000], pad_to_multiple_of=8, return_tensors="pt")
+        except TypeError as exc:
+            self.fail(f"ProcessorMixin.__call__ raised TypeError for strict extractor: {exc}")
+
+    def test_var_keyword_extractor_receives_all_kwargs(self):
+        """
+        A feature extractor that accepts **kwargs must still receive the full set of
+        modality kwargs — the filtering path must not be entered for it.
+        """
+        processor = self._make_stub_processor(feature_extractor_accepts_var_keyword=True)
+        try:
+            processor(text=["hello"], audio=[[0.0] * 16_000], pad_to_multiple_of=8, return_tensors="pt")
+        except TypeError as exc:
+            self.fail(f"ProcessorMixin.__call__ raised TypeError for **kwargs extractor: {exc}")

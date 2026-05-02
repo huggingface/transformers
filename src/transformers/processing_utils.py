@@ -686,7 +686,21 @@ class ProcessorMixin(PushToHubMixin):
             attribute = getattr(self, attribute_name, None)
             input_data, input_kwargs = attribute_to_kwargs[attribute_name]
             if input_data is not None and attribute is not None:
-                attribute_output = attribute(input_data, **kwargs[input_kwargs])
+                modality_kwargs = kwargs[input_kwargs]
+                params = inspect.signature(attribute.__call__).parameters
+                if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()):
+                    # Sub-processor accepts **kwargs, so it handles unknown keys itself.
+                    attribute_output = attribute(input_data, **modality_kwargs)
+                else:
+                    # Sub-processor has an explicit signature. Some kwargs may be declared
+                    # in multiple modality TypedDicts (e.g. `pad_to_multiple_of` appears in
+                    # both TextKwargs and AudioKwargs), so _merge_kwargs routes them to every
+                    # matching modality bucket. Filter to only the params this processor
+                    # explicitly accepts to avoid a TypeError.
+                    valid_keys = set(params.keys()) - {"self"}
+                    attribute_output = attribute(
+                        input_data, **{k: v for k, v in modality_kwargs.items() if k in valid_keys}
+                    )
                 outputs.update(attribute_output)
 
         return BatchFeature(outputs)
