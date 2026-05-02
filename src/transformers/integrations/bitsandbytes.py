@@ -218,7 +218,7 @@ class Bnb8bitSerialize(ConversionOps):
 
         if not isinstance(weight, bnb.nn.Int8Params):
             return {"weight": weight}
-
+            result["SCB"] = weight.SCB
         result = {"weight": weight.data}
         if hasattr(weight, "SCB") and weight.SCB is not None:
             result["weight.SCB"] = weight.SCB
