@@ -51,12 +51,51 @@ GGUF_TO_TRANSFORMERS_MAPPING = {
 }
 
 GGUF_SUPPORTED_ARCHITECTURES = list(GGUF_TO_TRANSFORMERS_MAPPING["config"].keys())
+PRISM_Q1_0_G128_NAME = "Q1_0_g128"
+PRISM_Q1_0_G128_VALUE = 41
+PRISM_Q1_0_G128_BLOCK_SIZE = 128
+PRISM_Q1_0_G128_TYPE_SIZE = 18
 
 
 class GGUFTensor(NamedTuple):
     weights: np.ndarray
     name: str
     metadata: dict
+
+
+def _is_prism_q1_0_g128(tensor_type) -> bool:
+    if getattr(tensor_type, "name", None) == PRISM_Q1_0_G128_NAME:
+        return True
+
+    try:
+        return int(tensor_type) == PRISM_Q1_0_G128_VALUE
+    except (TypeError, ValueError):
+        return False
+
+
+def _dequantize_prism_q1_0_g128(data: np.ndarray) -> np.ndarray:
+    rows = np.asarray(data, dtype=np.uint8)
+    if rows.shape[-1] % PRISM_Q1_0_G128_TYPE_SIZE != 0:
+        raise ValueError(
+            "Prism Q1_0_g128 row byte width must be divisible by 18, got "
+            f"{rows.shape[-1]} for shape {rows.shape}"
+        )
+
+    n_blocks = rows.shape[-1] // PRISM_Q1_0_G128_TYPE_SIZE
+    blocks = rows.reshape(*rows.shape[:-1], n_blocks, PRISM_Q1_0_G128_TYPE_SIZE)
+    scales = np.ascontiguousarray(blocks[..., :2]).view(np.float16).astype(np.float32)[..., 0]
+    sign_bits = np.unpackbits(blocks[..., 2:], axis=-1, bitorder="little")
+    weights = np.where(sign_bits == 1, scales[..., None], -scales[..., None]).astype(np.float32, copy=False)
+    return weights.reshape(*rows.shape[:-1], n_blocks * PRISM_Q1_0_G128_BLOCK_SIZE)
+
+
+def _dequantize_gguf_tensor(data: np.ndarray, tensor_type, dequantize_fn) -> np.ndarray:
+    try:
+        return dequantize_fn(data, tensor_type)
+    except NotImplementedError:
+        if _is_prism_q1_0_g128(tensor_type):
+            return _dequantize_prism_q1_0_g128(data)
+        raise
 
 
 class TensorProcessor:
@@ -778,7 +817,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
 
         for tensor in tqdm(reader.tensors, desc="Converting and de-quantizing GGUF tensors..."):
             name = tensor.name
-            weights = dequantize(tensor.data, tensor.tensor_type)
+            weights = _dequantize_gguf_tensor(tensor.data, tensor.tensor_type, dequantize)
 
             result = processor.process(
                 weights=weights,
