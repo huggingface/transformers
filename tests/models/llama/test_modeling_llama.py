@@ -81,7 +81,7 @@ class LlamaFlashNormFoldedTest(unittest.TestCase):
         self.assertTrue(torch.allclose(out, expected, atol=1e-6, rtol=1e-5))
 
     def test_rmsnorm_weightless_buffer_not_parameter(self):
-        """has_weight=False registers `weight` as a non-persistent buffer, not a Parameter."""
+        """has_weight=False registers `weight` as a buffer (not a Parameter), still present in state_dict for round-trip with existing flashnorm-folded checkpoints."""
         from transformers.models.llama.modeling_llama import LlamaRMSNorm
 
         norm_weighted = LlamaRMSNorm(64, has_weight=True)
@@ -91,12 +91,15 @@ class LlamaFlashNormFoldedTest(unittest.TestCase):
         self.assertIsInstance(norm_weighted.weight, torch.nn.Parameter)
         self.assertIn("weight", norm_weighted.state_dict())
 
-        # weightless: weight is a tensor (registered buffer) but NOT a Parameter,
-        # and NOT in state_dict (persistent=False since the value is constant ones)
+        # weightless: weight is a registered buffer, NOT a Parameter, but IS in
+        # state_dict (persistent=True so existing flashnorm-folded HF checkpoints,
+        # which carry all-ones tensors for HF compat, load without unexpected-key
+        # warnings; the buffer is still excluded from `parameters()` so it has
+        # no gradient and is not optimized).
         self.assertNotIsInstance(norm_weightless.weight, torch.nn.Parameter)
-        self.assertNotIn("weight", norm_weightless.state_dict())
-        # but still moves under .to(device): the buffer is registered
+        self.assertIn("weight", norm_weightless.state_dict())
         self.assertIn("weight", dict(norm_weightless.named_buffers()))
+        self.assertNotIn("weight", dict(norm_weightless.named_parameters()))
 
     def test_flashnorm_folded_config_propagates_to_all_norms(self):
         """LlamaConfig(flashnorm_folded=True) instantiates a model whose RMSNorms all have has_weight=False."""
@@ -116,10 +119,20 @@ class LlamaFlashNormFoldedTest(unittest.TestCase):
         for layer in model.layers:
             self.assertFalse(layer.input_layernorm.has_weight)
             self.assertFalse(layer.post_attention_layernorm.has_weight)
-        # The model's state_dict does not include any per-norm weight tensors
-        # (because the buffers are non-persistent).
-        norm_keys = [k for k in model.state_dict().keys() if k.endswith("norm.weight")]
-        self.assertEqual(norm_keys, [], f"Expected no norm.weight keys in state_dict, got: {norm_keys}")
+        # The model's state_dict still includes the per-norm weight tensors
+        # (the buffers are persistent so existing flashnorm-folded HF checkpoints,
+        # which carry all-ones tensors for HF compat, load without unexpected-key
+        # warnings). Each norm.weight buffer is all-ones with shape (hidden_size,).
+        sd = model.state_dict()
+        norm_keys = [k for k in sd.keys() if k.endswith("norm.weight")]
+        # 2 layers x 2 per-layer norms (input + post_attention) + 1 model.norm = 5
+        self.assertEqual(len(norm_keys), 5, f"Expected 5 norm.weight keys, got {len(norm_keys)}: {norm_keys}")
+        for k in norm_keys:
+            self.assertTrue(torch.equal(sd[k], torch.ones(64)), f"{k} should be all-ones")
+        # And none of those tensors are Parameters (they have no gradients).
+        param_names = {name for name, _ in model.named_parameters()}
+        for k in norm_keys:
+            self.assertNotIn(k, param_names, f"{k} should be a buffer, not a Parameter")
 
 
 @require_torch_accelerator

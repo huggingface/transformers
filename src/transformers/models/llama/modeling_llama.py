@@ -64,9 +64,11 @@ class LlamaRMSNorm(nn.Module):
                 the per-channel multiply is skipped via PyTorch's
                 ``F.rms_norm(weight=None)`` C++ kernel, which can deliver a
                 meaningful end-to-end speedup on FlashNorm-folded checkpoints.
-                The weight tensor is still allocated as an all-ones buffer (so
-                ``.to(device)`` moves it correctly) but it is not a Parameter,
-                not in ``state_dict``, and not multiplied into the output.
+                The weight tensor is still allocated as a buffer of ones (so
+                ``.to(device)`` moves it correctly and so existing flashnorm-folded
+                HF checkpoints, which carry the all-ones tensors for HF
+                compatibility, load cleanly without unexpected-key warnings),
+                but it is not a Parameter and is not multiplied into the output.
 
         Note: when the ``@use_kernel_forward_from_hub("RMSNorm")`` decorator
         is configured to swap ``forward`` for a hub-loaded kernel, that kernel
@@ -79,10 +81,13 @@ class LlamaRMSNorm(nn.Module):
         if has_weight:
             self.weight = nn.Parameter(weight_data)
         else:
-            # Non-persistent buffer so it does not appear in state_dict (the
-            # value is constant and reconstructed on init). register_buffer
-            # ensures the tensor moves with the module under .to(device).
-            self.register_buffer("weight", weight_data, persistent=False)
+            # Persistent buffer so the buffer keys are present in state_dict.
+            # This matches the existing flashnorm-folded HF checkpoints in the
+            # `weightless-rmsnorm` collection, which still carry the all-ones
+            # tensors for compatibility with stock HF Transformers loading.
+            # Without persistent=True, those keys would show up as
+            # `unexpected_keys` during from_pretrained.
+            self.register_buffer("weight", weight_data, persistent=True)
         self.variance_epsilon = eps
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
