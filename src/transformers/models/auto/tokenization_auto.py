@@ -58,7 +58,6 @@ else:
 logger = logging.get_logger(__name__)
 
 # V5: Simplified mapping - single tokenizer class per model type (always prefer tokenizers-based)
-REGISTERED_TOKENIZER_CLASSES: dict[str, type[Any]] = {}
 REGISTERED_FAST_ALIASES: dict[str, type[Any]] = {}
 
 TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
@@ -415,8 +414,10 @@ def tokenizer_class_from_name(class_name: str) -> type[Any] | None:
     if class_name in REGISTERED_FAST_ALIASES:
         return REGISTERED_FAST_ALIASES[class_name]
 
-    if class_name in REGISTERED_TOKENIZER_CLASSES:
-        return REGISTERED_TOKENIZER_CLASSES[class_name]
+    # User-registered classes take priority over built-ins
+    for tokenizer in TOKENIZER_MAPPING._extra_content.values():
+        if getattr(tokenizer, "__name__", None) == class_name:
+            return tokenizer
 
     if class_name == "TokenizersBackend":
         return TokenizersBackend
@@ -442,10 +443,6 @@ def tokenizer_class_from_name(class_name: str) -> type[Any] | None:
                 return result
             except AttributeError:
                 continue
-
-    for tokenizer in TOKENIZER_MAPPING._extra_content.values():
-        if getattr(tokenizer, "__name__", None) == class_name:
-            return tokenizer
 
     # We did not find the class, but maybe it's because a dep is missing. In that case, the class will be in the main
     # We did not find the class, but maybe it's because a dep is missing. In that case, the class will be in the main
@@ -868,10 +865,6 @@ class AutoTokenizer:
                 tokenizer_class = slow_tokenizer_class
             else:
                 raise ValueError("You need to pass a `tokenizer_class`")
-
-        for candidate in (slow_tokenizer_class, fast_tokenizer_class, tokenizer_class):
-            if candidate is not None:
-                REGISTERED_TOKENIZER_CLASSES[candidate.__name__] = candidate
 
         if slow_tokenizer_class is not None and fast_tokenizer_class is not None:
             REGISTERED_FAST_ALIASES[slow_tokenizer_class.__name__] = fast_tokenizer_class
