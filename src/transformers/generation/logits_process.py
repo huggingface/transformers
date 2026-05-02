@@ -1005,7 +1005,14 @@ class EtaLogitsWarper(LogitsProcessor):
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        if torch.isneginf(scores).all(dim=-1).any():
+            raise ValueError(
+                "EtaLogitsWarper received a row with all logits set to -inf. "
+                "This usually means previous logits processors masked every token."
+            )
+
         probabilities = scores.softmax(dim=-1)
+
         entropy = torch.distributions.Categorical(logits=scores).entropy()
         eta = torch.min(self.epsilon, torch.sqrt(self.epsilon) * torch.exp(-entropy))[..., None]
         indices_to_remove = probabilities < eta

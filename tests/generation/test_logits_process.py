@@ -624,6 +624,11 @@ class LogitsProcessorTest(unittest.TestCase):
         # first batch should keep 2 tokens, second batch would keep only 1, but due to `min_tokens_to_keep=2` keeps 2.
         self.assertListEqual((filtered_dist != 0.0).to(torch.long).sum(dim=-1).tolist(), [2, 2])
 
+        # eta warper should fail fast when a previous processor fully masked a row.
+        fully_masked_scores = torch.full((1, vocab_size), -float("inf"), device=torch_device, dtype=torch.float)
+        with self.assertRaisesRegex(ValueError, "all logits set to -inf"):
+            eta_warp(input_ids, fully_masked_scores)
+
     def test_no_repeat_ngram_dist_processor(self):
         vocab_size = 3
         batch_size = 2
