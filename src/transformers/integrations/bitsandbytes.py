@@ -78,7 +78,6 @@ class Bnb4bitDeserialize(ConversionOps):
                 value = value[0]
             return {full_layer_name: value}
 
-
         for key, value in input_dict.items():
             if isinstance(value, list):
                 input_dict[key] = value[0]
@@ -191,12 +190,12 @@ class Bnb4bitSerialize(ConversionOps):
 
         # After LoRA merge the weight is a plain tensor — nothing to re-serialize.
         if not isinstance(weight, bnb.nn.Params4bit):
-            return {"weight": weight}
+            return {full_layer_name: weight}
 
-        result = {"weight": weight.data}
+        result = {full_layer_name: weight.data}
         if weight.quant_state is not None:
             for key, val in weight.quant_state.as_dict(packed=True).items():
-                result[key] = val
+                result[f"{full_layer_name}.{key}"] = val
         return result
 
 
@@ -210,24 +209,25 @@ class Bnb8bitSerialize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
-    def convert(
-        self,
-        input_dict: dict[str, list[torch.Tensor]],
-        model: torch.nn.Module | None = None,
-        full_layer_name: str | None = None,
-        **kwargs,
-    ) -> dict[str, torch.Tensor]:
-        weight = list(input_dict.values())[0]
-        if isinstance(weight, list):
-            weight = weight[0]
 
-        if not isinstance(weight, bnb.nn.Int8Params):
-            return {"weight": weight}
+def convert(
+    self,
+    input_dict: dict[str, list[torch.Tensor]],
+    model: torch.nn.Module | None = None,
+    full_layer_name: str | None = None,
+    **kwargs,
+) -> dict[str, torch.Tensor]:
+    weight = list(input_dict.values())[0]
+    if isinstance(weight, list):
+        weight = weight[0]
 
-        result = {"weight": weight.data}
-        if hasattr(weight, "SCB") and weight.SCB is not None:
-            result["SCB"] = weight.SCB
-        return result
+    if not isinstance(weight, bnb.nn.Int8Params):
+        return {full_layer_name: weight}
+
+    result = {full_layer_name: weight.data}
+    if hasattr(weight, "SCB") and weight.SCB is not None:
+        result[f"{full_layer_name}.SCB"] = weight.SCB
+    return result
 
 
 def replace_with_bnb_linear(
