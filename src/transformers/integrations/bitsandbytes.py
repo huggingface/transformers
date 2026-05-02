@@ -90,7 +90,7 @@ class Bnb4bitDeserialize(ConversionOps):
             module=module,
         )
         module._is_hf_initialized = True
-        return {key_weight: new_value}
+        return {full_layer_name: new_value}
 
     @property
     def reverse_op(self):
@@ -155,7 +155,7 @@ class Bnb8bitDeserialize(ConversionOps):
         kwargs["SCB"] = input_dict["SCB"]
         new_value = bnb.nn.Int8Params(weight, requires_grad=False, **kwargs).to(weight.device)
         module._is_hf_initialized = True
-        return {key_weight: new_value}
+        return {full_layer_name: new_value}
 
     @property
     def reverse_op(self):
