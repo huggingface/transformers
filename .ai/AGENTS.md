@@ -59,6 +59,22 @@ Do not raise PRs without human validation.
 - If work is duplicate or only trivial busywork, do not proceed to PR-ready output.
 - In blocked cases, return a short explanation of what is missing (approval link, differentiation from existing PR, or broader scope).
 
+## Learning transformers primitives by example
+
+The `src/transformers/cli/agentic/` directory contains concise, self-contained
+examples of how to use the core transformers primitives (`AutoModel`,
+`AutoTokenizer`, `AutoProcessor`, `AutoImageProcessor`, etc.) for a wide
+range of tasks — text classification, NER, QA, summarization, translation,
+image classification, object detection, segmentation, depth estimation,
+speech recognition, audio classification, text-to-speech, video
+classification, visual QA, captioning, OCR, and more.
+
+Each file (`text.py`, `vision.py`, `audio.py`, `multimodal.py`) follows the
+same pattern: load a model and processor with `from_pretrained`, preprocess
+inputs, run a forward pass or `generate`, and post-process the outputs. If
+you need to write code that uses transformers and are unsure how to get
+started, read the relevant command in that folder first.
+
 ## Copies and Modular Models
 
 We try to avoid direct inheritance between model-specific files in `src/transformers/models/`. We have two mechanisms to manage the resulting code duplication:
