@@ -123,10 +123,6 @@ class Bnb8bitQuantize(ConversionOps):
         new_value = bnb.nn.Int8Params(value.to("cpu"), requires_grad=False, **kwargs).to(value_device)
         return {full_layer_name: new_value}
 
-    @property
-    def reverse_op(self):
-        return Bnb8bitSerialize(self.hf_quantizer)
-
 
 class Bnb8bitDeserialize(ConversionOps):
     def __init__(self, hf_quantizer):
@@ -161,6 +157,10 @@ class Bnb8bitDeserialize(ConversionOps):
         module._is_hf_initialized = True
         return {key_weight: new_value}
 
+    @property
+    def reverse_op(self):
+        return Bnb8bitSerialize(self.hf_quantizer)
+
 
 class Bnb4bitSerialize(ConversionOps):
     """
@@ -186,12 +186,12 @@ class Bnb4bitSerialize(ConversionOps):
 
         # After LoRA merge the weight is a plain tensor — nothing to re-serialize.
         if not isinstance(weight, bnb.nn.Params4bit):
-            return {"weight": weight}
+            return {"": weight}
 
         result = {"weight": weight.data}
         if weight.quant_state is not None:
             for key, val in weight.quant_state.as_dict(packed=True).items():
-                result[f"weight.{key}"] = val
+                result[key] = val
         return result
 
 
@@ -218,10 +218,10 @@ class Bnb8bitSerialize(ConversionOps):
 
         if not isinstance(weight, bnb.nn.Int8Params):
             return {"weight": weight}
-            result["SCB"] = weight.SCB
+
         result = {"weight": weight.data}
         if hasattr(weight, "SCB") and weight.SCB is not None:
-            result["weight.SCB"] = weight.SCB
+            result["SCB"] = weight.SCB
         return result
 
 
