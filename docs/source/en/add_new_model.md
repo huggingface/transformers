@@ -640,26 +640,6 @@ Congratulations on adding a new model to Transformers! 🥳
 
 This is a very significant contribution. Your work makes Transformers more accessible to developers and researchers around the world. You should be proud of your contribution and share your accomplishment with the community!
 
-## Model addition timeline
-
-There are four timelines for model additions depending on the model contributor and community demand for an architecture.
-
-- **day-0 integration**: If you plan on having a Transformers-first release, this is a great option because we can ensure the documentation is clear and optimize your model as much as possible (quantization, FlashAttention, KV-cache, etc.). We can also help you add the model, provide early reviews and make sure it works as expected.
-
-  Reach out to transformers@huggingface.co a few days (preferably weeks) in advance, especially if an architecture is particularly novel, to ensure model integration. We'll work together on a private fork of Transformers until your checkpoint and release is ready.
-
-- **same week integration**: Models with significant requests/demand are usually added the same week if the model author doesn't reach out.
-
-  Use the [issue tracker](https://github.com/huggingface/transformers/issues/new?assignees=&labels=New+model&projects=&template=new-model-addition.yml) to request a specific model to add. The more activity on the issue, the faster and more likely we'll integrate it.
-
-- **post-release integration**: Models without popular requests/demand or if we don't have the bandwidth to integrate it are added post-release.
-
-  This is a good opportunity if you're interested in contributing a model to Transformers. Take a look at open issues tagged with ["New model"](https://github.com/huggingface/transformers/issues?q=is%3Aopen+is%3Aissue+label%3A%22New+model%22). Feel free to give the most requested models a try first to multiply the impact of your contribution. We'll be there to help you each step of the way!
-
-- **Hub-first release**: Transformers [remote-code](./models#custom-models) feature allows Transformers-based projects to be shared directly on the Hub. This is a good option if you don't have the bandwidth to add a model directly to Transformers.
-
-  If a model ends up being very popular, then it's very likely that we'll integrate it in Transformers ourselves to enable better support (documentation, maintenance, optimization, etc.) for it. A Hub-first release is the most frictionless way to add a model.
-
 ## See also
 
 - [Model structure rules](./modeling_rules) — static rules enforced on all `modeling_*.py` and `configuration_*.py` files. Run `make typing` to check them before opening a PR.
