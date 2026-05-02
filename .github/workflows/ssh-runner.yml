@@ -40,6 +40,8 @@ jobs:
             echo "RUNNER=aws-g5-4xlarge-cache-ssh" >> $GITHUB_ENV
           elif [[ "$NUM_GPUS" == "multi" && "$RUNNER_TYPE" == "a10" ]]; then
             echo "RUNNER=aws-g5-12xlarge-cache-ssh" >> $GITHUB_ENV
+          elif [[ "$NUM_GPUS" == "multi" && "$RUNNER_TYPE" == "mi325" ]]; then
+            echo "RUNNER=amd-mi325-2gpu" >> $GITHUB_ENV
           else
             echo "RUNNER=" >> $GITHUB_ENV
           fi
@@ -57,6 +59,7 @@ jobs:
       group: ${{ needs.get_runner.outputs.RUNNER }}
     container:
       image: ${{ github.event.inputs.docker_image }}
+      options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache
     steps:
       - name: Update clone
         working-directory: /transformers
@@ -76,9 +79,15 @@ jobs:
         working-directory: /transformers
         run: pip freeze
 
-      - name: NVIDIA-SMI
+      - name: SMI
         run: |
-          nvidia-smi
+          if [ "$RUNNER_TYPE" == "a10" ]; then
+            nvidia-smi
+          elif [ "$RUNNER_TYPE" == "mi325" ]; then
+            amdsmi
+          else
+            echo "no smi available"
+          fi
 
       - name: Create python alias
         run: |
@@ -169,10 +178,19 @@ jobs:
           fi
         
       - name: Tailscale # In order to be able to SSH when a test fails
-        uses: huggingface/tailscale-action@7d53c9737e53934c30290b5524d1c9b4a7c98c8a  # main
+        #uses: huggingface/tailscale-action@7d53c9737e53934c30290b5524d1c9b4a7c98c8a  # main
+        uses: huggingface/tailscale-action@382cf9daef33b57fbbea5ab699de7b0ba95150e8
         with:
           authkey: ${{ secrets.TAILSCALE_SSH_AUTHKEY }}
           slackChannel: ${{ env.SLACKCHANNEL }}
           slackToken: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
-          waitForSSH: true
-          sshTimeout: 15m
+          containerMode: true
+          version: '1.84.0'
+          debugEnabled: true
+          sha256sum: 'c91eb43a92c209108bfaf1237696ac2089cc3d8fcf35d570d348cbfb19d8fb31'
+          #waitForSSH: true
+          #sshTimeout: 15m
+
+      - name: sleep
+        run: |
+          sleep 60m
