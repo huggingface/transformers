@@ -220,6 +220,7 @@ def evaluation_loop(
 
         metric.update(predictions, target)
 
+    metric.to(accelerator.device)
     metrics = metric.compute()
 
     # Replace list of per class metrics with separate metric for each class
