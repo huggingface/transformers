@@ -63,6 +63,20 @@ python src/transformers/models/musicgen/convert_musicgen_transformers.py \
     --checkpoint small --pytorch_dump_folder /output/path
 ```
 
+### AudioGen (text-to-audio)
+
+The [AudioGen-Medium](https://huggingface.co/facebook/audiogen-medium) checkpoint is published in AudioCraft format
+(`state_dict.bin` and `compression_state_dict.bin`). You can convert it to [`MusicgenForConditionalGeneration`] using
+`src/transformers/models/musicgen/convert_audiogen_transformers.py`. Install [`omegaconf`](https://pypi.org/project/omegaconf/)
+first (`pip install omegaconf`); the `audiocraft` package is not required for this conversion.
+
+```bash
+python src/transformers/models/musicgen/convert_audiogen_transformers.py \
+    --pytorch_dump_folder /output/path
+```
+
+Respect the model license (CC-BY-NC-4.0) when publishing converted weights.
+
 ## Generation
 
 MusicGen is compatible with two generation modes: greedy and sampling. In practice, sampling leads to significantly
