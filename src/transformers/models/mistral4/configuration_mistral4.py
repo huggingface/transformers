@@ -103,11 +103,12 @@ class Mistral4Config(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if self.rope_parameters is None:
+            default_rope_factor = 128.0
             self.rope_parameters = {
                 "type": "yarn",
                 "rope_theta": 10000.0,
-                "factor": 128.0,
-                "original_max_position_embeddings": 8192,
+                "factor": default_rope_factor,
+                "original_max_position_embeddings": max(1, int(self.max_position_embeddings / default_rope_factor)),
                 "max_position_embeddings": self.max_position_embeddings,
                 "beta_fast": 32.0,
                 "beta_slow": 1.0,
