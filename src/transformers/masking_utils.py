@@ -477,6 +477,8 @@ def sdpa_mask(
     ```
 
     """
+    if cache_position.ndim == 0:
+        cache_position = cache_position.unsqueeze(0)
     q_length = cache_position.shape[0]
 
     # Potentially pad the 2D mask
@@ -660,6 +662,8 @@ def flex_attention_mask(
         attention_mask (`torch.Tensor`, optional):
             The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length)
     """
+    if cache_position.ndim == 0:
+        cache_position = cache_position.unsqueeze(0)
     q_length, q_offset = cache_position.shape[0], cache_position[0]
 
     # Potentially add the padding 2D mask
