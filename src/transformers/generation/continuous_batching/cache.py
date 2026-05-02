@@ -556,7 +556,9 @@ class PagedAttentionMemoryHandler:
         self.group_size = group_size
         self.activation_peaks = activation_peaks
         self.num_attention_masks = num_attention_masks
-        self.max_blocks_per_request = continuous_batching_config.max_blocks_per_request or 0
+        self.max_blocks_per_request = continuous_batching_config.max_blocks_per_request
+        if self.max_blocks_per_request is None:
+            self.max_blocks_per_request = continuous_batching_config.fallback_max_blocks_per_request
         # This is the number of output rows for the output_ids tensor
         self.num_output_rows = 2 if continuous_batching_config.return_logprobs else 1
         # This account for the set of 2 IOs if async batching is used
