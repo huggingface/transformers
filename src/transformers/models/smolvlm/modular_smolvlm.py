@@ -137,6 +137,8 @@ class SmolVLMModel(Idefics3Model):
         block_idx = block_offset.unsqueeze(1) + chunk_idx
 
         image_embeds = torch.zeros_like(inputs_embeds)
+        # Ensure dtype compatibility for quantization
+        image_hidden_states = image_hidden_states.to(dtype=inputs_embeds.dtype)
         image_embeds[image_mask] = image_hidden_states[block_idx[image_mask], local_idx[image_mask], :]
 
         merged_embeds = torch.where(image_mask.unsqueeze(-1), image_embeds, inputs_embeds)
@@ -252,7 +254,7 @@ class SmolVLMModel(Idefics3Model):
             ).pooler_output
             image_hidden_states = image_hidden_states.to(inputs_embeds.device)
         elif image_hidden_states is not None:
-            image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=inputs_embeds.device)
+            image_hidden_states = image_hidden_states.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
 
         if image_hidden_states is not None:
             inputs_embeds = self.inputs_merger(
