@@ -1368,6 +1368,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self._keep_in_fp32_modules_strict = set(self._keep_in_fp32_modules_strict or [])
         # Current submodel must register its `_no_split_modules` as well
         self._no_split_modules = set(self._no_split_modules or [])
+        # Current submodel must register the `_keys_to_ignore_on_load_unexpected/missing`
+        self._keys_to_ignore_on_load_unexpected = self._keys_to_ignore_on_load_unexpected or []
+        self._keys_to_ignore_on_load_missing = self._keys_to_ignore_on_load_missing or []
 
         # Iterate over children only: as the final model is created, this is enough to gather the properties from all submodels.
         # This works because the way the `__init__` and `post_init` are called on all submodules is depth-first in the graph
@@ -1390,6 +1393,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Record `_no_split_modules` from the children
             if no_split := getattr(module, "_no_split_modules", None):
                 self._no_split_modules.update(no_split)
+            # Record `_keys_to_ignore_on_load_unexpected/missing` from the children
+            if ignore_unexpected := getattr(module, "_keys_to_ignore_on_load_unexpected", None):
+                self._keys_to_ignore_on_load_unexpected.extend([f"{name}.{child_name}" for child_name in ignore_unexpected])
+            if ignore_missing := getattr(module, "_keys_to_ignore_on_load_missing", None):
+                self._keys_to_ignore_on_load_missing.extend([f"{name}.{child_name}" for child_name in ignore_missing])
 
         # Maybe initialize the weights and tie the keys
         self.init_weights()
