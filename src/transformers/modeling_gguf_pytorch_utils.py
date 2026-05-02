@@ -458,6 +458,8 @@ TENSOR_PROCESSORS = {
     "qwen2moe": Qwen2MoeTensorProcessor,
     "gpt_oss": GptOssTensorProcessor,
     "qwen3moe": Qwen2MoeTensorProcessor,
+    # Qwen3.5 MoE reuses the qwen2/qwen3 fused 3-D ffn_*_exps layout.
+    "qwen35moe": Qwen2MoeTensorProcessor,
     "bloom": BloomTensorProcessor,
     "t5": T5TensorProcessor,
     "t5encoder": T5TensorProcessor,
@@ -512,6 +514,8 @@ def get_gguf_hf_weights_map(
         model_type = "qwen2moe"
     elif model_type == "qwen3_moe":
         model_type = "qwen3moe"
+    elif model_type == "qwen3_5_moe_text":
+        model_type = "qwen35moe"
     elif model_type == "gemma3_text":
         model_type = "gemma3"
     elif model_type == "umt5":
@@ -630,6 +634,12 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
         updated_architecture = "gpt_oss"
     elif "qwen3moe" in architecture:
         updated_architecture = "qwen3_moe"
+    elif "qwen35moe" in architecture:
+        # GGUF identifies Qwen3.5 MoE as "qwen35moe". Route to the
+        # text-only qwen3_5_moe_text config rather than the multimodal
+        # qwen3_5_moe wrapper so Qwen3_5MoeForCausalLM gets the matching
+        # Qwen3_5MoeTextConfig.
+        updated_architecture = "qwen3_5_moe_text"
     elif "minimax-m2" in architecture:
         updated_architecture = "minimax_m2"
 
@@ -714,6 +724,21 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
         parsed_parameters["config"]["full_attn_idxs"] = [
             i for i, num_kv_heads in enumerate(gguf_num_key_value_heads) if num_kv_heads > 0
         ]
+
+    if updated_architecture == "qwen3_5_moe_text":
+        # GatedDeltaNet's value head dim isn't emitted as its own GGUF key —
+        # the writer only emits ssm.inner_size (= linear_value_head_dim *
+        # linear_num_value_heads). Recover it here so the config matches the
+        # checkpoint instead of silently falling back to the class default.
+        ssm_inner_key = f"{architecture}.ssm.inner_size"
+        n_v_heads = parsed_parameters["config"].get("linear_num_value_heads")
+        if ssm_inner_key in reader.fields and n_v_heads:
+            ssm_inner = _gguf_parse_value(
+                reader.fields[ssm_inner_key].parts[reader.fields[ssm_inner_key].data[0]],
+                reader.fields[ssm_inner_key].types,
+            )
+            if ssm_inner % n_v_heads == 0:
+                parsed_parameters["config"]["linear_value_head_dim"] = ssm_inner // n_v_heads
 
     if updated_architecture == "gpt_oss":
         # Helper to read keys with the correct prefix
