@@ -197,7 +197,12 @@ class ChineseCLIPTextPooler(BertPooler):
 
 @auto_docstring
 class ChineseCLIPPreTrainedModel(CLIPPreTrainedModel):
-    _no_split_modules = ["ChineseCLIPVisionEmbeddings", "ChineseCLIPTextEmbeddings", "ChineseCLIPVisionAttention"]
+    _no_split_modules = [
+        "ChineseCLIPVisionEmbeddings",
+        "ChineseCLIPTextEmbeddings",
+        "ChineseCLIPTextLayer",
+        "ChineseCLIPVisionAttention",
+    ]
     _can_record_outputs = {
         "hidden_states": ChineseCLIPVisionLayer,
         "attentions": ChineseCLIPVisionAttention,
