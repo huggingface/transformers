@@ -69,6 +69,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_non_multi_accelerator,
     require_torch_up_to_2_accelerators,
+    require_torchvision,
     require_vision,
     run_first,
     run_test_using_subprocess,
@@ -1511,6 +1512,7 @@ class TrainerSavingTest(TestCasePlus, TrainerIntegrationCommon):
         )
 
     @require_vision
+    @require_torchvision
     def test_trainer_saves_image_processor(self):
         MODEL_ID = "openai/clip-vit-base-patch32"
         image_processor = AutoImageProcessor.from_pretrained(MODEL_ID)
@@ -1545,6 +1547,7 @@ class TrainerSavingTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertDictEqual(feature_extractor.to_dict(), reloaded_feature_extractor.to_dict())
 
     @require_vision
+    @require_torchvision
     def test_trainer_saves_processor(self):
         MODEL_ID = "openai/clip-vit-base-patch32"
         image_processor = AutoImageProcessor.from_pretrained(MODEL_ID)
