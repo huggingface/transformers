@@ -1163,6 +1163,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             "ignore_keys_at_rope_validation",
             "base_model_tp_plan",
             "base_model_pp_plan",
+            "distributed_config",
         ]:
             d.pop(key_to_remove, None)
 
