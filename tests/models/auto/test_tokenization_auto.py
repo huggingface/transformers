@@ -775,6 +775,13 @@ class NopConfig(PreTrainedConfig):
         text = "hello world"
         self.assertEqual(tokenizer.decode(tokenizer.encode(text)), text)
 
+    @slow
+    @require_tokenizers
+    def test_deepseek_r1_distill_qwen_uses_qwen2_tokenizer(self):
+        """Regression: qwen2 model with wrong Hub tokenizer_class='LlamaTokenizerFast' must use Qwen2Tokenizer."""
+        tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B")
+        self.assertIsInstance(tokenizer, Qwen2Tokenizer)
+
     @require_tokenizers
     @require_sentencepiece
     def test_specialized_hub_tokenizer_class_overrides_mismatched_auto_mapping(self):
