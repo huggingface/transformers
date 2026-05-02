@@ -14,7 +14,7 @@ from ...utils.type_validators import interval
 
 
 @auto_docstring(checkpoint="meta-my_new_model/MyNewModel-2-7b-hf")
-@strict(accept_kwargs=True)
+@strict
 class MyNewModelConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MyNewModelModel`]. It is used to instantiate an MyNewModel

@@ -50,7 +50,7 @@ class TextStreamer(BaseStreamer):
 
     Parameters:
         tokenizer (`AutoTokenizer`):
-            The tokenized used to decode the tokens.
+            The tokenizer used to decode the tokens.
         skip_prompt (`bool`, *optional*, defaults to `False`):
             Whether to skip the prompt to `.generate()` or not. Useful e.g. for chatbots.
         decode_kwargs (`dict`, *optional*):
@@ -173,7 +173,7 @@ class TextIteratorStreamer(TextStreamer):
 
     Parameters:
         tokenizer (`AutoTokenizer`):
-            The tokenized used to decode the tokens.
+            The tokenizer used to decode the tokens.
         skip_prompt (`bool`, *optional*, defaults to `False`):
             Whether to skip the prompt to `.generate()` or not. Useful e.g. for chatbots.
         timeout (`float`, *optional*):
@@ -248,7 +248,7 @@ class AsyncTextIteratorStreamer(TextStreamer):
 
     Parameters:
         tokenizer (`AutoTokenizer`):
-            The tokenized used to decode the tokens.
+            The tokenizer used to decode the tokens.
         skip_prompt (`bool`, *optional*, defaults to `False`):
             Whether to skip the prompt to `.generate()` or not. Useful e.g. for chatbots.
         timeout (`float`, *optional*):

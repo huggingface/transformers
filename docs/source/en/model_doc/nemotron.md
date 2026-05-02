@@ -57,17 +57,14 @@ Minitron models are for research and development only.
 The following code provides an example of how to load the Minitron-4B model and use it to perform text generation.
 
 ```python
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
-from accelerate import Accelerator
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 # Load the tokenizer and model
 model_path = 'nvidia/Minitron-4B-Base'
 tokenizer  = AutoTokenizer.from_pretrained(model_path)
 
-device = Accelerator().device
-dtype  = torch.bfloat16
-model  = AutoModelForCausalLM.from_pretrained(model_path, dtype=dtype, device_map=device)
+model  = AutoModelForCausalLM.from_pretrained(model_path, device_map="auto")
 
 # Prepare the input text
 prompt = 'Complete the paragraph: our solar system is'

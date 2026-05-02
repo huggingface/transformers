@@ -39,17 +39,16 @@ The example below demonstrates how to translate text with [`Pipeline`] or the [`
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="translation",
     model="facebook/mbart-large-50-many-to-many-mmt",
-    device=0,
-    dtype=torch.float16,
     src_lang="en_XX",
     tgt_lang="fr_XX",
+    device=0,
 )
 print(pipeline("UN Chief Says There Is No Military Solution in Syria"))
 ```
@@ -57,13 +56,13 @@ print(pipeline("UN Chief Says There Is No Military Solution in Syria"))
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
 
 article_en = "UN Chief Says There Is No Military Solution in Syria"
 
-model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-50-many-to-many-mmt", dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
+model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-50-many-to-many-mmt", attn_implementation="sdpa", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
 
 tokenizer.src_lang = "en_XX"
@@ -85,11 +84,11 @@ print(tokenizer.batch_decode(generated_tokens, skip_special_tokens=True))
     import torch
     from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-    model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-en-ro", dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
+    model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-en-ro", attn_implementation="sdpa", device_map="auto")
     tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-en-ro", src_lang="en_XX")
 
     article = "UN Chief Says There Is No Military Solution in Syria"
-    inputs = tokenizer(article, return_tensors="pt")
+    inputs = tokenizer(article, return_tensors="pt").to(model.device)
 
     translated_tokens = model.generate(**inputs, decoder_start_token_id=tokenizer.lang_code_to_id["ro_RO"])
     tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
@@ -102,13 +101,13 @@ print(tokenizer.batch_decode(generated_tokens, skip_special_tokens=True))
     import torch
     from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-    model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-50-many-to-many-mmt", dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
+    model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-50-many-to-many-mmt", attn_implementation="sdpa", device_map="auto")
     tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
 
     article_ar = "الأمين العام للأمم المتحدة يقول إنه لا يوجد حل عسكري في سوريا."
     tokenizer.src_lang = "ar_AR"
 
-    encoded_ar = tokenizer(article_ar, return_tensors="pt")
+    encoded_ar = tokenizer(article_ar, return_tensors="pt").to(model.device)
     generated_tokens = model.generate(**encoded_ar, forced_bos_token_id=tokenizer.lang_code_to_id["en_XX"])
     tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
     ```

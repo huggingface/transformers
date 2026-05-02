@@ -47,23 +47,26 @@ The Descript Audio Codec (DAC) model is structured into three distinct stages:
 Here is a quick example of how to encode and decode an audio using this model:
 
 ```python
->>> from datasets import load_dataset, Audio
->>> from transformers import DacModel, AutoProcessor
->>> librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+from datasets import Audio, load_dataset
 
->>> model = DacModel.from_pretrained("descript/dac_16khz")
->>> processor = AutoProcessor.from_pretrained("descript/dac_16khz")
->>> librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
->>> audio_sample = librispeech_dummy[-1]["audio"]["array"]
->>> inputs = processor(raw_audio=audio_sample, sampling_rate=processor.sampling_rate, return_tensors="pt")
+from transformers import AutoProcessor, DacModel
 
->>> encoder_outputs = model.encode(inputs["input_values"])
->>> # Get the intermediate audio codes
->>> audio_codes = encoder_outputs.audio_codes
->>> # Reconstruct the audio from its quantized representation
->>> audio_values = model.decode(encoder_outputs.quantized_representation)
->>> # or the equivalent with a forward pass
->>> audio_values = model(inputs["input_values"]).audio_values
+
+librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+
+model = DacModel.from_pretrained("descript/dac_16khz", device_map="auto")
+processor = AutoProcessor.from_pretrained("descript/dac_16khz")
+librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
+audio_sample = librispeech_dummy[-1]["audio"]["array"]
+inputs = processor(raw_audio=audio_sample, sampling_rate=processor.sampling_rate, return_tensors="pt").to(model.device)
+
+encoder_outputs = model.encode(inputs["input_values"])
+# Get the intermediate audio codes
+audio_codes = encoder_outputs.audio_codes
+# Reconstruct the audio from its quantized representation
+audio_values = model.decode(encoder_outputs.quantized_representation)
+# or the equivalent with a forward pass
+audio_values = model(inputs["input_values"]).audio_values
 ```
 
 ## DacConfig

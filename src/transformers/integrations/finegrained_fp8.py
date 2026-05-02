@@ -13,7 +13,6 @@
 # limitations under the License.
 import torch
 import torch.nn as nn
-import triton
 from torch.nn import functional as F
 
 from ..activations import ACT2FN
@@ -53,6 +52,13 @@ deepgemm_per_token_cast_to_fp8 = None
 _deepgemm_available = None
 
 
+def _first_attr(obj, *names):
+    for name in names:
+        if hasattr(obj, name):
+            return getattr(obj, name)
+    raise AttributeError(f"{type(obj).__name__} has none of: {names}")
+
+
 def _load_triton_kernel():
     """Lazily load the finegrained-fp8 Triton kernel and extract functions.
 
@@ -74,10 +80,10 @@ def _load_triton_kernel():
     _triton_available = False  # mark attempted before any early exit
 
     kernel = lazy_load_kernel("finegrained-fp8")
-    triton_fp8_matmul = getattr(kernel, "w8a8_fp8_matmul")
-    triton_fp8_act_quant = getattr(kernel, "fp8_act_quant")
-    triton_batched_fp8_matmul = getattr(kernel, "w8a8_fp8_matmul_batched")
-    triton_grouped_fp8_matmul = getattr(kernel, "w8a8_fp8_matmul_grouped")
+    triton_fp8_matmul = getattr(kernel, "w8a8_fp8_matmul", None)
+    triton_fp8_act_quant = getattr(kernel, "fp8_act_quant", None)
+    triton_batched_fp8_matmul = getattr(kernel, "w8a8_fp8_matmul_batched", None)
+    triton_grouped_fp8_matmul = getattr(kernel, "w8a8_fp8_matmul_grouped", None)
 
     missing = [
         name
@@ -137,8 +143,8 @@ def _load_deepgemm_kernel():
         )
 
     kernel = lazy_load_kernel("deep-gemm")
-    deepgemm_fp8_matmul = getattr(kernel, "fp8_gemm_nt")
-    deepgemm_grouped_fp8_matmul = getattr(kernel, "m_grouped_fp8_gemm_nt_contiguous")
+    deepgemm_fp8_matmul = getattr(kernel, "fp8_gemm_nt", None)
+    deepgemm_grouped_fp8_matmul = getattr(kernel, "m_grouped_fp8_gemm_nt_contiguous", None)
     deepgemm_per_token_cast_to_fp8 = resolve_internal_import(kernel, chained_path="utils.per_token_cast_to_fp8")
 
     missing = [
@@ -157,6 +163,11 @@ def _load_deepgemm_kernel():
         )
 
     _deepgemm_available = True
+
+
+def _cdiv(a: int, b: int) -> int:
+    """Ceiling division."""
+    return (a + b - 1) // b
 
 
 def w8a8_fp8_matmul(
@@ -596,15 +607,15 @@ class FP8Experts(nn.Module):
         self.block_size = block_size
         self.hidden_dim = config.hidden_size
         self.activation_scheme = activation_scheme
-        self.num_experts = getattr(config, "num_local_experts", config.num_experts)
-        self.intermediate_dim = getattr(config, "moe_intermediate_size", config.intermediate_size)
-        self.act_fn = ACT2FN[getattr(config, "hidden_activation", config.hidden_act)]
+        self.num_experts = _first_attr(config, "num_local_experts", "num_experts")
+        self.intermediate_dim = _first_attr(config, "moe_intermediate_size", "intermediate_size")
+        self.act_fn = ACT2FN[_first_attr(config, "hidden_activation", "hidden_act")]
 
         if self.has_gate:
             gu_proj_out, gu_proj_in = 2 * self.intermediate_dim, self.hidden_dim
             self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, gu_proj_out, gu_proj_in, dtype=dtype))
-            gu_scale_out = triton.cdiv(gu_proj_out, self.block_size[0]) if self.block_size is not None else 1
-            gu_scale_in = triton.cdiv(gu_proj_in, self.block_size[1]) if self.block_size is not None else 1
+            gu_scale_out = _cdiv(gu_proj_out, self.block_size[0]) if self.block_size is not None else 1
+            gu_scale_in = _cdiv(gu_proj_in, self.block_size[1]) if self.block_size is not None else 1
             self.gate_up_proj_scale_inv = nn.Parameter(
                 torch.empty(self.num_experts, gu_scale_out, gu_scale_in, dtype=torch.float32)
             )
@@ -612,8 +623,8 @@ class FP8Experts(nn.Module):
         else:
             u_proj_out, u_proj_in = self.intermediate_dim, self.hidden_dim
             self.up_proj = nn.Parameter(torch.empty(self.num_experts, u_proj_out, u_proj_in, dtype=dtype))
-            u_scale_out = triton.cdiv(u_proj_out, self.block_size[0]) if self.block_size is not None else 1
-            u_scale_in = triton.cdiv(u_proj_in, self.block_size[1]) if self.block_size is not None else 1
+            u_scale_out = _cdiv(u_proj_out, self.block_size[0]) if self.block_size is not None else 1
+            u_scale_in = _cdiv(u_proj_in, self.block_size[1]) if self.block_size is not None else 1
             self.up_proj_scale_inv = nn.Parameter(
                 torch.empty(self.num_experts, u_scale_out, u_scale_in, dtype=torch.float32)
             )
@@ -621,8 +632,8 @@ class FP8Experts(nn.Module):
 
         d_proj_out, d_proj_in = self.hidden_dim, self.intermediate_dim
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, d_proj_out, d_proj_in, dtype=dtype))
-        d_scale_out = triton.cdiv(d_proj_out, self.block_size[0]) if self.block_size is not None else 1
-        d_scale_in = triton.cdiv(d_proj_in, self.block_size[1]) if self.block_size is not None else 1
+        d_scale_out = _cdiv(d_proj_out, self.block_size[0]) if self.block_size is not None else 1
+        d_scale_in = _cdiv(d_proj_in, self.block_size[1]) if self.block_size is not None else 1
         self.down_proj_scale_inv = nn.Parameter(
             torch.empty(self.num_experts, d_scale_out, d_scale_in, dtype=torch.float32)
         )

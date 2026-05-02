@@ -657,7 +657,7 @@ class SpmConverter(Converter):
                     dropout=None,
                 )
             )
-        elif isinstance(vocab, list) and vocab and isinstance(vocab[0], (tuple, list)):
+        elif isinstance(vocab, list) and vocab and isinstance(vocab[0], tuple | list):
             tokenizer = Tokenizer(
                 Unigram(
                     vocab=vocab,

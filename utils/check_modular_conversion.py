@@ -106,6 +106,23 @@ def compare_files(modular_file_path, show_diff=True):
     return diff
 
 
+# Changes to any of these files can alter the generated output for every modular model,
+# so touching them must force a full re-check (see `converter_changed_in_diff`).
+CONVERTER_FILES = {
+    "utils/modular_model_converter.py",
+    "utils/create_dependency_mapping.py",
+}
+
+
+def _get_modified_files():
+    fork_point_sha = subprocess.check_output("git merge-base main HEAD".split()).decode("utf-8")
+    return (
+        subprocess.check_output(f"git diff --diff-filter=d --name-only {fork_point_sha}".split())
+        .decode("utf-8")
+        .split()
+    )
+
+
 def get_models_in_diff():
     """
     Finds all models that have been modified in the diff.
@@ -113,12 +130,7 @@ def get_models_in_diff():
     Returns:
         A set containing the names of the models that have been modified (e.g. {'llama', 'whisper'}).
     """
-    fork_point_sha = subprocess.check_output("git merge-base main HEAD".split()).decode("utf-8")
-    modified_files = (
-        subprocess.check_output(f"git diff --diff-filter=d --name-only {fork_point_sha}".split())
-        .decode("utf-8")
-        .split()
-    )
+    modified_files = _get_modified_files()
 
     # Matches both modelling files and tests
     relevant_modified_files = [x for x in modified_files if "/models/" in x and x.endswith(".py")]
@@ -127,6 +139,11 @@ def get_models_in_diff():
         model_name = file_path.split("/")[-2]
         model_names.add(model_name)
     return model_names
+
+
+def converter_changed_in_diff():
+    """Whether the diff touches a file that can change conversion output for every model."""
+    return any(f in CONVERTER_FILES for f in _get_modified_files())
 
 
 def guaranteed_no_diff(modular_file_path, dependencies, models_in_diff):
@@ -186,6 +203,12 @@ if __name__ == "__main__":
         console.print(
             "[bold red]You are developing on the main branch. We cannot identify the list of changed files and will have to check all files. This may take a while.[/bold red]"
         )
+        models_in_diff = {file_path.split("/")[-2] for file_path in args.files}
+    elif converter_changed_in_diff():
+        # The converter (or its dependency-mapping helper) is in the diff: its output can shift
+        # for any model, so restrict-by-diff would miss regressions. Force a full check.
+        console.print("[bold yellow]Converter change detected in diff; checking all modular files.[/bold yellow]")
+        args.check_all = True
         models_in_diff = {file_path.split("/")[-2] for file_path in args.files}
     else:
         models_in_diff = get_models_in_diff()

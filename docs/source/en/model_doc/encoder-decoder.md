@@ -37,11 +37,11 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 <hfoption id="AutoModel">
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+
 tokenizer = AutoTokenizer.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16")
-model = AutoModelForCausalLM.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16", dtype=torch.bfloat16, device_map="auto",attn_implementation="sdpa")
+model = AutoModelForCausalLM.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16", device_map="auto",attn_implementation="sdpa")
 
 text = "Plants create energy through a process known as photosynthesis. This involves capturing sunlight and converting carbon dioxide and water into glucose and oxygen."
 
@@ -61,7 +61,8 @@ print(tokenizer.decode(summary[0], skip_special_tokens=True))
 These models require downstream fine-tuning, as discussed in this [blog post](https://huggingface.co/blog/warm-starting-encoder-decoder). Use [`~EncoderDecoderModel.from_encoder_decoder_pretrained`] to combine encoder and decoder checkpoints.
 
 ```python
-from transformers import EncoderDecoderModel, BertTokenizer
+from transformers import BertTokenizer, EncoderDecoderModel
+
 
 tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
 model = EncoderDecoderModel.from_encoder_decoder_pretrained(
@@ -73,38 +74,40 @@ model = EncoderDecoderModel.from_encoder_decoder_pretrained(
 - Encoder Decoder models can be fine-tuned like BART, T5 or any other encoder-decoder model. Only 2 inputs are required to compute a loss, `input_ids` and `labels`. Refer to this [notebook](https://colab.research.google.com/drive/1WIk2bxglElfZewOHboPFNj8H44_VAyKE?usp=sharing#scrollTo=ZwQIEhKOrJpl) for a more detailed training example.
 
 ```python
->>> from transformers import BertTokenizer, EncoderDecoderModel
+from transformers import BertTokenizer, EncoderDecoderModel
 
->>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
->>> model = EncoderDecoderModel.from_encoder_decoder_pretrained("google-bert/bert-base-uncased", "google-bert/bert-base-uncased")
 
->>> model.config.decoder_start_token_id = tokenizer.cls_token_id
->>> model.config.pad_token_id = tokenizer.pad_token_id
+tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
+model = EncoderDecoderModel.from_encoder_decoder_pretrained("google-bert/bert-base-uncased", "google-bert/bert-base-uncased")
 
->>> input_ids = tokenizer(
-...     "The tower is 324 metres (1,063 ft) tall, about the same height as an 81-storey building, and the tallest structure in Paris. Its base is square, measuring 125 metres (410 ft) on each side.During its construction, the Eiffel Tower surpassed the Washington Monument to become the tallest man-made structure in the world, a title it held for 41 years until the Chrysler Building in New York City was  finished in 1930. It was the first structure to reach a height of 300 metres. Due to the addition of a broadcasting aerial at the top of the tower in 1957, it is now taller than the Chrysler Building by 5.2 metres (17 ft).Excluding transmitters, the Eiffel Tower is the second tallest free-standing structure in France after the Millau Viaduct.",
-...     return_tensors="pt",
-... ).input_ids
+model.config.decoder_start_token_id = tokenizer.cls_token_id
+model.config.pad_token_id = tokenizer.pad_token_id
 
->>> labels = tokenizer(
-...     "the eiffel tower surpassed the washington monument to become the tallest structure in the world. it was the first structure to reach a height of 300 metres in paris in 1930. it is now taller than the chrysler building by 5. 2 metres ( 17 ft ) and is the second tallest free - standing structure in paris.",
-...     return_tensors="pt",
-... ).input_ids
+input_ids = tokenizer(
+    "The tower is 324 metres (1,063 ft) tall, about the same height as an 81-storey building, and the tallest structure in Paris. Its base is square, measuring 125 metres (410 ft) on each side.During its construction, the Eiffel Tower surpassed the Washington Monument to become the tallest man-made structure in the world, a title it held for 41 years until the Chrysler Building in New York City was  finished in 1930. It was the first structure to reach a height of 300 metres. Due to the addition of a broadcasting aerial at the top of the tower in 1957, it is now taller than the Chrysler Building by 5.2 metres (17 ft).Excluding transmitters, the Eiffel Tower is the second tallest free-standing structure in France after the Millau Viaduct.",
+    return_tensors="pt",
+).input_ids
 
->>> # the forward function automatically creates the correct decoder_input_ids
->>> loss = model(input_ids=input_ids, labels=labels).loss
+labels = tokenizer(
+    "the eiffel tower surpassed the washington monument to become the tallest structure in the world. it was the first structure to reach a height of 300 metres in paris in 1930. it is now taller than the chrysler building by 5. 2 metres ( 17 ft ) and is the second tallest free - standing structure in paris.",
+    return_tensors="pt",
+).input_ids
+
+# the forward function automatically creates the correct decoder_input_ids
+loss = model(input_ids=input_ids, labels=labels).loss
 ```
 
 - [`EncoderDecoderModel`] can be randomly initialized from an encoder and a decoder config as shown below.
 
 ```python
->>> from transformers import BertConfig, EncoderDecoderConfig, EncoderDecoderModel
+from transformers import BertConfig, EncoderDecoderConfig, EncoderDecoderModel
 
->>> config_encoder = BertConfig()
->>> config_decoder = BertConfig()
 
->>> config = EncoderDecoderConfig.from_encoder_decoder_configs(config_encoder, config_decoder)
->>> model = EncoderDecoderModel(config=config)
+config_encoder = BertConfig()
+config_decoder = BertConfig()
+
+config = EncoderDecoderConfig.from_encoder_decoder_configs(config_encoder, config_decoder)
+model = EncoderDecoderModel(config=config)
 ```
 
 - The Encoder Decoder Model can also be used for translation as shown below.
@@ -112,16 +115,17 @@ model = EncoderDecoderModel.from_encoder_decoder_pretrained(
 ```python
 from transformers import AutoTokenizer, EncoderDecoderModel
 
+
 # Load a pre-trained translation model
 model_name = "google/bert2bert_L-24_wmt_en_de"
 tokenizer = AutoTokenizer.from_pretrained(model_name, pad_token="<pad>", eos_token="</s>", bos_token="<s>")
-model = EncoderDecoderModel.from_pretrained(model_name)
+model = EncoderDecoderModel.from_pretrained(model_name, device_map="auto")
 
 # Input sentence to translate
 input_text = "Plants create energy through a process known as"
 
 # Encode the input text
-inputs = tokenizer(input_text, return_tensors="pt", add_special_tokens=False).input_ids
+inputs = tokenizer(input_text, return_tensors="pt", add_special_tokens=False).to(model.device).input_ids
 
 # Generate the translated output
 outputs = model.generate(inputs)[0]

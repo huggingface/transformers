@@ -186,6 +186,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("megatron-bert", "BertTokenizer" if is_tokenizers_available() else None),
         ("metaclip_2", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("mgp-str", "MgpstrTokenizer"),
+        ("minicpmv4_6", "TokenizersBackend" if is_tokenizers_available() else None),
         (
             "ministral",
             "MistralCommonBackend"
@@ -258,6 +259,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
             else ("TokenizersBackend" if is_tokenizers_available() else None),
         ),
         ("plbart", "PLBartTokenizer" if is_tokenizers_available() else None),
+        ("pp_formulanet", "NougatTokenizer" if is_tokenizers_available() else None),
         ("prophetnet", "ProphetNetTokenizer"),
         ("qdqbert", "BertTokenizer" if is_tokenizers_available() else None),
         ("qianfan_ocr", "Qwen2Tokenizer" if is_tokenizers_available() else None),
@@ -704,8 +706,8 @@ class AutoTokenizer:
             else:
                 tokenizer_auto_map = tokenizer_config["auto_map"].get("AutoTokenizer", None)
 
-        # if there is a config, we can check that the tokenizer class != than model class and can thus assume we need to use TokenizersBackend
-        # Skip this early exit if auto_map is present (custom tokenizer with trust_remote_code)
+        # if there is a config, we can check that the tokenizer class != than model class.
+        # Use the config class if it's a specialized tokenizer, otherwise fall back to TokenizersBackend.
         if (
             tokenizer_auto_map is None
             and tokenizer_config_class is not None
@@ -715,15 +717,23 @@ class AutoTokenizer:
             and (TOKENIZER_MAPPING_NAMES.get(config_model_type).removesuffix("Fast"))
             != (tokenizer_config_class.removesuffix("Fast"))
         ):
-            # new model, but we ignore it unless the model type is the same
-            if TokenizersBackend is not None:
-                try:
-                    return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-                except Exception as e:
-                    logger.debug(f"Failed to use TokenizersBackend: {e}")
+            registered_class_name = TOKENIZER_MAPPING_NAMES.get(config_model_type).removesuffix("Fast")
+            if registered_class_name not in ("TokenizersBackend", "PythonBackend", "PreTrainedTokenizerFast"):
+                # The auto-mapping has a real class but the Hub specifies a different specialized class so trust the Hub's class.
+                tokenizer_class = tokenizer_class_from_name(tokenizer_config_class)
+                if tokenizer_class is not None and tokenizer_class.__name__ not in (
+                    "TokenizersBackend",
+                    "PythonBackend",
+                    "PreTrainedTokenizerFast",
+                ):
+                    return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
-            return tokenizer_class_from_name(tokenizer_config_class).from_pretrained(
-                pretrained_model_name_or_path, *inputs, **kwargs
+            if TokenizersBackend is not None:
+                return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
+            raise ValueError(
+                f"Tokenizer class '{tokenizer_config_class}' specified in the tokenizer config was not found. "
+                f"The tokenizer may need to be converted or re-saved."
             )
 
         if "_commit_hash" in tokenizer_config:

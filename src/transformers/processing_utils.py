@@ -1813,6 +1813,8 @@ class ProcessorMixin(PushToHubMixin):
                 images, videos = [], []
                 for message in conversation:
                     content = message.get("content") or []
+                    if isinstance(content, str):
+                        continue
                     visuals = [
                         content_block for content_block in content if content_block["type"] in ["image", "video"]
                     ]
