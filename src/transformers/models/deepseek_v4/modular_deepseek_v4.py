@@ -656,7 +656,12 @@ class DeepseekV4Attention(nn.Module):
             compressed_kv = self.compressor(hidden_states, q_residual, position_ids, past_key_values, self.layer_idx)
             kv = torch.cat([kv, compressed_kv], dim=2)
 
-        if attention_mask is not None and kv.shape[2] > attention_mask.shape[-1]:
+        # The compressor path concatenates extra entries onto the KV axis after the
+        # standard sliding-window cache update, so a tensor `attention_mask` (built
+        # for the pre-concat KV length) needs to be right-padded to cover them.
+        # Flex-attention passes a `BlockMask` whose KV-length axis comes from its
+        # own `mask_mod`, not from a dense tensor — skip the pad in that case.
+        if isinstance(attention_mask, torch.Tensor) and kv.shape[2] > attention_mask.shape[-1]:
             attention_mask = F.pad(attention_mask, (0, kv.shape[2] - attention_mask.shape[-1]), value=0.0)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
@@ -942,11 +947,17 @@ class DeepseekV4PreTrainedModel(MixtralPreTrainedModel):
     base_model_prefix = "model"
     _no_split_modules = ["DeepseekV4DecoderLayer"]
     # V4 supports the same backends as gpt-oss (sink-attention sibling): FlashAttention
-    # (FA3 / FA4 take the standard varlen path with a sink) and FlexAttention. SDPA
-    # stays off — torch's SDPA kernel doesn't carry the per-head learnable sink term.
+    # (FA3 / FA4 take the standard varlen path with a sink). SDPA stays off — torch's
+    # SDPA kernel doesn't carry the per-head learnable sink term. FlexAttention is also
+    # off: V4 attention concatenates compressor entries onto the KV axis *inside* the
+    # attention block, after the model-level mask was built, so the resulting KV length
+    # doesn't match the BlockMask's `kv_len`. There's no runtime resize on BlockMask,
+    # and rebuilding it per-block would require teaching the compressor's variable
+    # output count to a `mask_mod` — not worth it for a path the compressor already
+    # owns its own causality bookkeeping for.
     _supports_flash_attn = True
     _supports_sdpa = False
-    _supports_flex_attn = True
+    _supports_flex_attn = False
     # The compressor's rolling-window buffer / compressed-entries / overlap state
     # lives on the per-layer cache (:class:`DeepseekV4HCACache` /
     # :class:`DeepseekV4CSACache`) and isn't compatible with :class:`StaticCache`
