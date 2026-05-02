@@ -177,6 +177,26 @@ class DeepseekV4Config(PreTrainedConfig):
     mlp_bias: bool = False
     attention_dropout: float = 0.0
 
+    # V4's `rope_parameters` is keyed by *rope-type* labels (`main` / `compress`) — not
+    # by `layer_types`. The base `validate_rope` checks `keys ⊆ layer_types` and falls
+    # back to wrapping the whole dict as a single set of params when the subset check
+    # fails, which then warns about `main` / `compress` as unrecognized keys. Override
+    # to iterate the rope-type-keyed sub-dicts directly.
+    _rope_type_labels = ("main", "compress")
+
+    def validate_rope(self):
+        rope_parameters_dict = getattr(self, "rope_parameters", None) or {}
+        ignore_keys = self.ignore_keys_at_rope_validation
+        for rope_type_label in self._rope_type_labels:
+            rope_parameters = rope_parameters_dict.get(rope_type_label)
+            if not isinstance(rope_parameters, dict):
+                continue
+            rope_type = rope_parameters.get("rope_type", rope_parameters.get("type", "default"))
+            rope_parameters["rope_type"] = rope_type
+            validation_fn = getattr(self, f"_validate_{rope_type}_rope_parameters", None)
+            if validation_fn is not None:
+                validation_fn(rope_parameters, ignore_keys=ignore_keys)
+
     def validate_layer_type(self):
         """V4 narrows the global `ALLOWED_LAYER_TYPES` to the three attention-block
         types and two MLP-block types it actually ships with, on top of the standard
