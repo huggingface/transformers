@@ -3738,6 +3738,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             register_kernel_mapping_transformers()
 
             if kernel_config is not None and isinstance(kernel_config, KernelConfig):
+                # For n-to-1 entries (tuple keys), fuse the corresponding modules in the model
+                # before validation so that FusedModuleBase instances are visible to sanitize.
+                kernel_config.apply_fusions(self)
+
                 # This will make sure the mapping is valid, and the layers are registered in the model
                 kernel_config.sanitize_kernel_mapping(self)
 
