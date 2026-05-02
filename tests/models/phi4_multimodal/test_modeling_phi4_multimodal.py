@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import unittest
 
 import pytest
@@ -110,8 +111,8 @@ class Phi4MultimodalModelTester:
         self.eos_token_id = eos_token_id
         self.image_token_id = image_token_id
         self.audio_token_id = audio_token_id
-        self.audio_config = audio_config
-        self.vision_config = vision_config
+        self.audio_config = copy.deepcopy(audio_config)
+        self.vision_config = copy.deepcopy(vision_config)
 
         self.is_training = is_training
         self.batch_size = batch_size
