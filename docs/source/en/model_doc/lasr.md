@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2025-12-05.*
+*This model was released on 2020-05-16 and added to Hugging Face Transformers on 2025-12-05.*
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -33,8 +33,9 @@ LASR is the architecture behind MedASR, a speech-to-text model from Google Healt
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 from transformers import pipeline
+
 
 pipe = pipeline("automatic-speech-recognition", model="google/medasr")
 out = pipe("path/to/audio.mp3")
@@ -44,12 +45,14 @@ print(out)
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
+from datasets import Audio, load_dataset
+
 from transformers import AutoModelForCTC, AutoProcessor
-from datasets import load_dataset, Audio
+
 
 processor = AutoProcessor.from_pretrained("google/medasr")
-model = AutoModelForCTC.from_pretrained("google/medasr", dtype="auto", device_map="auto")
+model = AutoModelForCTC.from_pretrained("google/medasr", device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -69,12 +72,14 @@ print(processor.batch_decode(outputs))
 The example below prepares a batch of audio and text, passes it through the LASR/MedASR model, and computes the training loss.
 
 ```python
+from datasets import Audio, load_dataset
+
 from transformers import AutoModelForCTC, AutoProcessor
-from datasets import load_dataset, Audio
+
 
 # Load processor and model
 processor = AutoProcessor.from_pretrained("google/medasr")
-model = AutoModelForCTC.from_pretrained("google/medasr", dtype="auto", device_map="auto")
+model = AutoModelForCTC.from_pretrained("google/medasr", device_map="auto")
 
 # Load a small example dataset and prepare batch
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")

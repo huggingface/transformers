@@ -41,10 +41,10 @@ The example below demonstrates how to translate text with [`Pipeline`] or the [`
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
 
-pipeline = pipeline(task="translation", model="facebook/nllb-200-distilled-600M", src_lang="eng_Latn", tgt_lang="fra_Latn", dtype=torch.float16, device=0)
+
+pipeline = pipeline(task="translation", model="facebook/nllb-200-distilled-600M", src_lang="eng_Latn", tgt_lang="fra_Latn", device=0)
 pipeline("UN Chief says there is no military solution in Syria")
 ```
 
@@ -54,11 +54,12 @@ pipeline("UN Chief says there is no military solution in Syria")
 ```python
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
+
 tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-600M")
-model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M", dtype="auto", attn_implementation="sdpa")
+model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M", attn_implementation="sdpa", device_map="auto")
 
 article = "UN Chief says there is no military solution in Syria"
-inputs = tokenizer(article, return_tensors="pt")
+inputs = tokenizer(article, return_tensors="pt").to(model.device)
 
 translated_tokens = model.generate(
     **inputs, forced_bos_token_id=tokenizer.convert_tokens_to_ids("fra_Latn"), max_length=30
@@ -76,8 +77,9 @@ The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize 
 ```python
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BitsAndBytesConfig
 
+
 bnb_config = BitsAndBytesConfig(load_in_8bit=True)
-model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-1.3B", quantization_config=bnb_config)
+model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-1.3B", quantization_config=bnb_config, device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-1.3B")
 
 article = "UN Chief says there is no military solution in Syria"
@@ -93,6 +95,7 @@ Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/bl
 ```python
 from transformers.utils.attention_visualizer import AttentionMaskVisualizer
 
+
 visualizer = AttentionMaskVisualizer("facebook/nllb-200-distilled-600M")
 visualizer("UN Chief says there is no military solution in Syria")
 ```
@@ -106,19 +109,19 @@ visualizer("UN Chief says there is no military solution in Syria")
 - The tokenizer was updated in April 2023 to prefix the source sequence with the source language rather than the target language. This prioritizes zero-shot performance at a minor cost to supervised performance.
 
    ```python
-   >>> from transformers import NllbTokenizer
+   from transformers import NllbTokenizer
 
-   >>> tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-200-distilled-600M")
-   >>> tokenizer("How was your day?").input_ids
+   tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-200-distilled-600M")
+   tokenizer("How was your day?").input_ids
    [256047, 13374, 1398, 4260, 4039, 248130, 2]
    ```
 
    To revert to the legacy behavior, use the code example below.
 
    ```python
-   >>> from transformers import NllbTokenizer
+   from transformers import NllbTokenizer
 
-   >>> tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-200-distilled-600M", legacy_behaviour=True)
+   tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-200-distilled-600M", legacy_behaviour=True)
    ```
 
 - For non-English languages, specify the language's [BCP-47](https://github.com/facebookresearch/flores/blob/main/flores200/README.md#languages-in-flores-200) code with the `src_lang` keyword as shown below.
@@ -126,18 +129,18 @@ visualizer("UN Chief says there is no military solution in Syria")
 - See example below for a translation from Romanian to German.
 
     ```python
-    >>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+    from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-    >>> tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-600M")
-    >>> model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M")
+    tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-600M")
+    model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M", device_map="auto")
 
-    >>> article = "UN Chief says there is no military solution in Syria"
-    >>> inputs = tokenizer(article, return_tensors="pt")
+    article = "UN Chief says there is no military solution in Syria"
+    inputs = tokenizer(article, return_tensors="pt").to(model.device)
 
-    >>> translated_tokens = model.generate(
-    ...     **inputs, forced_bos_token_id=tokenizer.convert_tokens_to_ids("fra_Latn"), max_length=30
-    ... )
-    >>> tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
+    translated_tokens = model.generate(
+        **inputs, forced_bos_token_id=tokenizer.convert_tokens_to_ids("fra_Latn"), max_length=30
+    )
+    tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
     Le chef de l'ONU dit qu'il n'y a pas de solution militaire en Syrie
     ```
 

@@ -56,6 +56,7 @@ The model supports audio-text instructions, including multi-turn interactions, a
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
 
+
 model_id = "nvidia/audio-flamingo-3-hf"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AudioFlamingo3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
@@ -87,6 +88,7 @@ print(decoded_outputs)
 
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
+
 
 model_id = "nvidia/audio-flamingo-3-hf"
 processor = AutoProcessor.from_pretrained(model_id)
@@ -133,6 +135,7 @@ print(decoded_outputs)
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
 
+
 model_id = "nvidia/audio-flamingo-3-hf"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AudioFlamingo3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
@@ -164,6 +167,7 @@ print(decoded_outputs)
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
 
+
 model_id = "nvidia/audio-flamingo-3-hf"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AudioFlamingo3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
@@ -194,6 +198,7 @@ print(decoded_outputs)
 
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
+
 
 model_id = "nvidia/audio-flamingo-3-hf"
 processor = AutoProcessor.from_pretrained(model_id)
@@ -243,6 +248,7 @@ print(decoded_outputs)
 
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
+
 
 model_id = "nvidia/audio-flamingo-3-hf"
 processor = AutoProcessor.from_pretrained(model_id)
@@ -298,6 +304,7 @@ loss.backward()
 
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
+
 
 model_id = "nvidia/audio-flamingo-3-hf"
 processor = AutoProcessor.from_pretrained(model_id)

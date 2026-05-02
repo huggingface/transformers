@@ -43,8 +43,8 @@ Other models from the family can be found at [Ernie 4.5 Moe](./ernie4_5_moe) and
 ### Generate text
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 model_name = "baidu/ERNIE-4.5-0.3B-PT"
 
@@ -53,11 +53,10 @@ tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
     device_map="auto",
-    dtype=torch.bfloat16,
 )
 
 # prepare the model input
-inputs = tokenizer("Hey, are you conscious? Can you talk to me?", return_tensors="pt")
+inputs = tokenizer("Hey, are you conscious? Can you talk to me?", return_tensors="pt").to(model.device)
 prompt = "Hey, are you conscious? Can you talk to me?"
 messages = [
     {"role": "user", "content": prompt}

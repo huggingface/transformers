@@ -76,6 +76,7 @@ else:
             ("convnextv2", {"torchvision": "ConvNextImageProcessor", "pil": "ConvNextImageProcessorPil"}),
             ("cvt", {"torchvision": "ConvNextImageProcessor", "pil": "ConvNextImageProcessorPil"}),
             ("data2vec-vision", {"torchvision": "BeitImageProcessor", "pil": "BeitImageProcessorPil"}),
+            ("deimv2", {"torchvision": "RTDetrImageProcessor", "pil": "RTDetrImageProcessorPil"}),
             ("depth_anything", {"torchvision": "DPTImageProcessor", "pil": "DPTImageProcessorPil"}),
             ("dinat", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
             ("dinov2", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
@@ -582,8 +583,8 @@ class AutoImageProcessor:
                 feature_extractor_auto_map = config_dict["auto_map"]["AutoFeatureExtractor"]
                 image_processor_auto_map = feature_extractor_auto_map.replace("FeatureExtractor", "ImageProcessor")
 
-        # If not in image processor config, try the model config
-        if image_processor_type is None and image_processor_auto_map is None:
+        # If not in image processor config, try the model config (override image_processor_auto_map if trust_remote_code is False)
+        if image_processor_type is None and (image_processor_auto_map is None or trust_remote_code is False):
             if not isinstance(config, PreTrainedConfig):
                 config = AutoConfig.from_pretrained(
                     pretrained_model_name_or_path,

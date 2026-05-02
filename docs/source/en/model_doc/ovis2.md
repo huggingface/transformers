@@ -33,21 +33,16 @@ This model was contributed by [thisisiron](https://huggingface.co/thisisiron).
 
 ```python
 
-from PIL import Image
 import requests
 import torch
-from torchvision import io
-from typing import Dict
-from transformers.image_utils import load_images, load_video
-from transformers import AutoModelForImageTextToText, AutoTokenizer, AutoProcessor
-from accelerate import Accelerator
+from PIL import Image
 
-device = Accelerator().device
+from transformers import AutoModelForImageTextToText, AutoProcessor
+
 
 model = AutoModelForImageTextToText.from_pretrained(
     "thisisiron/Ovis2-2B-hf",
-    dtype=torch.bfloat16,
-).eval().to(device)
+).eval().to(model.device, device_map="auto")
 processor = AutoProcessor.from_pretrained("thisisiron/Ovis2-2B-hf")
 
 messages = [

@@ -40,6 +40,7 @@ The example below demonstrates how to generate text based on an image with [`Pip
 ```python
 from transformers import pipeline
 
+
 pipe = pipeline(model="CohereLabs/aya-vision-8b", task="image-text-to-text", device_map="auto")
 
 # Format message with the aya-vision chat template
@@ -60,14 +61,14 @@ print(outputs)
 
 ```python
 # pip install 'git+https://github.com/huggingface/transformers.git@v4.49.0-Aya Vision'
-import torch
-from transformers import AutoProcessor, AutoModelForImageTextToText
+from transformers import AutoModelForImageTextToText, AutoProcessor
+
 
 model_id = "CohereLabs/aya-vision-8b"
 
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForImageTextToText.from_pretrained(
-    model_id, device_map="auto", dtype=torch.float16
+    model_id, device_map="auto"
 )
 
 # Format message with the aya-vision chat template
@@ -102,17 +103,15 @@ The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quan
 
 ```python
 import torch
-from transformers import (
-    AutoProcessor,
-    AutoModelForImageTextToText,
-    BitsAndBytesConfig
-)
+
+from transformers import AutoModelForImageTextToText, AutoProcessor, BitsAndBytesConfig
+
 
 bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_quant_type="nf4",
     bnb_4bit_compute_dtype=torch.bfloat16,
-    bnb_4bit_use_double_quant=True
+    bit_use_double_quant=True
 )
 
 processor = AutoProcessor.from_pretrained("CohereLabs/aya-vision-32b", use_fast=True)
@@ -153,7 +152,7 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
         
     processor = AutoProcessor.from_pretrained("CohereForAI/aya-vision-8b")
     model = AutoModelForImageTextToText.from_pretrained(
-        "CohereForAI/aya-vision-8b", device_map="auto", dtype=torch.float16
+        "CohereForAI/aya-vision-8b", device_map="auto"
     )
     
     messages = [
@@ -199,7 +198,7 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
         
     processor = AutoProcessor.from_pretrained(model_id)
     model = AutoModelForImageTextToText.from_pretrained(
-        "CohereForAI/aya-vision-8b", device_map="auto", dtype=torch.float16
+        "CohereForAI/aya-vision-8b", device_map="auto"
     )
     
     batch_messages = [

@@ -1716,7 +1716,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             raise ValueError("weight_block_size must be a tuple of two positive integers")
 
     def get_loading_attributes(self):
-        return {"dequantize": self.dequantize}
+        return {"dequantize": self.dequantize, "modules_to_not_convert": self.modules_to_not_convert}
 
 
 class QuarkConfig(QuantizationConfigMixin):

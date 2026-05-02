@@ -234,13 +234,17 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-        )
-        mamba_mask = self._update_mamba_mask(attention_mask, past_key_values)
+        causal_mask_mapping = {}
+        for layer_type in set(self.config.layers_block_type):
+            if "mamba" in layer_type:
+                causal_mask_mapping[layer_type] = self._update_mamba_mask(attention_mask, past_key_values)
+            else:
+                causal_mask_mapping[layer_type] = create_causal_mask(
+                    config=self.config,
+                    inputs_embeds=inputs_embeds,
+                    attention_mask=attention_mask,
+                    past_key_values=past_key_values,
+                )
 
         # embed positions
         hidden_states = inputs_embeds
@@ -249,12 +253,9 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
             position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for i, decoder_layer in enumerate(self.layers):
-            # Depending on the layer type we opt for 2D base attention mask (Mamba) or 4D causal mask (Attention)
-            layer_mask = mamba_mask if self.config.layers_block_type[i] == "mamba" else causal_mask
-
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=layer_mask,
+                attention_mask=causal_mask_mapping[self.config.layers_block_type[i]],
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 position_embeddings=position_embeddings,

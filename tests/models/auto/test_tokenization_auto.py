@@ -765,3 +765,39 @@ class NopConfig(PreTrainedConfig):
                 revision="f8d333a098d19b4fd9a8b18f94170487ad3f821d",
             )
             self.assertEqual(tokenizer.__class__.__name__, "NllbTokenizer")
+
+    @slow
+    @require_tokenizers
+    def test_deepseek_r1_tokenizer_preserves_spaces(self):
+        """Regression: deepseek_v3 Hub config has wrong tokenizer_class='LlamaTokenizerFast'; must use TokenizersBackend."""
+        tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-R1")
+        self.assertIsInstance(tokenizer, TokenizersBackend)
+        text = "hello world"
+        self.assertEqual(tokenizer.decode(tokenizer.encode(text)), text)
+
+    @require_tokenizers
+    @require_sentencepiece
+    def test_specialized_hub_tokenizer_class_overrides_mismatched_auto_mapping(self):
+        """Hub's tokenizer_class wins when the auto-mapping has a different real class (e.g. m2m_100 → NllbTokenizer)."""
+        from transformers import NllbTokenizer
+
+        fake_config = mock.MagicMock()
+        fake_config.model_type = "m2m_100"
+        mock_tokenizer = mock.MagicMock(spec=NllbTokenizer)
+
+        with (
+            mock.patch(
+                "transformers.models.auto.tokenization_auto.AutoConfig.from_pretrained",
+                return_value=fake_config,
+            ),
+            mock.patch(
+                "transformers.models.auto.tokenization_auto.get_tokenizer_config",
+                return_value={"tokenizer_class": "NllbTokenizer"},
+            ),
+            mock.patch.object(NllbTokenizer, "from_pretrained", return_value=mock_tokenizer) as mock_nllb,
+            mock.patch.object(TokenizersBackend, "from_pretrained") as mock_tb,
+        ):
+            result = AutoTokenizer.from_pretrained("fake/nllb-model")
+            mock_nllb.assert_called_once()
+            mock_tb.assert_not_called()
+            self.assertIs(result, mock_tokenizer)

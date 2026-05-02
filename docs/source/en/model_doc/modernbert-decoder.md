@@ -41,14 +41,13 @@ The example below demonstrates how to use ModernBERT Decoder for text generation
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 generator = pipeline(
     task="text-generation",
     model="jhu-clsp/ettin-decoder-17m",
-    dtype=torch.float16,
     device=0
 )
 generator("The future of artificial intelligence is", max_length=50, num_return_sequences=1)
@@ -57,7 +56,6 @@ generator("The future of artificial intelligence is", max_length=50, num_return_
 classifier = pipeline(
     task="text-classification",
     model="jhu-clsp/ettin-decoder-17m",
-    dtype=torch.float16,
     device=0
 )
 classifier("This movie is really great!")
@@ -66,14 +64,15 @@ classifier("This movie is really great!")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("jhu-clsp/ettin-decoder-17m")
 model = AutoModelForCausalLM.from_pretrained(
     "jhu-clsp/ettin-decoder-17m",
-    dtype=torch.float16,
     device_map="auto",
 )
 
@@ -96,9 +95,9 @@ print(f"Generated text: {generated_text}")
 # For sequence classification
 from transformers import AutoModelForSequenceClassification
 
+
 classifier_model = AutoModelForSequenceClassification.from_pretrained(
     "jhu-clsp/ettin-decoder-17m",
-    dtype=torch.float16,
     device_map="auto",
     num_labels=2
 )
@@ -119,9 +118,11 @@ print(f"Prediction probabilities: {predictions}")
 
 <hfoption id="AutoModel (w/quantization)">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
 
 quantization_config = BitsAndBytesConfig(
     load_in_8bit=True,
@@ -130,7 +131,6 @@ quantization_config = BitsAndBytesConfig(
 tokenizer = AutoTokenizer.from_pretrained("jhu-clsp/ettin-decoder-1b")
 model = AutoModelForCausalLM.from_pretrained(
     "jhu-clsp/ettin-decoder-1b",
-    dtype=torch.float16,
     device_map="auto",
     quantization_config=quantization_config
 )
