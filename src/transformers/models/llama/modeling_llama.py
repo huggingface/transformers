@@ -68,16 +68,10 @@ class LlamaRMSNorm(nn.Module):
                 ``.to(device)`` moves it correctly) but it is not a Parameter,
                 not in ``state_dict``, and not multiplied into the output.
 
-        Notes:
-            - The ``@use_kernel_forward_from_hub("RMSNorm")`` decorator above can
-              swap ``forward`` for a hub-loaded kernel implementation. Hub kernels
-              are opt-in (typically via env var or model config) and may not honor
-              ``has_weight=False``; when an external kernel is enabled, callers
-              should ensure that kernel respects the flag, or instantiate this
-              module without hub-kernel routing for FlashNorm-folded checkpoints.
-            - The forward branch on ``self.has_weight`` is a single constant-per-
-              instance boolean check that ``torch.compile`` folds away; the cost
-              is negligible compared to the variance and rsqrt arithmetic.
+        Note: when the ``@use_kernel_forward_from_hub("RMSNorm")`` decorator
+        is configured to swap ``forward`` for a hub-loaded kernel, that kernel
+        may not honor ``has_weight=False`` unless its author specifically
+        supports the flag.
         """
         super().__init__()
         self.has_weight = has_weight

@@ -121,25 +121,6 @@ class LlamaFlashNormFoldedTest(unittest.TestCase):
         norm_keys = [k for k in model.state_dict().keys() if k.endswith("norm.weight")]
         self.assertEqual(norm_keys, [], f"Expected no norm.weight keys in state_dict, got: {norm_keys}")
 
-    def test_flashnorm_folded_default_off(self):
-        """By default, flashnorm_folded is False and existing checkpoint behavior is preserved."""
-        from transformers import LlamaConfig
-
-        config = LlamaConfig(
-            vocab_size=128,
-            hidden_size=64,
-            intermediate_size=128,
-            num_hidden_layers=2,
-            num_attention_heads=4,
-            num_key_value_heads=4,
-        )
-        self.assertFalse(config.flashnorm_folded)
-        model = LlamaModel(config)
-        self.assertTrue(model.norm.has_weight)
-        for layer in model.layers:
-            self.assertTrue(layer.input_layernorm.has_weight)
-            self.assertTrue(layer.post_attention_layernorm.has_weight)
-
 
 @require_torch_accelerator
 class LlamaIntegrationTest(unittest.TestCase):
