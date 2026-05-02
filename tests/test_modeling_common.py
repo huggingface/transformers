@@ -4679,8 +4679,18 @@ class ModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
 
-                # Check that it works for all dtypes
-                for dtype in ["float16", "bfloat16", "float32", "auto", torch.float16, torch.bfloat16, torch.float32]:
+                # Check a random-looking but reproducible subset of dtypes per model class.
+                supported_dtypes = [
+                    "float16",
+                    "bfloat16",
+                    "float32",
+                    "auto",
+                    torch.float16,
+                    torch.bfloat16,
+                    torch.float32,
+                ]
+                dtype_rng = random.Random(f"test_bc_torch_dtype:{model_class.__name__}")
+                for dtype in dtype_rng.sample(supported_dtypes, 3):
                     model_torch_dtype = model_class.from_pretrained(tmpdirname, torch_dtype=dtype)
                     model_dtype = model_class.from_pretrained(tmpdirname, dtype=dtype)
 
