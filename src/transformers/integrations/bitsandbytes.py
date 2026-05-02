@@ -125,7 +125,7 @@ class Bnb8bitQuantize(ConversionOps):
 
     @property
     def reverse_op(self):
-        return Bnb8bitSerialize(self.hf_quantizer) 
+        return Bnb8bitSerialize(self.hf_quantizer)
 
 
 class Bnb8bitDeserialize(ConversionOps):
@@ -161,6 +161,7 @@ class Bnb8bitDeserialize(ConversionOps):
         module._is_hf_initialized = True
         return {key_weight: new_value}
 
+
 class Bnb4bitSerialize(ConversionOps):
     """
     Reverse of Bnb4bitDeserialize: re-serializes a Params4bit weight back
@@ -168,6 +169,7 @@ class Bnb4bitSerialize(ConversionOps):
     When the weight has already been dequantized (e.g. after LoRA merge),
     it is returned as-is under the 'weight' key.
     """
+
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
@@ -199,6 +201,7 @@ class Bnb8bitSerialize(ConversionOps):
     into the multi-key checkpoint format.
     When the weight has already been dequantized, it is returned as-is.
     """
+
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
