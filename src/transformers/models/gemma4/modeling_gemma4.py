@@ -1442,7 +1442,7 @@ class Gemma4PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["Gemma4TextDecoderLayer", "Gemma4VisionEncoderLayer", "Gemma4AudioLayer"]
     _skip_keys_device_placement = ["past_key_values", "shared_kv_states"]
-    _supports_flash_attn = True
+    _supports_flash_attn = False  # released checkpoints use head_dim=512, which is not supported yet by FA kernels
     _supports_sdpa = True
     _supports_flex_attn = True
 
