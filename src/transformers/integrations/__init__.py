@@ -35,6 +35,7 @@ _import_structure = {
         "replace_with_bnb_linear",
         "validate_bnb_backend_availability",
     ],
+    "compressed_tensors_fp8": ["CTFP8Linear", "replace_with_ct_fp8_linear"],
     "deepspeed": [
         "HfDeepSpeedConfig",
         "HfTrainerDeepSpeedConfig",
@@ -194,6 +195,7 @@ if TYPE_CHECKING:
         replace_with_bnb_linear,
         validate_bnb_backend_availability,
     )
+    from .compressed_tensors_fp8 import CTFP8Linear, replace_with_ct_fp8_linear
     from .deepspeed import (
         HfDeepSpeedConfig,
         HfTrainerDeepSpeedConfig,
