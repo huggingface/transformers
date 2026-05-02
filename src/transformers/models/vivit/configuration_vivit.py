@@ -27,6 +27,10 @@ class VivitConfig(PreTrainedConfig):
         The number of frames in each video.
     tubelet_size (`list[int]`, *optional*, defaults to `[2, 16, 16]`):
         The size (resolution) of each tubelet.
+    pooler_output_size (`int`, *optional*):
+        Dimensionality of the pooler layer. If None, defaults to `hidden_size`.
+    pooler_act (`str`, *optional*, defaults to `"tanh"`):
+        The activation function to be used by the pooler.
 
     Example:
 
@@ -59,6 +63,12 @@ class VivitConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-06
     qkv_bias: bool = True
+    pooler_output_size: int | None = None
+    pooler_act: str = "tanh"
+
+    def __post_init__(self, **kwargs):
+        self.pooler_output_size = self.pooler_output_size if self.pooler_output_size else self.hidden_size
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["VivitConfig"]

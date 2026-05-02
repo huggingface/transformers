@@ -111,6 +111,13 @@ class BeitConfig(BackboneConfigMixin, PreTrainedConfig):
             out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)
         )
 
+        if self.add_fpn and (self._out_indices is None or len(self._out_indices) != 4):
+            raise ValueError(
+                "BeitConfig requires `out_indices` to be a list of exactly 4 integers when `add_fpn=True`, "
+                "specifying which features to use from the backbone. One can use `out_indices=[3, 5, 7, 11]` "
+                "for a base-sized architecture."
+            )
+
         super().__post_init__(**kwargs)
 
 

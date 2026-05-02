@@ -419,20 +419,35 @@ class PPDocLayoutV3MLPPredictionHead(nn.Module):
 
 class PPDocLayoutV3ConvLayer(nn.Module):
     def __init__(
-        self, in_channels: int, out_channels: int, kernel_size: int = 3, stride: int = 1, activation: str = "relu"
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int | tuple[int, int] = 3,
+        stride: int = 1,
+        bias: bool = False,
+        dilation: int | tuple[int, int] = 1,
+        groups: int = 1,
+        activation: str = "relu",
     ):
         super().__init__()
         self.convolution = nn.Conv2d(
-            in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=kernel_size // 2, bias=False
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            padding=kernel_size // 2,
+            dilation=dilation,
+            groups=groups,
+            bias=bias,
         )
         self.normalization = nn.BatchNorm2d(out_channels)
         self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
 
-    def forward(self, input: Tensor) -> Tensor:
-        hidden_state = self.convolution(input)
-        hidden_state = self.normalization(hidden_state)
-        hidden_state = self.activation(hidden_state)
-        return hidden_state
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.convolution(hidden_states)
+        hidden_states = self.normalization(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        return hidden_states
 
 
 class PPDocLayoutV3ScaleHead(nn.Module):
@@ -442,7 +457,7 @@ class PPDocLayoutV3ScaleHead(nn.Module):
         self.layers = nn.ModuleList()
         for k in range(head_length):
             in_c = in_channels if k == 0 else feature_channels
-            self.layers.append(PPDocLayoutV3ConvLayer(in_c, feature_channels, 3, 1, "silu"))
+            self.layers.append(PPDocLayoutV3ConvLayer(in_c, feature_channels, 3, 1, activation="silu"))
             if fpn_stride != base_stride:
                 self.layers.append(nn.Upsample(scale_factor=2, mode="bilinear", align_corners=align_corners))
 
@@ -486,7 +501,7 @@ class PPDocLayoutV3MaskFeatFPN(nn.Module):
                     align_corners=align_corners,
                 )
             )
-        self.output_conv = PPDocLayoutV3ConvLayer(feature_channels, out_channels, 3, 1, "silu")
+        self.output_conv = PPDocLayoutV3ConvLayer(feature_channels, out_channels, 3, 1, activation="silu")
 
     def forward(self, inputs):
         x = [inputs[i] for i in self.reorder_index]
@@ -506,7 +521,7 @@ class PPDocLayoutV3MaskFeatFPN(nn.Module):
 class PPDocLayoutV3EncoderMaskOutput(nn.Module):
     def __init__(self, in_channels, num_prototypes):
         super().__init__()
-        self.base_conv = PPDocLayoutV3ConvLayer(in_channels, in_channels, 3, 1, "silu")
+        self.base_conv = PPDocLayoutV3ConvLayer(in_channels, in_channels, 3, 1, activation="silu")
         self.conv = nn.Conv2d(in_channels, num_prototypes, kernel_size=1)
 
     def forward(self, x):
@@ -768,6 +783,54 @@ class PPDocLayoutV3CSPRepLayer(nn.Module):
         return self.conv3(hidden_state_1 + hidden_state_2)
 
 
+def build_2d_sinusoidal_position_embedding(
+    height: int,
+    width: int,
+    embed_dim: int = 256,
+    temperature: float = 10000.0,
+    cls_token: bool = False,
+    device: torch.device | None = None,
+    dtype: torch.dtype = torch.float32,
+) -> torch.Tensor:
+    """2D sinusoidal position embeddings for an image patch grid.
+
+    Each (h, w) position gets an ``embed_dim``-dimensional vector laid out as
+    ``[sin_h | cos_h | sin_w | cos_w]``, with row-major (H-outer) patch ordering.
+
+    Args:
+        height: Grid height in patches.
+        width: Grid width in patches.
+        embed_dim: Total embedding dimension; must be divisible by 4.
+        temperature: Base for the frequency decay.
+        cls_token: If `True`, prepend a zero row for a CLS token.
+        device: Target device; defaults to CPU.
+        dtype: Output dtype; frequency arithmetic uses float64 internally.
+
+    Returns:
+        Tensor of shape ``(height * width [+1], embed_dim)``.
+    """
+    if embed_dim % 4 != 0:
+        raise ValueError(f"`embed_dim` must be divisible by 4, got {embed_dim}")
+
+    pos_dim = embed_dim // 4
+    omega = torch.arange(pos_dim, dtype=torch.float64, device=device) / pos_dim
+    omega = 1.0 / temperature**omega  # (D/4,)
+
+    grid_h = torch.arange(height, dtype=torch.float64, device=device)
+    grid_w = torch.arange(width, dtype=torch.float64, device=device)
+    grid_h, grid_w = torch.meshgrid(grid_h, grid_w, indexing="ij")  # (H, W) each
+
+    emb_h = grid_h.flatten().outer(omega)  # (H*W, D/4)
+    emb_w = grid_w.flatten().outer(omega)  # (H*W, D/4)
+
+    pos_embed = torch.cat([emb_h.sin(), emb_h.cos(), emb_w.sin(), emb_w.cos()], dim=1)
+
+    if cls_token:
+        pos_embed = torch.cat([torch.zeros(1, embed_dim, dtype=torch.float64, device=device), pos_embed], dim=0)
+
+    return pos_embed.to(dtype)
+
+
 class PPDocLayoutV3SinePositionEmbedding(nn.Module):
     """
     2D sinusoidal position embedding used in RT-DETR hybrid encoder.
@@ -792,19 +855,14 @@ class PPDocLayoutV3SinePositionEmbedding(nn.Module):
         Returns:
             Position embeddings of shape (1, height*width, embed_dim)
         """
-        grid_w = torch.arange(torch_int(width), device=device).to(dtype)
-        grid_h = torch.arange(torch_int(height), device=device).to(dtype)
-        grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="xy")
-        if self.embed_dim % 4 != 0:
-            raise ValueError("Embed dimension must be divisible by 4 for 2D sin-cos position embedding")
-        pos_dim = self.embed_dim // 4
-        omega = torch.arange(pos_dim, device=device).to(dtype) / pos_dim
-        omega = 1.0 / (self.temperature**omega)
-
-        out_w = grid_w.flatten()[..., None] @ omega[None]
-        out_h = grid_h.flatten()[..., None] @ omega[None]
-
-        return torch.concat([out_h.sin(), out_h.cos(), out_w.sin(), out_w.cos()], dim=1)[None, :, :]
+        return build_2d_sinusoidal_position_embedding(
+            height=torch_int(height),
+            width=torch_int(width),
+            embed_dim=self.embed_dim,
+            temperature=self.temperature,
+            device=device,
+            dtype=dtype,
+        ).unsqueeze(0)
 
 
 class PPDocLayoutV3AIFILayer(nn.Module):
@@ -933,7 +991,9 @@ class PPDocLayoutV3HybridEncoder(PPDocLayoutV3PreTrainedModel):
             feature_channels=mask_feature_channels[0],
             out_channels=mask_feature_channels[1],
         )
-        self.encoder_mask_lateral = PPDocLayoutV3ConvLayer(config.x4_feat_dim, mask_feature_channels[1], 3, 1, "silu")
+        self.encoder_mask_lateral = PPDocLayoutV3ConvLayer(
+            config.x4_feat_dim, mask_feature_channels[1], 3, 1, activation="silu"
+        )
         self.encoder_mask_output = PPDocLayoutV3EncoderMaskOutput(
             in_channels=mask_feature_channels[1], num_prototypes=config.num_prototypes
         )

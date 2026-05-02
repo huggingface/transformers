@@ -333,6 +333,13 @@ def _test_eager_matches_sdpa_inference(
                         seqlen = inputs_dict.get("decoder_input_ids", processed_inputs[model.main_input_name]).shape[
                             -1
                         ]
+                    elif model.main_input_name in ("pixel_values", "input_values") and hasattr(
+                        self.model_tester, "seq_length"
+                    ):
+                        # For models where the main input's last dimension is not the token sequence length
+                        # (e.g. pixel_values.shape[-1] is image width, input_values.shape[-1] is num_mel_bins).
+                        # Use model_tester.seq_length (num_patches + 1/2 for ViT/DeiT/AST) instead.
+                        seqlen = self.model_tester.seq_length
                     else:
                         seqlen = processed_inputs[model.main_input_name].shape[-1]
                     dummy_attention_mask = torch.ones(batch_size, seqlen).to(torch.int64).to(torch_device)
@@ -4764,6 +4771,11 @@ class ModelTesterMixin:
         config_to_set.mlp_only_layers = [0]  # same but for qwens
         config_to_set.num_dense_layers = 1  # lfm2_moe
 
+        # Precompute state dict keys for every model class to detect dead conversion
+        # rules: a rule skipped for the current class must still apply to at least one.
+        all_classes_model_keys = {
+            cls: list(cls(copy.deepcopy(config)).state_dict().keys()) for cls in self.all_model_classes
+        }
         for model_class in self.all_model_classes:
             if skip_base_model and "For" not in model_class.__name__:
                 continue
@@ -4818,6 +4830,20 @@ class ModelTesterMixin:
                                 target_pattern_reversed = target_pattern_reversed.replace(r"\1", captured_group)
                             if any(re.search(target_pattern_reversed, k) for k in model.all_tied_weights_keys.keys()):
                                 continue
+
+                            # Skip rules whose target doesn't appear in this model class (e.g. class-specific head rules),
+                            # but assert the rule still matches at least one class
+                            if not any(re.search(target_pattern_reversed, k) for k in model_keys):
+                                self.assertTrue(
+                                    any(
+                                        any(re.search(target_pattern_reversed, k) for k in keys)
+                                        for keys in all_classes_model_keys.values()
+                                    ),
+                                    f"`{target_pattern_reversed}` in `{conversion}` does not match any "
+                                    "model class — the rule may be dead code or incorrectly written.",
+                                )
+                                continue
+
                         num_matches = sum(re.search(source_pattern, key) is not None for key in serialized_keys)
                         self.assertTrue(
                             num_matches > 0,

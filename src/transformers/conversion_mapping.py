@@ -36,6 +36,13 @@ if TYPE_CHECKING:
 
 
 _MODEL_TO_CONVERSION_PATTERN = {
+    # ViT-style vision models (old HuggingFace checkpoint format → new modular format)
+    "audio-spectrogram-transformer": "vit",
+    "deit": "vit",
+    "ijepa": "vit",
+    "vit_mae": "vit",
+    "vit_msn": "vit",
+    "vivit": "vit",
     # Mixtral-style MoE
     "minimax": "mixtral",
     "minimax_m2": "mixtral",
@@ -94,6 +101,58 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "vit": [
+            WeightRenaming(r"encoder\.layer\.", "layers."),
+            WeightRenaming("attention.query", "q_proj"),
+            WeightRenaming("attention.key", "k_proj"),
+            WeightRenaming("attention.value", "v_proj"),
+            WeightRenaming("attention.output.dense", "attention.o_proj"),
+            WeightRenaming("intermediate.dense", "mlp.fc1"),
+            WeightRenaming("output.dense", "mlp.fc2"),
+        ],
+        "lw_detr": [
+            WeightRenaming("attention.attention.query", "attention.q_proj"),
+            WeightRenaming("attention.attention.key", "attention.k_proj"),
+            WeightRenaming("attention.attention.value", "attention.v_proj"),
+            WeightRenaming("attention.output", "attention.o_proj"),
+        ],
+        "segformer": [
+            # Structural: legacy `encoder.*` lists → SegformerModel.stages (no `encoder` submodule on SegformerModel)
+            WeightRenaming(r"encoder.patch_embeddings.(\d+).", r"stages.\1.patch_embeddings."),
+            WeightRenaming(r"encoder.block.(\d+).", r"stages.\1.blocks."),
+            WeightRenaming(r"encoder.layer_norm.(\d+)", r"stages.\1.layer_norm"),
+            # Attention projection renames
+            WeightRenaming("attention.self.query", "attention.q_proj"),
+            WeightRenaming("attention.self.key", "attention.k_proj"),
+            WeightRenaming("attention.self.value", "attention.v_proj"),
+            WeightRenaming("attention.self.sr", "attention.sequence_reduction.sequence_reduction"),
+            WeightRenaming("attention.self.layer_norm", "attention.sequence_reduction.layer_norm"),
+            WeightRenaming("attention.output.dense", "attention.o_proj"),
+            # MLP renames
+            WeightRenaming("mlp.dense1", "mlp.fc1"),
+            WeightRenaming("mlp.dense2", "mlp.fc2"),
+            # LayerNorm renames
+            WeightRenaming("layer_norm_1", "layernorm_before"),
+            WeightRenaming("layer_norm_2", "layernorm_after"),
+            # Decode head: legacy checkpoints name the MLP list `linear_c`
+            WeightRenaming("decode_head.linear_c", "decode_head.linear_projections"),
+        ],
+        "swin": [
+            # Attention projection renames (SwinSelfAttention.{query,key,value} → SwinAttention.{q,k,v}_proj)
+            WeightRenaming("attention.self.query", "attention.q_proj"),
+            WeightRenaming("attention.self.key", "attention.k_proj"),
+            WeightRenaming("attention.self.value", "attention.v_proj"),
+            # Relative position bias: SwinSelfAttention → dedicated SwinRelativePositionBias submodule
+            WeightRenaming(
+                "attention.self.relative_position_bias_table",
+                "attention.relative_position_bias.relative_position_bias_table",
+            ),
+            # Output projection rename (SwinSelfOutput.dense → SwinAttention.o_proj)
+            WeightRenaming("attention.output.dense", "attention.o_proj"),
+            # MLP renames (SwinIntermediate.dense → SwinMLP.fc1, SwinOutput.dense → SwinMLP.fc2)
+            WeightRenaming("intermediate.dense", "mlp.fc1"),
+            WeightRenaming("output.dense", "mlp.fc2"),
+        ],
         "altclip": [
             WeightRenaming(source_patterns=r"layer\.", target_patterns="layers."),
         ],
@@ -526,6 +585,17 @@ def _build_checkpoint_conversion_mapping():
                 operations=[ErnieFuseAndSplitTextVisionExperts(stack_dim=0, concat_dim=1)],
             ),
         ],
+        # MaskFormer embeds both a Swin backbone (model_type="swin") and a DETR decoder
+        # (model_type="detr") as submodules. Both get their mappings collected automatically, but
+        # the Swin reverse mapping "mlp.fc1 → intermediate.dense" would corrupt DETR decoder keys
+        # if it runs before the DETR reverse "layers.N.mlp.fc1 → layers.N.fc1".
+        # By adding a "maskformer"-level mapping with the DETR fc1 rename, it is collected first
+        # (model-level before submodule-level), so its reverse runs first and removes "mlp.fc1"
+        # from DETR decoder paths before the Swin reverse can match them.
+        "maskformer": [
+            WeightRenaming(r"layers.(\d+).fc1", r"layers.\1.mlp.fc1"),
+            WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.fc2"),
+        ],
         "detr": [
             WeightRenaming("backbone.conv_encoder", "backbone"),
             WeightRenaming("out_proj", "o_proj"),
@@ -766,6 +836,40 @@ def _build_checkpoint_conversion_mapping():
     mapping["ernie4_5_moe"] = mapping["qwen2_moe"].copy()
     mapping["ernie4_5_moe"] += [
         WeightRenaming("mlp.moe_statics.e_score_correction_bias", "mlp.gate.moe_statics.e_score_correction_bias")
+    ]
+    mapping["beit"] = [
+        WeightRenaming("attention.query", "q_proj"),
+        WeightRenaming("attention.key", "k_proj"),
+        WeightRenaming("attention.value", "v_proj"),
+        WeightRenaming("attention.output.dense", "attention.o_proj"),
+        WeightRenaming("intermediate.dense", "mlp.fc1"),
+        WeightRenaming("output.dense", "mlp.fc2"),
+        WeightRenaming("encoder.relative_position_bias", "shared_position_bias"),
+        WeightRenaming(r"attention.attention.relative_position_bias\.", r"relative_position_bias."),
+        WeightRenaming("decode_head.bottleneck.", "decode_head.psp_bottleneck."),
+        WeightRenaming(r"(?<!psp_modules\.[0-9]\.1\.)bn\.", "normalization."),
+        WeightRenaming(r"(?<!psp_modules\.[0-9]\.1\.)conv\.weight", "convolution.weight"),
+        WeightRenaming(
+            r"decode_head\.psp_modules\.(\d+)\.1\.conv\.weight",
+            r"decode_head.psp_modules.blocks.\1.conv.convolution.weight",
+        ),
+        WeightRenaming(
+            r"decode_head\.psp_modules\.(\d+)\.1\.bn\.",
+            r"decode_head.psp_modules.blocks.\1.conv.normalization.",
+        ),
+        WeightRenaming(r"^fpn1\.0\.", "fpn.fpn1.conv_transpose1."),
+        WeightRenaming(r"^fpn1\.1\.", "fpn.fpn1.normalization."),
+        WeightRenaming(r"^fpn1\.3\.", "fpn.fpn1.conv_transpose2."),
+        WeightRenaming(r"^fpn2\.0\.", "fpn.fpn2."),
+        *mapping["vit"].copy(),
+        WeightRenaming(r"^encoder\.", "beit."),
+    ]
+
+    mapping["pixio"] = mapping["vit"].copy()
+    mapping["pixio"] += [
+        WeightRenaming("norm1", "layernorm_before"),
+        WeightRenaming("norm2", "layernorm_after"),
+        WeightRenaming(r"^encoder\.", "pixio."),
     ]
 
     mapping["minimax_m2"] = mapping["mixtral"].copy()
