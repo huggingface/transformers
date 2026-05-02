@@ -81,6 +81,8 @@ class GraniteSpeechConfig(PreTrainedConfig):
         Downsample rate for the audio feature extractor.
     window_size (`int`, *optional*, defaults to 15):
         Window size for the audio feature projector.
+    encoder_hidden_layers (`list[int]`, *optional*):
+        List of hidden layers from the encoder that are used by the projector.
 
     Example:
 
@@ -115,6 +117,7 @@ class GraniteSpeechConfig(PreTrainedConfig):
     has_lora_adapter: bool = True
     downsample_rate: int = 5
     window_size: int = 15
+    encoder_hidden_layers: list[int] | None = None
 
     def __post_init__(self, **kwargs):
         if isinstance(self.text_config, dict):
@@ -132,6 +135,22 @@ class GraniteSpeechConfig(PreTrainedConfig):
         if not isinstance(self.encoder_config, GraniteSpeechEncoderConfig):
             self.encoder_config = {} if self.encoder_config is None else self.encoder_config
             self.encoder_config = GraniteSpeechEncoderConfig(**self.encoder_config)
+
+        if self.encoder_hidden_layers is not None:
+            # Verify that all the required hidden layers are in the encoder's range
+            for idx in self.encoder_hidden_layers:
+                if (idx < 0) or (idx >= self.encoder_config.num_layers):
+                    raise ValueError(
+                        f"Asking for hidden layer {idx} but number of layers is {self.encoder_config.num_layers}."
+                    )
+            # Verify that the encoder output size matches the projector input
+            num_layers_concat = len(self.encoder_hidden_layers) + 1  # +1 for final layer
+            if self.projector_config.encoder_hidden_size != self.encoder_config.hidden_dim * num_layers_concat:
+                raise ValueError(
+                    f"Mismatch in projector input dimension {self.projector_config.encoder_hidden_size}"
+                    " and number of layers * encoder dimension "
+                    f"{self.encoder_config.hidden_dim * num_layers_concat}."
+                )
 
         super().__post_init__(**kwargs)
 
