@@ -703,7 +703,11 @@ class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
         hidden_states = transformer_outputs.last_hidden_state
 
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        # Fix for Python 3.13 numerical stability issue: clone weight to avoid NaN/Inf values
+        # caused by tied weights (lm_head.weight is tied to transformer.wte.weight)
+        # See: https://github.com/huggingface/transformers/issues/XXXXX
+        hidden_slice = hidden_states[:, slice_indices, :]
+        logits = nn.functional.linear(hidden_slice, self.lm_head.weight.clone())
 
         loss = None
         if labels is not None:
@@ -824,7 +828,10 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel, GenerationMixin):
 
         hidden_states = transformer_outputs.last_hidden_state
 
-        lm_logits = self.lm_head(hidden_states)
+        # Fix for Python 3.13 numerical stability issue: clone weight to avoid NaN/Inf values
+        # caused by tied weights (lm_head.weight is tied to transformer.wte.weight)
+        # See: https://github.com/huggingface/transformers/issues/XXXXX
+        lm_logits = nn.functional.linear(hidden_states, self.lm_head.weight.clone())
         mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids).squeeze(-1)
 
         mc_loss = None
