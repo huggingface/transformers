@@ -108,30 +108,22 @@ SPECIAL_CASES_TO_ALLOW = {
     "CsmConfig": ["tie_codebooks_embeddings"],
     "DeepseekV2Config": ["norm_topk_prob"],
     "DeepseekV4Config": [
+        # All BC / config-compat surface that the modeling code never reads but
+        # checkpoints in the wild expose (so we keep accepting them in `__init__`):
+        # `attention_bias` — V4 has no bias on any linear; kept for parity with V3 configs.
+        # `n_shared_experts` — V4 always builds exactly one shared MLP; the count
+        #   isn't read because there's no loop over shared experts.
+        # `norm_topk_prob` — V3 router knob; V4's `DeepseekV4TopKRouter` always normalises.
+        # `num_key_value_heads` — V4 is shared-KV MQA (always 1); not read at runtime.
+        # `num_nextn_predict_layers` — MTP layer count from upstream checkpoints; the
+        #   MTP head isn't instantiated by transformers' V4 implementation.
+        # `router_jitter_noise` — inherited from Mixtral; V4 routers don't apply jitter.
         "attention_bias",
-        "compress_rates",
-        "compress_rope_theta",
-        "hc_mult",
-        "hc_sinkhorn_iters",
-        "hc_eps",
-        "index_n_heads",
-        "index_head_dim",
-        "index_topk",
-        "mlp_layer_types",
+        "n_shared_experts",
+        "norm_topk_prob",
         "num_key_value_heads",
         "num_nextn_predict_layers",
-        "norm_topk_prob",
-        "o_groups",
-        "o_lora_rank",
-        "q_lora_rank",
-        "rope_parameters",
-        "rope_theta",
-        "routed_scaling_factor",
         "router_jitter_noise",
-        "scoring_func",
-        "n_routed_experts",
-        "n_shared_experts",
-        "swiglu_limit",
     ],
     "EsmFoldConfig": ["esm_ablate_pairwise", "esm_ablate_sequence", "esm_input_dropout", "esm_type"],
     "TrunkConfig": ["cpu_grad_checkpoint", "layer_drop"],
