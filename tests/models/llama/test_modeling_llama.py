@@ -58,6 +58,89 @@ class LlamaModelTest(CausalLMModelTest, unittest.TestCase):
     _torch_compile_train_cls = LlamaForCausalLM if is_torch_available() else None
 
 
+@require_torch
+class LlamaFlashNormFoldedTest(unittest.TestCase):
+    """
+    Tests for the FlashNorm Proposition 1 weightless RMSNorm path.
+    See arXiv:2407.09577. The transformation is exact: the per-channel norm
+    weight is folded into the next linear layer at conversion time, leaving
+    the runtime RMSNorm to do `x / RMS(x)` only (no per-channel multiply).
+    """
+
+    def test_rmsnorm_weightless_matches_F_rms_norm(self):
+        """LlamaRMSNorm(has_weight=False) output equals F.rms_norm(weight=None) bit-exact."""
+        from transformers.models.llama.modeling_llama import LlamaRMSNorm
+
+        torch.manual_seed(0)
+        hidden_size = 64
+        eps = 1e-6
+        norm = LlamaRMSNorm(hidden_size, eps=eps, has_weight=False)
+        x = torch.randn(2, 8, hidden_size)
+        out = norm(x)
+        expected = torch.nn.functional.rms_norm(x.to(torch.float32), (hidden_size,), None, eps).to(x.dtype)
+        self.assertTrue(torch.allclose(out, expected, atol=1e-6, rtol=1e-5))
+
+    def test_rmsnorm_weightless_buffer_not_parameter(self):
+        """has_weight=False registers `weight` as a non-persistent buffer, not a Parameter."""
+        from transformers.models.llama.modeling_llama import LlamaRMSNorm
+
+        norm_weighted = LlamaRMSNorm(64, has_weight=True)
+        norm_weightless = LlamaRMSNorm(64, has_weight=False)
+
+        # weighted: weight is a Parameter and in state_dict
+        self.assertIsInstance(norm_weighted.weight, torch.nn.Parameter)
+        self.assertIn("weight", norm_weighted.state_dict())
+
+        # weightless: weight is a tensor (registered buffer) but NOT a Parameter,
+        # and NOT in state_dict (persistent=False since the value is constant ones)
+        self.assertNotIsInstance(norm_weightless.weight, torch.nn.Parameter)
+        self.assertNotIn("weight", norm_weightless.state_dict())
+        # but still moves under .to(device): the buffer is registered
+        self.assertIn("weight", dict(norm_weightless.named_buffers()))
+
+    def test_flashnorm_folded_config_propagates_to_all_norms(self):
+        """LlamaConfig(flashnorm_folded=True) instantiates a model whose RMSNorms all have has_weight=False."""
+        from transformers import LlamaConfig
+
+        config = LlamaConfig(
+            vocab_size=128,
+            hidden_size=64,
+            intermediate_size=128,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            flashnorm_folded=True,
+        )
+        model = LlamaModel(config)
+        self.assertFalse(model.norm.has_weight)
+        for layer in model.layers:
+            self.assertFalse(layer.input_layernorm.has_weight)
+            self.assertFalse(layer.post_attention_layernorm.has_weight)
+        # The model's state_dict does not include any per-norm weight tensors
+        # (because the buffers are non-persistent).
+        norm_keys = [k for k in model.state_dict().keys() if k.endswith("norm.weight")]
+        self.assertEqual(norm_keys, [], f"Expected no norm.weight keys in state_dict, got: {norm_keys}")
+
+    def test_flashnorm_folded_default_off(self):
+        """By default, flashnorm_folded is False and existing checkpoint behavior is preserved."""
+        from transformers import LlamaConfig
+
+        config = LlamaConfig(
+            vocab_size=128,
+            hidden_size=64,
+            intermediate_size=128,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+        )
+        self.assertFalse(config.flashnorm_folded)
+        model = LlamaModel(config)
+        self.assertTrue(model.norm.has_weight)
+        for layer in model.layers:
+            self.assertTrue(layer.input_layernorm.has_weight)
+            self.assertTrue(layer.post_attention_layernorm.has_weight)
+
+
 @require_torch_accelerator
 class LlamaIntegrationTest(unittest.TestCase):
     def setup(self):

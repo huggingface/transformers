@@ -67,6 +67,17 @@ class LlamaRMSNorm(nn.Module):
                 The weight tensor is still allocated as an all-ones buffer (so
                 ``.to(device)`` moves it correctly) but it is not a Parameter,
                 not in ``state_dict``, and not multiplied into the output.
+
+        Notes:
+            - The ``@use_kernel_forward_from_hub("RMSNorm")`` decorator above can
+              swap ``forward`` for a hub-loaded kernel implementation. Hub kernels
+              are opt-in (typically via env var or model config) and may not honor
+              ``has_weight=False``; when an external kernel is enabled, callers
+              should ensure that kernel respects the flag, or instantiate this
+              module without hub-kernel routing for FlashNorm-folded checkpoints.
+            - The forward branch on ``self.has_weight`` is a single constant-per-
+              instance boolean check that ``torch.compile`` folds away; the cost
+              is negligible compared to the variance and rsqrt arithmetic.
         """
         super().__init__()
         self.has_weight = has_weight
