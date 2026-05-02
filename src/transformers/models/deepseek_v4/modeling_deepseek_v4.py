@@ -1082,16 +1082,23 @@ class DeepseekV4PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["DeepseekV4DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    # V4 supports the same backends as gpt-oss (sink-attention sibling): FlashAttention
-    # (FA3 / FA4 take the standard varlen path with a sink). SDPA stays off — torch's
-    # SDPA kernel doesn't carry the per-head learnable sink term. FlexAttention is also
-    # off: V4 attention concatenates compressor entries onto the KV axis *inside* the
-    # attention block, after the model-level mask was built, so the resulting KV length
-    # doesn't match the BlockMask's `kv_len`. There's no runtime resize on BlockMask,
-    # and rebuilding it per-block would require teaching the compressor's variable
-    # output count to a `mask_mod` — not worth it for a path the compressor already
-    # owns its own causality bookkeeping for.
-    _supports_flash_attn = True
+    # V4 ships eager-only. The non-eager backends are off for the following reasons:
+    #
+    #   * FlashAttention 2 / 3 cap the head dim at 256; V4's `head_dim=512`
+    #     (V4-Flash and V4-Pro both) is structurally incompatible — `flash_attention_2`
+    #     and the `kernels-community/vllm-flash-attn3` kernel both fail with
+    #     `RuntimeError: FlashAttention forward only supports head dimension at most
+    #     256`. FA4 has the same 256 cap, so it's off too.
+    #   * SDPA: torch's SDPA kernel doesn't carry the per-head learnable sink term V4
+    #     inherits from gpt-oss-style attention.
+    #   * FlexAttention: V4 attention concatenates compressor entries onto the KV
+    #     axis *inside* the attention block, after the model-level mask was built,
+    #     so the resulting KV length doesn't match the BlockMask's `kv_len`.
+    #     BlockMask has no runtime resize, and rebuilding it per-block would require
+    #     teaching the compressor's variable output count to a `mask_mod` — not
+    #     worth it for a path the compressor already owns its own causality
+    #     bookkeeping for.
+    _supports_flash_attn = False
     _supports_sdpa = False
     _supports_flex_attn = False
     # The compressor's rolling-window buffer / compressed-entries / overlap state
