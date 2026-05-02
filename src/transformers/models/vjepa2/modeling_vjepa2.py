@@ -861,8 +861,8 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flash_attn = True
     _can_record_outputs = {
-        "hidden_states": OutputRecorder(VJEPA2Layer, layer_name="encoder.layer"),
-        "attentions": OutputRecorder(VJEPA2RopeAttention, index=1, layer_name="encoder.layer"),
+        "hidden_states": OutputRecorder(VJEPA2Layer, layer_name=r"encoder\.layer"),
+        "attentions": OutputRecorder(VJEPA2RopeAttention, index=1, layer_name=r"encoder\.layer"),
     }
 
     @torch.no_grad()

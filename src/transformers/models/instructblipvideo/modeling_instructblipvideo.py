@@ -745,10 +745,10 @@ class InstructBlipVideoQFormerModel(InstructBlipVideoPreTrainedModel):
     _can_record_outputs = {
         "hidden_states": InstructBlipVideoQFormerLayer,
         "attentions": [
-            OutputRecorder(InstructBlipVideoQFormerMultiHeadAttention, index=1, layer_name=".attention"),
+            OutputRecorder(InstructBlipVideoQFormerMultiHeadAttention, index=1, layer_name=r"\.attention"),
         ],
         "cross_attentions": [
-            OutputRecorder(InstructBlipVideoQFormerMultiHeadAttention, index=1, layer_name=".crossattention"),
+            OutputRecorder(InstructBlipVideoQFormerMultiHeadAttention, index=1, layer_name=r"\.crossattention"),
         ],
     }
 

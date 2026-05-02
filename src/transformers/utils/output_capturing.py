@@ -18,6 +18,7 @@ This mostly describe the hooks used and the logic to make capture thread/context
 
 from __future__ import annotations
 
+import re
 import threading
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -39,13 +40,19 @@ _CAN_RECORD_REGISTRY = {}
 @dataclass
 @requires(backends=("torch",))
 class OutputRecorder:
-    """
+    r"""
     Configuration for recording outputs from a model via hooks.
 
     Attributes:
         target_class (Type): The class (e.g., nn.Module) to which the hook will be attached.
         index (Optional[int]): If the output is a tuple/list, optionally record only at a specific index.
-        layer_name (Optional[str]): Name of the submodule to target (if needed), e.g., "transformer.layer.3.attn".
+        layer_name (Optional[str]): Regex pattern (matched with `re.search`) used to filter submodules by their
+            dotted qualified name. Examples:
+
+            - `"self_attn"`: substring match
+            - `"transformer.layer.3.attn"`: literal path
+            - `r"layers\.1$"`: anchored, targets layer 1 without also matching `layers.10`/`layers.11`/…
+            - `r"layers\.(6|12|18)$"`: picks a non-contiguous subset of layers
         class_name (Optional[str]): Name of the class to which the hook will be attached. Could be the suffix of class name in some cases.
     """
 
@@ -142,7 +149,7 @@ def recursively_install_hooks(
         if (specs.target_class is not None and isinstance(parent_module, specs.target_class)) or (
             specs.class_name is not None and module_name.endswith(specs.class_name)
         ):
-            if specs.layer_name is not None and specs.layer_name not in module_name:
+            if specs.layer_name is not None and re.search(specs.layer_name, module_name) is None:
                 continue
             install_output_capturing_hook(parent_module, key, specs.index)
 

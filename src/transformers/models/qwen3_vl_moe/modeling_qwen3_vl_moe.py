@@ -601,7 +601,7 @@ class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
     input_modalities = ("image", "video")
     _no_split_modules = ["Qwen3VLMoeVisionBlock"]
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Qwen3VLMoeTextTopKRouter, layer_name="mlp.gate", index=0),
+        "router_logits": OutputRecorder(Qwen3VLMoeTextTopKRouter, layer_name=r"mlp\.gate", index=0),
         "hidden_states": Qwen3VLMoeVisionBlock,
         "attentions": Qwen3VLMoeVisionAttention,
     }

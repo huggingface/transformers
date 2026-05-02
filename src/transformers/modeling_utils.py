@@ -1259,7 +1259,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         ```
 
          This means you can record outputs from the same class, by specifying a layer name. Before
-         collecting outputs, we check that they come from this layer.
+         collecting outputs, we check that they come from this layer. `layer_name` is a regex pattern
+         (matched with `re.search` against the submodule's dotted qualified name), so anchors can be used
+         to target a single index without prefix-matching siblings (e.g. `"layers\\.1$"` matches `layers.1`
+         but not `layers.10`).
 
          If you have cross attention that come from `LlamaAttention` and self attention that also
          come from `LlamaAttention` but from `self_attn` you can do this:
@@ -1267,10 +1270,20 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
          ```python
          class LlamaModel(PreTrainedModel):
              _can_record_outputs = {
-                 "attentions": OutputRecorder(LlamaAttention, index=1, layer-name="self_attn"),
+                 "attentions": OutputRecorder(LlamaAttention, index=1, layer_name="self_attn"),
                  "cross_attentions": OutputRecorder(LlamaAttention, index=1, layer_name="cross_attn")
              }
 
+        ```
+
+         Regex alternation can also be used to pick a non-contiguous subset of layers, e.g. to
+         capture hidden states from layers 6, 12, and 18 only:
+
+         ```python
+         class MyModel(PreTrainedModel):
+             _can_record_outputs = {
+                 "hidden_states": OutputRecorder(MyBlock, layer_name=r"layers\\.(6|12|18)$"),
+             }
         ```
         """
         return self._can_record_outputs or {}

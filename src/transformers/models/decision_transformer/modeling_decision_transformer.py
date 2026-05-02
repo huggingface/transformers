@@ -316,8 +316,8 @@ class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False
     _can_record_outputs = {
         "hidden_states": DecisionTransformerGPT2Block,
-        "attentions": OutputRecorder(DecisionTransformerGPT2Attention, layer_name=".attn", index=1),
-        "cross_attentions": OutputRecorder(DecisionTransformerGPT2Attention, layer_name=".crossattention", index=1),
+        "attentions": OutputRecorder(DecisionTransformerGPT2Attention, layer_name=r"\.attn", index=1),
+        "cross_attentions": OutputRecorder(DecisionTransformerGPT2Attention, layer_name=r"\.crossattention", index=1),
     }
 
     # No longer used as we directly use our masks instead
