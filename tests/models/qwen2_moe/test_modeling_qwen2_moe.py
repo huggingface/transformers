@@ -92,6 +92,14 @@ class Qwen2MoeModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertEqual(result.router_logits[0].shape, (91, config.num_experts))
         torch.testing.assert_close(result.aux_loss.cpu(), torch.tensor(2, dtype=torch.float32), rtol=1e-2, atol=1e-2)
 
+        # Verify router_logits are raw logits, not softmax probabilities (regression test for double-softmax bug)
+        for layer_logits in result.router_logits:
+            row_sums = layer_logits.sum(dim=-1)
+            self.assertFalse(
+                torch.allclose(row_sums, torch.ones_like(row_sums), atol=1e-3),
+                "router_logits should be raw logits (row sums != 1.0), not softmax probabilities",
+            )
+
         # First, we make sure that adding padding tokens doesn't change the loss
         # loss(input_ids, attention_mask=None) == loss(input_ids + padding, attention_mask=attention_mask_with_padding)
         pad_length = input_ids.shape[1] * 4
