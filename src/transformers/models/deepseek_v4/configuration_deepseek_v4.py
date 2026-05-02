@@ -186,6 +186,13 @@ class DeepseekV4Config(PreTrainedConfig):
     def validate_rope(self):
         rope_parameters_dict = getattr(self, "rope_parameters", None) or {}
         ignore_keys = self.ignore_keys_at_rope_validation
+        # The yarn / longrope / llama3 validators in
+        # :class:`RotaryEmbeddingConfigMixin` read `self.rope_parameters[<key>]`
+        # directly (e.g. `original_max_position_embeddings`). With V4's
+        # rope-type-keyed nesting, the top-level dict only has `main` / `compress`,
+        # so those reads fail. Temporarily point `self.rope_parameters` at the
+        # rope-type-specific sub-dict for the duration of the validation call,
+        # then restore it.
         for rope_type_label in self._rope_type_labels:
             rope_parameters = rope_parameters_dict.get(rope_type_label)
             if not isinstance(rope_parameters, dict):
@@ -193,8 +200,13 @@ class DeepseekV4Config(PreTrainedConfig):
             rope_type = rope_parameters.get("rope_type", rope_parameters.get("type", "default"))
             rope_parameters["rope_type"] = rope_type
             validation_fn = getattr(self, f"_validate_{rope_type}_rope_parameters", None)
-            if validation_fn is not None:
+            if validation_fn is None:
+                continue
+            self.rope_parameters = rope_parameters
+            try:
                 validation_fn(rope_parameters, ignore_keys=ignore_keys)
+            finally:
+                self.rope_parameters = rope_parameters_dict
 
     def validate_layer_type(self):
         """V4 narrows the global `ALLOWED_LAYER_TYPES` to the three attention-block
