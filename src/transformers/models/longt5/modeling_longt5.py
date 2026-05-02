@@ -236,19 +236,6 @@ class LongT5LayerNorm(nn.Module):
         return self.weight * hidden_states
 
 
-try:
-    from apex.normalization import FusedRMSNorm
-
-    LongT5LayerNorm = FusedRMSNorm
-
-    logger.info("Discovered apex.normalization.FusedRMSNorm - will use it instead of LongT5LayerNorm")
-except ImportError:
-    # using the normal LongT5LayerNorm
-    pass
-except Exception:
-    logger.warning("discovered apex but it failed to load, falling back to LongT5LayerNorm")
-
-
 # Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->LongT5
 class LongT5DenseActDense(nn.Module):
     def __init__(self, config: LongT5Config):

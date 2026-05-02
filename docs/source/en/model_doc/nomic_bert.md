@@ -40,10 +40,12 @@ The examples below demonstrate how to generate dense vector embeddings for diffe
 <hfoptions id="usage">
 <hfoption id="Search Document">
 
-```py
+```python
 import torch
 import torch.nn.functional as F
-from transformers import AutoTokenizer, AutoModel
+
+from transformers import AutoModel, AutoTokenizer
+
 
 def mean_pooling(model_output, attention_mask):
     token_embeddings = model_output[0]
@@ -54,10 +56,10 @@ model_id = "nomic-ai/nomic-embed-text-v1.5"
 revision = "refs/pr/57"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
-model = AutoModel.from_pretrained(model_id, revision=revision)
+model = AutoModel.from_pretrained(model_id, revision=revision, device_map="auto")
 
 sentences = ['search_document: TSNE is a dimensionality reduction algorithm created by Laurens van Der Maaten']
-encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt')
+encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt').to(model.device)
 
 with torch.no_grad():
     model_output = model(**encoded_input)
@@ -70,10 +72,12 @@ print(embeddings)
 </hfoption>
 <hfoption id="Search Query">
 
-```py
+```python
 import torch
 import torch.nn.functional as F
-from transformers import AutoTokenizer, AutoModel
+
+from transformers import AutoModel, AutoTokenizer
+
 
 def mean_pooling(model_output, attention_mask):
     token_embeddings = model_output[0]
@@ -84,10 +88,10 @@ model_id = "nomic-ai/nomic-embed-text-v1.5"
 revision = "refs/pr/57"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
-model = AutoModel.from_pretrained(model_id, revision=revision)
+model = AutoModel.from_pretrained(model_id, revision=revision, device_map="auto")
 
 sentences = ['search_query: Who is Laurens van Der Maaten?']
-encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt')
+encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt').to(model.device)
 
 with torch.no_grad():
     model_output = model(**encoded_input)
@@ -100,10 +104,12 @@ print(embeddings)
 </hfoption>
 <hfoption id="Clustering">
 
-```py
+```python
 import torch
 import torch.nn.functional as F
-from transformers import AutoTokenizer, AutoModel
+
+from transformers import AutoModel, AutoTokenizer
+
 
 def mean_pooling(model_output, attention_mask):
     token_embeddings = model_output[0]
@@ -114,10 +120,10 @@ model_id = "nomic-ai/nomic-embed-text-v1.5"
 revision = "refs/pr/57"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
-model = AutoModel.from_pretrained(model_id, revision=revision)
+model = AutoModel.from_pretrained(model_id, revision=revision, device_map="auto")
 
 sentences = ['clustering: the quick brown fox']
-encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt')
+encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt').to(model.device)
 
 with torch.no_grad():
     model_output = model(**encoded_input)
@@ -130,10 +136,12 @@ print(embeddings)
 </hfoption>
 <hfoption id="Classification">
 
-```py
+```python
 import torch
 import torch.nn.functional as F
-from transformers import AutoTokenizer, AutoModel
+
+from transformers import AutoModel, AutoTokenizer
+
 
 def mean_pooling(model_output, attention_mask):
     token_embeddings = model_output[0]
@@ -144,10 +152,10 @@ model_id = "nomic-ai/nomic-embed-text-v1.5"
 revision = "refs/pr/57"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
-model = AutoModel.from_pretrained(model_id, revision=revision)
+model = AutoModel.from_pretrained(model_id, revision=revision, device_map="auto")
 
 sentences = ['classification: the quick brown fox']
-encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt')
+encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt').to(model.device)
 
 with torch.no_grad():
     model_output = model(**encoded_input)
@@ -172,7 +180,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision, model_max
 
 # dynamic RoPE for increased context
 rope_parameters = {"rope_theta": 1000.0, "rope_type": "dynamic", "factor": 2.0}
-model = AutoModel.from_pretrained(model_id, revision=revision, rope_parameters=rope_parameters) 
+model = AutoModel.from_pretrained(model_id, revision=revision, rope_parameters=rope_parameters, device_map="auto") 
 ```
 
 ## Notes

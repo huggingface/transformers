@@ -556,6 +556,7 @@ class TestAppRoutes(unittest.TestCase):
             cls.completion_handler,
             cls.response_handler,
             cls.transcription_handler,
+            generation_state=GenerationState(),
         )
         cls.transport = httpx.ASGITransport(app=cls.app)
 
@@ -1821,6 +1822,67 @@ class TestToolCallUnit(unittest.TestCase):
         processor.parse_response = lambda t, s: recursive_parse(t, s)
         calls = parse_tool_calls(processor, text, _TOOL_CALL_FALLBACKS["qwen"]["schema"])
         self.assertEqual(len(calls), 2)
+
+
+class TestCBWorkerDeadServerIntegration(unittest.TestCase):
+    """End-to-end FastAPI behavior when the CB worker has died.
+
+    Asserts the wiring from a ``CBWorkerDeadError`` raised in a request handler
+    (or a dead CB worker observed by ``/health``) to a 503 response carrying the cause —
+    the contract orchestrators rely on to recycle the pod.
+    """
+
+    def _build_app(self, generation_state, chat_handler=None):
+        from transformers.cli.serving.server import build_server
+
+        return build_server(
+            model_manager=MagicMock(),
+            chat_handler=chat_handler or MagicMock(),
+            completion_handler=MagicMock(),
+            response_handler=MagicMock(),
+            transcription_handler=MagicMock(),
+            generation_state=generation_state,
+        )
+
+    def test_health_returns_503_when_cb_dead(self):
+        from fastapi.testclient import TestClient
+
+        from transformers.cli.serving.utils import CBGenerateManager
+
+        state = GenerationState(continuous_batching=True)
+        # Manager whose underlying CB has a fatal_error set -> is_alive() returns False.
+        mgr = CBGenerateManager()
+        mgr._cb = MagicMock()
+        mgr._cb.fatal_error = RuntimeError("CUDA illegal memory access")
+        state._cb_manager = mgr
+
+        resp = TestClient(self._build_app(state)).get("/health")
+
+        self.assertEqual(resp.status_code, 503)
+        self.assertEqual(resp.json(), {"status": "unhealthy", "reason": "cb_worker_dead"})
+
+    def test_chat_endpoint_returns_503_with_cause(self):
+        """A CBWorkerDeadError raised from the chat route maps to 503 with the cause in the body."""
+        from fastapi.testclient import TestClient
+
+        from transformers.cli.serving.utils import CBWorkerDeadError
+
+        chat_handler = MagicMock()
+
+        async def handle_request(_body, _request_id):
+            raise CBWorkerDeadError("CB worker is dead and cannot accept request: CUDA illegal memory access")
+
+        chat_handler.handle_request = handle_request
+
+        client = TestClient(self._build_app(GenerationState(continuous_batching=True), chat_handler=chat_handler))
+        resp = client.post(
+            "/v1/chat/completions",
+            json={"model": "x", "messages": [{"role": "user", "content": "hi"}]},
+        )
+
+        self.assertEqual(resp.status_code, 503)
+        # Body carries the original cause so the client knows why the server is broken.
+        self.assertIn("CUDA illegal memory access", resp.json()["error"])
 
 
 class _TestToolCallBase:

@@ -35,29 +35,30 @@ The example below demonstrates how to obtain a depth map with [`Pipeline`] or th
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
 
-pipe = pipeline(task="depth-estimation", model="LiheYoung/depth-anything-base-hf", dtype=torch.bfloat16, device=0)
+
+pipe = pipeline(task="depth-estimation", model="LiheYoung/depth-anything-base-hf", device=0)
 pipe("http://images.cocodataset.org/val2017/000000039769.jpg")["depth"]
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 import requests
-import numpy as np
+import torch
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModelForDepthEstimation
 
+
 image_processor = AutoImageProcessor.from_pretrained("LiheYoung/depth-anything-base-hf")
-model = AutoModelForDepthEstimation.from_pretrained("LiheYoung/depth-anything-base-hf", dtype=torch.bfloat16)
+model = AutoModelForDepthEstimation.from_pretrained("LiheYoung/depth-anything-base-hf", device_map="auto")
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
-inputs = image_processor(images=image, return_tensors="pt")
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)

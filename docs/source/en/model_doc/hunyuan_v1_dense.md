@@ -30,14 +30,13 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`A
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="text-generation",
     model="tencent/Hunyuan-0.5B-Pretrain",
-    dtype=torch.bfloat16,
 )
 pipe("The future of artificial intelligence is")
 ```
@@ -45,14 +44,13 @@ pipe("The future of artificial intelligence is")
 </hfoption>
 <hfoption id="AutoModelForCausalLM">
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("tencent/Hunyuan-0.5B-Pretrain")
 model = AutoModelForCausalLM.from_pretrained(
     "tencent/Hunyuan-0.5B-Pretrain",
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 input_ids = tokenizer("The future of artificial intelligence is", return_tensors="pt").to(model.device)

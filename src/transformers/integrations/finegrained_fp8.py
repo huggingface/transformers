@@ -16,7 +16,7 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 from ..activations import ACT2FN
-from ..core_model_loading import ConversionOps, _IdentityOp
+from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import should_convert_module
 from ..utils import logging
 from ..utils.import_utils import get_cuda_runtime_version, resolve_internal_import
@@ -809,12 +809,7 @@ class Fp8Quantize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
-    def convert(self, input_dict: torch.Tensor, **kwargs) -> dict[str, torch.Tensor]:
-        # Unpack single key/value (value may be wrapped in a list)
-        target_keys, value = tuple(input_dict.items())[0]
-        value = value[0]
-
-        # Resolve block size (support dict-like or attr-like quant_config)
+    def _resolve_block_size(self, value: torch.Tensor) -> tuple[int, int]:
         block_size = None
         if self.hf_quantizer.quantization_config is not None:
             if isinstance(self.hf_quantizer.quantization_config, dict):
@@ -823,98 +818,175 @@ class Fp8Quantize(ConversionOps):
                 block_size = getattr(self.hf_quantizer.quantization_config, "weight_block_size", None)
         if block_size is None:
             block_size = (value.shape[-2], value.shape[-1])
+        return tuple(block_size)
 
-        block_m, block_n = block_size
+    def _quantize_one(self, key: str, value: torch.Tensor) -> dict[str, torch.Tensor]:
+        # Pass through tensors that aren't tileable (1D norms / biases, or shapes
+        # that don't divide cleanly by the configured block) — they were never
+        # FP8-quantized on the load side, so the reverse op shouldn't touch them.
+        if value.ndim < 2:
+            return {key: value}
+        block_m, block_n = self._resolve_block_size(value)
         rows, cols = value.shape[-2], value.shape[-1]
-
-        # Enforce exact tiling like your original
         if rows % block_m != 0 or cols % block_n != 0:
-            raise ValueError(
-                f"Matrix dimensions ({rows}, {cols}) must be divisible by block sizes ({block_m}, {block_n}). for {target_keys}"
-            )
+            return {key: value}
 
         # Leading dims can be empty (2D) or include num_experts/... (3D+)
         leading_shape = value.shape[:-2]
         rows_tiles = rows // block_m
         cols_tiles = cols // block_n
-
         original_shape = value.shape
         value_fp32 = value.to(torch.float32)
-
         # Reshape to (..., rows_tiles, block_m, cols_tiles, block_n)
         reshaped = value_fp32.reshape(*leading_shape, rows_tiles, block_m, cols_tiles, block_n)
-
-        # Per-tile max-abs over the block dims
-        # dims: block_m is at -3, block_n is at -1 after the reshape
+        # Per-tile max-abs over the block dims (block_m at -3, block_n at -1)
         max_abs = reshaped.abs().amax(dim=(-3, -1))
         safe_max_abs = torch.where(max_abs > 0, max_abs, torch.ones_like(max_abs))
-
-        # Tile scale (we store inverse scale like your Linear: weight_scale_inv)
+        # We store inverse scale to match the upstream ``weight_scale_inv`` convention
         scales = _FP8_MAX / safe_max_abs
         scales = torch.where(max_abs > 0, scales, torch.ones_like(scales))  # keep zeros stable
-
-        # Broadcast scales back over the block dims and quantize
-        # max_abs/scales shape: (..., rows_tiles, cols_tiles)
-        scales_broadcast = scales.unsqueeze(-1).unsqueeze(-3)  # -> (..., rows_tiles, 1, cols_tiles, 1)
+        # Broadcast scales over the block dims and quantize
+        scales_broadcast = scales.unsqueeze(-1).unsqueeze(-3)  # (..., rows_tiles, 1, cols_tiles, 1)
         scaled = reshaped * scales_broadcast
-
         quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
-
         quantized = quantized.reshape(original_shape)
+        inv_scales = (1.0 / scales).to(torch.float32)
+        scale_key = key.rsplit(".", 1)[0] + ".weight_scale_inv" if key.endswith("weight") else key + "_scale_inv"
+        return {key: quantized, scale_key: inv_scales}
 
-        inv_scales = (1.0 / scales).to(torch.float32)  # shape: (*leading, rows_tiles, cols_tiles)
-        if target_keys.endswith("weight"):
-            scale_key = target_keys.rsplit(".", 1)[0] + ".weight_scale_inv"
-        else:
-            scale_key = target_keys + "_scale_inv"
+    def convert(self, input_dict: torch.Tensor, **kwargs) -> dict[str, torch.Tensor]:
+        # Quantize every (key, tensor) entry in the dict. Single-tensor case (legacy
+        # callers that pass one key) and multi-tensor case (reverse of an expert
+        # ``MergeModulelist`` that emits one key per expert) are handled the same way.
+        result: dict[str, torch.Tensor] = {}
+        for key, value in input_dict.items():
+            tensor = value[0] if isinstance(value, list) else value
+            result.update(self._quantize_one(key, tensor))
+        return result
 
-        # Return both quantized weights and per-tile inverse scales (keeps leading dims, e.g., num_experts)
-        return {
-            target_keys: quantized,
-            scale_key: inv_scales,
-        }
+    @property
+    def reverse_op(self) -> "ConversionOps":
+        return Fp8Dequantize(self.hf_quantizer)
 
 
 class Fp8Dequantize(ConversionOps):
-    """Inverse operation of :class:`Fp8Quantize`. Takes a pair (weight, scale) and reconstructs the fp32 tensor."""
+    """Dequantize FP8 weights using their per-block ``weight_scale_inv``.
+
+    Designed to run as the *first* op in any :class:`WeightConverter` chain when
+    loading with ``dequantize=True`` — :meth:`update_weight_conversions` on the
+    FP8 quantizer attaches it to each existing model-specific converter so that
+    per-expert (weight, scale) pairs are folded into full-precision tensors before
+    the chain's merge / concat ops collapse the per-expert structure.
+
+    Pattern semantics
+        Input ``input_dict`` carries one entry per source pattern; each value is a
+        list of tensors (one per ``*`` match). For every weight pattern that has a
+        sibling ``*.weight_scale_inv`` pattern in the dict, this op pairs them up by
+        index, dequantizes per-pair, and emits the dequantized list under the
+        original *weight* key. Scale entries are dropped from the output so the
+        remaining ops only see weights.
+    """
 
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
+    def _scale_pattern_for(self, weight_pattern: str) -> str:
+        # Strip the optional ``$`` regex anchor so we can match the underlying name.
+        anchored = weight_pattern.endswith("$")
+        base = weight_pattern[:-1] if anchored else weight_pattern
+        if base.endswith(".weight"):
+            scale = base[: -len(".weight")] + ".weight_scale_inv"
+        elif base == "weight":
+            scale = "weight_scale_inv"
+        else:
+            scale = base + "_scale_inv"
+        return scale + "$" if anchored else scale
+
+    # E2M1 (FP4) value table — checkpoints sometimes ship MoE experts as packed FP4
+    # (two e2m1 nibbles per int8 byte), so the "weight" dtype lands as ``int8`` /
+    # ``float4_e2m1fn_x2`` and we have to unpack before applying the scale grid.
+    _FP4_E2M1_LUT = (0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0)
+
+    def _unpack_fp4(self, packed: torch.Tensor) -> torch.Tensor:
+        """Two ``e2m1`` FP4 values per byte → float32 tensor twice as wide on the last dim."""
+        lut = torch.tensor(self._FP4_E2M1_LUT, dtype=torch.float32, device=packed.device)
+        u8 = packed.contiguous().view(torch.uint8)
+        low = (u8 & 0xF).long()
+        high = ((u8 >> 4) & 0xF).long()
+        unpacked = torch.stack([lut[low], lut[high]], dim=-1)
+        return unpacked.reshape(*packed.shape[:-1], 2 * packed.shape[-1])
+
+    def _dequantize_one(self, quantized: torch.Tensor, scales: torch.Tensor) -> torch.Tensor:
+        # FP4 path: int8 / float4_e2m1fn_x2 stores two nibbles per byte. Unpack to fp32
+        # first so the rest of the routine sees a normal (rows, cols) float matrix.
+        fp4_dtype = getattr(torch, "float4_e2m1fn_x2", None)
+        if quantized.dtype == torch.int8 or (fp4_dtype is not None and quantized.dtype == fp4_dtype):
+            quantized_fp32 = self._unpack_fp4(quantized)
+        else:
+            quantized_fp32 = quantized.to(torch.float32)
+        rows, cols = quantized_fp32.shape[-2:]
+        # Derive block size from the scale grid rather than the global config: MoE experts
+        # ship MXFP4 with a ``[1, 32]`` block, dense linears ship FP8 with ``[128, 128]``,
+        # and the same dequant has to handle both within one checkpoint.
+        scale_rows, scale_cols = scales.shape[-2:]
+        if rows % scale_rows or cols % scale_cols:
+            raise ValueError(
+                f"Weight shape ({rows}, {cols}) not divisible by scale grid ({scale_rows}, {scale_cols})."
+            )
+        block_m = rows // scale_rows
+        block_n = cols // scale_cols
+        # ``ue8m0`` (``float8_e8m0fnu``) scales have no CUDA ``mul`` kernel, and casting
+        # the FP8 weight to that dtype loses precision. Promote both sides to fp32 for
+        # the math; emit in the scales' dtype when it's a real float, otherwise bf16.
+        out_dtype = scales.dtype if scales.dtype.is_floating_point and scales.element_size() >= 2 else torch.bfloat16
+        original_shape = quantized_fp32.shape
+        q = quantized_fp32.reshape(-1, scale_rows, block_m, scale_cols, block_n)
+        s = scales.to(torch.float32).reshape(-1, scale_rows, scale_cols).unsqueeze(-1).unsqueeze(2)
+        return (q * s).to(out_dtype).reshape(original_shape)
+
     def convert(
         self,
-        input_dict: dict[str, torch.Tensor],
+        input_dict: dict[str, list[torch.Tensor] | torch.Tensor],
         full_layer_name: str | None = None,
         **kwargs,
-    ) -> dict[str, torch.Tensor]:
-        if len(input_dict) < 2:
-            # case where we only got weights, need to check for "weight$"
-            return {full_layer_name: input_dict["weight$"]}
+    ) -> dict[str, list[torch.Tensor] | torch.Tensor]:
+        # Backward-compatible single-tensor path (the legacy fallback converter declares
+        # ``["weight$", "weight_scale_inv", "activation_scale"]`` and produces a single
+        # ``weight`` target). Also handles the no-scale case (e.g. RMSNorm weights that
+        # match ``weight$`` but ship no ``weight_scale_inv`` alongside).
+        if "weight$" in input_dict:
+            quantized = input_dict["weight$"]
+            quantized = quantized[0] if isinstance(quantized, list) else quantized
+            if "weight_scale_inv" in input_dict:
+                scales = input_dict["weight_scale_inv"]
+                scales = scales[0] if isinstance(scales, list) else scales
+                return {full_layer_name: self._dequantize_one(quantized, scales)}
+            return {full_layer_name: quantized}
 
-        quantized = input_dict["weight$"][0]
-        scales = input_dict["weight_scale_inv"][0]
-
-        rows, cols = quantized.shape[-2:]
-        block_size = self.hf_quantizer.quantization_config.weight_block_size
-        if block_size is None:
-            block_size = (quantized.shape[-2], quantized.shape[-1])
-
-        block_m, block_n = block_size
-
-        if rows % block_m != 0 or cols % block_n != 0:
-            raise ValueError(
-                f"Matrix dimensions ({rows}, {cols}) must be divisible by block sizes ({block_m}, {block_n})."
-            )
-        quantized = quantized.to(scales.dtype)
-        reshaped = quantized.reshape(-1, rows // block_m, block_m, cols // block_n, block_n)
-        expanded_scales = scales.reshape(-1, rows // block_m, cols // block_n)
-        expanded_scales = expanded_scales.unsqueeze(-1).unsqueeze(2)
-        dequantized = reshaped * expanded_scales
-
-        return {
-            full_layer_name: dequantized.reshape(quantized.shape),
-        }
+        # Generic chain path: dequantize every weight pattern that has a sibling scale.
+        result: dict[str, list[torch.Tensor] | torch.Tensor] = {}
+        for key, value in input_dict.items():
+            if "activation_scale" in key or "weight_scale_inv" in key:
+                continue  # consumed by the dequant; drop from the chain
+            scale_key = self._scale_pattern_for(key)
+            if scale_key not in input_dict:
+                # No scale to apply (e.g. unrelated entry) — pass through untouched.
+                result[key] = value
+                continue
+            weights = value if isinstance(value, list) else [value]
+            scales = input_dict[scale_key]
+            scales = scales if isinstance(scales, list) else [scales]
+            if len(weights) != len(scales):
+                raise ValueError(
+                    f"Fp8Dequantize: weight/scale count mismatch for {key} "
+                    f"({len(weights)} weights vs {len(scales)} scales)."
+                )
+            result[key] = [self._dequantize_one(w, s) for w, s in zip(weights, scales)]
+        return result
 
     @property
     def reverse_op(self) -> "ConversionOps":
-        return _IdentityOp()
+        # Round-trip: dequantize on load -> re-quantize on save, so the saved
+        # checkpoint preserves the FP8 format (weight + per-block ``weight_scale_inv``)
+        # whether the in-memory state stayed quantized or was dequantized for compute.
+        return Fp8Quantize(self.hf_quantizer)

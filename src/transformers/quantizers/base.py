@@ -294,6 +294,19 @@ class HfQuantizer(ABC):
     def get_weight_conversions(self):
         return []
 
+    def update_weight_conversions(self, weight_conversions):
+        """Give the quantizer a chance to rewrite the weight conversion pipeline.
+
+        Loading runs ``renamings → converters → (dequant → merge → concat)``. Dequant
+        has to happen *before* any merge/concat op because those operations aren't
+        aware of per-block scales, so the per-expert (weight, scale) pairs need to be
+        collapsed into full-precision tensors first. Subclasses (e.g. the FP8
+        quantizer in ``dequantize=True`` mode) override this to inject a dequantize
+        op at the start of each model-provided :class:`WeightConverter` and attach the
+        matching scale source patterns. Default: no-op.
+        """
+        return weight_conversions + self.get_weight_conversions()
+
 
 class SequentialLlama4TextExperts(ModuleList):
     """
