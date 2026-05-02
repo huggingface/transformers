@@ -41,6 +41,10 @@ COMMON_PYTEST_OPTIONS = {
 }
 DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.8.12"}]
 
+# CircleCI context holding OTLP collector config (OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_HEADERS).
+# Must exist in the CircleCI org settings. If env vars are empty, configure-ci-otel is a no-op.
+CI_OTEL_CONTEXT = "transformers-otel"
+
 # Strings that commonly appear in the output of flaky tests when they fail. These are used with `pytest-rerunfailures`
 # to rerun the tests that match these patterns.
 FLAKY_TEST_FAILURE_PATTERNS = [
@@ -127,6 +131,10 @@ class CircleCIJob:
         self.install_steps.append("uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh")
         # Install pytest-random-order plugin for test randomization
         self.install_steps.append("uv pip install pytest-random-order")
+        # Install transformers-ci for OTEL integration (configure-ci-otel CLI, pytest plugin). Export stays opt-in per job command.
+        self.install_steps.append(
+            "uv pip install 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'"
+        )
         if self.pytest_options is None:
             self.pytest_options = {}
         if isinstance(self.tests_to_run, str):
@@ -152,6 +160,7 @@ class CircleCIJob:
 
         # Do not run tests decorated by @is_flaky on pull requests
         env["RUN_FLAKY"] = os.environ.get("CIRCLE_PULL_REQUEST", "") == ""
+        env["TRANSFORMERS_TEST_OTEL_JOB_NAME"] = self.job_name
         env.update(self.additional_env)
 
         job = {
@@ -241,7 +250,13 @@ class CircleCIJob:
             {
                 "run": {
                     "name": "Run tests",
-                    "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt) | tee tests_output.txt)",
+                    "command": self._build_pytest_command(
+                        timeout_cmd=timeout_cmd,
+                        marker_cmd=marker_cmd,
+                        junit_flags=junit_flags,
+                        repeat_on_failure_flags=repeat_on_failure_flags,
+                        pytest_flags=pytest_flags,
+                    ),
                 }
             },
             {
@@ -293,6 +308,18 @@ class CircleCIJob:
             job["parallelism"] = parallel
         job["steps"] = steps
         return job
+
+    def _build_pytest_command(
+        self,
+        *,
+        timeout_cmd: str,
+        marker_cmd: str,
+        junit_flags: str,
+        repeat_on_failure_flags: str,
+        pytest_flags: list[str],
+    ) -> str:
+        pytest_flags_str = " ".join(pytest_flags)
+        return f"""({timeout_cmd} configure-ci-otel --job-name "$TRANSFORMERS_TEST_OTEL_JOB_NAME" -- python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {pytest_flags_str} $(cat splitted_tests.txt) | tee tests_output.txt)"""
 
     @property
     def job_name(self):
@@ -469,13 +496,14 @@ def create_circleci_config(folder=None):
     }
     if "CIRCLE_TOKEN" in os.environ:
         # For private forked repo. (e.g. new model addition)
-        config["workflows"] = {
-            "version": 2,
-            "run_tests": {"jobs": [{j.job_name: {"context": ["TRANSFORMERS_CONTEXT"]}} for j in jobs]},
-        }
+        job_contexts = ["TRANSFORMERS_CONTEXT", CI_OTEL_CONTEXT]
     else:
         # For public repo. (e.g. `transformers`)
-        config["workflows"] = {"version": 2, "run_tests": {"jobs": [j.job_name for j in jobs]}}
+        job_contexts = [CI_OTEL_CONTEXT]
+    config["workflows"] = {
+        "version": 2,
+        "run_tests": {"jobs": [{j.job_name: {"context": job_contexts}} for j in jobs]},
+    }
     with open(os.path.join(folder, "generated_config.yml"), "w", encoding="utf-8") as f:
         f.write(
             yaml.dump(config, sort_keys=False, default_flow_style=False)

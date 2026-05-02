@@ -17,6 +17,9 @@ env:
   OMP_NUM_THREADS: 16
   MKL_NUM_THREADS: 16
   TF_FORCE_GPU_ALLOW_GROWTH: true
+  # Self-hosted OTLP collector wiring. If the secrets are unset, configure-ci-otel is a no-op.
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}
+  OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.OTEL_EXPORTER_OTLP_HEADERS }}
 
 jobs:
   run_doctests:
@@ -38,7 +41,7 @@ jobs:
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .[flax]
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .[flax,ci]
 
       - name: GPU visibility
         working-directory: /transformers
@@ -67,7 +70,7 @@ jobs:
         working-directory: /transformers
         run: |
           cat doc_tests.txt
-          python3 -m pytest -v --make-reports doc_tests_gpu_${{ env.split_keys }} --doctest-modules $(cat doc_tests.txt) -sv --doctest-continue-on-failure --doctest-glob="*.md"
+          configure-ci-otel --job-name doc_tests_gpu_${{ env.split_keys }} -- python3 -m pytest -v --make-reports doc_tests_gpu_${{ env.split_keys }} --doctest-modules $(cat doc_tests.txt) -sv --doctest-continue-on-failure --doctest-glob="*.md"
 
       - name: Failure short reports
         if: ${{ failure() }}
