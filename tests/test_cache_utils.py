@@ -88,7 +88,6 @@ class TestStaticLayerCrop:
         assert layer.cumulative_length.item() == 5
         assert (layer.keys[:, :, 3:5, :] == 1).all()
 
-
     def test_crop_negative_overflow(self):
         """Negative crop exceeding current length clamps to 0."""
         layer = StaticLayer(max_cache_len=10)
