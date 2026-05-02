@@ -46,7 +46,7 @@ if is_torch_available():
         Sam3VisionConfig,
         Sam3ViTConfig,
     )
-    from transformers.models.sam3.modeling_sam3 import Sam3Model, Sam3VisionModel
+    from transformers.models.sam3.modeling_sam3 import Sam3MaskDecoder, Sam3Model, Sam3VisionModel
     from transformers.models.sam3.processing_sam3 import Sam3Processor
 
 
@@ -853,6 +853,52 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertIsNotNone(outputs.pred_masks)
         self.assertIsNotNone(outputs.pred_boxes)
         self.assertIsNotNone(outputs.pred_logits)
+
+    def test_mask_decoder_single_scale_input(self):
+        """
+        Sam3MaskDecoder.forward should accept a single tensor for `backbone_features`
+        (single-scale inference), wrapping it internally and emitting a UserWarning.
+        Multi-scale list inputs must continue to work unchanged.
+        """
+        import warnings
+
+        config = self.model_tester.get_config()
+        mask_decoder = Sam3MaskDecoder(config=config.mask_decoder_config).to(torch_device).eval()
+
+        batch_size = self.model_tester.batch_size
+        hidden_size = config.mask_decoder_config.hidden_size
+        num_queries = 5
+        seq_len = 64
+        h, w = 8, 8
+
+        decoder_queries = floats_tensor([batch_size, num_queries, hidden_size]).to(torch_device)
+        encoder_hidden_states = floats_tensor([batch_size, seq_len, hidden_size]).to(torch_device)
+
+        # single tensor (single-scale) path — must emit UserWarning, not crash
+        single_feat = floats_tensor([batch_size, hidden_size, h, w]).to(torch_device)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            with torch.no_grad():
+                out_single = mask_decoder(
+                    decoder_queries=decoder_queries,
+                    backbone_features=single_feat,
+                    encoder_hidden_states=encoder_hidden_states,
+                )
+        self.assertTrue(
+            any(issubclass(w.category, UserWarning) for w in caught),
+            "Expected a UserWarning when passing a single tensor for backbone_features",
+        )
+        self.assertIsNotNone(out_single.pred_masks)
+
+        # list input (multi-scale) path must still work
+        multi_feat = [floats_tensor([batch_size, hidden_size, h, w]).to(torch_device) for _ in range(2)]
+        with torch.no_grad():
+            out_multi = mask_decoder(
+                decoder_queries=decoder_queries,
+                backbone_features=multi_feat,
+                encoder_hidden_states=encoder_hidden_states,
+            )
+        self.assertIsNotNone(out_multi.pred_masks)
 
     @unittest.skip(reason="SAM3 model can't be compiled dynamic yet")
     def test_sdpa_can_compile_dynamic(self):

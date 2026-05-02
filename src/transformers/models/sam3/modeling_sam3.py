@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import math
+import warnings
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
@@ -2024,7 +2025,7 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
     def forward(
         self,
         decoder_queries: torch.Tensor,
-        backbone_features: list[torch.Tensor],
+        backbone_features: torch.Tensor | list[torch.Tensor],
         encoder_hidden_states: torch.Tensor,
         prompt_features: torch.Tensor | None = None,
         prompt_mask: torch.Tensor | None = None,
@@ -2033,7 +2034,9 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
         """
         Args:
             decoder_queries: Decoder output queries [batch_size, num_queries, hidden_size]
-            backbone_features: List of backbone features to process through FPN
+            backbone_features: List of backbone features to process through FPN, or a single tensor
+                for single-scale inference. When a single tensor is provided it is wrapped in a list
+                and a warning is emitted, since the config expects multiple FPN levels.
             encoder_hidden_states: Encoder outputs [batch_size, seq_len, hidden_size]
             prompt_features: Prompt features (text + geometry) for cross-attention [batch_size, prompt_len, hidden_size]
             prompt_mask: Padding mask [batch_size, prompt_len] where True=valid, False=padding
@@ -2041,6 +2044,15 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
         Returns:
             Sam3MaskDecoderOutput containing predicted masks and semantic segmentation.
         """
+        if isinstance(backbone_features, torch.Tensor):
+            warnings.warn(
+                "Sam3MaskDecoder received a single tensor for `backbone_features`. "
+                "Wrapping it in a list for single-scale inference. "
+                "For best results, provide multi-scale FPN features as a list of tensors.",
+                UserWarning,
+            )
+            backbone_features = [backbone_features]
+
         if prompt_features is not None:
             # Cross-attention: encoder features attend to prompt features
             residual = encoder_hidden_states
