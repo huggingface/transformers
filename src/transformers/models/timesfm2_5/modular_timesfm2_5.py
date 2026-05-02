@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import math
+import warnings
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
@@ -387,12 +388,15 @@ class TimesFm2_5Model(TimesFm2_5PreTrainedModel):
         """
         batch_size, seq_len = past_values.shape
         patch_len = self.config.patch_length
+        torch._check(seq_len % patch_len == 0)
 
         if past_values_padding is None:
             past_values_padding = torch.zeros_like(past_values, dtype=torch.long)
+        else:
+            past_values_padding = past_values_padding.narrow(1, 0, seq_len)
 
-        patched_inputs = past_values.view(batch_size, -1, patch_len)
-        patched_masks = past_values_padding[:, :seq_len].view(batch_size, -1, patch_len)
+        patched_inputs = past_values.unflatten(-1, (-1, patch_len))
+        patched_masks = past_values_padding.unflatten(-1, (-1, patch_len))
         patched_masks_bool = patched_masks >= 0.5
 
         count = past_values.new_zeros(batch_size)
@@ -532,7 +536,8 @@ class TimesFm2_5ModelForPrediction(TimesFmModelForPrediction):
     @auto_docstring
     def forward(
         self,
-        past_values: Sequence[torch.Tensor],
+        past_values: Sequence[torch.Tensor] | torch.Tensor,
+        past_observed_mask: torch.Tensor | None = None,
         window_size: int | None = None,
         future_values: torch.Tensor | None = None,
         forecast_context_len: int | None = None,
@@ -541,8 +546,20 @@ class TimesFm2_5ModelForPrediction(TimesFmModelForPrediction):
         **kwargs: Unpack[TransformersKwargs],
     ) -> TimesFm2_5OutputForPrediction:
         r"""
-        past_values (`Sequence[torch.Tensor]`):
-            Past values of the time series that serves as input to the model. Each tensor is a 1D time series.
+        past_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+            Past values of the time series that serves as input to the model. A list of 1D tensors with
+            possibly differing lengths is also accepted (deprecated): each tensor is front-padded with zeros
+            and stacked into a 2D tensor. Tensor inputs are preferred and required for export.
+        past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Boolean mask indicating which `past_values` were observed and which are padding/missing. Mask
+            values selected in `[0, 1]`:
+
+            - `1` for values that are **observed**,
+            - `0` for values that are **missing** (i.e. padded or NaNs that were replaced by zeros).
+
+            Defaults to a tensor of ones (everything observed). When `past_values` is passed as a list of
+            variable-length tensors, you should provide a matching `past_observed_mask` so the front-padding
+            zeros are not treated as observed values.
         window_size (`int`, *optional*):
             Window size of trend + residual decomposition. If `None`, decomposition is not applied.
         future_values (`torch.Tensor`, *optional*):
@@ -556,23 +573,36 @@ class TimesFm2_5ModelForPrediction(TimesFmModelForPrediction):
             `config.force_flip_invariance`.
         """
         forecast_context_len = forecast_context_len or self.context_len
-        device = past_values[0].device
 
-        inputs = [ts[-forecast_context_len:] for ts in past_values]
-        input_min = torch.min(torch.stack([torch.min(ts) for ts in inputs]))
+        if isinstance(past_values, list):
+            warnings.warn(
+                "Passing `past_values` as a list of 1D tensors is deprecated and will be removed in a future "
+                "version. Please pass a 2D `torch.Tensor` of shape `(batch_size, sequence_length)` and, when "
+                "needed, a `past_observed_mask` of the same shape (1 = observed, 0 = padded/missing).",
+                FutureWarning,
+            )
+            past_values = self._past_values_to_tensor(past_values)
+
+        device = past_values.device
+        if past_observed_mask is None:
+            past_observed_mask = torch.ones_like(past_values)
+
+        inputs = past_values[:, -forecast_context_len:]
+        observed_mask = past_observed_mask[:, -forecast_context_len:].to(device=device)
+        sentinel = torch.full_like(inputs, torch.finfo(inputs.dtype).max)
+        input_min = torch.where(observed_mask.bool(), inputs, sentinel).min()
 
         if window_size is not None:
-            new_inputs: list[torch.Tensor] = []
-            for ts in inputs:
-                new_inputs.extend(self._timesfm_moving_average(ts, window_size))
-            inputs = new_inputs
+            trend, residual = self._timesfm2_5_moving_average(inputs, window_size)
+            inputs = torch.stack([trend, residual], dim=1).view(2 * inputs.shape[0], -1)
+            observed_mask = torch.repeat_interleave(observed_mask, 2, dim=0)
 
         if truncate_negative is None:
             truncate_negative = self.config.infer_is_positive
         if force_flip_invariance is None:
             force_flip_invariance = self.config.force_flip_invariance
 
-        input_ts, input_padding = self._preprocess(inputs, context_len=forecast_context_len)
+        input_ts, input_padding = self._preprocess(inputs, observed_mask, context_len=forecast_context_len)
         input_ts = input_ts.to(device)
         input_padding = input_padding.to(device)
 
