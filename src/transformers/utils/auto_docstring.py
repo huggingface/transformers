@@ -31,7 +31,6 @@ from .doc import (
 )
 from .generic import ModelOutput
 
-
 PATH_TO_TRANSFORMERS = Path("src").resolve() / "transformers"
 
 
@@ -49,7 +48,10 @@ PLACEHOLDER_TO_AUTO_MODULE = {
     "image_processor_class": ("image_processing_auto", "IMAGE_PROCESSOR_MAPPING_NAMES"),
     "tokenizer_class": ("tokenization_auto", "TOKENIZER_MAPPING_NAMES"),
     "video_processor_class": ("video_processing_auto", "VIDEO_PROCESSOR_MAPPING_NAMES"),
-    "feature_extractor_class": ("feature_extraction_auto", "FEATURE_EXTRACTOR_MAPPING_NAMES"),
+    "feature_extractor_class": (
+        "feature_extraction_auto",
+        "FEATURE_EXTRACTOR_MAPPING_NAMES",
+    ),
     "processor_class": ("processing_auto", "PROCESSOR_MAPPING_NAMES"),
     "config_class": ("configuration_auto", "CONFIG_MAPPING_NAMES"),
     "model_class": ("modeling_auto", "MODEL_MAPPING_NAMES"),
@@ -629,11 +631,9 @@ class ConfigArgs:
     """,
     }
 
-    head_dim = {
-        "description": """
+    head_dim = {"description": """
     The attention head dimension. If None, it will default to hidden_size // num_attention_heads
-    """
-    }
+    """}
 
     num_hidden_layers = {
         "description": """
@@ -2582,7 +2582,10 @@ def equalize_indent(docstring: str, indent_level: int) -> str:
     prefix = " " * indent_level
     # Uses splitlines() (no keepends) to match previous behaviour that dropped
     # any trailing newline via the old splitlines() + "\n".join() + textwrap.indent path.
-    return "\n".join(prefix + line.lstrip() if line.strip() else "" for line in docstring.splitlines())
+    return "\n".join(
+        prefix + line.lstrip() if line.strip() else ""
+        for line in docstring.splitlines()
+    )
 
 
 def set_min_indent(docstring: str, indent_level: int) -> str:
@@ -2597,7 +2600,9 @@ def set_min_indent(docstring: str, indent_level: int) -> str:
         default=0,
     )
     prefix = " " * indent_level
-    return "\n".join(prefix + line[min_indent:] if line.strip() else "" for line in lines)
+    return "\n".join(
+        prefix + line[min_indent:] if line.strip() else "" for line in lines
+    )
 
 
 def parse_shape(docstring):
@@ -2642,14 +2647,20 @@ def parse_docstring(docstring, max_indent_level=0, return_intro=False):
         docstring_intro = docstring[: args_match.start()]
         if docstring_intro.split("\n")[-1].strip() == '"""':
             docstring_intro = "\n".join(docstring_intro.split("\n")[:-1])
-        if docstring_intro.split("\n")[0].strip() == 'r"""' or docstring_intro.split("\n")[0].strip() == '"""':
+        if (
+            docstring_intro.split("\n")[0].strip() == 'r"""'
+            or docstring_intro.split("\n")[0].strip() == '"""'
+        ):
             docstring_intro = "\n".join(docstring_intro.split("\n")[1:])
         if docstring_intro.strip() == "":
             docstring_intro = None
     args_section = args_match.group(1).lstrip("\n") if args_match else docstring
     if args_section.split("\n")[-1].strip() == '"""':
         args_section = "\n".join(args_section.split("\n")[:-1])
-    if args_section.split("\n")[0].strip() == 'r"""' or args_section.split("\n")[0].strip() == '"""':
+    if (
+        args_section.split("\n")[0].strip() == 'r"""'
+        or args_section.split("\n")[0].strip() == '"""'
+    ):
         args_section = "\n".join(args_section.split("\n")[1:])
     args_section = set_min_indent(args_section, 0)
     params = {}
@@ -2731,12 +2742,18 @@ def get_model_name(obj):
         if file_name.startswith(start) and file_name.endswith(end):
             model_name_lowercase_from_file = file_name[len(start) : -len(end)]
             break
-    if model_name_lowercase_from_file and model_name_lowercase_from_folder != model_name_lowercase_from_file:
-        from transformers.models.auto.configuration_auto import SPECIAL_MODEL_TYPE_TO_MODULE_NAME
+    if (
+        model_name_lowercase_from_file
+        and model_name_lowercase_from_folder != model_name_lowercase_from_file
+    ):
+        from transformers.models.auto.configuration_auto import (
+            SPECIAL_MODEL_TYPE_TO_MODULE_NAME,
+        )
 
         if (
             model_name_lowercase_from_file in SPECIAL_MODEL_TYPE_TO_MODULE_NAME
-            or model_name_lowercase_from_file.replace("_", "-") in SPECIAL_MODEL_TYPE_TO_MODULE_NAME
+            or model_name_lowercase_from_file.replace("_", "-")
+            in SPECIAL_MODEL_TYPE_TO_MODULE_NAME
         ):
             return model_name_lowercase_from_file
         return model_name_lowercase_from_folder
@@ -2782,14 +2799,18 @@ def generate_processor_intro(cls) -> str:
     elif len(components) == 2:
         components_text = f"a {components[0]} and a {components[1]}"
         classes_text = f"{component_classes[0]} and {component_classes[1]}"
-        classes_text_short = (
-            f"{component_classes[0].replace('[`', '[`~')} and {component_classes[1].replace('[`', '[`~')}"
-        )
+        classes_text_short = f"{component_classes[0].replace('[`', '[`~')} and {component_classes[1].replace('[`', '[`~')}"
     else:
-        components_text = ", ".join(f"a {c}" for c in components[:-1]) + f", and a {components[-1]}"
-        classes_text = ", ".join(component_classes[:-1]) + f", and {component_classes[-1]}"
+        components_text = (
+            ", ".join(f"a {c}" for c in components[:-1]) + f", and a {components[-1]}"
+        )
+        classes_text = (
+            ", ".join(component_classes[:-1]) + f", and {component_classes[-1]}"
+        )
         classes_short = [c.replace("[`", "[`~") for c in component_classes]
-        classes_text_short = ", ".join(classes_short[:-1]) + f", and {classes_short[-1]}"
+        classes_text_short = (
+            ", ".join(classes_short[:-1]) + f", and {classes_short[-1]}"
+        )
 
     intro = f"""Constructs a {class_name} which wraps {components_text} into a single processor.
 
@@ -2800,7 +2821,9 @@ def generate_processor_intro(cls) -> str:
     return intro
 
 
-def get_placeholders_dict(placeholders: set[str], model_name: str) -> Mapping[str, str | None]:
+def get_placeholders_dict(
+    placeholders: set[str], model_name: str
+) -> Mapping[str, str | None]:
     """
     Get the dictionary of placeholders for the given model name.
     """
@@ -2822,9 +2845,15 @@ def get_placeholders_dict(placeholders: set[str], model_name: str) -> Mapping[st
             if place_holder_value is not None:
                 if isinstance(place_holder_value, list | tuple):
                     place_holder_value = (
-                        place_holder_value[-1] if place_holder_value[-1] is not None else place_holder_value[0]
+                        place_holder_value[-1]
+                        if place_holder_value[-1] is not None
+                        else place_holder_value[0]
                     )
-                placeholders_dict[placeholder] = place_holder_value if place_holder_value is not None else placeholder
+                placeholders_dict[placeholder] = (
+                    place_holder_value
+                    if place_holder_value is not None
+                    else placeholder
+                )
             else:
                 placeholders_dict[placeholder] = placeholder
 
@@ -3024,16 +3053,22 @@ def _format_type_annotation_recursive(type_hint):
                         union_strs.append(_format_type_annotation_recursive(arg))
                 formatted_union = " | ".join(union_strs)
                 # Include the rest of the Annotated metadata
-                remaining_args = [_format_type_annotation_recursive(arg) for arg in args[1:]]
+                remaining_args = [
+                    _format_type_annotation_recursive(arg) for arg in args[1:]
+                ]
                 all_args = [formatted_union] + remaining_args
                 return f"{origin_str}[{', '.join(all_args)}]"
             elif first_arg_origin is Union:
                 # Old-style Union - format as Union[X, Y, Z]
                 union_args = get_args(args[0])
-                union_strs = [_format_type_annotation_recursive(arg) for arg in union_args]
+                union_strs = [
+                    _format_type_annotation_recursive(arg) for arg in union_args
+                ]
                 formatted_union = f"Union[{', '.join(union_strs)}]"
                 # Include the rest of the Annotated metadata
-                remaining_args = [_format_type_annotation_recursive(arg) for arg in args[1:]]
+                remaining_args = [
+                    _format_type_annotation_recursive(arg) for arg in args[1:]
+                ]
                 all_args = [formatted_union] + remaining_args
                 return f"{origin_str}[{', '.join(all_args)}]"
 
@@ -3071,7 +3106,9 @@ def _format_type_annotation_recursive(type_hint):
         return type_str
 
 
-def process_type_annotation(type_input, param_name: str | None = None) -> tuple[str, bool]:
+def process_type_annotation(
+    type_input, param_name: str | None = None
+) -> tuple[str, bool]:
     """
     Unified function to process and format a parameter's type annotation.
 
@@ -3139,27 +3176,45 @@ def process_type_annotation(type_input, param_name: str | None = None) -> tuple[
             parts = [p for p in parts if p != "None"]
         param_type = " | ".join(parts) if parts else ""
         # Clean up module prefixes including typing
-        param_type = "".join(param_type.split("typing.")).replace("transformers.", "~").replace("builtins.", "")
+        param_type = (
+            "".join(param_type.split("typing."))
+            .replace("transformers.", "~")
+            .replace("builtins.", "")
+        )
 
-    elif "typing" in param_type or "Union[" in param_type or "Optional[" in param_type or "[" in param_type:
+    elif (
+        "typing" in param_type
+        or "Union[" in param_type
+        or "Optional[" in param_type
+        or "[" in param_type
+    ):
         # Complex typing construct or generic type - clean up typing module references
         param_type = "".join(param_type.split("typing.")).replace("transformers.", "~")
 
     elif "<class '" in param_type:
         # This is a class type like "<class 'module.ClassName'>" - should NOT append param_name
         param_type = (
-            param_type.replace("transformers.", "~").replace("builtins.", "").replace("<class '", "").replace("'>", "")
+            param_type.replace("transformers.", "~")
+            .replace("builtins.", "")
+            .replace("<class '", "")
+            .replace("'>", "")
         )
 
     else:
         # Simple type or module path - only append param_name if it looks like a module path
         # This is legacy behavior for backwards compatibility
-        if param_name and "." in param_type and not param_type.split(".")[-1][0].isupper():
+        if (
+            param_name
+            and "." in param_type
+            and not param_type.split(".")[-1][0].isupper()
+        ):
             # Looks like a module path ending with an attribute
             param_type = f"{param_type.replace('transformers.', '~').replace('builtins', '')}.{param_name}"
         else:
             # Simple type name, don't append param_name
-            param_type = param_type.replace("transformers.", "~").replace("builtins.", "")
+            param_type = param_type.replace("transformers.", "~").replace(
+                "builtins.", ""
+            )
 
     # Clean up ForwardRef
     if "ForwardRef" in param_type:
@@ -3196,7 +3251,9 @@ def _process_parameter_type(param):
     return formatted_type, optional
 
 
-def _get_parameter_info(param_name, documented_params, source_args_dict, param_type, optional):
+def _get_parameter_info(
+    param_name, documented_params, source_args_dict, param_type, optional
+):
     """
     Get parameter documentation details from the appropriate source.
     Tensor shape, optional status and description are taken from the custom docstring in priority if available.
@@ -3242,7 +3299,14 @@ def _get_parameter_info(param_name, documented_params, source_args_dict, param_t
         # Parameter is not documented
         is_documented = False
 
-    return param_type, optional_string, shape_string, additional_info, description, is_documented
+    return (
+        param_type,
+        optional_string,
+        shape_string,
+        additional_info,
+        description,
+        is_documented,
+    )
 
 
 def _process_regular_parameters(
@@ -3274,7 +3338,9 @@ def _process_regular_parameters(
     # Use appropriate args source based on whether it's a processor or not
     if source_args_dict is None:
         if is_processor:
-            source_args_dict = get_args_doc_from_source([ModelArgs, ImageProcessorArgs, ProcessorArgs])
+            source_args_dict = get_args_doc_from_source(
+                [ModelArgs, ImageProcessorArgs, ProcessorArgs]
+            )
         else:
             source_args_dict = get_args_doc_from_source([ModelArgs, ImageProcessorArgs])
 
@@ -3284,7 +3350,9 @@ def _process_regular_parameters(
         # Skip parameters that should be ignored
         if (
             param_name in ARGS_TO_IGNORE
-            or param_name.startswith("_")  # Private/internal params (e.g. ClassVar-backed fields in configs)
+            or param_name.startswith(
+                "_"
+            )  # Private/internal params (e.g. ClassVar-backed fields in configs)
             or param.kind == inspect.Parameter.VAR_POSITIONAL
             or param.kind == inspect.Parameter.VAR_KEYWORD
         ):
@@ -3307,7 +3375,14 @@ def _process_regular_parameters(
         if param.default != inspect._empty and param.default is not None:
             param_default = f", defaults to `{str(param.default)}`"
 
-        param_type, optional_string, shape_string, additional_info, description, is_documented = _get_parameter_info(
+        (
+            param_type,
+            optional_string,
+            shape_string,
+            additional_info,
+            description,
+            is_documented,
+        ) = _get_parameter_info(
             param_name, documented_params, source_args_dict, param_type, optional
         )
 
@@ -3322,11 +3397,11 @@ def _process_regular_parameters(
             param_type = param_type if "`" in param_type else f"`{param_type}`"
             # Format the parameter docstring
             if additional_info:
-                param_docstring = f"{param_name} ({param_type}{additional_info}):{description}"
-            else:
                 param_docstring = (
-                    f"{param_name} ({param_type}{shape_string}{optional_string}{param_default}):{description}"
+                    f"{param_name} ({param_type}{additional_info}):{description}"
                 )
+            else:
+                param_docstring = f"{param_name} ({param_type}{shape_string}{optional_string}{param_default}):{description}"
             docstring += set_min_indent(
                 param_docstring,
                 indent_level + 8,
@@ -3336,16 +3411,23 @@ def _process_regular_parameters(
                 "type": param_type if param_type else "<fill_type>",
                 "optional": optional,
                 "shape": shape_string,
-                "description": description if description else "\n    <fill_description>",
+                "description": (
+                    description if description else "\n    <fill_description>"
+                ),
                 "default": param_default,
             }
             # Try to get the correct source file; for classes decorated with @strict (huggingface_hub),
             # func.__code__.co_filename points to the wrapper in huggingface_hub, not the config file.
             try:
                 if parent_class is not None:
-                    _source_file = inspect.getsourcefile(parent_class) or func.__code__.co_filename
+                    _source_file = (
+                        inspect.getsourcefile(parent_class) or func.__code__.co_filename
+                    )
                 else:
-                    _source_file = inspect.getsourcefile(inspect.unwrap(func)) or func.__code__.co_filename
+                    _source_file = (
+                        inspect.getsourcefile(inspect.unwrap(func))
+                        or func.__code__.co_filename
+                    )
             except (TypeError, OSError):
                 _source_file = func.__code__.co_filename
             undocumented_parameters.append(
@@ -3460,7 +3542,9 @@ def _is_processor_class(func, parent_class):
 
 # Python < 3.12 fallback: naming heuristics when __orig_bases__ is not set (cpython#103699).
 # Order matters: check ImageProcessorKwargs before ProcessorKwargs.
-_BASIC_KWARGS_NAMES = frozenset({"ImagesKwargs", "ProcessingKwargs", "TextKwargs", "VideosKwargs", "AudioKwargs"})
+_BASIC_KWARGS_NAMES = frozenset(
+    {"ImagesKwargs", "ProcessingKwargs", "TextKwargs", "VideosKwargs", "AudioKwargs"}
+)
 _BASIC_KWARGS_CLASSES = None  # Lazy-loaded name -> class mapping
 
 
@@ -3496,7 +3580,10 @@ def _get_base_kwargs_class(cls):
         parent = None
         for base in bases:
             if isinstance(base, type) and base not in (dict, object):
-                if getattr(base, "__name__", "") == "TypedDict" and getattr(base, "__module__", "") == "typing":
+                if (
+                    getattr(base, "__name__", "") == "TypedDict"
+                    and getattr(base, "__module__", "") == "typing"
+                ):
                     continue
                 parent = base
                 break
@@ -3527,7 +3614,9 @@ def _get_base_kwargs_class(cls):
         current = parent
 
 
-def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, indent_level, undocumented_parameters):
+def _process_kwargs_parameters(
+    sig, func, parent_class, documented_kwargs, indent_level, undocumented_parameters
+):
     """
     Process **kwargs parameters if needed.
 
@@ -3591,7 +3680,9 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
             if kwargs_documentation is not None:
                 documented_kwargs = parse_docstring(kwargs_documentation)[0]
             # Process each kwarg parameter
-            for param_name, param_type_annotation in kwarg_param.annotation.__args__[0].__annotations__.items():
+            for param_name, param_type_annotation in kwarg_param.annotation.__args__[
+                0
+            ].__annotations__.items():
                 # Handle nested kwargs structures for processors
 
                 if is_processor and param_name.endswith("_kwargs"):
@@ -3601,7 +3692,9 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                     # Get the actual type (unwrap Optional if needed)
                     actual_type = param_type_annotation
                     type_name = getattr(param_type_annotation, "__name__", None)
-                    if type_name is None and hasattr(param_type_annotation, "__origin__"):
+                    if type_name is None and hasattr(
+                        param_type_annotation, "__origin__"
+                    ):
                         # Handle Optional[Type] or Union cases
                         args = getattr(param_type_annotation, "__args__", ())
                         for arg in args:
@@ -3620,7 +3713,9 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                         nested_kwargs_doc = getattr(actual_type, "__doc__", None)
                         documented_nested_kwargs = {}
                         if nested_kwargs_doc:
-                            documented_nested_kwargs = parse_docstring(nested_kwargs_doc)[0]
+                            documented_nested_kwargs = parse_docstring(
+                                nested_kwargs_doc
+                            )[0]
 
                         # Only process fields that are documented in the custom kwargs class's own docstring
                         # This prevents showing too many inherited parameters
@@ -3629,20 +3724,29 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                             continue
 
                         # Process each field in the custom typed kwargs
-                        for nested_param_name, nested_param_type in actual_type.__annotations__.items():
+                        for (
+                            nested_param_name,
+                            nested_param_type,
+                        ) in actual_type.__annotations__.items():
                             # Only document parameters that are explicitly documented in the TypedDict's docstring
                             if nested_param_name not in documented_nested_kwargs:
                                 continue
-                            nested_param_type_str, nested_optional = process_type_annotation(
-                                nested_param_type, nested_param_name
+                            nested_param_type_str, nested_optional = (
+                                process_type_annotation(
+                                    nested_param_type, nested_param_name
+                                )
                             )
 
                             # Check for default value
                             nested_param_default = ""
                             if parent_class is not None:
-                                nested_param_default = str(getattr(parent_class, nested_param_name, ""))
+                                nested_param_default = str(
+                                    getattr(parent_class, nested_param_name, "")
+                                )
                                 nested_param_default = (
-                                    f", defaults to `{nested_param_default}`" if nested_param_default != "" else ""
+                                    f", defaults to `{nested_param_default}`"
+                                    if nested_param_default != ""
+                                    else ""
                                 )
 
                             # Only use the TypedDict's own docstring, not source_args_dict
@@ -3669,7 +3773,9 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                                     f"🚨 {nested_param_name} for {type_name} in file {func.__code__.co_filename} has no type"
                                 )
                             nested_param_type_str = (
-                                nested_param_type_str if "`" in nested_param_type_str else f"`{nested_param_type_str}`"
+                                nested_param_type_str
+                                if "`" in nested_param_type_str
+                                else f"`{nested_param_type_str}`"
                             )
                             # Format the parameter docstring (KWARGS_INDICATOR distinguishes from regular args)
                             if nested_additional_info:
@@ -3691,16 +3797,33 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
 
                 if documented_kwargs and param_name not in documented_kwargs:
                     continue
-                param_type, optional = process_type_annotation(param_type_annotation, param_name)
+                param_type, optional = process_type_annotation(
+                    param_type_annotation, param_name
+                )
 
                 # Check for default value
                 param_default = ""
                 if parent_class is not None:
                     param_default = str(getattr(parent_class, param_name, ""))
-                    param_default = f", defaults to `{param_default}`" if param_default != "" else ""
+                    param_default = (
+                        f", defaults to `{param_default}`"
+                        if param_default != ""
+                        else ""
+                    )
 
-                param_type, optional_string, shape_string, additional_info, description, is_documented = (
-                    _get_parameter_info(param_name, documented_kwargs, source_args_dict, param_type, optional)
+                (
+                    param_type,
+                    optional_string,
+                    shape_string,
+                    additional_info,
+                    description,
+                    is_documented,
+                ) = _get_parameter_info(
+                    param_name,
+                    documented_kwargs,
+                    source_args_dict,
+                    param_type,
+                    optional,
                 )
 
                 if is_documented:
@@ -3766,7 +3889,9 @@ def _add_return_tensors_to_docstring(func, parent_class, docstring, indent_level
         is_image_processor_preprocess = _is_image_processor_class(func, parent_class)
 
     # If it's a processor __call__ method or an image processor preprocess method and return_tensors is not already documented
-    if (is_processor_call or is_image_processor_preprocess) and "return_tensors" not in docstring:
+    if (
+        is_processor_call or is_image_processor_preprocess
+    ) and "return_tensors" not in docstring:
         # Get the return_tensors documentation from ImageProcessorArgs
         source_args_dict = (
             get_args_doc_from_source(ProcessorArgs)
@@ -3836,12 +3961,19 @@ def _process_parameters_section(
 
     # Process **kwargs parameters if needed
     kwargs_docstring, kwargs_summary = _process_kwargs_parameters(
-        sig, func, parent_class, documented_kwargs, indent_level, undocumented_parameters
+        sig,
+        func,
+        parent_class,
+        documented_kwargs,
+        indent_level,
+        undocumented_parameters,
     )
     docstring += kwargs_docstring
 
     # Add return_tensors for processor __call__ methods if not already present
-    docstring = _add_return_tensors_to_docstring(func, parent_class, docstring, indent_level)
+    docstring = _add_return_tensors_to_docstring(
+        func, parent_class, docstring, indent_level
+    )
 
     # Add **kwargs summary line after return_tensors
     docstring += kwargs_summary
@@ -3900,7 +4032,9 @@ def _prepare_return_docstring(output_type, config_class, add_intro=True):
         # Import here to avoid circular import
         from .doc import PT_RETURN_INTRODUCTION
 
-        intro = PT_RETURN_INTRODUCTION.format(full_output_type=full_output_type, config_class=config_class)
+        intro = PT_RETURN_INTRODUCTION.format(
+            full_output_type=full_output_type, config_class=config_class
+        )
     else:
         intro = f"Returns:\n    `{full_output_type}`"
         if documented_params:
@@ -3941,7 +4075,9 @@ def _prepare_return_docstring(output_type, config_class, add_intro=True):
                 # additional_info contains shape and optional status
                 param_line = f"- **{param_name}** (`{param_type}`{additional_info}) -- {param_description}"
             else:
-                param_line = f"- **{param_name}** (`{param_type}`) -- {param_description}"
+                param_line = (
+                    f"- **{param_name}** (`{param_type}`) -- {param_description}"
+                )
 
             # Handle multi-line descriptions:
             # Split the description to handle continuations with proper indentation
@@ -3979,10 +4115,15 @@ def _process_returns_section(func_documentation, sig, config_class, indent_level
     return_docstring = ""
 
     # Extract returns section from existing docstring if available
-    if func_documentation is not None and (match_start := _re_return.search(func_documentation)) is not None:
+    if (
+        func_documentation is not None
+        and (match_start := _re_return.search(func_documentation)) is not None
+    ):
         match_end = _re_example.search(func_documentation)
         if match_end:
-            return_docstring = func_documentation[match_start.start() : match_end.start()]
+            return_docstring = func_documentation[
+                match_start.start() : match_end.start()
+            ]
             func_documentation = func_documentation[match_end.start() :]
         else:
             return_docstring = func_documentation[match_start.start() :]
@@ -3991,7 +4132,9 @@ def _process_returns_section(func_documentation, sig, config_class, indent_level
     # Otherwise, generate return docstring from return annotation if available
     elif sig.return_annotation is not None and sig.return_annotation != inspect._empty:
         add_intro, return_annotation = contains_type(sig.return_annotation, ModelOutput)
-        return_docstring = _prepare_return_docstring(return_annotation, config_class, add_intro=add_intro)
+        return_docstring = _prepare_return_docstring(
+            return_annotation, config_class, add_intro=add_intro
+        )
         # PT_RETURN_INTRODUCTION already starts with \n, so only add blank line if it doesn't start with one
         if not return_docstring.startswith("\n"):
             return_docstring = "\n" + return_docstring
@@ -4001,7 +4144,14 @@ def _process_returns_section(func_documentation, sig, config_class, indent_level
 
 
 def _process_example_section(
-    func_documentation, func, parent_class, class_name, model_name_lowercase, config_class, checkpoint, indent_level
+    func_documentation,
+    func,
+    parent_class,
+    class_name,
+    model_name_lowercase,
+    config_class,
+    checkpoint,
+    indent_level,
 ):
     """
     Process the example section of the docstring.
@@ -4022,7 +4172,9 @@ def _process_example_section(
     example_docstring = ""
 
     # Use existing example section if available (with or without an "Example:" header)
-    if func_documentation is not None and (match := _re_example.search(func_documentation)):
+    if func_documentation is not None and (
+        match := _re_example.search(func_documentation)
+    ):
         example_docstring = func_documentation[match.start() :]
         example_docstring = "\n" + set_min_indent(example_docstring, indent_level + 4)
     # Skip examples for processors
@@ -4040,15 +4192,23 @@ def _process_example_section(
         # Get checkpoint example
         if (checkpoint_example := checkpoint) is None:
             try:
-                checkpoint_example = get_checkpoint_from_config_class(CONFIG_MAPPING[model_name_lowercase])
+                checkpoint_example = get_checkpoint_from_config_class(
+                    CONFIG_MAPPING[model_name_lowercase]
+                )
             except KeyError:
                 # For models with inconsistent lowercase model name
                 if model_name_lowercase in HARDCODED_CONFIG_FOR_MODELS:
-                    CONFIG_MAPPING_NAMES = auto_module.configuration_auto.CONFIG_MAPPING_NAMES
-                    config_class_name = HARDCODED_CONFIG_FOR_MODELS[model_name_lowercase]
+                    CONFIG_MAPPING_NAMES = (
+                        auto_module.configuration_auto.CONFIG_MAPPING_NAMES
+                    )
+                    config_class_name = HARDCODED_CONFIG_FOR_MODELS[
+                        model_name_lowercase
+                    ]
                     if config_class_name in CONFIG_MAPPING_NAMES.values():
                         model_name_for_auto_config = [
-                            k for k, v in CONFIG_MAPPING_NAMES.items() if v == config_class_name
+                            k
+                            for k, v in CONFIG_MAPPING_NAMES.items()
+                            if v == config_class_name
                         ][0]
                         if model_name_for_auto_config in CONFIG_MAPPING:
                             checkpoint_example = get_checkpoint_from_config_class(
@@ -4078,12 +4238,16 @@ def _process_example_section(
             # Check if the model is in a pipeline to get an example
             for name_model_list_for_task in MODELS_TO_PIPELINE:
                 try:
-                    model_list_for_task = getattr(auto_module.modeling_auto, name_model_list_for_task)
+                    model_list_for_task = getattr(
+                        auto_module.modeling_auto, name_model_list_for_task
+                    )
                 except (ImportError, AttributeError):
                     continue
                 if class_name in model_list_for_task.values():
                     pipeline_name = MODELS_TO_PIPELINE[name_model_list_for_task]
-                    example_annotation = PIPELINE_TASKS_TO_SAMPLE_DOCSTRINGS[pipeline_name].format(
+                    example_annotation = PIPELINE_TASKS_TO_SAMPLE_DOCSTRINGS[
+                        pipeline_name
+                    ].format(
                         model_class=class_name,
                         checkpoint=checkpoint_example,
                         expected_output="...",
@@ -4091,7 +4255,9 @@ def _process_example_section(
                         qa_target_start_index=14,
                         qa_target_end_index=15,
                     )
-                    example_docstring = set_min_indent(example_annotation, indent_level + 4)
+                    example_docstring = set_min_indent(
+                        example_annotation, indent_level + 4
+                    )
                     break
 
     return example_docstring
@@ -4112,14 +4278,21 @@ def auto_method_docstring(
 
     # Use inspect to retrieve the method's signature
     sig = inspect.signature(func)
-    indent_level = get_indent_level(func) if not parent_class else get_indent_level(parent_class)
+    indent_level = (
+        get_indent_level(func) if not parent_class else get_indent_level(parent_class)
+    )
 
     # Get model information
     model_name_lowercase, class_name, config_class = _get_model_info(func, parent_class)
     func_documentation = func.__doc__
 
     if custom_args is not None and func_documentation is not None:
-        func_documentation = "\n" + set_min_indent(custom_args.strip("\n"), 0) + "\n" + func_documentation
+        func_documentation = (
+            "\n"
+            + set_min_indent(custom_args.strip("\n"), 0)
+            + "\n"
+            + func_documentation
+        )
     elif custom_args is not None:
         func_documentation = "\n" + set_min_indent(custom_args.strip("\n"), 0)
 
@@ -4129,7 +4302,9 @@ def auto_method_docstring(
         if not docstring.strip().endswith("\n"):
             docstring += "\n"
     else:
-        docstring = add_intro_docstring(func, class_name=class_name, indent_level=indent_level)
+        docstring = add_intro_docstring(
+            func, class_name=class_name, indent_level=indent_level
+        )
 
     # Process Parameters section
     docstring += _process_parameters_section(
@@ -4186,7 +4361,10 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
     docstring_args = ""
     if "PreTrainedModel" in (x.__name__ for x in cls.__mro__):
         docstring_init = auto_method_docstring(
-            cls.__init__, parent_class=cls, custom_args=custom_args, checkpoint=checkpoint
+            cls.__init__,
+            parent_class=cls,
+            custom_args=custom_args,
+            checkpoint=checkpoint,
         ).__doc__.replace("Args:", "Parameters:")
     elif "ProcessorMixin" in (x.__name__ for x in cls.__mro__):
         is_processor = True
@@ -4195,7 +4373,9 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             parent_class=cls,
             custom_args=custom_args,
             checkpoint=checkpoint,
-            source_args_dict=get_args_doc_from_source([ModelArgs, ImageProcessorArgs, ProcessorArgs]),
+            source_args_dict=get_args_doc_from_source(
+                [ModelArgs, ImageProcessorArgs, ProcessorArgs]
+            ),
         ).__doc__.replace("Args:", "Parameters:")
     elif "ModelOutput" in (x.__name__ for x in cls.__mro__):
         # We have a data class
@@ -4234,7 +4414,9 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             if ancestor.__name__ == "PreTrainedConfig":
                 break
             own_config_params |= {
-                k for k, v in getattr(ancestor, "__annotations__", {}).items() if get_origin(v) is not ClassVar
+                k
+                for k, v in getattr(ancestor, "__annotations__", {}).items()
+                if get_origin(v) is not ClassVar
             }
         allowed_params = own_config_params if own_config_params else None
         docstring_init = auto_method_docstring(
@@ -4248,8 +4430,14 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
 
     indent_level = get_indent_level(cls)
     model_name_lowercase = get_model_name(cls)
-    model_name_title = " ".join([k.title() for k in model_name_lowercase.split("_")]) if model_name_lowercase else None
-    model_base_class = f"{model_name_title.title()}Model" if model_name_title is not None else None
+    model_name_title = (
+        " ".join([k.title() for k in model_name_lowercase.split("_")])
+        if model_name_lowercase
+        else None
+    )
+    model_base_class = (
+        f"{model_name_title.title()}Model" if model_name_title is not None else None
+    )
     if model_name_lowercase is not None:
         try:
             model_base_class = getattr(
@@ -4270,16 +4458,31 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
 
     name = re.findall(rf"({'|'.join(ClassDocstring.__dict__.keys())})$", cls.__name__)
 
-    if name == [] and custom_intro is None and not is_dataclass and not is_processor and not is_image_processor:
+    if (
+        name == []
+        and custom_intro is None
+        and not is_dataclass
+        and not is_processor
+        and not is_image_processor
+    ):
         raise ValueError(
             f"`{cls.__name__}` is not registered in the auto doc. Here are the available classes: {ClassDocstring.__dict__.keys()}.\n"
             "Add a `custom_intro` to the decorator if you want to use `auto_docstring` on a class not registered in the auto doc."
         )
-    if name != [] or custom_intro is not None or is_config or is_dataclass or is_processor or is_image_processor:
+    if (
+        name != []
+        or custom_intro is not None
+        or is_config
+        or is_dataclass
+        or is_processor
+        or is_image_processor
+    ):
         name = name[0] if name else None
         formatting_kwargs = {"model_name": model_name_title}
         if name == "Config":
-            formatting_kwargs.update({"model_base_class": model_base_class, "model_checkpoint": checkpoint})
+            formatting_kwargs.update(
+                {"model_base_class": model_base_class, "model_checkpoint": checkpoint}
+            )
         if custom_intro is not None:
             pre_block = equalize_indent(custom_intro, indent_level)
             if not pre_block.endswith("\n"):
@@ -4300,9 +4503,15 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
         else:
             pre_block = getattr(ClassDocstring, name).format(**formatting_kwargs)
         # Start building the docstring
-        docstring = set_min_indent(f"{pre_block}", indent_level) if len(pre_block) else ""
-        if name != "PreTrainedModel" and "PreTrainedModel" in (x.__name__ for x in cls.__mro__):
-            docstring += set_min_indent(f"{ClassDocstring.PreTrainedModel}", indent_level)
+        docstring = (
+            set_min_indent(f"{pre_block}", indent_level) if len(pre_block) else ""
+        )
+        if name != "PreTrainedModel" and "PreTrainedModel" in (
+            x.__name__ for x in cls.__mro__
+        ):
+            docstring += set_min_indent(
+                f"{ClassDocstring.PreTrainedModel}", indent_level
+            )
         # Add the __init__ docstring
         if docstring_init:
             docstring += set_min_indent(f"\n{docstring_init}", indent_level)
@@ -4313,15 +4522,30 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             doc_class = cls.__doc__ if cls.__doc__ else ""
             documented_kwargs = parse_docstring(doc_class)[0]
             for param_name, param_type_annotation in cls.__annotations__.items():
-                param_type, optional = process_type_annotation(param_type_annotation, param_name)
+                param_type, optional = process_type_annotation(
+                    param_type_annotation, param_name
+                )
 
                 # Check for default value
                 param_default = ""
                 param_default = str(getattr(cls, param_name, ""))
-                param_default = f", defaults to `{param_default}`" if param_default != "" else ""
+                param_default = (
+                    f", defaults to `{param_default}`" if param_default != "" else ""
+                )
 
-                param_type, optional_string, shape_string, additional_info, description, is_documented = (
-                    _get_parameter_info(param_name, documented_kwargs, source_args_dict, param_type, optional)
+                (
+                    param_type,
+                    optional_string,
+                    shape_string,
+                    additional_info,
+                    description,
+                    is_documented,
+                ) = _get_parameter_info(
+                    param_name,
+                    documented_kwargs,
+                    source_args_dict,
+                    param_type,
+                    optional,
                 )
 
                 if is_documented:
@@ -4504,10 +4728,18 @@ def auto_docstring(obj=None, *, custom_intro=None, custom_args=None, checkpoint=
     def auto_docstring_decorator(obj):
         if len(obj.__qualname__.split(".")) > 1:
             return auto_method_docstring(
-                obj, custom_args=custom_args, custom_intro=custom_intro, checkpoint=checkpoint
+                obj,
+                custom_args=custom_args,
+                custom_intro=custom_intro,
+                checkpoint=checkpoint,
             )
         else:
-            return auto_class_docstring(obj, custom_args=custom_args, custom_intro=custom_intro, checkpoint=checkpoint)
+            return auto_class_docstring(
+                obj,
+                custom_args=custom_args,
+                custom_intro=custom_intro,
+                checkpoint=checkpoint,
+            )
 
     if obj:
         return auto_docstring_decorator(obj)
