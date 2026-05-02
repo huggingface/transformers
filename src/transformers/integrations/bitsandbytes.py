@@ -73,10 +73,9 @@ class Bnb4bitDeserialize(ConversionOps):
         Deserialization of bnb keys. We need 6 keys to recreate the quantized weights
         """
         if len(input_dict) == 1:
-            value = list(input_dict.values())[0]
-            if isinstance(value, list):
-                value = value[0]
-            return {full_layer_name: value}
+            # special case when we only fetched the weight
+            # since we collected keys, we need to return it like that
+            return input_dict
 
         for key, value in input_dict.items():
             if isinstance(value, list):
@@ -93,7 +92,7 @@ class Bnb4bitDeserialize(ConversionOps):
             module=module,
         )
         module._is_hf_initialized = True
-        return {full_layer_name: new_value}
+        return {key_weight: new_value}
 
     @property
     def reverse_op(self):
@@ -142,10 +141,9 @@ class Bnb8bitDeserialize(ConversionOps):
         Deserialization of bnb keys.
         """
         if len(input_dict) == 1:
-            value = list(input_dict.values())[0]
-            if isinstance(value, list):
-                value = value[0]
-            return {full_layer_name: value}
+            # special case when we only fetched the weight
+            # since we collected keys, we need to return it like that
+            return input_dict
 
         for key, value in input_dict.items():
             if isinstance(value, list):
@@ -159,7 +157,7 @@ class Bnb8bitDeserialize(ConversionOps):
         kwargs["SCB"] = input_dict["SCB"]
         new_value = bnb.nn.Int8Params(weight, requires_grad=False, **kwargs).to(weight.device)
         module._is_hf_initialized = True
-        return {full_layer_name: new_value}
+        return {key_weight: new_value}
 
     @property
     def reverse_op(self):
@@ -209,25 +207,24 @@ class Bnb8bitSerialize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
+    def convert(
+        self,
+        input_dict: dict[str, list[torch.Tensor]],
+        model: torch.nn.Module | None = None,
+        full_layer_name: str | None = None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        weight = list(input_dict.values())[0]
+        if isinstance(weight, list):
+            weight = weight[0]
 
-def convert(
-    self,
-    input_dict: dict[str, list[torch.Tensor]],
-    model: torch.nn.Module | None = None,
-    full_layer_name: str | None = None,
-    **kwargs,
-) -> dict[str, torch.Tensor]:
-    weight = list(input_dict.values())[0]
-    if isinstance(weight, list):
-        weight = weight[0]
+        if not isinstance(weight, bnb.nn.Int8Params):
+            return {full_layer_name: weight}
 
-    if not isinstance(weight, bnb.nn.Int8Params):
-        return {full_layer_name: weight}
-
-    result = {full_layer_name: weight.data}
-    if hasattr(weight, "SCB") and weight.SCB is not None:
-        result[f"{full_layer_name}.SCB"] = weight.SCB
-    return result
+        result = {full_layer_name: weight.data}
+        if hasattr(weight, "SCB") and weight.SCB is not None:
+            result[f"{full_layer_name}.SCB"] = weight.SCB
+        return result
 
 
 def replace_with_bnb_linear(
