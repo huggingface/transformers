@@ -229,99 +229,69 @@ class DeepseekV4Config(PreTrainedConfig):
             if bad:
                 raise ValueError(f"`{name}` entries must be one of {allowed} for DeepSeek-V4; got {bad}.")
 
-    def _apply_legacy_kwargs(self, kwargs: dict) -> dict:
-        """Strip and stash legacy V4 kwargs that older checkpoints / configs ship under
-        their original V3-flavoured names. The values are kept on the instance so
-        `__post_init__` can fold them into the new fields after the parent's init has
-        run, and the kwargs dict is returned cleaned for `PreTrainedConfig.__post_init__`.
-        """
-        self._legacy_compress_ratios = kwargs.pop("compress_ratios", None)
-        self._legacy_compress_rate_csa = kwargs.pop("compress_rate_csa", None)
-        self._legacy_compress_rate_hca = kwargs.pop("compress_rate_hca", None)
-        self._legacy_num_hash_layers = kwargs.pop("num_hash_layers", None)
-        # `qk_rope_head_dim` isn't a config field — it's derived from
-        # `partial_rotary_factor * head_dim` and only set as a runtime attribute.
-        self._legacy_qk_rope_head_dim = kwargs.pop("qk_rope_head_dim", None)
-        return kwargs
+    def __post_init__(self, **kwargs):
+        # Strip legacy V4 kwargs (V3-flavoured names that older checkpoints still ship)
+        # before the parent's strict-validated init sees them, then fold each into the
+        # modern field below.
+        legacy_compress_ratios = kwargs.pop("compress_ratios", None)
+        legacy_compress_rate_csa = kwargs.pop("compress_rate_csa", None)
+        legacy_compress_rate_hca = kwargs.pop("compress_rate_hca", None)
+        legacy_num_hash_layers = kwargs.pop("num_hash_layers", None)
+        legacy_qk_rope_head_dim = kwargs.pop("qk_rope_head_dim", None)
+        PreTrainedConfig.__post_init__(self, **kwargs)
+        n = self.num_hidden_layers
 
-    def _resolve_compress_rates(self) -> None:
+        # `compress_rates`: dict, default per attention type. Legacy scalar overrides fold in.
         if self.compress_rates is None:
             self.compress_rates = dict(self.default_compress_rates)
-        if self._legacy_compress_rate_csa is not None:
-            self.compress_rates["compressed_sparse_attention"] = self._legacy_compress_rate_csa
-        if self._legacy_compress_rate_hca is not None:
-            self.compress_rates["heavily_compressed_attention"] = self._legacy_compress_rate_hca
+        if legacy_compress_rate_csa is not None:
+            self.compress_rates["compressed_sparse_attention"] = legacy_compress_rate_csa
+        if legacy_compress_rate_hca is not None:
+            self.compress_rates["heavily_compressed_attention"] = legacy_compress_rate_hca
 
-    def _resolve_layer_types(self) -> None:
-        n = self.num_hidden_layers
-        if self.layer_types is None and self._legacy_compress_ratios is not None:
-            # Translate the V4 checkpoint's per-layer integer `compress_ratios` into the
-            # named `layer_types` schedule (0 = sliding-only, 4 = CSA, 128 = HCA).
-            self.layer_types = [_COMPRESS_RATIO_TO_LAYER_TYPE[r] for r in self._legacy_compress_ratios]
+        # `layer_types`: explicit > legacy `compress_ratios` per-layer ints (0/4/128) >
+        # V4-Pro default (2× HCA bootstrap + CSA/HCA interleave).
+        if self.layer_types is None and legacy_compress_ratios is not None:
+            self.layer_types = [_COMPRESS_RATIO_TO_LAYER_TYPE[r] for r in legacy_compress_ratios]
         if self.layer_types is None:
-            # V4-Pro default: two HCA bootstrap layers, then CSA / HCA interleaved.
             interleave = [
                 "compressed_sparse_attention" if i % 2 else "heavily_compressed_attention"
                 for i in range(max(n - 2, 0))
             ]
-            head = ["heavily_compressed_attention"] * min(n, 2)
-            self.layer_types = head + interleave
+            self.layer_types = ["heavily_compressed_attention"] * min(n, 2) + interleave
         self.layer_types = list(self.layer_types[:n])
 
-    def _resolve_mlp_layer_types(self) -> None:
-        n = self.num_hidden_layers
+        # `mlp_layer_types`: first `num_hash_layers` hash_moe, rest moe.
         if self.mlp_layer_types is None:
-            n_hash = (
-                self._legacy_num_hash_layers
-                if self._legacy_num_hash_layers is not None
-                else self.default_num_hash_layers
-            )
+            n_hash = legacy_num_hash_layers if legacy_num_hash_layers is not None else self.default_num_hash_layers
             self.mlp_layer_types = ["hash_moe"] * min(n, n_hash) + ["moe"] * max(0, n - n_hash)
         self.mlp_layer_types = list(self.mlp_layer_types[:n])
 
-    def _resolve_partial_rotary_factor(self) -> None:
+        # `partial_rotary_factor` = legacy `qk_rope_head_dim / head_dim` if given, else default.
+        # `qk_rope_head_dim` is a runtime-only attr (never a dataclass field).
         if self.partial_rotary_factor is None:
             self.partial_rotary_factor = (
-                self._legacy_qk_rope_head_dim / self.head_dim
-                if self._legacy_qk_rope_head_dim is not None
+                legacy_qk_rope_head_dim / self.head_dim
+                if legacy_qk_rope_head_dim is not None
                 else self.default_partial_rotary_factor
             )
-            # Runtime-only attribute; never declared as a dataclass field.
         self.qk_rope_head_dim = int(self.head_dim * self.partial_rotary_factor)
 
-    def _resolve_rope_parameters(self) -> None:
-        """Normalize `rope_parameters` into a per-rope-type dict
-        `{"main": {...}, "compress": {...}}` (Gemma3 pattern; keys are *rope-type*
-        labels, unrelated to `layer_types`). Idempotent across save/load.
-
-        By the time we get here :class:`PreTrainedConfig` has already run
-        :meth:`RotaryEmbeddingConfigMixin.convert_rope_params_to_dict`, which folds the
-        checkpoint's legacy top-level `rope_scaling` block into `self.rope_parameters`
-        as a flat dict (`rope_type`, `factor`, YaRN params, …). We just split that
-        flat dict into the two rope-type buckets — the only difference between the two
-        is the `rope_theta` base (main attention uses `rope_theta=10000`; the
-        compressor / indexer uses `compress_rope_theta=160000`).
-        """
+        # `rope_parameters`: split the flat dict (left by `convert_rope_params_to_dict`,
+        # which folded any legacy `rope_scaling` block in) into per-rope-type
+        # `{main, compress}` sub-dicts. Idempotent: re-loading an already-split config
+        # is a no-op via the `isinstance` short-circuit. The two sub-dicts differ only
+        # in `rope_theta` (main: 10000, compress: 160000).
         rp = self.rope_parameters or {}
         if isinstance(rp.get("main"), dict) and isinstance(rp.get("compress"), dict):
+            # Already nested — drop any leftover top-level keys.
             self.rope_parameters = {"main": rp["main"], "compress": rp["compress"]}
-            return
-        base = {k: v for k, v in rp.items() if k not in ("main", "compress")}
-        base.setdefault("rope_theta", self.rope_theta)
-        base["partial_rotary_factor"] = self.partial_rotary_factor
-        base.setdefault("rope_type", "default")
-        main = dict(base)
-        compress = {**base, "rope_theta": self.compress_rope_theta}
-        self.rope_parameters = {"main": main, "compress": compress}
-
-    def __post_init__(self, **kwargs):
-        kwargs = self._apply_legacy_kwargs(kwargs)
-        PreTrainedConfig.__post_init__(self, **kwargs)
-        self._resolve_compress_rates()
-        self._resolve_layer_types()
-        self._resolve_mlp_layer_types()
-        self._resolve_partial_rotary_factor()
-        self._resolve_rope_parameters()
+        else:
+            base = {k: v for k, v in rp.items() if k not in ("main", "compress")}
+            base.setdefault("rope_theta", self.rope_theta)
+            base.setdefault("rope_type", "default")
+            base["partial_rotary_factor"] = self.partial_rotary_factor
+            self.rope_parameters = {"main": dict(base), "compress": {**base, "rope_theta": self.compress_rope_theta}}
 
 
 __all__ = ["DeepseekV4Config"]
