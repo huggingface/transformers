@@ -351,6 +351,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "chatlm",
     "deepseek_v2",
     "deepseek_v3",
+    "deepseek_v4",
     "deepseek_vl",
     "deepseek_vl_hybrid",
     "deepseek_vl_v2",

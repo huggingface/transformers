@@ -97,6 +97,189 @@ def _build_checkpoint_conversion_mapping():
         "altclip": [
             WeightRenaming(source_patterns=r"layer\.", target_patterns="layers."),
         ],
+        "deepseek_v4": [
+            # Upstream V4-Flash checkpoint uses a flatter V3-style namespace: ``attn`` /
+            # ``ffn`` instead of ``self_attn`` / ``mlp``, ``attn_norm`` / ``ffn_norm``
+            # instead of ``input_layernorm`` / ``post_attention_layernorm``, ``hc_attn_*``
+            # / ``hc_ffn_*`` for the Hyper-Connection params (wrapped here as
+            # ``attn_hc`` / ``ffn_hc`` submodules), ``embed`` / ``head`` / bare ``norm``
+            # for the model head, ``hc_head_*`` for the final HC collapse, and indexer
+            # weights nested under ``attn.indexer.compressor.*`` upstream but flattened
+            # onto the Indexer module here.
+            #
+            # All targets stay in the bare base-model namespace (no ``model.`` prefix).
+            # ``convert_and_load_state_dict_in_model`` consults
+            # :attr:`DeepseekV4PreTrainedModel.base_model_prefix = "model"` and adds /
+            # strips the ``model.`` prefix automatically based on whether the loader
+            # target is the base model or a head model.
+            #
+            # Ordering matters for save round-tripping: :func:`revert_weight_conversion`
+            # reverses the order *and* each transform, so a structural prefix-only rule
+            # placed before a specific in-prefix rename would steal the reverse match
+            # and emit ``layers.X.attn.sinks`` instead of ``layers.X.attn.attn_sink``.
+            # We split into two passes: structural prefix renames first (so they apply
+            # last on save / first on load), then specific in-prefix renames that
+            # operate on the already-prefixed keys. FP8 ``.scale`` → ``.weight_scale_inv``
+            # rename lives in the FP8 quantizer's ``update_weight_conversions`` (only
+            # active under FP8 dequant), so the V4 static mapping below stays free of
+            # FP8-only rules.
+            # ---- Pass 1: top-level + structural prefix renames ----
+            WeightRenaming(source_patterns=r"^embed\.weight$", target_patterns="embed_tokens.weight"),
+            WeightRenaming(source_patterns=r"^head\.weight$", target_patterns="lm_head.weight"),
+            WeightRenaming(source_patterns=r"^norm\.weight$", target_patterns="norm.weight"),
+            WeightRenaming(source_patterns=r"^hc_head_fn$", target_patterns="hc_head.hc_fn"),
+            WeightRenaming(source_patterns=r"^hc_head_base$", target_patterns="hc_head.hc_base"),
+            WeightRenaming(source_patterns=r"^hc_head_scale$", target_patterns="hc_head.hc_scale"),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.attn_norm\.",
+                target_patterns=r"layers.\1.input_layernorm.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.ffn_norm\.",
+                target_patterns=r"layers.\1.post_attention_layernorm.",
+            ),
+            WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_attn_fn$", target_patterns=r"layers.\1.attn_hc.fn"),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.hc_attn_base$", target_patterns=r"layers.\1.attn_hc.base"
+            ),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.hc_attn_scale$", target_patterns=r"layers.\1.attn_hc.scale"
+            ),
+            WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_ffn_fn$", target_patterns=r"layers.\1.ffn_hc.fn"),
+            WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_ffn_base$", target_patterns=r"layers.\1.ffn_hc.base"),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.hc_ffn_scale$", target_patterns=r"layers.\1.ffn_hc.scale"
+            ),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.attn\.",
+                target_patterns=r"layers.\1.self_attn.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.ffn\.",
+                target_patterns=r"layers.\1.mlp.",
+            ),
+            # ---- Pass 2: in-prefix specific renames (operate on already-prefixed keys) ----
+            # These can safely run after the structural prefix renames because their
+            # source patterns include the ``layers.X.self_attn.`` / ``layers.X.mlp.``
+            # prefix. On reverse the order flips so these undo first, restoring the
+            # specific upstream names *before* the structural rules strip the prefix.
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.self_attn\.attn_sink$",
+                target_patterns=r"layers.\1.self_attn.sinks",
+            ),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.self_attn\.indexer\.compressor\.norm\.",
+                target_patterns=r"layers.\1.self_attn.compressor.indexer.kv_norm.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.self_attn\.indexer\.compressor\.ape$",
+                target_patterns=r"layers.\1.self_attn.compressor.indexer.position_bias",
+            ),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.self_attn\.indexer\.compressor\.",
+                target_patterns=r"layers.\1.self_attn.compressor.indexer.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.self_attn\.indexer\.",
+                target_patterns=r"layers.\1.self_attn.compressor.indexer.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.self_attn\.compressor\.norm\.",
+                target_patterns=r"layers.\1.self_attn.compressor.kv_norm.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.self_attn\.compressor\.ape$",
+                target_patterns=r"layers.\1.self_attn.compressor.position_bias",
+            ),
+            # Attention / compressor / indexer leaf weights: upstream uses paper notation
+            # (``wq_a`` / ``wq_b`` / ``wkv`` / ``wo_a`` / ``wo_b`` / ``wgate``); we
+            # rename to the standard transformers ``*_proj`` form. Compressor / Indexer
+            # ``wkv`` / ``wgate`` are caught by the same patterns since they sit under
+            # ``self_attn.`` after the Pass 1 prefix rewrite.
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.self_attn\.(.*?)\.wq_a\.",
+                target_patterns=r"layers.\1.self_attn.\2.q_a_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.self_attn\.(.*?)\.wq_b\.",
+                target_patterns=r"layers.\1.self_attn.\2.q_b_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.self_attn\.(.*?)\.wkv\.",
+                target_patterns=r"layers.\1.self_attn.\2.kv_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.self_attn\.(.*?)\.wgate\.",
+                target_patterns=r"layers.\1.self_attn.\2.gate_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.self_attn\.(.*?)\.wo_a\.",
+                target_patterns=r"layers.\1.self_attn.\2.o_a_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.self_attn\.(.*?)\.wo_b\.",
+                target_patterns=r"layers.\1.self_attn.\2.o_b_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.self_attn\.wq_a\.",
+                target_patterns=r"layers.\1.self_attn.q_a_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.self_attn\.wq_b\.",
+                target_patterns=r"layers.\1.self_attn.q_b_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.self_attn\.wkv\.",
+                target_patterns=r"layers.\1.self_attn.kv_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.self_attn\.wo_a\.",
+                target_patterns=r"layers.\1.self_attn.o_a_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.self_attn\.wo_b\.",
+                target_patterns=r"layers.\1.self_attn.o_b_proj.",
+            ),
+            # Norm rename: upstream ships `q_norm` (the LoRA-rank RMSNorm sitting between
+            # q_a_proj and q_b_proj); we register it as `q_a_norm` so the suffix matches
+            # the surrounding `q_a_proj` / `q_b_proj` / `q_b_norm` symmetry. The
+            # unweighted `q_b_norm` has no learnable weight, so no upstream key.
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.self_attn\.q_norm\.",
+                target_patterns=r"layers.\1.self_attn.q_a_norm.",
+            ),
+            # Aux-loss-free routing bias: upstream ships ``gate.bias`` (V3 convention);
+            # we register it as ``e_score_correction_bias`` (cross-model standard name).
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.mlp\.gate\.bias$",
+                target_patterns=r"layers.\1.mlp.gate.e_score_correction_bias",
+            ),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.mlp\.shared_experts\.w1\.",
+                target_patterns=r"layers.\1.mlp.shared_experts.gate_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.mlp\.shared_experts\.w2\.",
+                target_patterns=r"layers.\1.mlp.shared_experts.down_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.mlp\.shared_experts\.w3\.",
+                target_patterns=r"layers.\1.mlp.shared_experts.up_proj.",
+            ),
+            WeightConverter(
+                source_patterns=[
+                    "experts.*.w1.weight",
+                    "experts.*.w3.weight",
+                ],
+                target_patterns="experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="experts.*.w2.weight",
+                target_patterns="experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+        ],
         "llava": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
@@ -709,8 +892,11 @@ def get_model_conversion_mapping(
     if add_legacy:
         weight_conversions.extend(get_checkpoint_conversion_mapping("legacy"))
 
-    # Add the ones from the quantizer as well if provided
+    # Let the quantizer rewrite / augment the conversion pipeline. This is where the
+    # FP8 dequantizer (when ``dequantize=True``) prepends a ``Fp8Dequantize`` op to
+    # every existing converter so that per-block scales are applied *before* any
+    # expert-merge / concat ops flatten the per-expert structure away.
     if hf_quantizer is not None:
-        weight_conversions.extend(hf_quantizer.get_weight_conversions())
+        weight_conversions = hf_quantizer.update_weight_conversions(weight_conversions)
 
     return weight_conversions
