@@ -170,8 +170,7 @@ tags
 # ruff
 .ruff_cache
 
-# modeling structure lint cache
-utils/mlinter/.mlinter_cache.json
+# checkers cache
 utils/.checkers_cache.json
 
 # modular conversion

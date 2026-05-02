@@ -31,11 +31,11 @@ Examples:
 
 ```python
 processor = EvollaProcessor.from_pretrained("westlake-repl/Evolla-10B-DPO-hf")
-model = EvollaForProteinText2Text.from_pretrained("westlake-repl/Evolla-10B-DPO-hf")
+model = EvollaForProteinText2Text.from_pretrained("westlake-repl/Evolla-10B-DPO-hf", device_map="auto")
 # aa_seq should have same length as foldseek
 protein_inputs = [
     {
-        
+
         "aa_seq": "MATGGRRG...",
         "foldseek": "###lqpfd...", # hashtag means the low-confidence foldseek tokens
     },

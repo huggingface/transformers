@@ -39,7 +39,6 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         # Ensure local assets are used instead of remote URLs to avoid network access in tests
         from tests.test_processing_common import MODALITY_INPUT_DATA
-        from transformers import video_processing_utils, video_utils
 
         repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
         local_image = os.path.join(repo_root, "coco_sample.png")
@@ -67,9 +66,6 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         MODALITY_INPUT_DATA["images"] = [local_image, local_image]
         MODALITY_INPUT_DATA["videos"] = local_videos
 
-        # Force video decoding to use torchvision backend to avoid torchcodec dependency during tests
-        video_processing_utils.is_torchcodec_available = lambda: False  # type: ignore
-        video_utils.is_torchcodec_available = lambda: False  # type: ignore
         super().setUpClass()
 
     @classmethod

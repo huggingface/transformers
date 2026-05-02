@@ -18,7 +18,6 @@ Tests for the serving layer.
 
 import asyncio
 import json
-import os
 import socket
 import time
 import unittest
@@ -28,25 +27,29 @@ import httpx
 
 from transformers.cli.serve import Serve
 from transformers.cli.serving.chat_completion import ChatCompletionHandler
+from transformers.cli.serving.completion import CompletionHandler
 from transformers.cli.serving.model_manager import ModelManager, TimedModel
 from transformers.cli.serving.response import ResponseHandler, compute_usage
 from transformers.cli.serving.server import build_server
 from transformers.cli.serving.transcription import TranscriptionHandler
 from transformers.cli.serving.utils import (
+    _TOOL_CALL_FALLBACKS,
     BaseHandler,
     GenerationState,
     Modality,
-    ToolCallParser,
-    detect_tool_format,
+    get_tool_call_config,
+    parse_tool_calls,
 )
 from transformers.testing_utils import (
     require_librosa,
     require_multipart,
     require_serve,
     require_torch_accelerator,
+    require_torchcodec,
     require_vision,
     slow,
 )
+from transformers.utils.chat_parsing_utils import recursive_parse
 from transformers.utils.import_utils import is_serve_available
 
 
@@ -169,8 +172,8 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         self.assertEqual(result[0]["content"], "Hello world")
 
     @require_vision
-    def test_vlm_base64_image_creates_temp_file(self):
-        """Base64 image URLs should be decoded and saved to a temp file."""
+    def test_vlm_base64_image_passed_through(self):
+        """Base64 image URLs should be passed through as-is for the processor to handle."""
 
         get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
 
@@ -191,7 +194,7 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         result = get_processor_inputs_from_messages(messages, Modality.VLM)
         image_item = result[0]["content"][1]
         self.assertEqual(image_item["type"], "image")
-        self.assertTrue(os.path.exists(image_item["url"]))  # temp file was created
+        self.assertEqual(image_item["url"], base64_url)
 
     def test_vlm_multi_turn(self):
         """VLM multi-turn: string content should be wrapped in text type."""
@@ -208,6 +211,110 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         for msg in result:
             self.assertIsInstance(msg["content"], list)
             self.assertEqual(msg["content"][0]["type"], "text")
+
+    def test_llm_tool_use_fields_forwarded(self):
+        """Tool-use fields (tool_calls, tool_call_id) should be forwarded to processor inputs."""
+
+        get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
+
+        tool_calls = [
+            {"id": "call_1", "type": "function", "function": {"name": "get_weather", "arguments": '{"city": "Paris"}'}}
+        ]
+        messages = [
+            {"role": "user", "content": "What's the weather in Paris?"},
+            {"role": "assistant", "tool_calls": tool_calls},
+            {"role": "tool", "content": "22°C, sunny", "tool_call_id": "call_1"},
+        ]
+        result = get_processor_inputs_from_messages(messages, Modality.LLM)
+        self.assertEqual(len(result), 3)
+        self.assertEqual(result[1]["tool_calls"], tool_calls)
+        self.assertNotIn("tool_calls", result[0])
+        self.assertEqual(result[2]["tool_call_id"], "call_1")
+        self.assertNotIn("tool_call_id", result[0])
+
+    def test_vlm_tool_use_fields_forwarded(self):
+        """Tool-use fields should be forwarded for VLM modality as well."""
+
+        get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
+
+        tool_calls = [{"id": "call_1", "type": "function", "function": {"name": "describe", "arguments": "{}"}}]
+        messages = [
+            {"role": "user", "content": "Describe this"},
+            {"role": "assistant", "tool_calls": tool_calls},
+            {"role": "tool", "content": "A landscape photo", "tool_call_id": "call_1"},
+        ]
+        result = get_processor_inputs_from_messages(messages, Modality.VLM)
+        self.assertEqual(len(result), 3)
+        self.assertEqual(result[1]["tool_calls"], tool_calls)
+        self.assertEqual(result[2]["tool_call_id"], "call_1")
+
+    def test_multimodal_base64_input_audio_converted_to_data_uri(self):
+        """input_audio with base64 data should be converted to a data URI for the processor to handle."""
+        import base64
+
+        get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
+
+        audio_url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3"
+        audio_bytes = httpx.get(audio_url, follow_redirects=True).content
+        audio_b64 = base64.b64encode(audio_bytes).decode()
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What do you hear?"},
+                    {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
+                ],
+            }
+        ]
+        result = get_processor_inputs_from_messages(messages, Modality.MULTIMODAL)
+        self.assertEqual(len(result[0]["content"]), 2)
+        self.assertEqual(result[0]["content"][0]["type"], "text")
+        audio_item = result[0]["content"][1]
+        self.assertEqual(audio_item["type"], "audio")
+        self.assertTrue(audio_item["url"].startswith("data:audio/mp3;base64,"))
+        self.assertIn(audio_b64, audio_item["url"])
+
+    def test_vlm_ignores_audio_content(self):
+        """VLM models should ignore audio content parts."""
+        import base64
+
+        get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
+
+        audio_b64 = base64.b64encode(b"fake audio").decode()
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What do you hear?"},
+                    {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
+                ],
+            }
+        ]
+        result = get_processor_inputs_from_messages(messages, Modality.VLM)
+        self.assertEqual(len(result[0]["content"]), 1)
+        self.assertEqual(result[0]["content"][0]["type"], "text")
+
+    def test_video_url_converted_to_hf_video_format(self):
+        """video_url content should be converted to HF video format for both VLM and MULTIMODAL."""
+        get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
+
+        video_src = "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "video_url", "video_url": {"url": video_src}},
+                    {"type": "text", "text": "What is happening?"},
+                ],
+            }
+        ]
+        for modality in (Modality.VLM, Modality.MULTIMODAL):
+            with self.subTest(modality=modality):
+                result = get_processor_inputs_from_messages(messages, modality)
+                self.assertEqual(len(result[0]["content"]), 2)
+                video_item = result[0]["content"][0]
+                self.assertEqual(video_item, {"type": "video", "url": video_src})
 
 
 class TestGenerativeModelList(unittest.TestCase):
@@ -323,6 +430,36 @@ class TestValidation(unittest.TestCase):
         self.assertTrue(any("audio" in msg for msg in cm.output))
 
 
+class TestResolveModel(unittest.TestCase):
+    def _make_handler(self, force_model=None):
+        mm = MagicMock()
+        mm.force_model = force_model
+        mm.process_model_name.side_effect = ModelManager.process_model_name
+        mm.load_model_and_processor.return_value = (MagicMock(), MagicMock())
+        return ChatCompletionHandler(model_manager=mm, generation_state=GenerationState())
+
+    def test_force_model_overrides_when_model_omitted(self):
+        handler = self._make_handler(force_model="org/pinned")
+        body = {}
+        model_id, _, _ = handler._resolve_model(body)
+        self.assertEqual(model_id, "org/pinned@main")
+        self.assertEqual(body["model"], "org/pinned")
+
+    def test_force_model_allows_matching_request(self):
+        handler = self._make_handler(force_model="org/pinned")
+        body = {"model": "org/pinned"}
+        model_id, _, _ = handler._resolve_model(body)
+        self.assertEqual(model_id, "org/pinned@main")
+
+    def test_force_model_rejects_mismatched_request(self):
+        handler = self._make_handler(force_model="org/pinned")
+        with self.assertRaises(HTTPException) as ctx:
+            handler._resolve_model({"model": "other/model"})
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertIn("org/pinned", ctx.exception.detail)
+        self.assertIn("other/model", ctx.exception.detail)
+
+
 class TestModelManager(unittest.TestCase):
     def test_process_model_name_adds_main(self):
         self.assertEqual(ModelManager.process_model_name("org/model"), "org/model@main")
@@ -400,130 +537,7 @@ class TestChunkSSE(unittest.TestCase):
         self.assertEqual(result, "data: hello\n\n")
 
 
-QWEN_TOOL_FORMAT = {"start": "<tool_call>", "end": "</tool_call>"}
-
-
 @require_serve
-class TestToolParser(unittest.TestCase):
-    def test_detect_tool_format_qwen(self):
-        model = MagicMock()
-        model.config.architectures = ["Qwen2ForCausalLM"]
-        fmt = detect_tool_format(model)
-        self.assertEqual(fmt, QWEN_TOOL_FORMAT)
-
-    def test_detect_tool_format_unsupported(self):
-        model = MagicMock()
-        model.config.architectures = ["LlamaForCausalLM"]
-        self.assertIsNone(detect_tool_format(model))
-
-    def test_parser_start_token(self):
-        parser = ToolCallParser(QWEN_TOOL_FORMAT)
-        result = parser.feed("<tool_call>")
-        self.assertIs(result, ToolCallParser.CONSUMED)
-
-    def test_parser_end_token(self):
-        parser = ToolCallParser(QWEN_TOOL_FORMAT)
-        parser.feed("<tool_call>")
-        result = parser.feed("</tool_call>")
-        self.assertIs(result, ToolCallParser.CONSUMED)
-
-    def test_parser_buffers_until_end(self):
-        parser = ToolCallParser(QWEN_TOOL_FORMAT)
-        parser.feed("<tool_call>")
-        # Intermediate tokens are buffered
-        result = parser.feed('{"name": "my_tool", "arguments": {"x": 1}}')
-        self.assertIs(result, ToolCallParser.CONSUMED)
-        # Tool call is emitted on end token
-        result = parser.feed("</tool_call>")
-        self.assertIsNot(result, ToolCallParser.CONSUMED)
-        self.assertEqual(result["name"], "my_tool")
-
-    def test_parser_normal_text_returns_none(self):
-        parser = ToolCallParser(QWEN_TOOL_FORMAT)
-        result = parser.feed("Hello world")
-        self.assertIsNone(result)
-
-    def test_parser_full_flow(self):
-        """Simulate a complete tool call token sequence."""
-
-        parser = ToolCallParser(QWEN_TOOL_FORMAT)
-        tool_calls = []
-
-        for token in [
-            "<tool_call>",
-            '{"name": "get_weather",',
-            ' "arguments": {',
-            '"city": "Paris"',
-            "}}",
-            "\n",
-            "</tool_call>",
-        ]:
-            result = parser.feed(token)
-            if result is not None and result is not ToolCallParser.CONSUMED:
-                tool_calls.append(result)
-
-        # Single tool call emitted on </tool_call> with both name and arguments
-        self.assertEqual(len(tool_calls), 1)
-        self.assertEqual(tool_calls[0]["name"], "get_weather")
-        self.assertIn("Paris", tool_calls[0]["arguments"])
-
-    def test_parse_tool_calls_from_text(self):
-        """Non-streaming tool call parsing from complete text."""
-
-        text = '<tool_call>\n{"name": "get_weather", "arguments": {"city": "Paris"}}\n</tool_call>'
-        calls = ToolCallParser.parse(text, QWEN_TOOL_FORMAT)
-        self.assertIsNotNone(calls)
-        self.assertEqual(len(calls), 1)
-        self.assertEqual(calls[0]["name"], "get_weather")
-        self.assertIn("Paris", calls[0]["arguments"])
-
-    def test_parse_tool_calls_no_tool_call(self):
-        """Non-streaming: normal text returns None."""
-
-        calls = ToolCallParser.parse("Hello, how can I help?", QWEN_TOOL_FORMAT)
-        self.assertIsNone(calls)
-
-    def test_parse_multiple_tool_calls(self):
-        """Non-streaming: multiple tool calls in one response."""
-
-        text = (
-            '<tool_call>\n{"name": "get_weather", "arguments": {"city": "Paris"}}\n</tool_call>\n'
-            '<tool_call>\n{"name": "get_weather", "arguments": {"city": "London"}}\n</tool_call>'
-        )
-        calls = ToolCallParser.parse(text, QWEN_TOOL_FORMAT)
-        self.assertIsNotNone(calls)
-        self.assertEqual(len(calls), 2)
-        self.assertEqual(calls[0]["name"], "get_weather")
-        self.assertIn("Paris", calls[0]["arguments"])
-        self.assertEqual(calls[1]["name"], "get_weather")
-        self.assertIn("London", calls[1]["arguments"])
-
-    def test_feed_multiple_tool_calls(self):
-        """Streaming: multiple tool calls emitted sequentially."""
-
-        parser = ToolCallParser(QWEN_TOOL_FORMAT)
-        tool_calls = []
-
-        tokens = [
-            "<tool_call>",
-            '{"name": "get_weather", "arguments": {"city": "Paris"}}',
-            "</tool_call>",
-            "<tool_call>",
-            '{"name": "get_weather", "arguments": {"city": "London"}}',
-            "</tool_call>",
-        ]
-        for token in tokens:
-            result = parser.feed(token)
-            if result is not None and result is not ToolCallParser.CONSUMED:
-                tool_calls.append(result)
-
-        self.assertEqual(len(tool_calls), 2)
-        self.assertEqual(tool_calls[0]["name"], "get_weather")
-        self.assertIn("Paris", tool_calls[0]["arguments"])
-        self.assertEqual(tool_calls[1]["name"], "get_weather")
-        self.assertIn("London", tool_calls[1]["arguments"])
-
-
 @require_serve
 class TestAppRoutes(unittest.TestCase):
     @classmethod
@@ -533,9 +547,17 @@ class TestAppRoutes(unittest.TestCase):
             {"id": "test/model", "owned_by": "test", "object": "model", "created": 0}
         ]
         cls.chat_handler = MagicMock(spec=ChatCompletionHandler)
+        cls.completion_handler = MagicMock(spec=CompletionHandler)
         cls.response_handler = MagicMock(spec=ResponseHandler)
         cls.transcription_handler = MagicMock(spec=TranscriptionHandler)
-        cls.app = build_server(cls.model_manager, cls.chat_handler, cls.response_handler, cls.transcription_handler)
+        cls.app = build_server(
+            cls.model_manager,
+            cls.chat_handler,
+            cls.completion_handler,
+            cls.response_handler,
+            cls.transcription_handler,
+            generation_state=GenerationState(),
+        )
         cls.transport = httpx.ASGITransport(app=cls.app)
 
     async def _request(self, method: str, path: str, **kwargs) -> httpx.Response:
@@ -680,110 +702,6 @@ class TestChatCompletion(unittest.TestCase):
         self.assertGreater(last.usage.completion_tokens, 0)
         self.assertEqual(last.usage.total_tokens, last.usage.prompt_tokens + last.usage.completion_tokens)
 
-    def test_tool_call(self):
-        """Tool calls should be parsed and emitted as ChoiceDeltaToolCall objects."""
-        # Qwen2.5-0.5B-Instruct supports tools (Qwen family)
-        tool_def = {
-            "function": {
-                "name": "get_weather",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"city": {"type": "string"}},
-                },
-                "description": "Get the weather for a city.",
-            },
-            "type": "function",
-        }
-        chunks = list(
-            self.client.chat.completions.create(
-                model=self.MODEL,
-                messages=[{"role": "user", "content": "What is the weather in Paris?"}],
-                stream=True,
-                max_tokens=50,
-                temperature=0.0,
-                tools=[tool_def],
-            )
-        )
-
-        # First chunk should have role="assistant"
-        self.assertEqual(chunks[0].choices[0].delta.role, "assistant")
-
-        # Model should make a tool call for this prompt
-        tool_chunks = [c for c in chunks if c.choices[0].delta.tool_calls]
-        self.assertGreater(len(tool_chunks), 0, "Model did not produce a tool call")
-
-        # First tool call delta should have the function name
-        first_tool = tool_chunks[0].choices[0].delta.tool_calls[0]
-        self.assertEqual(first_tool.function.name, "get_weather")
-
-        # finish_reason should be "tool_calls"
-        last = chunks[-1]
-        self.assertEqual(last.choices[0].finish_reason, "tool_calls")
-
-        # Arguments should be valid JSON with no trailing brace
-        args_json = first_tool.function.arguments
-        import json as json_mod
-
-        parsed_args = json_mod.loads(args_json)
-        self.assertIsInstance(parsed_args, dict)
-
-    def test_tool_call_non_streaming(self):
-        """Non-streaming tool calls should return tool_calls in the message."""
-        tool_def = {
-            "function": {
-                "name": "get_weather",
-                "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
-                "description": "Get the weather for a city.",
-            },
-            "type": "function",
-        }
-        resp = self.client.chat.completions.create(
-            model=self.MODEL,
-            messages=[{"role": "user", "content": "What is the weather in Paris?"}],
-            stream=False,
-            max_tokens=50,
-            temperature=0.0,
-            tools=[tool_def],
-        )
-        self.assertEqual(resp.choices[0].finish_reason, "tool_calls")
-        self.assertIsNotNone(resp.choices[0].message.tool_calls)
-        tc = resp.choices[0].message.tool_calls[0]
-        self.assertEqual(tc.function.name, "get_weather")
-
-        import json as json_mod
-
-        parsed_args = json_mod.loads(tc.function.arguments)
-        self.assertIsInstance(parsed_args, dict)
-
-    def test_tool_call_multi(self):
-        """Model should be able to call multiple tools when asked."""
-        tool_def = {
-            "function": {
-                "name": "get_weather",
-                "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
-                "description": "Get the weather for a city.",
-            },
-            "type": "function",
-        }
-        # Ask for two cities to encourage multiple tool calls
-        chunks = list(
-            self.client.chat.completions.create(
-                model=self.MODEL,
-                messages=[{"role": "user", "content": "What is the weather in Paris and London?"}],
-                stream=True,
-                max_tokens=100,
-                temperature=0.0,
-                tools=[tool_def],
-            )
-        )
-        tool_chunks = [c for c in chunks if c.choices[0].delta.tool_calls]
-        # Should have two tool calls — one for Paris, one for London
-        self.assertEqual(len(tool_chunks), 2, f"Expected 2 tool calls, got {len(tool_chunks)}")
-        cities = {tc.choices[0].delta.tool_calls[0].function.name for tc in tool_chunks}
-        self.assertEqual(cities, {"get_weather"})
-        last = chunks[-1]
-        self.assertEqual(last.choices[0].finish_reason, "tool_calls")
-
     def test_concurrent_non_streaming(self):
         """Two concurrent non-streaming requests should both complete without interference."""
         import concurrent.futures
@@ -867,6 +785,194 @@ class TestChatCompletion(unittest.TestCase):
         self.assertIsNotNone(resp.choices[0].message.content)
 
 
+@slow
+@require_serve
+class TestCompletion(unittest.TestCase):
+    """Integration tests for /v1/completions with a real model.
+
+    Covers sequential and continuous-batching generation, both streaming and
+    non-streaming, plus finish_reason, usage, stop strings, suffix, and
+    cancellation behaviour.
+    """
+
+    MODEL = "Qwen/Qwen2.5-0.5B"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.serve, port = _start_serve()
+        cls.base_url = f"http://localhost:{port}"
+        cls.client = OpenAI(base_url=f"{cls.base_url}/v1", api_key="unused")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.serve.kill_server()
+
+    # ----- non-streaming -----
+
+    def test_non_streaming(self):
+        from openai.types import Completion as OpenAICompletion
+
+        result = self.client.completions.create(
+            model=self.MODEL,
+            prompt="The capital of France is",
+            max_tokens=5,
+        )
+
+        self.assertIsInstance(result, OpenAICompletion)
+        self.assertEqual(result.object, "text_completion")
+        self.assertIsInstance(result.choices[0].text, str)
+        self.assertTrue(len(result.choices[0].text) > 0)
+        self.assertIn(result.choices[0].finish_reason, ("stop", "length"))
+
+    def test_non_streaming_usage(self):
+        result = self.client.completions.create(
+            model=self.MODEL,
+            prompt="The capital of France is",
+            max_tokens=5,
+        )
+        self.assertIsNotNone(result.usage)
+        self.assertGreater(result.usage.prompt_tokens, 0)
+        self.assertGreater(result.usage.completion_tokens, 0)
+        self.assertEqual(result.usage.total_tokens, result.usage.prompt_tokens + result.usage.completion_tokens)
+
+    def test_finish_reason_length(self):
+        result = self.client.completions.create(model=self.MODEL, prompt="Hello", max_tokens=1)
+        self.assertEqual(result.choices[0].finish_reason, "length")
+
+    def test_finish_reason_stop(self):
+        result = self.client.completions.create(model=self.MODEL, prompt="Hello", max_tokens=1024)
+        self.assertEqual(result.choices[0].finish_reason, "stop")
+
+    def test_stop_strings(self):
+        result = self.client.completions.create(
+            model=self.MODEL,
+            prompt="one two three four",
+            max_tokens=20,
+            stop=["six"],
+        )
+        self.assertNotIn("seven", result.choices[0].text)
+
+    def test_suffix(self):
+        """suffix should be appended to generated text."""
+        suffix = " [END]"
+        result = self.client.completions.create(
+            model=self.MODEL,
+            prompt="The capital of France is",
+            max_tokens=5,
+            suffix=suffix,
+        )
+        self.assertTrue(result.choices[0].text.endswith(suffix))
+
+    # ----- streaming -----
+
+    def test_streaming(self):
+        chunks = list(
+            self.client.completions.create(
+                model=self.MODEL,
+                prompt="The capital of France is",
+                max_tokens=5,
+                stream=True,
+            )
+        )
+        texts = [c.choices[0].text for c in chunks]
+        self.assertTrue(any(t != "" for t in texts))
+        self.assertIn(chunks[-1].choices[0].finish_reason, ("stop", "length"))
+
+    def test_streaming_usage(self):
+        chunks = list(
+            self.client.completions.create(
+                model=self.MODEL,
+                prompt="The capital of France is",
+                max_tokens=5,
+                stream=True,
+            )
+        )
+        last = chunks[-1]
+        self.assertIsNotNone(last.usage)
+        self.assertGreater(last.usage.prompt_tokens, 0)
+        self.assertGreater(last.usage.completion_tokens, 0)
+        self.assertEqual(last.usage.total_tokens, last.usage.prompt_tokens + last.usage.completion_tokens)
+
+    def test_streaming_finish_reason_length(self):
+        chunks = list(self.client.completions.create(model=self.MODEL, prompt="Hello", max_tokens=1, stream=True))
+        self.assertEqual(chunks[-1].choices[0].finish_reason, "length")
+
+    def test_streaming_suffix(self):
+        """suffix should be emitted as a final text chunk before finish_reason."""
+        suffix = " [END]"
+        chunks = list(
+            self.client.completions.create(
+                model=self.MODEL,
+                prompt="The capital of France is",
+                max_tokens=5,
+                suffix=suffix,
+                stream=True,
+            )
+        )
+        all_text = "".join(c.choices[0].text for c in chunks)
+        self.assertTrue(all_text.endswith(suffix))
+
+    def test_request_cancellation(self):
+        """Closing a stream early doesn't crash and the server stays healthy."""
+        with httpx.stream(
+            "POST",
+            f"{self.base_url}/v1/completions",
+            json={"model": self.MODEL, "prompt": "Count slowly:", "max_tokens": 500, "stream": True},
+            timeout=30,
+        ) as resp:
+            self.assertEqual(resp.status_code, 200)
+            chunks_read = 0
+            for _ in resp.iter_lines():
+                chunks_read += 1
+                if chunks_read >= 3:
+                    break
+
+        result = self.client.completions.create(model=self.MODEL, prompt="Hello", max_tokens=5)
+        self.assertIsNotNone(result.choices[0].text)
+
+    # ----- continuous batching -----
+
+    @require_torch_accelerator
+    def test_cb_streaming(self):
+        """Streaming completion with CB produces text."""
+        serve, port = _start_serve(
+            force_model=self.MODEL,
+            device="cuda:0",
+            continuous_batching=True,
+            attn_implementation="sdpa",
+        )
+        try:
+            client = OpenAI(base_url=f"http://localhost:{port}/v1", api_key="unused")
+            chunks = list(
+                client.completions.create(
+                    model=self.MODEL, prompt="The capital of France is", max_tokens=10, stream=True
+                )
+            )
+            texts = [c.choices[0].text for c in chunks]
+            self.assertTrue(any(t != "" for t in texts))
+            self.assertIn(chunks[-1].choices[0].finish_reason, ("stop", "length"))
+        finally:
+            serve.kill_server()
+
+    @require_torch_accelerator
+    def test_cb_non_streaming(self):
+        """Non-streaming completion with CB returns a full response."""
+        serve, port = _start_serve(
+            force_model=self.MODEL,
+            device="cuda:0",
+            continuous_batching=True,
+            attn_implementation="sdpa",
+        )
+        try:
+            client = OpenAI(base_url=f"http://localhost:{port}/v1", api_key="unused")
+            result = client.completions.create(model=self.MODEL, prompt="The capital of France is", max_tokens=10)
+            self.assertIsInstance(result.choices[0].text, str)
+            self.assertTrue(len(result.choices[0].text) > 0)
+            self.assertIn(result.choices[0].finish_reason, ("stop", "length"))
+        finally:
+            serve.kill_server()
+
+
 @require_serve
 class TestResponseInputConversion(unittest.TestCase):
     def _make_handler(self):
@@ -874,19 +980,19 @@ class TestResponseInputConversion(unittest.TestCase):
 
     def test_string_input(self):
         handler = self._make_handler()
-        msgs = handler._input_to_messages({"input": "Hello"})
+        msgs = handler._normalize_input({"input": "Hello"})
         self.assertEqual(msgs, [{"role": "user", "content": "Hello"}])
 
     def test_string_input_with_instructions(self):
         handler = self._make_handler()
-        msgs = handler._input_to_messages({"input": "Hello", "instructions": "Be brief"})
+        msgs = handler._normalize_input({"input": "Hello", "instructions": "Be brief"})
         self.assertEqual(len(msgs), 2)
         self.assertEqual(msgs[0], {"role": "system", "content": "Be brief"})
         self.assertEqual(msgs[1], {"role": "user", "content": "Hello"})
 
     def test_list_input(self):
         handler = self._make_handler()
-        msgs = handler._input_to_messages(
+        msgs = handler._normalize_input(
             {"input": [{"role": "user", "content": "A"}, {"role": "assistant", "content": "B"}]}
         )
         self.assertEqual(len(msgs), 2)
@@ -894,23 +1000,40 @@ class TestResponseInputConversion(unittest.TestCase):
 
     def test_list_input_with_instructions_prepends_system(self):
         handler = self._make_handler()
-        msgs = handler._input_to_messages({"input": [{"role": "user", "content": "Hi"}], "instructions": "Be helpful"})
+        msgs = handler._normalize_input({"input": [{"role": "user", "content": "Hi"}], "instructions": "Be helpful"})
         self.assertEqual(len(msgs), 2)
         self.assertEqual(msgs[0]["role"], "system")
         self.assertEqual(msgs[0]["content"], "Be helpful")
 
     def test_list_input_with_instructions_replaces_existing_system(self):
         handler = self._make_handler()
-        msgs = handler._input_to_messages(
+        msgs = handler._normalize_input(
             {"input": [{"role": "system", "content": "Old"}, {"role": "user", "content": "Hi"}], "instructions": "New"}
         )
         self.assertEqual(len(msgs), 2)
         self.assertEqual(msgs[0]["content"], "New")
 
-    def test_dict_input(self):
+    def test_flat_content_list(self):
+        """Flat content list (Responses API native) is wrapped as a single user message."""
         handler = self._make_handler()
-        msgs = handler._input_to_messages({"input": {"role": "user", "content": "Test"}})
-        self.assertEqual(msgs, [{"role": "user", "content": "Test"}])
+        flat_input = [
+            {"type": "input_text", "text": "Hello"},
+            {"type": "input_image", "image_url": "https://example.com/img.jpg"},
+        ]
+        msgs = handler._normalize_input({"input": flat_input})
+        self.assertEqual(len(msgs), 1)
+        self.assertEqual(msgs[0]["role"], "user")
+        self.assertEqual(msgs[0]["content"], flat_input)
+
+    def test_flat_content_list_with_instructions(self):
+        """Flat content list with instructions prepends a system message."""
+        handler = self._make_handler()
+        flat_input = [{"type": "input_text", "text": "Hello"}]
+        msgs = handler._normalize_input({"input": flat_input, "instructions": "Be brief"})
+        self.assertEqual(len(msgs), 2)
+        self.assertEqual(msgs[0], {"role": "system", "content": "Be brief"})
+        self.assertEqual(msgs[1]["role"], "user")
+        self.assertEqual(msgs[1]["content"], flat_input)
 
 
 @require_serve
@@ -1062,6 +1185,16 @@ class TestResponsesIntegration(unittest.TestCase):
         self.assertTrue(len(resp.output) > 0)
         self.assertTrue(len(resp.output[0].content[0].text) > 0)
 
+    def test_flat_content_list(self):
+        """Flat content list input (Responses API native format)."""
+        resp = self.client.responses.create(
+            model=self.MODEL,
+            input=[{"type": "input_text", "text": "Say hello"}],
+            stream=False,
+        )
+        self.assertEqual(resp.status, "completed")
+        self.assertTrue(len(resp.output[0].content[0].text) > 0)
+
     def test_non_streaming_usage(self):
         resp = self.client.responses.create(
             model=self.MODEL,
@@ -1089,96 +1222,6 @@ class TestResponsesIntegration(unittest.TestCase):
         self.assertGreater(usage.input_tokens, 0)
         self.assertGreater(usage.output_tokens, 0)
         self.assertEqual(usage.total_tokens, usage.input_tokens + usage.output_tokens)
-
-    def test_tool_call_streaming(self):
-        """Streaming responses with tools should emit function_call events."""
-        tool_def = {
-            "function": {
-                "name": "get_weather",
-                "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
-                "description": "Get the weather for a city.",
-            },
-            "type": "function",
-        }
-        events = list(
-            self.client.responses.create(
-                model=self.MODEL,
-                input="What is the weather in Paris?",
-                stream=True,
-                max_output_tokens=50,
-                tools=[tool_def],
-            )
-        )
-        types = [e.type for e in events]
-        self.assertIn("response.created", types)
-        self.assertIn("response.completed", types)
-
-        # Should have function call events
-        self.assertIn("response.output_item.added", types)
-        self.assertIn("response.function_call_arguments.done", types)
-
-        # Check the arguments done event
-        args_done = [e for e in events if e.type == "response.function_call_arguments.done"]
-        self.assertGreater(len(args_done), 0)
-        self.assertEqual(args_done[0].name, "get_weather")
-
-        import json as json_mod
-
-        parsed = json_mod.loads(args_done[0].arguments)
-        self.assertIsInstance(parsed, dict)
-
-    def test_tool_call_non_streaming(self):
-        """Non-streaming responses with tools should include function_call output items."""
-        tool_def = {
-            "function": {
-                "name": "get_weather",
-                "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
-                "description": "Get the weather for a city.",
-            },
-            "type": "function",
-        }
-        resp = self.client.responses.create(
-            model=self.MODEL,
-            input="What is the weather in Paris?",
-            stream=False,
-            max_output_tokens=50,
-            tools=[tool_def],
-        )
-        self.assertEqual(resp.status, "completed")
-
-        # Should have at least message + function_call in output
-        self.assertGreater(len(resp.output), 1)
-        fc_items = [o for o in resp.output if o.type == "function_call"]
-        self.assertGreater(len(fc_items), 0)
-        self.assertEqual(fc_items[0].name, "get_weather")
-
-        import json as json_mod
-
-        parsed = json_mod.loads(fc_items[0].arguments)
-        self.assertIsInstance(parsed, dict)
-
-    def test_tool_call_multi(self):
-        """Model should produce multiple tool calls when asked about two cities."""
-        tool_def = {
-            "function": {
-                "name": "get_weather",
-                "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
-                "description": "Get the weather for a city.",
-            },
-            "type": "function",
-        }
-        events = list(
-            self.client.responses.create(
-                model=self.MODEL,
-                input="What is the weather in Paris and London?",
-                stream=True,
-                max_output_tokens=100,
-                tools=[tool_def],
-            )
-        )
-        args_done = [e for e in events if e.type == "response.function_call_arguments.done"]
-        self.assertEqual(len(args_done), 2, f"Expected 2 tool calls, got {len(args_done)}")
-        self.assertEqual(events[-1].type, "response.completed")
 
     def test_multi_turn(self):
         """Multi-turn conversation via list input."""
@@ -1540,17 +1583,12 @@ class TestVLM(unittest.TestCase):
         )
 
     def test_responses_with_image(self):
-        """Responses API should accept image_url content and produce a meaningful response."""
+        """Responses API should accept input_image content and produce a meaningful response."""
         resp = self.client.responses.create(
             model=self.MODEL,
             input=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "What do you see in this image?"},
-                        {"type": "image_url", "image_url": {"url": _DOG_IMAGE_URL}},
-                    ],
-                }
+                {"type": "input_text", "text": "What do you see in this image?"},
+                {"type": "input_image", "image_url": _DOG_IMAGE_URL},
             ],
             stream=False,
             max_output_tokens=50,
@@ -1561,6 +1599,621 @@ class TestVLM(unittest.TestCase):
             any(word in text.lower() for word in ["dog", "beach", "person"]),
             f"Expected dog/beach/person in response, got: {text}",
         )
+
+
+_AUDIO_URL = (
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3"
+)
+_VIDEO_URL = "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"
+
+
+@slow
+@require_serve
+class TestMultimodalLM(unittest.TestCase):
+    """Integration tests for multimodal (audio, video) chat completions with Gemma 4."""
+
+    MODEL = "google/gemma-4-E2B-it"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.serve, port = _start_serve()
+        cls.base_url = f"http://localhost:{port}"
+        cls.client = OpenAI(base_url=f"{cls.base_url}/v1", api_key="unused")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.serve.kill_server()
+
+    def _get_audio_messages(self):
+        import base64
+
+        audio_bytes = httpx.get(_AUDIO_URL, follow_redirects=True).content
+        audio_b64 = base64.b64encode(audio_bytes).decode()
+        return [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Transcribe this audio."},
+                    {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
+                ],
+            }
+        ]
+
+    def _get_audio_flat_input(self):
+        """Flat content list format for Responses API."""
+        import base64
+
+        audio_bytes = httpx.get(_AUDIO_URL, follow_redirects=True).content
+        audio_b64 = base64.b64encode(audio_bytes).decode()
+        return [
+            {"type": "input_text", "text": "Transcribe this audio."},
+            {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
+        ]
+
+    def _assert_audio_transcription(self, text):
+        self.assertIsNotNone(text)
+        self.assertIn("chicago", text.lower(), f"Expected 'chicago' in transcription, got: {text}")
+
+    def _assert_video_description(self, text):
+        self.assertIsNotNone(text)
+        self.assertTrue(
+            any(word in text.lower() for word in ["concert", "music", "stage", "perform"]),
+            f"Expected concert/music/stage/perform in response, got: {text}",
+        )
+
+    def test_chat_completion_with_audio(self):
+        """Chat completions should accept input_audio (base64) content and transcribe audio."""
+        resp = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=self._get_audio_messages(),
+            max_tokens=200,
+        )
+        self._assert_audio_transcription(resp.choices[0].message.content)
+
+    def test_chat_completion_with_audio_streaming(self):
+        """Streaming chat completions should accept input_audio (base64) content and transcribe audio."""
+        stream = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=self._get_audio_messages(),
+            max_tokens=200,
+            stream=True,
+        )
+        chunks = []
+        for chunk in stream:
+            if chunk.choices[0].delta.content:
+                chunks.append(chunk.choices[0].delta.content)
+        self._assert_audio_transcription("".join(chunks))
+
+    @require_torchcodec
+    def test_chat_completion_with_video(self):
+        """Chat completions should accept video_url content and describe video."""
+        resp = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "video_url", "video_url": {"url": _VIDEO_URL}},
+                        {"type": "text", "text": "What is happening in the video?"},
+                    ],
+                }
+            ],
+            max_tokens=200,
+        )
+        self._assert_video_description(resp.choices[0].message.content)
+
+    @require_torchcodec
+    def test_chat_completion_with_video_streaming(self):
+        """Streaming chat completions should accept video_url content and describe video."""
+        stream = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "video_url", "video_url": {"url": _VIDEO_URL}},
+                        {"type": "text", "text": "What is happening in the video?"},
+                    ],
+                }
+            ],
+            max_tokens=200,
+            stream=True,
+        )
+        chunks = []
+        for chunk in stream:
+            if chunk.choices[0].delta.content:
+                chunks.append(chunk.choices[0].delta.content)
+        self._assert_video_description("".join(chunks))
+
+    def test_responses_with_audio(self):
+        """Responses API should accept input_audio (base64) content and transcribe audio."""
+        resp = self.client.responses.create(
+            model=self.MODEL,
+            input=self._get_audio_flat_input(),
+            stream=False,
+            max_output_tokens=200,
+        )
+        self.assertEqual(resp.status, "completed")
+        self._assert_audio_transcription(resp.output[0].content[0].text)
+
+    def test_responses_with_audio_streaming(self):
+        """Streaming responses API should accept input_audio (base64) content and transcribe audio."""
+        stream = self.client.responses.create(
+            model=self.MODEL,
+            input=self._get_audio_flat_input(),
+            stream=True,
+            max_output_tokens=200,
+        )
+        text = ""
+        for event in stream:
+            if event.type == "response.output_text.delta":
+                text += event.delta
+        self._assert_audio_transcription(text)
+
+    @require_torchcodec
+    def test_responses_with_video(self):
+        """Responses API should accept video_url content and describe video."""
+        resp = self.client.responses.create(
+            model=self.MODEL,
+            input=[
+                {"type": "input_text", "text": "What is happening in the video?"},
+                {"type": "video_url", "video_url": {"url": _VIDEO_URL}},
+            ],
+            stream=False,
+            max_output_tokens=200,
+        )
+        self.assertEqual(resp.status, "completed")
+        self._assert_video_description(resp.output[0].content[0].text)
+
+    @require_torchcodec
+    def test_responses_with_video_streaming(self):
+        """Streaming responses API should accept video_url content and describe video."""
+        stream = self.client.responses.create(
+            model=self.MODEL,
+            input=[
+                {"type": "input_text", "text": "What is happening in the video?"},
+                {"type": "video_url", "video_url": {"url": _VIDEO_URL}},
+            ],
+            stream=True,
+            max_output_tokens=200,
+        )
+        text = ""
+        for event in stream:
+            if event.type == "response.output_text.delta":
+                text += event.delta
+        self._assert_video_description(text)
+
+
+class TestToolCallUnit(unittest.TestCase):
+    """Unit tests for tool call parsing utilities (no server needed)."""
+
+    def test_get_tool_call_config_fallback(self):
+        """Fallback config is returned for known model families (Qwen)."""
+        model = MagicMock()
+        model.config.model_type = "qwen2"
+        processor = MagicMock(spec=["convert_tokens_to_ids"])
+        processor.convert_tokens_to_ids.return_value = 151657
+        config = get_tool_call_config(processor, model)
+        self.assertIsNotNone(config)
+        self.assertEqual(config["stc_id"], 151657)
+        self.assertEqual(config["etc_id"], 151657)
+
+    def test_get_tool_call_config_unsupported(self):
+        """None is returned for models without tool call support."""
+        model = MagicMock()
+        model.config.model_type = "llama"
+        processor = MagicMock(spec=[])
+        self.assertIsNone(get_tool_call_config(processor, model))
+
+    def test_parse_tool_calls_from_text(self):
+        text = '<tool_call>\n{"name": "get_weather", "arguments": {"city": "Paris"}}\n</tool_call>'
+        processor = MagicMock()
+        processor.parse_response = lambda t, s: recursive_parse(t, s)
+        calls = parse_tool_calls(processor, text, _TOOL_CALL_FALLBACKS["qwen"]["schema"])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["name"], "get_weather")
+
+    def test_parse_multiple_tool_calls_from_text(self):
+        text = (
+            '<tool_call>\n{"name": "get_weather", "arguments": {"city": "Paris"}}\n</tool_call>\n'
+            '<tool_call>\n{"name": "get_weather", "arguments": {"city": "London"}}\n</tool_call>'
+        )
+        processor = MagicMock()
+        processor.parse_response = lambda t, s: recursive_parse(t, s)
+        calls = parse_tool_calls(processor, text, _TOOL_CALL_FALLBACKS["qwen"]["schema"])
+        self.assertEqual(len(calls), 2)
+
+
+class TestCBWorkerDeadServerIntegration(unittest.TestCase):
+    """End-to-end FastAPI behavior when the CB worker has died.
+
+    Asserts the wiring from a ``CBWorkerDeadError`` raised in a request handler
+    (or a dead CB worker observed by ``/health``) to a 503 response carrying the cause —
+    the contract orchestrators rely on to recycle the pod.
+    """
+
+    def _build_app(self, generation_state, chat_handler=None):
+        from transformers.cli.serving.server import build_server
+
+        return build_server(
+            model_manager=MagicMock(),
+            chat_handler=chat_handler or MagicMock(),
+            completion_handler=MagicMock(),
+            response_handler=MagicMock(),
+            transcription_handler=MagicMock(),
+            generation_state=generation_state,
+        )
+
+    def test_health_returns_503_when_cb_dead(self):
+        from fastapi.testclient import TestClient
+
+        from transformers.cli.serving.utils import CBGenerateManager
+
+        state = GenerationState(continuous_batching=True)
+        # Manager whose underlying CB has a fatal_error set -> is_alive() returns False.
+        mgr = CBGenerateManager()
+        mgr._cb = MagicMock()
+        mgr._cb.fatal_error = RuntimeError("CUDA illegal memory access")
+        state._cb_manager = mgr
+
+        resp = TestClient(self._build_app(state)).get("/health")
+
+        self.assertEqual(resp.status_code, 503)
+        self.assertEqual(resp.json(), {"status": "unhealthy", "reason": "cb_worker_dead"})
+
+    def test_chat_endpoint_returns_503_with_cause(self):
+        """A CBWorkerDeadError raised from the chat route maps to 503 with the cause in the body."""
+        from fastapi.testclient import TestClient
+
+        from transformers.cli.serving.utils import CBWorkerDeadError
+
+        chat_handler = MagicMock()
+
+        async def handle_request(_body, _request_id):
+            raise CBWorkerDeadError("CB worker is dead and cannot accept request: CUDA illegal memory access")
+
+        chat_handler.handle_request = handle_request
+
+        client = TestClient(self._build_app(GenerationState(continuous_batching=True), chat_handler=chat_handler))
+        resp = client.post(
+            "/v1/chat/completions",
+            json={"model": "x", "messages": [{"role": "user", "content": "hi"}]},
+        )
+
+        self.assertEqual(resp.status_code, 503)
+        # Body carries the original cause so the client knows why the server is broken.
+        self.assertIn("CUDA illegal memory access", resp.json()["error"])
+
+
+class _TestToolCallBase:
+    """Base class for tool call integration tests. Subclasses set MODEL and inherit all tests."""
+
+    MODEL: str
+
+    @classmethod
+    def setUpClass(cls):
+        cls.serve, port = _start_serve()
+        cls.base_url = f"http://localhost:{port}"
+        cls.client = OpenAI(base_url=f"{cls.base_url}/v1", api_key="unused")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.serve.kill_server()
+
+    def _get_tool_def(self):
+        return {
+            "function": {
+                "name": "get_weather",
+                "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
+                "description": "Get the weather for a city.",
+            },
+            "type": "function",
+        }
+
+    def test_chat_non_streaming(self):
+        resp = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=[{"role": "user", "content": "What is the weather in Paris?"}],
+            stream=False,
+            max_tokens=50,
+            temperature=0.0,
+            tools=[self._get_tool_def()],
+        )
+        self.assertEqual(resp.choices[0].finish_reason, "tool_calls")
+        self.assertIsNotNone(resp.choices[0].message.tool_calls)
+        tc = resp.choices[0].message.tool_calls[0]
+        self.assertEqual(tc.function.name, "get_weather")
+        parsed_args = json.loads(tc.function.arguments)
+        self.assertIsInstance(parsed_args, dict)
+
+    def test_chat_streaming(self):
+        chunks = list(
+            self.client.chat.completions.create(
+                model=self.MODEL,
+                messages=[{"role": "user", "content": "What is the weather in Paris?"}],
+                stream=True,
+                max_tokens=50,
+                temperature=0.0,
+                tools=[self._get_tool_def()],
+            )
+        )
+        tool_chunks = [c for c in chunks if c.choices[0].delta.tool_calls]
+        self.assertGreater(len(tool_chunks), 0, "Model did not produce a tool call")
+        first_tool = tool_chunks[0].choices[0].delta.tool_calls[0]
+        self.assertEqual(first_tool.function.name, "get_weather")
+        self.assertEqual(chunks[-1].choices[0].finish_reason, "tool_calls")
+        parsed_args = json.loads(first_tool.function.arguments)
+        self.assertIsInstance(parsed_args, dict)
+
+    def test_chat_multiple_tool_calls_non_streaming(self):
+        resp = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=[{"role": "user", "content": "What is the weather in Paris and London?"}],
+            stream=False,
+            max_tokens=100,
+            temperature=0.0,
+            tools=[self._get_tool_def()],
+        )
+        self.assertEqual(resp.choices[0].finish_reason, "tool_calls")
+        self.assertEqual(len(resp.choices[0].message.tool_calls), 2)
+
+    def test_chat_multiple_tool_calls_streaming(self):
+        chunks = list(
+            self.client.chat.completions.create(
+                model=self.MODEL,
+                messages=[{"role": "user", "content": "What is the weather in Paris and London?"}],
+                stream=True,
+                max_tokens=100,
+                temperature=0.0,
+                tools=[self._get_tool_def()],
+            )
+        )
+        tool_chunks = [c for c in chunks if c.choices[0].delta.tool_calls]
+        self.assertEqual(len(tool_chunks), 2, f"Expected 2 tool calls, got {len(tool_chunks)}")
+        self.assertEqual(chunks[-1].choices[0].finish_reason, "tool_calls")
+
+    def test_chat_multi_turn_non_streaming(self):
+        tool_def = self._get_tool_def()
+        resp1 = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=[{"role": "user", "content": "What is the weather in Paris?"}],
+            stream=False,
+            max_tokens=50,
+            temperature=0.0,
+            tools=[tool_def],
+        )
+        self.assertEqual(resp1.choices[0].finish_reason, "tool_calls")
+        tc = resp1.choices[0].message.tool_calls[0]
+
+        resp2 = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=[
+                {"role": "user", "content": "What is the weather in Paris?"},
+                resp1.choices[0].message,
+                {"role": "tool", "tool_call_id": tc.id, "content": '{"temperature": 22, "condition": "sunny"}'},
+            ],
+            stream=False,
+            max_tokens=100,
+            temperature=0.0,
+            tools=[tool_def],
+        )
+        self.assertIn(resp2.choices[0].finish_reason, ("stop", "length"))
+        content = resp2.choices[0].message.content
+        self.assertIsNotNone(content)
+        self.assertTrue(
+            "22" in content.lower() or "sunny" in content.lower(),
+            f"Expected model to reference tool result, got: {content}",
+        )
+
+    def test_chat_multi_turn_streaming(self):
+        tool_def = self._get_tool_def()
+
+        # Turn 1: streaming — accumulate tool call from deltas
+        chunks = list(
+            self.client.chat.completions.create(
+                model=self.MODEL,
+                messages=[{"role": "user", "content": "What is the weather in Paris?"}],
+                stream=True,
+                max_tokens=50,
+                temperature=0.0,
+                tools=[tool_def],
+            )
+        )
+        self.assertEqual(chunks[-1].choices[0].finish_reason, "tool_calls")
+        tool_chunks = [c for c in chunks if c.choices[0].delta.tool_calls]
+        self.assertGreater(len(tool_chunks), 0)
+        tc = tool_chunks[0].choices[0].delta.tool_calls[0]
+
+        # Reconstruct assistant message from deltas
+        content = "".join(c.choices[0].delta.content for c in chunks if c.choices[0].delta.content)
+        assistant_msg = {
+            "role": "assistant",
+            "content": content,
+            "tool_calls": [{"id": tc.id, "type": "function", "function": tc.function.model_dump()}],
+        }
+
+        # Turn 2: streaming — send back tool result
+        chunks2 = list(
+            self.client.chat.completions.create(
+                model=self.MODEL,
+                messages=[
+                    {"role": "user", "content": "What is the weather in Paris?"},
+                    assistant_msg,
+                    {"role": "tool", "tool_call_id": tc.id, "content": '{"temperature": 22, "condition": "sunny"}'},
+                ],
+                stream=True,
+                max_tokens=100,
+                temperature=0.0,
+                tools=[tool_def],
+            )
+        )
+        content = "".join(c.choices[0].delta.content for c in chunks2 if c.choices[0].delta.content)
+        self.assertTrue(
+            "22" in content.lower() or "sunny" in content.lower(),
+            f"Expected model to reference tool result, got: {content}",
+        )
+
+    def test_responses_non_streaming(self):
+        resp = self.client.responses.create(
+            model=self.MODEL,
+            input="What is the weather in Paris?",
+            stream=False,
+            max_output_tokens=50,
+            tools=[self._get_tool_def()],
+        )
+        self.assertEqual(resp.status, "completed")
+        fc_items = [o for o in resp.output if o.type == "function_call"]
+        self.assertGreater(len(fc_items), 0)
+        self.assertEqual(fc_items[0].name, "get_weather")
+        parsed = json.loads(fc_items[0].arguments)
+        self.assertIsInstance(parsed, dict)
+
+    def test_responses_streaming(self):
+        events = list(
+            self.client.responses.create(
+                model=self.MODEL,
+                input="What is the weather in Paris?",
+                stream=True,
+                max_output_tokens=50,
+                tools=[self._get_tool_def()],
+            )
+        )
+        types = [e.type for e in events]
+        self.assertIn("response.created", types)
+        self.assertIn("response.completed", types)
+        self.assertIn("response.function_call_arguments.done", types)
+
+        args_done = [e for e in events if e.type == "response.function_call_arguments.done"]
+        self.assertGreater(len(args_done), 0)
+        self.assertEqual(args_done[0].name, "get_weather")
+        parsed = json.loads(args_done[0].arguments)
+        self.assertIsInstance(parsed, dict)
+
+    def test_responses_multiple_tool_calls_non_streaming(self):
+        resp = self.client.responses.create(
+            model=self.MODEL,
+            input="What is the weather in Paris and London?",
+            stream=False,
+            max_output_tokens=100,
+            tools=[self._get_tool_def()],
+        )
+        self.assertEqual(resp.status, "completed")
+        fc_items = [o for o in resp.output if o.type == "function_call"]
+        self.assertEqual(len(fc_items), 2, f"Expected 2 tool calls, got {len(fc_items)}")
+
+    def test_responses_multiple_tool_calls_streaming(self):
+        events = list(
+            self.client.responses.create(
+                model=self.MODEL,
+                input="What is the weather in Paris and London?",
+                stream=True,
+                max_output_tokens=100,
+                tools=[self._get_tool_def()],
+            )
+        )
+        args_done = [e for e in events if e.type == "response.function_call_arguments.done"]
+        self.assertEqual(len(args_done), 2, f"Expected 2 tool calls, got {len(args_done)}")
+        self.assertEqual(events[-1].type, "response.completed")
+
+    def test_responses_multi_turn_non_streaming(self):
+        tool_def = self._get_tool_def()
+        resp1 = self.client.responses.create(
+            model=self.MODEL,
+            input="What is the weather in Paris?",
+            stream=False,
+            max_output_tokens=50,
+            tools=[tool_def],
+        )
+        self.assertEqual(resp1.status, "completed")
+        fc_items = [o for o in resp1.output if o.type == "function_call"]
+        self.assertGreater(len(fc_items), 0)
+
+        input_list = [{"role": "user", "content": "What is the weather in Paris?"}]
+        input_list += resp1.output
+        input_list.append(
+            {
+                "type": "function_call_output",
+                "call_id": fc_items[0].call_id,
+                "output": '{"temperature": 22, "condition": "sunny"}',
+            }
+        )
+        resp2 = self.client.responses.create(
+            model=self.MODEL,
+            input=input_list,
+            stream=False,
+            max_output_tokens=100,
+            tools=[tool_def],
+        )
+        self.assertEqual(resp2.status, "completed")
+        msg_items = [o for o in resp2.output if o.type == "message"]
+        self.assertGreater(len(msg_items), 0)
+        content = msg_items[0].content[0].text
+        self.assertTrue(
+            "22" in content.lower() or "sunny" in content.lower(),
+            f"Expected model to reference tool result, got: {content}",
+        )
+
+    def test_responses_multi_turn_streaming(self):
+        tool_def = self._get_tool_def()
+
+        # Turn 1: streaming — get completed response with tool calls
+        events = list(
+            self.client.responses.create(
+                model=self.MODEL,
+                input="What is the weather in Paris?",
+                stream=True,
+                max_output_tokens=50,
+                tools=[tool_def],
+            )
+        )
+        completed = [e for e in events if e.type == "response.completed"]
+        self.assertEqual(len(completed), 1)
+        resp1_output = completed[0].response.output
+        fc_items = [o for o in resp1_output if o.type == "function_call"]
+        self.assertGreater(len(fc_items), 0)
+
+        # Turn 2: streaming — send back tool result
+        input_list = [{"role": "user", "content": "What is the weather in Paris?"}]
+        input_list += resp1_output
+        input_list.append(
+            {
+                "type": "function_call_output",
+                "call_id": fc_items[0].call_id,
+                "output": '{"temperature": 22, "condition": "sunny"}',
+            }
+        )
+        events2 = list(
+            self.client.responses.create(
+                model=self.MODEL,
+                input=input_list,
+                stream=True,
+                max_output_tokens=100,
+                tools=[tool_def],
+            )
+        )
+        content = "".join(e.delta for e in events2 if e.type == "response.output_text.delta")
+        self.assertTrue(
+            "22" in content.lower() or "sunny" in content.lower(),
+            f"Expected model to reference tool result, got: {content}",
+        )
+
+
+@slow
+@require_serve
+@require_torch_accelerator
+class TestToolCallQwen(_TestToolCallBase, unittest.TestCase):
+    """Tool call tests with Qwen (fallback config, no response_schema)."""
+
+    MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
+
+
+@slow
+@require_serve
+@require_torch_accelerator
+class TestToolCallGemma(_TestToolCallBase, unittest.TestCase):
+    """Tool call tests with Gemma 4 (response_schema + stc/etc special tokens)."""
+
+    MODEL = "google/gemma-4-E2B-it"
 
 
 @slow

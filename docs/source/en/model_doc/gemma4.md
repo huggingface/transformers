@@ -57,6 +57,17 @@ To encode positional information for each patch in the image, Gemma 4 uses a lea
 
 
 
+### Per-Layer Embeddings (PLE)
+
+Gemma 4 introduces a Per-Layer Embeddings (PLE) system that feeds an auxiliary residual signal into each decoder layer, rather than relying solely on a single shared embedding at the input.
+
+PLE combines two components that are summed and scaled by `1/√2` before being fed to each decoder layer:
+
+1. Token-identity (`get_per_layer_inputs`): looks up `input_ids` in `embed_tokens_per_layer`, a `Gemma4TextScaledWordEmbedding` that multiplies by `√(hidden_size_per_layer_input)`. The packed output is reshaped from `[batch, seq, num_hidden_layers * hidden_size_per_layer_input]` to `[batch, seq, num_hidden_layers, hidden_size_per_layer_input]`.
+2. Context-aware (`project_per_layer_inputs`): projects `inputs_embeds` through `per_layer_model_projection` (a Linear layer), scales by `1/√(hidden_size)`, reshapes to `[batch, seq, num_layers, ple_dim]`, and normalizes with `per_layer_projection_norm` (RMSNorm).
+
+When both components are available, the final per-layer input is `(token_identity + context_aware) * (1/√2)`. For multimodal inputs where `input_ids` are not available, only the context-aware projection is used.
+
 ## Usage examples
 
 The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
@@ -64,14 +75,13 @@ The example below demonstrates how to generate text based on an image with [`Pip
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="image-text-to-text",
     model="google/gemma-4-E2B-it",
-    dtype=torch.bfloat16
 )
 pipeline(
     images="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
@@ -82,13 +92,12 @@ pipeline(
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
-from transformers import AutoProcessor, AutoModelForImageTextToText
+```python
+from transformers import AutoModelForImageTextToText, AutoProcessor
+
 
 model = AutoModelForImageTextToText.from_pretrained(
     "google/gemma-4-E2B-it",
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -120,9 +129,8 @@ print(processor.decode(output[0][input_len:], skip_special_tokens=True))
 
 ### Function calling
 
-```py
-import torch
-from transformers import AutoProcessor, AutoModelForCausalLM
+```python
+from transformers import AutoModelForCausalLM, AutoProcessor
 
 
 WEATHER_TOOL = {
@@ -161,7 +169,6 @@ messages = [
 
 model = AutoModelForCausalLM.from_pretrained(
     "google/gemma-4-E2B-it",
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -186,9 +193,9 @@ print(processor.decode(outputs[0][input_len:], skip_special_tokens=False))
 
 ### Audio (E2B and E4B Only)
 
-```py
-import torch
-from transformers import AutoProcessor, AutoModelForMultimodalLM
+```python
+from transformers import AutoModelForMultimodalLM, AutoProcessor
+
 
 messages = [
     {
@@ -205,7 +212,6 @@ messages = [
 
 model = AutoModelForMultimodalLM.from_pretrained(
     "google/gemma-4-E2B-it",
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )

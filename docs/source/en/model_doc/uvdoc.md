@@ -34,10 +34,12 @@ The example below demonstrates how to rectify a document image with UVDoc using 
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModel
+
 
 model_path = "PaddlePaddle/UVDoc_safetensors"
 model = AutoModel.from_pretrained(

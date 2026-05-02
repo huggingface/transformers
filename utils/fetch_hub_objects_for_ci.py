@@ -1,14 +1,53 @@
+# Copyright 2021 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""
+This script downloads files from the HuggingFace Hub to be used for CI tests.
+"""
+
 import os
 import re
 
-import httpx
-from huggingface_hub import hf_hub_download, snapshot_download
 
-from transformers.testing_utils import _run_pipeline_tests, _run_staging
-from transformers.utils.import_utils import is_mistral_common_available
+# Ensure we always download from the public HuggingFace Hub, not the CI staging endpoint.
+# huggingface_hub reads HUGGINGFACE_CO_STAGING at import time and hardcodes hub-ci.huggingface.co.
+_staging_mode = os.environ.pop("HUGGINGFACE_CO_STAGING", None)
+
+import httpx  # noqa: E402
+from huggingface_hub import hf_hub_download, snapshot_download  # noqa: E402
+
+from transformers.testing_utils import _run_pipeline_tests, _run_staging  # noqa: E402
+from transformers.utils.import_utils import is_mistral_common_available  # noqa: E402
+
+
+# ruff: enable[E402]
+
+# Restore so transformers.testing_utils._run_staging can still read it.
+if _staging_mode is not None:
+    os.environ["HUGGINGFACE_CO_STAGING"] = _staging_mode
 
 
 URLS_FOR_TESTING_DATA = [
+    # TODO: copy those to our hf-internal-testing dataset and fix all tests using them
+    "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_formula_rec_001.png",
+    "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/ocr_demo2.jpg",
+    "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/doc_test.jpg",
+    "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png",
+    "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg",
+    "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg",
+    "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_rec_001.png",
+    "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png",
+    "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/table_recognition.jpg",
     "http://images.cocodataset.org/val2017/000000000139.jpg",
     "http://images.cocodataset.org/val2017/000000000285.jpg",
     "http://images.cocodataset.org/val2017/000000000632.jpg",
@@ -20,15 +59,11 @@ URLS_FOR_TESTING_DATA = [
     "http://images.cocodataset.org/val2017/000000039769.jpg",
     "http://images.cocodataset.org/val2017/000000077595.jpg",
     "http://images.cocodataset.org/val2017/000000136466.jpg",
-    "https://www.ilankelman.org/stopsigns/australia.jpg",
     "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg",
     "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
-    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
-    "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png",
-    "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
+    "https://llava-vl.github.io/static/images/view.jpg",
+    "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png",
-    "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
-    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
     "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav",
     "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3",
     "https://huggingface.co/datasets/raushan-testing-hf/images_test/resolve/main/picsum_237_200x300.jpg",
@@ -36,11 +71,15 @@ URLS_FOR_TESTING_DATA = [
     "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
     "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png",
     "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/two_dogs.jpg",
-    "https://llava-vl.github.io/static/images/view.jpg",
+    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+    "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4",
+    "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4",
+    # we should rely on this single dataset for our tests
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
-    "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4",
-    "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
-    "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
 ]
 
 
@@ -82,7 +121,7 @@ def validate_downloaded_content(filepath):
         if header.lower().startswith(bad_sig):
             raise ValueError(
                 f"Downloaded file appears to be an HTML error page, not a valid media file. "
-                f"This may indicate rate limiting. File starts with: {header[:50]!r}"
+                f"This may indicate rate limiting. File starts with: {header[:200]!r}"
             )
 
     file_size = os.path.getsize(filepath)
@@ -122,15 +161,29 @@ def download_test_file(url):
             raise
     else:
         # Use httpx for non-HF URLs (COCO, Britannica, etc.)
-        print(f"Downloading {filename} from external URL...")
-        with open(filename, "wb") as f:
-            with httpx.stream("GET", url, follow_redirects=True) as resp:
-                resp.raise_for_status()
-                f.writelines(resp.iter_bytes(chunk_size=8192))
+        import time
 
-        # Validate the downloaded content
-        validate_downloaded_content(filename)
-        print(f"Successfully downloaded: {filename}")
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                print(f"Downloading {filename} from {url}")
+                with open(filename, "wb") as f:
+                    with httpx.stream("GET", url, follow_redirects=True) as resp:
+                        resp.raise_for_status()
+                        f.writelines(resp.iter_bytes(chunk_size=8192))
+
+                validate_downloaded_content(filename)
+                print(f"Successfully downloaded: {filename}")
+                break
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    wait = 2 ** (attempt + 1)
+                    print(f"Attempt {attempt + 1} failed for {filename}: {e}. Retrying in {wait}s...")
+                    if os.path.exists(filename):
+                        os.remove(filename)
+                    time.sleep(wait)
+                else:
+                    raise
 
     return filename
 

@@ -148,7 +148,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: uv pip install -e ".[quality]"
+            - run: uv pip install -e ".[quality,serving]"
             - run:
                 name: Show installed libraries and their versions
                 command: pip freeze | tee installed.txt

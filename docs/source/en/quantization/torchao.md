@@ -328,11 +328,9 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
 from torchao.quantization import Int4WeightOnlyConfig
-from torchao.dtypes import Int4XPULayout
-from torchao.quantization.quant_primitives import ZeroPointDomain
 
 
-quant_config = Int4WeightOnlyConfig(group_size=128, layout=Int4XPULayout(), zero_point_domain=ZeroPointDomain.INT, int4_packing_format="plain_int32")
+quant_config = Int4WeightOnlyConfig(group_size=128, int4_packing_format="plain_int32")
 quantization_config = TorchAoConfig(quant_type=quant_config)
 
 # Load and quantize the model
@@ -345,7 +343,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device, quantized_model.dtype)
+input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device).to(quantized_model.dtype)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -395,9 +393,9 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
-from torchao.prototype.int4_opaque_tensor import Int4WeightOnlyOpaqueTensorConfig
+from torchao.prototype.quantization.int4 import PrototypeInt4WeightOnlyConfig
 
-quantization_config = TorchAoConfig(Int4WeightOnlyOpaqueTensorConfig(group_size=128))
+quantization_config = TorchAoConfig(PrototypeInt4WeightOnlyConfig(group_size=128, int4_choose_qparams_algorithm="tinygemm"))
 
 # Load and quantize the model
 quantized_model = AutoModelForCausalLM.from_pretrained(
@@ -409,7 +407,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device, quantized_model.dtype)
+input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device).to(quantized_model.dtype)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")

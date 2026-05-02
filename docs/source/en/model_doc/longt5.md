@@ -65,33 +65,35 @@ The complexity of this mechanism is `O(l(r + l/k))`.
 - An example showing how to evaluate a fine-tuned LongT5 model on the [pubmed dataset](https://huggingface.co/datasets/scientific_papers) is below.
 
 ```python
->>> import evaluate
->>> from datasets import load_dataset
->>> from transformers import AutoTokenizer, LongT5ForConditionalGeneration
+import evaluate
+from datasets import load_dataset
 
->>> dataset = load_dataset("scientific_papers", "pubmed", split="validation")
->>> model = (
-...     LongT5ForConditionalGeneration.from_pretrained("Stancld/longt5-tglobal-large-16384-pubmed-3k_steps")
-...     .to("auto")
-...     .half()
-... )
->>> tokenizer = AutoTokenizer.from_pretrained("Stancld/longt5-tglobal-large-16384-pubmed-3k_steps")
+from transformers import AutoTokenizer, LongT5ForConditionalGeneration
 
 
->>> def generate_answers(batch):
-...     inputs_dict = tokenizer(
-...         batch["article"], max_length=16384, padding="max_length", truncation=True, return_tensors="pt"
-...     )
-...     input_ids = inputs_dict.input_ids.to(model.device)
-...     attention_mask = inputs_dict.attention_mask.to(model.device)
-...     output_ids = model.generate(input_ids, attention_mask=attention_mask, max_length=512, num_beams=2)
-...     batch["predicted_abstract"] = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
-...     return batch
+dataset = load_dataset("scientific_papers", "pubmed", split="validation")
+model = (
+    LongT5ForConditionalGeneration.from_pretrained("Stancld/longt5-tglobal-large-16384-pubmed-3k_steps", device_map="auto")
+    .to("auto")
+    .half()
+)
+tokenizer = AutoTokenizer.from_pretrained("Stancld/longt5-tglobal-large-16384-pubmed-3k_steps")
 
 
->>> result = dataset.map(generate_answer, batched=True, batch_size=2)
->>> rouge = evaluate.load("rouge")
->>> rouge.compute(predictions=result["predicted_abstract"], references=result["abstract"])
+def generate_answers(batch):
+    inputs_dict = tokenizer(
+        batch["article"], max_length=16384, padding="max_length", truncation=True, return_tensors="pt"
+    )
+    input_ids = inputs_dict.input_ids.to(model.device)
+    attention_mask = inputs_dict.attention_mask.to(model.device)
+    output_ids = model.generate(input_ids, attention_mask=attention_mask, max_length=512, num_beams=2)
+    batch["predicted_abstract"] = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+    return batch
+
+
+result = dataset.map(generate_answer, batched=True, batch_size=2)
+rouge = evaluate.load("rouge")
+rouge.compute(predictions=result["predicted_abstract"], references=result["abstract"])
 ```
 
 ## Resources

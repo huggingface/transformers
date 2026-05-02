@@ -28,6 +28,7 @@ select = [
     "SIM",  # flake8-simplify
     "S110",  # bandit's try-except-pass rule
     "C4",  # flake8-comprehensions
+    "C901",  # McCabe complexity
     "RUF013",  # Checks for the use of implicit Optional in type annotations when the default parameter value is None.
     "PERF102",  # Checks for uses of dict.items() that discard either the key or the value when iterating over the dictionary.
     "PLC1802",  # Checks for len calls on sequences in a boolean test context.
@@ -49,6 +50,7 @@ extend-safe-fixes = [
 # Ignore import violations in all `__init__.py` files.
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["E402", "F401", "F403", "F811"]
+"examples/**/*.py" = ["C901"]
 "src/transformers/file_utils.py" = ["F401"]
 "src/transformers/utils/dummy_*.py" = ["F401"]
 
@@ -65,6 +67,9 @@ indent-style = "space"
 skip-magic-trailing-comma = false
 # Like Black, automatically detect the appropriate line ending.
 line-ending = "auto"
+
+[tool.ruff.lint.mccabe]
+max-complexity = 75
 
 [tool.pytest.ini_options]
 addopts = "--doctest-glob='**/*.md'"

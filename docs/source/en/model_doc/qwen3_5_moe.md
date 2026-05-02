@@ -42,6 +42,26 @@ TODO
 
 [[autodoc]] Qwen3_5MoeConfig
 
+## Qwen3OmniMoeVisionEncoderConfig
+
+[[autodoc]] Qwen3OmniMoeVisionEncoderConfig
+
+## Qwen3OmniMoeTextConfig
+
+[[autodoc]] Qwen3OmniMoeTextConfig
+
+## Qwen3OmniMoeTalkerTextConfig
+
+[[autodoc]] Qwen3OmniMoeTalkerTextConfig
+
+## Qwen3OmniMoeTalkerCodePredictorConfig
+
+[[autodoc]] Qwen3OmniMoeTalkerCodePredictorConfig
+
+## Qwen3OmniMoeAudioEncoderConfig
+
+[[autodoc]] Qwen3OmniMoeAudioEncoderConfig
+
 ## Qwen3_5MoeTextConfig
 
 [[autodoc]] Qwen3_5MoeTextConfig

@@ -56,6 +56,7 @@ class IBertConfig(PreTrainedConfig):
     eos_token_id: int | list[int] | None = 2
     quant_mode: bool = False
     force_dequant: str = "none"
+    tie_word_embeddings: bool = True
 
 
 __all__ = ["IBertConfig"]

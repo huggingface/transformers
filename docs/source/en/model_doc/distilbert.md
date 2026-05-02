@@ -38,14 +38,13 @@ The example below demonstrates how to classify text with [`Pipeline`], [`AutoMod
 
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 classifier = pipeline(
     task="text-classification",
     model="distilbert-base-uncased-finetuned-sst-2-english",
-    dtype=torch.float16,
     device=0
 )
 
@@ -58,16 +57,17 @@ print(result)
 
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "distilbert/distilbert-base-uncased-finetuned-sst-2-english",
 )
 model = AutoModelForSequenceClassification.from_pretrained(
     "distilbert/distilbert-base-uncased-finetuned-sst-2-english",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )

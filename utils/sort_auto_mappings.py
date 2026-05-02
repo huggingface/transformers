@@ -35,8 +35,8 @@ import re
 
 
 CHECKER_CONFIG = {
-    "name": "auto_mappings",
-    "label": "Auto mappings",
+    "name": "sort_auto_mappings",
+    "label": "Sort auto mappings",
     "file_globs": ["src/transformers/models/auto/*.py"],
     "check_args": ["--check_only"],
     "fix_args": [],
@@ -46,9 +46,8 @@ CHECKER_CONFIG = {
 PATH_TO_AUTO_MODULE = "src/transformers/models/auto"
 
 
-# re pattern that matches mapping introductions:
-#    SUPER_MODEL_MAPPING_NAMES = OrderedDict or SUPER_MODEL_MAPPING = OrderedDict
-_re_intro_mapping = re.compile(r"[A-Z_]+_MAPPING(\s+|_[A-Z_]+\s+)=\s+OrderedDict")
+# re pattern that matches XXX_MAPPING_NAMES or SPECIAL_MODEL_TYPE_TO_MODULE_NAMES
+_re_intro_mapping = re.compile(r"[A-Z_]+(_MAPPING|_MODEL_TYPE_TO_MODULE)(\s+|_[A-Z_]+\s+)=\s+OrderedDict(?!\(\*)")
 # re pattern that matches identifiers in mappings
 _re_identifier = re.compile(r'\s*\(\s*"(\S[^"]+)"')
 

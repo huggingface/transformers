@@ -55,7 +55,9 @@ jobs:
           # Security: checkout to the `main` branch for untrusted triggers (issue_comment, pull_request_target), otherwise use the specified ref
           ref: ${{ (github.event_name == 'issue_comment' || github.event_name == 'pull_request_target') && 'main' || (inputs.commit_sha || github.sha) }}
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
+        env:
+          ACTIONS_ARTIFACT_MAX_ARTIFACT_COUNT: 2000
 
       - name: Prepare some setup values
         run: |

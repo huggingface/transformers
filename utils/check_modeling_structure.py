@@ -1,70 +1,60 @@
 #!/usr/bin/env python
-"""Shim: delegates to utils.mlinter.mlinter for backward compatibility."""
+# Copyright 2026 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Thin local entrypoint for the external mlinter package."""
 
 import sys
 from pathlib import Path
 
 
-# Ensure the repo root is on sys.path so `utils.mlinter` is importable as a package.
-_REPO_ROOT = str(Path(__file__).resolve().parent.parent)
-if _REPO_ROOT not in sys.path:
-    sys.path.insert(0, _REPO_ROOT)
-
-# Re-export subprocess so that `@patch("check_modeling_structure.subprocess.run")` still works in tests.
-import subprocess  # noqa: E402, F401
-
-# Re-export everything the test suite uses via `import check_modeling_structure as cms`.
-from utils.mlinter._helpers import (  # noqa: E402, F401
-    MODELS_ROOT,
-    Violation,
-    _collect_class_bases,
-    _has_rule_suppression,
-    _inherits_pretrained_model,
-    _model_dir_name,
-    full_name,
-    is_self_method_call,
-    is_super_method_call,
-)
-from utils.mlinter.mlinter import (  # noqa: E402, F401
-    DEFAULT_ENABLED_TRF_RULES,
-    TRF_MODEL_DIR_ALLOWLISTS,
-    TRF_RULE_CHECKS,
-    TRF_RULE_SPECS,
-    TRF_RULES,
-    _is_rule_allowlisted_for_file,
-    analyze_file,
-    colored_error_message,
-    emit_violation,
-    format_rule_details,
-    format_rule_summary,
-    format_violation,
-    get_changed_modeling_files,
-    iter_modeling_files,
-    main,  # noqa: E402
-    maybe_handle_rule_docs_cli,
-    parse_args,
-    resolve_enabled_rules,
-    should_show_progress,
-)
-
-
 CHECKER_CONFIG = {
     "name": "modeling_structure",
     "label": "Modeling file structure",
-    # mlinter scans modeling_*.py, modular_*.py, and configuration_*.py via MODELING_PATTERNS.
     "file_globs": [
         "src/transformers/models/**/modeling_*.py",
         "src/transformers/models/**/modular_*.py",
         "src/transformers/models/**/configuration_*.py",
     ],
-    "check_args": [],
+    "check_args": ["--rules-toml", "utils/rules.toml"],
     "fix_args": None,
 }
 
+RULES_TOML_PATH = Path(__file__).resolve().with_name("rules.toml")
 
-# Expose rule-id string constants (e.g. cms.TRF001 == "TRF001") for test compatibility.
-for _rule_id in TRF_RULE_CHECKS:
-    globals()[_rule_id] = _rule_id
+
+def _require_mlinter():
+    try:
+        import mlinter
+    except ModuleNotFoundError as error:
+        raise ModuleNotFoundError(
+            "This script requires the standalone `transformers-mlinter` package. "
+            'Install the repo quality dependencies with `pip install -e ".[quality]"` and retry.'
+        ) from error
+
+    return mlinter
+
+
+def _add_default_rules_toml(argv: list[str]) -> list[str]:
+    if any(arg == "--rules-toml" or arg.startswith("--rules-toml=") for arg in argv[1:]):
+        return argv
+
+    return [argv[0], "--rules-toml", str(RULES_TOML_PATH), *argv[1:]]
+
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        sys.argv = _add_default_rules_toml(sys.argv)
+        raise SystemExit(_require_mlinter().main())
+    except ModuleNotFoundError as error:
+        raise SystemExit(str(error)) from error

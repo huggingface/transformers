@@ -55,7 +55,7 @@ jobs:
       n_runners: ${{ steps.set-matrix.outputs.n_runners }}
       process: ${{ steps.set-matrix.outputs.process }}
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           name: ci_results_${{ inputs.job }}
@@ -127,12 +127,14 @@ jobs:
       image: ${{ inputs.docker }}
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: ci_results_${{ inputs.job }}
           path: /transformers/ci_results_${{ inputs.job }}
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
+        env:
+          ACTIONS_ARTIFACT_MAX_ARTIFACT_COUNT: 2000
         with:
           pattern: setup_values*
           path: setup_values
@@ -255,12 +257,14 @@ jobs:
       image: ${{ inputs.docker }}
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: ci_results_${{ inputs.job }}
           path: /transformers/ci_results_${{ inputs.job }}
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
+        env:
+          ACTIONS_ARTIFACT_MAX_ARTIFACT_COUNT: 2000
         with:
           pattern: new_failures_with_bad_commit_${{ inputs.job }}*
           path: /transformers/new_failures_with_bad_commit_${{ inputs.job }}

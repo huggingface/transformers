@@ -331,6 +331,78 @@ print(generated_texts[0])
 
 And that's it, we can use the model the same way with no changes.
 
+
+## Iterative chatting with cache
+
+If you're building multimodal chat agents, you’re likely passing the same images or audio across turns. Caching lets you reuse their encoded representations instead of reprocessing them each time, cutting redundant computation.
+
+Like text-only models, multimodal models track dialogue history with a [chat template](./chat_templating). The key difference is that it applies the chat template in `"text"` format only and processes new multimodal content separately. If you apply the template with processing, the entire conversation gets reprocessed every turn because Jinja can't distinguish previously encoded inputs from new ones.
+
+The example below demonstrates this pattern. For text-only models, see the [iterative generation](../kv_cache#iterative-generation) guide.
+
+Here’s a simple Python example demonstrating this pattern. For an example with text-only models, refer to [this guide](../kv_cache.md#iterative-generation).
+
+```python
+import torch
+from transformers import AutoProcessor, Gemma4ForConditionalGeneration, TextStreamer
+from transformers.cache_utils import DynamicCache
+from transformers.image_utils import load_image
+from transformers.audio_utils import load_audio
+
+model_id = 'google/gemma-4-E2B-it'
+processor = AutoProcessor.from_pretrained(model_id)
+model = Gemma4ForConditionalGeneration.from_pretrained(model_id, dtype=torch.float32, device_map='cpu')
+
+past_key_values = DynamicCache()
+streamer = TextStreamer(processor.tokenizer, skip_prompt=True, skip_special_tokens=True)
+
+## Turn 1: multimodal input (text + image + audio)
+audio = load_audio("https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/jfk.wav")
+image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg")
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "In detail, describe the following audio and image."},
+            {"type": "audio"},
+            {"type": "image"},
+        ],
+    },
+]
+input_string = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+inputs = processor(text=input_string, images=[image], audio=[audio], return_tensors='pt')
+output = model.generate(**inputs, past_key_values=past_key_values, max_new_tokens=1024, do_sample=False, streamer=streamer)
+first_response = processor.decode(output[0][inputs['input_ids'].shape[1]:], skip_special_tokens=True)
+
+## Turn 2: text-only follow-up (reuses KV cache, no new media)
+messages.append({"role": "assistant", "content": [{"type": "text", "text": first_response}]})
+cached_string = processor.apply_chat_template(messages, tokenize=False)
+messages.append({"role": "user", "content": [{"type": "text", "text": "Summarize the previous descriptions in one sentence."}]})
+full_string = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+new_string = full_string[len(cached_string):]
+
+new_input_ids = processor.tokenizer(new_string, add_special_tokens=False, return_tensors='pt')['input_ids']
+# Build and pass an attention mask only if batched input or there is padding
+# attention_mask = torch.ones(1, past_key_values.get_seq_length() + new_input_ids.shape[1], dtype=torch.long)
+
+output2 = model.generate(input_ids=new_input_ids, past_key_values=past_key_values, max_new_tokens=1024, do_sample=False, streamer=streamer)
+second_response = processor.decode(output2[0][new_input_ids.shape[1]:], skip_special_tokens=True)
+
+## Turn 3: new image (must go through processor for image token expansion + encoding)
+image2 = load_image("https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/artemis.jpeg")
+messages.append({"role": "assistant", "content": [{"type": "text", "text": second_response}]})
+cached_string2 = processor.apply_chat_template(messages, tokenize=False)
+messages.append({"role": "user", "content": [{"type": "text", "text": "Describe this image."}, {"type": "image"}]})
+full_string2 = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+new_string2 = full_string2[len(cached_string2):]
+
+new_inputs2 = processor(text=new_string2, images=[image2], add_special_tokens=False, return_tensors='pt')
+# new_inputs2['attention_mask'] = torch.ones(1, past_key_values.get_seq_length() + new_inputs2['input_ids'].shape[1], dtype=torch.long)
+new_inputs2['past_key_values'] = past_key_values
+
+output3 = model.generate(**new_inputs2, max_new_tokens=1024, do_sample=False, streamer=streamer)
+```
+
 ## Further Reading
 
 Here are some more resources for the image-text-to-text task.

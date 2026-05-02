@@ -70,6 +70,7 @@ We will use [llava-onevision-qwen2-7b-si-hf](https://huggingface.co/llava-hf/lla
 ```python
 from transformers import AutoProcessor
 
+
 processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-si-hf")
 
 conversation = [
@@ -112,17 +113,15 @@ The original code can be found [here](https://github.com/LLaVA-VL/LLaVA-NeXT/tre
 Here's how to load the model and perform inference in half-precision (`torch.float16`):
 
 ```python
-from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
-from accelerate import Accelerator
 import torch
 
-device = Accelerator().device
+from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
 
-processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf") 
+
+processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf")
 model = LlavaOnevisionForConditionalGeneration.from_pretrained(
     "llava-hf/llava-onevision-qwen2-7b-ov-hf",
-    dtype=torch.float16,
-    device_map=device
+    device_map="auto"
 )
 
 # prepare image and text prompt, using the appropriate prompt template
@@ -136,7 +135,7 @@ conversation = [
         ],
     },
 ]
-inputs = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt")
+inputs = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device)
 inputs = inputs.to(model.device, torch.float16)
 
 # autoregressively complete prompt
@@ -150,13 +149,13 @@ print(processor.decode(output[0], skip_special_tokens=True))
 LLaVa-OneVision can perform inference with multiple images as input, where images either belong to the same prompt or different prompts (in batched inference). For that you have to use checkpoints with an "ov" suffix. For multi-image cases, we recommend using a **nested list of images** as input. Otherwise, every image will be patchified and consume a lot of memory. Here is how you can do it:
 
 ```python
-import requests
-from PIL import Image
 import torch
+
 from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
 
+
 # Load the model in half-precision
-model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf", dtype=torch.float16, device_map="auto")
+model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf", device_map="auto")
 processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf")
 
 # Prepare a batch of two prompts, where the first one is a multi-turn conversation and the second is not
@@ -219,7 +218,7 @@ import torch
 from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
 
 # Load the model in half-precision
-model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf", dtype=torch.float16, device_map="auto")
+model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf", device_map="auto")
 processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf")
 
 video_path = hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset")
@@ -265,7 +264,8 @@ We value your feedback to help identify bugs before the full release! Check out 
 Simply change the snippet above with:
 
 ```python
-from transformers import LlavaOnevisionForConditionalGeneration, BitsAndBytesConfig
+from transformers import BitsAndBytesConfig, LlavaOnevisionForConditionalGeneration
+
 
 # specify how to quantize the model
 quantization_config = BitsAndBytesConfig(
@@ -284,11 +284,11 @@ First make sure to install flash-attn. Refer to the [original repository of Flas
 ```python
 from transformers import LlavaOnevisionForConditionalGeneration
 
+
 model = LlavaOnevisionForConditionalGeneration.from_pretrained(
     model_id,
-    dtype=torch.float16,
     use_flash_attention_2=True
-).to(0)
+).to(0, device_map="auto")
 ```
 
 ## LlavaOnevisionConfig

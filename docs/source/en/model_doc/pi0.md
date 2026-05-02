@@ -38,14 +38,15 @@ You can find all the checkpoints under the [PI0](https://huggingface.co/collecti
 
 ## Usage examples
 
-```py
+```python
 import torch
+
+from transformers import PI0ForConditionalGeneration, PI0Processor
 from transformers.image_utils import load_image
-from transformers import PI0Processor, PI0ForConditionalGeneration
+
 
 model = PI0ForConditionalGeneration.from_pretrained(
     "lerobot/pi0_base",
-    dtype=torch.float32,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -53,7 +54,7 @@ processor = PI0Processor.from_pretrained("google/paligemma2-3b-mix-224")
 
 prompt = "Pick up the object"
 image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/vla_pi0.jpg")
-inputs = processor(image, prompt, return_tensors="pt")
+inputs = processor(image, prompt, return_tensors="pt").to(model.device)
 
 state = torch.randn(1, 32) # change with actual robot state
 actions = model.sample_actions(**inputs, state=state, num_steps=3)

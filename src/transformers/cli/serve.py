@@ -83,6 +83,7 @@ class Serve:
         import uvicorn
 
         from .serving.chat_completion import ChatCompletionHandler
+        from .serving.completion import CompletionHandler
         from .serving.model_manager import ModelManager
         from .serving.response import ResponseHandler
         from .serving.server import build_server
@@ -131,6 +132,11 @@ class Serve:
             generation_state=self._generation_state,
         )
 
+        self._completion_handler = CompletionHandler(
+            model_manager=self._model_manager,
+            generation_state=self._generation_state,
+        )
+
         self._response_handler = ResponseHandler(
             model_manager=self._model_manager,
             generation_state=self._generation_state,
@@ -141,8 +147,10 @@ class Serve:
         app = build_server(
             self._model_manager,
             self._chat_handler,
+            completion_handler=self._completion_handler,
             response_handler=self._response_handler,
             transcription_handler=self._transcription_handler,
+            generation_state=self._generation_state,
             enable_cors=enable_cors,
         )
 
@@ -183,6 +191,7 @@ Models will be loaded and unloaded automatically based on usage and a timeout.
 \b
 Endpoints:
     POST /v1/chat/completions — Chat completions (streaming + non-streaming).
+    POST /v1/completions      — Legacy text completions from a prompt.
     GET  /v1/models           — Lists available models.
     GET  /health              — Health check.
 

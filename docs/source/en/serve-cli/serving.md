@@ -23,7 +23,8 @@ The `transformers serve` CLI is a lightweight option for local or self-hosted se
 
 The `transformers serve` command spawns a local server compatible with the [OpenAI SDK](https://platform.openai.com/docs/overview). The server works with many third-party applications and supports the REST APIs below.
 
-- `/v1/chat/completions` for text and image requests
+- `/v1/chat/completions` for text, image, audio, and video requests
+- `/v1/completions` for legacy text completions from a freeform prompt
 - `/v1/responses` supports the [Responses API](https://platform.openai.com/docs/api-reference/responses)
 - `/v1/audio/transcriptions` for audio transcriptions
 - `/v1/models` lists available models for third-party integrations
@@ -43,48 +44,46 @@ transformers serve
 
 ## v1/chat/completions
 
-The `v1/chat/completions` API is based on the [Chat Completions API](https://platform.openai.com/docs/api-reference/chat). It supports text and image-based requests for LLMs and VLMs. Use it with `curl`, the [`~huggingface_hub.AsyncInferenceClient`], or the [OpenAI](https://platform.openai.com/docs/quickstart) client.
+The `v1/chat/completions` API is based on the [Chat Completions API](https://platform.openai.com/docs/api-reference/chat). It supports text, image, audio, and video requests for LLMs, VLMs, and multimodal models. Use it with `curl`, the [`~huggingface_hub.InferenceClient`], or the [OpenAI](https://platform.openai.com/docs/quickstart) client.
 
 ### Text-based completions
 
 <hfoptions id="chat-completion-http">
-<hfoption id="curl">
-
-```shell
-curl -X POST http://localhost:8000/v1/chat/completions -H "Content-Type: application/json" -d '{"messages": [{"role": "system", "content": "hello"}], "temperature": 0.9, "max_tokens": 1000, "stream": true, "model": "Qwen/Qwen2.5-0.5B-Instruct"}'
-```
-
-The command returns the following response.
-
-```shell
-data: {"object": "chat.completion.chunk", "id": "req_0", "created": 1751377863, "model": "Qwen/Qwen2.5-0.5B-Instruct", "system_fingerprint": "", "choices": [{"delta": {"role": "assistant", "content": "", "tool_call_id": null, "tool_calls": null}, "index": 0, "finish_reason": null, "logprobs": null}]}
-
-data: {"object": "chat.completion.chunk", "id": "req_0", "created": 1751377863, "model": "Qwen/Qwen2.5-0.5B-Instruct", "system_fingerprint": "", "choices": [{"delta": {"role": "assistant", "content": "", "tool_call_id": null, "tool_calls": null}, "index": 0, "finish_reason": null, "logprobs": null}]}
-
-(...)
-```
-
-</hfoption>
 <hfoption id="huggingface_hub">
 
 ```python
-import asyncio
-from huggingface_hub import AsyncInferenceClient
+from huggingface_hub import InferenceClient
 
 messages = [{"role": "user", "content": "What is the Transformers library known for?"}]
-client = AsyncInferenceClient("http://localhost:8000")
+client = InferenceClient("http://localhost:8000")
 
-async def responses_api_test_async():
-    async for chunk in (await client.chat_completion(messages, model="Qwen/Qwen2.5-0.5B-Instruct", max_tokens=256, stream=True)):
-        token = chunk.choices[0].delta.content
-        if token:
-            print(token, end='')
-
-asyncio.run(responses_api_test_async())
-asyncio.run(client.close())
+result = client.chat_completion(messages, model="Qwen/Qwen2.5-0.5B-Instruct", max_tokens=256)
+print(result.choices[0].message.content)
 ```
 
-The [`~huggingface_hub.AsyncInferenceClient`] returns a printed string.
+The [`~huggingface_hub.InferenceClient`] returns a printed string.
+
+```shell
+The Transformers library is primarily known for its ability to create and manipulate large-scale language models [...]
+```
+
+</hfoption>
+<hfoption id="huggingface_hub (stream)">
+
+```python
+from huggingface_hub import InferenceClient
+
+messages = [{"role": "user", "content": "What is the Transformers library known for?"}]
+client = InferenceClient("http://localhost:8000")
+
+stream = client.chat_completion(messages, model="Qwen/Qwen2.5-0.5B-Instruct", max_tokens=256, stream=True)
+for chunk in stream:
+    token = chunk.choices[0].delta.content
+    if token:
+        print(token, end="")
+```
+
+The [`~huggingface_hub.InferenceClient`] returns a printed string.
 
 ```shell
 The Transformers library is primarily known for its ability to create and manipulate large-scale language models [...]
@@ -106,13 +105,8 @@ completion = client.chat.completions.create(
             "content": "What is the Transformers library known for?"
         }
     ],
-    stream=True
 )
-
-for chunk in completion:
-    token = chunk.choices[0].delta.content
-    if token:
-        print(token, end='')
+print(completion.choices[0].message.content)
 ```
 
 The [OpenAI](https://platform.openai.com/docs/quickstart) client returns a printed string.
@@ -122,57 +116,111 @@ The Transformers library is primarily known for its ability to create and manipu
 ```
 
 </hfoption>
-</hfoptions>
+<hfoption id="openai (stream)">
 
-### Text and image-based completions
+```python
+from openai import OpenAI
 
-<hfoptions id="chat-completion-http-images">
-<hfoption id="curl">
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
 
-```shell
-curl http://localhost:8000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "Qwen/Qwen2.5-VL-7B-Instruct",
-    "stream": true,
-    "messages": [
-      {
-        "role": "user",
-        "content": [
-          {
-            "type": "text",
-            "text": "What is in this image?"
-          },
-          {
-            "type": "image_url",
-            "image_url": {
-              "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
-            }
-          }
-        ]
-      }
+completion = client.chat.completions.create(
+    model="Qwen/Qwen2.5-0.5B-Instruct",
+    messages=[
+        {
+            "role": "user",
+            "content": "What is the Transformers library known for?"
+        }
     ],
-    "max_tokens": 300
-  }'
+    stream=True,
+)
 
+for chunk in completion:
+    token = chunk.choices[0].delta.content
+    if token:
+        print(token, end="")
 ```
 
-The command returns the following response.
+The [OpenAI](https://platform.openai.com/docs/quickstart) client returns a printed string.
 
 ```shell
-data: {"id":"req_0","choices":[{"delta":{"role":"assistant"},"index":0}],"created":1753366665,"model":"Qwen/Qwen2.5-VL-7B-Instruct@main","object":"chat.completion.chunk","system_fingerprint":""}
-
-data: {"id":"req_0","choices":[{"delta":{"content":"The "},"index":0}],"created":1753366701,"model":"Qwen/Qwen2.5-VL-7B-Instruct@main","object":"chat.completion.chunk","system_fingerprint":""}
-
-data: {"id":"req_0","choices":[{"delta":{"content":"image "},"index":0}],"created":1753366701,"model":"Qwen/Qwen2.5-VL-7B-Instruct@main","object":"chat.completion.chunk","system_fingerprint":""}
+The Transformers library is primarily known for its ability to create and manipulate large-scale language models [...]
 ```
 
 </hfoption>
+<hfoption id="curl">
+
+```shell
+curl -X POST http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen/Qwen2.5-0.5B-Instruct",
+    "messages": [{"role": "user", "content": "What is the Transformers library known for?"}],
+    "temperature": 0.9,
+    "max_tokens": 256
+  }'
+```
+
+The command returns a JSON string.
+
+```json
+{
+  "id": "ade3578d-e2c3-47ed-b651-c014991a92f6",
+  "choices": [
+    {
+      "finish_reason": "length",
+      "index": 0,
+      "message": {
+        "content": "The Transformers library is primarily known for its ability to create and manipulate large-scale language models [...]",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1776184004,
+  "model": "Qwen/Qwen2.5-0.5B-Instruct@main",
+  "object": "chat.completion",
+  "usage": {
+    "completion_tokens": 256,
+    "prompt_tokens": 37,
+    "total_tokens": 293
+  }
+}
+```
+
+</hfoption>
+<hfoption id="curl (stream)">
+
+```shell
+curl -X POST http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen/Qwen2.5-0.5B-Instruct",
+    "messages": [{"role": "user", "content": "What is the Transformers library known for?"}],
+    "temperature": 0.9,
+    "max_tokens": 256,
+    "stream": true
+  }'
+```
+
+The command returns a stream of chunks.
+
+```shell
+data: {"id":"596d3941-754d-43b4-8773-9bf9940049f5","choices":[{"delta":{"role":"assistant"},"index":0}],"created":1776183469,"model":"Qwen/Qwen2.5-0.5B-Instruct@main","object":"chat.completion.chunk","system_fingerprint":""}
+
+data: {"id":"596d3941-754d-43b4-8773-9bf9940049f5","choices":[{"delta":{"content":"The"},"index":0}],"created":1776183469,"model":"Qwen/Qwen2.5-0.5B-Instruct@main","object":"chat.completion.chunk","system_fingerprint":""}
+
+(...)
+```
+
+</hfoption>
+</hfoptions>
+
+### Image-based completions
+
+<hfoptions id="chat-completion-http-images">
 <hfoption id="huggingface_hub">
 
 ```python
-import asyncio
-from huggingface_hub import AsyncInferenceClient
+from huggingface_hub import InferenceClient
 
 messages = [
     {
@@ -188,19 +236,48 @@ messages = [
         ],
     }
 ]
-client = AsyncInferenceClient("http://localhost:8000")
+client = InferenceClient("http://localhost:8000")
 
-async def responses_api_test_async():
-    async for chunk in (await client.chat_completion(messages, model="Qwen/Qwen2.5-VL-7B-Instruct", max_tokens=256, stream=True)):
-        token = chunk.choices[0].delta.content
-        if token:
-            print(token, end='')
-
-asyncio.run(responses_api_test_async())
-asyncio.run(client.close())
+result = client.chat_completion(messages, model="Qwen/Qwen2.5-VL-7B-Instruct", max_tokens=256)
+print(result.choices[0].message.content)
 ```
 
-The [`~huggingface_hub.AsyncInferenceClient`] returns a printed string.
+The [`~huggingface_hub.InferenceClient`] returns a printed string.
+
+```xmp
+The image depicts an astronaut in a space suit standing on what appears to be the surface of the moon, given the barren, rocky landscape and the dark sky in the background. The astronaut is holding a large egg that has cracked open, revealing a small creature inside. The scene is imaginative and playful, combining elements of space exploration with a whimsical twist involving the egg and the creature.
+```
+
+</hfoption>
+<hfoption id="huggingface_hub (stream)">
+
+```python
+from huggingface_hub import InferenceClient
+
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "What's in this image?"},
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg",
+                }
+            },
+        ],
+    }
+]
+client = InferenceClient("http://localhost:8000")
+
+stream = client.chat_completion(messages, model="Qwen/Qwen2.5-VL-7B-Instruct", max_tokens=256, stream=True)
+for chunk in stream:
+    token = chunk.choices[0].delta.content
+    if token:
+        print(token, end="")
+```
+
+The [`~huggingface_hub.InferenceClient`] returns a printed string.
 
 ```xmp
 The image depicts an astronaut in a space suit standing on what appears to be the surface of the moon, given the barren, rocky landscape and the dark sky in the background. The astronaut is holding a large egg that has cracked open, revealing a small creature inside. The scene is imaginative and playful, combining elements of space exploration with a whimsical twist involving the egg and the creature.
@@ -230,13 +307,8 @@ completion = client.chat.completions.create(
             ],
         }
     ],
-    stream=True
 )
-
-for chunk in completion:
-    token = chunk.choices[0].delta.content
-    if token:
-        print(token, end='')
+print(completion.choices[0].message.content)
 ```
 
 The [OpenAI](https://platform.openai.com/docs/quickstart) client returns a printed string.
@@ -246,48 +318,469 @@ The image depicts an astronaut in a space suit standing on what appears to be th
 ```
 
 </hfoption>
-</hfoptions>
+<hfoption id="openai (stream)">
 
-## v1/responses
+```python
+from openai import OpenAI
 
-> [!WARNING]
-> The `v1/responses` API is still experimental and there may be bugs. Please open an issue if you encounter any errors.
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
 
-The [Responses API](https://platform.openai.com/docs/api-reference/responses) is OpenAI's latest API endpoint for generation. It supports stateful interactions and integrates built-in tools to extend a model's capabilities. OpenAI [recommends](https://platform.openai.com/docs/guides/migrate-to-responses) using the Responses API over the Chat Completions API for new projects.
+completion = client.chat.completions.create(
+    model="Qwen/Qwen2.5-VL-7B-Instruct",
+    messages=[
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "What's in this image?"},
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg",
+                    }
+                },
+            ],
+        }
+    ],
+    stream=True,
+)
 
-The `v1/responses` API supports text-based requests for LLMs through the `curl` command and [OpenAI](https://platform.openai.com/docs/quickstart) client.
+for chunk in completion:
+    token = chunk.choices[0].delta.content
+    if token:
+        print(token, end="")
+```
 
-<hfoptions id="responses">
+The [OpenAI](https://platform.openai.com/docs/quickstart) client returns a printed string.
+
+```xmp
+The image depicts an astronaut in a space suit standing on what appears to be the surface of the moon, given the barren, rocky landscape and the dark sky in the background. The astronaut is holding a large egg that has cracked open, revealing a small creature inside. The scene is imaginative and playful, combining elements of space exploration with a whimsical twist involving the egg and the creature.
+```
+
+</hfoption>
 <hfoption id="curl">
 
 ```shell
-curl http://localhost:8000/v1/responses \
+curl http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "Qwen/Qwen2.5-0.5B-Instruct",
-    "stream": true,
-    "input": "Tell me a three sentence bedtime story about a unicorn."
+    "model": "Qwen/Qwen2.5-VL-7B-Instruct",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "What's in this image?"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg"
+            }
+          }
+        ]
+      }
+    ],
+    "max_tokens": 256
   }'
 ```
 
-The command returns the following response.
+The command returns a JSON string.
+
+```json
+{
+  "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "The image depicts an astronaut in a space suit standing on what appears to be the surface of the moon [...]",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1753366665,
+  "model": "Qwen/Qwen2.5-VL-7B-Instruct@main",
+  "object": "chat.completion",
+  "usage": {
+    "completion_tokens": 50,
+    "prompt_tokens": 120,
+    "total_tokens": 170
+  }
+}
+```
+
+</hfoption>
+<hfoption id="curl (stream)">
 
 ```shell
-data: {"response":{"id":"resp_req_0","created_at":1754059817.783648,"model":"Qwen/Qwen2.5-0.5B-Instruct@main","object":"response","output":[],"parallel_tool_calls":false,"tool_choice":"auto","tools":[],"status":"queued","text":{"format":{"type":"text"}}},"sequence_number":0,"type":"response.created"}
+curl http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen/Qwen2.5-VL-7B-Instruct",
+    "stream": true,
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "What's in this image?"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg"
+            }
+          }
+        ]
+      }
+    ],
+    "max_tokens": 256
+  }'
+```
 
-data: {"response":{"id":"resp_req_0","created_at":1754059817.783648,"model":"Qwen/Qwen2.5-0.5B-Instruct@main","object":"response","output":[],"parallel_tool_calls":false,"tool_choice":"auto","tools":[],"status":"in_progress","text":{"format":{"type":"text"}}},"sequence_number":1,"type":"response.in_progress"}
+The command returns a stream of chunks.
 
-data: {"item":{"id":"msg_req_0","content":[],"role":"assistant","status":"in_progress","type":"message"},"output_index":0,"sequence_number":2,"type":"response.output_item.added"}
+```shell
+data: {"id":"f47ac10b-58cc-4372-a567-0e02b2c3d479","choices":[{"delta":{"role":"assistant"},"index":0}],"created":1753366665,"model":"Qwen/Qwen2.5-VL-7B-Instruct@main","object":"chat.completion.chunk","system_fingerprint":""}
 
-data: {"content_index":0,"item_id":"msg_req_0","output_index":0,"part":{"annotations":[],"text":"","type":"output_text"},"sequence_number":3,"type":"response.content_part.added"}
+data: {"id":"f47ac10b-58cc-4372-a567-0e02b2c3d479","choices":[{"delta":{"content":"The "},"index":0}],"created":1753366701,"model":"Qwen/Qwen2.5-VL-7B-Instruct@main","object":"chat.completion.chunk","system_fingerprint":""}
 
-data: {"content_index":0,"delta":"","item_id":"msg_req_0","output_index":0,"sequence_number":4,"type":"response.output_text.delta"}
+(...)
+```
 
-data: {"content_index":0,"delta":"Once ","item_id":"msg_req_0","output_index":0,"sequence_number":5,"type":"response.output_text.delta"}
+</hfoption>
+</hfoptions>
 
-data: {"content_index":0,"delta":"upon ","item_id":"msg_req_0","output_index":0,"sequence_number":6,"type":"response.output_text.delta"}
+### Audio-based completions
 
-data: {"content_index":0,"delta":"a ","item_id":"msg_req_0","output_index":0,"sequence_number":7,"type":"response.output_text.delta"}
+Multimodal models like [Gemma 4](https://huggingface.co/google/gemma-4-E2B-it) and [Qwen2.5-Omni](https://huggingface.co/Qwen/Qwen2.5-Omni-3B) accept audio input through the OpenAI `input_audio` content type. Base64-encode the audio and specify the format (`mp3` or `wav`).
+
+<hfoptions id="audio-completions">
+<hfoption id="huggingface_hub">
+
+```python
+import base64
+import httpx
+from huggingface_hub import InferenceClient
+
+audio_url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3"
+audio_b64 = base64.b64encode(httpx.get(audio_url, follow_redirects=True).content).decode()
+
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "Transcribe this audio."},
+            {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
+        ],
+    }
+]
+client = InferenceClient("http://localhost:8000")
+
+result = client.chat_completion(messages, model="google/gemma-4-E2B-it", max_tokens=256)
+print(result.choices[0].message.content)
+```
+
+The [`~huggingface_hub.InferenceClient`] returns a printed string.
+
+```
+This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners, and on distant military outposts, all these conversations are what have kept me honest.
+```
+
+</hfoption>
+<hfoption id="huggingface_hub (stream)">
+
+```python
+import base64
+import httpx
+from huggingface_hub import InferenceClient
+
+audio_url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3"
+audio_b64 = base64.b64encode(httpx.get(audio_url, follow_redirects=True).content).decode()
+
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "Transcribe this audio."},
+            {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
+        ],
+    }
+]
+client = InferenceClient("http://localhost:8000")
+
+stream = client.chat_completion(messages, model="google/gemma-4-E2B-it", max_tokens=256, stream=True)
+for chunk in stream:
+    token = chunk.choices[0].delta.content
+    if token:
+        print(token, end="")
+```
+
+The [`~huggingface_hub.InferenceClient`] returns a printed string.
+
+```
+This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners, and on distant military outposts, all these conversations are what have kept me honest.
+```
+
+</hfoption>
+<hfoption id="openai">
+
+```python
+import base64
+import httpx
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
+
+audio_url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3"
+audio_b64 = base64.b64encode(httpx.get(audio_url, follow_redirects=True).content).decode()
+
+completion = client.chat.completions.create(
+    model="google/gemma-4-E2B-it",
+    messages=[
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Transcribe this audio."},
+                {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
+            ],
+        }
+    ],
+)
+print(completion.choices[0].message.content)
+```
+
+The [OpenAI](https://platform.openai.com/docs/quickstart) client returns a printed string.
+
+```
+This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners, and on distant military outposts, all these conversations are what have kept me honest.
+```
+
+</hfoption>
+<hfoption id="openai (stream)">
+
+```python
+import base64
+import httpx
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
+
+audio_url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3"
+audio_b64 = base64.b64encode(httpx.get(audio_url, follow_redirects=True).content).decode()
+
+completion = client.chat.completions.create(
+    model="google/gemma-4-E2B-it",
+    messages=[
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Transcribe this audio."},
+                {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
+            ],
+        }
+    ],
+    stream=True,
+)
+
+for chunk in completion:
+    token = chunk.choices[0].delta.content
+    if token:
+        print(token, end="")
+```
+
+The [OpenAI](https://platform.openai.com/docs/quickstart) client returns a printed string.
+
+```
+This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners, and on distant military outposts, all these conversations are what have kept me honest.
+```
+
+</hfoption>
+<hfoption id="curl">
+
+```shell
+# First, base64-encode the audio file and build the JSON payload
+AUDIO_B64=$(curl -sL https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3 | base64 -w 0)
+
+cat <<EOF > /tmp/audio_request.json
+{
+  "model": "google/gemma-4-E2B-it",
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {"type": "text", "text": "Transcribe this audio."},
+        {"type": "input_audio", "input_audio": {"data": "$AUDIO_B64", "format": "mp3"}}
+      ]
+    }
+  ]
+}
+EOF
+
+curl http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d @/tmp/audio_request.json
+```
+
+The command returns a JSON string.
+
+```json
+{
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "This week, I traveled to Chicago to deliver my final farewell address to the nation [...]",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1753366665,
+  "model": "google/gemma-4-E2B-it@main",
+  "object": "chat.completion",
+  "usage": {
+    "completion_tokens": 85,
+    "prompt_tokens": 200,
+    "total_tokens": 285
+  }
+}
+```
+
+</hfoption>
+<hfoption id="curl (stream)">
+
+```shell
+# First, base64-encode the audio file and build the JSON payload
+AUDIO_B64=$(curl -sL https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3 | base64 -w 0)
+
+cat <<EOF > /tmp/audio_request.json
+{
+  "model": "google/gemma-4-E2B-it",
+  "stream": true,
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {"type": "text", "text": "Transcribe this audio."},
+        {"type": "input_audio", "input_audio": {"data": "$AUDIO_B64", "format": "mp3"}}
+      ]
+    }
+  ]
+}
+EOF
+
+curl http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d @/tmp/audio_request.json
+```
+
+The command returns a stream of chunks.
+
+```shell
+data: {"id":"cb997e1d-98b9-414a-be89-1880288610ef","choices":[{"delta":{"role":"assistant"},"index":0}],"created":1776254856,"model":"google/gemma-4-E2B-it@main","object":"chat.completion.chunk","system_fingerprint":""}
+
+data: {"id":"cb997e1d-98b9-414a-be89-1880288610ef","choices":[{"delta":{"content":"This"},"index":0}],"created":1776254856,"model":"google/gemma-4-E2B-it@main","object":"chat.completion.chunk","system_fingerprint":""}
+
+(...)
+```
+
+</hfoption>
+</hfoptions>
+
+> [!WARNING]
+> The `audio_url` content type is an extension not part of the OpenAI standard and may change in future versions.
+
+You can also pass audio by URL with the `audio_url` content type to skip base64 encoding.
+
+```python
+completion = client.chat.completions.create(
+    model="google/gemma-4-E2B-it",
+    messages=[
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Transcribe this audio."},
+                {"type": "audio_url", "audio_url": {"url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3"}},
+            ],
+        }
+    ],
+)
+```
+
+### Video-based completions
+
+> [!WARNING]
+> The `video_url` content type is an extension not part of the OpenAI standard and may change in future versions.
+
+Use the `video_url` content type for video input. If the model supports audio (e.g. Gemma 4, Qwen2.5-Omni), the server extracts the audio track from the video and processes it with the visual frames.
+
+> [!TIP]
+> Video processing requires [torchcodec](https://github.com/pytorch/torchcodec). Install it with `pip install torchcodec`.
+
+<hfoptions id="video-completions">
+<hfoption id="huggingface_hub">
+
+```python
+from huggingface_hub import InferenceClient
+
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}},
+            {"type": "text", "text": "What is happening in the video and what is the song about?"},
+        ],
+    }
+]
+client = InferenceClient("http://localhost:8000")
+
+result = client.chat_completion(messages, model="google/gemma-4-E2B-it", max_tokens=256)
+print(result.choices[0].message.content)
+```
+
+The [`~huggingface_hub.InferenceClient`] returns a printed string.
+
+```
+The video captures a live music performance at a music festival or a large concert. There are several musicians on stage, including a central figure playing an acoustic guitar and singing. The foreground is filled with the backs of the audience, indicating a large crowd watching the show. The stage is dramatically lit with bright spotlights and blue and white stage lighting, with haze and smoke creating an immersive atmosphere.
+
+The lyrics of the song are: "I don't care 'bout street, from that fresh street, 'cause there's no problem, another one I want to be, in the storm..."
+```
+
+</hfoption>
+<hfoption id="huggingface_hub (stream)">
+
+```python
+from huggingface_hub import InferenceClient
+
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}},
+            {"type": "text", "text": "What is happening in the video and what is the song about?"},
+        ],
+    }
+]
+client = InferenceClient("http://localhost:8000")
+
+stream = client.chat_completion(messages, model="google/gemma-4-E2B-it", max_tokens=256, stream=True)
+for chunk in stream:
+    token = chunk.choices[0].delta.content
+    if token:
+        print(token, end="")
+```
+
+The [`~huggingface_hub.InferenceClient`] returns a printed string.
+
+```
+The video captures a live music performance at a music festival or a large concert. There are several musicians on stage, including a central figure playing an acoustic guitar and singing. The foreground is filled with the backs of the audience, indicating a large crowd watching the show. The stage is dramatically lit with bright spotlights and blue and white stage lighting, with haze and smoke creating an immersive atmosphere.
+
+The lyrics of the song are: "I don't care 'bout street, from that fresh street, 'cause there's no problem, another one I want to be, in the storm..."
 ```
 
 </hfoption>
@@ -296,46 +789,865 @@ data: {"content_index":0,"delta":"a ","item_id":"msg_req_0","output_index":0,"se
 ```python
 from openai import OpenAI
 
-client = OpenAI(base_url="http://localhost:8000/v1", api_key="<KEY>")
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
 
-response = client.responses.create(
-    model="Qwen/Qwen2.5-0.5B-Instruct",
-    instructions="You are a helpful assistant.",
-    input="Hello!",
-    stream=True,
-    metadata={"foo": "bar"},
+completion = client.chat.completions.create(
+    model="google/gemma-4-E2B-it",
+    messages=[
+        {
+            "role": "user",
+            "content": [
+                {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}},
+                {"type": "text", "text": "What is happening in the video and what is the song about?"},
+            ],
+        }
+    ],
+    max_tokens=256,
 )
-
-for event in response:
-    print(event)
+print(completion.choices[0].message.content)
 ```
 
-The [OpenAI](https://platform.openai.com/docs/quickstart) client returns multiple printed strings.
+The [OpenAI](https://platform.openai.com/docs/quickstart) client returns a printed string.
+
+```
+The video captures a live music performance at a music festival or a large concert. There are several musicians on stage, including a central figure playing an acoustic guitar and singing. The foreground is filled with the backs of the audience, indicating a large crowd watching the show. The stage is dramatically lit with bright spotlights and blue and white stage lighting, with haze and smoke creating an immersive atmosphere.
+
+The lyrics of the song are: "I don't care 'bout street, from that fresh street, 'cause there's no problem, another one I want to be, in the storm..."
+```
+
+</hfoption>
+<hfoption id="openai (stream)">
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
+
+completion = client.chat.completions.create(
+    model="google/gemma-4-E2B-it",
+    messages=[
+        {
+            "role": "user",
+            "content": [
+                {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}},
+                {"type": "text", "text": "What is happening in the video and what is the song about?"},
+            ],
+        }
+    ],
+    max_tokens=256,
+    stream=True,
+)
+
+for chunk in completion:
+    token = chunk.choices[0].delta.content
+    if token:
+        print(token, end="")
+```
+
+The [OpenAI](https://platform.openai.com/docs/quickstart) client returns a printed string.
+
+```
+The video captures a live music performance at a music festival or a large concert. There are several musicians on stage, including a central figure playing an acoustic guitar and singing. The foreground is filled with the backs of the audience, indicating a large crowd watching the show. The stage is dramatically lit with bright spotlights and blue and white stage lighting, with haze and smoke creating an immersive atmosphere.
+
+The lyrics of the song are: "I don't care 'bout street, from that fresh street, 'cause there's no problem, another one I want to be, in the storm..."
+```
+
+</hfoption>
+<hfoption id="curl">
 
 ```shell
-ResponseCreatedEvent(response=Response(id='resp_req_0', created_at=1754060400.3718212, error=None, incomplete_details=None, instructions='You are a helpful assistant.', metadata={'foo': 'bar'}, model='Qwen/Qwen2.5-0.5B-Instruct@main', object='response', output=[], parallel_tool_calls=False, temperature=None, tool_choice='auto', tools=[], top_p=None, background=None, max_output_tokens=None, max_tool_calls=None, previous_response_id=None, prompt=None, reasoning=None, service_tier=None, status='queued', text=ResponseTextConfig(format=ResponseFormatText(type='text')), top_logprobs=None, truncation=None, usage=None, user=None), sequence_number=0, type='response.created')
-ResponseInProgressEvent(response=Response(id='resp_req_0', created_at=1754060400.3718212, error=None, incomplete_details=None, instructions='You are a helpful assistant.', metadata={'foo': 'bar'}, model='Qwen/Qwen2.5-0.5B-Instruct@main', object='response', output=[], parallel_tool_calls=False, temperature=None, tool_choice='auto', tools=[], top_p=None, background=None, max_output_tokens=None, max_tool_calls=None, previous_response_id=None, prompt=None, reasoning=None, service_tier=None, status='in_progress', text=ResponseTextConfig(format=ResponseFormatText(type='text')), top_logprobs=None, truncation=None, usage=None, user=None), sequence_number=1, type='response.in_progress')
-ResponseOutputItemAddedEvent(item=ResponseOutputMessage(id='msg_req_0', content=[], role='assistant', status='in_progress', type='message'), output_index=0, sequence_number=2, type='response.output_item.added')
-ResponseContentPartAddedEvent(content_index=0, item_id='msg_req_0', output_index=0, part=ResponseOutputText(annotations=[], text='', type='output_text', logprobs=None), sequence_number=3, type='response.content_part.added')
-ResponseTextDeltaEvent(content_index=0, delta='', item_id='msg_req_0', output_index=0, sequence_number=4, type='response.output_text.delta')
-ResponseTextDeltaEvent(content_index=0, delta='', item_id='msg_req_0', output_index=0, sequence_number=5, type='response.output_text.delta')
-ResponseTextDeltaEvent(content_index=0, delta='Hello! ', item_id='msg_req_0', output_index=0, sequence_number=6, type='response.output_text.delta')
-ResponseTextDeltaEvent(content_index=0, delta='How ', item_id='msg_req_0', output_index=0, sequence_number=7, type='response.output_text.delta')
-ResponseTextDeltaEvent(content_index=0, delta='can ', item_id='msg_req_0', output_index=0, sequence_number=8, type='response.output_text.delta')
-ResponseTextDeltaEvent(content_index=0, delta='I ', item_id='msg_req_0', output_index=0, sequence_number=9, type='response.output_text.delta')
-ResponseTextDeltaEvent(content_index=0, delta='assist ', item_id='msg_req_0', output_index=0, sequence_number=10, type='response.output_text.delta')
-ResponseTextDeltaEvent(content_index=0, delta='you ', item_id='msg_req_0', output_index=0, sequence_number=11, type='response.output_text.delta')
-ResponseTextDeltaEvent(content_index=0, delta='', item_id='msg_req_0', output_index=0, sequence_number=12, type='response.output_text.delta')
-ResponseTextDeltaEvent(content_index=0, delta='', item_id='msg_req_0', output_index=0, sequence_number=13, type='response.output_text.delta')
-ResponseTextDeltaEvent(content_index=0, delta='today?', item_id='msg_req_0', output_index=0, sequence_number=14, type='response.output_text.delta')
-ResponseTextDoneEvent(content_index=0, item_id='msg_req_0', output_index=0, sequence_number=15, text='Hello! How can I assist you today?', type='response.output_text.done')
-ResponseContentPartDoneEvent(content_index=0, item_id='msg_req_0', output_index=0, part=ResponseOutputText(annotations=[], text='Hello! How can I assist you today?', type='output_text', logprobs=None), sequence_number=16, type='response.content_part.done')
-ResponseOutputItemDoneEvent(item=ResponseOutputMessage(id='msg_req_0', content=[ResponseOutputText(annotations=[], text='Hello! How can I assist you today?', type='output_text', logprobs=None)], role='assistant', status='completed', type='message', annotations=[]), output_index=0, sequence_number=17, type='response.output_item.done')
-ResponseCompletedEvent(response=Response(id='resp_req_0', created_at=1754060400.3718212, error=None, incomplete_details=None, instructions='You are a helpful assistant.', metadata={'foo': 'bar'}, model='Qwen/Qwen2.5-0.5B-Instruct@main', object='response', output=[ResponseOutputMessage(id='msg_req_0', content=[ResponseOutputText(annotations=[], text='Hello! How can I assist you today?', type='output_text', logprobs=None)], role='assistant', status='completed', type='message', annotations=[])], parallel_tool_calls=False, temperature=None, tool_choice='auto', tools=[], top_p=None, background=None, max_output_tokens=None, max_tool_calls=None, previous_response_id=None, prompt=None, reasoning=None, service_tier=None, status='completed', text=ResponseTextConfig(format=ResponseFormatText(type='text')), top_logprobs=None, truncation=None, usage=None, user=None), sequence_number=18, type='response.completed')
+curl http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "google/gemma-4-E2B-it",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}},
+          {"type": "text", "text": "What is happening in the video and what is the song about?"}
+        ]
+      }
+    ],
+    "max_tokens": 256
+  }'
+```
+
+The command returns a JSON string.
+
+```json
+{
+  "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+  "choices": [
+    {
+      "finish_reason": "length",
+      "index": 0,
+      "message": {
+        "content": "The video captures a live music performance at a music festival or a large concert [...]",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1753366665,
+  "model": "google/gemma-4-E2B-it@main",
+  "object": "chat.completion",
+  "usage": {
+    "completion_tokens": 256,
+    "prompt_tokens": 350,
+    "total_tokens": 606
+  }
+}
+```
+
+</hfoption>
+<hfoption id="curl (stream)">
+
+```shell
+curl http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "google/gemma-4-E2B-it",
+    "stream": true,
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}},
+          {"type": "text", "text": "What is happening in the video and what is the song about?"}
+        ]
+      }
+    ],
+    "max_tokens": 256
+  }'
+```
+
+The command returns a stream of chunks.
+
+```shell
+data: {"id":"cb997e1d-98b9-414a-be89-1880288610ef","choices":[{"delta":{"role":"assistant"},"index":0}],"created":1776254856,"model":"google/gemma-4-E2B-it@main","object":"chat.completion.chunk","system_fingerprint":""}
+
+data: {"id":"cb997e1d-98b9-414a-be89-1880288610ef","choices":[{"delta":{"content":"Based"},"index":0}],"created":1776254856,"model":"google/gemma-4-E2B-it@main","object":"chat.completion.chunk","system_fingerprint":""}
+
+(...)
 ```
 
 </hfoption>
 </hfoptions>
+
+### Multi-turn conversations[[completions]]
+
+To have a multi-turn conversation, include the full conversation history in the `messages` list with alternating `user` and `assistant` roles. Like all OpenAI-compatible servers, the API is stateless, so every request must contain the complete conversation history.
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
+
+completion = client.chat.completions.create(
+    model="Qwen/Qwen2.5-0.5B-Instruct",
+    messages=[
+        {"role": "user", "content": "What is the capital of France?"},
+        {"role": "assistant", "content": "The capital of France is Paris."},
+        {"role": "user", "content": "How many people live there?"},
+    ],
+)
+print(completion.choices[0].message.content)
+```
+
+The follow-up question "How many people live there?" relies on the prior context, so the model answers about Paris.
+
+```
+As of 2021, the population of Paris is approximately 2.2 million people.
+```
+
+## v1/completions
+
+The `v1/completions` API is based on the [legacy Completions API](https://platform.openai.com/docs/api-reference/completions). Unlike `/v1/chat/completions`, it takes a freeform text `prompt` instead of chat messages and returns generated text in `choices[].text`. This is useful for base (non-instruct) models and text completion tasks where a chat template is not needed. It also supports `suffix` for fill-in-the-middle text insertion.
+
+<hfoptions id="legacy-completion">
+<hfoption id="curl">
+
+```shell
+curl -X POST http://localhost:8000/v1/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen/Qwen2.5-0.5B",
+    "prompt": "The capital of France is",
+    "max_tokens": 20
+  }'
+```
+
+The command returns the following response.
+
+```json
+{
+  "id": "chatcmpl-abc123",
+  "object": "text_completion",
+  "created": 1234567890,
+  "model": "Qwen/Qwen2.5-0.5B@main",
+  "choices": [
+    {
+      "text": " Paris, and the capital of the United States is Washington, D.C.",
+      "index": 0,
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 5,
+    "completion_tokens": 16,
+    "total_tokens": 21
+  }
+}
+```
+
+</hfoption>
+<hfoption id="openai">
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
+
+# Non-streaming
+completion = client.completions.create(
+    model="Qwen/Qwen2.5-0.5B",
+    prompt="The capital of France is",
+    max_tokens=20,
+)
+print(completion.choices[0].text)
+```
+
+The [OpenAI](https://platform.openai.com/docs/quickstart) client returns the following.
+
+```shell
+ Paris, and the capital of the United States is Washington, D.C.
+```
+
+Streaming is also supported.
+
+```python
+stream = client.completions.create(
+    model="Qwen/Qwen2.5-0.5B",
+    prompt="The capital of France is",
+    max_tokens=20,
+    stream=True,
+)
+for chunk in stream:
+    print(chunk.choices[0].text, end="")
+```
+
+</hfoption>
+</hfoptions>
+
+## v1/responses
+
+The [Responses API](https://platform.openai.com/docs/api-reference/responses) is OpenAI's latest API endpoint for generation. It supports stateful interactions and integrates built-in tools to extend a model's capabilities. OpenAI [recommends](https://platform.openai.com/docs/guides/migrate-to-responses) using the Responses API over the Chat Completions API for new projects.
+
+The `v1/responses` API supports text, image, audio, and video requests through the `curl` command and [OpenAI](https://platform.openai.com/docs/quickstart) client.
+
+### Text-based responses
+
+<hfoptions id="responses">
+<hfoption id="openai">
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
+
+response = client.responses.create(
+    model="Qwen/Qwen2.5-0.5B-Instruct",
+    input="Tell me a three sentence bedtime story about a unicorn.",
+    max_output_tokens=256,
+    stream=False,
+)
+print(response.output[0].content[0].text)
+```
+
+The [OpenAI](https://platform.openai.com/docs/quickstart) client returns a printed string.
+
+```shell
+Once upon a time, in a faraway land, there lived a beautiful unicorn named Luna [...]
+```
+
+</hfoption>
+<hfoption id="openai (stream)">
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
+
+response = client.responses.create(
+    model="Qwen/Qwen2.5-0.5B-Instruct",
+    input="Tell me a three sentence bedtime story about a unicorn.",
+    max_output_tokens=256,
+    stream=True,
+)
+
+for event in response:
+    if hasattr(event, "delta") and event.delta:
+        print(event.delta, end="")
+```
+
+The [OpenAI](https://platform.openai.com/docs/quickstart) client returns a printed string.
+
+```shell
+Once upon a time, in a faraway land, there lived a beautiful unicorn named Luna [...]
+```
+
+</hfoption>
+<hfoption id="curl">
+
+```shell
+curl http://localhost:8000/v1/responses \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen/Qwen2.5-0.5B-Instruct",
+    "input": "Tell me a three sentence bedtime story about a unicorn.",
+    "max_output_tokens": 256,
+    "stream": false
+  }'
+```
+
+The command returns a JSON string.
+
+```json
+{
+  "id": "resp_8693af9b-b561-4267-bd1a-22d1b43284cb",
+  "created_at": 1776258580.7114341,
+  "model": "Qwen/Qwen2.5-0.5B-Instruct@main",
+  "object": "response",
+  "output": [
+    {
+      "id": "msg_8693af9b-b561-4267-bd1a-22d1b43284cb",
+      "content": [
+        {
+          "annotations": [],
+          "text": "Once upon a time, in a faraway land, there lived a beautiful unicorn named Luna [...]",
+          "type": "output_text"
+        }
+      ],
+      "role": "assistant",
+      "status": "completed",
+      "type": "message"
+    }
+  ],
+  "status": "completed"
+}
+```
+
+</hfoption>
+<hfoption id="curl (stream)">
+
+```shell
+curl http://localhost:8000/v1/responses \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen/Qwen2.5-0.5B-Instruct",
+    "stream": true,
+    "input": "Tell me a three sentence bedtime story about a unicorn.",
+    "max_output_tokens": 256
+  }'
+```
+
+The command returns a stream of chunks.
+
+```shell
+data: {"response":{"id":"resp_req_0","created_at":1754059817.783648,"model":"Qwen/Qwen2.5-0.5B-Instruct@main","object":"response","output":[],"status":"queued"},"sequence_number":0,"type":"response.created"}
+
+data: {"content_index":0,"delta":"Once ","item_id":"msg_req_0","output_index":0,"sequence_number":5,"type":"response.output_text.delta"}
+
+data: {"content_index":0,"delta":"upon ","item_id":"msg_req_0","output_index":0,"sequence_number":6,"type":"response.output_text.delta"}
+
+(...)
+```
+
+</hfoption>
+</hfoptions>
+
+### Image-based responses
+
+The Responses API also supports image, audio, and video inputs.
+
+<hfoptions id="responses-images">
+<hfoption id="openai">
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
+
+response = client.responses.create(
+    model="Qwen/Qwen2.5-VL-7B-Instruct",
+    input=[
+        {"type": "input_text", "text": "What's in this image?"},
+        {
+            "type": "input_image",
+            "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg",
+        },
+    ],
+    max_output_tokens=256,
+    stream=False,
+)
+print(response.output[0].content[0].text)
+```
+
+The [OpenAI](https://platform.openai.com/docs/quickstart) client returns a printed string.
+
+```xmp
+The image depicts an astronaut in a space suit standing on what appears to be the surface of the moon, given the barren, rocky landscape and the dark sky in the background. The astronaut is holding a large egg that has cracked open, revealing a small creature inside. The scene is imaginative and playful, combining elements of space exploration with a whimsical twist involving the egg and the creature.
+```
+
+</hfoption>
+<hfoption id="openai (stream)">
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
+
+response = client.responses.create(
+    model="Qwen/Qwen2.5-VL-7B-Instruct",
+    input=[
+        {"type": "input_text", "text": "What's in this image?"},
+        {
+            "type": "input_image",
+            "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg",
+        },
+    ],
+    max_output_tokens=256,
+    stream=True,
+)
+
+for event in response:
+    if hasattr(event, "delta") and event.delta:
+        print(event.delta, end="")
+```
+
+The [OpenAI](https://platform.openai.com/docs/quickstart) client returns a printed string.
+
+```xmp
+The image depicts an astronaut in a space suit standing on what appears to be the surface of the moon, given the barren, rocky landscape and the dark sky in the background. The astronaut is holding a large egg that has cracked open, revealing a small creature inside. The scene is imaginative and playful, combining elements of space exploration with a whimsical twist involving the egg and the creature.
+```
+
+</hfoption>
+<hfoption id="curl">
+
+```shell
+curl http://localhost:8000/v1/responses \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen/Qwen2.5-VL-7B-Instruct",
+    "input": [
+      {"type": "input_text", "text": "What'\''s in this image?"},
+      {"type": "input_image", "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg"}
+    ],
+    "max_output_tokens": 256,
+    "stream": false
+  }'
+```
+
+The command returns a JSON string.
+
+```json
+{
+  "id": "resp_f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "created_at": 1776258580.7114341,
+  "model": "Qwen/Qwen2.5-VL-7B-Instruct@main",
+  "object": "response",
+  "output": [
+    {
+      "id": "msg_f47ac10b-58cc-4372-a567-0e02b2c3d479",
+      "content": [
+        {
+          "annotations": [],
+          "text": "The image depicts an astronaut in a space suit standing on what appears to be the surface of the moon [...]",
+          "type": "output_text"
+        }
+      ],
+      "role": "assistant",
+      "status": "completed",
+      "type": "message"
+    }
+  ],
+  "status": "completed"
+}
+```
+
+</hfoption>
+<hfoption id="curl (stream)">
+
+```shell
+curl http://localhost:8000/v1/responses \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen/Qwen2.5-VL-7B-Instruct",
+    "stream": true,
+    "input": [
+      {"type": "input_text", "text": "What'\''s in this image?"},
+      {"type": "input_image", "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg"}
+    ],
+    "max_output_tokens": 256
+  }'
+```
+
+The command returns a stream of chunks.
+
+```shell
+data: {"response":{"id":"resp_f47ac10b-58cc-4372-a567-0e02b2c3d479","created_at":1776258580.7114341,"model":"Qwen/Qwen2.5-VL-7B-Instruct@main","object":"response","output":[],"status":"queued"},"sequence_number":0,"type":"response.created"}
+
+data: {"content_index":0,"delta":"The ","item_id":"msg_f47ac10b","output_index":0,"sequence_number":5,"type":"response.output_text.delta"}
+
+(...)
+```
+
+</hfoption>
+</hfoptions>
+
+### Audio-based responses
+
+<hfoptions id="responses-audio">
+<hfoption id="openai">
+
+```python
+import base64
+import httpx
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
+
+audio_url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3"
+audio_b64 = base64.b64encode(httpx.get(audio_url, follow_redirects=True).content).decode()
+
+response = client.responses.create(
+    model="google/gemma-4-E2B-it",
+    input=[
+        {"type": "input_text", "text": "Transcribe this audio."},
+        {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
+    ],
+    max_output_tokens=256,
+    stream=False,
+)
+print(response.output[0].content[0].text)
+```
+
+The [OpenAI](https://platform.openai.com/docs/quickstart) client returns a printed string.
+
+```
+This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners, and on distant military outposts, all these conversations are what have kept me honest.
+```
+
+</hfoption>
+<hfoption id="openai (stream)">
+
+```python
+import base64
+import httpx
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
+
+audio_url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3"
+audio_b64 = base64.b64encode(httpx.get(audio_url, follow_redirects=True).content).decode()
+
+response = client.responses.create(
+    model="google/gemma-4-E2B-it",
+    input=[
+        {"type": "input_text", "text": "Transcribe this audio."},
+        {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
+            ],
+        }
+    ],
+    max_output_tokens=256,
+    stream=True,
+)
+
+for event in response:
+    if hasattr(event, "delta") and event.delta:
+        print(event.delta, end="")
+```
+
+The [OpenAI](https://platform.openai.com/docs/quickstart) client returns a printed string.
+
+```
+This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners, and on distant military outposts, all these conversations are what have kept me honest.
+```
+
+</hfoption>
+<hfoption id="curl">
+
+```shell
+# First, base64-encode the audio file and build the JSON payload
+AUDIO_B64=$(curl -sL https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3 | base64 -w 0)
+
+cat <<EOF > /tmp/audio_request.json
+{
+  "model": "google/gemma-4-E2B-it",
+  "input": [
+    {"type": "input_text", "text": "Transcribe this audio."},
+    {"type": "input_audio", "input_audio": {"data": "$AUDIO_B64", "format": "mp3"}}
+  ],
+  "max_output_tokens": 256,
+  "stream": false
+}
+EOF
+
+curl http://localhost:8000/v1/responses \
+  -H "Content-Type: application/json" \
+  -d @/tmp/audio_request.json
+```
+
+The command returns a JSON string.
+
+```json
+{
+  "id": "resp_a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "created_at": 1776258580.7114341,
+  "model": "google/gemma-4-E2B-it@main",
+  "object": "response",
+  "output": [
+    {
+      "id": "msg_a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "content": [
+        {
+          "annotations": [],
+          "text": "This week, I traveled to Chicago to deliver my final farewell address to the nation [...]",
+          "type": "output_text"
+        }
+      ],
+      "role": "assistant",
+      "status": "completed",
+      "type": "message"
+    }
+  ],
+  "status": "completed"
+}
+```
+
+</hfoption>
+<hfoption id="curl (stream)">
+
+```shell
+# First, base64-encode the audio file and build the JSON payload
+AUDIO_B64=$(curl -sL https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3 | base64 -w 0)
+
+cat <<EOF > /tmp/audio_request.json
+{
+  "model": "google/gemma-4-E2B-it",
+  "stream": true,
+  "input": [
+    {"type": "input_text", "text": "Transcribe this audio."},
+    {"type": "input_audio", "input_audio": {"data": "$AUDIO_B64", "format": "mp3"}}
+  ],
+  "max_output_tokens": 256
+}
+EOF
+
+curl http://localhost:8000/v1/responses \
+  -H "Content-Type: application/json" \
+  -d @/tmp/audio_request.json
+```
+
+The command returns a stream of chunks.
+
+```shell
+data: {"response":{"id":"resp_a1b2c3d4-e5f6-7890-abcd-ef1234567890","created_at":1776258580.7114341,"model":"google/gemma-4-E2B-it@main","object":"response","output":[],"status":"queued"},"sequence_number":0,"type":"response.created"}
+
+data: {"content_index":0,"delta":"This ","item_id":"msg_a1b2c3d4","output_index":0,"sequence_number":5,"type":"response.output_text.delta"}
+
+(...)
+```
+
+</hfoption>
+</hfoptions>
+
+> [!WARNING]
+> The `audio_url` content type is an extension not part of the OpenAI standard and may change in future versions.
+
+You can also pass audio by URL with the `audio_url` content type to skip base64 encoding.
+
+```python
+response = client.responses.create(
+    model="google/gemma-4-E2B-it",
+    input=[
+        {"type": "input_text", "text": "Transcribe this audio."},
+        {"type": "audio_url", "audio_url": {"url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3"}},
+    ],
+    max_output_tokens=256,
+    stream=False,
+)
+```
+
+### Video-based responses
+
+> [!WARNING]
+> The `video_url` content type is an extension not part of the OpenAI standard and may change in future versions.
+
+> [!TIP]
+> Video processing requires [torchcodec](https://github.com/pytorch/torchcodec). Install it with `pip install torchcodec`.
+
+<hfoptions id="responses-video">
+<hfoption id="openai">
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
+
+response = client.responses.create(
+    model="google/gemma-4-E2B-it",
+    input=[
+        {"type": "input_text", "text": "What is happening in the video and what is the song about?"},
+        {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}},
+    ],
+    max_output_tokens=256,
+    stream=False,
+)
+print(response.output[0].content[0].text)
+```
+
+The [OpenAI](https://platform.openai.com/docs/quickstart) client returns a printed string.
+
+```
+The video captures a live music performance at a music festival or a large concert. There are several musicians on stage, including a central figure playing an acoustic guitar and singing. The foreground is filled with the backs of the audience, indicating a large crowd watching the show. The stage is dramatically lit with bright spotlights and blue and white stage lighting, with haze and smoke creating an immersive atmosphere.
+
+The lyrics of the song are: "I don't care 'bout street, from that fresh street, 'cause there's no problem, another one I want to be, in the storm..."
+```
+
+</hfoption>
+<hfoption id="openai (stream)">
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
+
+response = client.responses.create(
+    model="google/gemma-4-E2B-it",
+    input=[
+        {"type": "input_text", "text": "What is happening in the video and what is the song about?"},
+        {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}},
+    ],
+    max_output_tokens=256,
+    stream=True,
+)
+
+for event in response:
+    if hasattr(event, "delta") and event.delta:
+        print(event.delta, end="")
+```
+
+The [OpenAI](https://platform.openai.com/docs/quickstart) client returns a printed string.
+
+```
+The video captures a live music performance at a music festival or a large concert. There are several musicians on stage, including a central figure playing an acoustic guitar and singing. The foreground is filled with the backs of the audience, indicating a large crowd watching the show. The stage is dramatically lit with bright spotlights and blue and white stage lighting, with haze and smoke creating an immersive atmosphere.
+
+The lyrics of the song are: "I don't care 'bout street, from that fresh street, 'cause there's no problem, another one I want to be, in the storm..."
+```
+
+</hfoption>
+<hfoption id="curl">
+
+```shell
+curl http://localhost:8000/v1/responses \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "google/gemma-4-E2B-it",
+    "input": [
+      {"type": "input_text", "text": "What is happening in the video and what is the song about?"},
+      {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}}
+    ],
+    "max_output_tokens": 256,
+    "stream": false
+  }'
+```
+
+The command returns a JSON string.
+
+```json
+{
+  "id": "resp_b2c3d4e5-f6a7-8901-bcde-f12345678901",
+  "created_at": 1776258580.7114341,
+  "model": "google/gemma-4-E2B-it@main",
+  "object": "response",
+  "output": [
+    {
+      "id": "msg_b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "content": [
+        {
+          "annotations": [],
+          "text": "The video captures a live music performance at a music festival or a large concert [...]",
+          "type": "output_text"
+        }
+      ],
+      "role": "assistant",
+      "status": "completed",
+      "type": "message"
+    }
+  ],
+  "status": "completed"
+}
+```
+
+</hfoption>
+<hfoption id="curl (stream)">
+
+```shell
+curl http://localhost:8000/v1/responses \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "google/gemma-4-E2B-it",
+    "stream": true,
+    "input": [
+      {"type": "input_text", "text": "What is happening in the video and what is the song about?"},
+      {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}}
+    ],
+    "max_output_tokens": 256
+  }'
+```
+
+The command returns a stream of chunks.
+
+```shell
+data: {"response":{"id":"resp_b2c3d4e5-f6a7-8901-bcde-f12345678901","created_at":1776258580.7114341,"model":"google/gemma-4-E2B-it@main","object":"response","output":[],"status":"queued"},"sequence_number":0,"type":"response.created"}
+
+data: {"content_index":0,"delta":"Based ","item_id":"msg_b2c3d4e5","output_index":0,"sequence_number":5,"type":"response.output_text.delta"}
+
+(...)
+```
+
+</hfoption>
+</hfoptions>
+
+### Multi-turn conversations[[responses]]
+
+For multi-turn conversations, pass a list of messages with `role` keys in the `input` field. Like all OpenAI-compatible servers, the API is stateless, so every request must contain the complete conversation history.
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
+
+response = client.responses.create(
+    model="Qwen/Qwen2.5-0.5B-Instruct",
+    input=[
+        {"role": "user", "content": "What is the capital of France?"},
+        {"role": "assistant", "content": "The capital of France is Paris."},
+        {"role": "user", "content": "How many people live there?"},
+    ],
+    max_output_tokens=256,
+    stream=False,
+)
+print(response.output[0].content[0].text)
+```
+
+The follow-up question "How many people live there?" relies on the prior context, so the model answers about Paris.
+
+```
+As of 2021, Paris has a population of approximately 2.8 million people.
+```
 
 ## v1/audio/transcriptions
 
@@ -422,7 +1734,7 @@ The stream ends with exactly one terminal event, `ready` (success) or `error` (f
 
 ## Timeout
 
-`transformers serve` supports different requests by different models. Each model loads on demand and stays in GPU memory. Models unload automatically after 300 seconds of inactivity to free up GPU memory. Set `--model-timeout` to a different value in seconds, or `-1` to disable unloading entirely.
+`transformers serve` handles requests for any model. Each model loads on demand and stays in GPU memory. Models unload automatically after 300 seconds of inactivity to free GPU memory. Set `--model-timeout` to a different value in seconds, or `-1` to disable unloading.
 
 ```shell
 transformers serve --model-timeout 400
@@ -430,7 +1742,7 @@ transformers serve --model-timeout 400
 
 ### Loading examples
 
-See the example responses below for a freshly downloaded model, a model loaded from your local cache (skips the download stage), and a model that already exists in memory.
+The examples below show responses for a freshly downloaded model, a model loaded from your local cache (skips the download stage), and a model already in memory.
 
 <hfoptions id="load-model-examples">
 <hfoption id="fresh load">
@@ -472,7 +1784,7 @@ data: {"status": "ready", "model": "org/model@main", "cached": true}
 The `transformers serve` server supports OpenAI-style function calling. Models trained for tool-use generate structured function calls that your application executes.
 
 > [!NOTE]
-> Tool calling is currently limited to the Qwen model family.
+> Tool calling works with any model whose tokenizer declares tool call tokens. Qwen and Gemma 4 work out of the box. Open an [issue](https://github.com/huggingface/transformers/issues/new/choose) to request support for a specific model.
 
 Define tools as a list of function specifications following the OpenAI format.
 
@@ -534,6 +1846,79 @@ for event in response:
   print(event)
 ```
 
+### Multi-turn tool calling
+
+After the model returns a tool call, execute the function locally, then send the result back in a follow-up request to get the model's final answer. The pattern differs slightly between the two APIs. See the [OpenAI function calling guide](https://developers.openai.com/api/docs/guides/function-calling?api-mode=chat) for the full spec.
+
+The examples below reuse the `tools` list defined above.
+
+<hfoptions id="multi-turn-tool-calling">
+<hfoption id="v1/chat/completions">
+
+Pass the tool result as a `role: "tool"` message with the matching `tool_call_id`.
+
+```py
+# Model returns a tool call
+messages = [{"role": "user", "content": "What's the weather like in San Francisco?"}]
+response = client.chat.completions.create(
+    model="Qwen/Qwen2.5-7B-Instruct",
+    messages=messages,
+    tools=tools,
+)
+assistant_message = response.choices[0].message
+
+# Execute the tool locally
+tool_call = assistant_message.tool_calls[0]
+result = {"temperature": 22, "condition": "sunny"}  # your actual function call here
+
+# Send the tool result back
+messages.append(assistant_message)
+messages.append({
+    "role": "tool",
+    "tool_call_id": tool_call.id,
+    "content": json.dumps(result),
+})
+final_response = client.chat.completions.create(
+    model="Qwen/Qwen2.5-7B-Instruct",
+    messages=messages,
+    tools=tools,
+)
+print(final_response.choices[0].message.content)
+```
+
+</hfoption>
+<hfoption id="v1/responses">
+
+Pass the tool result as a `function_call_output` item in the `input` list of the follow-up request.
+
+```py
+user_message = {"role": "user", "content": "What's the weather like in San Francisco?"}
+response = client.responses.create(
+    model="Qwen/Qwen2.5-7B-Instruct",
+    input=[user_message],
+    tools=tools,
+    stream=False,
+)
+tool_call = next(item for item in response.output if item.type == "function_call")
+
+result = {"temperature": 22, "condition": "sunny"}
+
+final_response = client.responses.create(
+    model="Qwen/Qwen2.5-7B-Instruct",
+    input=[
+        user_message,
+        tool_call.model_dump(exclude_none=True),
+        {"type": "function_call_output", "call_id": tool_call.call_id, "output": json.dumps(result)},
+    ],
+    tools=tools,
+    stream=False,
+)
+print(final_response.output_text)
+```
+
+</hfoption>
+</hfoptions>
+
 ## Port forwarding
 
 Port forwarding lets you serve models from a remote server. Make sure you have SSH access to the server, then run this command on your local machine.
@@ -544,11 +1929,10 @@ ssh -N -f -L 8000:localhost:8000 your_server_account@your_server_IP -p port_to_s
 
 ## Reproducibility
 
-Use `--force-model <repo_id>` to avoid per-request model hints and produce stable, repeatable runs.
+Pass a model as a positional argument to avoid per-request model hints and produce stable, repeatable runs.
 
 ```sh
-transformers serve \
-  --force-model Qwen/Qwen2.5-0.5B-Instruct \
+transformers serve Qwen/Qwen2.5-0.5B-Instruct \
   --continuous-batching \
   --dtype "bfloat16"
 ```

@@ -95,7 +95,7 @@ class CompileableContextVar:
 _active_collector = CompileableContextVar("output_collector")
 
 
-def install_output_capuring_hook(module: nn.Module, key: str, index: int) -> None:
+def install_output_capturing_hook(module: nn.Module, key: str, index: int) -> None:
     """Install the forward hook needed to capture the output described by `key` and `index` in `module`."""
 
     def output_capturing_hook(module, args, output):
@@ -144,12 +144,12 @@ def recursively_install_hooks(
         ):
             if specs.layer_name is not None and specs.layer_name not in module_name:
                 continue
-            install_output_capuring_hook(parent_module, key, specs.index)
+            install_output_capturing_hook(parent_module, key, specs.index)
 
 
 def install_all_output_capturing_hooks(model: PreTrainedModel, prefix: str | None = None) -> None:
     """
-    Install the output recording hooks on all the modules in `model`. Tis will take care of correctly dispatching
+    Install the output recording hooks on all the modules in `model`. This will take care of correctly dispatching
     the `_can_record_outputs` property of each individual submodels in case of composite models.
     """
     # _can_record_outputs is None by default

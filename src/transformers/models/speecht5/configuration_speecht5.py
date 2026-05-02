@@ -262,7 +262,7 @@ class SpeechT5HifiGanConfig(PreTrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "hifigan"
+    model_type = "speecht5_hifigan"
 
     model_in_dim: int = 80
     sampling_rate: int = 16000

@@ -319,6 +319,7 @@ class Qwen3_5MoeForConditionalGeneration(Qwen3VLMoeForConditionalGeneration):
 __all__ = [
     "Qwen3_5MoeConfig",
     "Qwen3_5MoeTextConfig",
+    "Qwen3_5MoeVisionConfig",
     "Qwen3_5MoeVisionModel",
     "Qwen3_5MoeTextModel",
     "Qwen3_5MoeModel",
