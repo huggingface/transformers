@@ -353,6 +353,27 @@ class StaticLayer(CacheLayerMixin):
         """Return the maximum cache shape of the cache"""
         return self.max_cache_len
 
+    def crop(self, max_length: int) -> None:
+        """
+        Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
+        negative to remove `max_length` tokens. Zeros out evicted slots in-place to preserve static tensor addresses.
+        """
+        if not self.is_initialized:
+            return
+
+        seq_len = self.cumulative_length.item()
+        if max_length < 0:
+            max_length = seq_len - abs(max_length)
+        if max_length < 0:
+            max_length = 0
+
+        if seq_len <= max_length:
+            return
+
+        self.keys[:, :, max_length:, :] = 0
+        self.values[:, :, max_length:, :] = 0
+        self.cumulative_length.fill_(max_length)
+
 
 class StaticSlidingWindowLayer(StaticLayer):
     """
@@ -475,6 +496,19 @@ class StaticSlidingWindowLayer(StaticLayer):
     def get_seq_length(self) -> int:
         """Returns the sequence length of the cached states."""
         return self.cumulative_length_int
+
+    def crop(self, max_length: int) -> None:
+        """
+        Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
+        negative to remove `max_length` tokens.
+        """
+        if self.cumulative_length_int >= self.max_cache_len:
+            raise ValueError(
+                "Cannot `crop` a `StaticSlidingWindowLayer` after it has seen more tokens than its "
+                "sliding window (otherwise some states are lost)"
+            )
+        super().crop(max_length)
+        self.cumulative_length_int = self.cumulative_length.item()
 
     def reset(self):
         super().reset()

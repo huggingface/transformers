@@ -27,6 +27,7 @@ from ..utils import is_sklearn_available
 if is_sklearn_available():
     from sklearn.metrics import roc_curve
 
+from .configuration_utils import ALL_STATIC_CACHE_IMPLEMENTATIONS
 from .logits_process import LogitsProcessorList, MinLengthLogitsProcessor, SuppressTokensLogitsProcessor
 
 
@@ -186,8 +187,13 @@ class AssistedCandidateGenerator(CandidateGenerator):
             processor for processor in self.logits_processor if not isinstance(processor, MinLengthLogitsProcessor)
         ]
 
-        # We need to roll back the cache in assisted generation, only DynamicCache is supported
-        self.generation_config.cache_implementation = "dynamic_full"
+        # We need to roll back the cache in assisted generation. Static caches now support
+        # rollback via StaticLayer.crop(), so propagate the main model's cache_implementation
+        # when it is a static type; otherwise fall back to "dynamic_full".
+        if generation_config.cache_implementation in ALL_STATIC_CACHE_IMPLEMENTATIONS:
+            self.generation_config.cache_implementation = generation_config.cache_implementation
+        else:
+            self.generation_config.cache_implementation = "dynamic_full"
 
         if (
             is_sklearn_available()
@@ -303,8 +309,9 @@ class AssistedCandidateGenerator(CandidateGenerator):
             )
             self.assistant_kwargs = _prepare_token_type_ids(self.assistant_kwargs, input_ids.shape[-1])
 
-            # This unsets `dynamic_full`, needed to initialize a new cache for the assistant. After the first forward
-            # pass on each generation, we reuse the cache instead.
+            # Unset cache_implementation (whether "dynamic_full" or a static type) so that the
+            # assistant model reuses the existing cache from past_key_values on subsequent
+            # forward passes instead of initializing a new one.
             self.generation_config.cache_implementation = None
 
         return has_past_key_values
