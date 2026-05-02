@@ -224,7 +224,7 @@
     - local: debugging
       title: Debugging
     - local: perf_train_gpu_many
-      title: Parallelism methods
+      title: N-D parallelism
     title: Distributed training
   - isExpanded: false
     sections:
