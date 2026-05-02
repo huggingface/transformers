@@ -1085,6 +1085,8 @@ def set_param_for_module(
         if ref is not None and param_value.shape != expected_shape and hf_quantizer is None:
             loading_info.mismatched_keys.add((target_name, param_value.shape, expected_shape))
         else:
+            if distributed_operation is not None:
+                param_value = distributed_operation.post_shard_wrap(param_value)
             # super important otherwise _init_weight will re-init the param
             param_value._is_hf_initialized = True
             setattr(module_obj, param_name, param_value)

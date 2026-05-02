@@ -29,6 +29,7 @@ if is_torch_available():
     import torch
     import torch.distributed as dist
     from torch import nn
+    from torch.distributed.tensor import DTensor, Shard
 
     # Cache this result has it's a C FFI call which can be pretty time-consuming
     _torch_distributed_available = torch.distributed.is_available()
@@ -128,6 +129,17 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weig
     elif is_weight and "." in generic_param_name and (module_name := generic_param_name.rsplit(".", 1)[0]) in tp_plan:
         return tp_plan[module_name]
     return None
+
+
+def get_ep_sharded_param_names(model) -> list[str]:
+    """FQNs of parameters whose data is per-rank unique under EP sharding."""
+    if not getattr(model, "has_ep", False):
+        return []
+    return [
+        name
+        for name, _ in model.named_parameters()
+        if _get_parameter_tp_plan(parameter_name=name, tp_plan=model.tp_plan, is_weight=True) == "grouped_gemm"
+    ]
 
 
 # =============================================================================
@@ -685,6 +697,14 @@ class TensorParallelLayer:
         """
         pass
 
+    def post_shard_wrap(self, param: nn.Parameter) -> nn.Parameter:
+        """
+        Optional final wrap applied to a parameter after `shard_tensor` and before it is
+        attached to the module. Default is identity. Subclasses can override to e.g. wrap
+        the local shard as a DTensor.
+        """
+        return param
+
 
 class ColwiseParallel(TensorParallelLayer):
     """
@@ -1077,6 +1097,15 @@ class GroupedGemmParallel(TensorParallelLayer):
     def update_module_attributes(self, module: nn.Module):
         if hasattr(module, "num_experts"):
             module.num_experts = self.get_expected_sharded_shape((self.empty_param.shape[0],))[0]
+
+    def post_shard_wrap(self, param: nn.Parameter) -> nn.Parameter:
+        """
+        Wrap the EP-sharded local tensor as a DTensor on the TP/EP mesh. Without this, the
+        optimizer's foreach ops error with "mixed Tensor and DTensor" against the
+        FSDP-wrapped DTensor params on the rest of the model.
+        """
+        dt = DTensor.from_local(param.data, self.device_mesh, [Shard(0)], run_check=False)
+        return nn.Parameter(dt, requires_grad=param.requires_grad)
 
 
 class RouterParallel(TensorParallelLayer):
@@ -1488,6 +1517,8 @@ def shard_and_distribute_module(
     # otherwise loading is crazy slow
     if not isinstance(param, torch.nn.Parameter):
         param = torch.nn.Parameter(param, requires_grad=empty_param.is_floating_point())
+    if current_shard_plan is not None:
+        param = tp_layer.post_shard_wrap(param)
     setattr(module_to_tp, param_type, param)
     if tp_layer is not None:
         tp_layer.update_module_attributes(module_to_tp)

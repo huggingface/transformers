@@ -1396,11 +1396,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self._backward_compatibility_gradient_checkpointing()
 
     @property
+    def has_ep(self) -> bool:
+        """Whether expert parallelism is enabled for this model."""
+        distributed_config = getattr(getattr(self, "config", None), "distributed_config", None)
+        return distributed_config is not None and getattr(distributed_config, "enable_expert_parallel", False)
+
+    @property
     def tp_plan(self) -> dict[str, str]:
         """
         The full tp plan for the model's modules
         """
-        if hasattr(self.config, "distributed_config") and self.config.distributed_config.enable_expert_parallel:
+        if self.has_ep:
             return self._ep_plan
         return self._tp_plan
 

@@ -15,6 +15,8 @@
 from collections.abc import Callable
 from functools import wraps
 
+from torch.distributed.tensor import DTensor
+
 from ..utils import logging
 from ..utils.generic import GeneralInterface
 from ..utils.import_utils import (
@@ -405,17 +407,20 @@ def grouped_mm_experts_forward(
     tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1)
     offsets = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
 
+    def _local(p):
+        return p.to_local() if isinstance(p, DTensor) else p
+
     # Select expert weights and biases
     # NOTE: We keep all experts here and rely on offsets to target the active ones.
     # I have already implemented a version that only passes the active experts, but
     # to do so I had to use torch.unique which breaks the graph capture (data-dependent).
     # Also there were no speedup gains from it in my experiments, even in eager mode.
     if self.has_gate:
-        selected_weights = self.gate_up_proj
-        selected_biases = self.gate_up_proj_bias[expert_ids_g] if self.has_bias else None
+        selected_weights = _local(self.gate_up_proj)
+        selected_biases = _local(self.gate_up_proj_bias)[expert_ids_g] if self.has_bias else None
     else:
-        selected_weights = self.up_proj
-        selected_biases = self.up_proj_bias[expert_ids_g] if self.has_bias else None
+        selected_weights = _local(self.up_proj)
+        selected_biases = _local(self.up_proj_bias)[expert_ids_g] if self.has_bias else None
 
     # --- Up projection per expert (grouped) ---
     proj_out = _grouped_linear(
@@ -431,8 +436,8 @@ def grouped_mm_experts_forward(
         proj_out = self.act_fn(proj_out)  # (S, intermediate_dim)
 
     # Select down projection weights and biases
-    selected_weights = self.down_proj
-    selected_biases = self.down_proj_bias[expert_ids_g] if self.has_bias else None
+    selected_weights = _local(self.down_proj)
+    selected_biases = _local(self.down_proj_bias)[expert_ids_g] if self.has_bias else None
 
     # --- Down projection per expert (grouped) ---
     proj_out = _grouped_linear(
