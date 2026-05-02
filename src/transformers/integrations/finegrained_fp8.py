@@ -270,13 +270,11 @@ class FP8Linear(nn.Linear):
         if self.weight.element_size() > 1:
             return F.linear(input, self.weight, self.bias)
 
-        if isinstance(self.weight, torch.distributed.tensor.DTensor):
-            weight = self.weight._local_tensor.contiguous()
-            scale_inv = self.weight_scale_inv._local_tensor.contiguous()
-        else:
-            # why wouldn't it be contiguous?
-            weight = self.weight.contiguous()
-            scale_inv = self.weight_scale_inv.contiguous()
+        weight = self.weight
+        scale_inv = self.weight_scale_inv
+        if isinstance(weight, torch.distributed.tensor.DTensor):
+            weight = weight.to_local()
+            scale_inv = scale_inv.to_local()
 
         return fp8_linear(
             input,
@@ -391,11 +389,6 @@ def fp8_grouped_mm_experts_forward(
     sample_weights = top_k_weights.reshape(-1)  # (S,)
     expert_ids = top_k_index.reshape(-1)  # (S,)
 
-    # EP sentinel handling: leave `expert_ids` unclamped so the sort pushes sentinels to the tail,
-    # `histc(max=num_experts-1)` drops them from `tokens_per_expert`, and the grouped matmul skips
-    # rows beyond `offsets[-1]` — so sentinels cost no real GEMM compute. Sentinel rows are zeroed
-    # post-weighted-mul (see below), since the kernel leaves them uninitialized.
-
     # Sort by expert for grouped processing
     expert_ids_g, perm = torch.sort(expert_ids)
     selected_hidden_states_g = hidden_states[perm // num_top_k]
@@ -408,11 +401,31 @@ def fp8_grouped_mm_experts_forward(
     tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1)
     offsets = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
 
+    # EP sentinel handling: leave `expert_ids` unclamped so the sort pushes sentinels to the tail,
+    # `histc(max=num_experts-1)` drops them from `tokens_per_expert`, and the grouped matmul skips
+    # rows beyond `offsets[-1]` — sentinels cost no real GEMM compute. The kernel writes only
+    # valid rows, so sentinel-tail `proj_out` rows are uninit; without the post-mask below,
+    # `proj_out[sentinel] * 0 = NaN * 0 = NaN` would poison the per-token reduction. FP8
+    # quantized weights are inference-only, so no bwd pre-mask is needed.
+    sentinel_mask = (expert_ids_g >= self.num_experts).unsqueeze(-1)
+
+    # FSDP2 / EP wraps weights as DTensors but the kernel takes raw pointers — unwrap to
+    # local shards. Inference-only path, so `to_local()` autograd-awareness is moot.
+    w_up = self.gate_up_proj if self.has_gate else self.up_proj
+    ws_up = self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv
+    w_down = self.down_proj
+    ws_down = self.down_proj_scale_inv
+    if isinstance(w_up, torch.distributed.tensor.DTensor):
+        w_up = w_up.to_local()
+        ws_up = ws_up.to_local()
+        w_down = w_down.to_local()
+        ws_down = ws_down.to_local()
+
     # --- Up projection per expert (FP8 grouped) ---
     proj_out = finegrained_fp8.grouped_matmul(
         selected_hidden_states_g,
-        self.gate_up_proj if self.has_gate else self.up_proj,
-        self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv,
+        w_up,
+        ws_up,
         tokens_per_expert=tokens_per_expert,
         block_size=self.block_size,
         offsets=offsets,
@@ -429,8 +442,8 @@ def fp8_grouped_mm_experts_forward(
     # --- Down projection per expert (FP8 grouped) ---
     proj_out = finegrained_fp8.grouped_matmul(
         proj_out,
-        self.down_proj,
-        self.down_proj_scale_inv,
+        w_down,
+        ws_down,
         tokens_per_expert=tokens_per_expert,
         block_size=self.block_size,
         offsets=offsets,
@@ -439,10 +452,8 @@ def fp8_grouped_mm_experts_forward(
     # Apply routing weights
     weighted_out = proj_out * sample_weights_g.to(proj_out.dtype).unsqueeze(-1)  # (S, hidden_dim)
 
-    # EP sentinel handling: `proj_out` rows past `offsets[-1]` are left uninitialized by the kernel,
-    # so `proj_out[sentinel] * 0 = 0 * NaN = NaN` can leak from allocator pool reuse. Zero them here
-    # so the downstream reduction stays finite even when the routing weight was already zero.
-    weighted_out.masked_fill_((expert_ids_g >= self.num_experts).unsqueeze(-1), 0.0)
+    # Post-mask (fwd path).
+    weighted_out.masked_fill_(sentinel_mask, 0.0)
 
     # Restore original order
     inv_perm = torch.empty_like(perm)
