@@ -281,7 +281,7 @@ class Gemma3Vision2TextModelTester(VLMModelTester):
         # Gemma3 uses padding mask for bidirectional attention on image tokens
         return input_ids.ne(self.pad_token_id).to(torch_device)
 
-    def get_additional_inputs(self, config, input_ids, pixel_values):
+    def get_additional_inputs(self, config, input_ids, modality_inputs):
         # Gemma3 requires specific token_type_ids for bidirectional attention on image tokens
         token_type_ids = torch.zeros_like(input_ids)
         token_type_ids[input_ids == config.image_token_id] = 1

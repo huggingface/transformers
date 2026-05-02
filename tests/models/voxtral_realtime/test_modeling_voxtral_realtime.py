@@ -24,6 +24,10 @@ from transformers import (
     is_torch_available,
 )
 from transformers.audio_utils import load_audio
+from transformers.models.voxtral_realtime.configuration_voxtral_realtime import (
+    VoxtralRealtimeEncoderConfig,
+    VoxtralRealtimeTextConfig,
+)
 from transformers.testing_utils import (
     cleanup,
     require_torch,
@@ -31,10 +35,8 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
-from ...test_pipeline_mixin import PipelineTesterMixin
+from ...alm_tester import ALMModelTest, ALMModelTester
+from ...test_modeling_common import floats_tensor, ids_tensor
 
 
 if is_datasets_available():
@@ -44,135 +46,83 @@ if is_torch_available():
     import torch
 
 
-class VoxtralRealtimeModelTester:
-    def __init__(
-        self,
-        parent,
-        ignore_index=-100,
-        audio_token_id=0,
-        seq_length=5,
-        feat_seq_length=40,
-        text_config={
-            "model_type": "voxtral_realtime_text",
-            "intermediate_size": 36,
-            "initializer_range": 0.02,
-            "hidden_size": 32,
-            "max_position_embeddings": 52,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "num_key_value_heads": 2,
-            "use_labels": True,
-            "vocab_size": 99,
-            "head_dim": 8,
-            "pad_token_id": 1,  # can't be the same as the audio token id
-            "hidden_act": "silu",
-            "rms_norm_eps": 1e-6,
-            "attention_dropout": 0.0,
-            "rope_parameters": {
-                "rope_type": "default",
-                "rope_theta": 10000.0,
-            },
-        },
-        is_training=True,
-        audio_config={
-            "model_type": "voxtral_realtime_encoder",
-            "hidden_size": 16,
-            "num_attention_heads": 4,
-            "num_key_value_heads": 2,
-            "intermediate_size": 64,
-            "encoder_layers": 2,
-            "num_mel_bins": 80,
-            "max_position_embeddings": 100,
-            "initializer_range": 0.02,
-            "rms_norm_eps": 1e-6,
-            "activation_function": "silu",
-            "activation_dropout": 0.0,
-            "attention_dropout": 0.0,
-            "head_dim": 4,
-            "rope_parameters": {
-                "rope_type": "default",
-                "rope_theta": 10000.0,
-            },
-        },
-    ):
-        self.parent = parent
-        self.ignore_index = ignore_index
-        self.audio_token_id = audio_token_id
-        self.text_config = text_config
-        self.audio_config = audio_config
-        self.seq_length = seq_length
-        self.feat_seq_length = feat_seq_length
+class VoxtralRealtimeModelTester(ALMModelTester):
+    config_class = VoxtralRealtimeConfig
+    conditional_generation_class = VoxtralRealtimeForConditionalGeneration
+    text_config_class = VoxtralRealtimeTextConfig
+    audio_config_class = VoxtralRealtimeEncoderConfig
 
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.is_training = is_training
+    def __init__(self, parent, **kwargs):
+        # VoxtralRealtime does additive audio/text fusion: seq_length must equal num_audio_embeds.
+        # With audio_length_per_tok=8 (config default), num_audio_embeds = feat_seq_length // 8.
+        kwargs.setdefault("seq_length", 32)
+        kwargs.setdefault("feat_seq_length", kwargs["seq_length"] * 8)
+        # Audio encoder uses RoPE; max position must cover post-conv length (feat_seq_length // 2).
+        kwargs.setdefault("max_position_embeddings", kwargs["feat_seq_length"])
+        kwargs.setdefault("head_dim", 8)
+        kwargs.setdefault("rms_norm_eps", 1e-6)
+        kwargs.setdefault("activation_function", "silu")
+        kwargs.setdefault("hidden_act", "silu")
+        super().__init__(parent, **kwargs)
+        self._max_new_tokens = None
 
-        self.batch_size = 3
-        self.encoder_seq_length = seq_length
-        self._max_new_tokens = None  # this is used to set
+    def get_audio_embeds_mask(self, audio_mask):
+        # Causal conv2 (stride 2, left-pad 1): post_conv_len = feat_seq_length // 2.
+        # Projector reshapes by downsample_factor=4 → post_conv_len // downsample_factor embeds.
+        downsample_factor = 4
+        effective_feat = self.feat_seq_length + (self._max_new_tokens or 0) * 8
+        post_conv_len = effective_feat // 2
+        output_length = post_conv_len // downsample_factor
+        return torch.ones([self.batch_size, output_length], dtype=torch.long).to(torch_device)
 
-    def get_config(self):
-        return VoxtralRealtimeConfig(
-            text_config=self.text_config,
-            audio_config=self.audio_config,
-            ignore_index=self.ignore_index,
-            audio_token_id=self.audio_token_id,
-        )
+    def create_audio_features(self):
+        effective_feat = self.feat_seq_length + (self._max_new_tokens or 0) * 8
+        return floats_tensor([self.batch_size, self.num_mel_bins, effective_feat])
 
-    def prepare_config_and_inputs(self):
-        if self._max_new_tokens is not None:
-            feat_seq_length = self.feat_seq_length + self._max_new_tokens * 8
-        else:
-            feat_seq_length = self.feat_seq_length
-
-        input_features_values = floats_tensor(
-            [
-                self.batch_size,
-                self.audio_config["num_mel_bins"],
-                feat_seq_length,
-            ]
-        )
-        config = self.get_config()
-        return config, input_features_values
+    def place_audio_tokens(self, input_ids, config, num_audio_tokens):
+        # VoxtralRealtime fuses audio additively over the whole sequence; no placeholder token required.
+        input_ids = input_ids.clone()
+        input_ids[input_ids == self.audio_token_id] = self.pad_token_id
+        return input_ids
 
     def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        config, input_features_values = config_and_inputs
-        num_audio_tokens_per_batch_idx = 30
+        # Custom pipeline: input_ids at seq_length, audio covers seq_length (+ max_new_tokens extras
+        # during generation so the model can slice future-token audio per decode step). We do not run
+        # the base-class `audio_embeds_mask.shape[1] <= seq_length` invariant because, for this model,
+        # audio embeds legitimately exceed input length during generation.
+        audio_features = self.create_audio_features()
 
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
-        attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
-        attention_mask[:, :1] = 0
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        special_tokens = [self.pad_token_id, self.bos_token_id, self.eos_token_id, self.audio_token_id]
+        for safe_id in range(self.vocab_size):
+            if safe_id not in special_tokens:
+                break
+        else:
+            raise ValueError("vocab_size too small for a non-special safe token.")
+        input_ids[input_ids == self.pad_token_id] = safe_id
+        input_ids[input_ids == self.eos_token_id] = safe_id
 
-        input_ids[:, 1 : 1 + num_audio_tokens_per_batch_idx] = config.audio_token_id
-        inputs_dict = {
+        config = self.get_config()
+        # place_audio_tokens is a no-op for this model; call for symmetry.
+        input_ids = self.place_audio_tokens(input_ids, config, torch.tensor([self.seq_length] * self.batch_size))
+        attention_mask = self.create_attention_mask(input_ids)
+
+        return config, {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "input_features": input_features_values,
+            "input_features": audio_features,
         }
-        return config, inputs_dict
 
 
 @require_torch
-class VoxtralRealtimeForConditionalGenerationModelTest(
-    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
-):
+class VoxtralRealtimeForConditionalGenerationModelTest(ALMModelTest, unittest.TestCase):
     """
     Model tester for `VoxtralRealtimeForConditionalGeneration`.
     """
 
     additional_model_inputs = ["input_features"]
-
-    all_model_classes = (VoxtralRealtimeForConditionalGeneration,) if is_torch_available() else ()
+    model_tester_class = VoxtralRealtimeModelTester
     pipeline_model_mapping = {"any-to-any": VoxtralRealtimeForConditionalGeneration} if is_torch_available() else {}
-
-    _is_composite = True
-
-    def setUp(self):
-        self.model_tester = VoxtralRealtimeModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VoxtralRealtimeConfig, has_text_modality=False)
 
     def _with_max_new_tokens(max_new_tokens):
         def decorator(test_func):
@@ -209,8 +159,11 @@ class VoxtralRealtimeForConditionalGenerationModelTest(
     def test_generate_with_and_without_position_ids(self):
         super().test_generate_with_and_without_position_ids()
 
-    @unittest.skip(reason="VoxtralRealtime does not have a base model")
-    def test_model_base_model_prefix(self):
+    @unittest.skip(
+        reason="This test does not apply to VoxtralRealtime: audio tokens are not replaced in inputs_embeds, "
+        "audio and text embeddings are summed instead."
+    )
+    def test_mismatching_num_audio_tokens(self):
         pass
 
     @unittest.skip(
