@@ -186,7 +186,7 @@ class Bnb4bitSerialize(ConversionOps):
 
         # After LoRA merge the weight is a plain tensor — nothing to re-serialize.
         if not isinstance(weight, bnb.nn.Params4bit):
-            return {"": weight}
+            return {"weight": weight}
 
         result = {"weight": weight.data}
         if weight.quant_state is not None:
