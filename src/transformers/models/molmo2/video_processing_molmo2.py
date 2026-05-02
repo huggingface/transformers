@@ -179,10 +179,6 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
     size = {"height": 378, "width": 378}
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
-    do_resize = True
-    do_rescale = True
-    do_normalize = True
-    do_convert_rgb = True
     patch_size = 14
     pooling_size = [3, 3]
     num_frames = 64
@@ -266,9 +262,6 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
-        if size.height is None or size.width is None:
-            raise ValueError("size must contain 'height' and 'width' keys.")
-
         base_image_input_size = [size.height, size.width]
         image_pooling_h, image_pooling_w = pooling_size
 

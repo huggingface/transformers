@@ -39,15 +39,11 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
-    ModelTesterMixin,
     _config_zero_init,
     floats_tensor,
-    ids_tensor,
 )
-from ...test_pipeline_mixin import PipelineTesterMixin
+from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
 if is_torch_available():
@@ -57,107 +53,125 @@ if is_vision_available():
     from PIL import Image
 
 
-class Molmo2VisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        seq_length=7,
-        num_channels=3,
-        ignore_index=-100,
-        image_size=378,
-        text_config={
-            "bos_token_id": 0,
-            "eos_token_id": 1,
-            "pad_token_id": 2,
-            "hidden_act": "silu",
-            "head_dim": 128,
-            "hidden_size": 32,
-            "vocab_size": 99,
-            "intermediate_size": 37,
-            "max_position_embeddings": 512,
-            "model_type": "molmo2_text",
-            "num_attention_heads": 4,
-            "num_hidden_layers": 2,
-            "num_key_value_heads": 2,
-            "rope_theta": 10000.0,
-            "tie_word_embeddings": False,
-            "use_qk_norm": False,
-            "layer_norm_eps": 1e-6,
-        },
-        vit_config={
-            "hidden_size": 32,
-            "intermediate_size": 37,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "num_key_value_heads": 4,
-            "head_dim": 8,
-            "hidden_act": "gelu_pytorch_tanh",
-            "layer_norm_eps": 1e-6,
-            "image_default_input_size": [378, 378],
-            "image_patch_size": 14,
-            "image_num_pos": 729,
-            "attention_dropout": 0.0,
-            "residual_dropout": 0.0,
-        },
-        adapter_config={
-            "vit_layers": [-1],
-            "pooling_attention_mask": False,
-            "hidden_size": 32,
-            "num_attention_heads": 4,
-            "num_key_value_heads": 4,
-            "head_dim": 8,
-            "intermediate_size": 37,
-            "text_hidden_size": 32,
-            "hidden_act": "silu",
-        },
-        image_start_token_id=3,
-        image_end_token_id=4,
-        image_patch_id=5,
-        image_col_id=6,
-        tie_word_embeddings=False,
-        is_training=True,
-    ):
-        self.parent = parent
-        self.ignore_index = ignore_index
-        self.is_training = is_training
+class Molmo2VisionText2TextModelTester(VLMModelTester):
+    base_model_class = Molmo2Model
+    config_class = Molmo2Config
+    text_config_class = Molmo2TextConfig
+    vision_config_class = Molmo2VitConfig
+    conditional_generation_class = Molmo2ForConditionalGeneration
 
-        self.vit_config = vit_config
-        self.adapter_config = adapter_config
-        self.text_config = text_config
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("image_size", 378)
+        kwargs.setdefault("patch_size", 14)
+        kwargs.setdefault("num_image_tokens", 32)
+        kwargs.setdefault("seq_length", 7 + kwargs["num_image_tokens"])
+        kwargs.setdefault("hidden_size", 32)
+        kwargs.setdefault("intermediate_size", 37)
+        kwargs.setdefault("num_attention_heads", 4)
+        kwargs.setdefault("num_key_value_heads", 2)
+        kwargs.setdefault("head_dim", 128)
+        kwargs.setdefault("num_hidden_layers", 2)
+        kwargs.setdefault("hidden_act", "silu")
+        kwargs.setdefault("max_position_embeddings", 512)
+        kwargs.setdefault("bos_token_id", 0)
+        kwargs.setdefault("eos_token_id", 1)
+        kwargs.setdefault("pad_token_id", 2)
+        kwargs.setdefault("image_start_token_id", 3)
+        kwargs.setdefault("image_end_token_id", 4)
+        kwargs.setdefault("image_patch_id", 5)
+        kwargs.setdefault("image_col_id", 6)
+        # Alias so base helpers (special-token clearing, mismatch tests) protect image patch tokens.
+        kwargs.setdefault("image_token_id", kwargs["image_patch_id"])
+        super().__init__(parent, **kwargs)
 
-        self.vocab_size = text_config["vocab_size"]
-        self.bos_token_id = text_config["bos_token_id"]
-        self.eos_token_id = text_config["eos_token_id"]
-        self.pad_token_id = text_config["pad_token_id"]
-        self.head_dim = text_config["head_dim"]
-        self.hidden_size = text_config["hidden_size"]
-        self.intermediate_size = text_config["intermediate_size"]
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.num_key_value_heads = text_config["num_key_value_heads"]
-        self.rope_theta = text_config["rope_theta"]
-        self.hidden_act = text_config["hidden_act"]
-        self.max_position_embeddings = text_config["max_position_embeddings"]
-        self.model_type = text_config["model_type"]
+    def create_pixel_values(self):
+        # Molmo2 expects flattened patches: (batch, num_crops, n_patches, pixels_per_patch).
+        num_patches = (self.image_size // self.patch_size) ** 2
+        return floats_tensor(
+            [
+                self.batch_size,
+                1,
+                num_patches,
+                self.patch_size * self.patch_size * self.num_channels,
+            ]
+        )
 
-        self.image_start_token_id = image_start_token_id
-        self.image_end_token_id = image_end_token_id
-        self.image_patch_id = image_patch_id
-        self.image_col_id = image_col_id
-        self.tie_word_embeddings = tie_word_embeddings
+    def place_image_tokens(self, input_ids, config):
+        input_ids = input_ids.clone()
+        input_ids[:, -1] = self.pad_token_id
+        input_ids[input_ids == self.image_patch_id] = self.pad_token_id
+        input_ids[:, : self.num_image_tokens] = self.image_patch_id
+        return input_ids
 
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.num_image_tokens = 32
-        self.seq_length = seq_length + self.num_image_tokens
+    def create_attention_mask(self, input_ids):
+        # Molmo2 expects a standard 2D padding mask of ones, not the base's tril matrix.
+        return torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
+
+    def get_additional_inputs(self, config, input_ids, pixel_values):
+        num_patches = (self.image_size // self.patch_size) ** 2
+        # Mark image-patch positions; required by the training-mode mask path.
+        token_type_ids = torch.zeros_like(input_ids)
+        token_type_ids[input_ids == self.image_patch_id] = 1
+        return {
+            "image_token_pooling": torch.randint(
+                -1,
+                num_patches,
+                (self.batch_size, self.num_image_tokens, 4),
+                device=torch_device,
+            ),
+            "image_grids": torch.tensor([[4, 4, 4, 4]] * self.batch_size, device=torch_device),
+            "image_num_crops": torch.ones(self.batch_size, dtype=torch.long, device=torch_device),
+            "token_type_ids": token_type_ids,
+        }
 
     def get_config(self):
+        text_config = Molmo2TextConfig(
+            bos_token_id=self.bos_token_id,
+            eos_token_id=self.eos_token_id,
+            pad_token_id=self.pad_token_id,
+            hidden_act=self.hidden_act,
+            head_dim=self.head_dim,
+            hidden_size=self.hidden_size,
+            vocab_size=self.vocab_size,
+            intermediate_size=self.intermediate_size,
+            max_position_embeddings=self.max_position_embeddings,
+            num_attention_heads=self.num_attention_heads,
+            num_hidden_layers=self.num_hidden_layers,
+            num_key_value_heads=self.num_key_value_heads,
+            rope_theta=10000.0,
+            tie_word_embeddings=self.tie_word_embeddings,
+            layer_norm_eps=1e-6,
+        )
+        vit_config = Molmo2VitConfig(
+            hidden_size=32,
+            intermediate_size=37,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            head_dim=8,
+            hidden_act="gelu_pytorch_tanh",
+            layer_norm_eps=1e-6,
+            image_default_input_size=[self.image_size, self.image_size],
+            image_patch_size=self.patch_size,
+            image_num_pos=(self.image_size // self.patch_size) ** 2,
+            attention_dropout=0.0,
+            residual_dropout=0.0,
+        )
+        adapter_config = Molmo2AdapterConfig(
+            vit_layers=[-1],
+            pooling_attention_mask=False,
+            hidden_size=32,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            head_dim=8,
+            intermediate_size=37,
+            text_hidden_size=32,
+            hidden_act="silu",
+        )
         return Molmo2Config(
-            text_config=Molmo2TextConfig(**self.text_config),
-            vit_config=Molmo2VitConfig(**self.vit_config),
-            adapter_config=Molmo2AdapterConfig(**self.adapter_config),
+            text_config=text_config,
+            vit_config=vit_config,
+            adapter_config=adapter_config,
             image_start_token_id=self.image_start_token_id,
             image_end_token_id=self.image_end_token_id,
             image_patch_id=self.image_patch_id,
@@ -165,60 +179,14 @@ class Molmo2VisionText2TextModelTester:
             tie_word_embeddings=self.tie_word_embeddings,
         )
 
-    def prepare_config_and_inputs(self):
-        config = self.get_config()
-        patch_size = config.vit_config.image_patch_size
-        num_patches = (self.image_size // patch_size) ** 2
-        pixel_values = floats_tensor(
-            [
-                self.batch_size,
-                1,  # num_crops
-                num_patches,
-                patch_size * patch_size * self.num_channels,
-            ]
-        )
-        image_token_pooling = torch.randint(
-            -1, num_patches, (self.batch_size, self.num_image_tokens, 4), device=torch_device
-        )
-        image_grids = torch.tensor([[4, 4, 4, 4]] * self.batch_size, device=torch_device)
-
-        return config, pixel_values, image_token_pooling, image_grids
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values, image_token_pooling, image_grids = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
-
-        input_ids[:, -1] = self.pad_token_id
-        input_ids[input_ids == self.image_patch_id] = self.pad_token_id
-        input_ids[:, : self.num_image_tokens] = self.image_patch_id
-        inputs_dict = {
-            "pixel_values": pixel_values,
-            "image_token_pooling": image_token_pooling,
-            "image_grids": image_grids,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-        }
-        return config, inputs_dict
-
 
 @require_torch
-class Molmo2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
     """
     Model tester for `Molmo2ForConditionalGeneration`.
     """
 
-    all_model_classes = (
-        (
-            Molmo2Model,
-            Molmo2ForConditionalGeneration,
-        )
-        if is_torch_available()
-        else ()
-    )
-    all_generative_model_classes = (Molmo2ForConditionalGeneration,) if is_torch_available() else ()
-    # Molmo2TextModel is a text-only sub-component, not a standalone composite model
+    model_tester_class = Molmo2VisionText2TextModelTester
     pipeline_model_mapping = (
         {
             "image-to-text": Molmo2ForConditionalGeneration,
@@ -230,14 +198,6 @@ class Molmo2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     test_torchscript = False
     test_pruning = False
     test_head_masking = False
-    _is_composite = True
-
-    def setUp(self):
-        self.model_tester = Molmo2VisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Molmo2Config, has_text_modality=False)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -264,6 +224,7 @@ class Molmo2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             del inputs["pixel_values"]
             del inputs["image_token_pooling"]
             del inputs["image_grids"]
+            del inputs["image_num_crops"]
 
             wte = model.get_input_embeddings()
             inputs["inputs_embeds"] = wte(input_ids)
@@ -286,6 +247,7 @@ class Molmo2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             del inputs["pixel_values"]
             del inputs["image_token_pooling"]
             del inputs["image_grids"]
+            del inputs["image_num_crops"]
 
             inputs_embeds = model.get_input_embeddings()(input_ids)
 
@@ -314,10 +276,6 @@ class Molmo2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     @unittest.skip(reason="VLMs have dynamic control flow in preparing inputs for generation")
     def test_generate_compile_1_end_to_end(self):
-        pass
-
-    @unittest.skip(reason="Cannot unpad inputs for all modalities so easily")
-    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
 
     @unittest.skip(reason="Molmo2 weights are not tied.")
@@ -384,6 +342,7 @@ class Molmo2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][:1, ...]
             curr_input_dict["image_token_pooling"] = curr_input_dict["image_token_pooling"][:1, ...]
             curr_input_dict["image_grids"] = curr_input_dict["image_grids"][:1, ...]
+            curr_input_dict["image_num_crops"] = curr_input_dict["image_num_crops"][:1, ...]
             _ = model(**curr_input_dict)
 
     # Image features get cached in KV cache like other VLMs; no need to skip.

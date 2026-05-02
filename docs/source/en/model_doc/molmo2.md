@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-01-15 and added to Hugging Face Transformers on 2026-04-14.*
+*This model was released on 2026-01-15 and added to Hugging Face Transformers on 2026-05-02.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -45,7 +45,6 @@ import torch
 processor = Molmo2Processor.from_pretrained("allenai/Molmo2-8B")
 model = Molmo2ForConditionalGeneration.from_pretrained(
     "allenai/Molmo2-8B",
-    torch_dtype=torch.bfloat16,
     device_map="auto",
 )
 

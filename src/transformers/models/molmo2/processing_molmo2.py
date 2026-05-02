@@ -143,8 +143,10 @@ class Molmo2Processor(ProcessorMixin):
         """
         super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template)
 
-        self.image_placeholder_token = IMAGE_PROMPT
-        self.video_placeholder_token = VIDEO_PROMPT
+        self.image_token = IMAGE_PROMPT
+        self.video_token = VIDEO_PROMPT
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.video_token_id = tokenizer.convert_tokens_to_ids(self.video_token)
         self.image_token_ids = [tokenizer.convert_tokens_to_ids(token) for token in IMAGE_TOKENS]
         self.image_ids = self.image_token_ids
         self.image_use_col_tokens = image_use_col_tokens
@@ -259,7 +261,7 @@ class Molmo2Processor(ProcessorMixin):
 
             src_idx = np.tile(np.arange(S), (B, 1))  # [B, S]
             valid_mask = src_idx >= first_valid_index[:, None]  # [B, S]
-            tgt_idx = src_idx + 1  # shit right
+            tgt_idx = src_idx + 1  # shift right
             batch_idx = np.tile(np.arange(B)[:, None], (1, S))  # [B, S]
 
             # flatten valid_positions
@@ -340,18 +342,18 @@ class Molmo2Processor(ProcessorMixin):
         if image_grids is not None:
             index = 0
             for i in range(len(text)):
-                num_images = text[i].count(self.image_placeholder_token)
+                num_images = text[i].count(self.image_token)
                 image_grids_i = image_grids[index : index + num_images]
                 for image_grid in image_grids_i:
                     image_tokens = self.get_image_tokens(image_grid)
                     image_string = "".join(image_tokens)
-                    text[i] = text[i].replace(self.image_placeholder_token, image_string, 1)
+                    text[i] = text[i].replace(self.image_token, image_string, 1)
                 index += num_images
 
         if video_grids is not None:
             index = 0
             for i in range(len(text)):
-                num_videos = text[i].count(self.video_placeholder_token)
+                num_videos = text[i].count(self.video_token)
                 if num_videos > 1:
                     raise ValueError("At most one video is supported per sample.")
                 video_grids_i = video_grids[index : index + num_videos]
@@ -361,7 +363,7 @@ class Molmo2Processor(ProcessorMixin):
                         video_grid,
                         metadata.timestamps,
                     )
-                    text[i] = text[i].replace(self.video_placeholder_token, video_string, 1)
+                    text[i] = text[i].replace(self.video_token, video_string, 1)
                 index += num_videos
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)

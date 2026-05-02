@@ -115,10 +115,6 @@ class Molmo2TextConfig(PreTrainedConfig):
         Dictionary containing the scaling configuration for the RoPE embeddings.
     rope_scaling_layers (`list[int]`, *optional*):
         List of layer indices where rope scaling is applied.
-    use_qk_norm (`bool`, *optional*, defaults to `False`):
-        Whether to apply query-key normalization.
-    qk_norm_type (`str`, *optional*, defaults to `"olmo"`):
-        The type of query-key normalization to use.
     norm_after (`bool`, *optional*, defaults to `False`):
         Whether to apply layer normalization after the attention/FFN blocks instead of before.
     """
@@ -135,7 +131,7 @@ class Molmo2TextConfig(PreTrainedConfig):
     base_model_pp_plan = {
         "wte": (["input_ids"], ["inputs_embeds"]),
         "blocks": (["hidden_states", "attention_mask"], ["hidden_states"]),
-        "ln_f": (["hidden_states"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
     }
 
     hidden_size: int = 3584
@@ -155,8 +151,6 @@ class Molmo2TextConfig(PreTrainedConfig):
     rope_theta: float = 1000000.0
     rope_scaling: dict[str, Any] | None = None
     rope_scaling_layers: list[int] | None = None
-    use_qk_norm: bool = False
-    qk_norm_type: str = "olmo"
     layer_norm_eps: float = 1e-6
     norm_after: bool = False
     initializer_range: float = 0.02
@@ -236,6 +230,15 @@ class Molmo2Config(PreTrainedConfig):
             self.text_config = self.sub_configs["text_config"](**self.text_config)
         elif self.text_config is None:
             self.text_config = self.sub_configs["text_config"]()
+
+        # Normalize negative `vit_layers` indices and trim the ViT to the deepest layer the adapter actually reads.
+        num_vit_layers = self.vit_config.num_hidden_layers
+        self.adapter_config.vit_layers = [
+            layer if layer >= 0 else layer + num_vit_layers for layer in self.adapter_config.vit_layers
+        ]
+        last_layer_needed = max(self.adapter_config.vit_layers) + 1
+        if last_layer_needed < num_vit_layers:
+            self.vit_config.num_hidden_layers = last_layer_needed
 
         self.image_high_res_id = self.image_patch_id
         self.use_cache = self.text_config.use_cache
