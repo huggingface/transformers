@@ -120,6 +120,7 @@ from .utils import (
     is_torch_npu_available,
     is_torch_xpu_available,
     logging,
+    deprecated,
 )
 from .utils.generic import GeneralInterface, is_flash_attention_requested, split_attention_implementation
 from .utils.hub import DownloadKwargs, create_and_tag_model_card, get_checkpoint_shard_files
@@ -2661,6 +2662,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Remove from missing if necessary
             if missing_keys is not None and remove_from_missing:
                 missing_keys.discard(target_param_name)
+    @deprecated(
+    "5.0.0",
+    message=(
+        "`tie_embeddings_and_encoder_decoder` was renamed to `tie_weights` in Transformers v5. "
+        "Please update your code. "
+        "See #"
+     ),
+   )
+    def tie_embeddings_and_encoder_decoder(*args, **kwargs):
+        return tie_weights(*args, **kwargs)
 
     def _adjust_bias(self, output_embeddings, input_embeddings):
         if getattr(output_embeddings, "bias", None) is not None and hasattr(output_embeddings, "weight"):
