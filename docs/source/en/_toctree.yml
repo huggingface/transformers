@@ -213,8 +213,10 @@
       title: Accelerator selection
     - local: accelerate
       title: Accelerate
+    - local: ddp
+      title: DDP
     - local: fsdp
-      title: FullyShardedDataParallel
+      title: FSDP2
     - local: deepspeed
       title: DeepSpeed ZeRO
     - local: deepspeed_alst
@@ -237,7 +239,7 @@
     - local: perf_hardware
       title: Building a GPU workstation
     - local: model_memory_anatomy
-      title: Model training anatomy
+      title: GPU memory usage
     title: Hardware
   title: Training
 - isExpanded: false
