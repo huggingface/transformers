@@ -73,7 +73,11 @@ class Bnb4bitDeserialize(ConversionOps):
         Deserialization of bnb keys. We need 6 keys to recreate the quantized weights
         """
         if len(input_dict) == 1:
-            return input_dict
+            value = list(input_dict.values())[0]
+            if isinstance(value, list):
+                value = value[0]
+            return {full_layer_name: value}
+
 
         for key, value in input_dict.items():
             if isinstance(value, list):
@@ -139,9 +143,10 @@ class Bnb8bitDeserialize(ConversionOps):
         Deserialization of bnb keys.
         """
         if len(input_dict) == 1:
-            # special case when we only fetched the weight
-            # since we collected keys, we need to return it like that
-            return input_dict
+            value = list(input_dict.values())[0]
+            if isinstance(value, list):
+                value = value[0]
+            return {full_layer_name: value}
 
         for key, value in input_dict.items():
             if isinstance(value, list):
