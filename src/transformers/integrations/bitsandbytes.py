@@ -92,6 +92,10 @@ class Bnb4bitDeserialize(ConversionOps):
         module._is_hf_initialized = True
         return {key_weight: new_value}
 
+    @property
+    def reverse_op(self):
+        return Bnb4bitSerialize(self.hf_quantizer)
+
 
 class Bnb8bitQuantize(ConversionOps):
     def __init__(self, hf_quantizer):
@@ -118,6 +122,10 @@ class Bnb8bitQuantize(ConversionOps):
         kwargs.pop("SCB", None)
         new_value = bnb.nn.Int8Params(value.to("cpu"), requires_grad=False, **kwargs).to(value_device)
         return {full_layer_name: new_value}
+
+    @property
+    def reverse_op(self):
+        return Bnb8bitSerialize(self.hf_quantizer) 
 
 
 class Bnb8bitDeserialize(ConversionOps):
@@ -152,6 +160,66 @@ class Bnb8bitDeserialize(ConversionOps):
         new_value = bnb.nn.Int8Params(weight, requires_grad=False, **kwargs).to(weight.device)
         module._is_hf_initialized = True
         return {key_weight: new_value}
+
+class Bnb4bitSerialize(ConversionOps):
+    """
+    Reverse of Bnb4bitDeserialize: re-serializes a Params4bit weight back
+    into the multi-key checkpoint format expected by from_prequantized.
+    When the weight has already been dequantized (e.g. after LoRA merge),
+    it is returned as-is under the 'weight' key.
+    """
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(
+        self,
+        input_dict: dict[str, list[torch.Tensor]],
+        model: torch.nn.Module | None = None,
+        full_layer_name: str | None = None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        weight = list(input_dict.values())[0]
+        if isinstance(weight, list):
+            weight = weight[0]
+
+        # After LoRA merge the weight is a plain tensor — nothing to re-serialize.
+        if not isinstance(weight, bnb.nn.Params4bit):
+            return {"weight": weight}
+
+        result = {"weight": weight.data}
+        if weight.quant_state is not None:
+            for key, val in weight.quant_state.as_dict(packed=True).items():
+                result[f"weight.{key}"] = val
+        return result
+
+
+class Bnb8bitSerialize(ConversionOps):
+    """
+    Reverse of Bnb8bitDeserialize: re-serializes an Int8Params weight back
+    into the multi-key checkpoint format.
+    When the weight has already been dequantized, it is returned as-is.
+    """
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(
+        self,
+        input_dict: dict[str, list[torch.Tensor]],
+        model: torch.nn.Module | None = None,
+        full_layer_name: str | None = None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        weight = list(input_dict.values())[0]
+        if isinstance(weight, list):
+            weight = weight[0]
+
+        if not isinstance(weight, bnb.nn.Int8Params):
+            return {"weight": weight}
+
+        result = {"weight": weight.data}
+        if hasattr(weight, "SCB") and weight.SCB is not None:
+            result["weight.SCB"] = weight.SCB
+        return result
 
 
 def replace_with_bnb_linear(
