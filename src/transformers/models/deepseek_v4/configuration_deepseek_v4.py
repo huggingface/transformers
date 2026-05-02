@@ -105,22 +105,21 @@ class DeepseekV4Config(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-    base_model_tp_plan = {
-        # V4 attention is shared-KV MQA (`num_key_value_heads = 1`) plus a CSA / HCA
-        # compressor branch fed by the same `kv_proj`, both feeding `repeat_kv` to
-        # broadcast the single KV head across all attention heads. Colwise-sharding
-        # `q_b_proj` would split the queries per rank but leave KV replicated,
-        # which the compressor branch (and `repeat_kv`) can't reconcile —
-        # rank-local query head counts would no longer match the compressor's
-        # output. So the attention path stays replicated across ranks; only the
-        # MoE experts (the dominant parameter count anyway) get parallelised, via
-        # `moe_tp_experts` (== expert parallelism on the routed experts).
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
+    base_model_ep_plan = {
+        # EP-only by default, same shape as gpt-oss: route on the gate, run the
+        # routed experts as a grouped-GEMM kernel sharded along the expert axis,
+        # and wrap the experts module with `moe_tp_experts` so its output gets
+        # all-reduced across ranks. Attention stays replicated (V4 is shared-KV
+        # MQA + a CSA / HCA compressor branch — both broadcast a single KV head
+        # across all attention heads via `repeat_kv`, so colwise-sharding
+        # `q_b_proj` would leave KV replicated and `repeat_kv` would no longer
+        # match the rank-local query head count). The shared MLP also stays
+        # replicated — it's small and not worth TP-ing. There's deliberately
+        # no `base_model_tp_plan` for V4: we don't ship a pure-TP plan, only EP.
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
-        "layers.*.mlp.shared_experts.gate_proj": "colwise",
-        "layers.*.mlp.shared_experts.up_proj": "colwise",
-        "layers.*.mlp.shared_experts.down_proj": "rowwise",
     }
 
     vocab_size: int = 129280
