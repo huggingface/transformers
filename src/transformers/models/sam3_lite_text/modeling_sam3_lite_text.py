@@ -1804,8 +1804,8 @@ class Sam3LiteTextMaskDecoder(Sam3LiteTextPreTrainedModel):
         Args:
             decoder_queries: Decoder output queries [batch_size, num_queries, hidden_size]
             backbone_features: List of backbone features to process through FPN, or a single tensor
-                for single-scale inference. When a single tensor is provided, it is wrapped in a list
-                and a warning is emitted, since the config expects multi-scale FPN features.
+                for single-scale inference. When a single tensor is provided it is wrapped in a list
+                and a warning is emitted, since the config expects multiple FPN levels.
             encoder_hidden_states: Encoder outputs [batch_size, seq_len, hidden_size]
             prompt_features: Prompt features (text + geometry) for cross-attention [batch_size, prompt_len, hidden_size]
             prompt_mask: Padding mask [batch_size, prompt_len] where True=valid, False=padding
