@@ -259,6 +259,7 @@ GGUF_CONFIG_MAPPING = {
         "attention.head_count_kv": "num_key_value_heads",
         "attention.layer_norm_rms_epsilon": "rms_norm_eps",
         "attention.sliding_window": "sliding_window",
+        "attention.logit_softcapping": "attn_logit_softcapping",
         "vocab_size": "vocab_size",
     },
     "gemma3": {
@@ -275,6 +276,7 @@ GGUF_CONFIG_MAPPING = {
         "attention.head_count_kv": "num_key_value_heads",
         "attention.layer_norm_rms_epsilon": "rms_norm_eps",
         "attention.sliding_window": "sliding_window",
+        "attention.logit_softcapping": "attn_logit_softcapping",
         "vocab_size": "vocab_size",
     },
     "umt5": {
