@@ -1978,7 +1978,14 @@ class Trainer:
             if num_items_in_batch is not None:
                 kwargs["num_items_in_batch"] = num_items_in_batch
             inputs = {**inputs, **kwargs}
-        outputs = model(**inputs)
+        # BF16 loss: keep logits in BF16 to save ~600MB-1.4GB VRAM per forward pass.
+        # Negligible precision impact — QLoRA already quantizes to 4-bit.
+        if getattr(self.args, "bf16_loss", False) and self.args.bf16:
+            import torch
+            with torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
+                outputs = model(**inputs)
+        else:
+            outputs = model(**inputs)
 
         # User-defined compute_loss function
         if self.compute_loss_func is not None:
