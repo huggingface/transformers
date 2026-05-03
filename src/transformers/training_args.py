@@ -893,6 +893,16 @@ class TrainingArguments:
             "help": "Use full BF16 precision for evaluation (not just mixed precision). Faster and saves memory."
         },
     )
+    bf16_loss: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Keep cross-entropy loss computation in BF16 instead of upcasting to FP32. "
+                "Saves ~600 MB–1.4 GB VRAM per logit tensor during training. "
+                "Negligible precision impact for most workloads — QLoRA already quantizes to 4-bit."
+            )
+        },
+    )
     fp16_full_eval: bool = field(
         default=False,
         metadata={
@@ -1741,6 +1751,9 @@ class TrainingArguments:
 
         if self.fp16_full_eval and self.bf16_full_eval:
             raise ValueError("At most one of fp16 and bf16 can be True for full eval, but not both")
+
+        if self.bf16_loss and not self.bf16:
+            raise ValueError("`bf16_loss=True` requires `bf16=True`. BF16 loss avoids the FP32 upcast.")
 
         if self.lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU:
             if self.eval_strategy == IntervalStrategy.NO:
