@@ -69,7 +69,7 @@ class VideoLlama3Config(PreTrainedConfig):
     vision_config: dict | PreTrainedConfig | None = None
     image_token_id: int = 151655
     video_token_id: int = 151656
-    tie_word_embeddings: bool = False
+    tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):
