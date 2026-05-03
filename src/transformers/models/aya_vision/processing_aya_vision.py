@@ -13,10 +13,7 @@
 # limitations under the License.
 
 
-from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput, make_flat_list_of_images
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...processing_utils import BatchFeature, MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
 
 
@@ -35,6 +32,8 @@ class AyaVisionProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class AyaVisionProcessor(ProcessorMixin):
+    valid_processor_kwargs = AyaVisionProcessorKwargs
+
     def __init__(
         self,
         image_processor=None,
@@ -87,21 +86,21 @@ class AyaVisionProcessor(ProcessorMixin):
         self.tile_token = tile_token
         self.tile_global_token = tile_global_token
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.img_patch_token)
-        self.image_ids = tokenizer.convert_tokens_to_ids(
-            [img_patch_token, tile_token, tile_global_token, start_of_img_token, end_of_img_token]
+
+    @property
+    def image_token_ids(self) -> list[int]:
+        return self.tokenizer.convert_tokens_to_ids(
+            [
+                self.img_patch_token,
+                self.tile_token,
+                self.tile_global_token,
+                self.start_of_img_token,
+                self.end_of_img_token,
+            ]
         )
 
-    def _prompt_split_image(self, num_patches):
-        """
-        Create a structured string representation of image tokens
-
-        Args:
-           num_patches: Number of patches in the image
-
-        Returns:
-            String with appropriate image tokens
-        """
-
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        num_patches = image_inputs["num_patches"][image_idx]
         img_patches_per_tile = (self.img_size // self.patch_size) ** 2
         img_string = f"{self.start_of_img_token}"
         if num_patches > 1:
@@ -112,65 +111,23 @@ class AyaVisionProcessor(ProcessorMixin):
         img_string += f"{self.end_of_img_token}"
         return img_string
 
-    @auto_docstring
-    def __call__(
-        self,
-        images: ImageInput | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        **kwargs: Unpack[AyaVisionProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+    def _check_special_mm_tokens(self, text: list[str], text_inputs: "BatchFeature", modalities: list[str]):
         """
-        if text is None:
-            raise ValueError("You have to specify text.")
+        Checks that number of special tokens in text and processed text is same. The count can be different
+        if tokenized text was truncated, leading to issues in model code.
+        """
+        # Aya visino uses `img_patch_token` instead of image token`
+        token_str = self.img_patch_token
+        token_id = self.image_token_id
+        if token_str is not None and token_id is not None:
+            ids_count = [list(ids).count(token_id) for ids in text_inputs["input_ids"]]
+            text_count = [sample.count(token_str) for sample in text]
 
-        output_kwargs = self._merge_kwargs(
-            AyaVisionProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        if not isinstance(text, (list, tuple)):
-            text = [text]
-
-        # Process images
-        image_inputs = {}
-        if images is not None:
-            images = self.image_processor.fetch_images(images)
-            images = make_flat_list_of_images(images)
-            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-            num_patches = image_inputs.pop("num_patches")
-            image_index = 0
-            processed_text = []
-            for prompt in text:
-                new_prompt = prompt
-                while "<image>" in new_prompt:
-                    # Replace the image placeholder with structured image tokens
-                    image_tokens = self._prompt_split_image(num_patches[image_index])
-                    new_prompt = new_prompt.replace("<image>", image_tokens, 1)
-                    image_index += 1
-                processed_text.append(new_prompt)
-
-            if image_index != len(images):
-                raise ValueError("Number of image placeholders in the prompt does not match the number of images.")
-
-            text = processed_text
-
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
-
-        if return_mm_token_type_ids:
-            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
-        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+            if ids_count != text_count:
+                raise ValueError(
+                    f"Mismatch in `image` token count between text and `input_ids`. Got ids={ids_count} and text={text_count}. "
+                    "Likely due to `truncation='max_length'`. Please disable truncation or increase `max_length`."
+                )
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
@@ -203,6 +160,10 @@ class AyaVisionProcessor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         return MultiModalData(**vision_data)
+
+    @property
+    def unused_input_names(self) -> list[str]:
+        return ["num_patches"]
 
 
 __all__ = ["AyaVisionProcessor"]

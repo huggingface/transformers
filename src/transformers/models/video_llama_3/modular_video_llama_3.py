@@ -30,15 +30,13 @@ from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     ChannelDimension,
-    ImageInput,
     PILImageResampling,
     SizeDict,
     get_image_size,
 )
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...processing_utils import ProcessorMixin, Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
@@ -48,7 +46,6 @@ from ...utils import (
 from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...video_utils import (
-    VideoInput,
     group_videos_by_shape,
     reorder_videos,
 )
@@ -66,13 +63,13 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     eager_attention_forward,
 )
 from ..qwen2_vl.processing_qwen2_vl import (
-    Qwen2VLProcessor,
     Qwen2VLProcessorKwargs,
 )
 from ..qwen2_vl.video_processing_qwen2_vl import (
     Qwen2VLVideoProcessor,
     Qwen2VLVideoProcessorInitKwargs,
 )
+from ..qwen3_vl.processing_qwen3_vl import Qwen3VLProcessor
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import (
     SiglipAttention,
@@ -1024,93 +1021,53 @@ class VideoLlama3ProcessorKwargs(Qwen2VLProcessorKwargs):
     }
 
 
-class VideoLlama3Processor(Qwen2VLProcessor):
-    def __call__(
-        self,
-        images: ImageInput = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        videos: VideoInput = None,
-        **kwargs: Unpack[VideoLlama3ProcessorKwargs],
-    ) -> BatchFeature:
-        output_kwargs = self._merge_kwargs(
-            VideoLlama3ProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
+class VideoLlama3Processor(Qwen3VLProcessor):
+    def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
+        self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
+        self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
+        self.image_token_id = (
+            tokenizer.image_token_id
+            if getattr(tokenizer, "image_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.image_token)
         )
+        self.video_token_id = (
+            tokenizer.video_token_id
+            if getattr(tokenizer, "video_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.video_token)
+        )
+        ProcessorMixin.__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
-        image_inputs = videos_inputs = {}
-        if images is not None:
-            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-            image_grid_thw = image_inputs["image_grid_thw"]
-            image_merge_sizes = image_inputs["image_merge_sizes"]
-        else:
-            image_grid_thw = image_merge_sizes = []
+    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+        num_video_tokens = [
+            grid_thw.prod() // merge_size**2
+            for grid_thw, merge_size in zip(video_inputs["video_grid_thw"], video_inputs["video_merge_sizes"])
+        ]
+        video_compression_masks = video_inputs["video_compression_mask"].split(num_video_tokens)
+        metadata = video_inputs["video_metadata"][video_idx]
 
-        if videos is not None:
-            videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
-            num_video_tokens = [
-                grid_thw.prod() // merge_size**2
-                for grid_thw, merge_size in zip(videos_inputs["video_grid_thw"], videos_inputs["video_merge_sizes"])
-            ]
-            video_compression_masks = videos_inputs["video_compression_mask"].split(num_video_tokens)
-            if not kwargs.get("return_metadata"):
-                video_metadata = videos_inputs.pop("video_metadata")
-            else:
-                video_metadata = videos_inputs["video_metadata"]
-            timestamps = []
-            for metadata in video_metadata:
-                if metadata.fps is None:
-                    logger.warning_once(
-                        "VideoLLaMA4 requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
-                        "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
-                        "Defaulting to `fps=1`. Please provide `video_metadata` for more accurate results."
-                    )
-                metadata.fps = 1 if metadata.fps is None else metadata.fps
-                timestamps.append(metadata.timestamps)
-        else:
-            video_compression_masks = timestamps = []
+        if metadata.fps is None:
+            logger.warning_once(
+                "VideoLLaMA3 requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
+                "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
+                "Defaulting to `fps=1`. Please provide `video_metadata` for more accurate results."
+            )
+        metadata.fps = 1 if metadata.fps is None else metadata.fps
 
-        if not isinstance(text, list):
-            text = [text]
+        frame_compression_masks = video_compression_masks[video_idx].split(
+            len(video_compression_masks[video_idx]) // len(metadata.timestamps)
+        )
+        num_frame_tokens = [x.sum() for x in frame_compression_masks]
+        video_placeholder = [
+            f"Time {t:.1f}s:" + self.video_token * n for n, t in zip(num_frame_tokens, metadata.timestamps)
+        ]
 
-        text = text.copy()  # below lines change text in-place
-
-        if images is not None:
-            image_index = 0
-            for i in range(len(text)):
-                while self.image_token in text[i]:
-                    num_image_tokens = image_grid_thw[image_index].prod() // (image_merge_sizes[image_index] ** 2)
-                    text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
-                    image_index += 1
-                text[i] = text[i].replace("<|placeholder|>", self.image_token)
-
-        if videos is not None:
-            video_index = 0
-            for i in range(len(text)):
-                while self.video_token in text[i]:
-                    frame_compression_masks = video_compression_masks[video_index].split(
-                        len(video_compression_masks[video_index]) // len(timestamps[video_index])
-                    )
-                    num_frame_tokens = [x.sum() for x in frame_compression_masks]
-                    frame_prompts = [
-                        f"Time {t:.1f}s:" + "<|placeholder|>" * n
-                        for n, t in zip(num_frame_tokens, timestamps[video_index])
-                    ]
-                    text[i] = text[i].replace(self.video_token, ",".join(frame_prompts), 1)
-                    video_index += 1
-                text[i] = text[i].replace("<|placeholder|>", self.video_token)
-
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
-        self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
-
-        if return_mm_token_type_ids:
-            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
-        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
+        return ",".join(video_placeholder)
 
     def model_input_names(self):
         raise AttributeError("VideoLlama doesn't need to override it")
+
+    def _calculate_timestamps(self):
+        raise AttributeError("VideoLlama doesn't need this method")
 
 
 class VideoLlama3ImageProcessorKwargs(Qwen2VLImageProcessorKwargs):

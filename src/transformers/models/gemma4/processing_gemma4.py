@@ -12,12 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import re
 
 import numpy as np
 
 from ...audio_utils import AudioInput
-from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -51,6 +49,8 @@ class Gemma4ProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 @requires(backends=("vision",))
 class Gemma4Processor(ProcessorMixin):
+    valid_processor_kwargs = Gemma4ProcessorKwargs
+
     def __init__(
         self,
         feature_extractor,
@@ -107,189 +107,100 @@ class Gemma4Processor(ProcessorMixin):
             **kwargs,
         )
 
-    @auto_docstring
-    def __call__(
+    def prepare_inputs_layout(
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        audio: AudioInput | None = None,
-        videos: VideoInput | None = None,
-        **kwargs: Unpack[Gemma4ProcessorKwargs],
-    ) -> BatchFeature:
-        if text is None and images is None and audio is None and videos is None:
-            raise ValueError("Provide at least one of `text`, `images`, `audio`, or `videos`.")
-
-        output_kwargs = self._merge_kwargs(
-            Gemma4ProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
+        videos: VideoInput = None,
+        audio: AudioInput = None,
+        **kwargs,
+    ):
+        images, text, videos, audio = super().prepare_inputs_layout(
+            images=images, text=text, videos=videos, audio=audio, **kwargs
         )
 
-        if isinstance(text, str):
-            text = [text]
-        elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
-
-        image_inputs = {}
+        # Model requires nested struct
         if images is not None:
-            images = self.image_processor.fetch_images(images)
-            batched_images = make_nested_list_of_images(images)
-            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
+            images = make_nested_list_of_images(images)
 
-            num_soft_tokens = image_inputs.pop("num_soft_tokens_per_image")
+        # Create empty text to be replaced with placeholders
+        if images and not text:
+            text = [" ".join([self.boi_token] * len(image_list)) for image_list in images]
+        if audio and not text:
+            text = [self.audio_token] * len(audio)
 
-            # Create empty text to be replaced with placeholders
-            if not text:
-                text = [" ".join([self.image_token] * len(images)) for images in batched_images]
+        return images, text, videos, audio
 
-            if len(batched_images) != len(text):
-                raise ValueError(
-                    f"Received inconsistently sized batches of images ({len(batched_images)}) and text ({len(text)})."
-                )
+    def validate_inputs(
+        self,
+        images: ImageInput | list[ImageInput] | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        videos: VideoInput = None,
+        audio: AudioInput = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        super().validate_inputs(images=images, text=text, **kwargs)
 
-            replacements = [f"{self.boi_token}{self.image_token * n}{self.eoi_token}" for n in num_soft_tokens]
-            replacements_iter = iter(replacements)
+        if text is None and images is None:
+            raise ValueError("You must provide either `text` or `images`.")
 
-            # Expand image_token placeholders to per-image soft token sequences.
-            # re.sub never re-scans replaced text, so it is safe
-            pattern = re.escape(self.image_token)
-            text = [re.sub(pattern, lambda _: next(replacements_iter), prompt) for prompt in text]
+        if audio is not None and self.audio_token is None or self.boa_token is None or self.eoa_token is None:
+            raise ValueError("Audio inputs were provided, but the tokenizer does not have an `audio_token` defined.")
 
-        # Process video inputs in same way
-        video_inputs = {}
-        if videos is not None:
-            video_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
-            num_video_tokens = video_inputs.pop("num_soft_tokens_per_video")
-
-            # If user has not requested video metadata, pop it so it isn't returned
-            if not kwargs.get("return_metadata"):
-                video_metadata = video_inputs.pop("video_metadata")
-            else:
-                video_metadata = video_inputs["video_metadata"]
-
-            video_replacements = []
-            for metadata, n_tokens in zip(video_metadata, num_video_tokens):
-                if metadata.fps is None:
-                    logger.warning_once(
-                        "Gemma 4 requires frame timestamps to construct prompts, but the `fps` of the input video "
-                        "could not be inferred. Probably `video_metadata` was missing from inputs and you passed "
-                        "pre-sampled frames. Defaulting to `fps=24`. Please provide `video_metadata` for more "
-                        "accurate results."
+        if text is not None:
+            n_images_in_text = [sample.count(self.image_token) for sample in text]
+            if images is not None:
+                if len(images) != len(text):
+                    raise ValueError(
+                        f"Received inconsistently sized batches of images ({len(images)}) and text ({len(text)})."
                     )
-                metadata.fps = 24 if metadata.fps is None else metadata.fps
-                # mm:ss format for timestamps
-                timestamp_str = [
-                    f"{int(seconds // 60):02d}:{int(seconds % 60):02d}" for seconds in metadata.timestamps
-                ]
-                video_replacements.append(
-                    " ".join(
-                        [f"{t} {self.boi_token}{self.video_token * n_tokens}{self.eoi_token}" for t in timestamp_str]
+
+                n_images_in_images = [len(sublist) for sublist in images]
+                if n_images_in_text != n_images_in_images:
+                    raise ValueError(
+                        f"The total number of {self.image_token} tokens in the prompts should be the same as the number of images passed."
+                        f" Found {n_images_in_text} {self.image_token} tokens and {n_images_in_images} images per sample."
                     )
-                )
-
-            video_replacements = iter(video_replacements)
-            pattern = re.escape(self.video_token)
-            text = [re.sub(pattern, lambda _: next(video_replacements), prompt) for prompt in text]
-
-        # Process audio inputs
-        audio_inputs = {}
-        if audio is not None:
-            if self.audio_token is None or self.boa_token is None or self.eoa_token is None:
+            elif images is None and any(n_images_in_text):
                 raise ValueError(
-                    "Audio inputs were provided, but the tokenizer does not have an `audio_token` defined."
+                    f"Found {sum(n_images_in_text)} {self.image_token} tokens in the text but no images were passed."
                 )
 
-            # Normalize audio input to list of waveforms
-            if isinstance(audio, np.ndarray) and audio.ndim == 1:
-                audio = [audio]
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        num_soft_tokens = image_inputs["num_soft_tokens_per_image"][image_idx]
+        return f"{self.boi_token}{self.image_token * num_soft_tokens}{self.eoi_token}"
 
-            # TODO: Add tests for audio-only processor inputs.
-            if not text:
-                text = [self.audio_token] * len(audio)
+    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+        num_soft_tokens = video_inputs["num_soft_tokens_per_video"][video_idx]
+        metadata = video_inputs["video_metadata"][video_idx]
 
-            # Dynamic audio token expansion wihtout padding:
-            #   * Extract audio features with feature extractor;
-            #   * Compute precise per-audio token counts from the waveform duration;
-            #   * Generate full audio token sequence for each computed audio length;
-            #   * Expand text prompts with full audio token sequences.
-            audio_kwargs = output_kwargs.get("audio_kwargs", {})
-            audio_inputs = self.feature_extractor(audio, **audio_kwargs)
-            sampling_rate = self.feature_extractor.sampling_rate
-            num_audio_tokens = [self._compute_audio_num_tokens(a, sampling_rate) for a in audio]
-            replacements = [f"{self.boa_token}{self.audio_token * n}{self.eoa_token}" for n in num_audio_tokens]
-            replacements_iter = iter(replacements)
-            audio_pattern = re.escape(self.audio_token)
-            text = [re.sub(audio_pattern, lambda _: next(replacements_iter), prompt) for prompt in text]
+        if metadata.fps is None:
+            logger.warning_once(
+                "Gemma4 requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
+                "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
+                "Defaulting to `fps=24`. Please provide `video_metadata` for more accurate results."
+            )
+        metadata.fps = 24 if metadata.fps is None else metadata.fps
 
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        text_inputs = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
-
-        # Check special tokens for all active modalities
-        active_modalities = []
-        if images is not None:
-            active_modalities.append("image")
-        if videos is not None:
-            active_modalities.append("video")
-        if audio is not None:
-            active_modalities.append("audio")
-        if active_modalities:
-            self._check_special_mm_tokens(text, text_inputs, modalities=active_modalities)
-
-        if return_mm_token_type_ids:
-            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
-
-        return BatchFeature(
-            data={**text_inputs, **image_inputs, **audio_inputs, **video_inputs},
-            tensor_type=return_tensors,
+        # mm:ss format for timestamps
+        timestamp_str = [f"{int(seconds // 60):02d}:{int(seconds % 60):02d}" for seconds in metadata.timestamps]
+        video_replacement = " ".join(
+            [f"{t} {self.boi_token}{self.video_token * num_soft_tokens}{self.eoi_token}" for t in timestamp_str]
         )
+        return video_replacement
 
-    def _compute_audio_num_tokens(self, audio_waveform, sampling_rate: int) -> int:
-        """Compute the number of audio soft tokens for a single waveform.
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int) -> str:
+        # TODO: Add tests for audio-only processor inputs.
+        mask = audio_inputs["input_features_mask"][audio_idx]
 
-        Replicates the exact sequence-length arithmetic of the audio encoder
-        so that the processor inserts the correct number of placeholder tokens.
-        The computation mirrors:
-
-        1. Mel framing via ``_unfold`` in ``Gemma4AudioFeatureExtractor``
-        2. Two ``Conv2d`` subsampling layers in ``Gemma4AudioSubSampleConvProjection``
-           (each: kernel=3, stride=2, semicausal padding top=1, bottom=1)
-
-        The result is capped at ``self.audio_seq_length`` (the configured maximum).
-
-        Args:
-            audio_waveform: A 1-D numpy array or list containing the raw audio samples.
-            sampling_rate: The sampling rate of the audio waveform in Hz.
-
-        Returns:
-            The number of audio soft tokens to insert as placeholders.
-        """
-        num_samples = len(audio_waveform)
-
-        # Step 1: Mel frames (matches feature_extraction_gemma4.py _unfold)
-        frame_length = int(round(sampling_rate * 20.0 / 1000.0))  # 320 @ 16kHz
-        hop_length = int(round(sampling_rate * 10.0 / 1000.0))  # 160 @ 16kHz
-        frame_size_for_unfold = frame_length + 1  # 321
-
-        # The feature extractor prepends (frame_length // 2) zero samples as
-        # semicausal time-padding before the unfold.  We must include this to
-        # match the actual number of mel frames it produces.
-        pad_left = frame_length // 2  # 160 @ 16kHz
-        padded_samples = num_samples + pad_left
-        num_mel_frames = (padded_samples - frame_size_for_unfold) // hop_length + 1
-
-        if num_mel_frames <= 0:
-            return 0
-
-        # Step 2: Two SSCP conv layers (kernel=3, stride=2, semicausal pad top=1, bottom=1)
-        # Each layer: T_out = (T_in + pad_top + pad_bottom - kernel) // stride + 1
-        t = num_mel_frames
+        # Simulate two stride-2 conv blocks on the mask
+        t = len(mask)
         for _ in range(2):
-            t_padded = t + 2  # pad_top=1, pad_bottom=1
-            t = (t_padded - 3) // 2 + 1
+            t_out = (t + 2 - 3) // 2 + 1
+            mask = mask[::2][:t_out]
+            t = len(mask)
 
-        # Cap at the configured maximum
-        return min(t, self.audio_seq_length)
+        return f"{self.boa_token}{self.audio_token * int(mask.sum())}{self.eoa_token}"
 
     def _get_num_multimodal_tokens(self, image_sizes=None, audio_lengths=None, **kwargs):
         """
@@ -348,19 +259,11 @@ class Gemma4Processor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        model_input_names = super().model_input_names
-        model_input_names = [
-            name
-            for name in model_input_names
-            if name not in ["num_soft_tokens_per_image", "num_soft_tokens_per_video"]
-        ]
+        return super().model_input_names + ["mm_token_type_ids"]
 
-        # Include audio feature extractor input names if available
-        if self.feature_extractor is not None:
-            feature_extractor_input_names = self.feature_extractor.model_input_names
-            model_input_names.extend([name for name in feature_extractor_input_names if name not in model_input_names])
-
-        return model_input_names + ["mm_token_type_ids"]
+    @property
+    def unused_input_names(self) -> list[str]:
+        return ["num_soft_tokens_per_image", "num_soft_tokens_per_video"]
 
 
 __all__ = ["Gemma4Processor"]

@@ -24,8 +24,6 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -33,7 +31,6 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
@@ -43,7 +40,6 @@ from ...utils import (
 )
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ...video_utils import VideoInput
 from ..glm4.modeling_glm4 import Glm4MLP, Glm4RMSNorm, Glm4RotaryEmbedding, eager_attention_forward
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionPatchEmbed,
@@ -1193,114 +1189,36 @@ class Glm4vProcessor(Qwen2VLProcessor):
         self.video_start_id = tokenizer.convert_tokens_to_ids("<|begin_of_video|>")
         self.video_end_id = tokenizer.convert_tokens_to_ids("<|end_of_video|>")
 
-    def __call__(
-        self,
-        images: ImageInput | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        videos: VideoInput | None = None,
-        **kwargs: Unpack[Glm4vProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+        merge_length = self.video_processor.merge_size**2
+        num_frames = video_inputs["video_grid_thw"][video_idx][0]
+        num_image_tokens = video_inputs["video_grid_thw"][video_idx].prod() // merge_length // num_frames
+        metadata = video_inputs["video_metadata"][video_idx]
+        video_structure = ""
 
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-            - **pixel_values_videos** -- Pixel values of videos to be fed to a model. Returned when `videos` is not `None`.
-            - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
-            - **video_grid_thw** -- List of video 3D grid in LLM. Returned when `videos` is not `None`.
-        """
-        output_kwargs = self._merge_kwargs(
-            Glm4vProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-        if images is not None:
-            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-            image_grid_thw = image_inputs["image_grid_thw"]
-        else:
-            image_inputs = {}
-            image_grid_thw = None
+        if metadata.fps is None:
+            logger.warning_once(
+                "GLM4V requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
+                "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
+                "Defaulting to `fps=24`. Please provide `video_metadata` for more accurate results."
+            )
+        metadata.fps = 24 if metadata.fps is None else metadata.fps
+        timestamps = metadata.timestamps[::2]  # mrope
 
-        if videos is not None:
-            videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
-            # If user has not requested video metadata, pop it
-            if not kwargs.get("return_metadata"):
-                video_metadata = videos_inputs.pop("video_metadata")
-            else:
-                video_metadata = videos_inputs["video_metadata"]
-            video_grid_thw = videos_inputs["video_grid_thw"]
-        else:
-            videos_inputs = {}
-            video_grid_thw = None
+        unique_timestamps = []
+        for idx in range(0, len(timestamps)):
+            unique_timestamps.append(timestamps[idx])
 
-        if not isinstance(text, list):
-            text = [text]
+        selected_timestamps = unique_timestamps[:num_frames]
+        while len(selected_timestamps) < num_frames:
+            selected_timestamps.append(selected_timestamps[-1] if selected_timestamps else 0)
 
-        text = text.copy()  # below lines change text in-place
-        if image_grid_thw is not None:
-            merge_length = self.image_processor.merge_size**2
-            index = 0
-            for i in range(len(text)):
-                while self.image_token in text[i]:
-                    num_image_tokens = image_grid_thw[index].prod() // merge_length
-                    text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
-                    index += 1
-                text[i] = text[i].replace("<|placeholder|>", self.image_token)
+        for frame_idx in range(num_frames):
+            timestamp_sec = selected_timestamps[frame_idx]
+            frame_structure = self.replace_frame_token_id(timestamp_sec, num_image_tokens=num_image_tokens)
+            video_structure += frame_structure
 
-        if video_grid_thw is not None:
-            merge_length = self.video_processor.merge_size**2
-            video_index = 0
-            for i in range(len(text)):
-                while self.video_token in text[i]:
-                    num_frames = video_grid_thw[video_index][0]
-                    video_structure = ""
-
-                    metadata = video_metadata[video_index]
-                    if metadata.fps is None:
-                        logger.warning_once(
-                            "SmolVLM requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
-                            "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
-                            "Defaulting to `fps=24`. Please provide `video_metadata` for more accurate results."
-                        )
-                    metadata.fps = 24 if metadata.fps is None else metadata.fps
-                    timestamps = metadata.timestamps[::2]  # mrope
-
-                    unique_timestamps = []
-                    for idx in range(0, len(timestamps)):
-                        unique_timestamps.append(timestamps[idx])
-
-                    selected_timestamps = unique_timestamps[:num_frames]
-                    while len(selected_timestamps) < num_frames:
-                        selected_timestamps.append(selected_timestamps[-1] if selected_timestamps else 0)
-
-                    for frame_idx in range(num_frames):
-                        timestamp_sec = selected_timestamps[frame_idx]
-                        frame_structure = self.replace_frame_token_id(timestamp_sec)
-                        video_structure += frame_structure
-
-                    text[i] = text[i].replace(self.video_token, video_structure, 1)
-                    num_image_tokens = (
-                        video_grid_thw[video_index].prod() // merge_length // video_grid_thw[video_index][0]
-                    )
-                    for frame_idx in range(num_frames):
-                        if self.image_token in text[i]:
-                            text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
-
-                    video_index += 1
-
-                text[i] = text[i].replace("<|placeholder|>", self.image_token)
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
-
-        if return_mm_token_type_ids:
-            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
-        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
+        return video_structure
 
     def create_mm_token_type_ids(self, input_ids: list) -> list[list[int]]:
         # We have to iterate for each list separately because inputs
@@ -1323,8 +1241,8 @@ class Glm4vProcessor(Qwen2VLProcessor):
             mm_token_type_ids.append(mm_token_types.tolist())
         return mm_token_type_ids
 
-    def replace_frame_token_id(self, timestamp_sec):
-        return f"<|begin_of_image|>{self.image_token}<|end_of_image|>{int(timestamp_sec)}"
+    def replace_frame_token_id(self, timestamp_sec, num_image_tokens: int = 1):
+        return f"<|begin_of_image|>{self.image_token * num_image_tokens}<|end_of_image|>{int(timestamp_sec)}"
 
 
 __all__ = [

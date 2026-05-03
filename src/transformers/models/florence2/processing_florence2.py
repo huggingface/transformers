@@ -35,7 +35,7 @@ logger = logging.get_logger(__name__)
 
 class Florence2ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
-        "text_kwargs": {"padding": False, "return_mm_token_type_ids": False},
+        "text_kwargs": {"padding": False, "return_mm_token_type_ids": False, "return_text_replacement_offsets": False},
     }
 
 

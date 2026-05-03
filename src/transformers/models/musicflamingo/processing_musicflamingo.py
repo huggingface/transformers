@@ -19,15 +19,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import re
-
 import numpy as np
 
-from ...audio_utils import AudioInput, make_list_of_audio
+from ...audio_utils import AudioInput
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
-from ...utils import is_torch_available, logging
+from ...utils import auto_docstring, is_torch_available, logging
 
 
 if is_torch_available():
@@ -54,31 +52,9 @@ class MusicFlamingoProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class MusicFlamingoProcessor(ProcessorMixin):
-    r"""
-    Constructs an MusicFlamingo processor which wraps an MusicFlamingo feature extractor and an MusicFlamingo
-    tokenizer into a single processor.
-
-    [`MusicFlamingoProcessor`] offers all the functionalities of [`WhisperFeatureExtractor`] and
-    [`Qwen2TokenizerFast`]. See the [`~MusicFlamingoProcessor.__call__`] for more information.
-
-    Args:
-        feature_extractor ([`WhisperFeatureExtractor`]):
-            The feature extractor is a required input.
-        tokenizer ([`Qwen2TokenizerFast`]):
-            The tokenizer is a required input.
-        chat_template (`Optional[str]`, *optional*):
-            The Jinja template to use for formatting the conversation. If not provided, the tokenizer's default chat
-            template will be used.
-        audio_token (`Optional[str]`, *optional*, defaults to `"<sound>"`):
-            Special token used to represent audio inputs in the chat template.
-        audio_bos_token (`Optional[str]`, *optional*, defaults to `"<|sound_bos|>"`):
-            Special token used to represent the beginning of audio.
-        audio_eos_token (`Optional[str]`, *optional*, defaults to `"<|sound_eos|>"`):
-            Special token used to represent the end of audio.
-        max_audio_len (`int`, *optional*, defaults to 1200):
-            Maximum length of audio sequences in seconds. Audio longer than this will be truncated.
-    """
+    valid_processor_kwargs = MusicFlamingoProcessorKwargs
 
     def __init__(
         self,
@@ -90,6 +66,16 @@ class MusicFlamingoProcessor(ProcessorMixin):
         audio_eos_token="<|sound_eos|>",
         max_audio_len=1200,
     ):
+        r"""
+        audio_token (`Optional[str]`, *optional*, defaults to `"<sound>"`):
+            Special token used to represent audio inputs in the chat template.
+        audio_bos_token (`Optional[str]`, *optional*, defaults to `"<|sound_bos|>"`):
+            Special token used to represent the beginning of audio.
+        audio_eos_token (`Optional[str]`, *optional*, defaults to `"<|sound_eos|>"`):
+            Special token used to represent the end of audio.
+        max_audio_len (`int`, *optional*, defaults to 1200):
+            Maximum length of audio sequences in seconds. Audio longer than this will be truncated.
+        """
         self.audio_token = audio_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
         self.max_audio_len = max_audio_len
@@ -99,29 +85,7 @@ class MusicFlamingoProcessor(ProcessorMixin):
         self.audio_bos_token_id = tokenizer.convert_tokens_to_ids(audio_bos_token)
         self.audio_eos_token_id = tokenizer.convert_tokens_to_ids(audio_eos_token)
 
-    def _get_audio_token_length(self, audio_lengths):
-        conv_output_lengths = (audio_lengths - 1) // 2 + 1  # After conv2 downsampling
-        audio_tokens_lengths = (conv_output_lengths - 2) // 2 + 1  # After avg pooling
-        return audio_tokens_lengths
-
-    def _expand_audio_tokens(self, text, padding_mask, per_sample_windows):
-        audio_lengths = torch.stack([s.sum() for s in torch.split(padding_mask.sum(-1), per_sample_windows)])
-        audio_tokens_lengths = self._get_audio_token_length(audio_lengths)
-        audio_token_pattern = re.compile(re.escape(self.audio_token))
-        for i, audio_length in enumerate(audio_tokens_lengths):
-            text[i] = audio_token_pattern.sub(
-                self.audio_bos_token + self.audio_token * audio_length + self.audio_eos_token,
-                text[i],
-            )
-        return text
-
-    def _get_audio_tokens_mask(self, input_ids):
-        return (
-            (input_ids == self.audio_token_id)
-            | (input_ids == self.audio_bos_token_id)
-            | (input_ids == self.audio_eos_token_id)
-        )
-
+    @auto_docstring
     def __call__(
         self,
         text: TextInput | list[TextInput],
@@ -130,98 +94,100 @@ class MusicFlamingoProcessor(ProcessorMixin):
         **kwargs: Unpack[MusicFlamingoProcessorKwargs],
     ) -> BatchFeature:
         r"""
-        Main method to prepare one or several text sequence(s) and audio waveform(s) for the model. This
-        method expands `<sound>` placeholders in the text based on the post-pool frame counts of the
-        audio windows, then tokenizes the provided strings as-is, and extracts log-mel features
-        with [`WhisperFeatureExtractor`]. If `audio` is `None`, no audio processing is performed and
-        the text is tokenized as-is (LM-only behavior).
-
-        Args:
-            text (`str` or `list[str]`):
-                Input sequence or batch of sequences.
-            audio (`np.ndarray` or `list[np.ndarray]`):
-                Input audio or batch of audios as NumPy arrays. If provided, there must be as many `text` inputs as
-                `audio` inputs.
-            output_labels (bool, *optional*, default=False):
-                Whether to return labels for training.
+        output_labels (bool, *optional*, default=False):
+            Whether to return labels for training.
 
         Returns:
             [`BatchFeature`]: A dictionary with tokenized text (`input_ids`, `attention_mask`) and
             audio features (`input_features`, `input_features_mask`).
         """
+        # Force tensor outputs for AudioFlamingo, other types not supported
+        kwargs["return_tensors"] = "pt"
 
-        # Merge defaults with user kwargs
-        call_kwargs = self._merge_kwargs(
-            MusicFlamingoProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        text_kwargs = call_kwargs["text_kwargs"]
-        audio_kwargs = call_kwargs["audio_kwargs"]
-        return_tensors = text_kwargs.get("return_tensors")
-        if return_tensors != "pt":
-            raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
-
-        if isinstance(text, str):
-            text = [text]
-        elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
-
-        audio_inputs = {}
-        if audio is not None:
-            audio = make_list_of_audio(audio)
-            if len(text) != len(audio):
-                raise ValueError(f"Got {len(text)} text but {len(audio)} audios; they must match 1:1.")
-
-            # Determine number of chunks per sample, and flatten
-            window_size = int(audio_kwargs["sampling_rate"] * self.feature_extractor.chunk_length)
-            max_windows = int(self.max_audio_len // self.feature_extractor.chunk_length)
-
-            per_sample_windows: list[int] = []
-            flat_chunks: list[np.ndarray] = []
-
-            for audio_el in audio:
-                n_samples = int(audio_el.shape[0])
-                n_win = max(1, (n_samples + window_size - 1) // window_size)
-                if n_win > max_windows:
-                    logger.warning(
-                        f"Audio duration ({n_samples / audio_kwargs['sampling_rate']:.1f}s) exceeds {self.max_audio_len}s; truncating to first {self.max_audio_len}s."
-                    )
-                    n_win = max_windows
-                per_sample_windows.append(n_win)
-
-                time_cap = min(n_samples, n_win * window_size)
-                for i in range(n_win):
-                    start = i * window_size
-                    end = min((i + 1) * window_size, time_cap)
-                    flat_chunks.append(audio_el[start:end])
-
-            # Feature extraction
-            audio_inputs = self.feature_extractor(flat_chunks, **audio_kwargs)
-            padding_mask = audio_inputs.pop("attention_mask")
-            audio_inputs["input_features_mask"] = padding_mask
-
-            # Expand audio tokens in text
-            text = self._expand_audio_tokens(text, padding_mask, per_sample_windows)
-
-        # Tokenize
-        text_inputs = self.tokenizer(text, **text_kwargs)
-
-        data = {**text_inputs, **audio_inputs}
         if output_labels:
-            labels = data["input_ids"].clone()
-            labels[self._get_audio_tokens_mask(labels)] = -100
-            labels[labels == self.tokenizer.pad_token_id] = -100
-            data["labels"] = labels
+            kwargs["return_mm_token_type_ids"] = True
+        model_inputs = super().__call__(audio=audio, text=text, **kwargs)
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        if output_labels:
+            labels = model_inputs.pop("mm_token_type_ids")
+            labels[labels == self.tokenizer.pad_token_id] = -100
+            model_inputs["labels"] = labels
+        return BatchFeature(data=model_inputs, tensor_type="pt")
+
+    def validate_inputs(
+        self,
+        audio: AudioInput | None = None,
+        text: TextInput | list[TextInput] | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        super().validate_inputs(audio=audio, text=text, **kwargs)
+
+        if text is not None and audio is not None and len(text) != len(audio):
+            raise ValueError(f"Got {len(text)} text but {len(audio)} audios; they must match 1:1.")
+
+    def _get_audio_token_length(self, audio_lengths):
+        conv_output_lengths = (audio_lengths - 1) // 2 + 1  # After conv2 downsampling
+        audio_tokens_lengths = (conv_output_lengths - 2) // 2 + 1  # After avg pooling
+        return audio_tokens_lengths
+
+    def _process_audio(self, audio: AudioInput, **kwargs):
+        # Determine number of chunks per sample, and flatten
+        window_size = int(kwargs["sampling_rate"] * self.feature_extractor.chunk_length)
+        max_windows = int(self.max_audio_len // self.feature_extractor.chunk_length)
+
+        per_sample_windows: list[int] = []
+        flat_chunks: list[np.ndarray] = []
+        for audio_el in audio:
+            n_samples = int(audio_el.shape[0])
+            n_win = max(1, (n_samples + window_size - 1) // window_size)
+            if n_win > max_windows:
+                logger.warning(
+                    f"Audio duration ({n_samples / kwargs['sampling_rate']:.1f}s) exceeds {self.max_audio_len}s; truncating to first {self.max_audio_len}s."
+                )
+                n_win = max_windows
+            per_sample_windows.append(n_win)
+
+            time_cap = min(n_samples, n_win * window_size)
+            for i in range(n_win):
+                start = i * window_size
+                end = min((i + 1) * window_size, time_cap)
+                flat_chunks.append(audio_el[start:end])
+
+        audio = self.feature_extractor.fetch_audio(audio)
+        audio_inputs = self.feature_extractor(flat_chunks, **kwargs)
+        audio_inputs["input_features_mask"] = audio_inputs.pop("attention_mask")
+
+        # AudioFlamingo doesn't have its own feature extractor and crops audio into
+        # chunks here. Save the number of tokens based on crops/padding in analogy
+        # with some vision processors
+        audio_lengths = torch.stack(
+            [s.sum() for s in torch.split(audio_inputs["input_features_mask"].sum(-1), per_sample_windows)]
+        )
+        audio_inputs["num_audio_tokens"] = self._get_audio_token_length(audio_lengths)
+
+        audio_replacements = []
+        for idx in range(len(audio)):
+            replacement_text = self.replace_audio_token(audio_inputs, audio_idx=idx)
+            audio_replacements.append(replacement_text)
+
+        return audio_inputs, audio_replacements
+
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int) -> str:
+        num_audio_tokens = audio_inputs["num_audio_tokens"][audio_idx]
+        return self.audio_bos_token + self.audio_token * num_audio_tokens + self.audio_eos_token
 
     @property
     def model_input_names(self) -> list[str]:
-        tok_names = self.tokenizer.model_input_names
-        fea_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tok_names + fea_names + ["input_features_mask"]))
+        return super().model_input_names + ["input_features_mask"]
+
+    @property
+    def unused_input_names(self) -> list[str]:
+        "Input names returned always by subprocessors but not used in model's `forward`"
+        return ["num_audio_tokens"]
+
+    @property
+    def audio_ids(self):
+        return [self.audio_token_id, self.audio_bos_token_id, self.audio_eos_token_id]
 
 
 __all__ = ["MusicFlamingoProcessor"]
