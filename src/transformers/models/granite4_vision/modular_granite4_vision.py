@@ -378,7 +378,11 @@ class Granite4VisionPreTrainedModel(LlavaNextPreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range))
+            init.normal_(
+                module.weight,
+                mean=0.0,
+                std=getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range),
+            )
             if module.padding_idx is not None:
                 init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, nn.LayerNorm) or (
