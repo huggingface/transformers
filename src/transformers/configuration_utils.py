@@ -21,7 +21,7 @@ import os
 from collections.abc import Sequence
 from dataclasses import MISSING, dataclass, fields
 from functools import wraps
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeVar, Union
+from typing import Any, ClassVar, Literal, TypeVar
 
 from huggingface_hub import create_repo
 from huggingface_hub.dataclasses import strict
@@ -43,10 +43,7 @@ from .utils import (
     logging,
 )
 from .utils.generic import is_timm_config_dict
-
-
-if TYPE_CHECKING:
-    import torch
+from .utils.type_validators import dtype_validator
 
 
 logger = logging.get_logger(__name__)
@@ -231,7 +228,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     # Common attributes for all models
     output_hidden_states: bool | None = False
     return_dict: bool | None = True
-    dtype: Union[str, "torch.dtype"] | None = None
+    dtype: Any = dtype_validator(default=None)
     chunk_size_feed_forward: int = 0
     is_encoder_decoder: bool = False
 
