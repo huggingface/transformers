@@ -49,8 +49,32 @@ diff = '''
 
 [rules.TRF003]
 description = "forward() should use capture_output/can_return_tuple decorators instead of manual return_dict branching."
-default_enabled = false
-allowlist_models = []
+default_enabled = true
+# Legacy models with the old return_dict branching pattern still pending migration.
+# The migrated batch currently covers bloom, deberta, deberta_v2, falcon, longformer,
+# longt5, mbart, mt5, t5, umt5, wav2vec2, and xlnet; the remaining ones are tracked here.
+allowlist_models = [
+    "bark", "beit", "bit", "blip_2", "canine", "codegen", "cpmant", "ctrl", "cvt",
+    "dab_detr", "dac", "data2vec", "decision_transformer", "depth_anything", "depth_pro",
+    "dinat", "donut", "dpr", "efficientnet", "encodec", "falcon_mamba",
+    "fastspeech2_conformer", "flaubert", "flava", "fnet", "focalnet", "fsmt", "funnel",
+    "glpn", "gpt_neo", "gpt_neox_japanese", "gptj", "granite_speech",
+    "granite_speech_plus", "grounding_dino", "hgnet_v2", "hiera",
+    "higgs_audio_v2_tokenizer", "hubert", "ibert", "imagegpt", "kyutai_speech_to_text",
+    "led", "levit", "lilt", "llama4", "luke", "lxmert", "mamba", "mamba2",
+    "mask2former", "maskformer", "megatron_bert", "mgp_str", "mimi", "mm_grounding_dino",
+    "mobilenet_v1", "mobilenet_v2", "mobilevit", "mobilevitv2", "moshi", "mpnet", "mpt",
+    "mra", "mvp", "nystromformer", "omdet_turbo", "oneformer", "openai", "patchtsmixer",
+    "patchtst", "perceiver", "pix2struct", "poolformer", "pop2piano", "prophetnet", "pvt",
+    "pvt_v2", "recurrent_gemma", "reformer", "regnet", "rembert", "resnet", "roformer",
+    "rt_detr", "rwkv", "seamless_m4t", "seamless_m4t_v2", "segformer", "seggpt", "sew",
+    "sew_d", "speech_encoder_decoder", "speecht5", "squeezebert", "superglue", "superpoint",
+    "swiftformer", "swin", "swin2sr", "swinv2", "table_transformer", "tapas", "textnet",
+    "timesformer", "timm_backbone", "timm_wrapper", "trocr", "tvp", "udop",
+    "unispeech", "unispeech_sat", "univnet", "upernet", "vilt", "vision_encoder_decoder",
+    "vision_text_dual_encoder", "visual_bert", "vitdet", "vitmatte", "vits",
+    "wav2vec2_bert", "wav2vec2_conformer", "wavlm", "xcodec", "xlm", "yoso", "zoedepth",
+]
 
 [rules.TRF003.explanation]
 what_it_does = "Detects forward methods that use the old 'if not return_dict: return (x,)' pattern."
