@@ -241,6 +241,9 @@ IGNORE_NON_TESTED = (
         "Qwen3OmniMoeThinkerTextModel",
         "Qwen3OmniMoeForConditionalGeneration",  # Bigger model tested through Qwen3OmniMoeForConditionalGenerationIntegrationTest.
         "Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration",  # Building part of bigger (tested) model. Tested implicitly through Qwen3OmniMoeForConditionalGenerationIntegrationTest.
+        "Molmo2TextModel",  # Building part of bigger (tested) model. Tested implicitly through Molmo2ForConditionalGeneration.
+        "Molmo2VisionModel",  # Building part of bigger (tested) model. Tested implicitly through Molmo2ForConditionalGeneration.
+        "Molmo2VisionBackbone",  # Building part of bigger (tested) model. Tested implicitly through Molmo2ForConditionalGeneration.
         "MllamaTextModel",  # Building part of bigger (tested) model. # TODO: add tests
         "MllamaVisionModel",  # Building part of bigger (tested) model. # TODO: add tests
         "Llama4TextModel",  # Building part of bigger (tested) model. # TODO: add tests
@@ -312,6 +315,8 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
     "Aimv2TextModel",
+    "Molmo2VisionModel",
+    "Molmo2VisionBackbone",
     "AlignTextModel",
     "AlignVisionModel",
     "ClapTextModel",

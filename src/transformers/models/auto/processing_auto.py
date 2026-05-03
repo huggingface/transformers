@@ -125,6 +125,7 @@ else:
             ("mllama", "MllamaProcessor"),
             ("mm-grounding-dino", "GroundingDinoProcessor"),
             ("modernvbert", "Idefics3Processor"),
+            ("molmo2", "Molmo2Processor"),
             ("moonshine", "Wav2Vec2Processor"),
             ("moonshine_streaming", "MoonshineStreamingProcessor"),
             ("musicflamingo", "MusicFlamingoProcessor"),

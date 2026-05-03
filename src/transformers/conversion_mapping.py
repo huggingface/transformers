@@ -313,6 +313,29 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^vision_model", target_patterns="model.vision_model"),
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
         ],
+        "molmo2": [
+            # text backbone: `transformer.*` -> `language_model.*` (exclude vit's `image_vit.transformer.`)
+            WeightRenaming(source_patterns=r"(?<!image_vit\.)transformer\.", target_patterns="language_model."),
+            WeightRenaming(source_patterns=r"language_model\.ln_f\.", target_patterns="language_model.norm."),
+            # vision ViT: `vision_backbone.image_vit.transformer.resblocks.N.*` -> `...encoder.layers.N.*`
+            WeightRenaming(
+                source_patterns=r"vision_backbone\.image_vit\.transformer\.resblocks\.",
+                target_patterns="vision_backbone.image_vit.encoder.layers.",
+            ),
+            WeightRenaming(source_patterns=r"\.attention\.wq", target_patterns=".self_attn.q_proj"),
+            WeightRenaming(source_patterns=r"\.attention\.wk", target_patterns=".self_attn.k_proj"),
+            WeightRenaming(source_patterns=r"\.attention\.wv", target_patterns=".self_attn.v_proj"),
+            WeightRenaming(source_patterns=r"\.attention\.wo", target_patterns=".self_attn.out_proj"),
+            WeightRenaming(source_patterns=r"\.feed_forward\.w1", target_patterns=".mlp.fc1"),
+            WeightRenaming(source_patterns=r"\.feed_forward\.w2", target_patterns=".mlp.fc2"),
+            WeightRenaming(source_patterns=r"\.attention_norm", target_patterns=".layer_norm1"),
+            WeightRenaming(source_patterns=r"\.ffn_norm", target_patterns=".layer_norm2"),
+            # image pooling 2d: wq/wk/wv/wo -> q_proj/k_proj/v_proj/out_proj
+            WeightRenaming(source_patterns=r"image_pooling_2d\.wq", target_patterns="image_pooling_2d.q_proj"),
+            WeightRenaming(source_patterns=r"image_pooling_2d\.wk", target_patterns="image_pooling_2d.k_proj"),
+            WeightRenaming(source_patterns=r"image_pooling_2d\.wv", target_patterns="image_pooling_2d.v_proj"),
+            WeightRenaming(source_patterns=r"image_pooling_2d\.wo", target_patterns="image_pooling_2d.out_proj"),
+        ],
         "emu3": [
             WeightRenaming(source_patterns=r"^text_model.model", target_patterns="model.text_model"),
             WeightRenaming(source_patterns=r"^text_model.lm_head", target_patterns="lm_head"),

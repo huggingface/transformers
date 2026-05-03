@@ -76,6 +76,7 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "kosmos2-5": "Kosmos2_5Config",
     "donut": "DonutSwinConfig",
     "esmfold": "EsmConfig",
+    "molmo2": "Molmo2Config",
     "parakeet": "ParakeetCTCConfig",
     "privacy-filter": "OpenAIPrivacyFilterConfig",
     "lasr": "LasrCTCConfig",
