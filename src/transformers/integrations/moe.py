@@ -403,10 +403,7 @@ def grouped_mm_experts_forward(
     # With deterministic algorithms, CPU only supports float input, CUDA only supports int input.
 
     # torch.histc() does not support integer dtypes on CPU and MPS.
-    # It works well and is more efficient on CUDA when using int.
-    # For all other backends (XPU, TPU/XLA, HPU, etc.), we conservatively
-    # use float32 as it has broader operator suppor
-    histc_input = expert_ids_g.int() if device.type == "cuda" else expert_ids_g.to(torch.float32)
+    histc_input = expert_ids_g.float() if device.type in ("cpu", "mps") else expert_ids_g.int()
     tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1)
     offsets = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
 
