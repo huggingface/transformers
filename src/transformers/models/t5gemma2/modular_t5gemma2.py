@@ -325,13 +325,94 @@ class T5Gemma2MergedAttention(Gemma3Attention):
             cross_value_states = cross_attention_cache.layers[self.layer_idx].values
 
         # merged attention.
-        query_states = query_states
         cross_key_size = cross_input_shape[1]
+        q_len = hidden_states.shape[1]
+
+        # Determine whether the runtime conditions allow using Flash Attention 2 for the
+        # merged attention step.  FA2 is only valid here at q_len == 1 (single-token decode)
+        # because the fused causal+bidirectional masking required for q_len > 1 cannot be
+        # expressed in a single FA2 kernel call.
+        _fa2_eligible = (
+            self.config._attn_implementation == "flash_attention_2"
+            and q_len == 1
+            and not self.training
+            and hidden_states.dtype in (torch.float16, torch.bfloat16)
+            and hidden_states.device.type == "cuda"
+        )
+
+        if self.config._attn_implementation == "flash_attention_2" and not _fa2_eligible:
+            logger.warning_once(
+                "T5Gemma2MergedAttention: Flash Attention 2 is only supported during "
+                "single-token generation steps (q_len == 1, eval mode, fp16/bf16 on CUDA). "
+                "Falling back to SDPA for this forward pass.  Full training / prefill support "
+                "requires two separate FA2 calls with an online log-sum-exp combination and "
+                "will be addressed in a future release."
+            )
+
+        if _fa2_eligible:
+            from ..integrations.flash_attention import flash_attention_forward as _fa2_forward
+
+            # Capture self-KV length before any trimming so we can correctly index the
+            # incoming merged_attention_mask (which covers the full cached self span).
+            full_self_kv = key_states.shape[2]
+            enc_kv = cross_key_states.shape[2]
+
+            # SWA: trim self-KV to the last `sliding_window` tokens for the decode step.
+            # We deliberately do NOT pass sliding_window into the FA2 call because that
+            # parameter applies to the entire merged KV, which would incorrectly gate the
+            # cross-attention tokens behind the same window boundary.
+            if self.sliding_window is not None and full_self_kv > self.sliding_window:
+                key_states = key_states[:, :, -self.sliding_window :, :]
+                value_states = value_states[:, :, -self.sliding_window :, :]
+                effective_self_kv = self.sliding_window
+            else:
+                effective_self_kv = full_self_kv
+
+            # Build a 2D FA2-style padding mask aligned with the (possibly trimmed) merged KV.
+            # merged_attention_mask is either None (no padding anywhere) or a 2D boolean tensor
+            # of shape (batch, full_self_kv + enc_kv) produced by the decoder forward pass.
+            if merged_attention_mask is not None:
+                dec_mask = merged_attention_mask[:, full_self_kv - effective_self_kv : full_self_kv]
+                enc_mask = merged_attention_mask[:, full_self_kv:]
+                fa2_mask = torch.cat([dec_mask, enc_mask], dim=-1)
+                # Pass None when all positions are valid so FA2 uses the faster non-varlen path.
+                fa2_mask = None if fa2_mask.all() else fa2_mask
+            else:
+                fa2_mask = None
+
+            key_merged = torch.cat([key_states, cross_key_states], dim=2)
+            value_merged = torch.cat([value_states, cross_value_states], dim=2)
+
+            # is_causal=False: at q_len == 1, there are no future decoder tokens to mask.
+            # sliding_window=None: SWA is already enforced by the K/V trimming above.
+            attn_output, _ = _fa2_forward(
+                self,
+                query_states,
+                key_merged,
+                value_merged,
+                fa2_mask,
+                dropout=0.0,
+                scaling=self.scaling,
+                sliding_window=None,
+                softcap=self.attn_logit_softcapping,
+                is_causal=False,
+            )
+            attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+            attn_output = self.o_proj(attn_output)
+            # FA2 does not return attention weights.
+            return attn_output, None, None
+
+        # Eager / SDPA path (including FA2-requested-but-not-eligible fallback to SDPA).
+        effective_impl = (
+            "sdpa"
+            if self.config._attn_implementation == "flash_attention_2"
+            else self.config._attn_implementation
+        )
         key_states = torch.cat([key_states, cross_key_states], dim=2)
         value_states = torch.cat([value_states, cross_value_states], dim=2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
+            effective_impl, eager_attention_forward
         )
 
         attn_output, attn_weights = attention_interface(
@@ -348,7 +429,7 @@ class T5Gemma2MergedAttention(Gemma3Attention):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
 
-        # decompose merged attention weights into self & cross attention weights
+        # Decompose merged attention weights into self & cross attention weights.
         if attn_weights is not None:
             self_attn_weights = attn_weights[..., :-cross_key_size]
             cross_attn_weights = attn_weights[..., -cross_key_size:]
@@ -467,9 +548,13 @@ class T5Gemma2PreTrainedModel(Gemma3PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
 
-    # Mask creation is incompatible
-    # FA due to non-default creation / SWA
-    _supports_flash_attn = False
+    # Flash Attention 2 is supported for the encoder (bidirectional, standard FA2) and for
+    # the decoder merged attention exclusively during single-token generation steps (q_len == 1).
+    # At q_len == 1 the merged attention reduces to a single-row softmax over [self_KV || cross_KV],
+    # which a single FA2 kernel call can express correctly. For q_len > 1 (training / prefill),
+    # the fused causal+bidirectional masking cannot be represented in one FA2 call; those paths
+    # fall back to SDPA automatically. See T5Gemma2MergedAttention.forward for the runtime guards.
+    _supports_flash_attn = True
     # Flex due to custom masks not compatible to be merged after creation
     _supports_flex_attn = False
 
@@ -835,14 +920,48 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
                 )
             }
 
-        merged_attn_mask_mapping = {
-            "full_attention": torch.cat(
-                [self_attn_mask_mapping["full_attention"], cross_attn_mask_mapping["full_attention"]], dim=-1
-            ),
-            "sliding_attention": torch.cat(
-                [self_attn_mask_mapping["sliding_attention"], cross_attn_mask_mapping["full_attention"]], dim=-1
-            ),
-        }
+        # With Flash Attention 2, create_causal_mask / create_bidirectional_mask return a 2D
+        # boolean padding mask or None (when there is no padding).  torch.cat on two Nones
+        # would raise; use a helper that fills in all-valid tensors from the KV tensor shapes.
+        _is_fa2 = "flash_attention" in self.config._attn_implementation
+
+        if _is_fa2:
+            _enc_kv = encoder_hidden_states.shape[1]
+            _batch = inputs_embeds.shape[0]
+            # Decoder KV span = current query tokens + any tokens already in cache.
+            _dec_kv = inputs_embeds.shape[1] + (
+                past_key_values.self_attention_cache.get_seq_length() if past_key_values is not None else 0
+            )
+
+            def _merge_fa2(dec_mask, enc_mask):
+                """Concatenate two FA2 2-D padding masks, promoting None to all-valid."""
+                if dec_mask is None and enc_mask is None:
+                    return None
+                if dec_mask is None:
+                    dec_mask = inputs_embeds.new_ones(_batch, _dec_kv, dtype=torch.bool)
+                if enc_mask is None:
+                    enc_mask = inputs_embeds.new_ones(_batch, _enc_kv, dtype=torch.bool)
+                return torch.cat([dec_mask, enc_mask], dim=-1)
+
+            merged_attn_mask_mapping = {
+                "full_attention": _merge_fa2(
+                    self_attn_mask_mapping["full_attention"],
+                    cross_attn_mask_mapping["full_attention"],
+                ),
+                "sliding_attention": _merge_fa2(
+                    self_attn_mask_mapping["sliding_attention"],
+                    cross_attn_mask_mapping["full_attention"],
+                ),
+            }
+        else:
+            merged_attn_mask_mapping = {
+                "full_attention": torch.cat(
+                    [self_attn_mask_mapping["full_attention"], cross_attn_mask_mapping["full_attention"]], dim=-1
+                ),
+                "sliding_attention": torch.cat(
+                    [self_attn_mask_mapping["sliding_attention"], cross_attn_mask_mapping["full_attention"]], dim=-1
+                ),
+            }
 
         # input layer
         hidden_states = inputs_embeds
