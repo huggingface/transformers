@@ -1557,6 +1557,16 @@ class Trainer:
 
     def _prepare_for_training(self, max_steps, train_dataloader, resume_from_checkpoint):
         """Wrap model, create optimizer and scheduler, and run accelerator.prepare. Returns (model, train_dataloader)."""
+        # DeepSpeed: clear stale inference engine refs left by evaluate()/predict()
+        # so that _wrap_model() and accelerator.prepare() can create a training engine.
+        if (
+            self.is_deepspeed_enabled
+            and self.accelerator.deepspeed_engine_wrapped is None
+            and self.model_wrapped is not self.model
+        ):
+            self.model_wrapped = self.model
+            self.deepspeed = None
+
         delay_optimizer_creation = is_sagemaker_mp_enabled() or self.is_fsdp_xla_enabled or self.is_fsdp_enabled
 
         # Can't delay optimizer creation when using FSDP2: https://github.com/huggingface/accelerate/blob/3f636d626063ffcf9a337c7d3624d61b7d187d59/src/accelerate/accelerator.py#L1404
@@ -2629,31 +2639,52 @@ class Trainer:
 
         prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else args.prediction_loss_only
 
-        # if eval is called w/o train, handle model prep here
+        # if eval is called without train, handle model prep here
+        _ds_config_mutated = False
+        _need_ds_eval_engine = False
         if self.is_deepspeed_enabled and self.deepspeed is None:
-            _, _ = deepspeed_init(self, num_training_steps=0, inference=True)
+            hf_deepspeed_config = self.accelerator.state.deepspeed_plugin.hf_ds_config
+            # Only ZeRO-3 needs a DS inference engine (params are partitioned across GPUs).
+            # ZeRO-1/2 keep full params on each GPU and can eval without one.
+            _need_ds_eval_engine = hf_deepspeed_config.is_zero3()
+            if _need_ds_eval_engine:
+                # deepspeed_init(inference=True) mutates shared config (deletes optimizer,
+                # bakes scheduler "auto" to 0). Back up and restore after prepare().
+                import copy
+
+                _ds_config = hf_deepspeed_config.config
+                _saved_optimizer = copy.deepcopy(_ds_config.get("optimizer"))
+                _saved_sched_params = copy.deepcopy(_ds_config.get("scheduler", {}).get("params"))
+                _ds_config_mutated = True
+                _, _ = deepspeed_init(self, num_training_steps=0, inference=True)
 
         model = self._wrap_model(self.model, training=False)
 
-        if len(self.accelerator._models) == 0 and model is self.model:
-            start_time = time.time()
-            model = (
-                self.accelerator.prepare(model)
-                if self.is_deepspeed_enabled or (self.is_fsdp_enabled and not self.args.torch_compile)
-                else self.accelerator.prepare_model(model, evaluation_mode=True)
-            )
-            self.model_preparation_time = round(time.time() - start_time, 4)
+        try:
+            if len(self.accelerator._models) == 0 and model is self.model:
+                start_time = time.time()
+                if _need_ds_eval_engine or self.deepspeed is not None:
+                    model = self.accelerator.prepare(model)
+                elif self.is_fsdp_enabled and not self.args.torch_compile:
+                    model = self.accelerator.prepare(model)
+                else:
+                    model = self.accelerator.prepare_model(model, evaluation_mode=True)
+                self.model_preparation_time = round(time.time() - start_time, 4)
 
-            if self.is_fsdp_enabled:
-                self.model = model
+                if self.is_fsdp_enabled:
+                    self.model = model
 
-            # for the rest of this function `model` is the outside model, whether it was wrapped or not
-            if model is not self.model:
-                self.model_wrapped = model
+                if model is not self.model:
+                    self.model_wrapped = model
 
-            # backward compatibility
-            if self.is_deepspeed_enabled:
-                self.deepspeed = self.model_wrapped
+                if self.is_deepspeed_enabled and _need_ds_eval_engine:
+                    self.deepspeed = self.model_wrapped
+        finally:
+            if _ds_config_mutated:
+                if _saved_optimizer is not None:
+                    _ds_config["optimizer"] = _saved_optimizer
+                if _saved_sched_params is not None:
+                    _ds_config.setdefault("scheduler", {})["params"] = _saved_sched_params
 
         # if full fp16 or bf16 eval is wanted and this ``evaluation`` or ``predict`` isn't called
         # while ``train`` is running, cast it to the right dtype first and then put on device
