@@ -2934,6 +2934,20 @@ class Trainer:
         else:
             labels = None
 
+        # Enable Liger fused loss path during eval when we only need the loss (no logits).
+        if (
+            prediction_loss_only
+            and getattr(self.args, "use_liger_kernel", False)
+            and inputs.get("labels") is not None
+            and "skip_logits" not in inputs
+        ):
+            try:
+                forward_sig = inspect.signature(unwrap_model(model).forward)
+                if "skip_logits" in forward_sig.parameters:
+                    inputs["skip_logits"] = True
+            except (TypeError, ValueError):
+                pass
+
         with torch.no_grad():
             if is_sagemaker_mp_enabled():
                 raw_outputs = smp_forward_only(model, inputs)
