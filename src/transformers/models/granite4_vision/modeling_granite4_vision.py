@@ -542,7 +542,9 @@ class Granite4VisionPreTrainedModel(PreTrainedModel):
             )
             if module.padding_idx is not None:
                 init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, (nn.LayerNorm, Granite4VisionTextRMSNorm)):
+        elif isinstance(module, nn.LayerNorm) or (
+            hasattr(module, "weight") and hasattr(module, "variance_epsilon") and not isinstance(module, nn.Linear)
+        ):
             init.ones_(module.weight)
             if hasattr(module, "bias") and module.bias is not None:
                 init.zeros_(module.bias)
