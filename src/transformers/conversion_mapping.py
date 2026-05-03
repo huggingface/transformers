@@ -738,6 +738,10 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"^mlp1\.1\.", r"model\.multi_modal_projector\.linear_1\."),
             WeightRenaming(r"^mlp1\.3\.", r"model\.multi_modal_projector\.linear_2\."),
         ],
+        "exaone4_5": [
+            WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"^visual", target_patterns="model.visual"),
+        ],
         "legacy": [
             WeightRenaming(
                 source_patterns="LayerNorm.gamma",
