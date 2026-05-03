@@ -285,6 +285,7 @@ if TYPE_CHECKING:
     from .musicgen_melody import *
     from .mvp import *
     from .myt5 import *
+    from .nandi import *
     from .nanochat import *
     from .nemotron import *
     from .nemotron_h import *
