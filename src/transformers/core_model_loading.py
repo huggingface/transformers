@@ -384,7 +384,7 @@ class PermuteForRope(ConversionOps):
 
     def _apply(self, tensor: torch.Tensor) -> torch.Tensor:
         dim1, dim2 = tensor.shape
-        n_heads = self.config.getattr("num_attention_heads", 1)
+        n_heads = getattr(self.config, "num_attention_heads", 1)
 
         tensor = tensor.view(n_heads, dim1 // n_heads // 2, 2, dim2)
         tensor = tensor.transpose(1, 2).reshape(dim1, dim2)
