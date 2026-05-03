@@ -3529,9 +3529,8 @@ def _prepare_debugging_info(test_info, info):
     """Combine the information about the test and the call information to a patched function/method within it."""
 
     info = f"{test_info}\n\n{info}"
-    p = os.path.join(os.environ.get("_PATCHED_TESTING_METHODS_OUTPUT_DIR", ""), "captured_info.txt")
-    # TODO (ydshieh): This is not safe when we use pytest-xdist with more than 1 worker.
-    with open(p, "a") as fp:
+    output_path = _get_patched_testing_methods_output_file()
+    with output_path.open("a") as fp:
         fp.write(f"{info}\n\n{'=' * 120}\n\n")
 
     return info
@@ -3754,6 +3753,27 @@ def _parse_call_info(func, args, kwargs, call_argument_expressions, target_args)
     return info
 
 
+def _get_patched_testing_methods_output_file() -> Path:
+    """Return the output file used by patched assertion methods.
+
+    Under `pytest-xdist`, workers run in separate processes but can share the same output directory. Using a worker-
+    specific file avoids concurrent writes and resets clobbering each other's captured debugging information.
+    """
+
+    output_dir = Path(os.environ.get("_PATCHED_TESTING_METHODS_OUTPUT_DIR", ""))
+    worker_id = os.environ.get("PYTEST_XDIST_WORKER")
+    filename = f"captured_info_{worker_id}.txt" if worker_id else "captured_info.txt"
+    return output_dir / filename
+
+
+def _reset_patched_testing_methods_output_file() -> Path:
+    """Clear the output file used by patched assertion methods and return its path."""
+
+    output_path = _get_patched_testing_methods_output_file()
+    output_path.unlink(missing_ok=True)
+    return output_path
+
+
 def patch_testing_methods_to_collect_info():
     """
     Patch some methods (`torch.testing.assert_close`, `unittest.case.TestCase.assertEqual`, etc).
@@ -3761,8 +3781,7 @@ def patch_testing_methods_to_collect_info():
     This will allow us to collect the call information, e.g. the argument names and values, also the literal expressions
     passed as the arguments.
     """
-    p = os.path.join(os.environ.get("_PATCHED_TESTING_METHODS_OUTPUT_DIR", ""), "captured_info.txt")
-    Path(p).unlink(missing_ok=True)
+    _reset_patched_testing_methods_output_file()
 
     if is_torch_available():
         import torch
