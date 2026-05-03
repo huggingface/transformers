@@ -592,6 +592,9 @@ class Trainer:
         # Guards one-time LR scheduler creation in create_optimizer_and_scheduler
         self._created_lr_scheduler = False
 
+        self._tr_loss_components = {}
+        self._total_loss_components_scalar = {}
+
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
 
         # ---- 11. Finalize -----------------------------------------------------------
@@ -1739,16 +1742,38 @@ class Trainer:
                 if (
                     self.args.logging_nan_inf_filter
                     and not is_torch_xla_available()
-                    and (torch.isnan(tr_loss_step) or torch.isinf(tr_loss_step))
+                    and (
+                        torch.isnan(tr_loss_step)
+                        if isinstance(tr_loss_step, torch.Tensor)
+                        else any(torch.isnan(v) for v in tr_loss_step.values())
+                    )
+                    or (
+                        torch.isinf(tr_loss_step)
+                        if isinstance(tr_loss_step, torch.Tensor)
+                        else any(torch.isinf(v) for v in tr_loss_step.values())
+                    )
                 ):
                     # if loss is nan or inf simply add the average of previous logged losses
                     self._tr_loss += self._tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
+                    if isinstance(tr_loss_step, dict):
+                        for k in tr_loss_step:
+                            if k in self._tr_loss_components:
+                                self._tr_loss_components[k] += self._tr_loss_components[k] / (
+                                    1 + self.state.global_step - self._globalstep_last_logged
+                                )
                 else:
-                    if self._tr_loss.device != tr_loss_step.device:
-                        raise ValueError(
-                            f"Calculated loss must be on the original device: {self._tr_loss.device} but device in use is {tr_loss_step.device}"
-                        )
-                    self._tr_loss += tr_loss_step
+                    if isinstance(tr_loss_step, dict):
+                        for k, v in tr_loss_step.items():
+                            if k not in self._tr_loss_components:
+                                self._tr_loss_components[k] = torch.tensor(0.0, device=self.args.device)
+                            self._tr_loss_components[k] += v
+                        self._tr_loss += tr_loss_step["loss"]
+                    else:
+                        if self._tr_loss.device != tr_loss_step.device:
+                            raise ValueError(
+                                f"Calculated loss must be on the original device: {self._tr_loss.device} but device in use is {tr_loss_step.device}"
+                            )
+                        self._tr_loss += tr_loss_step
 
                 self.current_flos += float(self.floating_point_ops(inputs))
                 self._track_num_input_tokens(inputs)
@@ -1905,8 +1930,14 @@ class Trainer:
                 loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
                 return loss_mb.reduce_mean().detach().to(self.args.device)
 
+            return_outputs = self.args.logging_loss_components
             with self.compute_loss_context_manager():
-                loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
+                loss = self.compute_loss(
+                    model, inputs, return_outputs=return_outputs, num_items_in_batch=num_items_in_batch
+                )
+
+            if return_outputs:
+                loss, outputs = loss
 
             del inputs
             if (
@@ -1935,6 +1966,18 @@ class Trainer:
                 kwargs["scale_wrt_gas"] = False
 
             self.accelerator.backward(loss, **kwargs)
+
+            if return_outputs and isinstance(outputs, dict):
+                # Extract all loss-like components
+                loss_components = {
+                    k: v.detach()
+                    for k, v in outputs.items()
+                    if ("loss" in k or k in self.label_names) and isinstance(v, torch.Tensor) and v.numel() == 1
+                }
+                # Ensure the main loss is also included if not already
+                if "loss" not in loss_components:
+                    loss_components["loss"] = loss.detach()
+                return loss_components
 
             return loss.detach()
 
@@ -2066,6 +2109,15 @@ class Trainer:
             tr_loss -= tr_loss
 
             logs["loss"] = tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged)
+
+            if self.args.logging_loss_components:
+                for k, v in self._tr_loss_components.items():
+                    v_scalar = nested_gather(v, self.args.parallel_mode).mean().item()
+                    self._tr_loss_components[k] -= self._tr_loss_components[k]
+                    logs[k] = v_scalar / (self.state.global_step - self._globalstep_last_logged)
+                    if k not in self._total_loss_components_scalar:
+                        self._total_loss_components_scalar[k] = 0.0
+                    self._total_loss_components_scalar[k] += v_scalar
             if grad_norm is not None:
                 logs["grad_norm"] = grad_norm.item() if isinstance(grad_norm, torch.Tensor) else grad_norm
             if learning_rate is not None:
