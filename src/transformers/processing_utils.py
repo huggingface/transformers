@@ -22,6 +22,7 @@ import json
 import os
 import sys
 import typing
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any, Literal, TypedDict, TypeVar, Union
@@ -1424,10 +1425,31 @@ class ProcessorMixin(PushToHubMixin):
         if token is not None:
             kwargs["token"] = token
 
+        prebuilt = cls._pop_prebuilt_subprocessors(kwargs)
+
         # Get processor_dict first so we can use it to instantiate non-tokenizer sub-processors
         processor_dict, instantiation_kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
-        args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, processor_dict, **kwargs)
+        args = cls._get_arguments_from_pretrained(
+            pretrained_model_name_or_path, processor_dict, _prebuilt=prebuilt, **kwargs
+        )
         return cls.from_args_and_dict(args, processor_dict, **instantiation_kwargs)
+
+    @classmethod
+    def _pop_prebuilt_subprocessors(cls, kwargs: dict) -> dict:
+        """Pop pre-built sub-processors from `kwargs` by exact attribute name, or by modality
+        alias (e.g. `tokenizer=` → `bpe_tokenizer`) when that modality is unambiguous.
+        """
+        sub_processors = cls.get_attributes()
+        modality_counts = Counter(_get_modality_for_attribute(s) for s in sub_processors)
+        prebuilt = {}
+        for sub_processor_type in sub_processors:
+            modality = _get_modality_for_attribute(sub_processor_type)
+            instance = kwargs.pop(sub_processor_type, None)
+            if instance is None and modality != sub_processor_type and modality_counts[modality] == 1:
+                instance = kwargs.pop(modality, None)
+            if instance is not None:
+                prebuilt[sub_processor_type] = instance
+        return prebuilt
 
     @classmethod
     def get_attributes(cls):
@@ -1499,7 +1521,9 @@ class ProcessorMixin(PushToHubMixin):
         return tokenizer
 
     @classmethod
-    def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, processor_dict=None, **kwargs):
+    def _get_arguments_from_pretrained(
+        cls, pretrained_model_name_or_path, processor_dict=None, *, _prebuilt=None, **kwargs
+    ):
         """
         Identify and instantiate the subcomponents of Processor classes, such as image processors, tokenizers,
         and feature extractors. This method inspects the processor's `__init__` signature to identify parameters
@@ -1517,15 +1541,21 @@ class ProcessorMixin(PushToHubMixin):
             pretrained_model_name_or_path: Path or model id to load from.
             processor_dict: Optional dict containing processor config (from processor_config.json).
                 Required when loading additional non-tokenizer sub-processors.
+            _prebuilt: Optional `{attribute: instance}` dict of pre-built sub-processors that skip loading.
         """
         args = []
         processor_dict = processor_dict if processor_dict is not None else {}
         # Remove subfolder from kwargs to avoid duplicate keyword arguments
         subfolder = kwargs.pop("subfolder", "")
 
+        prebuilt = _prebuilt or {}
+
         # get args from processor init signature
         sub_processors = cls.get_attributes()
         for sub_processor_type in sub_processors:
+            if sub_processor_type in prebuilt:
+                args.append(prebuilt[sub_processor_type])
+                continue
             modality = _get_modality_for_attribute(sub_processor_type)
             is_primary = sub_processor_type == modality
 
