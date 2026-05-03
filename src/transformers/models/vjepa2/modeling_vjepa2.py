@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -128,24 +129,44 @@ class VJEPA2Embeddings(nn.Module):
         self.hidden_size = hidden_size
         self.patch_embeddings = VJEPA2PatchEmbeddings3D(config, hidden_size=hidden_size)
 
+        if config.img_temporal_dim_size is not None:
+            img_config = copy.copy(config)
+            img_config.tubelet_size = 1
+            self.patch_embeddings_img = VJEPA2PatchEmbeddings3D(img_config, hidden_size=hidden_size)
+        else:
+            self.patch_embeddings_img = None
+
+        if config.use_modality_embeddings:
+            self.img_mod_embed = nn.Parameter(torch.zeros(1, 1, hidden_size))
+            self.video_mod_embed = nn.Parameter(torch.zeros(1, 1, hidden_size))
+
         self.num_patches = self.patch_embeddings.num_patches
         self.patch_size = config.patch_size
 
     def forward(self, pixel_values_videos: torch.Tensor) -> torch.Tensor:
         num_frames = pixel_values_videos.shape[1]
 
-        # Swap `frames` and `channels` dims, the result is:
         # (batch_size, channels, num_frames, height, width)
         pixel_values_videos = pixel_values_videos.permute(0, 2, 1, 3, 4)
 
-        # For some cases, if the input vision (image/video) consists of num_frames < tubelet_size,
-        # then embedding lookup fails. In these cases, we duplicate the frames.
-        if num_frames < self.config.tubelet_size:
-            pixel_values_videos = pixel_values_videos.repeat(1, 1, self.config.tubelet_size, 1, 1)
+        is_image = self.config.img_temporal_dim_size is not None and num_frames == self.config.img_temporal_dim_size
 
-        target_dtype = self.patch_embeddings.proj.weight.dtype
-        pixel_values_videos = pixel_values_videos.to(dtype=target_dtype)
-        embeddings = self.patch_embeddings(pixel_values_videos)
+        if is_image and self.patch_embeddings_img is not None:
+            target_dtype = self.patch_embeddings_img.proj.weight.dtype
+            pixel_values_videos = pixel_values_videos.to(dtype=target_dtype)
+            embeddings = self.patch_embeddings_img(pixel_values_videos)
+        else:
+            if num_frames < self.config.tubelet_size:
+                pixel_values_videos = pixel_values_videos.repeat(1, 1, self.config.tubelet_size, 1, 1)
+            target_dtype = self.patch_embeddings.proj.weight.dtype
+            pixel_values_videos = pixel_values_videos.to(dtype=target_dtype)
+            embeddings = self.patch_embeddings(pixel_values_videos)
+
+        if self.config.use_modality_embeddings:
+            if is_image:
+                embeddings = embeddings + self.img_mod_embed
+            else:
+                embeddings = embeddings + self.video_mod_embed
 
         return embeddings
 
@@ -177,25 +198,24 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def rotate_queries_or_keys(x, pos):
+def rotate_queries_or_keys(x, pos, use_interleave=False):
     B, num_heads, N, D = x.size()
 
-    # similar to inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-    # they are computing this every time. instead HF style is to compute the inv_freq once and store it
-    # -- compute angle for each position
     omega = torch.arange(D // 2, dtype=x.dtype, device=x.device)
     omega /= D / 2.0
     omega = 1.0 / 10000**omega  # (D/2,)
     freq = pos.unsqueeze(-1) * omega  # (..., N, D/2), outer product
 
-    # -- build rotation matrix and apply
     emb_sin = freq.sin()  # (..., N, D/2)
     emb_cos = freq.cos()  # (..., N, D/2)
 
-    emb_sin = emb_sin.repeat(1, 1, 1, 2)
-    emb_cos = emb_cos.repeat(1, 1, 1, 2)
+    if use_interleave:
+        emb_sin = emb_sin.repeat_interleave(2, dim=-1)
+        emb_cos = emb_cos.repeat_interleave(2, dim=-1)
+    else:
+        emb_sin = emb_sin.repeat(1, 1, 1, 2)
+        emb_cos = emb_cos.repeat(1, 1, 1, 2)
 
-    # --
     y = x.unflatten(-1, (-1, 2))
     y1, y2 = y.unbind(dim=-1)
 
@@ -210,11 +230,13 @@ class VJEPA2RopeAttention(nn.Module):
         config: VJEPA2Config,
         hidden_size: int = 1024,
         num_attention_heads: int = 16,
+        is_predictor: bool = False,
     ):
         super().__init__()
         self.config = config
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
+        self.is_predictor = is_predictor
         if hidden_size % num_attention_heads != 0:
             raise ValueError(
                 f"The hidden size {(hidden_size,)} is not a multiple of the number of attention "
@@ -234,6 +256,8 @@ class VJEPA2RopeAttention(nn.Module):
 
         self.grid_size = self.config.crop_size // self.config.patch_size
         self.grid_depth = self.config.frames_per_clip // self.config.tubelet_size
+        # matches Meta's hardcoded RoPE reference resolution (256 for patch_size=16)
+        self.pretrained_grid_size = 256 // self.config.patch_size
 
         self.d_dim = int(2 * ((self.attention_head_size // 3) // 2))
         self.h_dim = int(2 * ((self.attention_head_size // 3) // 2))
@@ -259,33 +283,34 @@ class VJEPA2RopeAttention(nn.Module):
         device = x.device
         token_size = x.size(1)
 
-        # Note: when masks is none, we use a 1d id instead of Bxnum_attention_heads mask,
-        # as 1d vector is broadcasted to the correct shapes.
         if masks is not None:
             ids = masks.unsqueeze(1).repeat(1, self.num_attention_heads, 1)
         else:
             ids = torch.arange(token_size, device=device)
-        # change to allow for extrapolation
         tokens_per_frame = int(self.grid_size * self.grid_size)
         frame_ids = self._get_frame_pos(ids)
-        # --
         tokens_per_row = self.grid_size
         height_ids = self._get_height_pos(ids)
-        # --
-        # Remove frame component from ids (1st term) and height component (2nd term)
         width_ids = (ids - tokens_per_frame * frame_ids) - tokens_per_row * height_ids
+
+        if self.config.interpolate_rope and not self.is_predictor and self.grid_size > 1:
+            h_scale = (self.pretrained_grid_size - 1.0) / max(self.grid_size - 1.0, 1.0)
+            w_scale = (self.pretrained_grid_size - 1.0) / max(self.grid_size - 1.0, 1.0)
+            height_ids = height_ids.float() * h_scale
+            width_ids = width_ids.float() * w_scale
+
         return frame_ids, height_ids, width_ids
 
     def apply_rotary_embeddings(self, qk, pos_ids):
+        use_interleave = self.config.use_rope_interleave
         d_mask, h_mask, w_mask = pos_ids
         s = 0
-        qkd = rotate_queries_or_keys(qk[..., s : s + self.d_dim], pos=d_mask)
+        qkd = rotate_queries_or_keys(qk[..., s : s + self.d_dim], pos=d_mask, use_interleave=use_interleave)
         s += self.d_dim
-        qkh = rotate_queries_or_keys(qk[..., s : s + self.h_dim], pos=h_mask)
+        qkh = rotate_queries_or_keys(qk[..., s : s + self.h_dim], pos=h_mask, use_interleave=use_interleave)
         s += self.h_dim
-        qkw = rotate_queries_or_keys(qk[..., s : s + self.w_dim], pos=w_mask)
+        qkw = rotate_queries_or_keys(qk[..., s : s + self.w_dim], pos=w_mask, use_interleave=use_interleave)
         s += self.w_dim
-        # Combine rotated dimension
         if s < self.attention_head_size:
             qkr = qk[..., s:]
             qk = torch.cat([qkd, qkh, qkw, qkr], dim=-1)
@@ -386,6 +411,7 @@ class VJEPA2Layer(GradientCheckpointingLayer):
         hidden_size: int = 1024,
         num_attention_heads: int = 16,
         mlp_ratio: float = 4.0,
+        is_predictor: bool = False,
     ):
         super().__init__()
         self.config = config
@@ -394,7 +420,7 @@ class VJEPA2Layer(GradientCheckpointingLayer):
         self.mlp_ratio = mlp_ratio
 
         self.norm1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
-        self.attention = VJEPA2RopeAttention(config, hidden_size, num_attention_heads)
+        self.attention = VJEPA2RopeAttention(config, hidden_size, num_attention_heads, is_predictor=is_predictor)
         self.drop_path = VJEPA2DropPath(drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
         self.norm2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
         self.mlp = VJEPA2MLP(config, hidden_size=hidden_size, mlp_ratio=mlp_ratio)
@@ -446,21 +472,47 @@ class VJEPA2Encoder(nn.Module):
                 for i in range(config.num_hidden_layers)
             ]
         )
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+        if config.hierarchical_layers is not None:
+            self.norms_block = nn.ModuleList(
+                [nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) for _ in config.hierarchical_layers]
+            )
+            n_dist = config.n_output_distillation if config.n_output_distillation > 0 else 1
+            self._extraction_layers = config.hierarchical_layers[-n_dist:]
+            self.layernorm = None
+        else:
+            self.norms_block = None
+            self._extraction_layers = None
+            self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
         self.gradient_checkpointing = False
 
     def forward(
         self,
         pixel_values_videos: torch.Tensor | None = None,
+        return_hierarchical: bool = True,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         hidden_states = self.embeddings(pixel_values_videos)
+
+        hierarchical_outputs = []
 
         for i, layer_module in enumerate(self.layer):
             layer_outputs = layer_module(hidden_states, None, **kwargs)
             hidden_states = layer_outputs[0]
 
-        hidden_states = self.layernorm(hidden_states)
+            if self.norms_block is not None and self._extraction_layers is not None:
+                if i in self._extraction_layers:
+                    norm_idx = self.config.hierarchical_layers.index(i)
+                    hierarchical_outputs.append(self.norms_block[norm_idx](hidden_states))
+
+        if self.norms_block is not None:
+            if return_hierarchical and len(hierarchical_outputs) > 1:
+                hidden_states = torch.cat(hierarchical_outputs, dim=-1)
+            elif hierarchical_outputs:
+                hidden_states = hierarchical_outputs[-1]
+        elif self.layernorm is not None:
+            hidden_states = self.layernorm(hidden_states)
 
         return BaseModelOutput(
             last_hidden_state=hidden_states,
@@ -493,11 +545,27 @@ class VJEPA2PredictorEmbeddings(nn.Module):
         super().__init__()
 
         self.config = config
-        self.predictor_embeddings = nn.Linear(config.hidden_size, config.pred_hidden_size)
+
+        n_dist = config.n_output_distillation if config.n_output_distillation > 0 else 1
+        encoder_output_dim = config.hidden_size * n_dist
+
+        if config.n_output_distillation > 1:
+            self.predictor_embeddings = nn.Sequential(
+                nn.Linear(encoder_output_dim, config.hidden_size, bias=True),
+                nn.GELU(),
+                nn.Linear(config.hidden_size, config.pred_hidden_size, bias=True),
+            )
+        else:
+            self.predictor_embeddings = nn.Linear(config.hidden_size, config.pred_hidden_size)
+
         self.num_mask_tokens = 0
         self.zero_init_mask_tokens = config.pred_zero_init_mask_tokens
         self.num_mask_tokens = config.pred_num_mask_tokens
         self.mask_tokens = nn.Parameter(torch.zeros(self.num_mask_tokens, 1, 1, config.pred_hidden_size))
+
+        if config.use_modality_embeddings:
+            self.img_mod_embed = nn.Parameter(torch.zeros(1, 1, config.pred_hidden_size))
+            self.video_mod_embed = nn.Parameter(torch.zeros(1, 1, config.pred_hidden_size))
 
         self.patch_size = config.patch_size
         self.config = config
@@ -576,12 +644,26 @@ class VJEPA2Predictor(nn.Module):
                     hidden_size=config.pred_hidden_size,
                     num_attention_heads=config.pred_num_attention_heads,
                     mlp_ratio=config.pred_mlp_ratio,
+                    is_predictor=True,
                 )
                 for i in range(config.pred_num_hidden_layers)
             ]
         )
         self.layernorm = nn.LayerNorm(config.pred_hidden_size, eps=config.layer_norm_eps)
-        self.proj = nn.Linear(config.pred_hidden_size, config.hidden_size, bias=True)
+
+        n_hier = len(config.hierarchical_layers) if config.hierarchical_layers else 1
+        if config.teacher_embed_dim is not None:
+            out_embed_dim = config.teacher_embed_dim // n_hier
+        else:
+            out_embed_dim = config.hidden_size
+        proj_output_dim = n_hier * out_embed_dim
+
+        self.proj = nn.Linear(config.pred_hidden_size, proj_output_dim, bias=True)
+
+        if config.return_all_tokens:
+            self.proj_context = nn.Linear(config.pred_hidden_size, proj_output_dim, bias=True)
+        else:
+            self.proj_context = None
 
     def sort_tokens(self, hidden_states, position_masks, argsort):
         # gather position masks
@@ -607,28 +689,38 @@ class VJEPA2Predictor(nn.Module):
         encoder_hidden_states: torch.Tensor,
         context_mask: list[torch.Tensor],
         target_mask: list[torch.Tensor],
+        is_image: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
-        # mask out the encoder hidden states
-        # this is implemented here as in VJEPA training a separate encoder is used for target
         encoder_hidden_states = apply_masks(encoder_hidden_states, context_mask)
         _, N_ctxt, D = encoder_hidden_states.shape
         hidden_states, position_masks = self.embeddings(encoder_hidden_states, context_mask, target_mask)
 
-        # Put tokens in sorted order
         argsort = torch.argsort(position_masks, dim=1)  # [B, N]
         hidden_states, position_masks = self.sort_tokens(hidden_states, position_masks, argsort)
+
+        if self.config.use_modality_embeddings and hasattr(self.embeddings, "video_mod_embed"):
+            if is_image:
+                hidden_states = hidden_states + self.embeddings.img_mod_embed
+            else:
+                hidden_states = hidden_states + self.embeddings.video_mod_embed
 
         for i, layer_module in enumerate(self.layer):
             layer_outputs = layer_module(hidden_states, position_masks, **kwargs)
             hidden_states = layer_outputs[0]
 
         hidden_states = self.layernorm(hidden_states)
-        # unsort and extract the predicted tokens
         hidden_states = self.unsort_tokens(hidden_states, argsort)
-        hidden_states = hidden_states[:, N_ctxt:]
-        # projection
-        hidden_states = self.proj(hidden_states)
+
+        if self.config.return_all_tokens and self.proj_context is not None:
+            context_tokens = hidden_states[:, :N_ctxt]
+            target_tokens = hidden_states[:, N_ctxt:]
+            target_tokens = self.proj(target_tokens)
+            context_tokens = self.proj_context(context_tokens)
+            hidden_states = torch.cat([context_tokens, target_tokens], dim=1)
+        else:
+            hidden_states = hidden_states[:, N_ctxt:]
+            hidden_states = self.proj(hidden_states)
 
         return BaseModelOutput(
             last_hidden_state=hidden_states,
@@ -933,15 +1025,22 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
         if pixel_values_videos is None:
             raise ValueError("You have to specify pixel_values_videos")
 
+        is_image = (
+            self.config.img_temporal_dim_size is not None
+            and pixel_values_videos.shape[1] == self.config.img_temporal_dim_size
+        )
+
+        needs_hierarchical = not skip_predictor and self.config.n_output_distillation > 1
         encoder_outputs: BaseModelOutput = self.encoder(
             pixel_values_videos=pixel_values_videos,
+            return_hierarchical=needs_hierarchical,
             **kwargs,
         )
         sequence_output = encoder_outputs.last_hidden_state
 
         if context_mask is None and target_mask is None:
             B = pixel_values_videos.size(0)
-            N = sequence_output.size(1)  # ensure we are using dynamic patch size
+            N = sequence_output.size(1)
             context_mask = [torch.arange(N, device=pixel_values_videos.device).unsqueeze(0).repeat((B, 1))]
             target_mask = [torch.arange(N, device=pixel_values_videos.device).unsqueeze(0).repeat((B, 1))]
 
@@ -950,6 +1049,7 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
                 encoder_hidden_states=sequence_output,
                 context_mask=context_mask,
                 target_mask=target_mask,
+                is_image=is_image,
                 **kwargs,
             )
             predictor_output = VJEPA2WithMaskedInputPredictorOutput(
@@ -984,6 +1084,13 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
 class VJEPA2ForVideoClassification(VJEPA2PreTrainedModel):
     def __init__(self, config: VJEPA2Config):
         super().__init__(config)
+
+        if config.n_output_distillation > 1:
+            raise ValueError(
+                f"Classification heads for hierarchical distillation outputs "
+                f"(n_output_distillation={config.n_output_distillation}) are not yet supported. "
+                f"Use VJEPA2Model for feature extraction instead."
+            )
 
         self.num_labels = config.num_labels
         self.vjepa2 = VJEPA2Model(config)

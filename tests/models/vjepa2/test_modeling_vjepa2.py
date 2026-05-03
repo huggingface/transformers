@@ -184,6 +184,82 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
+    def test_config_2_1_defaults(self):
+        """Verify 2.1 config fields have correct defaults (backward-compatible with 2.0)."""
+        config = VJEPA2Config()
+        self.assertFalse(config.use_rope_interleave)
+        self.assertFalse(config.use_modality_embeddings)
+        self.assertFalse(config.interpolate_rope)
+        self.assertFalse(config.return_all_tokens)
+        self.assertIsNone(config.img_temporal_dim_size)
+        self.assertIsNone(config.teacher_embed_dim)
+        self.assertEqual(config.n_output_distillation, 0)
+        self.assertIsNone(config.hierarchical_layers)
+
+    def test_model_2_1_forward(self):
+        """Fast test: tiny 2.1 config forward pass with hierarchical output."""
+        config = VJEPA2Config(
+            crop_size=16,
+            frames_per_clip=2,
+            hidden_size=32,
+            num_attention_heads=2,
+            num_hidden_layers=4,
+            mlp_ratio=1.0,
+            pred_hidden_size=16,
+            pred_num_attention_heads=2,
+            pred_num_hidden_layers=2,
+            pred_num_mask_tokens=8,
+            use_rope_interleave=True,
+            use_modality_embeddings=True,
+            interpolate_rope=True,
+            return_all_tokens=True,
+            img_temporal_dim_size=1,
+            teacher_embed_dim=64,
+            n_output_distillation=1,
+            hierarchical_layers=[0, 1, 2, 3],
+        )
+        model = VJEPA2Model(config).to(torch_device).eval()
+
+        pixel_values = torch.randn(1, 2, 3, 16, 16, device=torch_device)
+        with torch.no_grad():
+            outputs = model(pixel_values)
+        # n_dist=1: encoder returns single-norm (hidden_size)
+        self.assertEqual(outputs.last_hidden_state.shape, (1, 1, 32))
+        # predictor with return_all_tokens: context + target tokens
+        # proj_output_dim = n_hier(4) * (teacher_embed_dim(64) // n_hier(4)) = 64
+        self.assertEqual(outputs.predictor_output.last_hidden_state.shape, (1, 2, 64))
+
+    def test_model_2_1_multi_distillation(self):
+        """Fast test: 2.1 config with n_output_distillation=4 (multi-layer predictor embed)."""
+        config = VJEPA2Config(
+            crop_size=16,
+            frames_per_clip=2,
+            hidden_size=32,
+            num_attention_heads=2,
+            num_hidden_layers=4,
+            mlp_ratio=1.0,
+            pred_hidden_size=16,
+            pred_num_attention_heads=2,
+            pred_num_hidden_layers=2,
+            pred_num_mask_tokens=8,
+            use_rope_interleave=True,
+            use_modality_embeddings=True,
+            interpolate_rope=True,
+            return_all_tokens=True,
+            img_temporal_dim_size=1,
+            n_output_distillation=4,
+            hierarchical_layers=[0, 1, 2, 3],
+        )
+        model = VJEPA2Model(config).to(torch_device).eval()
+
+        pixel_values = torch.randn(1, 2, 3, 16, 16, device=torch_device)
+        with torch.no_grad():
+            outputs = model(pixel_values)
+        # n_dist=4: encoder returns concatenated hierarchical (hidden_size * 4)
+        self.assertEqual(outputs.last_hidden_state.shape, (1, 1, 128))
+        # proj_output_dim = n_hier(4) * hidden_size(32) = 128
+        self.assertEqual(outputs.predictor_output.last_hidden_state.shape, (1, 2, 128))
+
     @slow
     def test_model_from_pretrained(self):
         model = VJEPA2Model.from_pretrained(VJEPA_HF_MODEL)
@@ -314,6 +390,37 @@ class VJEPA2ModelIntegrationTest(unittest.TestCase):
         # verify the last hidden states
         expected_shape = torch.Size((1, num_masks, 1024))
         self.assertEqual(outputs.predictor_output.last_hidden_state.shape, expected_shape)
+
+    @slow
+    def test_inference_vjepa2_1_base(self):
+        """Smoke test: instantiate a 2.1-like config and run forward pass."""
+        config = VJEPA2Config(
+            crop_size=16,
+            frames_per_clip=2,
+            hidden_size=32,
+            num_attention_heads=2,
+            num_hidden_layers=4,
+            mlp_ratio=1.0,
+            pred_hidden_size=16,
+            pred_num_attention_heads=2,
+            pred_num_hidden_layers=2,
+            pred_num_mask_tokens=8,
+            use_rope_interleave=True,
+            use_modality_embeddings=True,
+            interpolate_rope=True,
+            return_all_tokens=True,
+            img_temporal_dim_size=1,
+            teacher_embed_dim=64,
+            n_output_distillation=1,
+            hierarchical_layers=[0, 1, 2, 3],
+        )
+        model = VJEPA2Model(config).to(torch_device).eval()
+
+        pixel_values = torch.randn(1, 2, 3, 16, 16, device=torch_device)
+        with torch.no_grad():
+            outputs = model(pixel_values)
+        self.assertIsNotNone(outputs.last_hidden_state)
+        self.assertIsNotNone(outputs.predictor_output)
 
     @slow
     def test_video_classification(self):

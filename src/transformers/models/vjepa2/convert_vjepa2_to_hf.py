@@ -36,6 +36,11 @@ HUB_MODELS = {
     "vit_huge": "facebook/vjepa2-vith-fpc64-256",
     "vit_giant": "facebook/vjepa2-vitg-fpc64-256",
     "vit_giant_384": "facebook/vjepa2-vitg-fpc64-384",
+    # provisional names pending Meta's Hub upload (facebookresearch/vjepa2#137)
+    "vit_base_2_1_384": "facebook/vjepa2.1-vitb-fpc64-384",
+    "vit_large_2_1_384": "facebook/vjepa2.1-vitl-fpc64-384",
+    "vit_giant_2_1_384": "facebook/vjepa2.1-vitg-fpc64-384",
+    "vit_gigantic_2_1_384": "facebook/vjepa2.1-vitG-fpc64-384",
 }
 
 S3_MODELS = {
@@ -43,6 +48,10 @@ S3_MODELS = {
     "vit_huge": "https://dl.fbaipublicfiles.com/vjepa2/vith.pt",
     "vit_giant": "https://dl.fbaipublicfiles.com/vjepa2/vitg.pt",
     "vit_giant_384": "https://dl.fbaipublicfiles.com/vjepa2/vitg-384.pt",
+    "vit_base_2_1_384": "https://dl.fbaipublicfiles.com/vjepa2/vjepa2_1_vitb_dist_vitG_384.pt",
+    "vit_large_2_1_384": "https://dl.fbaipublicfiles.com/vjepa2/vjepa2_1_vitl_dist_vitG_384.pt",
+    "vit_giant_2_1_384": "https://dl.fbaipublicfiles.com/vjepa2/vjepa2_1_vitg_384.pt",
+    "vit_gigantic_2_1_384": "https://dl.fbaipublicfiles.com/vjepa2/vjepa2_1_vitG_384.pt",
 }
 
 TOKEN = os.environ.get("HF_TOKEN", None)
@@ -102,6 +111,89 @@ def get_vjepa2_config(model_name):
             pred_num_hidden_layers=12,
             pred_num_mask_tokens=10,
         )
+    # V-JEPA 2.1 models
+    elif model_name == "vit_base_2_1_384":
+        return VJEPA2Config(
+            crop_size=384,
+            frames_per_clip=64,
+            hidden_size=768,
+            num_attention_heads=12,
+            num_hidden_layers=12,
+            mlp_ratio=4,
+            pred_hidden_size=384,
+            pred_num_attention_heads=12,
+            pred_num_hidden_layers=12,
+            pred_num_mask_tokens=8,
+            use_rope_interleave=True,
+            use_modality_embeddings=True,
+            interpolate_rope=True,
+            return_all_tokens=True,
+            img_temporal_dim_size=1,
+            teacher_embed_dim=1664,
+            n_output_distillation=1,
+            hierarchical_layers=[2, 5, 8, 11],
+        )
+    elif model_name == "vit_large_2_1_384":
+        return VJEPA2Config(
+            crop_size=384,
+            frames_per_clip=64,
+            hidden_size=1024,
+            num_attention_heads=16,
+            num_hidden_layers=24,
+            mlp_ratio=4,
+            pred_hidden_size=384,
+            pred_num_attention_heads=12,
+            pred_num_hidden_layers=12,
+            pred_num_mask_tokens=8,
+            use_rope_interleave=True,
+            use_modality_embeddings=True,
+            interpolate_rope=True,
+            return_all_tokens=True,
+            img_temporal_dim_size=1,
+            teacher_embed_dim=1664,
+            n_output_distillation=1,
+            hierarchical_layers=[5, 11, 17, 23],
+        )
+    elif model_name == "vit_giant_2_1_384":
+        return VJEPA2Config(
+            crop_size=384,
+            frames_per_clip=64,
+            hidden_size=1408,
+            num_attention_heads=22,
+            num_hidden_layers=40,
+            mlp_ratio=48 / 11,
+            pred_hidden_size=384,
+            pred_num_attention_heads=12,
+            pred_num_hidden_layers=24,
+            pred_num_mask_tokens=8,
+            use_rope_interleave=True,
+            use_modality_embeddings=True,
+            interpolate_rope=True,
+            return_all_tokens=True,
+            img_temporal_dim_size=1,
+            n_output_distillation=4,
+            hierarchical_layers=[9, 19, 29, 39],
+        )
+    elif model_name == "vit_gigantic_2_1_384":
+        return VJEPA2Config(
+            crop_size=384,
+            frames_per_clip=64,
+            hidden_size=1664,
+            num_attention_heads=26,
+            num_hidden_layers=48,
+            mlp_ratio=64 / 13,
+            pred_hidden_size=384,
+            pred_num_attention_heads=12,
+            pred_num_hidden_layers=24,
+            pred_num_mask_tokens=8,
+            use_rope_interleave=True,
+            use_modality_embeddings=True,
+            interpolate_rope=True,
+            return_all_tokens=True,
+            img_temporal_dim_size=1,
+            n_output_distillation=4,
+            hierarchical_layers=[11, 23, 37, 47],
+        )
     else:
         raise ValueError("Model not supported")
 
@@ -117,10 +209,18 @@ def convert_encoder_keys(model_state_dict, og_encoder_state_dict, config):
             key = key.replace("attn.", "attention.")
         if key == "pos_embed":
             key = "encoder.embeddings.position_embeddings"
-        if "patch_embed." in key:
+        if "patch_embed." in key and not key.startswith("patch_embed_img."):
             key = key.replace("patch_embed.", "encoder.embeddings.patch_embeddings.")
+        if key.startswith("patch_embed_img."):
+            key = key.replace("patch_embed_img.", "encoder.embeddings.patch_embeddings_img.")
+        if key.startswith("norms_block."):
+            key = "encoder." + key
         if key.startswith("norm."):
             key = key.replace("norm.", "encoder.layernorm.")
+        if key == "img_mod_embed":
+            key = "encoder.embeddings.img_mod_embed"
+        if key == "video_mod_embed":
+            key = "encoder.embeddings.video_mod_embed"
         if "qkv." in key:
             prefix, suffix = key.split("qkv")
             if "bias" in suffix:
@@ -147,7 +247,6 @@ def convert_predictor_keys(model_state_dict, og_predictor_state_dict, config):
     emb_dim = config.pred_hidden_size
     if "predictor_pos_embed" in og_predictor_state_dict:
         del og_predictor_state_dict["predictor_pos_embed"]
-    # update predictor weights
     mask_tokens = {}
     mask_token_keys_to_delete = []
     for key, val in og_predictor_state_dict.copy().items():
@@ -164,10 +263,15 @@ def convert_predictor_keys(model_state_dict, og_predictor_state_dict, config):
         if "mask_tokens." in key:
             mask_tokens[key.split("mask_tokens.")[-1]] = val
             mask_token_keys_to_delete.append(key)
-            # key = key.replace("mask_tokens.", "predictor.embeddings.mask_tokens.")
         if key.startswith("predictor_norm."):
             key = key.replace("predictor_norm.", "predictor.layernorm.")
-        if key.startswith("predictor_proj."):
+        if key == "img_mod_embed":
+            key = "predictor.embeddings.img_mod_embed"
+        if key == "video_mod_embed":
+            key = "predictor.embeddings.video_mod_embed"
+        if key.startswith("predictor_proj_context."):
+            key = key.replace("predictor_proj_context.", "predictor.proj_context.")
+        elif key.startswith("predictor_proj."):
             key = key.replace("predictor_proj.", "predictor.proj.")
         if "qkv." in key:
             prefix, suffix = key.split("qkv")
@@ -220,6 +324,10 @@ def upload_original_ckpts(model_name):
         print("Uploading complete")
 
 
+def _is_2_1_model(model_name):
+    return "2_1" in model_name
+
+
 @torch.no_grad()
 def convert_and_test_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=False):
     """
@@ -227,8 +335,13 @@ def convert_and_test_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, pus
     """
     config = get_vjepa2_config(model_name)
 
+    if _is_2_1_model(model_name):
+        hub_name = "vjepa2_1_" + model_name.replace("_2_1", "")
+    else:
+        hub_name = "vjepa2_" + model_name
+
     # load original model from torch hub
-    original_encoder, original_predictor = torch.hub.load(HUB_REPO, "vjepa2_" + model_name, source=HUB_SOURCE)
+    original_encoder, original_predictor = torch.hub.load(HUB_REPO, hub_name, source=HUB_SOURCE)
     original_encoder.eval()
     original_predictor.eval()
     original_preprocessor = torch.hub.load(
@@ -273,6 +386,9 @@ def convert_and_test_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, pus
         original_predictor = original_predictor.to(device="cuda", dtype=torch.float32)
         model = model.to(device="cuda", dtype=torch.float32)
         # forward
+        is_2_1 = _is_2_1_model(model_name)
+        if is_2_1 and config.n_output_distillation > 1:
+            original_encoder.return_hierarchical = True
         original_encoder_outputs = original_encoder(pixel_values_videos.permute(0, 2, 1, 3, 4))
         B, N, _ = original_encoder_outputs.shape
         # test full mask
@@ -282,7 +398,15 @@ def convert_and_test_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, pus
         outputs = model(pixel_values_videos, context_mask=context_mask, target_mask=predictor_mask)
         assert torch.allclose(outputs.last_hidden_state, original_encoder_outputs, atol=1e-3)
         predictor_outputs = outputs.predictor_output
-        assert torch.allclose(predictor_outputs.last_hidden_state, original_predictor_outputs, atol=1e-3)
+        if is_2_1 and config.return_all_tokens:
+            og_target, og_context = original_predictor_outputs
+            N_ctxt = context_mask[0].shape[1]
+            hf_context = predictor_outputs.last_hidden_state[:, :N_ctxt]
+            hf_target = predictor_outputs.last_hidden_state[:, N_ctxt:]
+            assert torch.allclose(hf_target, og_target, atol=1e-2)
+            assert torch.allclose(hf_context, og_context, atol=1e-2)
+        else:
+            assert torch.allclose(predictor_outputs.last_hidden_state, original_predictor_outputs, atol=1e-3)
         # test partial mask
         window_size = 256
         mask = torch.arange(N, device=pixel_values_videos.device).unsqueeze(0)
@@ -296,7 +420,15 @@ def convert_and_test_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, pus
         outputs = model(pixel_values_videos, context_mask=context_mask, target_mask=predictor_mask)
         assert torch.allclose(outputs.last_hidden_state, original_encoder_outputs, atol=1e-3)
         predictor_outputs = outputs.predictor_output
-        assert torch.allclose(predictor_outputs.last_hidden_state, original_predictor_outputs, atol=1e-3)
+        if is_2_1 and config.return_all_tokens:
+            og_target, og_context = original_predictor_outputs
+            N_ctxt = context_mask[0].shape[1]
+            hf_context = predictor_outputs.last_hidden_state[:, :N_ctxt]
+            hf_target = predictor_outputs.last_hidden_state[:, N_ctxt:]
+            assert torch.allclose(hf_target, og_target, atol=1e-2)
+            assert torch.allclose(hf_context, og_context, atol=1e-2)
+        else:
+            assert torch.allclose(predictor_outputs.last_hidden_state, original_predictor_outputs, atol=1e-3)
 
     print("Looks ok!")
 
@@ -325,6 +457,10 @@ if __name__ == "__main__":
             "vit_huge",
             "vit_giant",
             "vit_giant_384",
+            "vit_base_2_1_384",
+            "vit_large_2_1_384",
+            "vit_giant_2_1_384",
+            "vit_gigantic_2_1_384",
         ],
         help="Name of the model you'd like to convert.",
     )
