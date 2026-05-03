@@ -2902,15 +2902,31 @@ class GenerationIntegrationTests(unittest.TestCase):
         outputs_without_penalty = model.generate(inputs_embeds=embeds, max_new_tokens=5, repetition_penalty=1.0)
         self.assertEqual(outputs_without_penalty.shape[0], inputs["input_ids"].shape[0])
 
-        with self.assertWarnsRegex(UserWarning, "repetition_penalty"):
-            outputs_with_ignored_penalty = model.generate(
+        with self.assertWarnsRegex(UserWarning, "apply the penalty only to newly generated tokens, not to the prompt"):
+            outputs_with_repetition_warning = model.generate(
                 inputs_embeds=embeds, max_new_tokens=5, repetition_penalty=1.1
             )
-        self.assertEqual(outputs_with_ignored_penalty.shape[0], inputs["input_ids"].shape[0])
+        self.assertEqual(outputs_with_repetition_warning.shape[0], inputs["input_ids"].shape[0])
 
-        with self.assertWarnsRegex(UserWarning, "no_repeat_ngram_size"):
-            outputs_with_ignored_ngram = model.generate(inputs_embeds=embeds, max_new_tokens=5, no_repeat_ngram_size=2)
-        self.assertEqual(outputs_with_ignored_ngram.shape[0], inputs["input_ids"].shape[0])
+        with self.assertWarnsRegex(UserWarning, "n-gram constraints only to newly generated tokens, not to the prompt"):
+            outputs_with_ngram_warning = model.generate(inputs_embeds=embeds, max_new_tokens=5, no_repeat_ngram_size=2)
+        self.assertEqual(outputs_with_ngram_warning.shape[0], inputs["input_ids"].shape[0])
+
+        with self.assertWarnsRegex(UserWarning, "apply the penalty only to newly generated tokens, not to the prompt"):
+            processors = model._get_logits_processor(
+                generation_config=GenerationConfig(repetition_penalty=1.1),
+                input_ids_seq_length=0,
+                model_kwargs={"inputs_embeds": embeds},
+            )
+        self.assertIn("RepetitionPenaltyLogitsProcessor", [processor.__class__.__name__ for processor in processors])
+
+        with self.assertWarnsRegex(UserWarning, "n-gram constraints only to newly generated tokens, not to the prompt"):
+            processors = model._get_logits_processor(
+                generation_config=GenerationConfig(no_repeat_ngram_size=2),
+                input_ids_seq_length=0,
+                model_kwargs={"inputs_embeds": embeds},
+            )
+        self.assertIn("NoRepeatNGramLogitsProcessor", [processor.__class__.__name__ for processor in processors])
 
         outputs = model.generate(
             input_ids=inputs["input_ids"],

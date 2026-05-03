@@ -1092,12 +1092,11 @@ class GenerationMixin(ContinuousMixin):
                 inputs_embeds = model_kwargs.get("inputs_embeds") if model_kwargs is not None else None
                 if inputs_embeds is not None and (input_ids_seq_length is None or input_ids_seq_length == 0):
                     warnings.warn(
-                        "Passing `repetition_penalty` requires some form of `input_ids` to be passed to "
-                        "`generate`, ignoring the argument.",
+                        "Passing `repetition_penalty` with `inputs_embeds` and without `input_ids` to `generate` will "
+                        "apply the penalty only to newly generated tokens, not to the prompt.",
                         UserWarning,
                     )
-                else:
-                    processors.append(RepetitionPenaltyLogitsProcessor(penalty=generation_config.repetition_penalty))
+                processors.append(RepetitionPenaltyLogitsProcessor(penalty=generation_config.repetition_penalty))
         if generation_config.no_repeat_ngram_size is not None and generation_config.no_repeat_ngram_size > 0:
             if self.config.is_encoder_decoder:
                 processors.append(NoRepeatNGramLogitsProcessor(generation_config.no_repeat_ngram_size))
@@ -1105,12 +1104,11 @@ class GenerationMixin(ContinuousMixin):
                 inputs_embeds = model_kwargs.get("inputs_embeds") if model_kwargs is not None else None
                 if inputs_embeds is not None and (input_ids_seq_length is None or input_ids_seq_length == 0):
                     warnings.warn(
-                        "Passing `no_repeat_ngram_size` requires some form of `input_ids` to be passed to "
-                        "`generate`, ignoring the argument.",
+                        "Passing `no_repeat_ngram_size` with `inputs_embeds` and without `input_ids` to `generate` will "
+                        "apply n-gram constraints only to newly generated tokens, not to the prompt.",
                         UserWarning,
                     )
-                else:
-                    processors.append(NoRepeatNGramLogitsProcessor(generation_config.no_repeat_ngram_size))
+                processors.append(NoRepeatNGramLogitsProcessor(generation_config.no_repeat_ngram_size))
         if (
             generation_config.encoder_no_repeat_ngram_size is not None
             and generation_config.encoder_no_repeat_ngram_size > 0
