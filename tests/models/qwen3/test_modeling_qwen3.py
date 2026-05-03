@@ -35,9 +35,11 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        Qwen3Config,
         Qwen3ForCausalLM,
         Qwen3Model,
     )
+    from transformers.models.qwen3.modeling_qwen3 import Qwen3RotaryEmbedding
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -70,6 +72,36 @@ class Qwen3ModelTest(CausalLMModelTest, unittest.TestCase):
         processor_name,
     ):
         return True
+
+    def test_rope_precomputed_cache_matches_legacy_path(self):
+        config = Qwen3Config(
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            head_dim=8,
+            max_position_embeddings=32,
+            rope_parameters={"rope_type": "default", "rope_theta": 10000.0},
+        )
+        cached_rope = Qwen3RotaryEmbedding(config)
+        legacy_rope = Qwen3RotaryEmbedding(config)
+        del legacy_rope.cos_cached
+        del legacy_rope.sin_cached
+
+        x = torch.empty(2, 4, config.head_dim, device="cpu", dtype=torch.float32)
+        position_vectors = [
+            torch.tensor([[0, 1, 2, 3]], device="cpu"),
+            torch.tensor([[3, 7, 11], [2, 5, 13]], device="cpu"),
+            torch.tensor([[0, 4, 8, 16, 31]], device="cpu"),
+        ]
+
+        for position_ids in position_vectors:
+            cos_cached, sin_cached = cached_rope(x, position_ids)
+            cos_legacy, sin_legacy = legacy_rope(x, position_ids)
+
+            torch.testing.assert_close(cos_cached, cos_legacy, rtol=0, atol=0)
+            torch.testing.assert_close(sin_cached, sin_legacy, rtol=0, atol=0)
 
 
 @require_torch
