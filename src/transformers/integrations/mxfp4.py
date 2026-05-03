@@ -289,6 +289,15 @@ def _convert_moe_packed_tensors(
     """
     import math
 
+    # Multi-GPU stuff.
+    assert blocks.device == scales.device, (
+        f"Can't dequantize mxfp4 to {dtype}: "
+        f"blocks are in device '{blocks.device}', but scales are in device 'scales.device'."
+    )
+    device = blocks.device
+    if device.type == "cuda":
+        torch.cuda.set_device(device)
+
     blocks = blocks.to(torch.uint8)
     scales = scales.to(torch.int32) - 127  # TODO that's because 128=2**7
 
