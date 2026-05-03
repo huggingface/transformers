@@ -141,7 +141,7 @@ def _pad_extra_bos_eos_tokens(
                 # if there are no pad tokens present, then add eos to the end
                 modified_input_ids[i] = torch.nn.functional.pad(each_input_id, (0, 1), value=eos_token_id)
         attention_mask = (
-            torch.nn.functional.pad(attention_mask, (1, 0), value=1) if attention_mask is not None else attention_mask
+            torch.nn.functional.pad(attention_mask, (0, 1), value=1) if attention_mask is not None else attention_mask
         )
 
     return modified_input_ids, attention_mask
