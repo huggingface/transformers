@@ -126,6 +126,17 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_model_training(self):
         pass
 
+    def test_shared_kv_cache_identity_preserved_by_apply_to_tensors(self):
+        from torch.distributed.utils import _apply_to_tensors
+
+        from transformers.models.gemma4.modeling_gemma4 import SharedKVCache
+
+        cache = SharedKVCache()
+        cache[0] = (torch.zeros(1), torch.zeros(1))
+
+        result = _apply_to_tensors(lambda t: t, {"shared_kv_states": cache})
+        self.assertIs(result["shared_kv_states"], cache)  # Same object, not a rebuilt
+
 
 class Gemma4Audio2TextModelTester:
     def __init__(
