@@ -383,6 +383,24 @@ class StaticLayer(CacheLayerMixin):
         """Return the maximum cache shape of the cache"""
         return self.max_cache_len
 
+    def crop(self, max_length: int) -> None:
+        """Crop the cache to the given length."""
+        if not self.is_initialized:
+            return
+
+        current_length = self.cumulative_length.item()
+
+        if max_length < 0:
+            raise ValueError(f"`max_length` passed to `StaticLayer.crop()` must be >= 0, got {max_length}.")
+
+        if max_length >= current_length:
+            return
+
+        self.keys[:, :, max_length:, :].zero_()
+        self.values[:, :, max_length:, :].zero_()
+
+        self.cumulative_length.fill_(max_length)
+
 
 class StaticSlidingWindowLayer(StaticLayer):
     """
