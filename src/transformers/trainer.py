@@ -1333,9 +1333,10 @@ class Trainer:
 
         Args:
             resume_from_checkpoint (`str` or `bool`, *optional*):
-                If a `str`, local path to a saved checkpoint as saved by a previous instance of [`Trainer`]. If a
-                `bool` and equals `True`, load the last checkpoint in *args.output_dir* as saved by a previous instance
-                of [`Trainer`]. If present, training will resume from the model/optimizer/scheduler states loaded here.
+                If a `str`, local path to a saved checkpoint as saved by a previous instance of [`Trainer`] or a config
+                on the Hugging Face Hub (e.g. `"user/repo-id@checkpoint-1000"`). If a `bool` and equals `True`, load the
+                last checkpoint in *args.output_dir* as saved by a previous instance of [`Trainer`]. If present,
+                training will resume from the model/optimizer/scheduler states loaded here.
             trial (`optuna.Trial` or `dict[str, Any]`, *optional*):
                 The trial run or the hyperparameter dictionary for hyperparameter search.
             ignore_keys_for_eval (`list[str]`, *optional*)
@@ -1406,6 +1407,24 @@ class Trainer:
             resume_from_checkpoint = get_last_checkpoint(args.output_dir)
             if resume_from_checkpoint is None:
                 raise ValueError(f"No valid checkpoint found in output directory ({args.output_dir})")
+
+        if isinstance(resume_from_checkpoint, str) and not os.path.isdir(resume_from_checkpoint):
+            revision = None
+            if "@" in resume_from_checkpoint:
+                resume_from_checkpoint, revision = resume_from_checkpoint.split("@", 1)
+
+            from huggingface_hub import snapshot_download
+
+            try:
+                resume_from_checkpoint = snapshot_download(
+                    repo_id=resume_from_checkpoint,
+                    revision=revision,
+                    token=args.hub_token if hasattr(args, "hub_token") else None,
+                )
+            except Exception as e:
+                raise ValueError(
+                    f"Can't find a valid checkpoint at `{resume_from_checkpoint}` locally or on the Hub. Error: {e}"
+                )
 
         if resume_from_checkpoint is not None:
             # Load model checkpoint before accelerator.prepare() for regular models,
