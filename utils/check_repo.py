@@ -550,6 +550,7 @@ DOC_MODEL_NAMES_NOT_IN_AUTO = {
     "xlm-v",
     "dialogpt",
     "flan-t5",
+    "conformer",
     "bert-japanese",
     "mms",
     "depth_anything_v2",

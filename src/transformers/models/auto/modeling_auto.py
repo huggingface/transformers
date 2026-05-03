@@ -93,6 +93,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("cohere2_vision", "Cohere2VisionModel"),
         ("cohere_asr", "CohereAsrModel"),
         ("conditional_detr", "ConditionalDetrModel"),
+        ("conformer_ctc", "ConformerForCTC"),
+        ("conformer_encoder", "ConformerEncoder"),
         ("convbert", "ConvBertModel"),
         ("convnext", "ConvNextModel"),
         ("convnextv2", "ConvNextV2Model"),
@@ -1642,6 +1644,7 @@ MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
     [
         # Model for Connectionist temporal classification (CTC) mapping
+        ("conformer_ctc", "ConformerForCTC"),
         ("data2vec-audio", "Data2VecAudioForCTC"),
         ("hubert", "HubertForCTC"),
         ("lasr_ctc", "LasrForCTC"),
