@@ -1848,11 +1848,14 @@ class GenerationMixin(ContinuousMixin):
         # Assisted decoding and contrastive search require cache rollback, which is incompatible with sliding layers.
         # To handle this, we skip passing the model config to DynamicCache (forcing a full-layer cache).
         # The "dynamic_full" option is a shortcut for generate() users to avoid sliding layers on their own.
-        # Static caches are now supported for assisted generation (StaticLayer.crop() handles rollback).
+        # Static caches are supported for decoder-only assisted generation (StaticLayer.crop() handles rollback).
+        # Encoder-decoder models still require dynamic caches because EncoderDecoderCache.crop() does not
+        # support static sub-caches.
         if generation_mode in (GenerationMode.ASSISTED_GENERATION, GenerationMode.CONTRASTIVE_SEARCH):
-            if generation_config.cache_implementation in ALL_STATIC_CACHE_IMPLEMENTATIONS:
-                # Static cache is allowed: StaticLayer.crop() and StaticSlidingWindowLayer.crop()
-                # support the rollback needed by assisted generation.
+            if (
+                generation_config.cache_implementation in ALL_STATIC_CACHE_IMPLEMENTATIONS
+                and not self.config.is_encoder_decoder
+            ):
                 pass
             else:
                 generation_config.cache_implementation = "dynamic_full"
