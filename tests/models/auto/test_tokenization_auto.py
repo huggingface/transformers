@@ -338,6 +338,27 @@ class AutoTokenizerTest(unittest.TestCase):
         )  # should not error
 
     @require_tokenizers
+    def test_auto_tokenizer_mistral_patching_applies_pretokenizer(self):
+        """Verify fix_mistral_regex=True actually patches the pre_tokenizer without AttributeError."""
+        import tokenizers
+
+        tokenizer = AutoTokenizer.from_pretrained("mistralai/Ministral-3-3B-Instruct-2512")
+        # Create a temp config with an old transformers_version so the patching code path is exercised
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = os.path.join(tmp_dir, "config.json")
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump({"model_type": "mistral", "transformers_version": "4.50.0"}, f)
+
+            patched = TokenizersBackend._patch_mistral_regex(
+                tokenizer._tokenizer,
+                tmp_dir,
+                is_local=True,
+                fix_mistral_regex=True,
+            )
+        self.assertTrue(getattr(patched, "fix_mistral_regex", False))
+        self.assertIsInstance(patched.pre_tokenizer, tokenizers.pre_tokenizers.Sequence)
+
+    @require_tokenizers
     def test_auto_tokenizer_loads_bloom_repo_without_tokenizer_class(self):
         tokenizer = AutoTokenizer.from_pretrained("trl-internal-testing/tiny-BloomForCausalLM")
         self.assertIsInstance(tokenizer, TokenizersBackend)
