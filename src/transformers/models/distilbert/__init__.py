@@ -18,8 +18,16 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_distilbert import *
-    from .modeling_distilbert import *
+    from .configuration_distilbert import DistilBertConfig
+    from .modeling_distilbert import (
+        DistilBertForMaskedLM,
+        DistilBertForMultipleChoice,
+        DistilBertForQuestionAnswering,
+        DistilBertForSequenceClassification,
+        DistilBertForTokenClassification,
+        DistilBertModel,
+        DistilBertPreTrainedModel,
+    )
     from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
 else:
     import sys

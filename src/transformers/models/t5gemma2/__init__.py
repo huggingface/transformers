@@ -18,8 +18,20 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_t5gemma2 import *
-    from .modeling_t5gemma2 import *
+    from .configuration_t5gemma2 import (
+        T5Gemma2Config,
+        T5Gemma2DecoderConfig,
+        T5Gemma2EncoderConfig,
+        T5Gemma2TextConfig,
+    )
+    from .modeling_t5gemma2 import (
+        T5Gemma2Encoder,
+        T5Gemma2ForConditionalGeneration,
+        T5Gemma2ForSequenceClassification,
+        T5Gemma2ForTokenClassification,
+        T5Gemma2Model,
+        T5Gemma2PreTrainedModel,
+    )
 else:
     import sys
 

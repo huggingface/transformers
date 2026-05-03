@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_audio_spectrogram_transformer import *
-    from .feature_extraction_audio_spectrogram_transformer import *
-    from .modeling_audio_spectrogram_transformer import *
+    from .configuration_audio_spectrogram_transformer import ASTConfig
+    from .feature_extraction_audio_spectrogram_transformer import ASTFeatureExtractor
+    from .modeling_audio_spectrogram_transformer import ASTForAudioClassification, ASTModel, ASTPreTrainedModel
 else:
     import sys
 

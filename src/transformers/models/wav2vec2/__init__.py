@@ -18,11 +18,19 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_wav2vec2 import *
-    from .feature_extraction_wav2vec2 import *
-    from .modeling_wav2vec2 import *
-    from .processing_wav2vec2 import *
-    from .tokenization_wav2vec2 import *
+    from .configuration_wav2vec2 import Wav2Vec2Config
+    from .feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
+    from .modeling_wav2vec2 import (
+        Wav2Vec2ForAudioFrameClassification,
+        Wav2Vec2ForCTC,
+        Wav2Vec2ForPreTraining,
+        Wav2Vec2ForSequenceClassification,
+        Wav2Vec2ForXVector,
+        Wav2Vec2Model,
+        Wav2Vec2PreTrainedModel,
+    )
+    from .processing_wav2vec2 import Wav2Vec2Processor
+    from .tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
 else:
     import sys
 

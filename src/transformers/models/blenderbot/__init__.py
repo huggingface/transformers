@@ -18,9 +18,14 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_blenderbot import *
-    from .modeling_blenderbot import *
-    from .tokenization_blenderbot import *
+    from .configuration_blenderbot import BlenderbotConfig
+    from .modeling_blenderbot import (
+        BlenderbotForCausalLM,
+        BlenderbotForConditionalGeneration,
+        BlenderbotModel,
+        BlenderbotPreTrainedModel,
+    )
+    from .tokenization_blenderbot import BlenderbotTokenizer
 else:
     import sys
 

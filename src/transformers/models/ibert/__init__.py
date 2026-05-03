@@ -18,8 +18,16 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_ibert import *
-    from .modeling_ibert import *
+    from .configuration_ibert import IBertConfig
+    from .modeling_ibert import (
+        IBertForMaskedLM,
+        IBertForMultipleChoice,
+        IBertForQuestionAnswering,
+        IBertForSequenceClassification,
+        IBertForTokenClassification,
+        IBertModel,
+        IBertPreTrainedModel,
+    )
 else:
     import sys
 

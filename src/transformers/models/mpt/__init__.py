@@ -18,8 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_mpt import *
-    from .modeling_mpt import *
+    from .configuration_mpt import MptConfig
+    from .modeling_mpt import (
+        MptForCausalLM,
+        MptForQuestionAnswering,
+        MptForSequenceClassification,
+        MptForTokenClassification,
+        MptModel,
+        MptPreTrainedModel,
+    )
 else:
     import sys
 

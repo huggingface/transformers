@@ -18,11 +18,16 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_pix2struct import *
-    from .image_processing_pil_pix2struct import *
-    from .image_processing_pix2struct import *
-    from .modeling_pix2struct import *
-    from .processing_pix2struct import *
+    from .configuration_pix2struct import Pix2StructConfig, Pix2StructTextConfig, Pix2StructVisionConfig
+    from .image_processing_pil_pix2struct import Pix2StructImageProcessorPil
+    from .image_processing_pix2struct import Pix2StructImageProcessor
+    from .modeling_pix2struct import (
+        Pix2StructForConditionalGeneration,
+        Pix2StructPreTrainedModel,
+        Pix2StructTextModel,
+        Pix2StructVisionModel,
+    )
+    from .processing_pix2struct import Pix2StructProcessor
 else:
     import sys
 

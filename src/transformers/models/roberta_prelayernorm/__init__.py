@@ -18,8 +18,17 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_roberta_prelayernorm import *
-    from .modeling_roberta_prelayernorm import *
+    from .configuration_roberta_prelayernorm import RobertaPreLayerNormConfig
+    from .modeling_roberta_prelayernorm import (
+        RobertaPreLayerNormForCausalLM,
+        RobertaPreLayerNormForMaskedLM,
+        RobertaPreLayerNormForMultipleChoice,
+        RobertaPreLayerNormForQuestionAnswering,
+        RobertaPreLayerNormForSequenceClassification,
+        RobertaPreLayerNormForTokenClassification,
+        RobertaPreLayerNormModel,
+        RobertaPreLayerNormPreTrainedModel,
+    )
 else:
     import sys
 

@@ -18,8 +18,14 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_swinv2 import *
-    from .modeling_swinv2 import *
+    from .configuration_swinv2 import Swinv2Config
+    from .modeling_swinv2 import (
+        Swinv2Backbone,
+        Swinv2ForImageClassification,
+        Swinv2ForMaskedImageModeling,
+        Swinv2Model,
+        Swinv2PreTrainedModel,
+    )
 else:
     import sys
 

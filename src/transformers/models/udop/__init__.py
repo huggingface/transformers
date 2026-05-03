@@ -18,10 +18,10 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_udop import *
-    from .modeling_udop import *
-    from .processing_udop import *
-    from .tokenization_udop import *
+    from .configuration_udop import UdopConfig
+    from .modeling_udop import UdopEncoderModel, UdopForConditionalGeneration, UdopModel, UdopPreTrainedModel
+    from .processing_udop import UdopProcessor
+    from .tokenization_udop import UdopTokenizer
 else:
     import sys
 

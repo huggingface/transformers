@@ -18,9 +18,20 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_luke import *
-    from .modeling_luke import *
-    from .tokenization_luke import *
+    from .configuration_luke import LukeConfig
+    from .modeling_luke import (
+        LukeForEntityClassification,
+        LukeForEntityPairClassification,
+        LukeForEntitySpanClassification,
+        LukeForMaskedLM,
+        LukeForMultipleChoice,
+        LukeForQuestionAnswering,
+        LukeForSequenceClassification,
+        LukeForTokenClassification,
+        LukeModel,
+        LukePreTrainedModel,
+    )
+    from .tokenization_luke import LukeTokenizer
 else:
     import sys
 

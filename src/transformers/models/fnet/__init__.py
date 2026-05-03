@@ -18,8 +18,19 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_fnet import *
-    from .modeling_fnet import *
+    from .configuration_fnet import FNetConfig
+    from .modeling_fnet import (
+        FNetForMaskedLM,
+        FNetForMultipleChoice,
+        FNetForNextSentencePrediction,
+        FNetForPreTraining,
+        FNetForQuestionAnswering,
+        FNetForSequenceClassification,
+        FNetForTokenClassification,
+        FNetLayer,
+        FNetModel,
+        FNetPreTrainedModel,
+    )
     from .tokenization_fnet import FNetTokenizer, FNetTokenizerFast
 else:
     import sys

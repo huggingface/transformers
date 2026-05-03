@@ -18,9 +18,18 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_blip_2 import *
-    from .modeling_blip_2 import *
-    from .processing_blip_2 import *
+    from .configuration_blip_2 import Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
+    from .modeling_blip_2 import (
+        Blip2ForConditionalGeneration,
+        Blip2ForImageTextRetrieval,
+        Blip2Model,
+        Blip2PreTrainedModel,
+        Blip2QFormerModel,
+        Blip2TextModelWithProjection,
+        Blip2VisionModel,
+        Blip2VisionModelWithProjection,
+    )
+    from .processing_blip_2 import Blip2Processor
 else:
     import sys
 

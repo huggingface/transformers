@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_fsmt import *
-    from .modeling_fsmt import *
-    from .tokenization_fsmt import *
+    from .configuration_fsmt import FSMTConfig
+    from .modeling_fsmt import FSMTForConditionalGeneration, FSMTModel, PretrainedFSMTModel
+    from .tokenization_fsmt import FSMTTokenizer
 else:
     import sys
 

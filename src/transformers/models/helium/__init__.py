@@ -18,8 +18,14 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_helium import *
-    from .modeling_helium import *
+    from .configuration_helium import HeliumConfig
+    from .modeling_helium import (
+        HeliumForCausalLM,
+        HeliumForSequenceClassification,
+        HeliumForTokenClassification,
+        HeliumModel,
+        HeliumPreTrainedModel,
+    )
 else:
     import sys
 

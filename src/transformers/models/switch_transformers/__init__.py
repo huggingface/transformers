@@ -18,8 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_switch_transformers import *
-    from .modeling_switch_transformers import *
+    from .configuration_switch_transformers import SwitchTransformersConfig
+    from .modeling_switch_transformers import (
+        SwitchTransformersEncoderModel,
+        SwitchTransformersForConditionalGeneration,
+        SwitchTransformersModel,
+        SwitchTransformersPreTrainedModel,
+        SwitchTransformersSparseMLP,
+        SwitchTransformersTop1Router,
+    )
 else:
     import sys
 

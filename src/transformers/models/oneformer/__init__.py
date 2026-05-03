@@ -18,11 +18,11 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_oneformer import *
-    from .image_processing_oneformer import *
-    from .image_processing_pil_oneformer import *
-    from .modeling_oneformer import *
-    from .processing_oneformer import *
+    from .configuration_oneformer import OneFormerConfig
+    from .image_processing_oneformer import OneFormerImageProcessor
+    from .image_processing_pil_oneformer import OneFormerImageProcessorPil
+    from .modeling_oneformer import OneFormerForUniversalSegmentation, OneFormerModel, OneFormerPreTrainedModel
+    from .processing_oneformer import OneFormerProcessor
 else:
     import sys
 

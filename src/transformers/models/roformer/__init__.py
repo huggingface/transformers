@@ -18,9 +18,19 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_roformer import *
-    from .modeling_roformer import *
-    from .tokenization_roformer import *
+    from .configuration_roformer import RoFormerConfig
+    from .modeling_roformer import (
+        RoFormerForCausalLM,
+        RoFormerForMaskedLM,
+        RoFormerForMultipleChoice,
+        RoFormerForQuestionAnswering,
+        RoFormerForSequenceClassification,
+        RoFormerForTokenClassification,
+        RoFormerLayer,
+        RoFormerModel,
+        RoFormerPreTrainedModel,
+    )
+    from .tokenization_roformer import RoFormerTokenizer, RoFormerTokenizerFast
     from .tokenization_roformer_fast import *
 else:
     import sys

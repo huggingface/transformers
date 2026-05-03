@@ -18,9 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_gemma import *
-    from .modeling_gemma import *
-    from .tokenization_gemma import *
+    from .configuration_gemma import GemmaConfig
+    from .modeling_gemma import (
+        GemmaForCausalLM,
+        GemmaForSequenceClassification,
+        GemmaForTokenClassification,
+        GemmaModel,
+        GemmaPreTrainedModel,
+    )
+    from .tokenization_gemma import GemmaTokenizer
     from .tokenization_gemma_fast import *
 else:
     import sys

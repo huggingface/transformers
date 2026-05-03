@@ -18,12 +18,17 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_videomae import *
+    from .configuration_videomae import VideoMAEConfig
     from .feature_extraction_videomae import *
-    from .image_processing_pil_videomae import *
-    from .image_processing_videomae import *
-    from .modeling_videomae import *
-    from .video_processing_videomae import *
+    from .image_processing_pil_videomae import VideoMAEImageProcessorPil
+    from .image_processing_videomae import VideoMAEImageProcessor
+    from .modeling_videomae import (
+        VideoMAEForPreTraining,
+        VideoMAEForVideoClassification,
+        VideoMAEModel,
+        VideoMAEPreTrainedModel,
+    )
+    from .video_processing_videomae import VideoMAEVideoProcessor
 else:
     import sys
 

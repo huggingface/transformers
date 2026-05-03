@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_pvt_v2 import *
-    from .modeling_pvt_v2 import *
+    from .configuration_pvt_v2 import PvtV2Config
+    from .modeling_pvt_v2 import PvtV2Backbone, PvtV2ForImageClassification, PvtV2Model, PvtV2PreTrainedModel
 else:
     import sys
 

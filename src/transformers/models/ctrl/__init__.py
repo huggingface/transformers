@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_ctrl import *
-    from .modeling_ctrl import *
-    from .tokenization_ctrl import *
+    from .configuration_ctrl import CTRLConfig
+    from .modeling_ctrl import CTRLForSequenceClassification, CTRLLMHeadModel, CTRLModel, CTRLPreTrainedModel
+    from .tokenization_ctrl import CTRLTokenizer
 else:
     import sys
 

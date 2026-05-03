@@ -18,8 +18,14 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_blt import *
-    from .modeling_blt import *
+    from .configuration_blt import (
+        BltConfig,
+        BltGlobalTransformerConfig,
+        BltLocalDecoderConfig,
+        BltLocalEncoderConfig,
+        BltPatcherConfig,
+    )
+    from .modeling_blt import BltForCausalLM, BltModel, BltPatcher, BltPreTrainedModel
     from .tokenization_blt import *
 else:
     import sys

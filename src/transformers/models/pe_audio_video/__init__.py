@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_pe_audio_video import *
-    from .modeling_pe_audio_video import *
-    from .processing_pe_audio_video import *
+    from .configuration_pe_audio_video import PeAudioVideoConfig, PeAudioVideoEncoderConfig
+    from .modeling_pe_audio_video import PeAudioVideoEncoder, PeAudioVideoModel
+    from .processing_pe_audio_video import PeAudioVideoProcessor
 else:
     import sys
 

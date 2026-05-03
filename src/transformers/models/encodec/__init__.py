@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_encodec import *
-    from .feature_extraction_encodec import *
-    from .modeling_encodec import *
+    from .configuration_encodec import EncodecConfig
+    from .feature_extraction_encodec import EncodecFeatureExtractor
+    from .modeling_encodec import EncodecModel, EncodecPreTrainedModel
 else:
     import sys
 

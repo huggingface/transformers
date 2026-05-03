@@ -19,9 +19,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_videomt import *
-    from .modeling_videomt import *
-    from .video_processing_videomt import *
+    from .configuration_videomt import VideomtConfig
+    from .modeling_videomt import VideomtForUniversalSegmentation, VideomtPreTrainedModel
+    from .video_processing_videomt import VideomtVideoProcessor
 else:
     import sys
 

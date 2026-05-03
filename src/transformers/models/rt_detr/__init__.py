@@ -20,12 +20,12 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_rt_detr import *
-    from .configuration_rt_detr_resnet import *
-    from .image_processing_pil_rt_detr import *
-    from .image_processing_rt_detr import *
-    from .modeling_rt_detr import *
-    from .modeling_rt_detr_resnet import *
+    from .configuration_rt_detr import RTDetrConfig
+    from .configuration_rt_detr_resnet import RTDetrResNetConfig
+    from .image_processing_pil_rt_detr import RTDetrImageProcessorPil
+    from .image_processing_rt_detr import RTDetrImageProcessor
+    from .modeling_rt_detr import RTDetrForObjectDetection, RTDetrModel, RTDetrPreTrainedModel
+    from .modeling_rt_detr_resnet import RTDetrResNetBackbone, RTDetrResNetPreTrainedModel
 else:
     import sys
 

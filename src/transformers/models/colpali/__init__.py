@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_colpali import *
-    from .modeling_colpali import *
-    from .processing_colpali import *
+    from .configuration_colpali import ColPaliConfig
+    from .modeling_colpali import ColPaliForRetrieval, ColPaliPreTrainedModel
+    from .processing_colpali import ColPaliProcessor
 else:
     import sys
 

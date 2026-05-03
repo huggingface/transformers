@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_depth_pro import *
-    from .image_processing_depth_pro import *
-    from .modeling_depth_pro import *
+    from .configuration_depth_pro import DepthProConfig
+    from .image_processing_depth_pro import DepthProImageProcessor
+    from .modeling_depth_pro import DepthProForDepthEstimation, DepthProModel, DepthProPreTrainedModel
 else:
     import sys
 

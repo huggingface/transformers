@@ -18,11 +18,11 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_sam import *
-    from .image_processing_pil_sam import *
-    from .image_processing_sam import *
-    from .modeling_sam import *
-    from .processing_sam import *
+    from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
+    from .image_processing_pil_sam import SamImageProcessorPil
+    from .image_processing_sam import SamImageProcessor
+    from .modeling_sam import SamModel, SamPreTrainedModel, SamVisionModel
+    from .processing_sam import SamProcessor
 else:
     import sys
 

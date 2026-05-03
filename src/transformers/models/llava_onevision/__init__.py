@@ -18,12 +18,16 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_llava_onevision import *
-    from .image_processing_llava_onevision import *
-    from .image_processing_pil_llava_onevision import *
-    from .modeling_llava_onevision import *
-    from .processing_llava_onevision import *
-    from .video_processing_llava_onevision import *
+    from .configuration_llava_onevision import LlavaOnevisionConfig
+    from .image_processing_llava_onevision import LlavaOnevisionImageProcessor
+    from .image_processing_pil_llava_onevision import LlavaOnevisionImageProcessorPil
+    from .modeling_llava_onevision import (
+        LlavaOnevisionForConditionalGeneration,
+        LlavaOnevisionModel,
+        LlavaOnevisionPreTrainedModel,
+    )
+    from .processing_llava_onevision import LlavaOnevisionProcessor
+    from .video_processing_llava_onevision import LlavaOnevisionVideoProcessor
 else:
     import sys
 

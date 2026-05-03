@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_bamba import *
-    from .modeling_bamba import *
+    from .configuration_bamba import BambaConfig
+    from .modeling_bamba import BambaForCausalLM, BambaModel, BambaPreTrainedModel
     from .processing_bamba import *
 else:
     import sys

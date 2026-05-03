@@ -18,11 +18,11 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_fuyu import *
-    from .image_processing_fuyu import *
-    from .image_processing_pil_fuyu import *
-    from .modeling_fuyu import *
-    from .processing_fuyu import *
+    from .configuration_fuyu import FuyuConfig
+    from .image_processing_fuyu import FuyuImageProcessor
+    from .image_processing_pil_fuyu import FuyuImageProcessorPil
+    from .modeling_fuyu import FuyuForCausalLM, FuyuModel, FuyuPreTrainedModel
+    from .processing_fuyu import FuyuProcessor
 else:
     import sys
 

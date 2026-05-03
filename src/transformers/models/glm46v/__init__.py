@@ -18,12 +18,12 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_glm46v import *
-    from .image_processing_glm46v import *
-    from .image_processing_pil_glm46v import *
-    from .modeling_glm46v import *
-    from .processing_glm46v import *
-    from .video_processing_glm46v import *
+    from .configuration_glm46v import Glm46VConfig
+    from .image_processing_glm46v import Glm46VImageProcessor
+    from .image_processing_pil_glm46v import Glm46VImageProcessorPil
+    from .modeling_glm46v import Glm46VForConditionalGeneration, Glm46VModel, Glm46VPreTrainedModel
+    from .processing_glm46v import Glm46VProcessor
+    from .video_processing_glm46v import Glm46VVideoProcessor
 else:
     import sys
 

@@ -18,9 +18,14 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_musicgen import *
-    from .modeling_musicgen import *
-    from .processing_musicgen import *
+    from .configuration_musicgen import MusicgenConfig, MusicgenDecoderConfig
+    from .modeling_musicgen import (
+        MusicgenForCausalLM,
+        MusicgenForConditionalGeneration,
+        MusicgenModel,
+        MusicgenPreTrainedModel,
+    )
+    from .processing_musicgen import MusicgenProcessor
 else:
     import sys
 

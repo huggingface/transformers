@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_regnet import *
-    from .modeling_regnet import *
+    from .configuration_regnet import RegNetConfig
+    from .modeling_regnet import RegNetForImageClassification, RegNetModel, RegNetPreTrainedModel
 else:
     import sys
 

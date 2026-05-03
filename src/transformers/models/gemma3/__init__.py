@@ -18,11 +18,19 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_gemma3 import *
-    from .image_processing_gemma3 import *
-    from .image_processing_pil_gemma3 import *
-    from .modeling_gemma3 import *
-    from .processing_gemma3 import *
+    from .configuration_gemma3 import Gemma3Config, Gemma3TextConfig
+    from .image_processing_gemma3 import Gemma3ImageProcessor
+    from .image_processing_pil_gemma3 import Gemma3ImageProcessorPil
+    from .modeling_gemma3 import (
+        Gemma3ForCausalLM,
+        Gemma3ForConditionalGeneration,
+        Gemma3ForSequenceClassification,
+        Gemma3Model,
+        Gemma3PreTrainedModel,
+        Gemma3TextForSequenceClassification,
+        Gemma3TextModel,
+    )
+    from .processing_gemma3 import Gemma3Processor
 else:
     import sys
 

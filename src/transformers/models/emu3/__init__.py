@@ -18,10 +18,17 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_emu3 import *
-    from .image_processing_emu3 import *
-    from .modeling_emu3 import *
-    from .processing_emu3 import *
+    from .configuration_emu3 import Emu3Config, Emu3TextConfig, Emu3VQVAEConfig
+    from .image_processing_emu3 import Emu3ImageProcessor
+    from .modeling_emu3 import (
+        Emu3ForCausalLM,
+        Emu3ForConditionalGeneration,
+        Emu3Model,
+        Emu3PreTrainedModel,
+        Emu3TextModel,
+        Emu3VQVAE,
+    )
+    from .processing_emu3 import Emu3Processor
 else:
     import sys
 

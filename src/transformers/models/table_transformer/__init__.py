@@ -18,8 +18,12 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_table_transformer import *
-    from .modeling_table_transformer import *
+    from .configuration_table_transformer import TableTransformerConfig
+    from .modeling_table_transformer import (
+        TableTransformerForObjectDetection,
+        TableTransformerModel,
+        TableTransformerPreTrainedModel,
+    )
 else:
     import sys
 

@@ -18,8 +18,14 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_gemma2 import *
-    from .modeling_gemma2 import *
+    from .configuration_gemma2 import Gemma2Config
+    from .modeling_gemma2 import (
+        Gemma2ForCausalLM,
+        Gemma2ForSequenceClassification,
+        Gemma2ForTokenClassification,
+        Gemma2Model,
+        Gemma2PreTrainedModel,
+    )
 else:
     import sys
 

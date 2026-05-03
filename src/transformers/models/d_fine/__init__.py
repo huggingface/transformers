@@ -20,8 +20,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_d_fine import *
-    from .modeling_d_fine import *
+    from .configuration_d_fine import DFineConfig
+    from .modeling_d_fine import DFineForObjectDetection, DFineModel, DFinePreTrainedModel
 else:
     import sys
 

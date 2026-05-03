@@ -18,12 +18,26 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_flava import *
+    from .configuration_flava import (
+        FlavaConfig,
+        FlavaImageCodebookConfig,
+        FlavaImageConfig,
+        FlavaMultimodalConfig,
+        FlavaTextConfig,
+    )
     from .feature_extraction_flava import *
-    from .image_processing_flava import *
-    from .image_processing_pil_flava import *
-    from .modeling_flava import *
-    from .processing_flava import *
+    from .image_processing_flava import FlavaImageProcessor
+    from .image_processing_pil_flava import FlavaImageProcessorPil
+    from .modeling_flava import (
+        FlavaForPreTraining,
+        FlavaImageCodebook,
+        FlavaImageModel,
+        FlavaModel,
+        FlavaMultimodalModel,
+        FlavaPreTrainedModel,
+        FlavaTextModel,
+    )
+    from .processing_flava import FlavaProcessor
 else:
     import sys
 

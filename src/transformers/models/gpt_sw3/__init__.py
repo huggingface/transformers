@@ -18,7 +18,7 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .tokenization_gpt_sw3 import *
+    from .tokenization_gpt_sw3 import GPTSw3Tokenizer
 else:
     import sys
 

@@ -18,8 +18,12 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_granitemoeshared import *
-    from .modeling_granitemoeshared import *
+    from .configuration_granitemoeshared import GraniteMoeSharedConfig
+    from .modeling_granitemoeshared import (
+        GraniteMoeSharedForCausalLM,
+        GraniteMoeSharedModel,
+        GraniteMoeSharedPreTrainedModel,
+    )
 else:
     import sys
 

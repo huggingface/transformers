@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_evolla import *
-    from .modeling_evolla import *
-    from .processing_evolla import *
+    from .configuration_evolla import EvollaConfig
+    from .modeling_evolla import EvollaForProteinText2Text, EvollaModel, EvollaPreTrainedModel
+    from .processing_evolla import EvollaProcessor
 else:
     import sys
 

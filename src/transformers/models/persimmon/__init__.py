@@ -18,8 +18,14 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_persimmon import *
-    from .modeling_persimmon import *
+    from .configuration_persimmon import PersimmonConfig
+    from .modeling_persimmon import (
+        PersimmonForCausalLM,
+        PersimmonForSequenceClassification,
+        PersimmonForTokenClassification,
+        PersimmonModel,
+        PersimmonPreTrainedModel,
+    )
 else:
     import sys
 

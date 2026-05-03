@@ -18,9 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_bros import *
-    from .modeling_bros import *
-    from .processing_bros import *
+    from .configuration_bros import BrosConfig
+    from .modeling_bros import (
+        BrosForTokenClassification,
+        BrosModel,
+        BrosPreTrainedModel,
+        BrosSpadeEEForTokenClassification,
+        BrosSpadeELForTokenClassification,
+    )
+    from .processing_bros import BrosProcessor
 else:
     import sys
 

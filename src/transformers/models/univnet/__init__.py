@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_univnet import *
-    from .feature_extraction_univnet import *
-    from .modeling_univnet import *
+    from .configuration_univnet import UnivNetConfig
+    from .feature_extraction_univnet import UnivNetFeatureExtractor
+    from .modeling_univnet import UnivNetModel
 else:
     import sys
 

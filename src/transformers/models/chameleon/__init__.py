@@ -18,11 +18,16 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_chameleon import *
-    from .image_processing_chameleon import *
-    from .image_processing_pil_chameleon import *
-    from .modeling_chameleon import *
-    from .processing_chameleon import *
+    from .configuration_chameleon import ChameleonConfig, ChameleonVQVAEConfig
+    from .image_processing_chameleon import ChameleonImageProcessor
+    from .image_processing_pil_chameleon import ChameleonImageProcessorPil
+    from .modeling_chameleon import (
+        ChameleonForConditionalGeneration,
+        ChameleonModel,
+        ChameleonPreTrainedModel,
+        ChameleonVQVAE,
+    )
+    from .processing_chameleon import ChameleonProcessor
 else:
     import sys
 

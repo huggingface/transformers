@@ -18,10 +18,10 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_seggpt import *
-    from .image_processing_pil_seggpt import *
-    from .image_processing_seggpt import *
-    from .modeling_seggpt import *
+    from .configuration_seggpt import SegGptConfig
+    from .image_processing_pil_seggpt import SegGptImageProcessorPil
+    from .image_processing_seggpt import SegGptImageProcessor
+    from .modeling_seggpt import SegGptForImageSegmentation, SegGptModel, SegGptPreTrainedModel
 else:
     import sys
 

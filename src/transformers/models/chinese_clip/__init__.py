@@ -18,11 +18,16 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_chinese_clip import *
-    from .image_processing_chinese_clip import *
-    from .image_processing_chinese_pil_clip import *
-    from .modeling_chinese_clip import *
-    from .processing_chinese_clip import *
+    from .configuration_chinese_clip import ChineseCLIPConfig, ChineseCLIPTextConfig, ChineseCLIPVisionConfig
+    from .image_processing_chinese_clip import ChineseCLIPImageProcessor
+    from .image_processing_chinese_pil_clip import ChineseCLIPImageProcessorPil
+    from .modeling_chinese_clip import (
+        ChineseCLIPModel,
+        ChineseCLIPPreTrainedModel,
+        ChineseCLIPTextModel,
+        ChineseCLIPVisionModel,
+    )
+    from .processing_chinese_clip import ChineseCLIPProcessor
 else:
     import sys
 

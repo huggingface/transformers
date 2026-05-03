@@ -18,8 +18,19 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_megatron_bert import *
-    from .modeling_megatron_bert import *
+    from .configuration_megatron_bert import MegatronBertConfig
+    from .modeling_megatron_bert import (
+        MegatronBertForCausalLM,
+        MegatronBertForMaskedLM,
+        MegatronBertForMultipleChoice,
+        MegatronBertForNextSentencePrediction,
+        MegatronBertForPreTraining,
+        MegatronBertForQuestionAnswering,
+        MegatronBertForSequenceClassification,
+        MegatronBertForTokenClassification,
+        MegatronBertModel,
+        MegatronBertPreTrainedModel,
+    )
 else:
     import sys
 

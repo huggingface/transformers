@@ -18,9 +18,23 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_qwen3_omni_moe import *
-    from .modeling_qwen3_omni_moe import *
-    from .processing_qwen3_omni_moe import *
+    from .configuration_qwen3_omni_moe import Qwen3OmniMoeConfig, Qwen3OmniMoeTalkerConfig, Qwen3OmniMoeThinkerConfig
+    from .modeling_qwen3_omni_moe import (
+        Qwen3OmniMoeCode2Wav,
+        Qwen3OmniMoeCode2WavDecoderBlock,
+        Qwen3OmniMoeCode2WavTransformerModel,
+        Qwen3OmniMoeForConditionalGeneration,
+        Qwen3OmniMoePreTrainedModel,
+        Qwen3OmniMoePreTrainedModelForConditionalGeneration,
+        Qwen3OmniMoeTalkerCodePredictorModel,
+        Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration,
+        Qwen3OmniMoeTalkerForConditionalGeneration,
+        Qwen3OmniMoeTalkerModel,
+        Qwen3OmniMoeThinkerForConditionalGeneration,
+        Qwen3OmniMoeThinkerTextModel,
+        Qwen3OmniMoeThinkerTextPreTrainedModel,
+    )
+    from .processing_qwen3_omni_moe import Qwen3OmniMoeProcessor
 else:
     import sys
 

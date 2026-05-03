@@ -8,8 +8,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_vitpose_backbone import *
-    from .modeling_vitpose_backbone import *
+    from .configuration_vitpose_backbone import VitPoseBackboneConfig
+    from .modeling_vitpose_backbone import VitPoseBackbonePreTrainedModel, VitPoseBackbone
 else:
     import sys
 

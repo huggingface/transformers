@@ -18,10 +18,10 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_superpoint import *
-    from .image_processing_pil_superpoint import *
-    from .image_processing_superpoint import *
-    from .modeling_superpoint import *
+    from .configuration_superpoint import SuperPointConfig
+    from .image_processing_pil_superpoint import SuperPointImageProcessorPil
+    from .image_processing_superpoint import SuperPointImageProcessor
+    from .modeling_superpoint import SuperPointForKeypointDetection, SuperPointPreTrainedModel
 else:
     import sys
 

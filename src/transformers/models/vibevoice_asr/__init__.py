@@ -19,9 +19,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_vibevoice_asr import *
-    from .modeling_vibevoice_asr import *
-    from .processing_vibevoice_asr import *
+    from .configuration_vibevoice_asr import VibeVoiceAsrConfig
+    from .modeling_vibevoice_asr import VibeVoiceAsrForConditionalGeneration, VibeVoiceAsrPreTrainedModel
+    from .processing_vibevoice_asr import VibeVoiceAsrProcessor
 else:
     import sys
 

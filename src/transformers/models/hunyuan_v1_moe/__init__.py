@@ -5,8 +5,13 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_hunyuan_v1_moe import *
-    from .modeling_hunyuan_v1_moe import *
+    from .configuration_hunyuan_v1_moe import HunYuanMoEV1Config
+    from .modeling_hunyuan_v1_moe import (
+        HunYuanMoEV1ForCausalLM,
+        HunYuanMoEV1ForSequenceClassification,
+        HunYuanMoEV1Model,
+        HunYuanMoEV1PreTrainedModel,
+    )
 else:
     import sys
 

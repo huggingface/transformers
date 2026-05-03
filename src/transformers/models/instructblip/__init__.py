@@ -18,9 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_instructblip import *
-    from .modeling_instructblip import *
-    from .processing_instructblip import *
+    from .configuration_instructblip import InstructBlipConfig, InstructBlipQFormerConfig, InstructBlipVisionConfig
+    from .modeling_instructblip import (
+        InstructBlipForConditionalGeneration,
+        InstructBlipModel,
+        InstructBlipPreTrainedModel,
+        InstructBlipQFormerModel,
+        InstructBlipVisionModel,
+    )
+    from .processing_instructblip import InstructBlipProcessor
 else:
     import sys
 

@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_kosmos2 import *
-    from .modeling_kosmos2 import *
-    from .processing_kosmos2 import *
+    from .configuration_kosmos2 import Kosmos2Config
+    from .modeling_kosmos2 import Kosmos2ForConditionalGeneration, Kosmos2Model, Kosmos2PreTrainedModel
+    from .processing_kosmos2 import Kosmos2Processor
 else:
     import sys
 

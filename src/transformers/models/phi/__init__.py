@@ -18,8 +18,14 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_phi import *
-    from .modeling_phi import *
+    from .configuration_phi import PhiConfig
+    from .modeling_phi import (
+        PhiForCausalLM,
+        PhiForSequenceClassification,
+        PhiForTokenClassification,
+        PhiModel,
+        PhiPreTrainedModel,
+    )
 else:
     import sys
 

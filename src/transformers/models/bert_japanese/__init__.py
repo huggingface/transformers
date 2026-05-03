@@ -18,7 +18,7 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .tokenization_bert_japanese import *
+    from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
 else:
     import sys
 

@@ -18,12 +18,21 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_vilt import *
+    from .configuration_vilt import ViltConfig
     from .feature_extraction_vilt import *
-    from .image_processing_pil_vilt import *
-    from .image_processing_vilt import *
-    from .modeling_vilt import *
-    from .processing_vilt import *
+    from .image_processing_pil_vilt import ViltImageProcessorPil
+    from .image_processing_vilt import ViltImageProcessor
+    from .modeling_vilt import (
+        ViltForImageAndTextRetrieval,
+        ViltForImagesAndTextClassification,
+        ViltForMaskedLM,
+        ViltForQuestionAnswering,
+        ViltForTokenClassification,
+        ViltLayer,
+        ViltModel,
+        ViltPreTrainedModel,
+    )
+    from .processing_vilt import ViltProcessor
 else:
     import sys
 

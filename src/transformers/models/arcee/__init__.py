@@ -18,8 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_arcee import *
-    from .modeling_arcee import *
+    from .configuration_arcee import ArceeConfig
+    from .modeling_arcee import (
+        ArceeForCausalLM,
+        ArceeForQuestionAnswering,
+        ArceeForSequenceClassification,
+        ArceeForTokenClassification,
+        ArceeModel,
+        ArceePreTrainedModel,
+    )
 else:
     import sys
 

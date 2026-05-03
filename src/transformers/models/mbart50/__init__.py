@@ -18,7 +18,7 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .tokenization_mbart50 import *
+    from .tokenization_mbart50 import MBart50Tokenizer
 else:
     import sys
 

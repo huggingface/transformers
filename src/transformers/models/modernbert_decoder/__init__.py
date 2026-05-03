@@ -18,8 +18,13 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_modernbert_decoder import *
-    from .modeling_modernbert_decoder import *
+    from .configuration_modernbert_decoder import ModernBertDecoderConfig
+    from .modeling_modernbert_decoder import (
+        ModernBertDecoderForCausalLM,
+        ModernBertDecoderForSequenceClassification,
+        ModernBertDecoderModel,
+        ModernBertDecoderPreTrainedModel,
+    )
 else:
     import sys
 

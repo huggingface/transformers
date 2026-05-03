@@ -18,8 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_bloom import *
-    from .modeling_bloom import *
+    from .configuration_bloom import BloomConfig
+    from .modeling_bloom import (
+        BloomForCausalLM,
+        BloomForQuestionAnswering,
+        BloomForSequenceClassification,
+        BloomForTokenClassification,
+        BloomModel,
+        BloomPreTrainedModel,
+    )
     from .tokenization_bloom import *
 else:
     import sys

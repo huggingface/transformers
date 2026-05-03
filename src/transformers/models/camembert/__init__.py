@@ -18,9 +18,18 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_camembert import *
-    from .modeling_camembert import *
-    from .tokenization_camembert import *
+    from .configuration_camembert import CamembertConfig
+    from .modeling_camembert import (
+        CamembertForCausalLM,
+        CamembertForMaskedLM,
+        CamembertForMultipleChoice,
+        CamembertForQuestionAnswering,
+        CamembertForSequenceClassification,
+        CamembertForTokenClassification,
+        CamembertModel,
+        CamembertPreTrainedModel,
+    )
+    from .tokenization_camembert import CamembertTokenizer
 else:
     import sys
 

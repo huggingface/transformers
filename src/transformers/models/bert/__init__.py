@@ -18,9 +18,21 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_bert import *
-    from .modeling_bert import *
-    from .tokenization_bert import *
+    from .configuration_bert import BertConfig
+    from .modeling_bert import (
+        BertForMaskedLM,
+        BertForMultipleChoice,
+        BertForNextSentencePrediction,
+        BertForPreTraining,
+        BertForQuestionAnswering,
+        BertForSequenceClassification,
+        BertForTokenClassification,
+        BertLayer,
+        BertLMHeadModel,
+        BertModel,
+        BertPreTrainedModel,
+    )
+    from .tokenization_bert import BertTokenizer
 else:
     import sys
 

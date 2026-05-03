@@ -18,10 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_mobilevit import *
-    from .image_processing_mobilevit import *
-    from .image_processing_pil_mobilevit import *
-    from .modeling_mobilevit import *
+    from .configuration_mobilevit import MobileViTConfig
+    from .image_processing_mobilevit import MobileViTImageProcessor
+    from .image_processing_pil_mobilevit import MobileViTImageProcessorPil
+    from .modeling_mobilevit import (
+        MobileViTForImageClassification,
+        MobileViTForSemanticSegmentation,
+        MobileViTModel,
+        MobileViTPreTrainedModel,
+    )
 else:
     import sys
 

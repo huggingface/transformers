@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_dinov3_convnext import *
-    from .modeling_dinov3_convnext import *
+    from .configuration_dinov3_convnext import DINOv3ConvNextConfig
+    from .modeling_dinov3_convnext import DINOv3ConvNextBackbone, DINOv3ConvNextModel, DINOv3ConvNextPreTrainedModel
 else:
     import sys
 

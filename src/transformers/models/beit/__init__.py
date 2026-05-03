@@ -18,10 +18,17 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_beit import *
-    from .image_processing_beit import *
-    from .image_processing_pil_beit import *
-    from .modeling_beit import *
+    from .configuration_beit import BeitConfig
+    from .image_processing_beit import BeitImageProcessor
+    from .image_processing_pil_beit import BeitImageProcessorPil
+    from .modeling_beit import (
+        BeitBackbone,
+        BeitForImageClassification,
+        BeitForMaskedImageModeling,
+        BeitForSemanticSegmentation,
+        BeitModel,
+        BeitPreTrainedModel,
+    )
 else:
     import sys
 

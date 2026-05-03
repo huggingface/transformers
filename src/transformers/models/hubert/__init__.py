@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_hubert import *
-    from .modeling_hubert import *
+    from .configuration_hubert import HubertConfig
+    from .modeling_hubert import HubertForCTC, HubertForSequenceClassification, HubertModel, HubertPreTrainedModel
 else:
     import sys
 

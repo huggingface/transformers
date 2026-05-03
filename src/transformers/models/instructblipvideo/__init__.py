@@ -18,11 +18,21 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_instructblipvideo import *
+    from .configuration_instructblipvideo import (
+        InstructBlipVideoConfig,
+        InstructBlipVideoQFormerConfig,
+        InstructBlipVideoVisionConfig,
+    )
     from .image_processing_instructblipvideo import *
-    from .modeling_instructblipvideo import *
-    from .processing_instructblipvideo import *
-    from .video_processing_instructblipvideo import *
+    from .modeling_instructblipvideo import (
+        InstructBlipVideoForConditionalGeneration,
+        InstructBlipVideoModel,
+        InstructBlipVideoPreTrainedModel,
+        InstructBlipVideoQFormerModel,
+        InstructBlipVideoVisionModel,
+    )
+    from .processing_instructblipvideo import InstructBlipVideoProcessor
+    from .video_processing_instructblipvideo import InstructBlipVideoVideoProcessor
 else:
     import sys
 

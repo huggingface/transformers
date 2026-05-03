@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_sam_hq import *
-    from .modeling_sam_hq import *
-    from .processing_sam_hq import *
+    from .configuration_sam_hq import SamHQConfig, SamHQMaskDecoderConfig, SamHQPromptEncoderConfig, SamHQVisionConfig
+    from .modeling_sam_hq import SamHQModel, SamHQPreTrainedModel, SamHQVisionModel
+    from .processing_sam_hq import SamHQProcessor
 else:
     import sys
 

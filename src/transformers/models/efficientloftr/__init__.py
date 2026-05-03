@@ -18,10 +18,14 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_efficientloftr import *
-    from .image_processing_efficientloftr import *
-    from .image_processing_pil_efficientloftr import *
-    from .modeling_efficientloftr import *
+    from .configuration_efficientloftr import EfficientLoFTRConfig
+    from .image_processing_efficientloftr import EfficientLoFTRImageProcessor
+    from .image_processing_pil_efficientloftr import EfficientLoFTRImageProcessorPil
+    from .modeling_efficientloftr import (
+        EfficientLoFTRForKeypointMatching,
+        EfficientLoFTRModel,
+        EfficientLoFTRPreTrainedModel,
+    )
 else:
     import sys
 

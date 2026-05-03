@@ -18,7 +18,7 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .tokenization_wav2vec2_phoneme import *
+    from .tokenization_wav2vec2_phoneme import Wav2Vec2PhonemeCTCTokenizer
 else:
     import sys
 

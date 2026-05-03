@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_cohere import *
-    from .modeling_cohere import *
-    from .tokenization_cohere import *
+    from .configuration_cohere import CohereConfig
+    from .modeling_cohere import CohereForCausalLM, CohereModel, CoherePreTrainedModel
+    from .tokenization_cohere import CohereTokenizer
 else:
     import sys
 

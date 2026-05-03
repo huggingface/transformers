@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_vjepa2 import *
-    from .modeling_vjepa2 import *
-    from .video_processing_vjepa2 import *
+    from .configuration_vjepa2 import VJEPA2Config
+    from .modeling_vjepa2 import VJEPA2ForVideoClassification, VJEPA2Model, VJEPA2PreTrainedModel
+    from .video_processing_vjepa2 import VJEPA2VideoProcessor
 else:
     import sys
 

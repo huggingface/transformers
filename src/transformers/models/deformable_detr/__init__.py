@@ -20,10 +20,14 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_deformable_detr import *
-    from .image_processing_deformable_detr import *
-    from .image_processing_pil_deformable_detr import *
-    from .modeling_deformable_detr import *
+    from .configuration_deformable_detr import DeformableDetrConfig
+    from .image_processing_deformable_detr import DeformableDetrImageProcessor
+    from .image_processing_pil_deformable_detr import DeformableDetrImageProcessorPil
+    from .modeling_deformable_detr import (
+        DeformableDetrForObjectDetection,
+        DeformableDetrModel,
+        DeformableDetrPreTrainedModel,
+    )
 else:
     import sys
 

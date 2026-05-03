@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_dinov2 import *
-    from .modeling_dinov2 import *
+    from .configuration_dinov2 import Dinov2Config
+    from .modeling_dinov2 import Dinov2Backbone, Dinov2ForImageClassification, Dinov2Model, Dinov2PreTrainedModel
 else:
     import sys
 

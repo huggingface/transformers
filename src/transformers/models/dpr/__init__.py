@@ -18,10 +18,27 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_dpr import *
-    from .modeling_dpr import *
-    from .tokenization_dpr import *
-    from .tokenization_dpr_fast import *
+    from .configuration_dpr import DPRConfig
+    from .modeling_dpr import (
+        DPRContextEncoder,
+        DPRPretrainedContextEncoder,
+        DPRPreTrainedModel,
+        DPRPretrainedQuestionEncoder,
+        DPRPretrainedReader,
+        DPRQuestionEncoder,
+        DPRReader,
+    )
+    from .tokenization_dpr import (
+        DPRContextEncoderTokenizer,
+        DPRQuestionEncoderTokenizer,
+        DPRReaderOutput,
+        DPRReaderTokenizer,
+    )
+    from .tokenization_dpr_fast import (
+        DPRContextEncoderTokenizerFast,
+        DPRQuestionEncoderTokenizerFast,
+        DPRReaderTokenizerFast,
+    )
 else:
     import sys
 

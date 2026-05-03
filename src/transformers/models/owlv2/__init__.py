@@ -18,11 +18,17 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_owlv2 import *
-    from .image_processing_owlv2 import *
-    from .image_processing_pil_owlv2 import *
-    from .modeling_owlv2 import *
-    from .processing_owlv2 import *
+    from .configuration_owlv2 import Owlv2Config, Owlv2TextConfig, Owlv2VisionConfig
+    from .image_processing_owlv2 import Owlv2ImageProcessor
+    from .image_processing_pil_owlv2 import Owlv2ImageProcessorPil
+    from .modeling_owlv2 import (
+        Owlv2ForObjectDetection,
+        Owlv2Model,
+        Owlv2PreTrainedModel,
+        Owlv2TextModel,
+        Owlv2VisionModel,
+    )
+    from .processing_owlv2 import Owlv2Processor
 else:
     import sys
 

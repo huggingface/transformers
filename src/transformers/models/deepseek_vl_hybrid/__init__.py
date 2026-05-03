@@ -18,11 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_deepseek_vl_hybrid import *
-    from .image_processing_deepseek_vl_hybrid import *
-    from .image_processing_pil_deepseek_vl_hybrid import *
-    from .modeling_deepseek_vl_hybrid import *
-    from .processing_deepseek_vl_hybrid import *
+    from .configuration_deepseek_vl_hybrid import DeepseekVLHybridConfig
+    from .image_processing_deepseek_vl_hybrid import DeepseekVLHybridImageProcessor
+    from .image_processing_pil_deepseek_vl_hybrid import DeepseekVLHybridImageProcessorPil
+    from .modeling_deepseek_vl_hybrid import (
+        DeepseekVLHybridForConditionalGeneration,
+        DeepseekVLHybridModel,
+        DeepseekVLHybridPreTrainedModel,
+    )
+    from .processing_deepseek_vl_hybrid import DeepseekVLHybridProcessor
 else:
     import sys
 

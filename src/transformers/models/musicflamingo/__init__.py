@@ -20,9 +20,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_musicflamingo import *
-    from .modeling_musicflamingo import *
-    from .processing_musicflamingo import *
+    from .configuration_musicflamingo import MusicFlamingoConfig
+    from .modeling_musicflamingo import MusicFlamingoForConditionalGeneration, MusicFlamingoPreTrainedModel
+    from .processing_musicflamingo import MusicFlamingoProcessor
 else:
     import sys
 

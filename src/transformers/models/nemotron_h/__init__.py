@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_nemotron_h import *
-    from .modeling_nemotron_h import *
+    from .configuration_nemotron_h import NemotronHConfig
+    from .modeling_nemotron_h import NemotronHForCausalLM, NemotronHModel, NemotronHPreTrainedModel
 else:
     import sys
 

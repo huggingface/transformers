@@ -18,9 +18,17 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_qwen3_5 import *
-    from .modeling_qwen3_5 import *
-    from .tokenization_qwen3_5 import *
+    from .configuration_qwen3_5 import Qwen3_5Config, Qwen3_5TextConfig
+    from .modeling_qwen3_5 import (
+        Qwen3_5ForCausalLM,
+        Qwen3_5ForConditionalGeneration,
+        Qwen3_5ForSequenceClassification,
+        Qwen3_5Model,
+        Qwen3_5PreTrainedModel,
+        Qwen3_5TextModel,
+        Qwen3_5VisionModel,
+    )
+    from .tokenization_qwen3_5 import Qwen3_5Tokenizer
 else:
     import sys
 

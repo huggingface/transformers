@@ -20,11 +20,23 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_phi4_multimodal import *
-    from .feature_extraction_phi4_multimodal import *
-    from .image_processing_phi4_multimodal import *
-    from .modeling_phi4_multimodal import *
-    from .processing_phi4_multimodal import *
+    from .configuration_phi4_multimodal import (
+        Phi4MultimodalAudioConfig,
+        Phi4MultimodalConfig,
+        Phi4MultimodalVisionConfig,
+    )
+    from .feature_extraction_phi4_multimodal import Phi4MultimodalFeatureExtractor
+    from .image_processing_phi4_multimodal import Phi4MultimodalImageProcessor
+    from .modeling_phi4_multimodal import (
+        Phi4MultimodalAudioModel,
+        Phi4MultimodalAudioPreTrainedModel,
+        Phi4MultimodalForCausalLM,
+        Phi4MultimodalModel,
+        Phi4MultimodalPreTrainedModel,
+        Phi4MultimodalVisionModel,
+        Phi4MultimodalVisionPreTrainedModel,
+    )
+    from .processing_phi4_multimodal import Phi4MultimodalProcessor
 else:
     import sys
 

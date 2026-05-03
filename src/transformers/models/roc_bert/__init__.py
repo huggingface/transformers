@@ -18,9 +18,20 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_roc_bert import *
-    from .modeling_roc_bert import *
-    from .tokenization_roc_bert import *
+    from .configuration_roc_bert import RoCBertConfig
+    from .modeling_roc_bert import (
+        RoCBertForCausalLM,
+        RoCBertForMaskedLM,
+        RoCBertForMultipleChoice,
+        RoCBertForPreTraining,
+        RoCBertForQuestionAnswering,
+        RoCBertForSequenceClassification,
+        RoCBertForTokenClassification,
+        RoCBertLayer,
+        RoCBertModel,
+        RoCBertPreTrainedModel,
+    )
+    from .tokenization_roc_bert import RoCBertTokenizer
 else:
     import sys
 

@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_glm4_moe import *
-    from .modeling_glm4_moe import *
+    from .configuration_glm4_moe import Glm4MoeConfig
+    from .modeling_glm4_moe import Glm4MoeForCausalLM, Glm4MoeModel, Glm4MoePreTrainedModel
 else:
     import sys
 

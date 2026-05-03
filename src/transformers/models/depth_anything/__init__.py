@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_depth_anything import *
-    from .modeling_depth_anything import *
+    from .configuration_depth_anything import DepthAnythingConfig
+    from .modeling_depth_anything import DepthAnythingForDepthEstimation, DepthAnythingPreTrainedModel
 else:
     import sys
 

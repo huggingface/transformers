@@ -19,9 +19,9 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from ..gpt2.tokenization_gpt2 import GPT2Tokenizer as CodeGenTokenizerFast
-    from .configuration_codegen import *
-    from .modeling_codegen import *
-    from .tokenization_codegen import *
+    from .configuration_codegen import CodeGenConfig
+    from .modeling_codegen import CodeGenForCausalLM, CodeGenModel, CodeGenPreTrainedModel
+    from .tokenization_codegen import CodeGenTokenizer
 else:
     import sys
 

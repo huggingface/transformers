@@ -18,10 +18,10 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_swin2sr import *
-    from .image_processing_pil_swin2sr import *
-    from .image_processing_swin2sr import *
-    from .modeling_swin2sr import *
+    from .configuration_swin2sr import Swin2SRConfig
+    from .image_processing_pil_swin2sr import Swin2SRImageProcessorPil
+    from .image_processing_swin2sr import Swin2SRImageProcessor
+    from .modeling_swin2sr import Swin2SRForImageSuperResolution, Swin2SRModel, Swin2SRPreTrainedModel
 else:
     import sys
 

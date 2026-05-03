@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_cohere2 import *
-    from .modeling_cohere2 import *
+    from .configuration_cohere2 import Cohere2Config
+    from .modeling_cohere2 import Cohere2ForCausalLM, Cohere2Model, Cohere2PreTrainedModel
 else:
     import sys
 

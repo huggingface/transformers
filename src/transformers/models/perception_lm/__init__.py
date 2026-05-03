@@ -18,10 +18,14 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_perception_lm import *
-    from .image_processing_perception_lm import *
-    from .modeling_perception_lm import *
-    from .processing_perception_lm import *
+    from .configuration_perception_lm import PerceptionLMConfig
+    from .image_processing_perception_lm import PerceptionLMImageProcessor
+    from .modeling_perception_lm import (
+        PerceptionLMForConditionalGeneration,
+        PerceptionLMModel,
+        PerceptionLMPreTrainedModel,
+    )
+    from .processing_perception_lm import PerceptionLMProcessor
 else:
     import sys
 

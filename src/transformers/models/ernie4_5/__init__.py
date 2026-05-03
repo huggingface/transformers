@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_ernie4_5 import *
-    from .modeling_ernie4_5 import *
+    from .configuration_ernie4_5 import Ernie4_5Config
+    from .modeling_ernie4_5 import Ernie4_5ForCausalLM, Ernie4_5Model, Ernie4_5PreTrainedModel
 else:
     import sys
 

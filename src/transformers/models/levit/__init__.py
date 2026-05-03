@@ -18,11 +18,16 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_levit import *
+    from .configuration_levit import LevitConfig
     from .feature_extraction_levit import *
-    from .image_processing_levit import *
-    from .image_processing_pil_levit import *
-    from .modeling_levit import *
+    from .image_processing_levit import LevitImageProcessor
+    from .image_processing_pil_levit import LevitImageProcessorPil
+    from .modeling_levit import (
+        LevitForImageClassification,
+        LevitForImageClassificationWithTeacher,
+        LevitModel,
+        LevitPreTrainedModel,
+    )
 else:
     import sys
 

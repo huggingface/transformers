@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_vivit import *
-    from .image_processing_vivit import *
-    from .modeling_vivit import *
+    from .configuration_vivit import VivitConfig
+    from .image_processing_vivit import VivitImageProcessor
+    from .modeling_vivit import VivitForVideoClassification, VivitModel, VivitPreTrainedModel
 else:
     import sys
 

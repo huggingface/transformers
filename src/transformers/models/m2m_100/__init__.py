@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_m2m_100 import *
-    from .modeling_m2m_100 import *
-    from .tokenization_m2m_100 import *
+    from .configuration_m2m_100 import M2M100Config
+    from .modeling_m2m_100 import M2M100ForConditionalGeneration, M2M100Model, M2M100PreTrainedModel
+    from .tokenization_m2m_100 import M2M100Tokenizer
 else:
     import sys
 

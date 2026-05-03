@@ -18,9 +18,17 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_gpt_neox import *
-    from .modeling_gpt_neox import *
-    from .tokenization_gpt_neox import *
+    from .configuration_gpt_neox import GPTNeoXConfig
+    from .modeling_gpt_neox import (
+        GPTNeoXForCausalLM,
+        GPTNeoXForQuestionAnswering,
+        GPTNeoXForSequenceClassification,
+        GPTNeoXForTokenClassification,
+        GPTNeoXLayer,
+        GPTNeoXModel,
+        GPTNeoXPreTrainedModel,
+    )
+    from .tokenization_gpt_neox import GPTNeoXTokenizer
 else:
     import sys
 

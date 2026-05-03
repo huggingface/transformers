@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_mlcd import *
-    from .modeling_mlcd import *
+    from .configuration_mlcd import MLCDVisionConfig
+    from .modeling_mlcd import MLCDPreTrainedModel, MLCDVisionModel
 else:
     import sys
 

@@ -18,12 +18,20 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_blip import *
-    from .image_processing_blip import *
-    from .image_processing_pil_blip import *
-    from .modeling_blip import *
-    from .modeling_blip_text import *
-    from .processing_blip import *
+    from .configuration_blip import BlipConfig, BlipTextConfig, BlipVisionConfig
+    from .image_processing_blip import BlipImageProcessor
+    from .image_processing_pil_blip import BlipImageProcessorPil
+    from .modeling_blip import (
+        BlipForConditionalGeneration,
+        BlipForImageTextRetrieval,
+        BlipForQuestionAnswering,
+        BlipModel,
+        BlipPreTrainedModel,
+        BlipTextModel,
+        BlipVisionModel,
+    )
+    from .modeling_blip_text import BlipTextLMHeadModel, BlipTextModel, BlipTextPreTrainedModel
+    from .processing_blip import BlipProcessor
 else:
     import sys
 

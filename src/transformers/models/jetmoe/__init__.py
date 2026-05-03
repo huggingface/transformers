@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_jetmoe import *
-    from .modeling_jetmoe import *
+    from .configuration_jetmoe import JetMoeConfig
+    from .modeling_jetmoe import JetMoeForCausalLM, JetMoeForSequenceClassification, JetMoeModel, JetMoePreTrainedModel
 else:
     import sys
 

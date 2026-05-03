@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_voxtral import *
-    from .modeling_voxtral import *
-    from .processing_voxtral import *
+    from .configuration_voxtral import VoxtralConfig, VoxtralEncoderConfig
+    from .modeling_voxtral import VoxtralEncoder, VoxtralForConditionalGeneration, VoxtralPreTrainedModel
+    from .processing_voxtral import VoxtralProcessor
 else:
     import sys
 

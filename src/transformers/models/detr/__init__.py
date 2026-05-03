@@ -19,11 +19,11 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_detr import *
+    from .configuration_detr import DetrConfig
     from .feature_extraction_detr import *
-    from .image_processing_detr import *
-    from .image_processing_pil_detr import *
-    from .modeling_detr import *
+    from .image_processing_detr import DetrImageProcessor
+    from .image_processing_pil_detr import DetrImageProcessorPil
+    from .modeling_detr import DetrForObjectDetection, DetrForSegmentation, DetrModel, DetrPreTrainedModel
 else:
     import sys
 

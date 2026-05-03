@@ -18,8 +18,14 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_opt import *
-    from .modeling_opt import *
+    from .configuration_opt import OPTConfig
+    from .modeling_opt import (
+        OPTForCausalLM,
+        OPTForQuestionAnswering,
+        OPTForSequenceClassification,
+        OPTModel,
+        OPTPreTrainedModel,
+    )
 else:
     import sys
 

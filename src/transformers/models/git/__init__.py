@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_git import *
-    from .modeling_git import *
-    from .processing_git import *
+    from .configuration_git import GitConfig, GitVisionConfig
+    from .modeling_git import GitForCausalLM, GitModel, GitPreTrainedModel, GitVisionModel
+    from .processing_git import GitProcessor
 else:
     import sys
 

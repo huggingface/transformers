@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_speech_encoder_decoder import *
-    from .modeling_speech_encoder_decoder import *
+    from .configuration_speech_encoder_decoder import SpeechEncoderDecoderConfig
+    from .modeling_speech_encoder_decoder import SpeechEncoderDecoderModel
 else:
     import sys
 

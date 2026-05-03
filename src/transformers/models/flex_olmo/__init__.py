@@ -19,8 +19,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_flex_olmo import *
-    from .modeling_flex_olmo import *
+    from .configuration_flex_olmo import FlexOlmoConfig
+    from .modeling_flex_olmo import FlexOlmoForCausalLM, FlexOlmoModel, FlexOlmoPreTrainedModel
 else:
     import sys
 

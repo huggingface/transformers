@@ -18,8 +18,14 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_gpt_oss import *
-    from .modeling_gpt_oss import *
+    from .configuration_gpt_oss import GptOssConfig
+    from .modeling_gpt_oss import (
+        GptOssForCausalLM,
+        GptOssForSequenceClassification,
+        GptOssForTokenClassification,
+        GptOssModel,
+        GptOssPreTrainedModel,
+    )
 else:
     import sys
 

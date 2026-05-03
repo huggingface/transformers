@@ -18,9 +18,18 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_xlm import *
-    from .modeling_xlm import *
-    from .tokenization_xlm import *
+    from .configuration_xlm import XLMConfig
+    from .modeling_xlm import (
+        XLMForMultipleChoice,
+        XLMForQuestionAnswering,
+        XLMForQuestionAnsweringSimple,
+        XLMForSequenceClassification,
+        XLMForTokenClassification,
+        XLMModel,
+        XLMPreTrainedModel,
+        XLMWithLMHeadModel,
+    )
+    from .tokenization_xlm import XLMTokenizer
 else:
     import sys
 

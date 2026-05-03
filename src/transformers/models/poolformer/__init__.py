@@ -18,11 +18,11 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_poolformer import *
+    from .configuration_poolformer import PoolFormerConfig
     from .feature_extraction_poolformer import *
-    from .image_processing_pil_poolformer import *
-    from .image_processing_poolformer import *
-    from .modeling_poolformer import *
+    from .image_processing_pil_poolformer import PoolFormerImageProcessorPil
+    from .image_processing_poolformer import PoolFormerImageProcessor
+    from .modeling_poolformer import PoolFormerForImageClassification, PoolFormerModel, PoolFormerPreTrainedModel
 else:
     import sys
 

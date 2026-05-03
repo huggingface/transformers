@@ -18,9 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_tapas import *
-    from .modeling_tapas import *
-    from .tokenization_tapas import *
+    from .configuration_tapas import TapasConfig
+    from .modeling_tapas import (
+        TapasForMaskedLM,
+        TapasForQuestionAnswering,
+        TapasForSequenceClassification,
+        TapasModel,
+        TapasPreTrainedModel,
+    )
+    from .tokenization_tapas import TapasTokenizer
 else:
     import sys
 

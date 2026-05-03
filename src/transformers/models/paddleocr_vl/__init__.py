@@ -19,11 +19,18 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_paddleocr_vl import *
-    from .image_processing_paddleocr_vl import *
-    from .image_processing_pil_paddleocr_vl import *
-    from .modeling_paddleocr_vl import *
-    from .processing_paddleocr_vl import *
+    from .configuration_paddleocr_vl import PaddleOCRTextConfig, PaddleOCRVisionConfig, PaddleOCRVLConfig
+    from .image_processing_paddleocr_vl import PaddleOCRVLImageProcessor
+    from .image_processing_pil_paddleocr_vl import PaddleOCRVLImageProcessorPil
+    from .modeling_paddleocr_vl import (
+        PaddleOCRTextModel,
+        PaddleOCRVisionModel,
+        PaddleOCRVisionTransformer,
+        PaddleOCRVLForConditionalGeneration,
+        PaddleOCRVLModel,
+        PaddleOCRVLPreTrainedModel,
+    )
+    from .processing_paddleocr_vl import PaddleOCRVLProcessor
 else:
     import sys
 

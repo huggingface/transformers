@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_timesformer import *
-    from .modeling_timesformer import *
+    from .configuration_timesformer import TimesformerConfig
+    from .modeling_timesformer import TimesformerForVideoClassification, TimesformerModel, TimesformerPreTrainedModel
 else:
     import sys
 

@@ -18,11 +18,22 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_seamless_m4t import *
-    from .feature_extraction_seamless_m4t import *
-    from .modeling_seamless_m4t import *
-    from .processing_seamless_m4t import *
-    from .tokenization_seamless_m4t import *
+    from .configuration_seamless_m4t import SeamlessM4TConfig
+    from .feature_extraction_seamless_m4t import SeamlessM4TFeatureExtractor
+    from .modeling_seamless_m4t import (
+        SeamlessM4TCodeHifiGan,
+        SeamlessM4TForSpeechToSpeech,
+        SeamlessM4TForSpeechToText,
+        SeamlessM4TForTextToSpeech,
+        SeamlessM4TForTextToText,
+        SeamlessM4THifiGan,
+        SeamlessM4TModel,
+        SeamlessM4TPreTrainedModel,
+        SeamlessM4TTextToUnitForConditionalGeneration,
+        SeamlessM4TTextToUnitModel,
+    )
+    from .processing_seamless_m4t import SeamlessM4TProcessor
+    from .tokenization_seamless_m4t import SeamlessM4TTokenizer
 else:
     import sys
 

@@ -18,8 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_mixtral import *
-    from .modeling_mixtral import *
+    from .configuration_mixtral import MixtralConfig
+    from .modeling_mixtral import (
+        MixtralForCausalLM,
+        MixtralForQuestionAnswering,
+        MixtralForSequenceClassification,
+        MixtralForTokenClassification,
+        MixtralModel,
+        MixtralPreTrainedModel,
+    )
 else:
     import sys
 
