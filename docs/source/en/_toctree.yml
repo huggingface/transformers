@@ -553,6 +553,8 @@
         title: DeBERTa
       - local: model_doc/deberta-v2
         title: DeBERTa-v2
+      - local: model_doc/deepseek_ocr2
+        title: DeepSeek-OCR-2
       - local: model_doc/deepseek_v2
         title: DeepSeek-V2
       - local: model_doc/deepseek_v3
