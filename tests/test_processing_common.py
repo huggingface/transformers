@@ -2018,6 +2018,21 @@ class ProcessorTesterMixin:
         result = processor.apply_chat_template(messages, tokenize=True)
         self.assertIsInstance(result, list)
 
+        # Also test with explicit content=None (OpenAI returns this for tool-call-only messages)
+        messages_with_none = [
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": "What is the weather?"}],
+            },
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{"type": "function", "function": {"name": "get_weather", "arguments": {}}}],
+            },
+        ]
+        result_none = processor.apply_chat_template(messages_with_none, tokenize=True)
+        self.assertIsInstance(result_none, list)
+
     def test_get_num_multimodal_tokens_matches_processor_call(self):
         "Tests that the helper used internally in vLLM works correctly"
 

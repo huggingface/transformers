@@ -1087,6 +1087,33 @@ Hey how are you doing"""  # noqa: W293
         )  # Check that no error raised
 
     @require_jinja
+    def test_chat_template_content_none(self):
+        """Regression test: content=None (e.g. OpenAI tool-call messages) should be treated the same as missing content."""
+        dummy_template = (
+            "{% for message in messages %}"
+            "{{ message['role'] }}"
+            "{% if message.content is defined %}: {{ message['content'] }}{% endif %}"
+            "\n"
+            "{% endfor %}"
+        )
+        messages_with_none = [
+            {"role": "user", "content": "What is the weather?"},
+            {"role": "assistant", "content": None},
+        ]
+        messages_without_content = [
+            {"role": "user", "content": "What is the weather?"},
+            {"role": "assistant"},
+        ]
+        tokenizer = self.get_tokenizer()
+        output_none = tokenizer.apply_chat_template(
+            messages_with_none, chat_template=dummy_template, tokenize=False, return_dict=False
+        )
+        output_missing = tokenizer.apply_chat_template(
+            messages_without_content, chat_template=dummy_template, tokenize=False, return_dict=False
+        )
+        self.assertEqual(output_none, output_missing)
+
+    @require_jinja
     def test_jinja_loopcontrols(self):
         break_template = """
         {%- for message in messages %}

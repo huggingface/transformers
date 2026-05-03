@@ -1789,6 +1789,14 @@ class ProcessorMixin(PushToHubMixin):
             is_batched = False
             conversations = [conversation]
 
+        # Normalize: drop `content` from assistant messages when it is None.
+        # Some APIs (e.g. OpenAI) return content=None for tool-call-only messages, but many chat templates
+        # crash or produce wrong output (e.g. rendering literal "None") when they encounter it.
+        conversations = [
+            [{k: v for k, v in msg.items() if k != "content" or v is not None} for msg in conversation]
+            for conversation in conversations
+        ]
+
         # Normalize OpenAI-style "image_url" content blocks to HuggingFace-style "image" blocks
         # OpenAI format: {"type": "image_url", "image_url": {"url": "..."}}
         # HuggingFace format: {"type": "image", "url": "..."}

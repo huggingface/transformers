@@ -3074,6 +3074,14 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             conversations = [conversation]
             is_batched = False
 
+        # Normalize: drop `content` from assistant messages when it is None.
+        # Some APIs (e.g. OpenAI) return content=None for tool-call-only messages, but many chat templates
+        # crash or produce wrong output (e.g. rendering literal "None") when they encounter it.
+        conversations = [
+            [{k: v for k, v in msg.items() if k != "content" or v is not None} for msg in conversation]
+            for conversation in conversations
+        ]
+
         if continue_final_message:
             if add_generation_prompt:
                 raise ValueError(
