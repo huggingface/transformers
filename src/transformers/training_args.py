@@ -1774,16 +1774,22 @@ class TrainingArguments:
     @property
     def train_batch_size(self) -> int:
         """
-        The actual batch size for training.
+        The actual batch size for training (takes into account the number of processes and
+        the split_batches configuration).
         """
+        if hasattr(self, "accelerator_config") and self.accelerator_config.split_batches:
+            return self.per_device_train_batch_size
         train_batch_size = self.per_device_train_batch_size * max(1, self.n_gpu)
         return train_batch_size
 
     @property
     def eval_batch_size(self) -> int:
         """
-        The actual batch size for evaluation.
+        The actual batch size for evaluation (takes into account the number of processes and
+        the split_batches configuration).
         """
+        if hasattr(self, "accelerator_config") and self.accelerator_config.split_batches:
+            return self.per_device_eval_batch_size
         eval_batch_size = self.per_device_eval_batch_size * max(1, self.n_gpu)
         return eval_batch_size
 
