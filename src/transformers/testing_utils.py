@@ -3525,13 +3525,34 @@ def _get_call_arguments(code_context):
     return None
 
 
+def _get_patched_testing_methods_output_path() -> Path:
+    """Return the output path used by patched testing methods.
+
+    When `pytest-xdist` is enabled, each worker writes to its own file to avoid cross-worker clobbering.
+    """
+
+    output_dir = Path(os.environ.get("_PATCHED_TESTING_METHODS_OUTPUT_DIR", ""))
+    worker_id = os.environ.get("PYTEST_XDIST_WORKER")
+    filename = "captured_info.txt" if worker_id is None else f"captured_info_{worker_id}.txt"
+    return output_dir / filename
+
+
+def _clear_patched_testing_methods_output_files():
+    """Remove stale output files before patched testing methods start collecting info."""
+
+    output_dir = Path(os.environ.get("_PATCHED_TESTING_METHODS_OUTPUT_DIR", ""))
+    if os.environ.get("PYTEST_XDIST_WORKER") is None:
+        for path in output_dir.glob("captured_info*.txt"):
+            path.unlink(missing_ok=True)
+    else:
+        _get_patched_testing_methods_output_path().unlink(missing_ok=True)
+
+
 def _prepare_debugging_info(test_info, info):
     """Combine the information about the test and the call information to a patched function/method within it."""
 
     info = f"{test_info}\n\n{info}"
-    p = os.path.join(os.environ.get("_PATCHED_TESTING_METHODS_OUTPUT_DIR", ""), "captured_info.txt")
-    # TODO (ydshieh): This is not safe when we use pytest-xdist with more than 1 worker.
-    with open(p, "a") as fp:
+    with open(_get_patched_testing_methods_output_path(), "a") as fp:
         fp.write(f"{info}\n\n{'=' * 120}\n\n")
 
     return info
@@ -3761,8 +3782,7 @@ def patch_testing_methods_to_collect_info():
     This will allow us to collect the call information, e.g. the argument names and values, also the literal expressions
     passed as the arguments.
     """
-    p = os.path.join(os.environ.get("_PATCHED_TESTING_METHODS_OUTPUT_DIR", ""), "captured_info.txt")
-    Path(p).unlink(missing_ok=True)
+    _get_patched_testing_methods_output_path().unlink(missing_ok=True)
 
     if is_torch_available():
         import torch

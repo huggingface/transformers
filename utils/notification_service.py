@@ -935,15 +935,32 @@ def retrieve_artifact(artifact_path: str, gpu: str | None):
         raise ValueError(f"Invalid GPU for artifact. Passed GPU: `{gpu}`.")
 
     _artifact = {}
+    captured_info = []
 
     if os.path.exists(artifact_path):
-        files = os.listdir(artifact_path)
+        files = sorted(os.listdir(artifact_path))
         for file in files:
             try:
                 with open(os.path.join(artifact_path, file)) as f:
-                    _artifact[file.split(".")[0]] = f.read()
+                    content = f.read()
             except UnicodeDecodeError as e:
                 raise ValueError(f"Could not open {os.path.join(artifact_path, file)}.") from e
+
+            artifact_name = file.split(".")[0]
+            if artifact_name == "captured_info" or artifact_name.startswith("captured_info_"):
+                captured_info.append((file, content))
+                continue
+
+            _artifact[artifact_name] = content
+
+    if captured_info:
+        if len(captured_info) == 1 and captured_info[0][0] == "captured_info.txt":
+            _artifact["captured_info"] = captured_info[0][1]
+        else:
+            separator = f"\n\n{'=' * 120}\n\n"
+            _artifact["captured_info"] = separator.join(
+                f"{file}\n{'-' * len(file)}\n{content}" for file, content in captured_info
+            )
 
     return _artifact
 
