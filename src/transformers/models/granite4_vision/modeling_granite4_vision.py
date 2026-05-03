@@ -534,6 +534,18 @@ class Granite4VisionPreTrainedModel(PreTrainedModel):
         elif isinstance(module, Granite4VisionModel):
             embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
             init.normal_(module.image_newline, mean=0.0, std=embed_std)
+        if isinstance(module, nn.Embedding):
+            init.normal_(
+                module.weight,
+                mean=0.0,
+                std=getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range),
+            )
+            if module.padding_idx is not None:
+                init.zeros_(module.weight[module.padding_idx])
+        elif isinstance(module, (nn.LayerNorm, Granite4VisionTextRMSNorm)):
+            init.ones_(module.weight)
+            if hasattr(module, "bias") and module.bias is not None:
+                init.zeros_(module.bias)
         if isinstance(module, Granite4VisionTextRotaryEmbedding):
             # Non-persistent buffers (inv_freq, original_inv_freq) are replaced with
             # torch.empty_like() garbage by _move_missing_keys_from_meta_to_device.
