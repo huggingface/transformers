@@ -15,6 +15,7 @@
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from transformers import (
@@ -52,11 +53,122 @@ if is_datasets_available():
 
 if is_torch_available():
     import torch
+    from torch import nn
+
+
+if is_torch_available():
+
+    class DummyGenerationModel(nn.Module):
+        def __init__(self, is_encoder_decoder: bool = False):
+            super().__init__()
+            self.config = SimpleNamespace(is_encoder_decoder=is_encoder_decoder, pad_token_id=0)
+            self.generation_config = GenerationConfig(
+                max_length=6, max_new_tokens=None, pad_token_id=0, eos_token_id=1
+            )
+            self.last_generate_kwargs = None
+
+        def forward(self, input_ids, labels=None, **kwargs):
+            logits = torch.zeros(*input_ids.shape, 8, device=input_ids.device)
+            loss = torch.tensor(0.0, device=input_ids.device)
+            return {"loss": loss, "logits": logits}
+
+        def generate(self, input_ids, attention_mask=None, **kwargs):
+            captured_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask, **kwargs}
+            self.last_generate_kwargs = {
+                key: value.detach().clone() if torch.is_tensor(value) else value
+                for key, value in captured_kwargs.items()
+            }
+            generated_token = torch.full((input_ids.shape[0], 1), 9, dtype=input_ids.dtype, device=input_ids.device)
+            return torch.cat([input_ids, generated_token], dim=-1)
 
 
 set_seed(42)
 MARIAN_MODEL = "sshleifer/student_marian_en_ro_6_1"
 MBART_TINY = "sshleifer/tiny-mbart"
+
+
+@require_torch
+class Seq2SeqTrainerPredictionStepTester(TestCasePlus):
+    def _get_trainer_and_model(self, is_encoder_decoder: bool = False):
+        model = DummyGenerationModel(is_encoder_decoder=is_encoder_decoder)
+        training_args = Seq2SeqTrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            predict_with_generate=True,
+            report_to="none",
+            per_device_eval_batch_size=2,
+        )
+        trainer = Seq2SeqTrainer(model=model, args=training_args)
+        return trainer, model
+
+    def test_decoder_only_prediction_step_uses_generate(self):
+        trainer, model = self._get_trainer_and_model(is_encoder_decoder=False)
+        inputs = {
+            "input_ids": torch.tensor([[4, 5, 6], [7, 8, 9]], dtype=torch.long),
+            "attention_mask": torch.tensor([[1, 1, 1], [1, 1, 1]], dtype=torch.long),
+            "labels": torch.tensor([[4, 5, 6], [7, 8, 9]], dtype=torch.long),
+        }
+
+        loss, generated_tokens, _ = trainer.prediction_step(model, inputs, prediction_loss_only=False)
+
+        self.assertIsNotNone(loss)
+        self.assertIsNotNone(model.last_generate_kwargs)
+        self.assertEqual(generated_tokens[0, 0].item(), 9)
+
+    def test_decoder_only_uses_generation_inputs_when_provided(self):
+        trainer, model = self._get_trainer_and_model(is_encoder_decoder=False)
+        inputs = {
+            "input_ids": torch.tensor([[50, 51, 52], [60, 61, 62]], dtype=torch.long),
+            "attention_mask": torch.tensor([[1, 1, 1], [1, 1, 1]], dtype=torch.long),
+            "generation_input_ids": torch.tensor([[11, 12], [21, 22]], dtype=torch.long),
+            "generation_attention_mask": torch.tensor([[1, 1], [1, 1]], dtype=torch.long),
+            "labels": torch.tensor([[-100, 12, 13], [-100, 22, 23]], dtype=torch.long),
+        }
+
+        _, generated_tokens, _ = trainer.prediction_step(model, inputs, prediction_loss_only=False)
+
+        self.assertTrue(torch.equal(model.last_generate_kwargs["input_ids"].cpu(), inputs["generation_input_ids"]))
+        self.assertTrue(
+            torch.equal(model.last_generate_kwargs["attention_mask"].cpu(), inputs["generation_attention_mask"])
+        )
+        self.assertNotIn("generation_input_ids", model.last_generate_kwargs)
+        self.assertNotIn("generation_attention_mask", model.last_generate_kwargs)
+        self.assertEqual(generated_tokens[0, 0].item(), 9)
+        self.assertEqual(generated_tokens.shape[-1], model.generation_config.max_length)
+
+    def test_decoder_only_builds_left_padded_prompt_from_labels(self):
+        trainer, model = self._get_trainer_and_model(is_encoder_decoder=False)
+        inputs = {
+            "input_ids": torch.tensor([[11, 12, 21, 22, 0], [31, 32, 33, 41, 42]], dtype=torch.long),
+            "attention_mask": torch.tensor([[1, 1, 1, 1, 0], [1, 1, 1, 1, 1]], dtype=torch.long),
+            "labels": torch.tensor([[-100, -100, 21, 22, -100], [-100, -100, -100, 41, 42]], dtype=torch.long),
+        }
+
+        _, generated_tokens, labels = trainer.prediction_step(model, inputs, prediction_loss_only=False)
+
+        expected_input_ids = torch.tensor([[0, 11, 12], [31, 32, 33]], dtype=torch.long)
+        expected_attention_mask = torch.tensor([[0, 1, 1], [1, 1, 1]], dtype=torch.long)
+
+        self.assertTrue(torch.equal(model.last_generate_kwargs["input_ids"].cpu(), expected_input_ids))
+        self.assertTrue(torch.equal(model.last_generate_kwargs["attention_mask"].cpu(), expected_attention_mask))
+        self.assertEqual(generated_tokens[0, 0].item(), 9)
+        self.assertEqual(generated_tokens.shape[-1], model.generation_config.max_length)
+        self.assertEqual(labels.shape[-1], model.generation_config.max_length)
+
+    def test_encoder_decoder_path_remains_unchanged(self):
+        trainer, model = self._get_trainer_and_model(is_encoder_decoder=True)
+        inputs = {
+            "input_ids": torch.tensor([[2, 3, 4], [5, 6, 7]], dtype=torch.long),
+            "attention_mask": torch.tensor([[1, 1, 1], [1, 1, 1]], dtype=torch.long),
+            "decoder_input_ids": torch.tensor([[9, 9, 9], [8, 8, 8]], dtype=torch.long),
+            "decoder_attention_mask": torch.tensor([[1, 1, 1], [1, 1, 1]], dtype=torch.long),
+            "labels": torch.tensor([[9, 9, 9], [8, 8, 8]], dtype=torch.long),
+        }
+
+        trainer.prediction_step(model, inputs, prediction_loss_only=False)
+
+        self.assertNotIn("decoder_input_ids", model.last_generate_kwargs)
+        self.assertNotIn("decoder_attention_mask", model.last_generate_kwargs)
+        self.assertTrue(torch.equal(model.last_generate_kwargs["input_ids"].cpu(), inputs["input_ids"]))
 
 
 @require_sentencepiece
