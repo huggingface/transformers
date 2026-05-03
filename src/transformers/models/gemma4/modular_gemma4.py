@@ -1511,7 +1511,8 @@ class Gemma4AudioModel(Gemma4PreTrainedModel):
                 (self.config.attention_context_left - 1, self.config.attention_context_right)
             ),
         )
-        attention_mask = self._convert_4d_mask_to_blocked_5d(attention_mask)
+        if attention_mask is not None:
+            attention_mask = self._convert_4d_mask_to_blocked_5d(attention_mask)
 
         for encoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = encoder_layer(
