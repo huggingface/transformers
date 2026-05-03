@@ -272,9 +272,61 @@ def add_model_to_auto_mappings(
                 )
 
 
+_PROCESSOR_SUFFIXES = (
+    "TokenizerFast",
+    "Tokenizer",
+    "ImageProcessorFast",
+    "ImageProcessor",
+    "VideoProcessor",
+    "FeatureExtractor",
+    "Processor",
+)
+
+
+def _sort_public_classes(public_classes: list[str]) -> tuple[list[str], set[str]]:
+    """
+    Sort public classes into the canonical autodoc order for the model_doc template:
+
+    1. Config class
+    2. Tokenizer / Processor / ImageProcessor / FeatureExtractor
+    3. Base `<ModelName>Model`
+    4. `<ModelName>PreTrainedModel`
+    5. Task heads (remaining classes), preserving `__all__` order
+
+    Returns the ordered list and the set of classes that should emit a `- forward`
+    directive under their autodoc block (everything except config and processors).
+    """
+    config, processor, base_model, pretrained, heads = [], [], [], [], []
+    for cls in public_classes:
+        if cls.endswith("Config"):
+            config.append(cls)
+        elif cls.endswith(_PROCESSOR_SUFFIXES):
+            processor.append(cls)
+        elif cls.endswith("PreTrainedModel"):
+            pretrained.append(cls)
+        elif cls.endswith("Model"):
+            base_model.append(cls)
+        else:
+            heads.append(cls)
+
+    ordered = config + processor + base_model + pretrained + heads
+    with_forward = set(base_model + pretrained + heads)
+    return ordered, with_forward
+
+
 def create_doc_file(new_paper_name: str, public_classes: list[str]):
     """
     Create a new doc file to fill for the new model.
+
+    Emits a skeleton with `<UPPERCASE_SNAKE>` sentinel tokens that the
+    transformers-model-doc skill (or a human contributor) resolves into the
+    final doc. Sentinels intentionally stay in the file if unresolved — they
+    are the signal that the doc is incomplete.
+
+    Code-example conventions:
+      - No `dtype` / `torch_dtype`.
+      - `device_map="auto"` on every model `from_pretrained` call.
+      - Prepared inputs chain `.to(model.device)` before the model call.
 
     Args:
         new_paper_name (`str`):
@@ -289,37 +341,51 @@ def create_doc_file(new_paper_name: str, public_classes: list[str]):
     copyright_for_markdown = re.sub(r"# ?", "", COPYRIGHT).replace("coding=utf-8\n", "<!--") + added_note
 
     doc_template = textwrap.dedent(
-        f"""
+        f"""\
         # {new_paper_name}
 
-        ## Overview
+        [{new_paper_name}](<PAPER_URL>) <INTRO_SENTENCES>
 
-        The {new_paper_name} model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-        <INSERT SHORT SUMMARY HERE>
+        You can find all the [{new_paper_name}] checkpoints under the [<ORG>](<HUB_CHECKPOINT_URL>) collection.
 
-        The abstract from the paper is the following:
+        ## Quickstart
 
-        <INSERT PAPER ABSTRACT HERE>
+        <hfoptions id="usage">
+        <hfoption id="Pipeline">
 
-        Tips:
+        ```py
+        from transformers import pipeline
 
-        <INSERT TIPS ABOUT MODEL HERE>
+        pipe = pipeline(task="<TASK>", model="<CHECKPOINT_ID>", device=0)
+        pipe("<MINIMAL_INPUT>")
+        ```
 
-        This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-        The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+        </hfoption>
+        <hfoption id="AutoModel">
 
-        ## Usage examples
+        ```py
+        from transformers import AutoTokenizer, <AUTOMODEL_CLASS>
 
-        <INSERT SOME NICE EXAMPLES HERE>
+        tokenizer = AutoTokenizer.from_pretrained("<CHECKPOINT_ID>")
+        model = <AUTOMODEL_CLASS>.from_pretrained("<CHECKPOINT_ID>", device_map="auto")
+
+        inputs = tokenizer("<MINIMAL_INPUT>", return_tensors="pt").to(model.device)
+        outputs = model(**inputs)
+        print(<OUTPUT_EXPRESSION>)
+        ```
+
+        </hfoption>
+        </hfoptions>
 
         """
     )
 
-    # Add public classes doc
+    ordered_classes, with_forward = _sort_public_classes(public_classes)
+
     doc_for_classes = []
-    for class_ in public_classes:
+    for class_ in ordered_classes:
         doc = f"## {class_}\n\n[[autodoc]] {class_}"
-        if "Model" in class_:
+        if class_ in with_forward:
             doc += "\n    - forward"
         doc_for_classes.append(doc)
 
