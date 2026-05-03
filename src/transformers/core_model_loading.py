@@ -661,6 +661,16 @@ class WeightTransform:
     def __repr__(self):
         return f"{self.__class__.__name__}(source_patterns={self.source_patterns}, target_patterns={self.target_patterns})"
 
+    def transform_model(self, model: "PreTrainedModel") -> None:
+        """
+        Optionally restructure the live model graph before weights are loaded.
+
+        Override this in subclasses that need to add, remove, or replace `nn.Module`
+        instances (e.g. fusing two `nn.Linear` layers into one) so that the module
+        structure matches what the weight transform will produce.  The default
+        implementation is a no-op.
+        """
+
     def __setattr__(self, name, value):
         if name in ("source_patterns", "target_patterns"):
             # We do not allow to re-set the patterns, as they are linked between each other and changing one
