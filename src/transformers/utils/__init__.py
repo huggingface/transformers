@@ -16,6 +16,7 @@
 
 from functools import lru_cache
 
+from huggingface_hub.errors import EntryNotFoundError, RepositoryNotFoundError, RevisionNotFoundError
 from packaging import version
 
 from .. import __version__
@@ -81,11 +82,8 @@ from .hub import (
     LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE,
     S3_BUCKET_PREFIX,
     TRANSFORMERS_DYNAMIC_MODULE_NAME,
-    EntryNotFoundError,
     PushInProgress,
     PushToHubMixin,
-    RepositoryNotFoundError,
-    RevisionNotFoundError,
     cached_file,
     define_sagemaker_information,
     extract_commit_hash,

@@ -17,6 +17,7 @@ Generic utilities
 
 from __future__ import annotations
 
+import importlib
 import inspect
 import json
 import os
@@ -29,10 +30,8 @@ from collections.abc import Callable, Iterable, MutableMapping
 from contextlib import AbstractContextManager, ExitStack, nullcontext
 from dataclasses import fields, is_dataclass
 from enum import Enum
-from functools import partial, wraps
+from functools import lru_cache, partial, wraps
 from typing import TYPE_CHECKING, Any, TypedDict
-
-import numpy as np
 
 from ..utils import logging
 from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_proxy
@@ -51,6 +50,11 @@ if is_torch_available():
     _is_torch_available = True
 
 _registered_model_output_types: set[type[Any]] = set()
+
+
+@lru_cache
+def _get_numpy():
+    return importlib.import_module("numpy")
 
 
 def _register_model_output_pytree_node(output_type: type[ModelOutput]) -> None:
@@ -152,7 +156,7 @@ def is_numpy_array(x) -> bool:
     """
     Tests if `x` is a numpy array or not.
     """
-    return isinstance(x, np.ndarray)
+    return isinstance(x, _get_numpy().ndarray)
 
 
 def is_torch_tensor(x) -> bool:
@@ -200,11 +204,12 @@ def _is_tensor_or_array_like(value):
     """
     Check if a value is array-like (includes ragged arrays)
     """
+    numpy = _get_numpy()
     if is_numpy_array(value):
         return True
     if is_torch_tensor(value):
         return True
-    if isinstance(value, (int, float, bool, np.number)):
+    if isinstance(value, (int, float, bool, numpy.number)):
         return True
 
     if isinstance(value, (list, tuple)):
@@ -311,13 +316,14 @@ def to_py_obj(obj):
     """
     Convert a PyTorch tensor, Numpy array or python list to a python list.
     """
+    numpy = _get_numpy()
     if isinstance(obj, (int, float)):
         return obj
     elif isinstance(obj, (dict, UserDict)):
         return {k: to_py_obj(v) for k, v in obj.items()}
     elif isinstance(obj, (list, tuple)):
         # Only convert directly if all elements are numeric scalars
-        if all(isinstance(x, (int, float, np.number)) for x in obj):
+        if all(isinstance(x, (int, float, numpy.number)) for x in obj):
             return list(obj)
 
         # Otherwise recurse element-wise
@@ -335,7 +341,7 @@ def to_py_obj(obj):
             return framework_to_py_obj[framework](obj)
 
     # tolist also works on 0d np arrays
-    if isinstance(obj, np.number):
+    if isinstance(obj, numpy.number):
         return obj.tolist()
     else:
         return obj
@@ -345,6 +351,7 @@ def to_numpy(obj):
     """
     Convert a PyTorch tensor, Numpy array or python list to a Numpy array.
     """
+    numpy = _get_numpy()
 
     framework_to_numpy = {
         "pt": lambda obj: obj.detach().cpu().numpy(),
@@ -354,7 +361,7 @@ def to_numpy(obj):
     if isinstance(obj, (dict, UserDict)):
         return {k: to_numpy(v) for k, v in obj.items()}
     elif isinstance(obj, (list, tuple)):
-        return np.array(obj)
+        return numpy.array(obj)
 
     # This gives us a smart order to test the frameworks with the corresponding tests.
     framework_to_test_func = _get_frameworks_and_test_func(obj)
@@ -631,7 +638,7 @@ def transpose(array, axes=None):
     Framework-agnostic version of transpose operation.
     """
     if is_numpy_array(array):
-        return np.transpose(array, axes=axes)
+        return _get_numpy().transpose(array, axes=axes)
     elif is_torch_tensor(array):
         return array.T if axes is None else array.permute(*axes)
     else:
@@ -643,7 +650,7 @@ def reshape(array, newshape):
     Framework-agnostic version of reshape operation.
     """
     if is_numpy_array(array):
-        return np.reshape(array, newshape)
+        return _get_numpy().reshape(array, newshape)
     elif is_torch_tensor(array):
         return array.reshape(*newshape)
     else:
@@ -655,7 +662,7 @@ def squeeze(array, axis=None):
     Framework-agnostic version of squeeze operation.
     """
     if is_numpy_array(array):
-        return np.squeeze(array, axis=axis)
+        return _get_numpy().squeeze(array, axis=axis)
     elif is_torch_tensor(array):
         return array.squeeze() if axis is None else array.squeeze(dim=axis)
     else:
@@ -667,7 +674,7 @@ def expand_dims(array, axis):
     Framework-agnostic version of expand_dims operation.
     """
     if is_numpy_array(array):
-        return np.expand_dims(array, axis)
+        return _get_numpy().expand_dims(array, axis)
     elif is_torch_tensor(array):
         return array.unsqueeze(dim=axis)
     else:
@@ -679,7 +686,7 @@ def tensor_size(array):
     Framework-agnostic version of size operation.
     """
     if is_numpy_array(array):
-        return np.size(array)
+        return _get_numpy().size(array)
     elif is_torch_tensor(array):
         return array.numel()
     else:

@@ -31,12 +31,20 @@ import importlib
 import importlib.abc
 import sys
 import threading
+import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from types import ModuleType
 from typing import Any
 
 
-MAX_IMPORT_COUNT = 1000
+MAX_IMPORT_COUNT = 750
+
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+SRC_DIR = ROOT_DIR / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 
 
 # ---------------------------------------------------------------------------
@@ -48,6 +56,12 @@ MAX_IMPORT_COUNT = 1000
 class ImportNode:
     name: str
     children: list[ImportNode] = field(default_factory=list)
+
+
+@dataclass
+class TraceResult:
+    tracer: ImportTreeTracer
+    elapsed_seconds: float
 
 
 class LoaderProxy(importlib.abc.Loader):
@@ -167,19 +181,21 @@ class ImportTreeTracer:
 # ---------------------------------------------------------------------------
 
 
-def trace_import(target: str) -> ImportTreeTracer:
+def trace_import(target: str) -> TraceResult:
     tracer = ImportTreeTracer()
     original_meta_path = list(sys.meta_path)
     finder = ImportTreeFinder(tracer, original_meta_path)
     sys.meta_path.insert(0, finder)
+    start_time = time.perf_counter()
     try:
         importlib.import_module(target)
     finally:
+        elapsed_seconds = time.perf_counter() - start_time
         try:
             sys.meta_path.remove(finder)
         except ValueError:
             pass
-    return tracer
+    return TraceResult(tracer=tracer, elapsed_seconds=elapsed_seconds)
 
 
 # ---------------------------------------------------------------------------
@@ -223,21 +239,23 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        tracer = trace_import("transformers")
+        result = trace_import("transformers")
     except Exception as exc:
         print(f"ERROR: `import transformers` failed: {exc}", file=sys.stderr)
         return 1
 
+    tracer = result.tracer
+
     if args.display:
         print(format_tree(tracer.roots))
         print()
-        print(f"Total modules imported: {tracer.count}")
+        print(f"Total modules imported: {tracer.count} ({result.elapsed_seconds:.3f}s)")
         return 0
 
     if tracer.count > args.max_count:
         print(
             f"Import complexity regression: `import transformers` triggered {tracer.count} module imports "
-            f"(maximum allowed: {args.max_count}).\n"
+            f"in {result.elapsed_seconds:.3f}s (maximum allowed: {args.max_count}).\n"
             f"\n"
             f"Run the following command to display the full import tree and identify the cause:\n"
             f"\n"
@@ -245,7 +263,7 @@ def main() -> int:
         )
         return 1
 
-    print(f"Import complexity OK: {tracer.count} modules (max {args.max_count})")
+    print(f"Import complexity OK: {tracer.count} modules in {result.elapsed_seconds:.3f}s (max {args.max_count})")
     return 0
 
 
