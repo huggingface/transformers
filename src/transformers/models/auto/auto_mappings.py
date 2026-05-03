@@ -108,6 +108,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("csm", "CsmConfig"),
         ("csm_depth_decoder_model", "CsmDepthDecoderConfig"),
         ("ctrl", "CTRLConfig"),
+        ("ctsm", "CtsmConfig"),
         ("cvt", "CvtConfig"),
         ("cwm", "CwmConfig"),
         ("d_fine", "DFineConfig"),

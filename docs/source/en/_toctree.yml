@@ -1427,6 +1427,8 @@
     - sections:
       - local: model_doc/autoformer
         title: Autoformer
+      - local: model_doc/ctsm
+        title: CTSM
       - local: model_doc/informer
         title: Informer
       - local: model_doc/patchtsmixer

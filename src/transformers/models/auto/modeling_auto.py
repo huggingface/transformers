@@ -99,6 +99,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("cpmant", "CpmAntModel"),
         ("csm", "CsmForConditionalGeneration"),
         ("ctrl", "CTRLModel"),
+        ("ctsm", "CtsmModel"),
         ("cvt", "CvtModel"),
         ("cwm", "CwmModel"),
         ("d_fine", "DFineModel"),
@@ -1835,6 +1836,7 @@ MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING_NAMES = OrderedDict(
     [
+        ("ctsm", "CtsmModelForPrediction"),
         ("timesfm", "TimesFmModelForPrediction"),
         ("timesfm2_5", "TimesFm2_5ModelForPrediction"),
     ]
