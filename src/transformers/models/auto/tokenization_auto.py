@@ -364,6 +364,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "janus",
     "llava",
     "llava_next",
+    "minicpm3",
     "minicpmv",
     "minimax_m2",
     "modernbert",
