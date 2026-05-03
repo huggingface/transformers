@@ -2893,6 +2893,51 @@ class GenerationIntegrationTests(unittest.TestCase):
         finally:
             logger.removeHandler(warningHandler)
 
+    def test_inputs_embeds_warn_without_ids_for_token_based_processors(self):
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device).eval()
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        inputs = tokenizer("Hello world", return_tensors="pt").to(torch_device)
+        embeds = model.get_input_embeddings()(inputs["input_ids"])
+
+        outputs_without_penalty = model.generate(inputs_embeds=embeds, max_new_tokens=5, repetition_penalty=1.0)
+        self.assertEqual(outputs_without_penalty.shape[0], inputs["input_ids"].shape[0])
+
+        with self.assertWarnsRegex(UserWarning, "apply the penalty only to newly generated tokens, not to the prompt"):
+            outputs_with_repetition_warning = model.generate(
+                inputs_embeds=embeds, max_new_tokens=5, repetition_penalty=1.1
+            )
+        self.assertEqual(outputs_with_repetition_warning.shape[0], inputs["input_ids"].shape[0])
+
+        with self.assertWarnsRegex(UserWarning, "n-gram constraints only to newly generated tokens, not to the prompt"):
+            outputs_with_ngram_warning = model.generate(inputs_embeds=embeds, max_new_tokens=5, no_repeat_ngram_size=2)
+        self.assertEqual(outputs_with_ngram_warning.shape[0], inputs["input_ids"].shape[0])
+
+        with self.assertWarnsRegex(UserWarning, "apply the penalty only to newly generated tokens, not to the prompt"):
+            processors = model._get_logits_processor(
+                generation_config=GenerationConfig(repetition_penalty=1.1),
+                input_ids_seq_length=0,
+                model_kwargs={"inputs_embeds": embeds},
+            )
+        self.assertIn("RepetitionPenaltyLogitsProcessor", [processor.__class__.__name__ for processor in processors])
+
+        with self.assertWarnsRegex(UserWarning, "n-gram constraints only to newly generated tokens, not to the prompt"):
+            processors = model._get_logits_processor(
+                generation_config=GenerationConfig(no_repeat_ngram_size=2),
+                input_ids_seq_length=0,
+                model_kwargs={"inputs_embeds": embeds},
+            )
+        self.assertIn("NoRepeatNGramLogitsProcessor", [processor.__class__.__name__ for processor in processors])
+
+        outputs = model.generate(
+            input_ids=inputs["input_ids"],
+            inputs_embeds=embeds,
+            attention_mask=inputs.get("attention_mask"),
+            max_new_tokens=5,
+            repetition_penalty=1.1,
+            no_repeat_ngram_size=2,
+        )
+        self.assertEqual(outputs.shape[0], inputs["input_ids"].shape[0])
+
     @slow
     def test_beam_search_early_stop_heuristic(self):
         """Regression test for #38778 (early stopping needs to be tracked at a batch level)"""
