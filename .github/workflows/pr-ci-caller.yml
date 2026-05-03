@@ -1,0 +1,8 @@
+name: PR CI
+
+on:
+  pull_request:
+
+jobs:
+  pr-ci:
+    uses: huggingface/transformers-test-ci/.github/workflows/pr-ci_dynamic_caller_example.yml@main
