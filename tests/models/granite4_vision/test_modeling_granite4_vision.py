@@ -123,10 +123,6 @@ class Granite4VisionModelTest(VLMModelTest, unittest.TestCase):
     test_attention_outputs = False
     has_attentions = False
 
-    @unittest.skip("QFormer submodules not initialized by init_weights from meta device")
-    def test_can_init_all_missing_weights(self):
-        pass
-
     @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
         super().test_training_gradient_checkpointing()
