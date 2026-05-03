@@ -192,6 +192,30 @@ class TestImportStructures(unittest.TestCase):
 
         self.assertEqual(ground_truth_spread_import_structure, newly_spread_import_structure)
 
+    def test_pil_import_structure_does_not_require_torchvision(self):
+        import_structure = spread_import_structure(define_import_structure(self.models_path / "gemma3"))
+
+        module_name = "image_processing_pil_gemma3"
+        object_name = "Gemma3ImageProcessorPil"
+        matching_backends = []
+
+        for backends, modules in import_structure.items():
+            if module_name in modules and object_name in modules[module_name]:
+                matching_backends.append(backends)
+
+        self.assertTrue(
+            matching_backends,
+            f"Could not find `{object_name}` in the import structure for `{module_name}`.",
+        )
+        self.assertTrue(
+            any("torchvision" not in backends for backends in matching_backends),
+            f"`{object_name}` should be importable without torchvision: {matching_backends}",
+        )
+        self.assertFalse(
+            any("torchvision" in backends for backends in matching_backends),
+            f"`{object_name}` should not require torchvision: {matching_backends}",
+        )
+
 
 @pytest.mark.parametrize(
     "backend,package_name,version_comparison,version",

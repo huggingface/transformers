@@ -2582,13 +2582,20 @@ def requires(*, backends=()):
 BASE_FILE_REQUIREMENTS = {
     lambda name, content: "modeling_" in name: ("torch",),
     lambda name, content: "tokenization_" in name and name.endswith("_fast"): ("tokenizers",),
-    lambda name, content: "image_processing_" in name and "TorchvisionBackend" in content: (
+    lambda name, content: (
+        "image_processing_" in name and "TorchvisionBackend" in content and "image_processing_pil_" not in name
+    ): (
         "vision",
         "torch",
         "torchvision",
     ),
     lambda name, content: "image_processing_" in name: ("vision",),
-    lambda name, content: "video_processing_" in name: ("vision", "torch", "torchvision"),
+    lambda name, content: "video_processing_" in name and "video_processing_pil_" not in name: (
+        "vision",
+        "torch",
+        "torchvision",
+    ),
+    lambda name, content: "video_processing_pil_" in name: ("vision", "torch"),
 }
 
 
@@ -2632,6 +2639,13 @@ def fetch__all__(file_content) -> list[str]:
                 _all.append(lines[__all__line_index].strip("\"', "))
 
         return _all
+
+
+def _normalize_pil_backends(module_name: str, backends: tuple[str, ...]) -> tuple[str, ...]:
+    # PIL-specific processors should not require torchvision.
+    if "image_processing_pil_" in module_name or "video_processing_pil_" in module_name:
+        return tuple(backend for backend in backends if backend != "torchvision")
+    return backends
 
 
 @lru_cache
@@ -2797,7 +2811,8 @@ def create_import_structure_from_path(module_path):
                     else:
                         backends = ()
 
-                    backends = frozenset(backends + base_requirements)
+                    backends = _normalize_pil_backends(module_name, backends + base_requirements)
+                    backends = frozenset(backends)
                     if backends not in module_requirements:
                         module_requirements[backends] = {}
                     if module_name not in module_requirements[backends]:
