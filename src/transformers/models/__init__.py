@@ -356,6 +356,9 @@ if TYPE_CHECKING:
     from .qwen3_moe import *
     from .qwen3_next import *
     from .qwen3_omni_moe import *
+    from .qwen3_tts import *
+    from .qwen3_tts_tokenizer_multi_codebook import *
+    from .qwen3_tts_tokenizer_single_codebook import *
     from .qwen3_vl import *
     from .qwen3_vl_moe import *
     from .rag import *
