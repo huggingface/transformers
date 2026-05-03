@@ -870,7 +870,7 @@ class AriaTextForCausalLM(AriaTextPreTrainedModel, LlamaForCausalLM):
 
     @auto_docstring
     def forward(self, **super_kwargs):
-        super().forward(self, **super_kwargs)
+        return super().forward(**super_kwargs)
 
 
 class AriaCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
