@@ -320,6 +320,23 @@ GGUF_CONFIG_MAPPING = {
         "vocab_size": "vocab_size",
         "expert_gating_func": "scoring_func",
     },
+    "llama4": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size_mlp",
+        "expert_feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        "rope.dimension_count": None,
+        "rope.freq_base": "rope_theta",
+        "attention.key_length": "head_dim",
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_rms_epsilon": "rms_norm_eps",
+        "vocab_size": "vocab_size",
+        "expert_count": "num_local_experts",
+        "expert_used_count": "num_experts_per_tok",
+        "interleave_moe_layer_step": "interleave_moe_layer_step",
+    },
 }
 
 GGUF_TOKENIZER_MAPPING = {
@@ -787,6 +804,7 @@ class GGUFGemmaConverter(GemmaConverter):
 
 GGUF_TO_FAST_CONVERTERS = {
     "llama": GGUFLlamaConverter,
+    "llama4_text": GGUFLlamaConverter,
     "qwen2": GGUFQwen2Converter,
     "qwen2_moe": GGUFQwen2Converter,
     "qwen3": GGUFQwen2Converter,

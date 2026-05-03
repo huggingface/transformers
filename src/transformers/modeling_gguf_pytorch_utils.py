@@ -453,8 +453,57 @@ class MiniMaxM2TensorProcessor(TensorProcessor):
             out.copy_(torch_weights)
 
 
+class Llama4TensorProcessor(TensorProcessor):
+    HF_MOE_GATE_UP_PATTERN = re.compile(r"(?:model\.)?layers\.(?P<bid>\d+)\.feed_forward\.experts\.gate_up_proj$")
+    HF_MOE_DOWN_PATTERN = re.compile(r"(?:model\.)?layers\.(?P<bid>\d+)\.feed_forward\.experts\.down_proj$")
+    GGUF_MOE_WEIGHTS_PATTERN = re.compile(r".*\.ffn_(?P<w>gate|up|down)_exps\.weight$")
+
+    def __init__(self, config=None):
+        super().__init__(config=config)
+
+    def perform_fallback_tensor_mapping(
+        self, gguf_to_hf_name_map: dict[str, str], suffix: str, qual_name: str, hf_name: str
+    ):
+        if m := re.fullmatch(self.HF_MOE_GATE_UP_PATTERN, hf_name):
+            full_hf_name = qual_name + hf_name
+            gguf_to_hf_name_map[f"blk.{m['bid']}.ffn_gate_exps.weight"] = full_hf_name
+            gguf_to_hf_name_map[f"blk.{m['bid']}.ffn_up_exps.weight"] = full_hf_name
+        elif m := re.fullmatch(self.HF_MOE_DOWN_PATTERN, hf_name):
+            full_hf_name = qual_name + hf_name
+            gguf_to_hf_name_map[f"blk.{m['bid']}.ffn_down_exps.weight"] = full_hf_name
+
+    def process(self, weights, name: str, **kwargs):
+        if m := re.fullmatch(self.GGUF_MOE_WEIGHTS_PATTERN, name):
+            tensor_key_mapping = kwargs.get("tensor_key_mapping")
+            parsed_parameters = kwargs.get("parsed_parameters")
+            if tensor_key_mapping and name in tensor_key_mapping:
+                self._set_moe_expert_tensor(weights, parsed_parameters, tensor_key_mapping[name], m["w"])
+                return GGUFTensor(weights, None, {})
+        return GGUFTensor(weights, name, {})
+
+    def _set_moe_expert_tensor(self, weights: np.ndarray, parsed_parameters: dict[str, dict], hf_name: str, w: str):
+        torch_weights = torch.from_numpy(np.ascontiguousarray(np.swapaxes(weights, -1, -2)))
+        if w == "down":
+            parsed_parameters["tensors"][hf_name] = torch_weights
+            return
+        # Merge gate and up into gate_up_proj: [E, hidden, 2*expert_dim], gate first then up.
+        shape = list(torch_weights.shape)
+        shard_dim = -1
+        shard_size = shape[shard_dim]
+        shape[shard_dim] = shard_size * 2
+        if hf_name not in parsed_parameters["tensors"]:
+            parsed_parameters["tensors"][hf_name] = torch.zeros(shape, dtype=torch_weights.dtype)
+        out: torch.Tensor = parsed_parameters["tensors"][hf_name]
+        if w == "gate":
+            out = out.narrow(shard_dim, 0, shard_size)
+        else:  # w == "up"
+            out = out.narrow(shard_dim, shard_size, shard_size)
+        out.copy_(torch_weights)
+
+
 TENSOR_PROCESSORS = {
     "llama": LlamaTensorProcessor,
+    "llama4": Llama4TensorProcessor,
     "qwen2moe": Qwen2MoeTensorProcessor,
     "gpt_oss": GptOssTensorProcessor,
     "qwen3moe": Qwen2MoeTensorProcessor,
@@ -518,6 +567,10 @@ def get_gguf_hf_weights_map(
         model_type = "t5"
     elif model_type == "minimax_m2":
         model_type = "minimax-m2"
+    elif model_type == "llama4_text":
+        # GGUF Llama 4 files only contain text weights; the text-only config
+        # uses `llama4_text` in transformers but the GGUF arch key is `llama4`.
+        model_type = "llama4"
     elif model_type == "gpt_oss":
         model_type = "gpt-oss"
     arch = None
@@ -694,6 +747,18 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     # Gemma3 GGUF checkpoint only contains weights of text backbone
     if parsed_parameters["config"]["model_type"] == "gemma3":
         parsed_parameters["config"]["model_type"] = "gemma3_text"
+
+    # Llama 4 GGUF checkpoints only contain the text backbone. Rewrite the model_type to
+    # the text-only config and nest rope_theta under rope_parameters (Llama4TextConfig is
+    # @strict and stores rope params in a nested dict rather than a top-level field).
+    if parsed_parameters["config"]["model_type"] == "llama4":
+        parsed_parameters["config"]["model_type"] = "llama4_text"
+        rope_theta = parsed_parameters["config"].pop("rope_theta", None)
+        if rope_theta is not None:
+            parsed_parameters["config"]["rope_parameters"] = {
+                "rope_type": "default",
+                "rope_theta": float(rope_theta),
+            }
 
     # MiniMax-M2: convert expert_gating_func integer to scoring_func string
     if parsed_parameters["config"].get("model_type") == "minimax_m2":
