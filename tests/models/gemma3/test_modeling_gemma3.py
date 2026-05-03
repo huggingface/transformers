@@ -161,6 +161,25 @@ class Gemma3TextModelTest(CausalLMModelTest, unittest.TestCase):
         EXPECTED_OUTPUT = torch.tensor([[90109, 90109, 90109, 83191, 83191], [246901, 69832, 69832, 69832, 62288]])
         torch.testing.assert_close(generated_sequences, EXPECTED_OUTPUT)
 
+    @slow
+    @require_torch_gpu
+    @require_flash_attn
+    @pytest.mark.flash_attn_test
+    def test_flash_attention_2_forward_on_sinkless_model(self) -> None:
+        """End-to-end integration test of model construction and forward pass with ``flash_attention_2``.
+
+        Loads a tiny Gemma3 checkpoint through the ``from_pretrained`` dispatcher
+        and runs a forward pass (through the flash-attention backend).
+        """
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-Gemma3ForCausalLM",
+            dtype=torch.bfloat16,  # FA2 only supports half precision
+            attn_implementation="flash_attention_2",
+        ).to(torch_device)
+        input_ids = torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8]], device=torch_device)
+        with torch.no_grad():
+            _ = model(input_ids=input_ids)
+
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     @unittest.skip("TODO (joao): check why this is failing")
     def test_model_rope_scaling_from_config(self):
