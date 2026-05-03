@@ -77,15 +77,22 @@ class Qwen3VLVisionPatchEmbed(nn.Module):
         self.in_channels = config.in_channels
         self.embed_dim = config.hidden_size
 
-        kernel_size = [self.temporal_patch_size, self.patch_size, self.patch_size]
-        self.proj = nn.Conv3d(self.in_channels, self.embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=True)
+        in_features = self.in_channels * self.temporal_patch_size * self.patch_size * self.patch_size
+        self.proj = nn.Linear(in_features, self.embed_dim, bias=True)
+
+    def _load_from_state_dict(self, state_dict, prefix, *args, **kwargs):
+        # Existing checkpoints store proj.weight as a 5-D Conv3d tensor
+        # (out, in, kt, kh, kw).  Reshape to 2-D on load for backward compatibility.
+        key = prefix + "proj.weight"
+        if key in state_dict and state_dict[key].dim() == 5:
+            out_dim = state_dict[key].shape[0]
+            state_dict[key] = state_dict[key].reshape(out_dim, -1).contiguous()
+        super()._load_from_state_dict(state_dict, prefix, *args, **kwargs)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         target_dtype = self.proj.weight.dtype
-        hidden_states = hidden_states.view(
-            -1, self.in_channels, self.temporal_patch_size, self.patch_size, self.patch_size
-        )
-        hidden_states = self.proj(hidden_states.to(dtype=target_dtype)).view(-1, self.embed_dim)
+        hidden_states = hidden_states.reshape(-1, self.proj.in_features)
+        hidden_states = self.proj(hidden_states.to(dtype=target_dtype))
         return hidden_states
 
 
