@@ -28,22 +28,22 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
+@auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")
 @strict
 class Qwen3OmniMoeAudioEncoderConfig(PreTrainedConfig):
     r"""
     max_source_positions (`int`, *optional*, defaults to 1500):
         Maximum sequence length for the inputs
-    n_window (`int`, *optional*, defaults to 100):
-        Number of windwos
+    n_window (`int`, *optional*, defaults to 50):
+        Number of windows
     output_dim (`int`, *optional*, defaults to 3584):
         Dimensionality of the output
-    n_window_infer (`int`, *optional*, defaults to `400`):
+    n_window_infer (`int`, *optional*, defaults to `800`):
         Number of windows during inference
     conv_chunksize (`int`, *optional*, defaults to `500`):
         Chunk size of each input to convolutional layer
     downsample_hidden_size (`int`, *optional*, defaults to `480`):
-        Hidden size in donwsampling layer
+        Hidden size in downsampling layer
     """
 
     model_type = "qwen3_omni_moe_audio_encoder"
@@ -62,15 +62,14 @@ class Qwen3OmniMoeAudioEncoderConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     max_source_positions: int = 1500
 
-    n_window: int = 100
+    n_window: int = 50
     output_dim: int = 3584
-
-    n_window_infer: int = 400
+    n_window_infer: int = 800
     conv_chunksize: int = 500
     downsample_hidden_size: int = 480
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
+@auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")
 @strict
 class Qwen3OmniMoeVisionEncoderConfig(PreTrainedConfig):
     r"""
@@ -100,7 +99,7 @@ class Qwen3OmniMoeVisionEncoderConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
+@auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")
 @strict
 class Qwen3OmniMoeTextConfig(PreTrainedConfig):
     r"""
@@ -180,7 +179,7 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
+@auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")
 @strict
 class Qwen3OmniMoeThinkerConfig(PreTrainedConfig):
     r"""
@@ -247,7 +246,7 @@ class Qwen3OmniMoeThinkerConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3OmniMoeTalkerCodePredictor-8B")
+@auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")
 @strict
 class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
     r"""
@@ -315,7 +314,7 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
+@auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")
 @strict
 class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
     r"""
@@ -408,7 +407,7 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
+@auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")
 @strict
 class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
     r"""
@@ -503,7 +502,7 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
+@auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")
 @strict
 class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
     r"""
@@ -559,7 +558,7 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
         return ["sliding_attention"] * self.num_hidden_layers
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
+@auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")
 @strict
 class Qwen3OmniMoeConfig(PreTrainedConfig):
     r"""
@@ -670,10 +669,10 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
 
 
 __all__ = [
+    "Qwen3OmniMoeAudioEncoderConfig",
     "Qwen3OmniMoeConfig",
     "Qwen3OmniMoeThinkerConfig",
     "Qwen3OmniMoeTalkerConfig",
-    "Qwen3OmniMoeAudioEncoderConfig",
     "Qwen3OmniMoeTalkerCodePredictorConfig",
     "Qwen3OmniMoeTalkerTextConfig",
     "Qwen3OmniMoeTextConfig",
