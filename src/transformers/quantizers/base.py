@@ -237,10 +237,10 @@ class HfQuantizer(ABC):
         keep_in_fp32_modules: list[str] | None = None,
         add_default_skips: bool = False,
     ):
-        if skip_modules is None or add_default_skips:
-            modules_to_not_convert = get_keys_to_not_convert(model)
-        else:
-            modules_to_not_convert = []
+        # Always include auto-detected keys (lm_head, tied embeddings) so that skip_modules is
+        # additive. Previously this branch was gated on add_default_skips, causing lm_head to be
+        # quantized and bitsandbytes to raise AssertionError when any skip_modules were supplied.
+        modules_to_not_convert = get_keys_to_not_convert(model)
 
         if skip_modules is not None:
             modules_to_not_convert.extend(skip_modules)
