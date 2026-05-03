@@ -436,6 +436,7 @@ if TYPE_CHECKING:
     from .video_llava import *
     from .videomae import *
     from .videomt import *
+    from .videoprism import *
     from .vilt import *
     from .vipllava import *
     from .vision_encoder_decoder import *

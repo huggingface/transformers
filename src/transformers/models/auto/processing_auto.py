@@ -176,6 +176,7 @@ else:
             ("unispeech-sat", "Wav2Vec2Processor"),
             ("vibevoice_asr", "VibeVoiceAsrProcessor"),
             ("video_llava", "VideoLlavaProcessor"),
+            ("videoprism", "VideoPrismProcessor"),
             ("vilt", "ViltProcessor"),
             ("vipllava", "LlavaProcessor"),
             ("vision-text-dual-encoder", "VisionTextDualEncoderProcessor"),
