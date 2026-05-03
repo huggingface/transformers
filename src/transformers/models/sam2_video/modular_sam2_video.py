@@ -892,8 +892,8 @@ class Sam2VideoImageSegmentationOutput(Sam2ImageSegmentationOutput):
     object_pointer: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the Sam2 model's output.")
+@dataclass
 class Sam2VideoSegmentationOutput(ModelOutput):
     r"""
     object_ids (`list[int]`, *optional*):

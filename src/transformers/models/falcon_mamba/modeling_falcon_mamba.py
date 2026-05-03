@@ -541,12 +541,12 @@ class FalconMambaPreTrainedModel(PreTrainedModel):
             init.normal_(module.weight, std=std)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for the FALCON_MAMBA model outputs.
     """
 )
+@dataclass
 class FalconMambaOutput(ModelOutput):
     r"""
     cache_params (`Cache`):
@@ -561,12 +561,12 @@ class FalconMambaOutput(ModelOutput):
     hidden_states: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class FalconMambaCausalLMOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

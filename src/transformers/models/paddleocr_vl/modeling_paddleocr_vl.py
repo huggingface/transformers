@@ -973,12 +973,12 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Llava outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class PaddleOCRVLModelOutputWithPast(ModelOutput):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -997,12 +997,12 @@ class PaddleOCRVLModelOutputWithPast(ModelOutput):
     rope_deltas: torch.LongTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for PaddleOCRVL causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class PaddleOCRVLCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

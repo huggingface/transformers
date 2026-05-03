@@ -226,12 +226,12 @@ class FastVlmModel(FastVlmPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for FastVlm causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class FastVlmCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

@@ -57,12 +57,12 @@ class ColPaliPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.weight[module.padding_idx])
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for ColPali embeddings output.
     """
 )
+@dataclass
 class ColPaliForRetrievalOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

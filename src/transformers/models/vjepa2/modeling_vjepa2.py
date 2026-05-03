@@ -32,12 +32,12 @@ from .configuration_vjepa2 import VJEPA2Config
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     VJEPA Predictor outputs that also contains the masked encoder outputs
     """
 )
+@dataclass
 class VJEPA2WithMaskedInputPredictorOutput(ModelOutput):
     r"""
     masked_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*, returned when `context_mask` is provided which is applied on VJEPA2Encoder outputs):
@@ -53,13 +53,13 @@ class VJEPA2WithMaskedInputPredictorOutput(ModelOutput):
     target_hidden_state: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     VJEPA outputs that also contains the masked encoder outputs
     Optionally contains the predictor outputs
     """
 )
+@dataclass
 class VJEPA2WithMaskedInputModelOutput(ModelOutput):
     r"""
     masked_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*, returned when `context_mask` is provided which is applied on VJEPA2Encoder outputs):

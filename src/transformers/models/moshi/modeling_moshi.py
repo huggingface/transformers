@@ -45,12 +45,12 @@ if is_flash_attn_available():
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Outputs of [`MoshiForConditionalConditionalGeneration.generate`].
     """
 )
+@dataclass
 class MoshiConditionalGenerationGenerateOutput(ModelOutput):
     r"""
     audio_sequences (`torch.LongTensor` of shape `(batch_size*num_return_sequences, 1, sequence_length)`, *optional*):
@@ -97,12 +97,12 @@ class MoshiConditionalGenerationGenerateOutput(ModelOutput):
     audio_codes: torch.LongTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     `MoshiForCausalLM` outputs.
     """
 )
+@dataclass
 class MoshiCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -124,12 +124,12 @@ class MoshiCausalLMOutputWithPast(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     `MoshiForConditionalGeneration` outputs.
     """
 )
+@dataclass
 class MoshiConditionalGenerationOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `text_labels` is provided):

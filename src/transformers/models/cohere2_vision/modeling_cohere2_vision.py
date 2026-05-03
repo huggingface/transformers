@@ -93,12 +93,12 @@ class Cohere2VisionModelOutputWithPast(BaseModelOutputWithPast):
     image_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Cohere2Vision causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Cohere2VisionCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

@@ -127,12 +127,12 @@ class PerceptionLMModelOutputWithPast(BaseModelOutputWithPast):
     video_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for PerceptionLM causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class PerceptionLMCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

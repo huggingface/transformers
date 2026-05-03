@@ -45,8 +45,8 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_qwen3_vl import Qwen3VLConfig, Qwen3VLTextConfig, Qwen3VLVisionConfig
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
     r"""
     deepstack_features (`List[torch.FloatTensor]`, *optional*):
@@ -564,12 +564,12 @@ class Qwen3VLTextDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Llava outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class Qwen3VLModelOutputWithPast(ModelOutput):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -1362,12 +1362,12 @@ class Qwen3VLModel(Qwen3VLPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Qwen3VL causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Qwen3VLCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

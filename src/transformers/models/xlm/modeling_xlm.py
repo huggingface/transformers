@@ -79,12 +79,12 @@ def get_masks(slen, lengths, causal, padding_mask=None):
     return mask, attn_mask
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of question answering models using a [`~modeling_utils.XLMSQuADHead`].
     """
 )
+@dataclass
 class XLMSquadHeadOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):
@@ -638,12 +638,12 @@ class XLMPreTrainedModel(PreTrainedModel):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of question answering models using a `XLMSQuADHead`.
     """
 )
+@dataclass
 class XLMForQuestionAnsweringOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):

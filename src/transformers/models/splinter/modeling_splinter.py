@@ -560,12 +560,12 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of Splinter as a span selection model.
     """
 )
+@dataclass
 class SplinterForPreTrainingOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when start and end positions are provided):

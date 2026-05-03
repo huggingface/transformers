@@ -34,12 +34,12 @@ from .configuration_yolos import YolosConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`YolosForObjectDetection`].
     """
 )
+@dataclass
 class YolosObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):

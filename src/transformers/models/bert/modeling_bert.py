@@ -558,12 +558,12 @@ class BertPreTrainedModel(PreTrainedModel):
             init.zeros_(module.token_type_ids)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`BertForPreTraining`].
     """
 )
+@dataclass
 class BertForPreTrainingOutput(ModelOutput):
     r"""
     loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):

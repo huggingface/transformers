@@ -118,8 +118,8 @@ class SLANetPreTrainedModel(SLANeXtPreTrainedModel):
                             init.uniform_(layer.bias, -std, std)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class SLANetForTableRecognitionOutput(BaseModelOutputWithNoAttention):
     r"""
     head_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):

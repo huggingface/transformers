@@ -91,7 +91,6 @@ class MultiScaleDeformableAttention(nn.Module):
         return output.transpose(1, 2).contiguous()
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the GroundingDinoDecoder. This class adds two attributes to
@@ -100,6 +99,7 @@ class MultiScaleDeformableAttention(nn.Module):
     - a stacked tensor of intermediate reference points.
     """
 )
+@dataclass
 class GroundingDinoDecoderOutput(ModelOutput):
     r"""
     intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -115,7 +115,6 @@ class GroundingDinoDecoderOutput(ModelOutput):
     attentions: tuple[tuple[torch.FloatTensor]] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the GroundingDinoEncoder. This class extends BaseModelOutput, due to:
@@ -123,6 +122,7 @@ class GroundingDinoDecoderOutput(ModelOutput):
     - vision and text intermediate hidden states
     """
 )
+@dataclass
 class GroundingDinoEncoderOutput(ModelOutput):
     r"""
     last_hidden_state_vision (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -146,12 +146,12 @@ class GroundingDinoEncoderOutput(ModelOutput):
     attentions: tuple[tuple[torch.FloatTensor]] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the Grounding DINO encoder-decoder model.
     """
 )
+@dataclass
 class GroundingDinoModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
@@ -209,12 +209,12 @@ class GroundingDinoModelOutput(ModelOutput):
     encoder_pred_boxes: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`GroundingDinoForObjectDetection`].
     """
 )
+@dataclass
 class GroundingDinoObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):

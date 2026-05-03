@@ -25,12 +25,12 @@ from ...utils import ModelOutput, auto_docstring
 from .configuration_vitmatte import VitMatteConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of image matting models.
     """
 )
+@dataclass
 class ImageMattingOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

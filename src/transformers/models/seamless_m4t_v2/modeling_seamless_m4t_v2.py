@@ -106,12 +106,12 @@ class SeamlessM4Tv2GenerationOutput(ModelOutput):
     unit_sequences: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class defining the outputs from [`SeamlessM4Tv2TextToUnitDecoder`].
     """
 )
+@dataclass
 class SeamlessM4Tv2TextToUnitDecoderOutput(ModelOutput):
     r"""
     padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -125,13 +125,13 @@ class SeamlessM4Tv2TextToUnitDecoderOutput(ModelOutput):
     padding_mask: torch.Tensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class defining the outputs from [`SeamlessM4Tv2TextToUnitForConditionalGeneration`] and
         [`SeamlessM4Tv2TextToUnitModel`].
     """
 )
+@dataclass
 class SeamlessM4Tv2TextToUnitOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):

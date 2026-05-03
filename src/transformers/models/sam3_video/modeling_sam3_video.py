@@ -457,8 +457,8 @@ class Sam3VideoInferenceSession:
         self.cache.clear_all()
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the Sam3Video model's output.")
+@dataclass
 class Sam3VideoSegmentationOutput(ModelOutput):
     r"""
     object_ids (`list[int]`, *optional*):

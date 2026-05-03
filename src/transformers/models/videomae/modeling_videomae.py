@@ -38,12 +38,12 @@ from .configuration_videomae import VideoMAEConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for VideoMAEDecoder's outputs, with potential hidden states and attentions.
     """
 )
+@dataclass
 class VideoMAEDecoderOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
@@ -55,12 +55,12 @@ class VideoMAEDecoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for VideoMAEForPreTraining's outputs, with potential hidden states and attentions.
     """
 )
+@dataclass
 class VideoMAEForPreTrainingOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`):

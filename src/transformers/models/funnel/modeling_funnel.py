@@ -711,12 +711,12 @@ class FunnelClassificationHead(nn.Module):
         return self.linear_out(hidden)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`FunnelForPreTraining`].
     """
 )
+@dataclass
 class FunnelForPreTrainingOutput(ModelOutput):
     r"""
     loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):

@@ -168,12 +168,12 @@ def generalized_box_iou(boxes1, boxes2):
     return iou - (area - union) / area
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`Owlv2ForObjectDetection`].
     """
 )
+@dataclass
 class Owlv2ObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):

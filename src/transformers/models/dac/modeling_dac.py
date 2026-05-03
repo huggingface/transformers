@@ -70,8 +70,8 @@ class DacEncoderOutput(ModelOutput):
     projected_latents: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 # Copied from transformers.models.encodec.modeling_encodec.EncodecDecoderOutput with Encodec->Dac, segment_length->input_length
 class DacDecoderOutput(ModelOutput):
     r"""

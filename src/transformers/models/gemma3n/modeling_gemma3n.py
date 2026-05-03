@@ -55,8 +55,8 @@ if is_accelerate_available():
     from accelerate.hooks import add_hook_to_module
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Gemma3nAudioEncoderModelOutput(BaseModelOutputWithPooling):
     r"""
     audio_mel_mask (`torch.BoolTensor`, *optional*):
@@ -92,12 +92,12 @@ class Gemma3nModelOutputWithPast(BaseModelOutputWithPast):
     audio_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Gemma3n causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Gemma3nCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

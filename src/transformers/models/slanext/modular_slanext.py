@@ -267,8 +267,8 @@ class SLANeXtSLAHead(SLANeXtPreTrainedModel):
         return BaseModelOutput(last_hidden_state=structure_preds, hidden_states=structure_preds_list)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class SLANeXtForTableRecognitionOutput(BaseModelOutput):
     r"""
     head_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):

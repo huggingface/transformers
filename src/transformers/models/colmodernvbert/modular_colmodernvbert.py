@@ -331,12 +331,12 @@ class ColModernVBertPreTrainedModel(ColPaliPreTrainedModel):
     config: ColModernVBertConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for ColModernVBert embeddings output.
     """
 )
+@dataclass
 class ColModernVBertForRetrievalOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

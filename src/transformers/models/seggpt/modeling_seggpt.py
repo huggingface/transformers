@@ -31,12 +31,12 @@ from .configuration_seggpt import SegGptConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`SegGptEncoderOutput`].
     """
 )
+@dataclass
 class SegGptEncoderOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, patch_height, patch_width, hidden_size)`):
@@ -59,12 +59,12 @@ class SegGptEncoderOutput(ModelOutput):
     intermediate_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`SegGptImageSegmentationOutput`].
     """
 )
+@dataclass
 class SegGptImageSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided):

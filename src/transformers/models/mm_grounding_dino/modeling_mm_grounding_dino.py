@@ -694,7 +694,6 @@ class MMGroundingDinoConvModel(nn.Module):
         return out, pos
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the MMGroundingDinoEncoder. This class extends BaseModelOutput, due to:
@@ -702,6 +701,7 @@ class MMGroundingDinoConvModel(nn.Module):
     - vision and text intermediate hidden states
     """
 )
+@dataclass
 class MMGroundingDinoEncoderOutput(ModelOutput):
     r"""
     last_hidden_state_vision (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -1253,7 +1253,6 @@ class MMGroundingDinoEncoder(MMGroundingDinoPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the MMGroundingDinoDecoder. This class adds two attributes to
@@ -1262,6 +1261,7 @@ class MMGroundingDinoEncoder(MMGroundingDinoPreTrainedModel):
     - a stacked tensor of intermediate reference points.
     """
 )
+@dataclass
 class MMGroundingDinoDecoderOutput(ModelOutput):
     r"""
     intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -1635,12 +1635,12 @@ class MMGroundingDinoDecoder(MMGroundingDinoPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the Grounding DINO encoder-decoder model.
     """
 )
+@dataclass
 class MMGroundingDinoModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
@@ -2213,12 +2213,12 @@ class MMGroundingDinoMLPPredictionHead(nn.Module):
         return x
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`MMGroundingDinoForObjectDetection`].
     """
 )
+@dataclass
 class MMGroundingDinoObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):

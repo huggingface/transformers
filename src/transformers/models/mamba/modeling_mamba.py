@@ -470,12 +470,12 @@ class MambaPreTrainedModel(PreTrainedModel):
             init.normal_(module.weight, std=std)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for the MAMBA model outputs.
     """
 )
+@dataclass
 class MambaOutput(ModelOutput):
     r"""
     cache_params (`Cache`):
@@ -490,12 +490,12 @@ class MambaOutput(ModelOutput):
     hidden_states: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class MambaCausalLMOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

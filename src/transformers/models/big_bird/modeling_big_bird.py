@@ -1458,12 +1458,12 @@ class BigBirdPreTrainedModel(PreTrainedModel):
             init.zeros_(module.token_type_ids)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`BigBirdForPreTraining`].
     """
 )
+@dataclass
 class BigBirdForPreTrainingOutput(ModelOutput):
     r"""
     loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
@@ -1483,12 +1483,12 @@ class BigBirdForPreTrainingOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of question answering models.
     """
 )
+@dataclass
 class BigBirdForQuestionAnsweringModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

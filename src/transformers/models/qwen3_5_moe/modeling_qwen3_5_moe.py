@@ -1286,12 +1286,12 @@ class Qwen3_5MoeVisionModel(Qwen3_5MoePreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Llava outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class Qwen3_5MoeModelOutputWithPast(ModelOutput):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -1311,12 +1311,12 @@ class Qwen3_5MoeModelOutputWithPast(ModelOutput):
     router_logits: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Qwen3_5Moe causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Qwen3_5MoeCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

@@ -65,8 +65,8 @@ from .configuration_sam3 import (
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3VisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
     fpn_hidden_states (`tuple[torch.FloatTensor]`):

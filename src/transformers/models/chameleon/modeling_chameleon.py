@@ -47,8 +47,8 @@ from .configuration_chameleon import ChameleonConfig, ChameleonVQVAEConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class ChameleonVQVAEModelOutput(BaseModelOutputWithPooling):
     r"""
     quantized_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):

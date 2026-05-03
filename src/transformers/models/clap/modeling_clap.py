@@ -126,12 +126,12 @@ class ClapTextModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     ClapAudio model output to mimic the output of the original implementation.
     """
 )
+@dataclass
 class ClapAudioModelOutput(ModelOutput):
     r"""
     audio_embeds (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
@@ -144,8 +144,8 @@ class ClapAudioModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 # Copied from transformers.models.clip.modeling_clip.CLIPOutput with CLIP->Clap, vision->audio, Vision->Audio, image->audio
 class ClapOutput(ModelOutput):
     r"""

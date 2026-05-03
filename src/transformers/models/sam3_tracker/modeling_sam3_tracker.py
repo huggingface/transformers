@@ -44,8 +44,8 @@ from .configuration_sam3_tracker import Sam3TrackerConfig, Sam3TrackerMaskDecode
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the Sam3Tracker model's output.")
+@dataclass
 class Sam3TrackerImageSegmentationOutput(ModelOutput):
     r"""
     iou_scores (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks)`):

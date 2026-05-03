@@ -31,12 +31,12 @@ from ...utils import ModelOutput, auto_docstring, is_peft_available
 from .configuration_wav2vec2_conformer import Wav2Vec2ConformerConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`Wav2Vec2ConformerForPreTraining`], with potential hidden states and attentions.
     """
 )
+@dataclass
 class Wav2Vec2ConformerForPreTrainingOutput(ModelOutput):
     r"""
     loss (*optional*, returned when `sample_negative_indices` are passed, `torch.FloatTensor` of shape `(1,)`):

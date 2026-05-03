@@ -213,12 +213,12 @@ class JanusPreTrainedModel(PreTrainedModel):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Janus VQ-VAE mode model outputs.
     """
 )
+@dataclass
 class JanusVQVAEOutput(ModelOutput):
     r"""
     decoded_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):

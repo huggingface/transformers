@@ -33,12 +33,12 @@ from .retrieval_rag import RagRetriever
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for retriever augmented marginalized models outputs.
     """
 )
+@dataclass
 class RetrievAugLMMarginOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

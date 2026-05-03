@@ -45,12 +45,12 @@ from .configuration_omdet_turbo import OmDetTurboConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the OmDetTurboHybridEncoder.
     """
 )
+@dataclass
 class OmDetTurboEncoderOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor`):
@@ -65,12 +65,12 @@ class OmDetTurboEncoderOutput(ModelOutput):
     extracted_states: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the OmDetTurboDecoder.
     """
 )
+@dataclass
 class OmDetTurboDecoderOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -100,12 +100,12 @@ class OmDetTurboDecoderOutput(ModelOutput):
     intermediate_reference_points: tuple[tuple[torch.FloatTensor]] = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`OmDetTurboObjectDetectionOutput`].
     """
 )
+@dataclass
 class OmDetTurboObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor`):

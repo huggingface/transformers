@@ -45,7 +45,6 @@ logger = logging.get_logger(__name__)
 _PRIMES = [31, 43, 59, 61, 73, 97, 103, 113, 137, 149, 157, 173, 181, 193, 211, 223]
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`CanineModel`]. Based on [`~modeling_outputs.BaseModelOutputWithPooling`], but with slightly
@@ -53,6 +52,7 @@ _PRIMES = [31, 43, 59, 61, 73, 97, 103, 113, 137, 149, 157, 173, 181, 193, 211, 
     Transformer encoders.
     """
 )
+@dataclass
 class CanineModelOutputWithPooling(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):

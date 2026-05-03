@@ -218,12 +218,12 @@ class DeformableDetrDecoderOutput(DetrDecoderOutput):
     intermediate_reference_points: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the Deformable DETR encoder-decoder model.
     """
 )
+@dataclass
 class DeformableDetrModelOutput(ModelOutput):
     r"""
     init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):

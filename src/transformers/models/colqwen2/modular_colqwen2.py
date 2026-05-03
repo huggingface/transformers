@@ -216,12 +216,12 @@ class ColQwen2PreTrainedModel(ColPaliPreTrainedModel):
     pass
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for ColQwen2 embeddings output.
     """
 )
+@dataclass
 class ColQwen2ForRetrievalOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

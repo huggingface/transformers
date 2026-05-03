@@ -38,12 +38,12 @@ from .configuration_qwen2_audio import Qwen2AudioConfig, Qwen2AudioEncoderConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Qwen2Audio causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Qwen2AudioCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

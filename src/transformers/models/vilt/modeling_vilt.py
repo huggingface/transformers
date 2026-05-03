@@ -40,12 +40,12 @@ from .configuration_vilt import ViltConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`ViltForImagesAndTextClassification`].
     """
 )
+@dataclass
 class ViltForImagesAndTextClassificationOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

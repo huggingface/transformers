@@ -364,13 +364,13 @@ class SLANeXtVisionLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for slanext vision model's outputs that also contains image embeddings obtained by applying the projection
     layer to the pooler_output.
     """
 )
+@dataclass
 class SLANeXtVisionEncoderOutput(ModelOutput):
     r"""
     image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
@@ -597,8 +597,8 @@ class SLANeXtSLAHead(SLANeXtPreTrainedModel):
         return BaseModelOutput(last_hidden_state=structure_preds, hidden_states=structure_preds_list)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class SLANeXtForTableRecognitionOutput(BaseModelOutput):
     r"""
     head_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
