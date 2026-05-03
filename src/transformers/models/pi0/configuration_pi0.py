@@ -125,8 +125,8 @@ class PI0Config(PreTrainedConfig):
                 vocab_size=self.vlm_config.text_config.vocab_size,
             )
 
-        # Force bidirectional attention
-        self.dit_config.is_causal = False
+        # Force bidirectional attention for images in Paligemma
+        self.dit_config.is_causal = True
         self.dit_config.use_bidirectional_attention = True
         self.vlm_config.text_config.use_bidirectional_attention = True
         super().__post_init__(**kwargs)
