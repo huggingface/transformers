@@ -171,7 +171,6 @@ class Kimi2_6ImageProcessor(TorchvisionBackend):
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
 
-            # Patchify in NaViT style, TODO maybe same as Siglip2 - needs to check with model
             batch_size, channels, height, width = stacked_images.shape
             grid_h, grid_w = height // patch_size, width // patch_size
             patches = stacked_images.reshape(batch_size, channels, grid_h, patch_size, grid_w, patch_size)

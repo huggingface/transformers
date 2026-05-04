@@ -100,19 +100,14 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"layer\.", target_patterns="layers."),
         ],
         "kimi2_6": [
+            # Same as llava, add `model` as prefix if needed 
             WeightRenaming(source_patterns=r"language_model.model", target_patterns="model.language_model"),
-            WeightRenaming(source_patterns=r"language_model.lm_head.weight", target_patterns="lm_head.weight"),
-            WeightRenaming(
-                source_patterns=r"vision_tower.encoder.blocks", target_patterns="model.vision_tower.encoder_blocks"
-            ),
-            WeightRenaming(
-                source_patterns=r"vision_tower.encoder.final_layernorm",
-                target_patterns="model.vision_tower.final_layernorm",
-            ),
+            WeightRenaming(source_patterns=r"language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"vision_tower.encoder", target_patterns="model.vision_tower"),
+            # Rename projection/norm/mlp modules
             WeightRenaming(source_patterns=r"mm_projector.proj.0", target_patterns="model.mm_projector.in_proj"),
             WeightRenaming(source_patterns=r"mm_projector.proj.2", target_patterns="model.mm_projector.out_proj"),
-            WeightRenaming(source_patterns=r"blocks.(\d+).wo", target_patterns=r"blocks.\1.attn.proj"),
-            WeightRenaming(source_patterns=r"blocks.(\d+).wqkv", target_patterns=r"blocks.\1.attn.qkv"),
+            WeightRenaming(source_patterns=r"blocks", target_patterns="encoder_blocks"),
             WeightRenaming(source_patterns=r"blocks.(\d+).norm1", target_patterns=r"blocks.\1.norm2"),
             WeightRenaming(source_patterns=r"blocks.(\d+).norm0", target_patterns=r"blocks.\1.norm1"),
             WeightRenaming(source_patterns=r"blocks.(\d+).mlp.fc1", target_patterns=r"blocks.\1.mlp.fc2"),
@@ -121,13 +116,14 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"vision_tower.patch_embed.pos_emb.weight",
                 target_patterns="model.vision_tower.patch_embed.pos_emb.position_embeddings",
             ),
+            WeightRenaming(source_patterns=r"blocks.(\d+).wo", target_patterns=r"blocks.\1.attn.proj"),
             # Unfuse qkv and apply rope permutation
             WeightConverter(
-                source_patterns=["attn.qkv"],
+                source_patterns=[r"wqkv"],
                 target_patterns=[
-                    "attn.q_proj",
-                    "attn.k_proj",
-                    "attn.v_proj",
+                    r"attn.q_proj",
+                    r"attn.k_proj",
+                    r"attn.v_proj",
                 ],
                 operations=[UnfuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"])],
             ),

@@ -17,6 +17,7 @@ import gc
 import unittest
 
 import requests
+from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -26,6 +27,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
+from transformers.cache_utils import Cache
 from transformers.testing_utils import (
     backend_empty_cache,
     require_torch,
@@ -151,6 +153,51 @@ class Kimi2_6ModelTest(VLMModelTest, unittest.TestCase):
         text_gen_config.forced_eos_token_id = None
 
         return config, filtered_inputs_dict
+
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        """Needs to be overridden as deepseek has special MLA cache format (though we don't really use the MLA)"""
+        self.assertIsInstance(past_key_values, Cache)
+
+        # (batch, head, seq_length, head_features)
+        expected_common_shape = (
+            batch_size,
+            getattr(config, "num_key_value_heads", config.num_attention_heads),
+            seq_length,
+        )
+        expected_key_shape = expected_common_shape + (config.qk_nope_head_dim + config.qk_rope_head_dim,)
+        expected_value_shape = expected_common_shape + (config.v_head_dim,)
+
+        for layer in past_key_values.layers:
+            self.assertEqual(layer.keys.shape, expected_key_shape)
+            self.assertEqual(layer.values.shape, expected_value_shape)
+
+     def test_reverse_loading_mapping(self):
+        super().test_reverse_loading_mapping(skip_base_model=True)
+
+    @parameterized.expand([("random",), ("same",)])
+    @unittest.skip("DeepseekV3 backbone is not compatible with assisted decoding")
+    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
+        pass
+
+    @unittest.skip("DeepseekV3 backbone is not compatible with assisted decoding")
+    def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
+        pass
+
+    @unittest.skip("DeepseekV3 backbone is not compatible with assisted decoding")
+    def test_assisted_decoding_sample(self):
+        pass
+
+    @unittest.skip("Deepseek-V3 backbone uses MLA so it is not compatible with the standard cache format")
+    def test_beam_search_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip("Deepseek-V3 backbone uses MLA so it is not compatible with the standard cache format")
+    def test_greedy_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip(reason="SDPA can't dispatch on flash due to unsupported head dims on LM backbone")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
 
 
 @require_torch

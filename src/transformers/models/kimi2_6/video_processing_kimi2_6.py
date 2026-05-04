@@ -141,7 +141,6 @@ class Kimi2_6VideoProcessor(BaseVideoProcessor):
                 stacked_videos, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
 
-            # Patchify in NaViT style, TODO maybe same as Siglip2 - needs to check with model
             batch_size, time, channels, height, width = stacked_videos.shape
             grid_h, grid_w = height // patch_size, width // patch_size
             patches = stacked_videos.reshape(batch_size, time, channels, grid_h, patch_size, grid_w, patch_size)

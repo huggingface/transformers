@@ -404,6 +404,62 @@ class PermuteForRope(ConversionOps):
             output[key] = [self._apply(tensors[0])]
         return output
 
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return PermuteForRope()
+
+
+class FuseAndPermuteForRope(ConversionOps):
+    """
+    Applies the permutation required to convert complex RoPE weights to the split sin/cos format on fused QKV.
+    Same as calling `PermuteForRope() + Concatenate()` but lets us call `Permute` only on a subset of chunked tensors.
+    """
+
+    def __init__(self, dim: int = 0, permute_layer_names: list[str] | None = None):
+        self.dim = dim
+        self.permute_layer_names = permute_layer_names or []
+
+    def _apply_permutation(self, tensor: torch.Tensor) -> torch.Tensor:
+        dim1, dim2 = tensor.shape
+        config = self.config.vision_config
+        n_heads = getattr(config, "num_attention_heads", 1)
+
+        tensor = tensor.view(n_heads, 2, dim1 // n_heads // 2, dim2)
+        tensor = tensor.transpose(1, 2).reshape(dim1, dim2)
+        return tensor
+
+    @torch.no_grad
+    def convert(
+        self,
+        input_dict: dict[str, list[torch.Tensor]],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        config,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        self.config = config
+        target_pattern = self.get_target_pattern(target_patterns)
+
+        all_tensors = []
+        for source_pattern in source_patterns:
+            tensors = input_dict[source_pattern][0]
+            # Permute q and key weights back (skip biases) to match original RoPE implementation
+            if any(name in source_pattern for name in self.permute_layer_names) and tensors.ndim == 2:
+                tensors = self._apply_permutation(tensors)
+            all_tensors.append(tensors)
+
+        return {target_pattern: torch.cat(all_tensors, dim=self.dim)}
+
+    def get_target_pattern(self, target_patterns: list[str]) -> str:
+        # Here we always return the target pattern
+        if len(target_patterns) > 1:
+            raise ValueError("Undefined Operation encountered!")
+        return target_patterns[0]
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return UnfuseAndPermuteForRope(self.dim, self.permute_layer_names)
+
 
 class UnfuseAndPermuteForRope(ConversionOps):
     """
@@ -424,10 +480,6 @@ class UnfuseAndPermuteForRope(ConversionOps):
         tensor = tensor.transpose(1, 2).reshape(dim1, dim2)
         return tensor
 
-    def chunk_qkv(self, tensors: torch.Tensor, split_sizes: list[int]) -> list[torch.Tensor]:
-        chunks = torch.chunk(tensors, split_sizes, dim=self.dim)
-        return chunks
-
     @torch.no_grad
     def convert(
         self,
@@ -441,7 +493,7 @@ class UnfuseAndPermuteForRope(ConversionOps):
 
         tensor = next(iter(input_dict.values()))[0]
         targets = self.get_target_patterns(input_dict, target_patterns)
-        chunks = self.chunk_qkv(tensor, len(targets))
+        chunks = chunks = torch.chunk(tensor, len(targets), dim=self.dim)
 
         output: dict[str, torch.Tensor] = dict(zip(targets, chunks))
         for key, value in output.items():
@@ -458,7 +510,7 @@ class UnfuseAndPermuteForRope(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return Concatenate(self.dim)
+        return FuseAndPermuteForRope(self.dim, self.permute_layer_names)
 
 
 class ErnieFuseAndSplitTextVisionExperts(ConversionOps):

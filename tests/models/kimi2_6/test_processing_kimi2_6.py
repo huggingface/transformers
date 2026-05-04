@@ -17,17 +17,15 @@ import unittest
 
 import numpy as np
 
+from transformers import Kimi2_6Config
 from transformers.testing_utils import require_av, require_torch, require_torchvision, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_vision_available():
-    from transformers import Kimi26Processor
-
-    if is_torchvision_available():
-        pass
+    from transformers import Kimi2_6Processor
 
 if is_torch_available():
     import torch
@@ -37,16 +35,17 @@ if is_torch_available():
 @require_torch
 @require_torchvision
 class Kimi26ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
-    processor_class = Kimi26Processor
-    model_id = "Qwen/Qwen2-VL-7B-Instruct"
+    processor_class = Kimi2_6Processor
+    model_id = "moonshotai/Kimi-K2.6"
 
     @classmethod
     def _setup_from_pretrained(cls, model_id, **kwargs):
-        return super()._setup_from_pretrained(model_id, patch_size=4, max_pixels=56 * 56, min_pixels=28 * 28, **kwargs)
+        return super()._setup_from_pretrained(model_id, patch_size=4, trust_remote_code=False, config=Kimi2_6Config(), **kwargs)
 
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
+        cls.video_token = processor.video_token
 
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
@@ -289,29 +288,3 @@ class Kimi26ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs[self.images_input_name].shape[0], 100)
         inputs = processor(text=input_str, images=image_input, max_pixels=56 * 56 * 4, return_tensors="pt")
         self.assertEqual(inputs[self.images_input_name].shape[0], 612)
-
-    def test_special_mm_token_truncation(self):
-        """Tests that special vision tokens do not get truncated when `truncation=True` is set."""
-
-        processor = self.get_processor()
-
-        input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
-        image_input = self.prepare_image_inputs(batch_size=2)
-
-        _ = processor(
-            text=input_str,
-            images=image_input,
-            return_tensors="pt",
-            truncation=None,
-            padding=True,
-        )
-
-        with self.assertRaises(ValueError):
-            _ = processor(
-                text=input_str,
-                images=image_input,
-                return_tensors="pt",
-                truncation=True,
-                padding=True,
-                max_length=20,
-            )

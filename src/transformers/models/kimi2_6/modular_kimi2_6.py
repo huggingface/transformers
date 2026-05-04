@@ -19,6 +19,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BaseModelOutputWithPooling
@@ -126,7 +127,7 @@ class Kimi2_6VisionPositionEmbeddings(nn.Module):
         self.num_frames = config.pos_emb_time
 
         self.position_embeddings = nn.Parameter(
-            torch.empty(config.pos_emb_height, config.pos_emb_width, config.hidden_size)
+            torch.randn(config.pos_emb_height, config.pos_emb_width, config.hidden_size)
         )
         time_position_embeddings = self.get_1d_sincos_pos_embed()
         self.register_buffer("time_position_embeddings", time_position_embeddings, persistent=False)
@@ -319,6 +320,10 @@ class Kimi2_6PreTrainedModel(Qwen2VLPreTrainedModel):
 
     def _init_weights(self, module):
         PreTrainedModel._init_weights(module)
+        if isinstance(module, Kimi2_6VisionPositionEmbeddings):
+            buffer_value = module.get_1d_sincos_pos_embed()
+            init.copy_(module.time_position_embeddings, buffer_value)
+            init.trunc_normal_(module.position_embeddings, mean=0.0)
 
 
 class Kimi2_6VisionModel(Kimi2_6PreTrainedModel):
@@ -385,6 +390,7 @@ class Kimi2_6VisionModel(Kimi2_6PreTrainedModel):
         self,
         pixel_values: torch.Tensor,
         grid_thw: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         r"""
         grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
@@ -410,6 +416,7 @@ class Kimi2_6VisionModel(Kimi2_6PreTrainedModel):
                 cu_seqlens=cu_seqlens,
                 max_seqlen=max_seqlen,
                 position_embeddings=position_embeddings,
+                **kwargs,
             )
 
         hidden_states = self.final_layernorm(hidden_states)

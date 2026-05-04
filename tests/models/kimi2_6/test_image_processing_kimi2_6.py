@@ -13,16 +13,12 @@
 # limitations under the License.
 
 import io
-import itertools
-import json
-import tempfile
 import unittest
 
 import httpx
 import numpy as np
 
 from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
-from transformers.models.qwen2_vl.image_processing_qwen2_vl import smart_resize
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -45,17 +41,17 @@ class Kimi26ImageProcessingTester:
         num_frames=10,
         min_resolution=56,
         max_resolution=1024,
-        min_pixels=56 * 56,
-        max_pixels=28 * 28 * 1280,
         do_normalize=True,
         image_mean=OPENAI_CLIP_MEAN,
         image_std=OPENAI_CLIP_STD,
         do_resize=True,
+        size=None,
         patch_size=14,
-        temporal_patch_size=2,
         merge_size=2,
+        max_patches=36,
         do_convert_rgb=True,
     ):
+        self.size = size if size is not None else {"max_height": 512, "max_width": 512}
         self.parent = parent
         self.batch_size = batch_size
         self.min_resolution = min_resolution
@@ -64,10 +60,8 @@ class Kimi26ImageProcessingTester:
         self.num_frames = num_frames
         self.image_mean = OPENAI_CLIP_MEAN
         self.image_std = OPENAI_CLIP_STD
-        self.min_pixels = min_pixels
-        self.max_pixels = max_pixels
+        self.max_patches = max_patches
         self.patch_size = patch_size
-        self.temporal_patch_size = temporal_patch_size
         self.merge_size = merge_size
         self.do_resize = do_resize
         self.do_normalize = do_normalize
@@ -80,10 +74,9 @@ class Kimi26ImageProcessingTester:
             "do_resize": self.do_resize,
             "image_mean": self.image_mean,
             "image_std": self.image_std,
-            "min_pixels": self.min_pixels,
-            "max_pixels": self.max_pixels,
+            "size": self.size,
+            "max_patches": self.max_patches,
             "patch_size": self.patch_size,
-            "temporal_patch_size": self.temporal_patch_size,
             "merge_size": self.merge_size,
         }
 
@@ -132,21 +125,9 @@ class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
             self.assertTrue(hasattr(image_processing, "patch_size"))
-            self.assertTrue(hasattr(image_processing, "temporal_patch_size"))
+            self.assertTrue(hasattr(image_processing, "max_patches"))
             self.assertTrue(hasattr(image_processing, "merge_size"))
-
-    def test_image_processor_to_json_string(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class(**self.image_processor_dict)
-            obj = json.loads(image_processor.to_json_string())
-            for key, value in self.image_processor_dict.items():
-                if key not in ["min_pixels", "max_pixels"]:
-                    self.assertEqual(obj[key], value)
-
-    def test_select_best_resolution(self):
-        # Test with a final resize resolution
-        best_resolution = smart_resize(561, 278, factor=28)
-        self.assertEqual(best_resolution, (560, 280))
+            self.assertTrue(hasattr(image_processing, "size"))
 
     def test_call_pil(self):
         for image_processing_class in self.image_processing_classes.values():
@@ -161,8 +142,8 @@ class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             process_out = image_processing(image_inputs[0], return_tensors="pt")
             encoded_images = process_out.pixel_values
             image_grid_thws = process_out.image_grid_thw
-            expected_output_image_shape = (4900, 1176)
-            expected_image_grid_thws = torch.Tensor([[1, 70, 70]])
+            expected_output_image_shape = (36, 3, 14, 14)
+            expected_image_grid_thws = torch.Tensor([[1, 6, 6]])
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
             self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
@@ -170,8 +151,8 @@ class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             process_out = image_processing(image_inputs, return_tensors="pt")
             encoded_images = process_out.pixel_values
             image_grid_thws = process_out.image_grid_thw
-            expected_output_image_shape = (34300, 1176)
-            expected_image_grid_thws = torch.Tensor([[1, 70, 70]] * 7)
+            expected_output_image_shape = (252, 3, 14, 14)
+            expected_image_grid_thws = torch.Tensor([[1, 6, 6]] * self.image_processor_tester.batch_size)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
             self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
@@ -188,8 +169,8 @@ class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             process_out = image_processing(image_inputs[0], return_tensors="pt")
             encoded_images = process_out.pixel_values
             image_grid_thws = process_out.image_grid_thw
-            expected_output_image_shape = (4900, 1176)
-            expected_image_grid_thws = torch.Tensor([[1, 70, 70]])
+            expected_output_image_shape = (36, 3, 14, 14)
+            expected_image_grid_thws = torch.Tensor([[1, 6, 6]])
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
             self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
@@ -197,8 +178,8 @@ class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             process_out = image_processing(image_inputs, return_tensors="pt")
             encoded_images = process_out.pixel_values
             image_grid_thws = process_out.image_grid_thw
-            expected_output_image_shape = (34300, 1176)
-            expected_image_grid_thws = torch.Tensor([[1, 70, 70]] * 7)
+            expected_output_image_shape = (252, 3, 14, 14)
+            expected_image_grid_thws = torch.Tensor([[1, 6, 6]] * self.image_processor_tester.batch_size)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
             self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
@@ -216,8 +197,8 @@ class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             process_out = image_processing(image_inputs[0], return_tensors="pt")
             encoded_images = process_out.pixel_values
             image_grid_thws = process_out.image_grid_thw
-            expected_output_image_shape = (4900, 1176)
-            expected_image_grid_thws = torch.Tensor([[1, 70, 70]])
+            expected_output_image_shape = (36, 3, 14, 14)
+            expected_image_grid_thws = torch.Tensor([[1, 6, 6]])
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
             self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
@@ -225,8 +206,8 @@ class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             process_out = image_processing(image_inputs, return_tensors="pt")
             encoded_images = process_out.pixel_values
             image_grid_thws = process_out.image_grid_thw
-            expected_output_image_shape = (34300, 1176)
-            expected_image_grid_thws = torch.Tensor([[1, 70, 70]] * 7)
+            expected_output_image_shape = (252, 3, 14, 14)
+            expected_image_grid_thws = torch.Tensor([[1, 6, 6]] * self.image_processor_tester.batch_size)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
             self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
@@ -243,8 +224,8 @@ class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             process_out = image_processing(image_inputs, return_tensors="pt")
             encoded_images = process_out.pixel_values
             image_grid_thws = process_out.image_grid_thw
-            expected_output_image_shape = (34300, 1176)
-            expected_image_grid_thws = torch.Tensor([[1, 70, 70]] * 7)
+            expected_output_image_shape = (252, 3, 14, 14)
+            expected_image_grid_thws = torch.Tensor([[1, 6, 6]] * self.image_processor_tester.batch_size)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
             self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
@@ -253,8 +234,8 @@ class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             process_out = image_processing(image_inputs_nested, return_tensors="pt")
             encoded_images_nested = process_out.pixel_values
             image_grid_thws_nested = process_out.image_grid_thw
-            expected_output_image_shape = (34300, 1176)
-            expected_image_grid_thws = torch.Tensor([[1, 70, 70]] * 7)
+            expected_output_image_shape = (252, 3, 14, 14)
+            expected_image_grid_thws = torch.Tensor([[1, 6, 6]] * self.image_processor_tester.batch_size)
             self.assertEqual(tuple(encoded_images_nested.shape), expected_output_image_shape)
             self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
@@ -262,38 +243,30 @@ class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue((encoded_images_nested == encoded_images).all())
             self.assertTrue((image_grid_thws_nested == expected_image_grid_thws).all())
 
-    def test_custom_image_size(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                image_processing.save_pretrained(tmpdirname)
-                image_processor_loaded = image_processing_class.from_pretrained(
-                    tmpdirname, max_pixels=56 * 56, min_pixels=28 * 28
-                )
-
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
-            process_out = image_processor_loaded(image_inputs, return_tensors="pt")
-            expected_output_video_shape = [112, 1176]
-            self.assertListEqual(list(process_out.pixel_values.shape), expected_output_video_shape)
-
     def test_custom_pixels(self):
-        pixel_choices = frozenset(itertools.product((100, 150, 200, 20000), (100, 150, 200, 20000)))
+        "Test different values for min and max pixels when resizing"
+        pixel_choices = frozenset((100, 150, 200, 20000))
         for image_processing_class in self.image_processing_classes.values():
             image_processor_dict = self.image_processor_dict.copy()
-            for a_pixels, b_pixels in pixel_choices:
-                image_processor_dict["min_pixels"] = min(a_pixels, b_pixels)
-                image_processor_dict["max_pixels"] = max(a_pixels, b_pixels)
+            for size in pixel_choices:
+                image_processor_dict["size"]["max_height"] = size
+                image_processor_dict["size"]["max_width"] = size
                 image_processor = image_processing_class(**image_processor_dict)
                 image_inputs = self.image_processor_tester.prepare_image_inputs()
                 # Just checking that it doesn't raise an error
                 image_processor(image_inputs, return_tensors="pt")
 
-    @require_vision
-    @require_torch
-    def test_backends_equivalence(self):
-        if len(self.image_processing_classes) < 2:
-            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
+        # Can't assign different sizes for H and W
+        with self.assertRaises(ValueError):
+            image_processor_dict = self.image_processor_dict.copy()
+            image_processor_dict["size"]["max_height"] = 100
+            image_processor_dict["size"]["max_width"] = 200
+            image_processor = image_processing_class(**image_processor_dict)
+            image_inputs = self.image_processor_tester.prepare_image_inputs()
+            image_processor(image_inputs, return_tensors="pt")
 
+    # Override to test additional outputs for equivalence such as `image_grid_thw`
+    def test_backends_equivalence(self):
         dummy_image = Image.open(
             io.BytesIO(
                 httpx.get("http://images.cocodataset.org/val2017/000000039769.jpg", follow_redirects=True).content
@@ -317,12 +290,7 @@ class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 reference_encoding.image_grid_thw.float(), encodings[backend_name].image_grid_thw.float()
             )
 
-    @require_vision
-    @require_torch
     def test_backends_equivalence_batched(self):
-        if len(self.image_processing_classes) < 2:
-            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
-
         if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
             self.skipTest(
                 reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
@@ -346,17 +314,3 @@ class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self._assert_tensors_equivalence(
                 reference_encoding.image_grid_thw.float(), encodings[backend_name].image_grid_thw.float()
             )
-
-    def test_get_num_patches_without_images(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            num_patches = image_processing.get_number_of_image_patches(height=100, width=100, images_kwargs={})
-            self.assertEqual(num_patches, 64)
-
-            num_patches = image_processing.get_number_of_image_patches(height=200, width=50, images_kwargs={})
-            self.assertEqual(num_patches, 56)
-
-            num_patches = image_processing.get_number_of_image_patches(
-                height=100, width=100, images_kwargs={"patch_size": 28}
-            )
-            self.assertEqual(num_patches, 16)
