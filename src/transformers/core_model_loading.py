@@ -519,6 +519,8 @@ class WeightTransform:
     source_patterns: str | list[str] = field(init=True)
     target_patterns: str | list[str] = field(init=True)
     compiled_sources: re.Pattern = field(init=False)
+    _original_source_patterns: list[str] = field(init=False)
+    _original_target_patterns: list[str] = field(init=False)
 
     quantization_operation: ConversionOps | None = None
 
@@ -541,10 +543,13 @@ class WeightTransform:
         # when instantiating the reverse mapping (i.e. the targets become sources, and sources become targets)
         # The issues lie in the sources usually, so here we need to check the targets for the reversed mapping
 
+        # We need to copy the exact original patterns to later reverse (before processing may change them)
+        self._original_source_patterns = self.source_patterns.copy()
+        self._original_target_patterns = self.target_patterns.copy()
+
         # Process target_patterns: detect capturing groups and replace with \1
         # Store the original capturing group patterns for reverse mapping
         target_capturing_groups: list[str] = []
-        unprocess_targets = self.target_patterns.copy()
         for i, pattern in enumerate(self.target_patterns):
             self.target_patterns[i], captured_group = process_target_pattern(pattern)
             if captured_group is not None:
@@ -573,7 +578,7 @@ class WeightTransform:
                 pattern = pattern.replace(r"\1", unique_capturing_group, 1)
             # Potentially process a bit more for consistency - only if they are consistent pairs, i.e. the length is the same
             if len(self.source_patterns) == len(self.target_patterns):
-                pattern = process_source_pattern(pattern, unprocess_targets[i])
+                pattern = process_source_pattern(pattern, self._original_target_patterns[i])
             self.source_patterns[i] = pattern
 
         # Construct the regex we will use to rename keys from the sources to the targets
@@ -627,7 +632,9 @@ class WeightTransform:
             kwargs["operations"] = [op.reverse_op for op in self.operations[::-1]]
 
         reverse_transform = self.__class__(
-            source_patterns=self.target_patterns, target_patterns=self.source_patterns, **kwargs
+            source_patterns=self._original_target_patterns,
+            target_patterns=self._original_source_patterns,
+            **kwargs,
         )
 
         return reverse_transform
@@ -838,7 +845,7 @@ class DtensorShardOperation:
             if not placements:
                 return source[...].to(device=device, dtype=dtype)
             has_strided = any(not p.is_shard() for _, p in placements)
-            intervals: list[list[tuple[int, int]]] = [[(0, size)] for size in source_shape]
+            intervals = [[(0, size)] for size in source_shape]
             for mesh_dim, placement in placements:
                 sub_mesh = self._get_sub_mesh(mesh_dim)
                 rank, world_size = sub_mesh.get_local_rank(), sub_mesh.size()
