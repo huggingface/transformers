@@ -283,6 +283,7 @@ IGNORE_NON_TESTED = (
         "Gemma4VisionModel",  # Building part of a bigger model, tested implicitly
         "Gemma4AudioModel",  # Building part of a bigger model, tested implicitly
         "Sam3LiteTextTextModel",  # Building part of a bigger model, tested implicitly through Sam3LiteTextModel
+        "Exaone4_5_VisionModel",  # Building part of a bigger model
     ]
 )
 
