@@ -14,6 +14,7 @@
 
 import argparse
 import ast
+import difflib
 import glob
 import os
 import subprocess
@@ -269,9 +270,19 @@ def main(overwrite: bool):
 
     if old_content != new_content:
         if not overwrite:
+            diff = "".join(
+                difflib.unified_diff(
+                    old_content.splitlines(keepends=True),
+                    new_content.splitlines(keepends=True),
+                    fromfile=f"{filename} (on disk)",
+                    tofile=f"{filename} (regenerated)",
+                    n=3,
+                )
+            )
             raise Exception(
-                "Generated auto-mapping is not consistent with the contents of `models/auto/auto_mappings.py`:\n"
-                + "\nRun `make fix-repo` or `python utils/check_auto.py --fix_and_overwrite` to fix them."
+                "Generated auto-mapping is not consistent with the contents of `models/auto/auto_mappings.py`.\n"
+                "Run `make fix-repo` or `python utils/check_auto.py --fix_and_overwrite` to fix them.\n\n"
+                f"Diff (on disk → regenerated):\n{diff}"
             )
         else:
             with open(filename, "w") as f:
