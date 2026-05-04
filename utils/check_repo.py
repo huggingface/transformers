@@ -56,7 +56,7 @@ CHECKER_CONFIG = {
     "label": "Repository structure",
     # Approximate: the checker also introspects the live transformers module at runtime
     # (e.g. dir(transformers.models), CONFIG_MAPPING_NAMES) and walks tests/ broadly.
-    "file_globs": [
+    "cache_globs": [
         "src/transformers/models/**/*.py",
         "src/transformers/models/auto/*.py",
         "src/transformers/**/__init__.py",

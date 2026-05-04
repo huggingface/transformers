@@ -25,7 +25,7 @@ CHECKER_CONFIG = {
     "label": "Config attributes",
     # Approximate: iterates CONFIG_MAPPING at runtime and also reads modeling_*.py files
     # in each config's directory via os.listdir(). Deprecated models are skipped.
-    "file_globs": ["src/transformers/models/**/configuration_*.py", "src/transformers/models/**/modeling_*.py"],
+    "cache_globs": ["src/transformers/models/**/configuration_*.py", "src/transformers/models/**/modeling_*.py"],
     "check_args": [],
     "fix_args": None,
 }

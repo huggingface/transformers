@@ -38,8 +38,8 @@ CHECKER_CONFIG = {
     "name": "modeling_rules_doc",
     "label": "Modeling rules documentation",
     # Depends on utils/rules.toml plus the installed `mlinter` package output,
-    # which cannot be fully expressed as repo file globs for the checker cache.
-    "file_globs": None,
+    # which cannot be fully expressed as repo cache globs for the checker cache.
+    "cache_globs": None,
     "check_args": ["--rules-toml", "utils/rules.toml"],
     "fix_args": ["--rules-toml", "utils/rules.toml", "--fix_and_overwrite"],
 }
