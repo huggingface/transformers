@@ -926,7 +926,7 @@ class Fp8Quantize(ConversionOps):
         return result
 
     @property
-    def reverse_op(self) -> "ConversionOps":
+    def reverse_op(self) -> ConversionOps:
         return Fp8Dequantize(self.hf_quantizer)
 
 

@@ -122,7 +122,9 @@ def _sonicmoe_wrapper(
     """
     sonicmoe = _load_sonicmoe_kernel()
     activation_type_enum = sonicmoe.activation_type_enum
-    activation_type = getattr(activation_type_enum, ACT_MAP.get(act_name, "swiglu").upper(), activation_type_enum.SWIGLU)
+    activation_type = getattr(
+        activation_type_enum, ACT_MAP.get(act_name, "swiglu").upper(), activation_type_enum.SWIGLU
+    )
     output, _ = sonicmoe.moe_general_routing_inputs(
         hidden_states,
         router_scores,
