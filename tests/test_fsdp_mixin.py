@@ -49,9 +49,10 @@ if is_torch_available():
     from torch.distributed.tensor import DTensor
     from torch.nn.parallel import DistributedDataParallel as DDP
 
+    from transformers.distributed import DistributedConfig
     from transformers.integrations.fsdp import (
         _find_final_norm,
-        apply_fsdp2,
+        apply_fully_shard_data_parallel,
         get_transformer_block_classes,
         initialize_fsdp,
     )
@@ -373,12 +374,11 @@ def train_fsdp2(
 ):
     # -- Phase 1: Pre-checkpoint run -- train only the first `checkpoint_step` steps, then save
     _set_determinism(SEED)
-    _, device_mesh, _ = initialize_fsdp(fsdp_plan=fsdp_plan)
+    distributed_config = DistributedConfig(fsdp_size=dist.get_world_size(), fsdp_plan=fsdp_plan)
     pre_ckpt_model = AutoModelForCausalLM.from_pretrained(
         init_model_dir,
         torch_dtype=dtype,
-        fsdp_plan=fsdp_plan,
-        device_mesh=device_mesh,
+        distributed_config=distributed_config,
         attn_implementation="eager",
     )
     pre_ckpt_model.train()
@@ -415,8 +415,7 @@ def train_fsdp2(
         resumed_model = AutoModelForCausalLM.from_pretrained(
             model_dir,
             torch_dtype=dtype,
-            fsdp_plan=fsdp_plan,
-            device_mesh=device_mesh,
+            distributed_config=distributed_config,
             attn_implementation="eager",
         )
         resumed_model.train()
@@ -461,16 +460,14 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
 
     batches = _build_repeated_training_batches(config, device, 3)
 
-    auto_plan = {"mode": "auto"}
+    distributed_config = DistributedConfig(fsdp_size=dist.get_world_size(), fsdp_plan="auto")
 
     init_tmpdir, init_tmpdir_obj = _save_init_pretrained(rank, config, torch.float32)
     try:
-        _, device_mesh, _ = initialize_fsdp(fsdp_plan=auto_plan)
         _set_determinism(SEED)
         model = AutoModelForCausalLM.from_pretrained(
             init_tmpdir,
-            fsdp_plan=auto_plan,
-            device_mesh=device_mesh,
+            distributed_config=distributed_config,
             attn_implementation="eager",
         )
         dist.barrier()
@@ -495,8 +492,7 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
 
         new_model = AutoModelForCausalLM.from_pretrained(
             tmpdir,
-            fsdp_plan=auto_plan,
-            device_mesh=device_mesh,
+            distributed_config=distributed_config,
             attn_implementation="eager",
         )
         dist.barrier()
@@ -522,7 +518,7 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
 
 def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_word_embeddings):
     """
-    Verify that apply_fsdp2(fsdp_plan={"mode": "auto"}) wraps exactly the right modules.
+    Verify that apply_fully_shard_data_parallel(fsdp_plan={"mode": "auto"}) wraps exactly the right modules.
 
     Expected FSDP targets:
     UNTIED                              TIED
@@ -570,7 +566,7 @@ def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_wor
     if not weights_tied:
         expected_targets |= {output_name}
 
-    model = apply_fsdp2(model, device_mesh, fsdp_plan=auto_plan)
+    model = apply_fully_shard_data_parallel(model, device_mesh, fsdp_plan=auto_plan)
 
     actual_targets = {name for name, module in model.named_modules() if type(module).__name__.startswith("FSDP")}
 

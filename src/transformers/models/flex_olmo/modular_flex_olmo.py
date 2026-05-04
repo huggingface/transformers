@@ -60,13 +60,10 @@ class FlexOlmoConfig(PreTrainedConfig):
     attribute_map = {"num_local_experts": "num_experts"}
     default_theta = 500000.0
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.k_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.v_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.o_proj": "rowwise_split_input",  # input is replicated due to the added norm on q and k
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.self_attn.q_proj": "colwise_allgather",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.k_proj": "colwise_allgather",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.v_proj": "colwise_allgather",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.o_proj": "vocab_allreduce",  # input is replicated due to the added norm on q and k
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

@@ -49,9 +49,23 @@ class PhiConfig(PreTrainedConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.dense": "rowwise",
+        "layers.*.self_attn.dense": "rowwise_allreduce",
         "layers.*.mlp.fc1": "colwise",
-        "layers.*.mlp.fc2": "rowwise",
+        "layers.*.mlp.fc2": "rowwise_allreduce",
+    }
+    base_model_sp_plan = {
+        "embed_tokens": "vocab_reduce_scatter",
+        "layers.*.input_layernorm": "activation",
+        "layers.*.self_attn": "module_allgather_hidden_states",
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.dense": "rowwise_reduce_scatter",
+        "layers.*.post_attention_layernorm": "activation",
+        "layers.*.mlp": "module_allgather",
+        "layers.*.mlp.fc1": "colwise",
+        "layers.*.mlp.fc2": "rowwise_reduce_scatter",
+        "norm": "activation",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -66,8 +80,8 @@ class PhiConfig(PreTrainedConfig):
     num_hidden_layers: int = 24
     num_attention_heads: int = 32
     num_key_value_heads: int | None = None
-    resid_pdrop: float | int = 0.0
-    embd_pdrop: float | int = 0.0
+    resid_pdrop: float = 0.0
+    embd_pdrop: float = 0.0
     attention_dropout: float | int | None = 0.0
     hidden_act: str = "gelu_new"
     max_position_embeddings: int = 2048

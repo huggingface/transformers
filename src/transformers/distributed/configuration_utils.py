@@ -12,99 +12,69 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import json
 import os
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import asdict, dataclass
+
+import torch
 
 
 @dataclass
 class DistributedConfig:
     """
-    Base class for distributed configs
+    Configuration for native distributed training (FSDP2 + TP).
+
+    Args:
+        tp_size (`int`, *optional*):
+            Number of devices for tensor parallelism. If `None` and `fsdp_size` is set, defaults to 1.
+        tp_plan (`str` or `dict`, *optional*):
+            Tensor parallel sharding plan. Use `"auto"` for the model's default plan.
+        fsdp_size (`int`, *optional*):
+            Number of devices for FSDP (data parallelism). If `None` and `tp_size` is set, defaults to 1.
+        fsdp_plan (`str` or `dict`, *optional*):
+            FSDP wrapping plan. Use `"auto"` to wrap each transformer layer + root.
     """
 
-    enable_expert_parallel: bool = False
-    # TODO: add tp_plan, pp_plan, device_mesh etc..
+    tp_size: int | None = None
+    tp_plan: str | dict[str, str] | None = None
+    enable_sequence_parallel: bool = False
+    fsdp_size: int | None = None
+    fsdp_plan: str | dict | None = None
+
+    def __post_init__(self):
+        if self.tp_size is None and self.fsdp_size is None:
+            return
+
+        if self.tp_size is None:
+            self.tp_size = 1
+        if self.fsdp_size is None:
+            self.fsdp_size = 1
+        if self.tp_plan is None:
+            self.tp_plan = "auto"
+        if self.fsdp_plan is None:
+            self.fsdp_plan = "auto"
+
+        if torch.distributed.is_available() and torch.distributed.is_initialized():
+            world_size = torch.distributed.get_world_size()
+            assert self.tp_size * self.fsdp_size == world_size, (
+                f"tp_size ({self.tp_size}) * fsdp_size ({self.fsdp_size}) must be equal to world_size ({world_size})"
+            )
 
     @classmethod
-    def from_dict(cls, config_dict, **kwargs):
-        """
-        Constructs a DistributedConfig instance from a dictionary of parameters.
-        Args:
-            config_dict (Dict[str, Any]): Dictionary containing configuration parameters.
-            **kwargs: Additional keyword arguments to override dictionary values.
-        Returns:
-            DistributedConfig: Instance of DistributedConfig constructed from the dictionary.
-        """
-        config = cls(**config_dict)
-        to_remove = []
-        for key, value in kwargs.items():
-            if hasattr(config, key):
-                setattr(config, key, value)
-                to_remove.append(key)
-        for key in to_remove:
-            kwargs.pop(key, None)
-        return config
+    def from_dict(cls, config_dict: dict, **kwargs) -> "DistributedConfig":
+        merged = {**config_dict, **kwargs}
+        valid_keys = {f.name for f in cls.__dataclass_fields__.values()}
+        return cls(**{k: v for k, v in merged.items() if k in valid_keys})
 
-    # Copied from transformers.utils.quantization_config.QuantizationConfigMixin.to_json_file
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    def to_json_string(self) -> str:
+        return json.dumps(self.to_dict(), indent=2) + "\n"
+
     def to_json_file(self, json_file_path: str | os.PathLike):
-        """
-        Save this instance to a JSON file.
-        Args:
-            json_file_path (`str` or `os.PathLike`):
-                Path to the JSON file in which this configuration instance's parameters will be saved.
-            use_diff (`bool`, *optional*, defaults to `True`):
-                If set to `True`, only the difference between the config instance and the default
-                `QuantizationConfig()` is serialized to JSON file.
-        """
-        with open(json_file_path, "w", encoding="utf-8") as writer:
-            config_dict = self.to_dict()
-            json_string = json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
+        with open(json_file_path, "w", encoding="utf-8") as f:
+            f.write(self.to_json_string())
 
-            writer.write(json_string)
-
-    def to_dict(self) -> dict[str, Any]:
-        """
-        Serializes this instance to a Python dictionary. Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
-        """
-        return copy.deepcopy(self.__dict__)
-
-    # Copied from transformers.utils.quantization_config.QuantizationConfigMixin.__iter__
-    def __iter__(self):
-        """allows `dict(obj)` for situations where obj may be a dict or QuantizationConfigMixin"""
-        yield from copy.deepcopy(self.__dict__).items()
-
-    # Copied from transformers.utils.quantization_config.QuantizationConfigMixin.__repr__
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string()}"
-
-    def to_json_string(self):
-        """
-        Serializes this instance to a JSON formatted string.
-        Returns:
-            str: JSON formatted string representing the configuration instance.
-        """
-        return json.dumps(self.__dict__, indent=2) + "\n"
-
-    def update(self, **kwargs):
-        """
-        Updates attributes of this class instance with attributes from `kwargs` if they match existing attributes,
-        returning all the unused kwargs.
-        Args:
-            kwargs (`Dict[str, Any]`):
-                Dictionary of attributes to tentatively update this class.
-        Returns:
-            `Dict[str, Any]`: Dictionary containing all the key-value pairs that were not used to update the instance.
-        """
-        to_remove = []
-        for key, value in kwargs.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-                to_remove.append(key)
-
-        # Remove all the attributes that were updated, without modifying the input dict
-        unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
-        return unused_kwargs

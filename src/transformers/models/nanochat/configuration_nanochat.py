@@ -46,10 +46,11 @@ class NanoChatConfig(PretrainedConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.o_proj": "rowwise_allreduce",
         "layers.*.mlp.fc1": "colwise",
-        "layers.*.mlp.fc2": "rowwise",
+        "layers.*.mlp.fc2": "rowwise_allreduce",
     }
+    base_model_sp_plan = None
 
     vocab_size: int = 50304
     hidden_size: int = 768

@@ -39,12 +39,12 @@ else:
     torch.cuda.set_device(0)
 
 configs = {
-    "single_gpu": None,
-    "fsdp": DistributedConfig(fsdp_size=2, fsdp_plan="auto"),
-    "tp": DistributedConfig(tp_size=2, tp_plan="auto"),
-    "tp_sp": DistributedConfig(tp_size=2, tp_plan="auto", enable_sequence_parallel=True),
-    "tp_fsdp": DistributedConfig(tp_size=2, tp_plan="auto", fsdp_size=2, fsdp_plan="auto"),
-    "tp_sp_fsdp": DistributedConfig(tp_size=2, tp_plan="auto", fsdp_size=2, fsdp_plan="auto", enable_sequence_parallel=True),
+    "single_gpu": lambda: None,
+    "fsdp": lambda: DistributedConfig(fsdp_size=2, fsdp_plan="auto"),
+    "tp": lambda: DistributedConfig(tp_size=2, tp_plan="auto"),
+    "tp_sp": lambda: DistributedConfig(tp_size=2, tp_plan="auto", enable_sequence_parallel=True),
+    "tp_fsdp": lambda: DistributedConfig(tp_size=2, tp_plan="auto", fsdp_size=2, fsdp_plan="auto"),
+    "tp_sp_fsdp": lambda: DistributedConfig(tp_size=2, tp_plan="auto", fsdp_size=2, fsdp_plan="auto", enable_sequence_parallel=True),
 }
 
 tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -64,7 +64,7 @@ def compute_loss(model):
     # Pad sequence length to a multiple of tp_size so DTensor Shard(1) splits evenly
     # across ranks in SP mode. Always pad (even for non-TP modes) so that all modes
     # compute on the same input and losses are directly comparable.
-    max_tp = max((c.tp_size if c is not None else 1) for c in configs.values())
+    max_tp = 2  # all TP configs use tp_size=2
     seq_len = input_ids.shape[1]
     if seq_len % max_tp != 0:
         pad_len = max_tp - (seq_len % max_tp)
@@ -88,7 +88,7 @@ def compute_loss(model):
 
 
 # --- Step 1: Load original model and compute loss ---
-model = AutoModelForCausalLM.from_pretrained(model_id, distributed_config=configs[args.mode], dtype=torch.float32)
+model = AutoModelForCausalLM.from_pretrained(model_id, distributed_config=configs[args.mode](), dtype=torch.float32)
 if args.mode == "single_gpu":
     model = model.to("cuda:0")
 
@@ -116,7 +116,7 @@ del model
 torch.cuda.empty_cache()
 
 # --- Step 3: Reload from saved checkpoint and compute loss ---
-model2 = AutoModelForCausalLM.from_pretrained(save_dir, distributed_config=configs[args.mode], dtype=torch.float32)
+model2 = AutoModelForCausalLM.from_pretrained(save_dir, distributed_config=configs[args.mode](), dtype=torch.float32)
 if args.mode == "single_gpu":
     model2 = model2.to("cuda:0")
 

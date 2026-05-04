@@ -59,6 +59,7 @@ from transformers import (
     is_torch_available,
     logging,
 )
+from transformers.distributed import DistributedConfig
 from transformers.modeling_flash_attention_utils import is_flash_attn_available
 from transformers.models.mistral.modeling_mistral import MistralModel
 from transformers.testing_utils import (
@@ -430,6 +431,42 @@ class ModelUtilsTest(TestCasePlus):
         mock_world_size.assert_not_called()
         self.assertIn(torch.device("cpu"), total_byte_count)
         self.assertGreater(total_byte_count[torch.device("cpu")], 0)
+
+    def test_model_from_pretrained_fsdp_distributes_before_loading(self):
+        model = GPT2LMHeadModel(GPT2Config(n_layer=1, n_head=2, n_embd=8, n_positions=8, n_ctx=8, vocab_size=32))
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            call_order = []
+
+            fake_mesh = mock.Mock()
+            fake_mesh.mesh_dim_names = ("fsdp",)
+            fake_mesh.ndim = 1
+
+            def fake_apply_fsdp(model, fsdp_mesh, fsdp_plan):
+                call_order.append("distribute")
+                self.assertIs(fsdp_mesh, fake_mesh)
+                self.assertEqual(fsdp_plan, "auto")
+                return model
+
+            def fake_load_pretrained_model(model, state_dict, checkpoint_files, load_config, expected_keys=None):
+                call_order.append("load")
+                self.assertIs(load_config.device_mesh, fake_mesh)
+                return mock.Mock(), None
+
+            with (
+                patch("transformers.modeling_utils.init_device_mesh", return_value=fake_mesh),
+                patch("transformers.modeling_utils.apply_fully_shard_data_parallel", side_effect=fake_apply_fsdp),
+                patch.object(GPT2LMHeadModel, "_load_pretrained_model", side_effect=fake_load_pretrained_model),
+                patch.object(
+                    GPT2LMHeadModel,
+                    "_finalize_model_loading",
+                    side_effect=lambda model, load_config, loading_info: loading_info,
+                ),
+            ):
+                GPT2LMHeadModel.from_pretrained(tmp_dir, distributed_config=DistributedConfig(fsdp_size=2))
+
+        self.assertEqual(call_order, ["distribute", "load"])
 
     def test_hub_retry(self):
         @hub_retry(max_attempts=2)

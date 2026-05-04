@@ -8,6 +8,11 @@ __pycache__/
 # C extensions
 *.so
 
+verify_ckpt*
+checkpoints*
+*result*
+debug*
+
 # tests and logs
 tests/fixtures/cached_*_text.txt
 logs/

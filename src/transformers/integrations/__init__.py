@@ -161,9 +161,12 @@ else:
     ]
 
 _import_structure["tensor_parallel"] = [
-    "shard_and_distribute_module",
     "ALL_PARALLEL_STYLES",
-    "translate_to_torch_parallel_style",
+    "apply_tensor_parallel",
+    "convert_strided_to_shard",
+    "gather_full_state_dict",
+    "restore_strided_from_shard",
+    "verify_tp_plan",
 ]
 try:
     if not is_torch_greater_or_equal("2.5"):
@@ -295,6 +298,14 @@ if TYPE_CHECKING:
     from .quanto import replace_with_quanto_layers
     from .sinq import SinqDeserialize, SinqQuantize
     from .spqr import replace_with_spqr_linear
+    from .tensor_parallel import (
+        ALL_PARALLEL_STYLES,
+        apply_tensor_parallel,
+        convert_strided_to_shard,
+        gather_full_state_dict,
+        restore_strided_from_shard,
+        verify_tp_plan,
+    )
     from .vptq import replace_with_vptq_linear
 
     try:
@@ -304,12 +315,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .executorch import TorchExportableModuleWithStaticCache, convert_and_export_with_cache
-
-    from .tensor_parallel import (
-        ALL_PARALLEL_STYLES,
-        shard_and_distribute_module,
-        translate_to_torch_parallel_style,
-    )
 
     try:
         if not is_torch_greater_or_equal("2.5"):

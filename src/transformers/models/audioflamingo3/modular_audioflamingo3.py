@@ -143,6 +143,7 @@ class AudioFlamingo3MultiModalProjector(VoxtralMultiModalProjector):
 )
 class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
     _tp_plan = None
+    _sp_plan = None
     _pp_plan = None
     _keep_in_fp32_modules_strict = None
 

@@ -181,10 +181,22 @@ class Phi4MultimodalConfig(PreTrainedConfig):
     model_type = "phi4_multimodal"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "layers.*.self_attn.qkv_proj": "colwise_gather_output",  # we need to replicate here due to the slicing of qkv
-        "layers.*.self_attn.o_proj": "rowwise_split_input",  # input is replicated due to the slicing of qkv
-        "layers.*.mlp.gate_up_proj": "colwise_gather_output",  # we need to replicate here due to the `chunk` operation
-        "layers.*.mlp.down_proj": "rowwise_split_input",  # input is replicated due to the `chunk` operation
+        "layers.*.self_attn.qkv_proj": "colwise_allgather",  # we need to replicate here due to the slicing of qkv
+        "layers.*.self_attn.o_proj": "vocab_allreduce",  # input is replicated due to the slicing of qkv
+        "layers.*.mlp.gate_up_proj": "colwise_allgather",  # we need to replicate here due to the `chunk` operation
+        "layers.*.mlp.down_proj": "vocab_allreduce",  # input is replicated due to the `chunk` operation
+    }
+    base_model_sp_plan = {
+        "embed_tokens": "vocab_reduce_scatter",
+        "layers.*.input_layernorm": "activation",
+        "layers.*.self_attn": "module_allgather_hidden_states",
+        "layers.*.self_attn.qkv_proj": "colwise_allgather",  # fused qkv needs full tensor for slicing
+        "layers.*.self_attn.o_proj": "vocab_reduce_scatter",
+        "layers.*.post_attention_layernorm": "activation",
+        "layers.*.mlp": "module_allgather",
+        "layers.*.mlp.gate_up_proj": "colwise_allgather",  # fused gate/up needs full tensor for chunk
+        "layers.*.mlp.down_proj": "vocab_reduce_scatter",
+        "norm": "activation",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

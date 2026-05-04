@@ -32,7 +32,6 @@ from typing import TYPE_CHECKING, Any
 import torch
 
 from .integrations.accelerate import get_device, offload_weight
-from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
 from .utils import is_env_variable_true
 from .utils.loading_report import LoadStateDictInfo
 from .utils.logging import get_logger, tqdm
@@ -41,9 +40,12 @@ from .utils.logging import get_logger, tqdm
 _torch_distributed_available = torch.distributed.is_available()
 
 if TYPE_CHECKING:
-    from .integrations.tensor_parallel import TensorParallelLayer
     from .modeling_utils import LoadStateDictConfig, PreTrainedModel
     from .quantizers import HfQuantizer
+elif _torch_distributed_available:
+    from torch.distributed.tensor import DTensor
+    from torch.distributed.tensor._utils import compute_local_shape_and_global_offset
+    from torch.distributed.tensor.placement_types import Shard
 
 
 logger = get_logger(__name__)
@@ -316,7 +318,7 @@ class PermuteForRope(ConversionOps):
 
     def _apply(self, tensor: torch.Tensor) -> torch.Tensor:
         dim1, dim2 = tensor.shape
-        n_heads = self.config.getattr("num_attention_heads", 1)
+        n_heads = getattr(self.config, "num_attention_heads", 1)
 
         tensor = tensor.view(n_heads, dim1 // n_heads // 2, 2, dim2)
         tensor = tensor.transpose(1, 2).reshape(dim1, dim2)
@@ -332,11 +334,10 @@ class PermuteForRope(ConversionOps):
         **kwargs,
     ) -> dict[str, list[torch.Tensor]]:
         self.config = config
-        output: dict[str, list[torch.Tensor]] = {}
+        output = {}
         for key, tensors in input_dict.items():
-            if len(tensors) != 1:
-                raise ValueError("PermuteForRope expects a single tensor per key.")
-            output[key] = [self._apply(tensors[0])]
+            tensor = tensors[0] if isinstance(tensors, list) else tensors
+            output[key] = self._apply(tensor)
         return output
 
 
@@ -519,15 +520,10 @@ class WeightTransform:
     target_patterns: str | list[str] = field(init=True)
     compiled_sources: re.Pattern = field(init=False)
 
-    distributed_operation: TensorParallelLayer | None = None
     quantization_operation: ConversionOps | None = None
 
     collected_tensors: dict[str, list[Future]] = field(default_factory=lambda: defaultdict(list), init=False)
     layer_targets: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set), init=False)
-
-    # Those are needed to be able to reverse correctly the transform, as the patterns may be processed
-    _original_source_patterns: list[str] = field(init=False)
-    _original_target_patterns: list[str] = field(init=False)
 
     def __setattr__(self, name, value):
         if name in ("source_patterns", "target_patterns"):
@@ -545,13 +541,10 @@ class WeightTransform:
         # when instantiating the reverse mapping (i.e. the targets become sources, and sources become targets)
         # The issues lie in the sources usually, so here we need to check the targets for the reversed mapping
 
-        # We need to copy the exact original patterns to later reverse (before processing may change them)
-        self._original_source_patterns = self.source_patterns.copy()
-        self._original_target_patterns = self.target_patterns.copy()
-
         # Process target_patterns: detect capturing groups and replace with \1
         # Store the original capturing group patterns for reverse mapping
         target_capturing_groups: list[str] = []
+        unprocess_targets = self.target_patterns.copy()
         for i, pattern in enumerate(self.target_patterns):
             self.target_patterns[i], captured_group = process_target_pattern(pattern)
             if captured_group is not None:
@@ -580,7 +573,7 @@ class WeightTransform:
                 pattern = pattern.replace(r"\1", unique_capturing_group, 1)
             # Potentially process a bit more for consistency - only if they are consistent pairs, i.e. the length is the same
             if len(self.source_patterns) == len(self.target_patterns):
-                pattern = process_source_pattern(pattern, self._original_target_patterns[i])
+                pattern = process_source_pattern(pattern, unprocess_targets[i])
             self.source_patterns[i] = pattern
 
         # Construct the regex we will use to rename keys from the sources to the targets
@@ -618,7 +611,7 @@ class WeightTransform:
             # inside that matched named group
             replaced_group_idx = self.compiled_sources.groupindex[matching_group_name] + 1
             replacement = replacement.replace(r"\1", match_object.group(replaced_group_idx))
-        renamed_key = source_key.replace(match_object.group(0), replacement, 1)
+        renamed_key = source_key.replace(match_object.group(0), replacement)
         return renamed_key, source_pattern_that_matched
 
     def reverse_transform(self) -> WeightTransform:
@@ -634,7 +627,7 @@ class WeightTransform:
             kwargs["operations"] = [op.reverse_op for op in self.operations[::-1]]
 
         reverse_transform = self.__class__(
-            source_patterns=self._original_target_patterns, target_patterns=self._original_source_patterns, **kwargs
+            source_patterns=self.target_patterns, target_patterns=self.source_patterns, **kwargs
         )
 
         return reverse_transform
@@ -659,7 +652,7 @@ class WeightTransform:
                 tensors = [future.result() for future in tensors if future.result() is not None]
             # Sync loading
             elif callable(tensors[0]):
-                tensors = [func() for func in tensors]
+                tensors = [tensor for func in tensors if (tensor := func()) is not None]
             # Add them to the new dictionary
             collected_tensors[key] = tensors
 
@@ -800,36 +793,161 @@ def spawn_materialize(
     tensor: torch.Tensor,
     device=None,
     dtype=None,
+    sharding_op: DtensorShardOperation | None = None,
+    tensor_idx: int | None = None,
 ) -> Future | Callable:
-    """Materialize a tensor from file asynchronously if `thread_pool` is provided, or return a Callable that will
-    load the tensor synchronously when called."""
+    """Materialize (and optionally shard) a tensor, asynchronously if a thread pool is provided.
+
+    When ``sharding_op`` is given the tensor is sharded according to the DTensor
+    placement strategy; otherwise it is simply copied to *device*/*dtype*.
+    Without a thread pool a deferred callable is returned instead of a Future.
+    """
 
     def _job():
+        if sharding_op is not None:
+            return sharding_op.shard_tensor(tensor, tensor_idx=tensor_idx, device=device, dtype=dtype)
         return _materialize_copy(tensor, device, dtype)
 
     if thread_pool is not None:
         return thread_pool.submit(_job)
-    else:
-        # Return the Callable here, not the Tensor itself, so we actually delay loading to avoid saturating cpu
-        # memory during Conversion
-        return _job
+    # Return the Callable here, not the Tensor itself, so we actually delay loading
+    # to avoid saturating cpu memory during Conversion
+    return _job
 
 
-def spawn_tp_materialize(
-    thread_pool: ThreadPoolExecutor | None, tensor: torch.Tensor, sharding_method, tensor_idx, device=None, dtype=None
-) -> Future | Callable:
-    """Materialize and shard a tensor (according to the TP-plan) from file asynchronously if `thread_pool` is provided, or
-    return a Callable that will load the tensor synchronously when called."""
+class DtensorShardOperation:
 
-    def _job():
-        return sharding_method.shard_tensor(tensor, tensor_idx=tensor_idx, device=device, dtype=dtype)
+    def __init__(self, param: DTensor):
+        self.device_mesh = param.device_mesh
+        self.placements = tuple(param.placements)
+        self.param_ndim = param.ndim
+        local_shape, offsets = compute_local_shape_and_global_offset(
+            param.shape, self.device_mesh, self.placements
+        )
+        self._first_owned_expert = offsets[0]
+        self._owned_experts_count = local_shape[0]
 
-    if thread_pool is not None:
-        return thread_pool.submit(_job)
-    else:
-        # Return the Callable here, not the Tensor itself, so we actually delay loading to avoid saturating cpu
-        # memory during Conversion
-        return _job
+    def shard_tensor(
+        self, source: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
+    ) -> torch.Tensor | None:
+        source_shape = list(source.shape) if isinstance(source, torch.Tensor) else source.get_shape()
+        placements = [(md, p) for md, p in enumerate(self.placements) if hasattr(p, "dim")]
+
+        if tensor_idx is None:
+            # Source already has the param's shape -> slice every dim directly.
+            if not placements:
+                return source[...].to(device=device, dtype=dtype)
+            has_strided = any(not p.is_shard() for _, p in placements)
+            intervals: list[list[tuple[int, int]]] = [[(0, size)] for size in source_shape]
+            for mesh_dim, placement in placements:
+                sub_mesh = self._get_sub_mesh(mesh_dim)
+                rank, world_size = sub_mesh.get_local_rank(), sub_mesh.size()
+                source_dim = self._norm_dim(placement.dim)
+                if not placement.is_shard():
+                    intervals[source_dim] = self._strided_intervals(
+                        intervals[source_dim], rank, world_size, placement.split_factor
+                    )
+                else:
+                    intervals[source_dim] = self._contiguous_intervals(intervals[source_dim], rank, world_size)
+            # Only _StridedShard can produce multi-interval dims that need cat.
+            if has_strided:
+                return self._slice_and_cat(source, intervals, device, dtype)
+            slices = tuple(slice(*(pieces[0] if pieces else (0, 0))) for pieces in intervals)
+            return source[slices].to(device=device, dtype=dtype)
+
+        # Source is one of N pieces. Ownership check on the leading axis;
+        # MergeModulelist / Concatenate will assemble the param from kept pieces.
+        # Inner dims only use _contiguous_intervals, which yields one piece per dim,
+        # so we can slice directly -- no cat needed.
+        shards_expert_axis = any(self._norm_dim(p.dim) == 0 for _, p in placements)
+        owns_expert = self._first_owned_expert <= tensor_idx < self._first_owned_expert + self._owned_experts_count
+        if shards_expert_axis and not owns_expert:
+            return None
+        inner_placements = [(md, p) for md, p in placements if self._norm_dim(p.dim) != 0]
+        if not inner_placements:
+            return source[...].to(device=device, dtype=dtype)
+        slice_per_dim: list[tuple[int, int]] = [(0, size) for size in source_shape]
+        for mesh_dim, placement in inner_placements:
+            sub_mesh = self._get_sub_mesh(mesh_dim)
+            rank, world_size = sub_mesh.get_local_rank(), sub_mesh.size()
+            source_dim = self._norm_dim(placement.dim) - 1  # exactly one leading dim missing
+            pieces = self._contiguous_intervals([slice_per_dim[source_dim]], rank, world_size)
+            slice_per_dim[source_dim] = pieces[0] if pieces else (0, 0)
+        return source[tuple(slice(s, e) for s, e in slice_per_dim)].to(device=device, dtype=dtype)
+
+    def _strided_intervals(
+        self, intervals: list[tuple[int, int]], rank: int, world_size: int, split_factor: int
+    ) -> list[tuple[int, int]]:
+        narrowed = []
+        for start, end in intervals:
+            group_size = math.ceil((end - start) / split_factor)
+            for group_idx in range(split_factor):
+                group_start = start + group_idx * group_size
+                group_end = min(group_start + group_size, end)
+                if group_end <= group_start:
+                    continue
+                size, offset = Shard.local_shard_size_and_offset(group_end - group_start, world_size, rank)
+                if size > 0:
+                    narrowed.append((group_start + offset, group_start + offset + size))
+        return narrowed
+
+    def _contiguous_intervals(
+        self, intervals: list[tuple[int, int]], rank: int, world_size: int
+    ) -> list[tuple[int, int]]:
+        total = sum(end - start for start, end in intervals)
+        my_size, my_offset = Shard.local_shard_size_and_offset(total, world_size, rank)
+        if my_size == 0:
+            return []
+
+        out: list[tuple[int, int]] = []
+        flat_pos = 0
+        slice_end = my_offset + my_size
+        for start, end in intervals:
+            length = end - start
+            interval_end_flat = flat_pos + length
+            if interval_end_flat <= my_offset:  # entirely before my slice
+                flat_pos = interval_end_flat
+                continue
+            if flat_pos >= slice_end:  # entirely after my slice
+                break
+            sub_start = max(0, my_offset - flat_pos)
+            sub_end = min(length, slice_end - flat_pos)
+            out.append((start + sub_start, start + sub_end))
+            flat_pos = interval_end_flat
+        return out
+
+    def _slice_and_cat(self, source, intervals, device, dtype):
+        multi_interval_dim: int | None = None
+        slices: list[slice] = []
+        for source_dim, pieces in enumerate(intervals):
+            if len(pieces) == 1:
+                start, end = pieces[0]
+                slices.append(slice(start, end))
+                continue
+            if multi_interval_dim is not None:
+                raise ValueError("Shard-on-read only supports disjoint ranges on a single checkpoint dimension.")
+            multi_interval_dim = source_dim
+            slices.append(slice(None))  # placeholder, filled per-piece below
+
+        # Fast path: every dim is one contiguous interval, read in a single slice.
+        if multi_interval_dim is None:
+            return source[tuple(slices)].to(device=device, dtype=dtype)
+
+        # Multi-interval dim: read each piece separately, then concatenate.
+        pieces_read = []
+        for start, end in intervals[multi_interval_dim]:
+            piece_slices = list(slices)
+            piece_slices[multi_interval_dim] = slice(start, end)
+            pieces_read.append(source[tuple(piece_slices)])
+        return torch.cat(pieces_read, dim=multi_interval_dim).to(device=device, dtype=dtype)
+
+    def _get_sub_mesh(self, mesh_dim: int):
+        if self.device_mesh.ndim == 1:
+            return self.device_mesh
+        return self.device_mesh[self.device_mesh.mesh_dim_names[mesh_dim]]
+
+    def _norm_dim(self, dim: int) -> int:
+        return dim if dim >= 0 else self.param_ndim + dim
 
 
 def dot_natural_key(s: str):
@@ -900,7 +1018,6 @@ def set_param_for_module(
     target_name: str,
     param_value: torch.Tensor,
     loading_info: LoadStateDictInfo,
-    distributed_operation: TensorParallelLayer | None,
     hf_quantizer: HfQuantizer,
 ):
     module_path, _, param_name = target_name.rpartition(".")
@@ -915,27 +1032,40 @@ def set_param_for_module(
     if ref is None:
         loading_info.unexpected_keys.add(target_name)
     else:
-        if not isinstance(param_value, torch.nn.Parameter):
+        if not isinstance(param_value, torch.nn.Parameter) and not isinstance(ref, DTensor):
             if param_name not in module_obj._buffers:
                 param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
 
         # Remove from missing keys (it's either mismatched, or all good)
         loading_info.missing_keys.discard(target_name)
 
-        # Determine expected shape: for TP, use sharded shape; otherwise, use full shape
-        if distributed_operation is not None:
-            expected_shape = torch.Size(distributed_operation.get_expected_sharded_shape(ref.shape))
-        else:
-            expected_shape = ref.shape
+        expected_shape = ref.to_local().shape if isinstance(ref, DTensor) else ref.shape
 
         if ref is not None and param_value.shape != expected_shape and hf_quantizer is None:
             loading_info.mismatched_keys.add((target_name, param_value.shape, expected_shape))
         else:
-            # super important otherwise _init_weight will re-init the param
-            param_value._is_hf_initialized = True
-            setattr(module_obj, param_name, param_value)
-            if distributed_operation is not None:
-                distributed_operation.update_module_attributes(module_obj)
+            if isinstance(ref, DTensor):
+                local_param = param_value.detach() if isinstance(param_value, torch.nn.Parameter) else param_value
+                dtensor_param = DTensor.from_local(
+                    local_param.contiguous(),
+                    ref.device_mesh,
+                    ref.placements,
+                    run_check=False,
+                    shape=ref.shape,
+                    stride=tuple(ref.stride()),
+                )
+                with torch.no_grad():
+                    if ref.is_meta:
+                        torch.utils.swap_tensors(
+                            ref, torch.nn.Parameter(dtensor_param, requires_grad=ref.requires_grad)
+                        )
+                    else:
+                        ref.copy_(dtensor_param)
+                ref._is_hf_initialized = True
+            else:
+                # super important otherwise _init_weight will re-init the param
+                param_value._is_hf_initialized = True
+                setattr(module_obj, param_name, param_value)
 
 
 def offload_and_maybe_resave_param(
@@ -1097,10 +1227,21 @@ def convert_and_load_state_dict_in_model(
     """
     prefix = model.base_model_prefix
     tp_plan = tp_plan or {}
-    device_map = load_config.device_map or {"": "cpu"}
     hf_quantizer = load_config.hf_quantizer
     dtype = load_config.dtype
     device_mesh = load_config.device_mesh
+
+    if load_config.device_map is not None:
+        device_map = load_config.device_map
+    elif device_mesh is not None:
+        if device_mesh.device_type == "cpu":
+            device_map = {"": torch.device("cpu")}
+        else:
+            device_map = {
+                "": torch.device(device_mesh.device_type, getattr(torch, device_mesh.device_type).current_device())
+            }
+    else:
+        device_map = {"": "cpu"}
     disk_offload_folder = load_config.disk_offload_folder
     offload_buffers = load_config.offload_buffers
     dtype_plan = load_config.dtype_plan or {}
@@ -1135,10 +1276,6 @@ def convert_and_load_state_dict_in_model(
     converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
     param_name_to_load: dict[str, WeightRenaming | WeightConverter] = {}
 
-    # build '(?P<g0>.*.*\\.block_sparse_moe\\..*)' and group to source {'g0': '*.block_sparse_moe.'}
-    # and target to source {'g0': '*.mlp.'}. This allows us to quickly find which pattern matched.
-    if tp_plan != {}:
-        tp_plan_alt, tp_plan_by_group_name, _ = build_glob_alternation(list(tp_plan.keys()))
     if dtype_plan != {}:
         dtype_policy_alt, dtype_policy_by_group_name, _ = build_glob_alternation(list(dtype_plan.keys()))
 
@@ -1200,32 +1337,23 @@ def convert_and_load_state_dict_in_model(
             elif empty_param is not None and empty_param.dtype != _dtype:
                 _dtype = empty_param.dtype  # usually correct when initializing
 
-            # 4. Handle TP sharding or device_map placement
-            future_or_tensor = None
-            if device_mesh and tp_plan:
-                if matched_tp_pattern := tp_plan_alt.search(renamed_key):
-                    matched_tp_pattern = tp_plan_by_group_name[matched_tp_pattern.lastgroup]
-                    if getattr(mapping, "distributed_operation", None) is None:
-                        tp_layer = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].__class__
-                        mapping.distributed_operation = tp_layer(
-                            device_mesh=device_mesh, rank=device_mesh.get_local_rank(), empty_param=empty_param.clone()
-                        )
-                    shard_index = (
-                        len(mapping.collected_tensors.get(source_pattern, []))
-                        if isinstance(mapping, WeightConverter) and isinstance(mapping.operations[0], MergeModulelist)
-                        else None
-                    )
-                    future_or_tensor = spawn_tp_materialize(
-                        thread_pool,
-                        tensor,
-                        mapping.distributed_operation,
-                        shard_index,
-                        device_map[""],
-                        _dtype,
-                    )
-
-            if future_or_tensor is None:
-                param_device = get_device(device_map, renamed_key, valid_torch_device=True)
+            # 4. Materialize tensor — shard-on-read for DTensor params, plain copy otherwise
+            param_device = get_device(device_map, renamed_key, valid_torch_device=True)
+            if isinstance(empty_param, DTensor):
+                tensor_idx = (
+                    len(mapping.collected_tensors.get(source_pattern, []))
+                    if isinstance(mapping, WeightConverter) and isinstance(mapping.operations[0], MergeModulelist)
+                    else None
+                )
+                future_or_tensor = spawn_materialize(
+                    thread_pool,
+                    tensor,
+                    param_device,
+                    _dtype,
+                    sharding_op=DtensorShardOperation(empty_param),
+                    tensor_idx=tensor_idx,
+                )
+            else:
                 future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype)
 
             mapping.add_tensor(renamed_key, original_key, source_pattern, future_or_tensor)
@@ -1255,14 +1383,7 @@ def convert_and_load_state_dict_in_model(
                             target_name, param, loading_info, disk_offload_folder, disk_offload_index, mapping
                         )
                     else:
-                        set_param_for_module(
-                            model,
-                            target_name,
-                            param,
-                            loading_info,
-                            mapping.distributed_operation,
-                            hf_quantizer,
-                        )
+                        set_param_for_module(model, target_name, param, loading_info, hf_quantizer)
 
                 # Cleanup all the tensors that were gathered before next iteration
                 del realized_value

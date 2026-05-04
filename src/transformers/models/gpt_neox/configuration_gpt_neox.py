@@ -47,9 +47,18 @@ class GPTNeoXConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.attention.query_key_value": "colwise",
-        "layers.*.attention.dense": "rowwise",
+        "layers.*.attention.dense": "rowwise_allreduce",
         "layers.*.mlp.dense_h_to_4h": "colwise",
-        "layers.*.mlp.dense_4h_to_h": "rowwise",
+        "layers.*.mlp.dense_4h_to_h": "rowwise_allreduce",
+    }
+    base_model_sp_plan = {
+        "embed_tokens": "vocab_reduce_scatter",
+        "layers.*.input_layernorm": "activation",
+        "layers.*.post_attention_layernorm": "activation",
+        "layers.*.mlp": "module_allgather",
+        "layers.*.mlp.dense_h_to_4h": "colwise",
+        "layers.*.mlp.dense_4h_to_h": "rowwise_reduce_scatter",
+        "norm": "activation",
     }
     base_model_pp_plan = {
         "embed_in": (["input_ids"], ["inputs_embeds"]),

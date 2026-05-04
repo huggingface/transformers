@@ -73,14 +73,15 @@ class OlmoHybridConfig(PreTrainedConfig):
     model_type = "olmo_hybrid"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.k_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.v_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.o_proj": "rowwise_split_input",  # input is replicated due to the added norm on q and k
+        "layers.*.self_attn.q_proj": "colwise_allgather",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.k_proj": "colwise_allgather",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.v_proj": "colwise_allgather",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.o_proj": "vocab_allreduce",  # input is replicated due to the added norm on q and k
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.down_proj": "rowwise_allreduce",
     }
+    base_model_sp_plan = None
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
