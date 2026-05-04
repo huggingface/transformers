@@ -83,3 +83,15 @@ TODO
 ## Qwen3_5Tokenizer
 
 [[autodoc]] Qwen3_5Tokenizer
+
+## Qwen3_5CausalLMOutputWithPast
+
+[[autodoc]] Qwen3_5CausalLMOutputWithPast
+
+## Qwen3_5VLCausalLMOutputWithPast
+
+[[autodoc]] Qwen3_5VLCausalLMOutputWithPast
+
+## Qwen3_5MTP
+
+[[autodoc]] Qwen3_5MTP
