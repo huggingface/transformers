@@ -50,6 +50,10 @@ def use_gqa_in_sdpa(
         return _is_torch_greater_or_equal_than_2_8
     if not (_is_torch_greater_or_equal_than_2_5 and attention_mask is None):
         return False
+    # FA is a CUDA-only kernel; the probe below only makes sense on CUDA tensors.
+    # On CPU (and other accelerators without FA), fall back to repeat_kv.
+    if query.device.type != "cuda":
+        return False
     if not torch.backends.cuda.flash_sdp_enabled():
         return False
     try:

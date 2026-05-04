@@ -15,30 +15,54 @@ class UseGqaInSdpaLogicTest(unittest.TestCase):
     """
 
     def setUp(self):
+        from types import SimpleNamespace
+
         import torch
 
         from transformers.integrations import sdpa_attention as mod
 
         self.mod = mod
         self.torch = torch
-        # Tensors are passed straight through to mocked APIs; shapes don't
-        # matter for the logic tests but we keep them realistic.
-        self.q = torch.randn(1, 8, 16, 128, dtype=torch.bfloat16)
-        self.k = torch.randn(1, 2, 16, 128, dtype=torch.bfloat16)
-        self.v = torch.randn(1, 2, 16, 128, dtype=torch.bfloat16)
+        # Real CPU tensors for tests that must hit the CPU short-circuit branch.
+        self.cpu_q = torch.randn(1, 8, 16, 128, dtype=torch.bfloat16)
+        self.cpu_k = torch.randn(1, 2, 16, 128, dtype=torch.bfloat16)
+        self.cpu_v = torch.randn(1, 2, 16, 128, dtype=torch.bfloat16)
+        # Fake "cuda" tensors for tests that should exercise the FA-probe path
+        # without actually requiring CUDA. The probe is fully mocked, so the
+        # function never indexes shape/dtype/strides — only `.device.type`.
+        cuda_dev = SimpleNamespace(type="cuda")
+        self.cuda_q = SimpleNamespace(device=cuda_dev)
+        self.cuda_k = SimpleNamespace(device=cuda_dev)
+        self.cuda_v = SimpleNamespace(device=cuda_dev)
 
-    def _call(self, attn_mask=None, is_causal=True):
-        return self.mod.use_gqa_in_sdpa(attn_mask, self.q, self.k, self.v, is_causal, 0.0)
+    def _call_cpu(self, attn_mask=None, is_causal=True):
+        return self.mod.use_gqa_in_sdpa(attn_mask, self.cpu_q, self.cpu_k, self.cpu_v, is_causal, 0.0)
+
+    def _call_cuda(self, attn_mask=None, is_causal=True):
+        return self.mod.use_gqa_in_sdpa(attn_mask, self.cuda_q, self.cuda_k, self.cuda_v, is_causal, 0.0)
 
     def test_attention_mask_rejects(self):
         # Mask -> dispatch falls back to MATH; never use enable_gqa.
         mask = self.torch.zeros(1, 1, 16, 16)
         with patch.object(self.mod, "_is_torch_greater_or_equal_than_2_5", True):
-            self.assertFalse(self._call(attn_mask=mask))
+            self.assertFalse(self._call_cuda(attn_mask=mask))
 
     def test_old_torch_rejects(self):
         with patch.object(self.mod, "_is_torch_greater_or_equal_than_2_5", False):
-            self.assertFalse(self._call())
+            self.assertFalse(self._call_cuda())
+
+    def test_cpu_inputs_reject_without_probing(self):
+        # FA is CUDA-only; on CPU we must fall back to repeat_kv without
+        # touching `torch.backends.cuda.*`.
+        with (
+            patch.object(self.mod, "_is_torch_greater_or_equal_than_2_5", True),
+            patch.object(self.mod, "_is_torch_xpu_available", False),
+            patch.object(self.torch.backends.cuda, "flash_sdp_enabled") as fse,
+            patch.object(self.torch.backends.cuda, "can_use_flash_attention") as cufa,
+        ):
+            self.assertFalse(self._call_cpu())
+            fse.assert_not_called()
+            cufa.assert_not_called()
 
     def test_flash_disabled_rejects(self):
         # User wrapped the call in sdpa_kernel([EFFICIENT]) (or globally
@@ -48,7 +72,7 @@ class UseGqaInSdpaLogicTest(unittest.TestCase):
             patch.object(self.mod, "_is_torch_xpu_available", False),
             patch.object(self.torch.backends.cuda, "flash_sdp_enabled", return_value=False),
         ):
-            self.assertFalse(self._call())
+            self.assertFalse(self._call_cuda())
 
     def test_flash_enabled_but_inputs_ineligible_rejects(self):
         # FA flag is on, but pytorch says FA can't actually run these inputs
@@ -59,7 +83,7 @@ class UseGqaInSdpaLogicTest(unittest.TestCase):
             patch.object(self.torch.backends.cuda, "flash_sdp_enabled", return_value=True),
             patch.object(self.torch.backends.cuda, "can_use_flash_attention", return_value=False),
         ):
-            self.assertFalse(self._call())
+            self.assertFalse(self._call_cuda())
 
     def test_flash_eligible_returns_true(self):
         # Happy path: regression guard for the existing default-enabled behavior.
@@ -69,7 +93,7 @@ class UseGqaInSdpaLogicTest(unittest.TestCase):
             patch.object(self.torch.backends.cuda, "flash_sdp_enabled", return_value=True),
             patch.object(self.torch.backends.cuda, "can_use_flash_attention", return_value=True),
         ):
-            self.assertTrue(self._call())
+            self.assertTrue(self._call_cuda())
 
     def test_xpu_keeps_existing_path(self):
         # XPU branch is unchanged: torch>=2.8 -> True regardless of probe.
@@ -77,12 +101,12 @@ class UseGqaInSdpaLogicTest(unittest.TestCase):
             patch.object(self.mod, "_is_torch_xpu_available", True),
             patch.object(self.mod, "_is_torch_greater_or_equal_than_2_8", True),
         ):
-            self.assertTrue(self._call())
+            self.assertTrue(self._call_cpu())
         with (
             patch.object(self.mod, "_is_torch_xpu_available", True),
             patch.object(self.mod, "_is_torch_greater_or_equal_than_2_8", False),
         ):
-            self.assertFalse(self._call())
+            self.assertFalse(self._call_cpu())
 
     def test_probe_exception_is_swallowed(self):
         # SDPAParams may not exist on very old torch; defensive fallback.
@@ -92,7 +116,7 @@ class UseGqaInSdpaLogicTest(unittest.TestCase):
             patch.object(self.torch.backends.cuda, "flash_sdp_enabled", return_value=True),
             patch.object(self.torch.backends.cuda, "SDPAParams", side_effect=RuntimeError("boom")),
         ):
-            self.assertFalse(self._call())
+            self.assertFalse(self._call_cuda())
 
 
 @require_torch_gpu
