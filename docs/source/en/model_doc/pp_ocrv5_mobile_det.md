@@ -39,17 +39,19 @@ The example below demonstrates how to detect text with PP-OCRV5_Mobile_Det using
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import pipeline
+
 
 image = Image.open(
     requests.get(
         "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png", stream=True
     ).raw)
 detector = pipeline(
-    task="object-detection", 
+    task="object-detection",
     model="PaddlePaddle/PP-OCRV5_mobile_det_safetensors",
     device_map="auto",
 )
@@ -57,16 +59,17 @@ results = detector(image)
 
 for result in results:
     print(result)
-
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
+
 
 model_path="PaddlePaddle/PP-OCRv5_mobile_det_safetensors"
 model = AutoModelForObjectDetection.from_pretrained(model_path, device_map="auto")
@@ -81,7 +84,6 @@ results = image_processor.post_process_object_detection(outputs, target_sizes=in
 for result in results:
     print(result["boxes"])
     print(result["scores"])
-
 ```
 
 </hfoption>
@@ -94,17 +96,19 @@ Here is how you can do it with PP-OCRV5_Mobile_Det using the [`Pipeline`] or the
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import pipeline
+
 
 image = Image.open(
     requests.get(
         "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png", stream=True
     ).raw)
 detector = pipeline(
-    task="object-detection", 
+    task="object-detection",
     model="PaddlePaddle/PP-OCRV5_mobile_det_safetensors",
     device_map="auto",
 )
@@ -112,17 +116,18 @@ results = detector([image, image])
 
 for result in results:
     print(result)
-
 ```
 
 </hfoption>
 
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
+
 
 model_path="PaddlePaddle/PP-OCRv5_mobile_det_safetensors"
 model = AutoModelForObjectDetection.from_pretrained(model_path, device_map="auto")
@@ -137,7 +142,6 @@ results = image_processor.post_process_object_detection(outputs, target_sizes=in
 for result in results:
     print(result["boxes"])
     print(result["scores"])
-
 ```
 
 </hfoption>

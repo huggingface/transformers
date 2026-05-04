@@ -68,15 +68,16 @@ class Multimodal2VisionAttention(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
-        batch_size, seq_length, embed_dim = hidden_states.shape
+        input_shape = hidden_states.shape[:-1]
 
+        hidden_shape = (*input_shape, -1, self.head_dim)
         queries = self.q_proj(hidden_states)
         keys = self.k_proj(hidden_states)
         values = self.v_proj(hidden_states)
 
-        queries = queries.view(batch_size, seq_length, -1, self.head_dim).transpose(1, 2)
-        keys = keys.view(batch_size, seq_length, -1, self.head_dim).transpose(1, 2)
-        values = values.view(batch_size, seq_length, -1, self.head_dim).transpose(1, 2)
+        queries = queries.view(hidden_shape).transpose(1, 2)
+        keys = keys.view(hidden_shape).transpose(1, 2)
+        values = values.view(hidden_shape).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -93,7 +94,7 @@ class Multimodal2VisionAttention(nn.Module):
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights
@@ -168,20 +169,6 @@ class Multimodal2VisionEncoder(nn.Module):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
-        r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-                than the model's internal embedding lookup matrix.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-        """
         hidden_states = inputs_embeds
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
@@ -200,6 +187,12 @@ class Multimodal2VisionPreTrainedModel(PreTrainedModel):
     config: Multimodal2Config
     base_model_prefix = "multimodal2_vision"
     input_modalities = ("image", "text")
+    _no_split_modules = [
+        "Multimodal2VisionTextEmbeddings",
+        "Multimodal2VisionEncoderLayer",
+        "Multimodal2VisionVisionEmbeddings",
+    ]
+
     supports_gradient_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn = True
@@ -300,15 +293,20 @@ class Multimodal2VisionEmbeddings(nn.Module):
         return embeddings
 
 
-class Multimodal2VisionTransformer(Multimodal2VisionPreTrainedModel):
+@auto_docstring(
+    custom_intro="""
+    The vision model from MULTIMODAL2 without any head or projection on top.
+    """
+)
+class Multimodal2VisionModel(Multimodal2VisionPreTrainedModel):
     config: Multimodal2VisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    _no_split_modules = ["CLIPEncoderLayer"]
+    _input_embed_layer = "patch_embedding"
+    _no_split_modules = ["Multimodal2VisionEncoderLayer"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.config = config
         embed_dim = config.hidden_size
 
         self.embeddings = Multimodal2VisionEmbeddings(config)
@@ -324,54 +322,6 @@ class Multimodal2VisionTransformer(Multimodal2VisionPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor | None = None,
         interpolate_pos_encoding: bool | None = False,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
-        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
-        hidden_states = self.pre_layrnorm(hidden_states)
-
-        encoder_outputs: BaseModelOutput = self.encoder(
-            inputs_embeds=hidden_states,
-            **kwargs,
-        )
-
-        last_hidden_state = encoder_outputs.last_hidden_state
-        pooled_output = last_hidden_state[:, 0, :]
-        pooled_output = self.post_layernorm(pooled_output)
-
-        return BaseModelOutputWithPooling(
-            last_hidden_state=last_hidden_state,
-            pooler_output=pooled_output,
-        )
-
-
-@auto_docstring(
-    custom_intro="""
-    The vision model from MULTIMODAL2 without any head or projection on top.
-    """
-)
-class Multimodal2VisionModel(Multimodal2VisionPreTrainedModel):
-    config: Multimodal2VisionConfig
-    main_input_name = "pixel_values"
-    input_modalities = ("image",)
-    _no_split_modules = ["Multimodal2VisionEncoderLayer"]
-
-    def __init__(self, config: Multimodal2VisionConfig):
-        super().__init__(config)
-        self.vision_model = Multimodal2VisionTransformer(config)
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.vision_model.embeddings.patch_embedding
-
-    @auto_docstring
-    def forward(
-        self,
-        pixel_values: torch.FloatTensor | None = None,
-        interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
@@ -396,9 +346,19 @@ class Multimodal2VisionModel(Multimodal2VisionPreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output  # pooled CLS states
         ```"""
+        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        hidden_states = self.pre_layrnorm(hidden_states)
 
-        return self.vision_model(
-            pixel_values=pixel_values,
-            interpolate_pos_encoding=interpolate_pos_encoding,
+        encoder_outputs: BaseModelOutput = self.encoder(
+            inputs_embeds=hidden_states,
             **kwargs,
+        )
+
+        last_hidden_state = encoder_outputs.last_hidden_state
+        pooled_output = last_hidden_state[:, 0, :]
+        pooled_output = self.post_layernorm(pooled_output)
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
         )

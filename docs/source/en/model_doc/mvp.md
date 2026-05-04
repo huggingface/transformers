@@ -37,8 +37,8 @@ This model was contributed by [Tianyi Tang](https://huggingface.co/StevenTang). 
 ## Usage tips
 
 - We have released a series of models [here](https://huggingface.co/models?filter=mvp), including MVP, MVP with task-specific prompts, and multi-task pre-trained variants.
-- If you want to use a model without prompts (standard Transformer), you can load it through `MvpForConditionalGeneration.from_pretrained('RUCAIBox/mvp')`.
-- If you want to use a model with task-specific prompts, such as summarization, you can load it through `MvpForConditionalGeneration.from_pretrained('RUCAIBox/mvp-summarization')`.
+- If you want to use a model without prompts (standard Transformer), you can load it through `MvpForConditionalGeneration.from_pretrained('RUCAIBox/mvp', device_map="auto")`.
+- If you want to use a model with task-specific prompts, such as summarization, you can load it through `MvpForConditionalGeneration.from_pretrained('RUCAIBox/mvp-summarization', device_map="auto")`.
 - Our model supports lightweight prompt tuning following [Prefix-tuning](https://huggingface.co/papers/2101.00190) with method `set_lightweight_tuning()`.
 
 ## Usage examples
@@ -46,69 +46,72 @@ This model was contributed by [Tianyi Tang](https://huggingface.co/StevenTang). 
 For summarization, it is an example to use MVP and MVP with summarization-specific prompts.
 
 ```python
->>> from transformers import MvpTokenizer, MvpForConditionalGeneration
+from transformers import MvpForConditionalGeneration, MvpTokenizer
 
->>> tokenizer = MvpTokenizer.from_pretrained("RUCAIBox/mvp")
->>> model = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mvp")
->>> model_with_prompt = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mvp-summarization")
 
->>> inputs = tokenizer(
-...     "Summarize: You may want to stick it to your boss and leave your job, but don't do it if these are your reasons.",
-...     return_tensors="pt",
-... )
->>> generated_ids = model.generate(**inputs)
->>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+tokenizer = MvpTokenizer.from_pretrained("RUCAIBox/mvp")
+model = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mvp", device_map="auto")
+model_with_prompt = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mvp-summarization", device_map="auto")
+
+inputs = tokenizer(
+    "Summarize: You may want to stick it to your boss and leave your job, but don't do it if these are your reasons.",
+    return_tensors="pt",
+)
+generated_ids = model.generate(**inputs)
+tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 ["Why You Shouldn't Quit Your Job"]
 
->>> generated_ids = model_with_prompt.generate(**inputs)
->>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+generated_ids = model_with_prompt.generate(**inputs)
+tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 ["Don't do it if these are your reasons"]
 ```
 
 For data-to-text generation, it is an example to use MVP and multi-task pre-trained variants.
 
 ```python
->>> from transformers import MvpTokenizerFast, MvpForConditionalGeneration
+from transformers import MvpForConditionalGeneration, MvpTokenizerFast
 
->>> tokenizer = MvpTokenizerFast.from_pretrained("RUCAIBox/mvp")
->>> model = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mvp")
->>> model_with_mtl = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mtl-data-to-text")
 
->>> inputs = tokenizer(
-...     "Describe the following data: Iron Man | instance of | Superhero [SEP] Stan Lee | creator | Iron Man",
-...     return_tensors="pt",
-... )
->>> generated_ids = model.generate(**inputs)
->>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+tokenizer = MvpTokenizerFast.from_pretrained("RUCAIBox/mvp")
+model = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mvp", device_map="auto")
+model_with_mtl = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mtl-data-to-text", device_map="auto")
+
+inputs = tokenizer(
+    "Describe the following data: Iron Man | instance of | Superhero [SEP] Stan Lee | creator | Iron Man",
+    return_tensors="pt",
+)
+generated_ids = model.generate(**inputs)
+tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 ['Stan Lee created the character of Iron Man, a fictional superhero appearing in American comic']
 
->>> generated_ids = model_with_mtl.generate(**inputs)
->>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+generated_ids = model_with_mtl.generate(**inputs)
+tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 ['Iron Man is a fictional superhero appearing in American comic books published by Marvel Comics.']
 ```
 
 For lightweight tuning, *i.e.*, fixing the model and only tuning prompts, you can load MVP with randomly initialized prompts or with task-specific prompts. Our code also supports Prefix-tuning with BART following the [original paper](https://huggingface.co/papers/2101.00190).
 
 ```python
->>> from transformers import MvpForConditionalGeneration
+from transformers import MvpForConditionalGeneration
 
->>> model = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mvp", use_prompt=True)
->>> # the number of trainable parameters (full tuning)
->>> sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+model = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mvp", use_prompt=True, device_map="auto")
+# the number of trainable parameters (full tuning)
+sum(p.numel() for p in model.parameters() if p.requires_grad)
 468116832
 
->>> # lightweight tuning with randomly initialized prompts
->>> model.set_lightweight_tuning()
->>> # the number of trainable parameters (lightweight tuning)
->>> sum(p.numel() for p in model.parameters() if p.requires_grad)
+# lightweight tuning with randomly initialized prompts
+model.set_lightweight_tuning()
+# the number of trainable parameters (lightweight tuning)
+sum(p.numel() for p in model.parameters() if p.requires_grad)
 61823328
 
->>> # lightweight tuning with task-specific prompts
->>> model = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mtl-data-to-text")
->>> model.set_lightweight_tuning()
->>> # original lightweight Prefix-tuning
->>> model = MvpForConditionalGeneration.from_pretrained("facebook/bart-large", use_prompt=True)
->>> model.set_lightweight_tuning()
+# lightweight tuning with task-specific prompts
+model = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mtl-data-to-text", device_map="auto")
+model.set_lightweight_tuning()
+# original lightweight Prefix-tuning
+model = MvpForConditionalGeneration.from_pretrained("facebook/bart-large", use_prompt=True, device_map="auto")
+model.set_lightweight_tuning()
 ```
 
 ## Resources

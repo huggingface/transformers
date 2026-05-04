@@ -39,6 +39,7 @@ if is_torch_available():
 
     from transformers import (
         OlmoForCausalLM,
+        OlmoForSequenceClassification,
         OlmoModel,
     )
 
@@ -161,11 +162,13 @@ class OlmoModelTester:
 
 @require_torch
 class OlmoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (OlmoModel, OlmoForCausalLM) if is_torch_available() else ()
+    all_model_classes = (OlmoModel, OlmoForCausalLM, OlmoForSequenceClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": OlmoModel,
             "text-generation": OlmoForCausalLM,
+            "text-classification": OlmoForSequenceClassification,
+            "zero-shot": OlmoForSequenceClassification,
         }
         if is_torch_available()
         else {}

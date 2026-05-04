@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2026-02-08.*
+*This model was released on 2026-02-17 and added to Hugging Face Transformers on 2026-02-09.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -34,14 +34,13 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`A
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="text-generation",
     model="zai-org/GLM-5",
-    dtype=torch.bfloat16,
 )
 pipe("The theory of relativity states that")
 ```
@@ -49,14 +48,13 @@ pipe("The theory of relativity states that")
 </hfoption>
 <hfoption id="AutoModelForCausalLM">
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("zai-org/GLM-5")
 model = AutoModelForCausalLM.from_pretrained(
     "zai-org/GLM-5",
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 input_ids = tokenizer("The theory of relativity states that", return_tensors="pt").to(model.device)

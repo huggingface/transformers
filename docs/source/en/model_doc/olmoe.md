@@ -39,14 +39,13 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`A
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="text-generation",
     model="allenai/OLMoE-1B-7B-0125",
-    dtype=torch.float16,
     device=0,
 )
 
@@ -57,18 +56,15 @@ print(result)
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from accelerate import Accelerator
 
-device = Accelerator().device
 
-model = AutoModelForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", attn_implementation="sdpa", dtype="auto", device_map="auto").to(device)
+model = AutoModelForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", attn_implementation="sdpa", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("allenai/OLMoE-1B-7B-0924")
 
-inputs = tokenizer("Bitcoin is", return_tensors="pt")
-inputs = {k: v.to(device) for k, v in inputs.items()}
+inputs = tokenizer("Bitcoin is", return_tensors="pt").to(model.device)
+inputs = {k: v.to(model.device) for k, v in inputs.items()}
 output = model.generate(**inputs, max_length=64)
 print(tokenizer.decode(output[0]))
 ```
@@ -78,12 +74,11 @@ print(tokenizer.decode(output[0]))
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
 
-```py
+```python
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-from accelerate import Accelerator
 
-device = Accelerator().device
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
 
 quantization_config = BitsAndBytesConfig(
    load_in_4bit=True,
@@ -92,11 +87,11 @@ quantization_config = BitsAndBytesConfig(
    bnb_4bit_quant_type="nf4"
 )
 
-model = AutoModelForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", attn_implementation="sdpa", dtype="auto", device_map="auto", quantization_config=quantization_config).to(device)
+model = AutoModelForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", attn_implementation="sdpa", device_map="auto", quantization_config=quantization_config)
 tokenizer = AutoTokenizer.from_pretrained("allenai/OLMoE-1B-7B-0924")
 
-inputs = tokenizer("Bitcoin is", return_tensors="pt")
-inputs = {k: v.to(device) for k, v in inputs.items()}
+inputs = tokenizer("Bitcoin is", return_tensors="pt").to(model.device)
+inputs = {k: v.to(model.device) for k, v in inputs.items()}
 output = model.generate(**inputs, max_length=64)
 print(tokenizer.decode(output[0]))
 ```

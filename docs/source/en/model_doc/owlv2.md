@@ -44,33 +44,33 @@ OWLv2 is, just like its predecessor [OWL-ViT](owlvit), a zero-shot text-conditio
 [`Owlv2ImageProcessor`] can be used to resize (or rescale) and normalize images for the model and [`CLIPTokenizer`] is used to encode the text. [`Owlv2Processor`] wraps [`Owlv2ImageProcessor`] and [`CLIPTokenizer`] into a single instance to both encode the text and prepare the images. The following example shows how to perform object detection using [`Owlv2Processor`] and [`Owlv2ForObjectDetection`].
 
 ```python
->>> import requests
->>> from PIL import Image
->>> import torch
+import requests
+from PIL import Image
+import torch
 
->>> from transformers import Owlv2Processor, Owlv2ForObjectDetection
+from transformers import Owlv2Processor, Owlv2ForObjectDetection
 
->>> processor = Owlv2Processor.from_pretrained("google/owlv2-base-patch16-ensemble")
->>> model = Owlv2ForObjectDetection.from_pretrained("google/owlv2-base-patch16-ensemble")
+processor = Owlv2Processor.from_pretrained("google/owlv2-base-patch16-ensemble")
+model = Owlv2ForObjectDetection.from_pretrained("google/owlv2-base-patch16-ensemble", device_map="auto")
 
->>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
->>> image = Image.open(requests.get(url, stream=True).raw)
->>> text_labels = [["a photo of a cat", "a photo of a dog"]]
->>> inputs = processor(text=text_labels, images=image, return_tensors="pt")
->>> outputs = model(**inputs)
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+text_labels = [["a photo of a cat", "a photo of a dog"]]
+inputs = processor(text=text_labels, images=image, return_tensors="pt").to(model.device)
+outputs = model(**inputs)
 
->>> # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
->>> target_sizes = torch.tensor([(image.height, image.width)])
->>> # Convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
->>> results = processor.post_process_grounded_object_detection(
-...     outputs=outputs, target_sizes=target_sizes, threshold=0.1, text_labels=text_labels
-... )
->>> # Retrieve predictions for the first image for the corresponding text queries
->>> result = results[0]
->>> boxes, scores, text_labels = result["boxes"], result["scores"], result["text_labels"]
->>> for box, score, text_label in zip(boxes, scores, text_labels):
-...     box = [round(i, 2) for i in box.tolist()]
-...     print(f"Detected {text_label} with confidence {round(score.item(), 3)} at location {box}")
+# Target image sizes (height, width) to rescale box predictions [batch_size, 2]
+target_sizes = torch.tensor([(image.height, image.width)])
+# Convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
+results = processor.post_process_grounded_object_detection(
+    outputs=outputs, target_sizes=target_sizes, threshold=0.1, text_labels=text_labels
+)
+# Retrieve predictions for the first image for the corresponding text queries
+result = results[0]
+boxes, scores, text_labels = result["boxes"], result["scores"], result["text_labels"]
+for box, score, text_label in zip(boxes, scores, text_labels):
+    box = [round(i, 2) for i in box.tolist()]
+    print(f"Detected {text_label} with confidence {round(score.item(), 3)} at location {box}")
 Detected a photo of a cat with confidence 0.614 at location [341.67, 23.39, 642.32, 371.35]
 Detected a photo of a cat with confidence 0.665 at location [6.75, 51.96, 326.62, 473.13]
 ```

@@ -117,7 +117,6 @@ class OptimizerNames(ExplicitEnum):
     ADAMW_TORCH_FUSED = "adamw_torch_fused"
     ADAMW_TORCH_XLA = "adamw_torch_xla"
     ADAMW_TORCH_NPU_FUSED = "adamw_torch_npu_fused"
-    ADAMW_APEX_FUSED = "adamw_apex_fused"
     ADAFACTOR = "adafactor"
     ADAMW_ANYPRECISION = "adamw_anyprecision"
     ADAMW_TORCH_4BIT = "adamw_torch_4bit"
@@ -637,6 +636,9 @@ class TrainingArguments:
         ddp_broadcast_buffers (`bool`, *optional*):
             When using distributed training, the value of the flag `broadcast_buffers` passed to
             `DistributedDataParallel`. Will default to `False` if gradient checkpointing is used, `True` otherwise.
+        ddp_static_graph (`bool`, *optional*):
+            When using distributed training, the value of the flag `static_graph` passed to
+            `DistributedDataParallel`.
         ddp_backend (`str`, *optional*):
             The backend to use for distributed training. Must be one of `"nccl"`, `"mpi"`, `"xccl"`, `"gloo"`, `"hccl"`.
         ddp_timeout (`int`, *optional*, defaults to 1800):
@@ -1372,6 +1374,15 @@ class TrainingArguments:
         metadata={
             "help": (
                 "When using distributed training, the value of the flag `broadcast_buffers` passed to "
+                "`DistributedDataParallel`."
+            )
+        },
+    )
+    ddp_static_graph: bool | None = field(
+        default=None,
+        metadata={
+            "help": (
+                "When using distributed training, the value of the flag `static_graph` passed to "
                 "`DistributedDataParallel`."
             )
         },
@@ -2544,7 +2555,7 @@ class TrainingArguments:
 
         Args:
             name (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_torch"`):
-                The optimizer to use: `"adamw_torch"`, `"adamw_torch_fused"`, `"adamw_apex_fused"`,
+                The optimizer to use: `"adamw_torch"`, `"adamw_torch_fused"`,
                 `"adamw_anyprecision"` or `"adafactor"`.
             learning_rate (`float`, *optional*, defaults to 5e-5):
                 The initial learning rate.

@@ -37,24 +37,23 @@ The example below demonstrates how to generate text based on an image with the [
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor
-from accelerate import Accelerator
 from transformers.image_utils import load_image
 
 
 # Prepare processor and model
 model_id = "openmmlab-community/mm_grounding_dino_tiny_o365v1_goldg_v3det"
-device = Accelerator().device
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(device)
+model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id, device_map="auto")
 
 # Prepare inputs
 image_url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = load_image(image_url)
 text_labels = [["a cat", "a remote control"]]
-inputs = processor(images=image, text=text_labels, return_tensors="pt").to(device)
+inputs = processor(images=image, text=text_labels, return_tensors="pt").to(model.device)
 
 # Run inference
 with torch.no_grad():

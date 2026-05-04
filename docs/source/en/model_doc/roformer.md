@@ -35,16 +35,15 @@ The example below demonstrates how to predict the `[MASK]` token with [`Pipeline
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 # uncomment to install rjieba which is needed for the tokenizer
 # !pip install rjieba
-import torch
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="fill-mask",
     model="junnyu/roformer_chinese_base",
-    dtype=torch.float16,
     device=0
 )
 output = pipe("水在零度时会[MASK]")
@@ -61,8 +60,8 @@ import torch
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 
 model = AutoModelForMaskedLM.from_pretrained(
-    "junnyu/roformer_chinese_base", dtype=torch.float16
-)
+    "junnyu/roformer_chinese_base"
+ device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("junnyu/roformer_chinese_base")
 
 input_ids = tokenizer("水在零度时会[MASK]", return_tensors="pt").to(model.device)

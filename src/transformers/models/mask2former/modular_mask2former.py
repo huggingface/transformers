@@ -15,8 +15,6 @@
 import torch
 from torch import nn
 
-from ...image_utils import SizeDict
-from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
     logging,
@@ -33,32 +31,6 @@ from .image_processing_mask2former import (
 
 
 logger = logging.get_logger(__name__)
-
-
-class Mask2FormerImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    ignore_index (`int`, *optional*):
-        Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
-        denoted with 0 (background) will be replaced with `ignore_index`.
-    do_reduce_labels (`bool`, *optional*, defaults to `False`):
-        Whether or not to decrement all label values of segmentation maps by 1. Usually used for datasets where 0
-        is used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k).
-        The background label will be replaced by `ignore_index`.
-    num_labels (`int`, *optional*):
-        The number of labels in the segmentation map.
-    size_divisor (`int`, *optional*, defaults to `32`):
-        Some backbones need images divisible by a certain number. If not passed, it defaults to the value used in
-        Swin Transformer.
-    pad_size (`SizeDict`, *optional*):
-        The size to pad the images to. Must be larger than any image size provided for preprocessing. If `pad_size`
-        is not provided, images will be padded to the largest height and width in the batch.
-    """
-
-    ignore_index: int | None
-    do_reduce_labels: bool
-    num_labels: int | None
-    size_divisor: int
-    pad_size: SizeDict | None
 
 
 class Mask2FormerImageProcessor(MaskFormerImageProcessor):

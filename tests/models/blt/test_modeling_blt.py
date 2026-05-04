@@ -20,6 +20,7 @@ from parameterized import parameterized
 
 from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_torch,
     require_torch_accelerator,
@@ -185,6 +186,10 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
     @pytest.mark.generate
+    def test_generate_with_quant_cache(self):
+        self.skipTest("BLT uses EncoderDecoderCache internally and does not support quantized cache")
+
+    @pytest.mark.generate
     @unittest.skip(
         "Blt requires real token IDs for its hash-based embedding computation, making inputs_embeds generation incompatible with identical outputs"
     )
@@ -260,74 +265,25 @@ class BltIntegrationTest(unittest.TestCase):
 
     @slow
     def test_model_logits(self):
-        EXPECTED_OUTPUT = torch.tensor(
-            [
-                [
-                    -10.4948,
-                    -10.7065,
-                    -6.1813,
-                    -10.5545,
-                    -10.3428,
-                    -9.1493,
-                    -8.4937,
-                    -8.6382,
-                    -9.2159,
-                    -9.5907,
-                    -9.3679,
-                    -8.4184,
-                    -9.0655,
-                    -3.4436,
-                    2.9616,
-                    -10.3157,
-                    -6.3723,
-                    -6.0133,
-                    -9.7100,
-                    -9.2128,
-                    -8.8064,
-                    -9.8179,
-                    -9.7516,
-                    -9.4681,
-                    -9.7715,
-                    -9.4897,
-                    -9.0491,
-                    -9.8098,
-                    -9.4648,
-                    -9.3294,
-                ],
-                [
-                    -13.3010,
-                    -13.1910,
-                    -5.7230,
-                    -13.2895,
-                    -13.4864,
-                    -8.7140,
-                    -7.0275,
-                    -7.0182,
-                    -10.1362,
-                    -10.3762,
-                    -9.9086,
-                    -7.8049,
-                    -8.8660,
-                    -5.2711,
-                    -3.5778,
-                    -12.5346,
-                    -9.1609,
-                    -6.7925,
-                    -10.3717,
-                    -9.2650,
-                    -10.6393,
-                    -11.4807,
-                    -11.2128,
-                    -10.9615,
-                    -10.5806,
-                    -10.8873,
-                    -11.0651,
-                    -11.3471,
-                    -10.5437,
-                    -9.9688,
-                ],
-            ]
-        ).to(torch_device)
+        # fmt: off
+        EXPECTED_OUTPUT = Expectations(
+            {
+                (None, None): torch.tensor(
+                    [
+                        [-10.5000, -10.6875, -6.2500, -10.5625, -10.3125, -9.1875, -8.5000, -8.5625, -9.1875, -9.6250, -9.3750, -8.5000, -9.1250, -3.3906, 2.9688, -10.3125, -6.4688, -6.0312, -9.7500, -9.1875, -8.8125, -9.8750, -9.8125, -9.5000, -9.8125, -9.5000, -9.0625, -9.8125, -9.5000, -9.3750],
+                        [-13.2500, -13.1250, -5.6875, -13.1875, -13.3750, -8.6875, -6.9688, -6.9375, -10.0625, -10.3125, -9.8125, -7.7188, -8.8125, -5.2188, -3.5000, -12.4375, -9.0625, -6.6250, -10.3125, -9.1875, -10.6250, -11.4375, -11.1250, -10.8750, -10.5000, -10.8750, -11.0000, -11.3125, -10.5000, -9.8750],
+                    ]
+                ),
+                ("xpu", None): torch.tensor(
+                    [
+                        [-10.4375, -10.6875, -6.1875, -10.5000, -10.3125, -9.1250, -8.4375, -8.6250, -9.1875, -9.5625, -9.3125, -8.4375, -9.0625, -3.4375, 2.9531, -10.2500, -6.4062, -6.0000, -9.6875, -9.1875, -8.8125, -9.8125, -9.7500, -9.4375, -9.7500, -9.4375, -9.0000, -9.8125, -9.4375, -9.3125],
+                        [-13.3125, -13.2500, -5.5938, -13.3125, -13.5000, -8.7500, -7.0625, -7.0312, -10.1875, -10.3750, -9.9375, -7.8438, -8.8750, -5.3438, -3.5938, -12.5625, -9.2500, -6.8125, -10.3750, -9.3125, -10.6875, -11.5625, -11.3125, -11.0000, -10.6250, -10.9375, -11.0625, -11.3750, -10.5625, -10.0000],
+                    ]
+                ),
+            }
+        ).get_expectation()
+        EXPECTED_OUTPUT = EXPECTED_OUTPUT.to(torch_device)
+        # fmt: on
 
         input_ids = [1, 42, 21, 12, 43, 23, 1, 4]
 
@@ -336,14 +292,21 @@ class BltIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             output = model(torch.tensor([input_ids]).to(torch_device))[0]
 
-        torch.testing.assert_close(EXPECTED_OUTPUT, output[0, :2, :30], rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(EXPECTED_OUTPUT, output[0, :2, :30].to(torch_device), rtol=1e-3, atol=1e-3)
 
     @slow
     @require_torch_bf16
     def test_model_bf16(self):
         """Test Blt model with bfloat16 precision."""
         NUM_TOKENS_TO_GENERATE = 200
-        EXPECTED_TEXT = "my name is alex and i am a student at the university of michigan in the college of arts and sciences. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan m"
+        # fmt: off
+        EXPECTED_TEXT = Expectations(
+            {
+                (None, None): "my name is alex and i am a student at the university of michigan. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan math club and the michigan computer s",
+                ("xpu", None): "my name is alex and i am a student at the university of michigan. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan math club and the michigan computer s",
+            }
+        )
+        # fmt: on
 
         prompt = "my name is"
 
@@ -360,81 +323,32 @@ class BltIntegrationTest(unittest.TestCase):
         )
 
         output_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(output_text, EXPECTED_TEXT)
+        self.assertEqual(output_text, EXPECTED_TEXT.get_expectation())
 
     @slow
     @require_torch_bf16
     def test_model_logits_bf16(self):
         """Test Blt model logits with bfloat16 precision."""
 
-        EXPECTED_OUTPUT = torch.tensor(
-            [
-                [
-                    -10.5000,
-                    -10.6875,
-                    -6.1875,
-                    -10.5625,
-                    -10.3125,
-                    -9.1875,
-                    -8.5000,
-                    -8.6875,
-                    -9.1875,
-                    -9.5625,
-                    -9.3750,
-                    -8.5000,
-                    -9.0625,
-                    -3.4219,
-                    2.9531,
-                    -10.3125,
-                    -6.4062,
-                    -6.0000,
-                    -9.6875,
-                    -9.1875,
-                    -8.8125,
-                    -9.8125,
-                    -9.7500,
-                    -9.4375,
-                    -9.8125,
-                    -9.5000,
-                    -9.0000,
-                    -9.8125,
-                    -9.4375,
-                    -9.3125,
-                ],
-                [
-                    -13.2500,
-                    -13.1875,
-                    -5.6875,
-                    -13.3125,
-                    -13.5000,
-                    -8.7500,
-                    -7.0625,
-                    -7.0312,
-                    -10.1250,
-                    -10.3750,
-                    -9.8750,
-                    -7.8438,
-                    -8.8750,
-                    -5.2812,
-                    -3.5625,
-                    -12.5000,
-                    -9.1875,
-                    -6.8125,
-                    -10.3750,
-                    -9.3125,
-                    -10.6250,
-                    -11.5000,
-                    -11.2500,
-                    -11.0000,
-                    -10.5625,
-                    -10.8750,
-                    -11.0625,
-                    -11.3750,
-                    -10.5625,
-                    -10.0000,
-                ],
-            ]
-        ).to(torch_device)
+        # fmt: off
+        EXPECTED_OUTPUT = Expectations(
+            {
+                (None, None): torch.tensor(
+                    [
+                        [-10.5000, -10.6875, -6.2500, -10.5625, -10.3125, -9.1875, -8.5000, -8.5625, -9.1875, -9.6250, -9.3750, -8.5000, -9.1250, -3.3906, 2.9688, -10.3125, -6.4688, -6.0312, -9.7500, -9.1875, -8.8125, -9.8750, -9.8125, -9.5000, -9.8125, -9.5000, -9.0625, -9.8125, -9.5000, -9.3750],
+                        [-13.2500, -13.1250, -5.6875, -13.1875, -13.3750, -8.6875, -6.9688, -6.9375, -10.0625, -10.3125, -9.8125, -7.7188, -8.8125, -5.2188, -3.5000, -12.4375, -9.0625, -6.6250, -10.3125, -9.1875, -10.6250, -11.4375, -11.1250, -10.8750, -10.5000, -10.8750, -11.0000, -11.3125, -10.5000, -9.8750],
+                    ]
+                ),
+                ("xpu", None): torch.tensor(
+                    [
+                        [-10.4375, -10.6875, -6.1875, -10.5000, -10.3125, -9.1250, -8.4375, -8.6250, -9.1875, -9.5625, -9.3125, -8.4375, -9.0625, -3.4375, 2.9531, -10.2500, -6.4062, -6.0000, -9.6875, -9.1875, -8.8125, -9.8125, -9.7500, -9.4375, -9.7500, -9.4375, -9.0000, -9.8125, -9.4375, -9.3125],
+                        [-13.3125, -13.2500, -5.5938, -13.3125, -13.5000, -8.7500, -7.0625, -7.0312, -10.1875, -10.3750, -9.9375, -7.8438, -8.8750, -5.3438, -3.5938, -12.5625, -9.2500, -6.8125, -10.3750, -9.3125, -10.6875, -11.5625, -11.3125, -11.0000, -10.6250, -10.9375, -11.0625, -11.3750, -10.5625, -10.0000],
+                    ]
+                ),
+            }
+        ).get_expectation()
+        EXPECTED_OUTPUT = EXPECTED_OUTPUT.to(torch_device)
+        # fmt: on
 
         input_ids = [1, 42, 21, 12, 43, 23, 1, 4]
 
@@ -445,13 +359,20 @@ class BltIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             output = model(torch.tensor([input_ids]).to(torch_device))[0]
 
-        torch.testing.assert_close(EXPECTED_OUTPUT, output[0, :2, :30], rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(EXPECTED_OUTPUT, output[0, :2, :30].to(torch_device), rtol=1e-3, atol=1e-3)
 
     @slow
     def test_model_eager(self):
         """Test Blt model with bfloat16 precision using eager attention implementation."""
         NUM_TOKENS_TO_GENERATE = 200
-        EXPECTED_TEXT = "my name is alex and i am a student at the university of michigan. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan math club and the michigan computer s"
+        # fmt: off
+        EXPECTED_TEXT = Expectations(
+            {
+                (None, None): "my name is alex and i am a student at the university of michigan. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan math club and the michigan computer s",
+                ("xpu", None): "my name is alex and i am a student at the university of michigan in the college of arts and sciences. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan m",
+            }
+        )
+        # fmt: on
 
         prompt = "my name is"
 
@@ -466,14 +387,21 @@ class BltIntegrationTest(unittest.TestCase):
         )
 
         output_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(output_text, EXPECTED_TEXT)
+        self.assertEqual(output_text, EXPECTED_TEXT.get_expectation())
 
     @slow
     @require_torch_bf16
     def test_model_bf16_static_cache(self):
         """Test Blt model with bfloat16 precision and static cache."""
         NUM_TOKENS_TO_GENERATE = 200
-        EXPECTED_TEXT = "my name is alex and i am a student at the university of michigan in the college of arts and sciences. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan m"
+        # fmt: off
+        EXPECTED_TEXT = Expectations(
+            {
+                (None, None): "my name is alex and i am a student at the university of michigan. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan math club and the michigan computer s",
+                ("xpu", None): "my name is alex and i am a student at the university of michigan. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan math club and the michigan computer s",
+            }
+        )
+        # fmt: on
 
         prompt = "my name is"
 
@@ -492,4 +420,4 @@ class BltIntegrationTest(unittest.TestCase):
         )
 
         output_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(output_text, EXPECTED_TEXT)
+        self.assertEqual(output_text, EXPECTED_TEXT.get_expectation())

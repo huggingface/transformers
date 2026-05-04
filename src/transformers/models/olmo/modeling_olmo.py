@@ -35,7 +35,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -496,4 +496,8 @@ class OlmoForCausalLM(OlmoPreTrainedModel, GenerationMixin):
         )
 
 
-__all__ = ["OlmoForCausalLM", "OlmoModel", "OlmoPreTrainedModel"]
+class OlmoForSequenceClassification(GenericForSequenceClassification, OlmoPreTrainedModel):
+    pass
+
+
+__all__ = ["OlmoForCausalLM", "OlmoForSequenceClassification", "OlmoModel", "OlmoPreTrainedModel"]

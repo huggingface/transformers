@@ -48,12 +48,12 @@ This model was contributed by [Raushan Turganbay](https://huggingface.co/Raushan
 Using GLM-Image with image input to generate vision token for DIT using.
 
 ```python
-from transformers import GlmImageForConditionalGeneration, AutoProcessor
-import torch
+
+from transformers import AutoProcessor, GlmImageForConditionalGeneration
+
 
 model = GlmImageForConditionalGeneration.from_pretrained(
     pretrained_model_name_or_path="zai-org/GLM-Image/vision_language_encoder",
-    dtype=torch.bfloat16,
     device_map="cuda:0"
 )
 processor = AutoProcessor.from_pretrained(

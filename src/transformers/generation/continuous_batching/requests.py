@@ -27,6 +27,7 @@ if is_psutil_available():
     import psutil
 
 # This is a temporary token ID used to represent a token that is not yet generated
+# TODO: update this to 0 and check it breaks nothing + simplify carry over and time new logic
 TMP_TOKEN_ID = -1
 
 
@@ -45,9 +46,11 @@ def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
         device = torch.device("cuda")
         torch.cuda.empty_cache()
         torch.cuda.synchronize()
-        total_memory = torch.cuda.get_device_properties(device).total_memory
+        # Use mem_get_info to get actual free memory: device_properties().total_memory returns the physical device
+        # total which ignores CUDA context and driver overhead (~0.5 GiB), leading to overcommit.
+        free_memory, total_memory = torch.cuda.mem_get_info(device)
         reserved_memory = torch.cuda.memory_reserved(device)
-        allocated_memory = torch.cuda.memory_allocated(device)
+        allocated_memory = total_memory - free_memory
     elif is_torch_xpu_available():
         device = torch.device("xpu")
         torch.xpu.empty_cache()
@@ -177,6 +180,7 @@ class RequestState:
     # Fields overwritten in __post_init__
     _new_tokens_limit: int = 2147483647  # An int to check the max number of new tokens w/out always comparing w/ None
     remaining_prefill_tokens: list[int] = field(default_factory=list)  # Initial tokens left to process
+    is_cpu_offloaded: bool = False  # True when the request's KV cache is in the CPU swap pool
 
     def __post_init__(self):
         # If no max length is set, we set an absurdly high value which will never be reached

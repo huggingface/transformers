@@ -32,6 +32,7 @@ from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
     LlamaForCausalLM,
+    LlamaForSequenceClassification,
     LlamaMLP,
     LlamaModel,
     LlamaRotaryEmbedding,
@@ -182,8 +183,13 @@ class OlmoForCausalLM(LlamaForCausalLM):
     pass
 
 
+class OlmoForSequenceClassification(LlamaForSequenceClassification):
+    pass
+
+
 __all__ = [
     "OlmoForCausalLM",
+    "OlmoForSequenceClassification",
     "OlmoModel",
     "OlmoPreTrainedModel",  # noqa: F822
 ]

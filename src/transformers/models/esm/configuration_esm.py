@@ -159,12 +159,12 @@ class EsmConfig(PreTrainedConfig):
     mask_token_id (`int`, *optional*):
         The index of the mask token in the vocabulary. This must be included in the config because of the
         "mask-dropout" scaling trick, which will scale the inputs depending on the number of masked tokens.
+    rope_theta (`float`, defaults to 10000.0):
+        The base period of the RoPE embeddings. Only used when `position_embedding_type` is set to `"rotary"`.
     position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
         Type of position embedding. Choose either `"absolute"` or "rotary"`.
     emb_layer_norm_before (`bool`, *optional*):
         Whether to apply layer normalization after embeddings but before the main stem of the network.
-    rope_theta (`float`, defaults to 10000.0):
-        The base period of the RoPE embeddings. Only used when `position_embedding_type` is set to `"rotary"`.
     token_dropout (`bool`, defaults to `False`):
         When this is enabled, masked tokens are treated as if they had been dropped out by input dropout.
     is_folding_model (`bool`, defaults to `False`):

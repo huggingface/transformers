@@ -62,6 +62,23 @@ if is_torch_available():
     from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
 
+def _should_warn(outer_attr: str, inner_attr: str, user_set_attributes: set | None) -> bool:
+    """Determine if we should raise a warning for the combination `outer_attr` and `inner_attr`, based on whether
+    they were provided explicitly, i.e. if they were in `user_set_attributes`.
+    For example, if `outer_attr="do_sample"`, the warnings should be suppressed for `inner_attr` flags (e.g. "top_p") that weren't
+    explicitly set by the caller. When `do_sample=False` is explicitly required by the user, values such as `top_p` inherited
+    from a model's `generation_config.json` are harmless when the user opts for greedy decoding.
+    """
+    outer_sample_set = user_set_attributes is not None and outer_attr in user_set_attributes
+    inner_attr_set = user_set_attributes is not None and inner_attr in user_set_attributes
+    # We should warn only if both are explicitly set, none are set, or only the inner_attr is set while outer_attr is not
+    return (
+        (outer_sample_set and inner_attr_set)
+        or (not outer_sample_set and not inner_attr_set)
+        or (inner_attr_set and not outer_sample_set)
+    )
+
+
 class GenerationMode(ExplicitEnum):
     """
     Possible generation modes, downstream of the [`~generation.GenerationMixin.generate`] method.
@@ -350,6 +367,11 @@ class GenerationConfig(PushToHubMixin):
     _original_object_hash: int | None
 
     def __init__(self, **kwargs):
+        # Snapshot of the attributes the caller explicitly provided (before the `kwargs.pop(...)` calls below
+        # consume them). Used by `validate()` to restrict "minor issue" warnings to flags actually set by the user,
+        # as opposed to defaults inherited from a model's `generation_config.json`.
+        user_set_attributes = set(kwargs.keys())
+
         # Parameters that control the length of the output
         self.max_length = kwargs.pop("max_length", None)
         self.max_new_tokens = kwargs.pop("max_new_tokens", None)
@@ -466,7 +488,7 @@ class GenerationConfig(PushToHubMixin):
                 )
 
         # Validate the values of the attributes
-        self.validate()
+        self.validate(user_set_attributes=user_set_attributes)
 
     def __hash__(self):
         return hash(self.to_json_string(ignore_metadata=True))
@@ -587,7 +609,7 @@ class GenerationConfig(PushToHubMixin):
             "diversity_penalty": 0.0,
         }
 
-    def validate(self, strict=False):
+    def validate(self, strict=False, user_set_attributes: set[str] | None = None):
         """
         Validates the values of the attributes of the [`GenerationConfig`] instance. Raises exceptions in the presence
         of parameterization that can be detected as incorrect from the configuration instance alone.
@@ -597,6 +619,11 @@ class GenerationConfig(PushToHubMixin):
 
         Args:
             strict (bool): If True, raise an exception for any issues found. If False, only log issues.
+            user_set_attributes (set[str], *optional*): Names of attributes the caller explicitly provided. When
+                supplied, "minor issue" warnings about conflicting flag combinations (e.g. sampling-only flags set
+                while `do_sample=False`) only fire if the conflicting flag is in this set -- avoiding noisy warnings
+                when the value was inherited from a model's default `generation_config.json`. When `None`, all set
+                attributes are considered user-set (backward-compatible behavior for direct `validate()` calls).
         """
         minor_issues = {}  # format: {attribute_name: issue_description}
 
@@ -636,47 +663,79 @@ class GenerationConfig(PushToHubMixin):
 
         # Note that we check `is not True` in purpose. Boolean fields can also be `None` so we
         # have to be explicit. Value of `None` is same as having `False`, i.e. the default value
+
         if self.do_sample is not True:
             greedy_wrong_parameter_msg = (
-                "`do_sample` is set not to set `True`. However, `{flag_name}` is set to `{flag_value}` -- this flag is only "
-                "used in sample-based generation modes. You should set `do_sample=True` or unset `{flag_name}`."
+                "`do_sample` is not set to `True`. However, `{flag_name}` is set to `{flag_value}` -- this flag is "
+                "only used in sample-based generation modes. You should set `do_sample=True` or unset `{flag_name}`."
             )
-            if self.temperature is not None and self.temperature != 1.0:
+
+            if (
+                self.temperature is not None
+                and self.temperature != 1.0
+                and _should_warn("do_sample", "temperature", user_set_attributes)
+            ):
                 minor_issues["temperature"] = greedy_wrong_parameter_msg.format(
                     flag_name="temperature", flag_value=self.temperature
                 )
-            if self.top_p is not None and self.top_p != 1.0:
+            if (
+                self.top_p is not None
+                and self.top_p != 1.0
+                and _should_warn("do_sample", "top_p", user_set_attributes)
+            ):
                 minor_issues["top_p"] = greedy_wrong_parameter_msg.format(flag_name="top_p", flag_value=self.top_p)
-            if self.min_p is not None:
+            if self.min_p is not None and _should_warn("do_sample", "min_p", user_set_attributes):
                 minor_issues["min_p"] = greedy_wrong_parameter_msg.format(flag_name="min_p", flag_value=self.min_p)
-            if self.top_h is not None:
+            if self.top_h is not None and _should_warn("do_sample", "top_h", user_set_attributes):
                 minor_issues["top_h"] = greedy_wrong_parameter_msg.format(flag_name="top_h", flag_value=self.top_h)
-            if self.typical_p is not None and self.typical_p != 1.0:
+            if (
+                self.typical_p is not None
+                and self.typical_p != 1.0
+                and _should_warn("do_sample", "typical_p", user_set_attributes)
+            ):
                 minor_issues["typical_p"] = greedy_wrong_parameter_msg.format(
                     flag_name="typical_p", flag_value=self.typical_p
                 )
-            if self.top_k is not None and self.top_k != 50:
+            if self.top_k is not None and self.top_k != 50 and _should_warn("do_sample", "top_k", user_set_attributes):
                 minor_issues["top_k"] = greedy_wrong_parameter_msg.format(flag_name="top_k", flag_value=self.top_k)
-            if self.epsilon_cutoff is not None and self.epsilon_cutoff != 0.0:
+            if (
+                self.epsilon_cutoff is not None
+                and self.epsilon_cutoff != 0.0
+                and _should_warn("do_sample", "epsilon_cutoff", user_set_attributes)
+            ):
                 minor_issues["epsilon_cutoff"] = greedy_wrong_parameter_msg.format(
                     flag_name="epsilon_cutoff", flag_value=self.epsilon_cutoff
                 )
-            if self.eta_cutoff is not None and self.eta_cutoff != 0.0:
+            if (
+                self.eta_cutoff is not None
+                and self.eta_cutoff != 0.0
+                and _should_warn("do_sample", "eta_cutoff", user_set_attributes)
+            ):
                 minor_issues["eta_cutoff"] = greedy_wrong_parameter_msg.format(
                     flag_name="eta_cutoff", flag_value=self.eta_cutoff
                 )
 
-        # 2.2. detect beam-only parameterization when not in beam mode
+        # 2.2. detect beam-only parameterization when not in beam mode. Same provenance filtering as above --
+        # both `num_beams` and the beam-only flag must be user-set for the warning to fire.
         if self.num_beams is None or self.num_beams == 1:
             single_beam_wrong_parameter_msg = (
-                "`num_beams` is set to {num_beams}. However, `{flag_name}` is set to `{flag_value}` -- this flag is only used "
-                "in beam-based generation modes. You should set `num_beams>1` or unset `{flag_name}`."
+                "`num_beams` is set to {num_beams}. However, `{flag_name}` is set to `{flag_value}` -- this flag is "
+                "only used in beam-based generation modes. You should set `num_beams>1` or unset `{flag_name}`."
             )
-            if self.early_stopping is not None and self.early_stopping is not False:
+
+            if (
+                self.early_stopping is not None
+                and self.early_stopping is not False
+                and _should_warn("num_beams", "early_stopping", user_set_attributes)
+            ):
                 minor_issues["early_stopping"] = single_beam_wrong_parameter_msg.format(
                     num_beams=self.num_beams, flag_name="early_stopping", flag_value=self.early_stopping
                 )
-            if self.length_penalty is not None and self.length_penalty != 1.0:
+            if (
+                self.length_penalty is not None
+                and self.length_penalty != 1.0
+                and _should_warn("num_beams", "length_penalty", user_set_attributes)
+            ):
                 minor_issues["length_penalty"] = single_beam_wrong_parameter_msg.format(
                     num_beams=self.num_beams, flag_name="length_penalty", flag_value=self.length_penalty
                 )
@@ -1232,8 +1291,9 @@ class GenerationConfig(PushToHubMixin):
                     setattr(self, key, value)
                     to_remove.append(key)
 
-        # Confirm that the updated instance is still valid
-        self.validate()
+        # Confirm that the updated instance is still valid. Only attributes *explicitly* updated in this call count
+        # as user-set for warning purposes: defaults inherited from a model's config shouldn't emit warnings.
+        self.validate(user_set_attributes=set(to_remove))
 
         # Remove all the attributes that were updated, without modifying the input dict
         unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
@@ -1556,11 +1616,13 @@ class ContinuousBatchingConfig:
             Number of blocks in the KV cache. Auto-inferred from GPU memory when `None`.
         max_batch_tokens (`int`, *optional*):
             Maximum number of tokens in a batch. Auto-inferred from GPU memory when `None`.
-        max_memory_percent (`float`, *optional*, defaults to 0.8):
-            Maximum percentage of free GPU memory (after the model is loaded) to use for the KV cache.
-        max_blocks_per_request (`int`, *optional*, defaults to 0):
+        max_memory_percent (`float`, *optional*):
+            Maximum percentage of free GPU memory (after the model is loaded) to use for the KV cache. When `None`,
+            resolved at runtime to 0.9 if there is no logit processing and 0.8 if there is, to leave headroom for
+            vocabulary-sized temporary tensors.
+        max_blocks_per_request (`int`, *optional*):
             Maximum blocks per request, used in the `flash_attn_with_kvcache` fast decode path to dimension
-            the block table. Setting this to 0 disables the fast decode path.
+            the block table. Setting this to 0 disables the fast decode path. Default is None (auto-inferred).
         allow_block_sharing (`bool`, *optional*, defaults to `True`):
             Whether to allow block sharing for prefix caching. Block sharing can only be allowed, never forced,
             as some models do not support it. Disable if you have few short prompts but long generation lengths.
@@ -1591,6 +1653,13 @@ class ContinuousBatchingConfig:
             Scheduler type to use.
         return_logprobs (`bool`, *optional*, defaults to `False`):
             Whether to return log probabilities along with the generated tokens.
+        cpu_offload_space (`float`, *optional*, defaults to 0.0):
+            CPU swap space in GiB for KV cache offloading. A pre-allocated pinned CPU buffer of this size is
+            created at initialization. When the GPU cache is full, evicted requests' KV caches are copied here
+            instead of being discarded. 0 disables offloading (default).
+        cpu_offload_space_safety_threshold (`float`, *optional*, defaults to 0.8):
+            If `cpu_offload_space` exceeds this fraction of total system RAM, it is clamped to avoid host OOM.
+            Set to 1.0 to disable the safety cap. Ignored when psutil is not available.
         max_queue_size (`int`, *optional*, defaults to 0):
             Maximum request queue size for serving. 0 means unlimited.
         per_request_processors (`bool`, *optional*, defaults to `False`):
@@ -1607,12 +1676,13 @@ class ContinuousBatchingConfig:
     num_blocks: int | None = None
     max_batch_tokens: int | None = None
 
-    # The max percentage of free GPU memory (after the model is loaded) to use for the KV cache.
-    max_memory_percent: float = 0.8
+    # The max percentage of free GPU memory (after the model is loaded) to use for the KV cache. If None, auto resolved
+    # to 0.9 (no logit processing) or 0.8 (logit processing) to leave headroom for temporary tensors.
+    max_memory_percent: float | None = None
 
     # This is only used in the flash_attn_with_kvcache fast decode path to dimension the block table. If it is set to 0,
-    # the fast decode path will not be used. Currently turned off by default.
-    max_blocks_per_request: int | None = 0
+    # the fast decode path will not be used. Auto-inferred from GPU memory when `None` (default).
+    max_blocks_per_request: int | None = None
 
     # Block sharing can only be allowed, but never forced: some model just do not support it. If you only have a few
     # short prompts, but long generation lengths, you might want to disable block sharing.
@@ -1649,6 +1719,16 @@ class ContinuousBatchingConfig:
     # probabilities will be returned along with the generated tokens in the generation output.
     return_logprobs: bool = False
 
+    # CPU swap space in GiB for KV cache offloading. When the GPU cache is full and a request must be evicted, its KV
+    # cache is copied to this pre-allocated pinned CPU buffer instead of being discarded. Default to 0.0 GiB. You can
+    # also set this to None to dimension the pool using only the safety threshold, but this will error out if psutil is
+    # not available.
+    # TODO: use async transfer and move this to a non-zero value
+    cpu_offload_space: float | None = 0.0
+    # Safety cap: if cpu_offload_space exceeds this fraction of total system RAM, it is clamped. Set to 0.0 to disable
+    # offloading.
+    cpu_offload_space_safety_threshold: float = 0.8
+
     # The parameters below are mostly useful in the context of serving
     max_queue_size: int = 0
 
@@ -1658,6 +1738,11 @@ class ContinuousBatchingConfig:
     # When True, processors explicitly marked as unsupported are removed with a warning. When False, all processors
     # are kept but warnings are logged for unsupported/unknown ones.
     drop_unsupported_processors: bool = True
+
+    @property
+    def fallback_max_blocks_per_request(self) -> int:
+        """A good default for the size of the block table for the decode path"""
+        return 32
 
     def account_for_cb_deprecated_arguments(
         self,
@@ -1772,6 +1857,13 @@ class ContinuousBatchingConfig:
                 "disable asynchronous batching but it will degrade performance."
             )
         return self.use_async_batching
+
+    def resolve_max_memory_percent(self, has_logit_processors: bool) -> None:
+        """Resolves `max_memory_percent` when unset: 0.9 without logit processors, 0.8 with them. Active processors
+        materialize `[N, V]` intermediates (e.g. top-p sort, softmax) that get captured into the CUDA graph pool, so
+        the cache has to cede some budget to that pool."""
+        if self.max_memory_percent is None:
+            self.max_memory_percent = 0.8 if has_logit_processors else 0.9
 
     def resolve_sentinel_values(self) -> None:
         """For some parameters (padding intervals and max cached graphs), the default is a sentinel value of 0: that

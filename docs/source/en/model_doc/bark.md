@@ -44,11 +44,9 @@ You can speed up inference and reduce memory footprint by 50% simply by loading 
 
 ```python
 from transformers import BarkModel
-from accelerate import Accelerator
-import torch
 
-device = Accelerator().device
-model = BarkModel.from_pretrained("suno/bark-small", dtype=torch.float16).to(device)
+
+model = BarkModel.from_pretrained("suno/bark-small", device_map="auto")
 ```
 
 #### Using CPU offload
@@ -81,7 +79,7 @@ pip install -U flash-attn --no-build-isolation
 To load a model using Flash Attention 2, we can pass the `attn_implementation="flash_attention_2"` flag to [`.from_pretrained`](https://huggingface.co/docs/transformers/main/en/main_classes/model#transformers.PreTrainedModel.from_pretrained). We'll also load the model in half-precision (e.g. `torch.float16`), since it results in almost no degradation to audio quality but significantly lower memory usage and faster inference:
 
 ```python
-model = BarkModel.from_pretrained("suno/bark-small", dtype=torch.float16, attn_implementation="flash_attention_2").to(device)
+model = BarkModel.from_pretrained("suno/bark-small", attn_implementation="flash_attention_2", device_map="auto")
 ```
 
 ##### Performance comparison
@@ -100,13 +98,10 @@ You can combine optimization techniques, and use CPU offload, half-precision and
 
 ```python
 from transformers import BarkModel
-from accelerate import Accelerator
-import torch
 
-device = Accelerator().device
 
 # load in fp16 and use Flash Attention 2
-model = BarkModel.from_pretrained("suno/bark-small", dtype=torch.float16, attn_implementation="flash_attention_2").to(device)
+model = BarkModel.from_pretrained("suno/bark-small", attn_implementation="flash_attention_2", device_map="auto")
 
 # enable CPU offload
 model.enable_cpu_offload()
@@ -120,53 +115,55 @@ Suno offers a library of voice presets in a number of languages [here](https://s
 These presets are also uploaded in the hub [here](https://huggingface.co/suno/bark-small/tree/main/speaker_embeddings) or [here](https://huggingface.co/suno/bark/tree/main/speaker_embeddings).
 
 ```python
->>> from transformers import AutoProcessor, BarkModel
+from transformers import AutoProcessor, BarkModel
 
->>> processor = AutoProcessor.from_pretrained("suno/bark")
->>> model = BarkModel.from_pretrained("suno/bark")
 
->>> voice_preset = "v2/en_speaker_6"
+processor = AutoProcessor.from_pretrained("suno/bark")
+model = BarkModel.from_pretrained("suno/bark", device_map="auto")
 
->>> inputs = processor("Hello, my dog is cute", voice_preset=voice_preset)
+voice_preset = "v2/en_speaker_6"
 
->>> audio_array = model.generate(**inputs)
->>> audio_array = audio_array.cpu().numpy().squeeze()
+inputs = processor("Hello, my dog is cute", voice_preset=voice_preset)
+
+audio_array = model.generate(**inputs)
+audio_array = audio_array.cpu().numpy().squeeze()
 ```
 
 Bark can generate highly realistic, **multilingual** speech as well as other audio - including music, background noise and simple sound effects.
 
 ```python
->>> # Multilingual speech - simplified Chinese
->>> inputs = processor("惊人的！我会说中文")
+# Multilingual speech - simplified Chinese
+inputs = processor("惊人的！我会说中文")
 
->>> # Multilingual speech - French - let's use a voice_preset as well
->>> inputs = processor("Incroyable! Je peux générer du son.", voice_preset="fr_speaker_5")
+# Multilingual speech - French - let's use a voice_preset as well
+inputs = processor("Incroyable! Je peux générer du son.", voice_preset="fr_speaker_5")
 
->>> # Bark can also generate music. You can help it out by adding music notes around your lyrics.
->>> inputs = processor("♪ Hello, my dog is cute ♪")
+# Bark can also generate music. You can help it out by adding music notes around your lyrics.
+inputs = processor("♪ Hello, my dog is cute ♪")
 
->>> audio_array = model.generate(**inputs)
->>> audio_array = audio_array.cpu().numpy().squeeze()
+audio_array = model.generate(**inputs)
+audio_array = audio_array.cpu().numpy().squeeze()
 ```
 
 The model can also produce **nonverbal communications** like laughing, sighing and crying.
 
 ```python
->>> # Adding non-speech cues to the input text
->>> inputs = processor("Hello uh ... [clears throat], my dog is cute [laughter]")
+# Adding non-speech cues to the input text
+inputs = processor("Hello uh [clears throat], my dog is cute [laughter]")
 
->>> audio_array = model.generate(**inputs)
->>> audio_array = audio_array.cpu().numpy().squeeze()
+audio_array = model.generate(**inputs)
+audio_array = audio_array.cpu().numpy().squeeze()
 ```
 
 To save the audio, simply take the sample rate from the model config and some scipy utility:
 
 ```python
->>> from scipy.io.wavfile import write as write_wav
+from scipy.io.wavfile import write as write_wav
 
->>> # save audio to disk, but first take the sample rate from the model config
->>> sample_rate = model.generation_config.sample_rate
->>> write_wav("bark_generation.wav", sample_rate, audio_array)
+
+# save audio to disk, but first take the sample rate from the model config
+sample_rate = model.generation_config.sample_rate
+write_wav("bark_generation.wav", sample_rate, audio_array)
 ```
 
 ## BarkConfig

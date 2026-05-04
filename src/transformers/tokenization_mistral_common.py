@@ -1090,16 +1090,11 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
                 If not specified, the default reasoning effort will be used.
 
             kwargs (additional keyword arguments, *optional*):
-                Not supported by `MistralCommonBackend.apply_chat_template`.
-                Will raise an error if used.
+                Additional arguments passed to the mistral-common `ChatCompletionRequest.from_openai` method.
 
         Returns:
             `Union[str, list[int], list[str], list[list[int]], BatchEncoding]`: The tokenized chat so far, including control tokens. This output is ready to pass to the model, either directly or via methods like `generate()`.
         """
-        if kwargs:
-            raise ValueError(
-                f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonBackend.apply_chat_template`."
-            )
         if not isinstance(truncation, bool):
             raise TypeError("`truncation` must be a boolean for `apply_chat_template` method.")
 
@@ -1185,6 +1180,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
                 tools=tools,
                 continue_final_message=continue_final_message,
                 reasoning_effort=reasoning_effort,
+                **kwargs,
             )
 
             tokenized_request = self.tokenizer.encode_chat_completion(chat_request)
@@ -1594,9 +1590,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
     @staticmethod
     def _get_validation_mode(mode: str | ValidationMode) -> ValidationMode:
         """Get the validation mode from a string or a ValidationMode."""
-        _invalid_mode_msg = (
-            f"Invalid `mistral-common` tokenizer mode: {mode}. Possible values are 'finetuning' or 'test'."
-        )
+        _invalid_mode_msg = f"Invalid `mistral-common` tokenizer mode: {mode}. Possible values are {', '.join([vm.value for vm in list(ValidationMode)])}."
         if isinstance(mode, str):
             try:
                 mode = ValidationMode[mode]
@@ -1605,8 +1599,6 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         elif not isinstance(mode, (str, ValidationMode)):
             raise ValueError(_invalid_mode_msg)
 
-        if mode not in [ValidationMode.finetuning, ValidationMode.test]:
-            raise ValueError(_invalid_mode_msg)
         return mode
 
     def __repr__(self) -> str:

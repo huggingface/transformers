@@ -113,35 +113,36 @@ To follow the example of the following image, `"Hello, I'm Moshi"` could be tran
 [`MoshiForConditionalGeneration.generate`] then auto-regressively feeds to itself its own audio stream, but since it doesn't have access to the user input stream while using `transformers`, it will thus **assume that the user is producing blank audio**.
 
 ```python
->>> from datasets import load_dataset, Audio
->>> import torch, math
->>> from transformers import MoshiForConditionalGeneration, AutoFeatureExtractor, AutoTokenizer
-from accelerate import Accelerator
+import math
+
+import torch
+from datasets import Audio, load_dataset
+
+from transformers import AutoFeatureExtractor, AutoTokenizer
 
 
->>> librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
->>> feature_extractor = AutoFeatureExtractor.from_pretrained("kyutai/moshiko-pytorch-bf16")
->>> tokenizer = AutoTokenizer.from_pretrained("kyutai/moshiko-pytorch-bf16")
->>> device = Accelerator().device
->>> dtype = torch.bfloat16
+librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+feature_extractor = AutoFeatureExtractor.from_pretrained("kyutai/moshiko-pytorch-bf16")
+tokenizer = AutoTokenizer.from_pretrained("kyutai/moshiko-pytorch-bf16")
+dtype = torch.bfloat16
 
->>> # prepare user input audio 
->>> librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
->>> audio_sample = librispeech_dummy[-1]["audio"]["array"]
->>> user_input_values = feature_extractor(raw_audio=audio_sample, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt").to(device=device, dtype=dtype)
+# prepare user input audio
+librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
+audio_sample = librispeech_dummy[-1]["audio"]["array"]
+user_input_values = feature_extractor(raw_audio=audio_sample, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt").to(device=device, dtype=dtype)
 
->>> # prepare moshi input values - we suppose moshi didn't say anything while the user spoke
->>> moshi_input_values = torch.zeros_like(user_input_values.input_values)
+# prepare moshi input values - we suppose moshi didn't say anything while the user spoke
+moshi_input_values = torch.zeros_like(user_input_values.input_values)
 
->>> # prepare moshi input ids - we suppose moshi didn't say anything while the user spoke
->>> num_tokens = math.ceil(moshi_input_values.shape[-1] * waveform_to_token_ratio)
->>> input_ids = torch.ones((1, num_tokens), device=device, dtype=torch.int64) * tokenizer.encode("<pad>")[0]
+# prepare moshi input ids - we suppose moshi didn't say anything while the user spoke
+num_tokens = math.ceil(moshi_input_values.shape[-1] * waveform_to_token_ratio)
+input_ids = torch.ones((1, num_tokens), device=device, dtype=torch.int64) * tokenizer.encode("<pad>")[0]
 
->>> # generate 25 new tokens (around 2s of audio)
->>> output = model.generate(input_ids=input_ids, user_input_values=user_input_values.input_values, moshi_input_values=moshi_input_values, max_new_tokens=25)
+# generate 25 new tokens (around 2s of audio)
+output = model.generate(input_ids=input_ids, user_input_values=user_input_values.input_values, moshi_input_values=moshi_input_values, max_new_tokens=25)
 
->>> text_tokens = output.sequences
->>> audio_waveforms = output.audio_sequences
+text_tokens = output.sequences
+audio_waveforms = output.audio_sequences
 ```
 
 **2. Model training**
