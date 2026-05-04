@@ -10,66 +10,61 @@ export PYTHONPATH = src
 # so they can never drift out of sync (e.g. silently dropping `auto_mappings`
 # from CI, as happened in #45018 → fixed in #45774).
 
-STYLE_CHECKERS := ruff_check ruff_format init_isort sort_auto_mappings
-TYPING_CHECKERS := types modeling_structure
-CODE_QUALITY_CHECKERS := $(TYPING_CHECKERS) $(STYLE_CHECKERS)
+STYLE_CHECKERS := ruff_check, ruff_format, init_isort, sort_auto_mappings
+TYPING_CHECKERS := types, modeling_structure
+CODE_QUALITY_CHECKERS := $(TYPING_CHECKERS), $(STYLE_CHECKERS)
 
 REPO_CONSISTENCY_CHECKERS := \
-	auto_mappings \
-	imports \
-	import_complexity \
-	copies \
-	modular_conversion \
-	doc_toc \
-	modeling_rules_doc \
-	docstrings \
-	dummies \
-	repo \
-	inits \
-	pipeline_typing \
-	config_docstrings \
-	config_attributes \
-	doctest_list \
-	update_metadata \
-	add_dates \
+	auto_mappings, \
+	imports, \
+	import_complexity, \
+	copies, \
+	modular_conversion, \
+	doc_toc, \
+	modeling_rules_doc, \
+	docstrings, \
+	dummies, \
+	repo, \
+	inits, \
+	pipeline_typing, \
+	config_docstrings, \
+	config_attributes, \
+	doctest_list, \
+	update_metadata, \
+	add_dates, \
 	deps_table
 
-ALL_CHECKERS := $(CODE_QUALITY_CHECKERS) $(REPO_CONSISTENCY_CHECKERS)
+ALL_CHECKERS := $(CODE_QUALITY_CHECKERS), $(REPO_CONSISTENCY_CHECKERS)
 
 # `update_metadata` in --fix mode pushes to the `huggingface/transformers-metadata`
-# Hub dataset (requires an auth token); exclude it from the local fix workflow.
-FIX_CHECKERS := $(filter-out update_metadata,$(ALL_CHECKERS))
-
-# Convert a space-separated checker list to the comma-separated form `checkers.py` expects.
-empty :=
-space := $(empty) $(empty)
-comma := ,
-csv = $(subst $(space),$(comma),$(strip $1))
+# Hub dataset (requires an auth token); strip it from the local fix workflow.
+# `checkers.py` ignores the empty entry left behind.
+FIX_CHECKERS := $(subst update_metadata,,$(ALL_CHECKERS))
 
 
 # Runs all linting/formatting scripts, most notably ruff
 style:
-	@python utils/checkers.py $(call csv,$(STYLE_CHECKERS)) --fix
+	@python utils/checkers.py $(STYLE_CHECKERS) --fix
 
 # Runs ty type checker and model structure rules
 typing:
-	@python utils/checkers.py $(call csv,$(TYPING_CHECKERS))
+	@python utils/checkers.py $(TYPING_CHECKERS)
 
 # Runs typing, ruff linting/formatting, import-order checks and auto-mappings
 check-code-quality:
-	@python utils/checkers.py $(call csv,$(CODE_QUALITY_CHECKERS))
+	@python utils/checkers.py $(CODE_QUALITY_CHECKERS)
 
 # Runs a full repository consistency check.
 check-repository-consistency:
-	@python utils/checkers.py $(call csv,$(REPO_CONSISTENCY_CHECKERS))
+	@python utils/checkers.py $(REPO_CONSISTENCY_CHECKERS)
 
 # Runs typing and formatting checks + repository consistency check (ignores errors)
 check-repo:
-	@python utils/checkers.py $(call csv,$(ALL_CHECKERS)) --keep-going
+	@python utils/checkers.py $(ALL_CHECKERS) --keep-going
 
 # Run all repo checks for which there is an automatic fix, most notably modular conversions
 fix-repo:
-	@python utils/checkers.py $(call csv,$(FIX_CHECKERS)) --fix --keep-going
+	@python utils/checkers.py $(FIX_CHECKERS) --fix --keep-going
 
 # Run tests for the library, requires pytest-random-order
 test:
