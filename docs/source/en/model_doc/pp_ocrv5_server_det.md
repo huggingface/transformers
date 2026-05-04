@@ -39,10 +39,12 @@ The example below demonstrates how to detect text with PP-OCRV5_Server_Det using
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import pipeline
+
 
 image = Image.open(
     requests.get(
@@ -57,17 +59,18 @@ results = detector(image)
 
 for result in results:
     print(result)
-
 ```
 
 </hfoption>
 
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
+
 
 model_path = "PaddlePaddle/PP-OCRV5_server_det_safetensors"
 model = AutoModelForObjectDetection.from_pretrained(
@@ -84,7 +87,6 @@ results = image_processor.post_process_object_detection(outputs, target_sizes=in
 
 for result in results:
     print(result)
-
 ```
 
 </hfoption>
@@ -97,10 +99,12 @@ Here is how you can do it with PP-OCRV5_Server_Det using [`Pipeline`] or the [`A
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import pipeline
+
 
 image = Image.open(
     requests.get(
@@ -115,17 +119,18 @@ results = detector([image, image])
 
 for result in results:
     print(result)
-
 ```
 
 </hfoption>
 
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
+
 
 model_path = "PaddlePaddle/PP-OCRV5_server_det_safetensors"
 model = AutoModelForObjectDetection.from_pretrained(
@@ -142,7 +147,6 @@ results = image_processor.post_process_object_detection(outputs, target_sizes=in
 
 for result in results:
     print(result)
-
 ```
 
 </hfoption>

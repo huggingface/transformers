@@ -52,19 +52,20 @@ The original code can be found [here](https://github.com/IDEA-Research/DAB-DETR)
 Use the code below to get started with the model.
 
 ```python
-import torch
 import requests
-
+import torch
 from PIL import Image
-from transformers import AutoModelForObjectDetection, AutoImageProcessor
 
-url = 'http://images.cocodataset.org/val2017/000000039769.jpg' 
+from transformers import AutoImageProcessor, AutoModelForObjectDetection
+
+
+url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
 image = Image.open(requests.get(url, stream=True).raw)
 
 image_processor = AutoImageProcessor.from_pretrained("IDEA-Research/dab-detr-resnet-50")
-model = AutoModelForObjectDetection.from_pretrained("IDEA-Research/dab-detr-resnet-50")
+model = AutoModelForObjectDetection.from_pretrained("IDEA-Research/dab-detr-resnet-50", device_map="auto")
 
-inputs = image_processor(images=image, return_tensors="pt")
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -92,26 +93,28 @@ There are three other ways to instantiate a DAB-DETR model (depending on what yo
 
 Option 1: Instantiate DAB-DETR with pre-trained weights for entire model
 
-```py
->>> from transformers import DabDetrForObjectDetection
+```python
+from transformers import DabDetrForObjectDetection
 
->>> model = DabDetrForObjectDetection.from_pretrained("IDEA-Research/dab-detr-resnet-50")
+
+model = DabDetrForObjectDetection.from_pretrained("IDEA-Research/dab-detr-resnet-50", device_map="auto")
 ```
 
 Option 2: Instantiate DAB-DETR with randomly initialized weights for Transformer, but pre-trained weights for backbone
 
-```py
->>> from transformers import DabDetrConfig, DabDetrForObjectDetection
+```python
+from transformers import DabDetrConfig, DabDetrForObjectDetection
 
->>> config = DabDetrConfig()
->>> model = DabDetrForObjectDetection(config)
+
+config = DabDetrConfig()
+model = DabDetrForObjectDetection(config)
 ```
 
 Option 3: Instantiate DAB-DETR with randomly initialized weights for backbone + Transformer
 
 ```py
->>> config = DabDetrConfig()
->>> model = DabDetrForObjectDetection(config)
+config = DabDetrConfig()
+model = DabDetrForObjectDetection(config)
 ```
 
 ## DabDetrConfig

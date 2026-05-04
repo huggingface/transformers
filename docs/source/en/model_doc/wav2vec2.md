@@ -67,9 +67,10 @@ pip install -U flash-attn --no-build-isolation
 To load a model using Flash Attention 2, we can pass the argument `attn_implementation="flash_attention_2"` to [`.from_pretrained`](https://huggingface.co/docs/transformers/main/en/main_classes/model#transformers.PreTrainedModel.from_pretrained). We'll also load the model in half-precision (e.g. `torch.float16`), since it results in almost no degradation to audio quality but significantly lower memory usage and faster inference:
 
 ```python
->>> from transformers import Wav2Vec2Model
+from transformers import Wav2Vec2Model
 
-model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-large-960h-lv60-self", dtype=torch.float16, attn_implementation="flash_attention_2").to(device)
+
+model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-large-960h-lv60-self", attn_implementation="flash_attention_2", device_map="auto")
 ...
 ```
 
@@ -148,55 +149,55 @@ If you are planning to decode multiple batches of audios, you should consider us
 Otherwise, [`~Wav2Vec2ProcessorWithLM.batch_decode`] performance will be slower than calling [`~Wav2Vec2ProcessorWithLM.decode`] for each audio individually, as it internally instantiates a new `Pool` for every call. See the example below:
 
 ```python
->>> # Let's see how to use a user-managed pool for batch decoding multiple audios
->>> from multiprocessing import get_context
->>> from transformers import AutoTokenizer, AutoProcessor, AutoModelForCTC
-from accelerate import Accelerator
->>> from datasets import load_dataset
->>> import datasets
->>> import torch
+# Let's see how to use a user-managed pool for batch decoding multiple audios
+from multiprocessing import get_context
 
->>> device = Accelerator().device
->>> # import model, feature extractor, tokenizer
->>> model = AutoModelForCTC.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm").to(device)
->>> processor = AutoProcessor.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm")
+import datasets
+import torch
+from datasets import load_dataset
 
->>> # load example dataset
->>> dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
->>> dataset = dataset.cast_column("audio", datasets.Audio(sampling_rate=16_000))
+from transformers import AutoModelForCTC, AutoProcessor
 
 
->>> def map_to_array(example):
-...     example["speech"] = example["audio"]["array"]
-...     return example
+# import model, feature extractor, tokenizer
+model = AutoModelForCTC.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm", device_map="auto")
+processor = AutoProcessor.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm")
+
+# load example dataset
+dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+dataset = dataset.cast_column("audio", datasets.Audio(sampling_rate=16_000))
 
 
->>> # prepare speech data for batch inference
->>> dataset = dataset.map(map_to_array, remove_columns=["audio"])
+def map_to_array(example):
+    example["speech"] = example["audio"]["array"]
+    return example
 
 
->>> def map_to_pred(batch, pool):
-...     device = Accelerator().device
-...     inputs = processor(batch["speech"], sampling_rate=16_000, padding=True, return_tensors="pt")
-...     inputs = {k: v.to(device) for k, v in inputs.items()}
-
-...     with torch.no_grad():
-...         logits = model(**inputs).logits
-
-...     transcription = processor.batch_decode(logits.cpu().numpy(), pool).text
-...     batch["transcription"] = transcription
-...     return batch
+# prepare speech data for batch inference
+dataset = dataset.map(map_to_array, remove_columns=["audio"])
 
 
->>> # note: pool should be instantiated *after* `Wav2Vec2ProcessorWithLM`.
->>> #       otherwise, the LM won't be available to the pool's sub-processes
->>> # select number of processes and batch_size based on number of CPU cores available and on dataset size
->>> with get_context("fork").Pool(processes=2) as pool:
-...     result = dataset.map(
-...         map_to_pred, batched=True, batch_size=2, fn_kwargs={"pool": pool}, remove_columns=["speech"]
-...     )
+def map_to_pred(batch, pool):
+    inputs = processor(batch["speech"], sampling_rate=16_000, padding=True, return_tensors="pt").to(model.device)
+    inputs = {k: v.to(model.device) for k, v in inputs.items()}
 
->>> result["transcription"][:2]
+    with torch.no_grad():
+        logits = model(**inputs).logits
+
+    transcription = processor.batch_decode(logits.cpu().numpy(), pool).text
+    batch["transcription"] = transcription
+    return batch
+
+
+# note: pool should be instantiated *after* `Wav2Vec2ProcessorWithLM`.
+#       otherwise, the LM won't be available to the pool's sub-processes
+# select number of processes and batch_size based on number of CPU cores available and on dataset size
+with get_context("fork").Pool(processes=2) as pool:
+    result = dataset.map(
+        map_to_pred, batched=True, batch_size=2, fn_kwargs={"pool": pool}, remove_columns=["speech"]
+    )
+
+result["transcription"][:2]
 ['MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL', "NOR IS MISTER COULTER'S MANNER LESS INTERESTING THAN HIS MATTER"]
 ```
 

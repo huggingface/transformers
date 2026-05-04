@@ -70,11 +70,11 @@ The original code can be found [here](https://github.com/facebookresearch/cwm).
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+
 model_name = 'facebook/cwm'
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
-    dtype="auto",
     device_map="auto"
 )
 

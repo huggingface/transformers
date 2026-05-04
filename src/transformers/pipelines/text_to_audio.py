@@ -179,6 +179,7 @@ class TextToAudioPipeline(Pipeline):
             # Add speaker ID if needed and user didn't insert at start of text
             if self.model.config.model_type == "csm":
                 text = [f"[0]{t}" if not t.startswith("[") else t for t in text]
+                kwargs.setdefault("add_special_tokens", True)
             if self.model.config.model_type == "dia":
                 text = [f"[S1] {t}" if not t.startswith("[") else t for t in text]
             output = preprocessor(text, **kwargs, return_tensors="pt")

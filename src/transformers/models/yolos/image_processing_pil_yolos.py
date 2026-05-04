@@ -44,8 +44,9 @@ if is_torch_available():
     import torch
     from torch import nn
 
+SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
-# Adapted from transformers.models.yolos.image_processing_yolos.YolosImageProcessorKwargs
+
 class YolosImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
@@ -58,9 +59,6 @@ class YolosImageProcessorKwargs(ImagesKwargs, total=False):
 
     format: str | AnnotationFormat
     do_convert_annotations: bool
-
-
-SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
 
 # inspired by https://github.com/facebookresearch/yolos/blob/master/datasets/coco.py#L33

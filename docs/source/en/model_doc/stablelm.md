@@ -44,21 +44,19 @@ We also provide StableLM Zephyr 3B, an instruction fine-tuned version of the mod
 The following code snippet demonstrates how to use `StableLM 3B 4E1T` for inference:
 
 ```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
-from accelerate import Accelerator, set_seed
->>> device = Accelerator().device # the device to load the model onto
+from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
 
->>> set_seed(0)
 
->>> tokenizer = AutoTokenizer.from_pretrained("stabilityai/stablelm-3b-4e1t")
->>> model = AutoModelForCausalLM.from_pretrained("stabilityai/stablelm-3b-4e1t")
->>> model.to(device)  # doctest: +IGNORE_RESULT
+set_seed(0)
 
->>> model_inputs = tokenizer("The weather is always wonderful in", return_tensors="pt").to(model.device)
+tokenizer = AutoTokenizer.from_pretrained("stabilityai/stablelm-3b-4e1t")
+model = AutoModelForCausalLM.from_pretrained("stabilityai/stablelm-3b-4e1t", device_map="auto")
 
->>> generated_ids = model.generate(**model_inputs, max_length=32, do_sample=True)
->>> responses = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
->>> responses
+model_inputs = tokenizer("The weather is always wonderful in", return_tensors="pt").to(model.device)
+
+generated_ids = model.generate(**model_inputs, max_length=32, do_sample=True)
+responses = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+responses
 ['The weather is always wonderful in Costa Rica, which makes it a prime destination for retirees. That’s where the Pensionado program comes in, offering']
 ```
 
@@ -75,22 +73,19 @@ Also make sure that your hardware is compatible with Flash-Attention 2. Read mor
 Now, to run the model with Flash Attention 2, refer to the snippet below:
 
 ```python
->>> import torch
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
-from accelerate import Accelerator, set_seed
->>> device = Accelerator().device # the device to load the model onto
+from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
 
->>> set_seed(0)
 
->>> tokenizer = AutoTokenizer.from_pretrained("stabilityai/stablelm-3b-4e1t")
->>> model = AutoModelForCausalLM.from_pretrained("stabilityai/stablelm-3b-4e1t", dtype=torch.bfloat16, attn_implementation="flash_attention_2")  # doctest: +SKIP
->>> model.to(device)  # doctest: +SKIP
+set_seed(0)
 
->>> model_inputs = tokenizer("The weather is always wonderful in", return_tensors="pt").to(model.device)
+tokenizer = AutoTokenizer.from_pretrained("stabilityai/stablelm-3b-4e1t")
+model = AutoModelForCausalLM.from_pretrained("stabilityai/stablelm-3b-4e1t", attn_implementation="flash_attention_2", device_map="auto")  # doctest: +SKIP
 
->>> generated_ids = model.generate(**model_inputs, max_length=32, do_sample=True)  # doctest: +SKIP
->>> responses = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)  # doctest: +SKIP
->>> responses  # doctest: +SKIP
+model_inputs = tokenizer("The weather is always wonderful in", return_tensors="pt").to(model.device)
+
+generated_ids = model.generate(**model_inputs, max_length=32, do_sample=True)  # doctest: +SKIP
+responses = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)  # doctest: +SKIP
+responses  # doctest: +SKIP
 ['The weather is always wonderful in Costa Rica, which makes it a prime destination for retirees. That’s where the Pensionado program comes in, offering']
 ```
 

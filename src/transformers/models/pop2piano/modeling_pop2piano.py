@@ -36,20 +36,6 @@ from .configuration_pop2piano import Pop2PianoConfig
 
 logger = logging.get_logger(__name__)
 
-_load_pop2piano_layer_norm = True
-
-try:
-    from apex.normalization import FusedRMSNorm
-
-    _load_pop2piano_layer_norm = False
-
-    logger.info("Discovered apex.normalization.FusedRMSNorm - will use it instead of Pop2PianoLayerNorm")
-except ImportError:
-    # using the normal Pop2PianoLayerNorm
-    pass
-except Exception:
-    logger.warning("Discovered apex but it failed to load, falling back to Pop2PianoLayerNorm")
-
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerNorm with T5->Pop2Piano
 class Pop2PianoLayerNorm(nn.Module):
@@ -75,10 +61,6 @@ class Pop2PianoLayerNorm(nn.Module):
             hidden_states = hidden_states.to(self.weight.dtype)
 
         return self.weight * hidden_states
-
-
-if not _load_pop2piano_layer_norm:
-    Pop2PianoLayerNorm = FusedRMSNorm
 
 
 # Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->Pop2Piano,t5->pop2piano

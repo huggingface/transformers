@@ -39,14 +39,15 @@ The example below demonstrates how to summarize text with [`Pipeline`], [`AutoMo
 
 ```python
 import torch
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "allenai/led-base-16384"
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "allenai/led-base-16384",
-    dtype=torch.float16,
     device_map="auto"
 )
 
@@ -73,16 +74,16 @@ The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quan
 
 ```python
 import torch
-from transformers import BitsAndBytesConfig, AutoModelForSeq2SeqLM, AutoTokenizer
+
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BitsAndBytesConfig
+
 
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.bfloat16,
     bnb_4bit_quant_type="nf4"
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "allenai/led-large-16384",
-    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )

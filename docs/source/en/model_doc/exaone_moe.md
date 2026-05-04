@@ -68,6 +68,7 @@ For tasks that require accurate results, you can run the K-EXAONE model in reaso
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+
 model_name = "LGAI-EXAONE/K-EXAONE-236B-A23B"
 
 model = AutoModelForCausalLM.from_pretrained(
@@ -136,6 +137,7 @@ Please check the [example file](https://github.com/LG-AI-EXAONE/K-EXAONE/blob/ma
 
 ```python
 from transformers.utils import get_json_schema
+
 
 def roll_dice(max_num: int):
     """

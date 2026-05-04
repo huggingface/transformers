@@ -48,11 +48,12 @@ Tips:
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model = AutoModelForCausalLM.from_pretrained("tiiuae/Falcon-H1-7B-Instruct")
+
+model = AutoModelForCausalLM.from_pretrained("tiiuae/Falcon-H1-7B-Instruct", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("tiiuae/Falcon-H1-7B-Instruct")
 
 message = ["Mamba is a snake with following properties  "]
-inputs = tokenizer(message, return_tensors='pt', return_token_type_ids=False)
+inputs = tokenizer(message, return_tensors='pt', return_token_type_ids=False).to(model.device)
 response = model.generate(**inputs, max_new_tokens=64)
 print(tokenizer.batch_decode(response, skip_special_tokens=True)[0])
 ```

@@ -16,6 +16,7 @@ import tempfile
 from abc import ABC, abstractmethod
 
 from transformers import TorchAoConfig, set_seed
+from transformers.distributed.configuration_utils import DistributedConfig
 from transformers.integrations.tensor_parallel import _get_parameter_tp_plan
 from transformers.testing_utils import (
     is_tensor_parallel_test,
@@ -344,6 +345,72 @@ def _test_tp_generation_quantized_impl(_rank, model_path, model_class, max_new_t
     dist.barrier()
 
 
+def _load_ep_and_reference_models(model_path, model_class):
+    """Load EP model and non-EP reference model for comparison."""
+    model_ep = model_class.from_pretrained(
+        model_path,
+        distributed_config=DistributedConfig(enable_expert_parallel=True),
+    )
+    dist.barrier()
+
+    device = model_ep.device
+    model_ref = model_class.from_pretrained(model_path)
+    model_ref = model_ref.to(device)
+
+    return model_ep, model_ref, device
+
+
+def _test_ep_forward_impl(_rank, model_path, model_class, atol, rtol):
+    """Implementation for comparing EP and non-EP model outputs."""
+    set_seed(0)
+
+    model_ep, model_ref, device = _load_ep_and_reference_models(model_path, model_class)
+
+    model_ep.eval()
+    model_ref.eval()
+
+    vocab_size = model_ref.config.vocab_size
+    input_ids = torch.randint(0, vocab_size, (2, 64)).to(device)
+
+    with torch.no_grad():
+        logits_ref = model_ref(input_ids).logits
+        logits_ep = model_ep(input_ids).logits
+
+    diff = (logits_ref - logits_ep).abs()
+    assert torch.allclose(logits_ref, logits_ep, atol=atol, rtol=rtol), (
+        f"EP and non-EP model outputs differ. Max diff: {diff.max().item()} | Min diff: {diff.min().item()}"
+    )
+
+    dist.barrier()
+
+
+def _test_ep_backward_impl(_rank, model_path, model_class, atol, rtol):
+    """Implementation for comparing EP and non-EP model backward passes."""
+    set_seed(0)
+
+    model_ep, model_ref, device = _load_ep_and_reference_models(model_path, model_class)
+    model_ep.train()
+    model_ref.train()
+
+    vocab_size = model_ref.config.vocab_size
+    input_ids = torch.randint(0, vocab_size, (2, 64)).to(device)
+    labels = torch.randint(0, vocab_size, (2, 64)).to(device)
+
+    loss_ref = model_ref(input_ids, labels=labels).loss
+    loss_ref.backward()
+
+    loss_ep = model_ep(input_ids, labels=labels).loss
+    loss_ep.backward()
+
+    assert torch.allclose(loss_ref, loss_ep, atol=atol, rtol=rtol), (
+        f"EP and non-EP model losses differ. "
+        f"Non-EP loss: {loss_ref.item()}, EP loss: {loss_ep.item()}, "
+        f"Diff: {(loss_ref - loss_ep).abs().item()}"
+    )
+
+    dist.barrier()
+
+
 class TensorParallelTesterMixin(ABC):
     """
     Mixin for tensor parallel tests. Add to model test classes alongside ModelTesterMixin.
@@ -371,6 +438,11 @@ class TensorParallelTesterMixin(ABC):
     # ============================================================
     # Helper methods
     # ============================================================
+    def _has_ep_plan(self) -> bool:
+        """Check if model has an expert parallel plan defined."""
+        config = self.model_tester.get_config()
+        return hasattr(config, "base_model_ep_plan") and config.base_model_ep_plan is not None
+
     def _has_tp_plan(self) -> bool:
         """Check if model has a tensor parallel plan defined."""
         config = self.model_tester.get_config()
@@ -410,6 +482,26 @@ class TensorParallelTesterMixin(ABC):
         # config = self.model_tester.get_config()
         # if hasattr(config, "vision_config") and config.vision_config is not None:
         #     self.skipTest("VLM models are not yet supported in TP tests")
+
+    def _skip_if_ep_not_supported(self):
+        """Check and skip test if EP is not supported for this model/environment."""
+        if not is_torch_greater_or_equal("2.9"):
+            self.skipTest("Expert parallel tests require torch >= 2.9")
+
+        if torch.cuda.is_available() or torch.xpu.is_available():
+            self.skipTest("Expert parallel mixin tests are CPU-only and should not run on GPU or XPU machines")
+
+        if os.cpu_count() < self.tensor_parallel_size:
+            self.skipTest(
+                f"Expert parallel tests require at least {self.tensor_parallel_size} CPUs, "
+                f"but only {os.cpu_count()} available"
+            )
+
+        if not hasattr(self.model_tester, "causal_lm_class") or self.model_tester.causal_lm_class is None:
+            self.skipTest("Model tester does not have causal_lm_class (not using CausalLMModelTester)")
+
+        if not self._has_ep_plan():
+            self.skipTest("Model does not have an expert parallel plan (base_model_ep_plan)")
 
     @is_tensor_parallel_test
     def test_tp_forward(self):
@@ -482,3 +574,35 @@ class TensorParallelTesterMixin(ABC):
             _init_distributed(tp=self.tensor_parallel_size)(_test_tp_generation_quantized_impl)(
                 tmp_dir, model_class, max_new_tokens
             )
+
+    @is_tensor_parallel_test
+    def test_ep_forward(self):
+        self._skip_if_ep_not_supported()
+
+        config = self.model_tester.get_config()
+        model_class = self._get_tp_model_class()
+        atol = self.tensor_parallel_atol
+        rtol = self.tensor_parallel_rtol
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            set_seed(42)
+            model = model_class(config)
+            model.save_pretrained(tmp_dir, save_original_format=True)
+
+            _init_distributed(tp=self.tensor_parallel_size)(_test_ep_forward_impl)(tmp_dir, model_class, atol, rtol)
+
+    @is_tensor_parallel_test
+    def test_ep_backward(self):
+        self._skip_if_ep_not_supported()
+
+        config = self.model_tester.get_config()
+        model_class = self._get_tp_model_class()
+        atol = self.tensor_parallel_atol
+        rtol = self.tensor_parallel_rtol
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            set_seed(42)
+            model = model_class(config)
+            model.save_pretrained(tmp_dir, save_original_format=True)
+
+            _init_distributed(tp=self.tensor_parallel_size)(_test_ep_backward_impl)(tmp_dir, model_class, atol, rtol)

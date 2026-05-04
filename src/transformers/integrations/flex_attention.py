@@ -356,6 +356,7 @@ def flex_attention_forward(
             # Use new_norm / old_norm = exp(combined_lse - lse) to compute renorm and apply
             renorm_factor = torch.exp(lse_expanded - combined_lse)
             attention_output = attention_output * renorm_factor
+            attention_output = attention_output.to(query.dtype)
     else:
         attention_output = flex_attention_output  # type: ignore[assignment]
         lse = None

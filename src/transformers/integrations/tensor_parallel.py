@@ -1052,10 +1052,8 @@ class GroupedGemmParallel(TensorParallelLayer):
             )
         local_num_experts = global_num_experts // self.device_mesh.size()
         shard_size = local_num_experts
-        if isinstance(device, torch.device):
-            device = device.index if device.index is not None else 0
-        start = device * shard_size
-        end = (device + 1) * shard_size
+        start = self.rank * shard_size
+        end = (self.rank + 1) * shard_size
         # special case we don't "shard" just send this entire tensor to the correct rank.
         shape = param.get_shape() if not isinstance(param, torch.Tensor) else param.shape
         if tensor_idx is not None and start <= tensor_idx < end:
@@ -1078,7 +1076,7 @@ class GroupedGemmParallel(TensorParallelLayer):
 
     def update_module_attributes(self, module: nn.Module):
         if hasattr(module, "num_experts"):
-            module.num_experts = self.get_expected_sharded_shape((module.num_experts,))[0]
+            module.num_experts = self.get_expected_sharded_shape((self.empty_param.shape[0],))[0]
 
 
 class RouterParallel(TensorParallelLayer):
@@ -1094,49 +1092,66 @@ class RouterParallel(TensorParallelLayer):
 
     def _prepare_output_fn(self, mod, outputs, device_mesh):
         """
-        Imagine if you had 4 tokens, top_k = 4, and 128experts.
-        With EP = 8. The num_local_expert should be 128/8 = 16
-        Imagine router_indices being:
-        [ 52,  42, 119,  67],
-        [102,  89,  61,  40],
-        [ 82, 103,   4,  34],
-        [ 93,  23, 109,  11],
+        Remap global expert indices to local and zero out non-local scores.
 
-        then you can map which rank should be getting which values
+        Example: 4 tokens, top_k=4, 128 experts, EP=8. num_local_experts = 128/8 = 16.
 
-        [3, 2, 7, 4],
-        [6, 5, 3, 2],
-        [5, 6, 0, 2],
-        [5, 1, 6, 0],
+        Router produces (all ranks see the same values):
+            router_scores:  (4, 4)  — top-k routing weights
+            router_indices: (4, 4)  — global expert IDs
+                [ 52,  42, 119,  67],
+                [102,  89,  61,  40],
+                [ 82, 103,   4,  34],
+                [ 93,  23, 109,  11],
 
-        Thus for say rank 0, you fill with 16 (num_local_expert) the index tensor
+        Each index maps to a rank: index // 16 gives the owning rank.
+                [3, 2, 7, 4],
+                [6, 5, 3, 2],
+                [5, 6, 0, 2],
+                [5, 1, 6, 0],
 
-        [ 16, 16, 16, 16],
-        [ 16, 16, 16, 16],
-        [ 16, 16, 4, 16],
-        [ 16, 16, 16, 11],
+        For rank 0 (owns experts 0-15), we remap local indices with fmod and
+        fill non-local with sentinel=16 (used for one_hot masking):
+            router_indices (rank 0):
+                [ 16, 16, 16, 16],
+                [ 16, 16, 16, 16],
+                [ 16, 16,  4, 16],
+                [ 16, 16, 16, 11],
 
-        This works well. For another rank you need to make sure you round to num_local_expert
-        because the next operation will one hot encode the router index vector.
+        Scores for non-local experts are zeroed out via masked_fill:
+            router_scores (rank 0):
+                [0.0, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.3, 0.0],    ← only expert 4 (local) keeps its score
+                [0.0, 0.0, 0.0, 0.1],    ← only expert 11 (local) keeps its score
 
-        This allows us to know directly which local expert is hit.
-        Similarly the scores are indexed with something created form
-        router_indices.
+        both router_scores and router_indices stay (seq, top_k) shape.
+        They are paired element-wise: scores[i] is the weight for indices[i].
+        All expert forward implementations (grouped_mm, batched_mm, eager) flatten
+        both with reshape(-1) and rely on this pairing. Changing the shape of one
+        without the other breaks routing!
 
-        The kinda naive training loop that we use for device_map "auto" uses a similar logic.
-        Here we are just making each rank believe that he is alone, and he computes his part of the hiddenstates.
-        Mask invalid indices with num_local_expert for one-hot encoding, so the computes will skip the masking index.
+        Each rank believes it is alone and computes only its part of the hidden states.
+        The sentinel index (num_local_experts) is skipped by one_hot encoding or clamped
+        + masked in grouped_mm/batched_mm. After the expert forward, an all_reduce sums
+        partial outputs across EP ranks to produce the full result.
         """
         ep_rank, ep_size = device_mesh.get_local_rank(), device_mesh.size()
-        if mod.num_experts % ep_size != 0:
+        num_experts = getattr(mod, "num_experts", None)
+        if num_experts is None:
+            num_experts = getattr(getattr(mod, "config", None), "num_experts", None)
+        if num_experts is None:
+            raise AttributeError(f"Router module {type(mod).__name__} is missing num_experts and config.num_experts")
+
+        if num_experts % ep_size != 0:
             raise ValueError(
-                f"The number of experts must be divisible by number of ep_size: {mod.num_experts} % {ep_size} != 0"
+                f"The number of experts must be divisible by number of ep_size: {num_experts} % {ep_size} != 0"
             )
-        num_local_experts = mod.num_experts // ep_size
+        num_local_experts = num_experts // ep_size
         router_logits, router_scores, router_indices = outputs
-        router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_scores)
-        router_scores = router_scores[:, ep_rank * num_local_experts : (ep_rank + 1) * num_local_experts]
-        router_indices = router_indices.masked_fill((router_indices // num_local_experts) != ep_rank, -1)
+        non_local_mask = (router_indices // num_local_experts) != ep_rank
+        router_scores = router_scores.masked_fill(non_local_mask, 0.0)
+        router_indices = router_indices.masked_fill(non_local_mask, -1)
         # As -1 % 1 is 0, we can only use mask fill when num_local_experts is 1
         if num_local_experts > 1:
             router_indices = torch.fmod(router_indices, num_local_experts)
@@ -1452,6 +1467,7 @@ def shard_and_distribute_module(
         else:
             logger.info(f"Tensor sharding plan for {param_name}: {current_shard_plan}")
 
+    tp_layer = None
     if current_shard_plan is not None:
         try:
             tp_layer = ALL_PARALLEL_STYLES[current_shard_plan]
@@ -1473,7 +1489,8 @@ def shard_and_distribute_module(
     if not isinstance(param, torch.nn.Parameter):
         param = torch.nn.Parameter(param, requires_grad=empty_param.is_floating_point())
     setattr(module_to_tp, param_type, param)
-    tp_layer.update_module_attributes(module_to_tp)
+    if tp_layer is not None:
+        tp_layer.update_module_attributes(module_to_tp)
     return param
 
 

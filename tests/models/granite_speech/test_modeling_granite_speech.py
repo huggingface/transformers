@@ -125,6 +125,12 @@ class GraniteSpeechForConditionalGenerationModelTest(ALMModelTest, unittest.Test
     model_tester_class = GraniteSpeechModelTester
     pipeline_model_mapping = {"any-to-any": GraniteSpeechForConditionalGeneration} if is_torch_available() else {}
 
+    @unittest.skip(
+        reason="This test does not apply to GraniteSpeech since inputs_embeds corresponding to audio tokens are replaced when input features are provided."
+    )
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
     def test_inputs_embeds(self):
         # Overwrite inputs_embeds tests because we need to delete "input_features" for the audio model
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
