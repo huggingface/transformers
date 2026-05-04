@@ -301,9 +301,7 @@ class CtsmModel(TimesFmModel):
         self.multi_resolution = (
             nn.Embedding(config.num_resolutions, config.hidden_size) if config.use_resolution_embeddings else None
         )
-        self.special_token = (
-            nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if config.use_special_token else None
-        )
+        self.special_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if config.use_special_token else None
 
         self.post_init()
 
@@ -519,9 +517,7 @@ class CtsmModel(TimesFmModel):
         model_input = model_input + self.freq_emb(freq)
 
         attention_mask = self._build_attention_mask(patch_padding, num_coarse_patches, model_input.dtype)
-        position_ids = (
-            torch.arange(model_input.shape[1], device=device, dtype=torch.long).unsqueeze(0).expand(bsz, -1)
-        )
+        position_ids = torch.arange(model_input.shape[1], device=device, dtype=torch.long).unsqueeze(0).expand(bsz, -1)
         position_embeddings = self.rotary_emb(model_input, position_ids)
 
         past_key_values = DynamicCache(config=self.config) if use_cache else None
