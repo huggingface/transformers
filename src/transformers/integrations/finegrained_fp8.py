@@ -14,7 +14,8 @@
 from __future__ import annotations
 
 import functools
-from types import SimpleNamespace
+from collections.abc import Callable
+from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
@@ -50,12 +51,23 @@ def _first_attr(obj, *names):
     raise AttributeError(f"{type(obj).__name__} has none of: {names}")
 
 
-@functools.cache
-def _load_finegrained_fp8_kernel() -> SimpleNamespace:
-    """
-    Load the finegrained-fp8 Triton kernel once and return its entry points as a `SimpleNamespace`.
+@dataclass(frozen=True)
+class FineGrainedFP8:
+    """Entry points exposed by the `kernels-community/finegrained-fp8` Triton kernel."""
 
-    Raises `ImportError` if the `kernels` package is missing or any required entry point is absent.
+    matmul: Callable
+    act_quant: Callable
+    batched_matmul: Callable
+    grouped_matmul: Callable
+
+
+@functools.cache
+def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
+    """
+    Load the finegrained-fp8 Triton kernel once and return its entry points.
+
+    Raises `ImportError` if the `kernels` package is missing, or the kernel or required
+    symbols cannot be found.
     """
     if not is_kernels_available():
         raise ImportError(
@@ -90,7 +102,7 @@ def _load_finegrained_fp8_kernel() -> SimpleNamespace:
             "Please update the `kernels` package (`pip install -U kernels`)."
         )
 
-    return SimpleNamespace(
+    return FineGrainedFP8(
         matmul=matmul,
         act_quant=act_quant,
         batched_matmul=batched_matmul,
