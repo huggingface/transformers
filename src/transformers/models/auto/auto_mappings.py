@@ -623,6 +623,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("xclip_text_model", "XCLIPTextConfig"),
         ("xclip_vision_model", "XCLIPVisionConfig"),
         ("xcodec", "XcodecConfig"),
+        ("xcodec2", "Xcodec2Config"),
         ("xglm", "XGLMConfig"),
         ("xlm", "XLMConfig"),
         ("xlm-roberta", "XLMRobertaConfig"),
