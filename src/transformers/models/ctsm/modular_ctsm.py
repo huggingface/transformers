@@ -99,7 +99,6 @@ class CtsmConfig(TimesFmConfig):
     model_type = "ctsm"
 
     num_hidden_layers: int = 25
-    context_length: int = 512
     quantiles: list[float] | tuple[float, ...] = (
         0.01,
         0.05,
@@ -117,7 +116,6 @@ class CtsmConfig(TimesFmConfig):
         0.95,
         0.99,
     )
-    use_positional_embedding: bool = False
     use_resolution_embeddings: bool = True
     use_special_token: bool = True
     num_resolutions: int = 3
