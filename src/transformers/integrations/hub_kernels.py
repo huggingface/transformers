@@ -557,8 +557,8 @@ class FusedModuleBase(nn.Module):
         """
         Args:
             modules_to_fuse: The source modules to fuse together.
+            # TODO: are source_names still required?
             source_names: The attribute names under which each module lives in its parent
-                (used to restore them on `unfuse_modules`).
             fused_module_names: The names under which each source module is registered as a
                 child of this container (i.e. `self.<name>`). When `None`, the
                 `kernel_layer_name` attribute of each source module is used. Pass this
