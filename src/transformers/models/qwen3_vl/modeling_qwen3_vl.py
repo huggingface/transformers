@@ -82,10 +82,15 @@ class Qwen3VLVisionPatchEmbed(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         target_dtype = self.proj.weight.dtype
-        hidden_states = hidden_states.view(
-            -1, self.in_channels, self.temporal_patch_size, self.patch_size, self.patch_size
+        hidden_states = hidden_states.to(dtype=target_dtype).view(
+            -1, self.in_channels * self.temporal_patch_size * self.patch_size * self.patch_size
         )
-        hidden_states = self.proj(hidden_states.to(dtype=target_dtype)).view(-1, self.embed_dim)
+        # Use F.linear instead of Conv3d. When stride == kernel_size, Conv3d
+        # just extracts non-overlapping patches and applies a linear projection.
+        # F.linear avoids cuDNN overhead that causes ~50,000x slowdown on
+        # some GPU/dtype combinations (see #45750).
+        weight = self.proj.weight.view(self.embed_dim, -1)
+        hidden_states = torch.nn.functional.linear(hidden_states, weight, self.proj.bias)
         return hidden_states
 
 
