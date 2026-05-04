@@ -31,6 +31,11 @@ class SolarOpenConfig(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):
         Number of groups for routed experts.
+    num_nextn_predict_layers (`int`, *optional*, defaults to 0):
+        Number of Multi-Token Prediction (MTP) modules appended after the base
+        transformer. When `0`, the model behaves as a standard decoder. When `>0`,
+        each extra module predicts one additional future token at inference time
+        (speculative decoding via `generate(..., use_mtp=True)`).
     """
 
     model_type = "solar_open"

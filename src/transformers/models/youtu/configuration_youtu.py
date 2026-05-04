@@ -35,6 +35,11 @@ from ...utils import auto_docstring
 @strict
 class YoutuConfig(PreTrainedConfig):
     r"""
+    num_nextn_predict_layers (`int`, *optional*, defaults to 0):
+        Number of Multi-Token Prediction (MTP) modules appended after the base
+        transformer. When `0`, the model behaves as a standard decoder. When `>0`,
+        each extra module predicts one additional future token at inference time
+        (speculative decoding via `generate(..., use_mtp=True)`).
     rope_interleave (`bool`, *optional*, defaults to `True`):
         Whether to interleave the rotary position embeddings.
     embedding_initializer_range (`float`, *optional*):

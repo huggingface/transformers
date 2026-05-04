@@ -544,6 +544,9 @@ class DeepseekV3PreTrainedModel(PreTrainedModel):
         "attentions": DeepseekV3Attention,
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    # MTP weights live at `model.layers.{num_hidden_layers + k}.*`. They are loaded
+    # separately through `MTPCandidateGenerator` (see `transformers.generation.candidate_generators`)
+    # and never populated into the main model — hence the ignore.
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
 
     @torch.no_grad()

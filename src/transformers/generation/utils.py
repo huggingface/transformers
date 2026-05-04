@@ -136,6 +136,7 @@ GENERATION_MODES_MAPPING = {
     GenerationMode.BEAM_SEARCH: "_beam_search",
     GenerationMode.BEAM_SAMPLE: "_beam_search",
     GenerationMode.ASSISTED_GENERATION: "_assisted_decoding",
+    GenerationMode.MTP_DECODING: "_mtp_decoding",
     # Deprecated methods
     GenerationMode.DOLA_GENERATION: "transformers-community/dola",
     GenerationMode.CONTRASTIVE_SEARCH: "transformers-community/contrastive-search",
@@ -1477,6 +1478,18 @@ class GenerationMixin(ContinuousMixin):
                     f"assisted generation is not supported with stateful models, such as {self.__class__.__name__}"
                 )
 
+        if generation_mode == GenerationMode.MTP_DECODING:
+            if generation_config.num_return_sequences > 1:
+                raise ValueError(
+                    "num_return_sequences must be 1 when `use_mtp=True` "
+                    f"(got {generation_config.num_return_sequences})."
+                )
+            if getattr(self.config, "num_nextn_predict_layers", 0) <= 0:
+                raise ValueError(
+                    "`use_mtp=True` was passed but the model config has no MTP modules "
+                    "(`num_nextn_predict_layers <= 0`)."
+                )
+
         if (assistant_model := generation_mode_kwargs.get("assistant_model")) is not None:
             if self.config.is_encoder_decoder and not assistant_model.config.is_encoder_decoder:
                 attributes_to_check = ["encoder_attention_heads", "encoder_ffn_dim", "encoder_layers"]
@@ -1848,7 +1861,11 @@ class GenerationMixin(ContinuousMixin):
         # Assisted decoding and contrastive search require cache rollback, which is incompatible with sliding layers.
         # To handle this, we skip passing the model config to DynamicCache (forcing a full-layer cache).
         # The "dynamic_full" option is a shortcut for generate() users to avoid sliding layers on their own.
-        if generation_mode in (GenerationMode.ASSISTED_GENERATION, GenerationMode.CONTRASTIVE_SEARCH):
+        if generation_mode in (
+            GenerationMode.ASSISTED_GENERATION,
+            GenerationMode.CONTRASTIVE_SEARCH,
+            GenerationMode.MTP_DECODING,
+        ):
             if generation_config.cache_implementation is not None:
                 logger.warning_once(
                     "An assistant model is provided, using a dynamic cache instead of a cache of type="
@@ -3715,6 +3732,190 @@ class GenerationMixin(ContinuousMixin):
                 )
         else:
             return input_ids
+
+    def _mtp_decoding(
+        self: "GenerativePreTrainedModel",
+        input_ids: torch.LongTensor,
+        logits_processor: LogitsProcessorList,
+        stopping_criteria: StoppingCriteriaList,
+        generation_config: GenerationConfig,
+        synced_gpus: bool = False,
+        streamer: Optional["BaseStreamer"] = None,
+        **model_kwargs,
+    ) -> GenerateNonBeamOutput | torch.LongTensor:
+        r"""
+        Multi-Token Prediction (MTP) speculative decoding. Uses an
+        [`MTPCandidateGenerator`][transformers.generation.candidate_generators.MTPCandidateGenerator] attached
+        to the model as `model.mtp_candidate_generator` — typically loaded via its `from_pretrained` — to draft
+        `K = config.num_nextn_predict_layers` tokens per step. The base model runs once per step to produce
+        the hidden state + first draft token, the MTP heads chain K more drafts, and a second forward on the
+        K+1 candidates provides the verification logits. Standard speculative sampling handles accept/reject.
+
+        Only supports `batch_size = 1`.
+        """
+        if not model_kwargs.get("use_cache"):
+            raise ValueError("`use_mtp` generate requires `use_cache=True`.")
+        mtp_generator = getattr(self, "mtp_candidate_generator", None)
+        if mtp_generator is None:
+            raise ValueError(
+                "`use_mtp=True` requires an `MTPCandidateGenerator` attached to the model, e.g.:\n"
+                "    from transformers.generation.candidate_generators import MTPCandidateGenerator\n"
+                "    model.mtp_candidate_generator = MTPCandidateGenerator.from_pretrained(checkpoint, model)"
+            )
+        num_mtp = mtp_generator.num_mtp
+
+        do_sample = generation_config.do_sample
+        output_scores = generation_config.output_scores
+        output_logits = generation_config.output_logits
+        return_dict_in_generate = generation_config.return_dict_in_generate
+        scores = () if (return_dict_in_generate and output_scores) else None
+        raw_logits = () if (return_dict_in_generate and output_logits) else None
+
+        batch_size = input_ids.shape[0]
+        if batch_size > 1:
+            raise ValueError("MTP decoding currently only supports batch_size = 1.")
+        unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
+        this_peer_finished = False
+        is_first_iteration = True
+
+        while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
+            cur_len = input_ids.shape[1]
+
+            # 1. Base-model forward on the full prompt (first iter) or the not-yet-cached tail.
+            next_sequence_length = None if is_first_iteration else 1 if model_kwargs["use_cache"] else None
+            model_inputs = self.prepare_inputs_for_generation(
+                input_ids,
+                next_sequence_length=next_sequence_length,
+                is_first_iteration=is_first_iteration,
+                **model_kwargs,
+            )
+            # Route through the base model to keep the last hidden state; we'll project to logits manually.
+            base_only_inputs = {k: v for k, v in model_inputs.items() if k not in ("logits_to_keep", "labels")}
+            base_out = self.model(**base_only_inputs, return_dict=True)
+            main_cache = base_out.past_key_values
+            h_last = base_out.last_hidden_state[:, -1:, :]
+
+            # 2. Sample x_{t+1} from the base model's prediction at the last prompt position.
+            base_logits = self.lm_head(h_last)[:, 0, :].to(dtype=torch.float32, device=input_ids.device)
+            base_scores = logits_processor(input_ids, base_logits)
+            if do_sample:
+                x_next = torch.multinomial(nn.functional.softmax(base_scores, dim=-1), num_samples=1)
+            else:
+                x_next = torch.argmax(base_scores, dim=-1, keepdim=True)
+
+            # 3. Delegate K extra drafts to the MTP candidate generator.
+            candidate_tokens, draft_stack = mtp_generator.get_candidates(
+                input_ids,
+                previous_hidden_state=h_last,
+                past_key_values=main_cache,
+                first_token=x_next,
+                position_offset=cur_len,
+                logits_processor=logits_processor,
+                do_sample=do_sample,
+            )
+            is_done_candidate = stopping_criteria(torch.cat([input_ids, candidate_tokens], dim=1), None)
+            verify_kwargs = copy.copy(model_kwargs)
+            verify_kwargs["past_key_values"] = main_cache
+            verify_kwargs = _prepare_attention_mask(
+                verify_kwargs, cur_len + num_mtp + 1, self.config.is_encoder_decoder
+            )
+            if verify_kwargs.get("position_ids") is not None:
+                verify_kwargs = _prepare_position_ids(
+                    verify_kwargs, cur_len + num_mtp + 1, self.config.is_encoder_decoder
+                )
+            verify_inputs = self.prepare_inputs_for_generation(
+                torch.cat([input_ids, candidate_tokens], dim=1),
+                next_sequence_length=num_mtp + 1,
+                is_first_iteration=False,
+                **verify_kwargs,
+            )
+            if "logits_to_keep" in verify_inputs:
+                verify_inputs["logits_to_keep"] = num_mtp + 1
+            verify_outputs = self(**verify_inputs, return_dict=True)
+            verify_logits = verify_outputs.logits[:, -(num_mtp + 1) :, :].to(
+                dtype=torch.float32, device=input_ids.device
+            )
+            for i in range(num_mtp + 1):
+                verify_logits[:, i, :] = logits_processor(
+                    torch.cat([input_ids, candidate_tokens[:, :i]], dim=1), verify_logits[:, i, :]
+                )
+
+            # 5. Accept/reject. We compare the base model's predictions at positions cur_len..cur_len+K-1
+            #    (logits for x_{t+2}..x_{t+K+1}) against the drafts x_{t+2}..x_{t+K+1} = candidate_tokens[:, 1:].
+            #    x_{t+1} itself came from the base model, so it is unconditionally kept.
+            drafts_for_check = candidate_tokens[:, 1:]  # (1, K)
+            verify_for_drafts = verify_logits[:, :num_mtp, :]  # (1, K, V)
+            if do_sample:
+                _candidate_input_ids = torch.cat([input_ids, drafts_for_check], dim=1)
+                accepted_drafts, n_matches = _speculative_sampling(
+                    _candidate_input_ids,
+                    draft_stack,
+                    num_mtp,
+                    verify_for_drafts,
+                    is_done_candidate,
+                )
+                accepted_after_xnext = accepted_drafts
+            else:
+                verify_argmax = verify_logits.argmax(dim=-1)  # (1, K+1)
+                draft_match = verify_argmax[:, :num_mtp] == drafts_for_check
+                n_matches = int(((~draft_match).cumsum(dim=-1) < 1).sum().item())
+                if is_done_candidate and n_matches == num_mtp:
+                    n_matches -= 1
+                bonus = verify_argmax[:, n_matches : n_matches + 1]
+                accepted_after_xnext = torch.cat([drafts_for_check[:, :n_matches], bonus], dim=1)
+
+            accepted = torch.cat([x_next, accepted_after_xnext], dim=1)
+            mtp_generator.update_candidate_strategy(input_ids, verify_logits, n_matches)
+
+            # 6. Commit. Extend input_ids, crop the base-model cache, and update model_kwargs.
+            input_ids = torch.cat([input_ids, accepted], dim=1)
+            if streamer is not None:
+                streamer.put(accepted.cpu())
+            new_cur_len = input_ids.shape[1]
+            main_cache.crop(new_cur_len - 1)
+            model_kwargs["past_key_values"] = main_cache
+            model_kwargs = self._update_model_kwargs_for_generation(
+                base_out,
+                model_kwargs,
+                is_encoder_decoder=self.config.is_encoder_decoder,
+                num_new_tokens=accepted.shape[1],
+            )
+            # `_update_model_kwargs_for_generation` only extended attention_mask by 1; add the rest.
+            if model_kwargs.get("attention_mask") is not None:
+                extra = accepted.shape[1] - 1
+                if extra > 0:
+                    mask = model_kwargs["attention_mask"]
+                    model_kwargs["attention_mask"] = torch.cat([mask, mask.new_ones((mask.shape[0], extra))], dim=-1)
+
+            if return_dict_in_generate:
+                newly_added = accepted.shape[1]
+                if output_scores:
+                    scores += tuple(verify_logits[:, i, :] for i in range(newly_added))
+                if output_logits:
+                    raw_logits += tuple(verify_logits[:, i, :] for i in range(newly_added))
+
+            is_first_iteration = False
+            unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
+            this_peer_finished = unfinished_sequences.max() == 0
+            del base_out, verify_outputs
+
+        if streamer is not None:
+            streamer.end()
+
+        if return_dict_in_generate:
+            cache = None
+            if any(cache_key in model_kwargs for cache_key in ALL_CACHE_NAMES):
+                cache_key = next(cache_key for cache_key in ALL_CACHE_NAMES if cache_key in model_kwargs)
+                cache = model_kwargs[cache_key]
+            return GenerateDecoderOnlyOutput(
+                sequences=input_ids,
+                scores=scores,
+                logits=raw_logits,
+                attentions=None,
+                hidden_states=None,
+                past_key_values=cache,
+            )
+        return input_ids
 
     # TODO: v5.1: make public once API stabilized
     def _prefill(

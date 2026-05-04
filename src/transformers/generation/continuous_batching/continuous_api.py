@@ -748,6 +748,17 @@ class ContinuousBatchingManager:
             generation_config: Configuration for generation parameters
             continuous_batching_config: Configuration for continuous batching parameters
         """
+        # MTP speculative decoding in continuous batching needs paged-cache slot reservation
+        # (K + 1 tokens per request per step) plus per-request accept/reject in the sampler.
+        # That work is tracked separately; until it lands, refuse the combination rather than
+        # silently downgrade to plain decoding.
+        if getattr(generation_config, "use_mtp", False):
+            raise NotImplementedError(
+                "`use_mtp=True` with `generate_batch` / continuous batching is not supported yet. "
+                "Use `model.generate(..., use_mtp=True)` for single-sequence MTP decoding, or set "
+                "`use_mtp=False` for batched generation."
+            )
+
         # Reload paged version of the attention implementation if necessary
         if "paged|" not in model.config._attn_implementation:
             model.set_attn_implementation(f"paged|{model.config._attn_implementation}")

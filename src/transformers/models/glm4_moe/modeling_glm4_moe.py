@@ -487,6 +487,9 @@ class Glm4MoePreTrainedModel(PreTrainedModel):
         "attentions": Glm4MoeAttention,
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    # MTP weights live at `model.layers.{num_hidden_layers}.*` (layer 46 for GLM-4.5-Air,
+    # layer 92 for the larger GLM-4.5 variant). They are loaded into `MTPCandidateGenerator`
+    # and ignored here on the main model.
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.92.*", r"model\.layers\.46.*"]
 
     @torch.no_grad()

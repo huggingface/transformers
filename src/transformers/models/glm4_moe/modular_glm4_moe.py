@@ -46,6 +46,11 @@ class Glm4MoeConfig(PreTrainedConfig):
     first_k_dense_replace (`int`, *optional*, defaults to 1):
         Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
                                                         \--k dense layers--/
+    num_nextn_predict_layers (`int`, *optional*, defaults to 0):
+        Number of Multi-Token Prediction (MTP) modules appended after the base
+        transformer. When `0`, the model behaves as a standard decoder. When `>0`,
+        each extra module predicts one additional future token at inference time
+        (speculative decoding via `generate(..., use_mtp=True)`).
 
     Example:
 
@@ -114,6 +119,7 @@ class Glm4MoeConfig(PreTrainedConfig):
     topk_group: int = 1
     first_k_dense_replace: int = 1
     norm_topk_prob: bool = True
+    num_nextn_predict_layers: int = 0
     use_qk_norm: bool = False
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
@@ -184,6 +190,9 @@ class Glm4MoeDecoderLayer(DeepseekV3DecoderLayer):
 
 
 class Glm4MoePreTrainedModel(DeepseekV3PreTrainedModel):
+    # MTP weights live at `model.layers.{num_hidden_layers}.*` (layer 46 for GLM-4.5-Air,
+    # layer 92 for the larger GLM-4.5 variant). They are loaded into `MTPCandidateGenerator`
+    # and ignored here on the main model.
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.92.*", r"model\.layers\.46.*"]
 
 

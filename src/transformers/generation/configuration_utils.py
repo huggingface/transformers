@@ -89,6 +89,7 @@ class GenerationMode(ExplicitEnum):
     GREEDY_SEARCH = "greedy_search"
     SAMPLE = "sample"
     ASSISTED_GENERATION = "assisted_generation"
+    MTP_DECODING = "mtp_decoding"
     DOLA_GENERATION = "dola_generation"
     # Beam methods
     BEAM_SEARCH = "beam_search"
@@ -343,6 +344,10 @@ class GenerationConfig(PushToHubMixin):
             If set to a positive integer, the re-encodeing process will additionally consider the last `target_lookbehind` target tokens
             to correctly align tokens. Can only be used with different tokenizers in speculative decoding.
             See this [blog](https://huggingface.co/blog/universal_assisted_generation) for more details.
+        use_mtp(`bool`, *optional*, defaults to `False`):
+            If `True`, speculate with the model's Multi-Token Prediction (MTP) modules (DeepSeek-V3 / GLM-4 MoE style).
+            The base model drafts `config.num_nextn_predict_layers` extra tokens per step via the MTP heads, then
+            verifies them in a single forward pass — standard speculative decoding, shared weights + KV cache.
 
         > Parameters related to performances and compilation
 
@@ -446,6 +451,7 @@ class GenerationConfig(PushToHubMixin):
         self.assistant_early_exit = kwargs.pop("assistant_early_exit", None)
         self.assistant_lookbehind = kwargs.pop("assistant_lookbehind", None)
         self.target_lookbehind = kwargs.pop("target_lookbehind", None)
+        self.use_mtp = kwargs.pop("use_mtp", False)
 
         # Performance
         self.compile_config = kwargs.pop("compile_config", None)
@@ -554,6 +560,16 @@ class GenerationConfig(PushToHubMixin):
                     "You've set `assistant_model`, which triggers assisted generate. Currently, assisted generate "
                     "is only supported with Greedy Search and Sample. However, the base decoding mode (based on "
                     f"current flags) is {generation_mode} -- some of the set flags will be ignored."
+                )
+
+        # Multi-Token Prediction decoding uses the model's own MTP modules as the draft
+        if self.use_mtp:
+            if generation_mode in (GenerationMode.GREEDY_SEARCH, GenerationMode.SAMPLE):
+                generation_mode = GenerationMode.MTP_DECODING
+            else:
+                logger.warning(
+                    f"`use_mtp=True` is only supported with Greedy Search and Sample; the current mode is "
+                    f"{generation_mode}. Ignoring `use_mtp`."
                 )
 
         # DoLa generation may extend some generation modes
