@@ -524,14 +524,11 @@ class FusedModuleBase(nn.Module):
     def __init__(
         self,
         modules_to_fuse: list["nn.Module"],
-        source_names: list[str],
         fused_module_names: list[str] | None = None,
     ):
         """
         Args:
             modules_to_fuse: The source modules to fuse together.
-            # TODO: are source_names still required?
-            source_names: The attribute names under which each module lives in its parent
             fused_module_names: The names under which each source module is registered as a
                 child of this container (i.e. `self.<name>`). When `None`, the
                 `kernel_layer_name` attribute of each source module is used. Pass this
@@ -540,10 +537,6 @@ class FusedModuleBase(nn.Module):
         super().__init__()
         if len(modules_to_fuse) == 0:
             raise ValueError("At least one module must be provided for fusion.")
-        if len(modules_to_fuse) != len(source_names):
-            raise ValueError("Length of modules_to_fuse and source_names must match.")
-
-        self._source_names = source_names
 
         if fused_module_names is not None:
             if len(fused_module_names) != len(modules_to_fuse):
@@ -620,7 +613,7 @@ def make_fused_parent_class(
     def fused_init(self, *args, **kwargs):
         original_init(self, *args, **kwargs)
         modules_to_fuse = [getattr(self, name) for name in _child_names]
-        fused = fused_module_cls(modules_to_fuse, _child_names, fused_module_names=list(_source_names))
+        fused = fused_module_cls(modules_to_fuse, fused_module_names=list(_source_names))
         setattr(self, _child_names[0], fused)
         for name in _child_names[1:]:
             setattr(self, name, nn.Identity())
