@@ -44,7 +44,7 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import handle_extra_kwargs, is_flash_attention_requested, merge_with_config_defaults
+from ...utils.generic import accepts_precomputed_kwargs, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.hub import cached_file
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids, get_vision_window_index
@@ -91,11 +91,13 @@ def chunk_and_pad_features(
         chunk_lengths = kwargs.pop("chunk_lengths", None)
         if padded_feature is not None and chunk_lengths is not None:
             return padded_feature, chunk_lengths
+
     chunk_num = torch.ceil(feature_lens / (n_window * 2)).long()
     chunk_lengths = torch.full((chunk_num.sum(),), n_window * 2, dtype=torch.long, device=feature_lens.device)
     tail_chunk_index = F.pad(chunk_num, (1, 0), value=-1).cumsum(0)[1:]
     chunk_lengths[tail_chunk_index] = feature_lens % (n_window * 2)
     chunk_lengths = torch.where(chunk_lengths == 0, n_window * 2, chunk_lengths)
+
     chunk_list = input_features.T.split(chunk_lengths.tolist(), dim=0)
     padded_feature = nn.utils.rnn.pad_sequence(chunk_list, batch_first=True).transpose(1, 2)
     return padded_feature, chunk_lengths
@@ -1421,7 +1423,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         Then prepares a mask so that pad tokens are not attended to.
         """
         warnings.warn(
-            f"`{self.__class__.__name__}.padded_and_mask_function` is deprecated and will be removed in a future version. Use `chunk_and_pad_features` and `get_audio_cu_seqlens` helpers instead.",
+            f"`{self.__class__.__name__}.padded_and_mask_function` is deprecated and will be removed in v5.11. Use `chunk_and_pad_features` and `get_audio_cu_seqlens` helpers instead.",
             FutureWarning,
             stacklevel=2,
         )
@@ -1614,10 +1616,10 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
         cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
         window_index, cu_window_seqlens = get_vision_window_index(
             grid_thw,
-            self.spatial_merge_size,
-            self.window_size,
-            self.patch_size,
-            self.spatial_merge_unit,
+            spatial_merge_size=self.spatial_merge_size,
+            window_size=self.window_size,
+            patch_size=self.patch_size,
+            spatial_merge_unit=self.spatial_merge_unit,
             kwargs=kwargs,
         )
 
@@ -1734,7 +1736,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    @handle_extra_kwargs(modality="video")
+    @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_features(
@@ -1750,9 +1752,9 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             The temporal, height and width of feature shape of each video in LLM.
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-        return self.visual(pixel_values_videos, grid_thw=video_grid_thw, return_dict=True, **kwargs)
+        return self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
 
-    @handle_extra_kwargs(modality="image")
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -1768,7 +1770,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
-        return self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
+        return self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring

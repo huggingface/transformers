@@ -28,7 +28,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import handle_extra_kwargs, merge_with_config_defaults
+from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_bilinear_indices_and_weights, get_vision_cu_seqlens, get_vision_position_ids
 from ..qwen3.modeling_qwen3 import Qwen3ForCausalLM
@@ -443,8 +443,8 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
         """
         bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
             grid_thw,
-            self.num_grid_per_side,
-            self.config.spatial_merge_size,
+            num_grid_per_side=self.num_grid_per_side,
+            spatial_merge_size=self.config.spatial_merge_size,
             kwargs=kwargs,
         )
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
@@ -561,7 +561,7 @@ class Qwen3_5Model(Qwen3VLModel):
         # Same implementation as for images
         return super().get_video_features(**super_kwargs)
 
-    @handle_extra_kwargs(modality="image")
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(

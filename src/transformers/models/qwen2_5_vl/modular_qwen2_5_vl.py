@@ -221,7 +221,7 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
 
     def rot_pos_emb(self, grid_thw):
         warnings.warn(
-            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in a future version. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
+            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in v5.11. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
             FutureWarning,
             stacklevel=2,
         )
@@ -231,16 +231,16 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
 
     def get_window_index(self, grid_thw):
         warnings.warn(
-            f"`{self.__class__.__name__}.get_window_index` is deprecated and will be removed in a future version. Use `get_vision_window_index` from `transformers.vision_utils` instead.",
+            f"`{self.__class__.__name__}.get_window_index` is deprecated and will be removed in v5.11. Use `get_vision_window_index` from `transformers.vision_utils` instead.",
             FutureWarning,
             stacklevel=2,
         )
         window_index, cu_window_seqlens = get_vision_window_index(
             grid_thw,
-            self.spatial_merge_size,
-            self.window_size,
-            self.patch_size,
-            self.spatial_merge_unit,
+            spatial_merge_size=self.spatial_merge_size,
+            window_size=self.window_size,
+            patch_size=self.patch_size,
+            spatial_merge_unit=self.spatial_merge_unit,
         )
         return window_index, cu_window_seqlens.tolist()
 
@@ -263,10 +263,10 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
         window_index, cu_window_seqlens = get_vision_window_index(
             grid_thw,
-            self.spatial_merge_size,
-            self.window_size,
-            self.patch_size,
-            self.spatial_merge_unit,
+            spatial_merge_size=self.spatial_merge_size,
+            window_size=self.window_size,
+            patch_size=self.patch_size,
+            spatial_merge_unit=self.spatial_merge_unit,
             kwargs=kwargs,
         )
 

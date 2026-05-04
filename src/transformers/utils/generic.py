@@ -908,7 +908,7 @@ def can_return_tuple(func):
 _KNOWN_MODALITIES = ("image", "video", "audio")
 
 
-def handle_extra_kwargs(modality: str):
+def accepts_precomputed_kwargs(modality: str):
     """
     Decorator for ``get_<modality>_features`` methods that:
       - strips the modality prefix from incoming kwargs whose stripped name isn't an existing
@@ -920,6 +920,13 @@ def handle_extra_kwargs(modality: str):
 
     Used so multimodal models can accept arbitrary precomputed tensors (``image_cu_seqlens``,
     ``video_position_ids``, …) without enumerating each one in every signature.
+
+    Apply this decorator **only once per modality**, on the innermost base model's
+    ``get_<modality>_features`` (i.e. on ``Model.get_image_features``, not on the outer
+    ``ForConditionalGeneration.get_image_features`` wrapper). Stacking it at multiple layers
+    causes premature prefix-stripping: the outer layer rewrites ``image_foo`` → ``foo`` based
+    on its own (narrower) signature, hiding kwargs that the inner method declares as named
+    parameters. Outer wrappers should just forward ``**kwargs`` through.
     """
     prefix = f"{modality}_"
     other_prefixes = tuple(f"{m}_" for m in _KNOWN_MODALITIES if m != modality)

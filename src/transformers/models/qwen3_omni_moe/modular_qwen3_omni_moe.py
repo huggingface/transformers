@@ -46,7 +46,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
-from ...utils.generic import TransformersKwargs, handle_extra_kwargs, merge_with_config_defaults
+from ...utils.generic import TransformersKwargs, accepts_precomputed_kwargs, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...video_utils import VideoInput, make_batched_videos
 from ..mimi.modeling_mimi import MimiLayerScale
@@ -137,11 +137,13 @@ def chunk_and_pad_features(
         chunk_lengths = kwargs.pop("chunk_lengths", None)
         if padded_feature is not None and chunk_lengths is not None:
             return padded_feature, chunk_lengths
+
     chunk_num = torch.ceil(feature_lens / (n_window * 2)).long()
     chunk_lengths = torch.full((chunk_num.sum(),), n_window * 2, dtype=torch.long, device=feature_lens.device)
     tail_chunk_index = F.pad(chunk_num, (1, 0), value=-1).cumsum(0)[1:]
     chunk_lengths[tail_chunk_index] = feature_lens % (n_window * 2)
     chunk_lengths = torch.where(chunk_lengths == 0, n_window * 2, chunk_lengths)
+
     chunk_list = input_features.T.split(chunk_lengths.tolist(), dim=0)
     padded_feature = nn.utils.rnn.pad_sequence(chunk_list, batch_first=True).transpose(1, 2)
     return padded_feature, chunk_lengths
@@ -190,17 +192,21 @@ def get_audio_cu_seqlens(
     """
     if kwargs is not None and (cu_seqlens := kwargs.pop("cu_seqlens", None)) is not None:
         return cu_seqlens
+
     aftercnn_lens = _get_feat_extract_output_lengths(feature_lens)
     feature_lens_after_cnn = _get_feat_extract_output_lengths(chunk_lengths)
     max_len_after_cnn = feature_lens_after_cnn.max().item()
-    cu_chunk_lens = [0]
+
     n_window_ratio = n_window_infer // (n_window * 2)
     window_aftercnn = max_len_after_cnn * n_window_ratio
+
+    cu_chunk_lens = [0]
     for cnn_len in aftercnn_lens:
         cu_chunk_lens += [window_aftercnn] * (cnn_len // window_aftercnn)
         remainder = cnn_len % window_aftercnn
         if remainder != 0:
             cu_chunk_lens += [remainder]
+
     return torch.tensor(cu_chunk_lens, device=feature_lens.device).cumsum(-1, dtype=torch.int32)
 
 
@@ -1186,7 +1192,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         self.num_experts_per_tok = config.text_config.num_experts_per_tok
         self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
 
-    @handle_extra_kwargs(modality="video")
+    @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_features(
@@ -1202,9 +1208,9 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             The temporal, height and width of feature shape of each video in LLM.
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-        return self.visual(pixel_values_videos, grid_thw=video_grid_thw, return_dict=True, **kwargs)
+        return self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
 
-    @handle_extra_kwargs(modality="image")
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -1220,7 +1226,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
-        return self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
+        return self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring

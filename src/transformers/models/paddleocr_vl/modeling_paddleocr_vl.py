@@ -44,8 +44,9 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check, torch_int
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
-    handle_extra_kwargs,
+    accepts_precomputed_kwargs,
     is_flash_attention_requested,
     maybe_autocast,
     merge_with_config_defaults,
@@ -821,6 +822,7 @@ class PaddleOCRVisionEncoder(nn.Module):
     # Ignore copy
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("image_grid_thw", new_name="grid_thw", version="5.11.0")
     def forward(
         self,
         inputs_embeds: torch.FloatTensor,
@@ -888,6 +890,7 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
+    @deprecate_kwarg("image_grid_thw", new_name="grid_thw", version="5.11.0")
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -934,6 +937,7 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @deprecate_kwarg("image_grid_thw", new_name="grid_thw", version="5.11.0")
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1188,7 +1192,7 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
         mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, mrope_position_deltas
 
-    @handle_extra_kwargs(modality="image")
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -1204,7 +1208,7 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
             The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype).unsqueeze(0)
-        vision_outputs = self.visual(pixel_values=pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
+        vision_outputs = self.visual(pixel_values=pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_embeds = vision_outputs.last_hidden_state
         image_embeds = self.projector(image_embeds, image_grid_thw)
         vision_outputs.pooler_output = image_embeds
@@ -1364,7 +1368,6 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    @handle_extra_kwargs(modality="image")
     @auto_docstring
     def get_image_features(
         self,

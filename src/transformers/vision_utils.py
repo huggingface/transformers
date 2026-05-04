@@ -71,13 +71,13 @@ def get_vision_position_ids(
         spatial_merge_size = torch.tensor([spatial_merge_size], device=device).expand(len(grid_thw))
 
     position_ids = []
-    for (t, h, w), m in zip(grid_thw.tolist(), spatial_merge_size.tolist()):
-        t, h, w, m = int(t), int(h), int(w), int(m)
+    for (t, h, w), merge_size in zip(grid_thw.tolist(), spatial_merge_size.tolist()):
+        t, h, w, merge_size = int(t), int(h), int(w), int(merge_size)
         hpos_ids = torch.arange(h, device=device).unsqueeze(1).expand(-1, w)
-        hpos_ids = hpos_ids.reshape(h // m, m, w // m, m).permute(0, 2, 1, 3).flatten()
+        hpos_ids = hpos_ids.reshape(h // merge_size, merge_size, w // merge_size, merge_size).transpose(1, 2).flatten()
 
         wpos_ids = torch.arange(w, device=device).unsqueeze(0).expand(h, -1)
-        wpos_ids = wpos_ids.reshape(h // m, m, w // m, m).permute(0, 2, 1, 3).flatten()
+        wpos_ids = wpos_ids.reshape(h // merge_size, merge_size, w // merge_size, merge_size).transpose(1, 2).flatten()
         position_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
 
     return torch.cat(position_ids, dim=0)
@@ -170,8 +170,8 @@ def get_vision_bilinear_indices_and_weights(
         bilinear_weights = kwargs.pop("bilinear_weights", None)
         if bilinear_indices is not None and bilinear_weights is not None:
             return bilinear_indices, bilinear_weights
-    N = num_grid_per_side
-    m = spatial_merge_size
+    side = num_grid_per_side
+    merge_size = spatial_merge_size
     device = grid_thw.device
 
     idx_parts: list[list[torch.Tensor]] = [[] for _ in range(4)]
@@ -180,40 +180,40 @@ def get_vision_bilinear_indices_and_weights(
     for t, h, w in grid_thw.tolist():
         t, h, w = int(t), int(h), int(w)
 
-        h_idxs = torch.linspace(0, N - 1, h, device=device)
-        w_idxs = torch.linspace(0, N - 1, w, device=device)
+        h_grid = torch.linspace(0, side - 1, h, device=device)
+        w_grid = torch.linspace(0, side - 1, w, device=device)
 
-        h_floor = h_idxs.int()
-        w_floor = w_idxs.int()
-        h_ceil = (h_floor + 1).clamp(max=N - 1)
-        w_ceil = (w_floor + 1).clamp(max=N - 1)
+        h_floor = h_grid.int()
+        w_floor = w_grid.int()
+        h_ceil = (h_floor + 1).clamp(max=side - 1)
+        w_ceil = (w_floor + 1).clamp(max=side - 1)
 
-        dh = h_idxs - h_floor
-        dw = w_idxs - w_floor
+        h_frac = h_grid - h_floor
+        w_frac = w_grid - w_floor
 
-        bh_f = h_floor * N
-        bh_c = h_ceil * N
+        h_floor_offset = h_floor * side
+        h_ceil_offset = h_ceil * side
 
-        raw_idx = [
-            (bh_f[:, None] + w_floor[None, :]).flatten(),
-            (bh_f[:, None] + w_ceil[None, :]).flatten(),
-            (bh_c[:, None] + w_floor[None, :]).flatten(),
-            (bh_c[:, None] + w_ceil[None, :]).flatten(),
+        corner_indices = [
+            (h_floor_offset[:, None] + w_floor[None, :]).flatten(),
+            (h_floor_offset[:, None] + w_ceil[None, :]).flatten(),
+            (h_ceil_offset[:, None] + w_floor[None, :]).flatten(),
+            (h_ceil_offset[:, None] + w_ceil[None, :]).flatten(),
         ]
-        raw_w = [
-            ((1 - dh)[:, None] * (1 - dw)[None, :]).flatten(),
-            ((1 - dh)[:, None] * dw[None, :]).flatten(),
-            (dh[:, None] * (1 - dw)[None, :]).flatten(),
-            (dh[:, None] * dw[None, :]).flatten(),
+        corner_weights = [
+            ((1 - h_frac)[:, None] * (1 - w_frac)[None, :]).flatten(),
+            ((1 - h_frac)[:, None] * w_frac[None, :]).flatten(),
+            (h_frac[:, None] * (1 - w_frac)[None, :]).flatten(),
+            (h_frac[:, None] * w_frac[None, :]).flatten(),
         ]
 
-        h_idx = torch.arange(h, device=device).view(h // m, m)
-        w_idx = torch.arange(w, device=device).view(w // m, m)
-        reorder = (h_idx[:, :, None, None] * w + w_idx[None, None, :, :]).permute(0, 2, 1, 3).flatten().repeat(t)
+        h_idx = torch.arange(h, device=device).view(h // merge_size, merge_size)
+        w_idx = torch.arange(w, device=device).view(w // merge_size, merge_size)
+        reorder = (h_idx[:, :, None, None] * w + w_idx[None, None, :, :]).transpose(1, 2).flatten().repeat(t)
 
         for i in range(4):
-            idx_parts[i].append(raw_idx[i][reorder])
-            weight_parts[i].append(raw_w[i][reorder])
+            idx_parts[i].append(corner_indices[i][reorder])
+            weight_parts[i].append(corner_weights[i][reorder])
 
     bilinear_indices = torch.stack([torch.cat(p) for p in idx_parts])
     bilinear_weights = torch.stack([torch.cat(p) for p in weight_parts])

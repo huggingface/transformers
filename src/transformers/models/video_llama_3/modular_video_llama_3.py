@@ -45,7 +45,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.generic import handle_extra_kwargs, is_flash_attention_requested, merge_with_config_defaults
+from ...utils.generic import accepts_precomputed_kwargs, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...video_utils import (
     VideoInput,
@@ -478,7 +478,7 @@ class VideoLlama3Model(Qwen2VLModel):
     def compute_3d_position_ids(self):
         raise AttributeError("Not needed for VideoLLaMA3")
 
-    @handle_extra_kwargs(modality="video")
+    @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_features(
@@ -503,7 +503,7 @@ class VideoLlama3Model(Qwen2VLModel):
             **kwargs,
         )
 
-    @handle_extra_kwargs(modality="image")
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -655,46 +655,6 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
 
     def __init__(self, config: VideoLlama3Config):
         super().__init__(config)  # just to add type hint on config
-
-    @handle_extra_kwargs(modality="image")
-    @can_return_tuple
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        image_merge_sizes: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        image_merge_sizes (`torch.Tensor` of shape `(num_images,)`, *optional*):
-            The spatial downsampling ratio of each image feature.
-        """
-        return self.model.get_image_features(pixel_values, image_grid_thw, image_merge_sizes, **kwargs)
-
-    @handle_extra_kwargs(modality="video")
-    @can_return_tuple
-    @auto_docstring
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.FloatTensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        video_merge_sizes: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
-        video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`, *optional*):
-            The spatial downsampling ratio of each video feature.
-        """
-        return self.model.get_video_features(pixel_values_videos, video_grid_thw, video_merge_sizes, **kwargs)
 
     @can_return_tuple
     @auto_docstring

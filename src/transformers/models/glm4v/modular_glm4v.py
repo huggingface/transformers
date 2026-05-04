@@ -42,7 +42,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import handle_extra_kwargs, maybe_autocast, merge_with_config_defaults
+from ...utils.generic import accepts_precomputed_kwargs, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...video_utils import VideoInput
 from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
@@ -318,9 +318,9 @@ class Glm4vVisionEmbeddings(nn.Module):
         # Calculate target dimensions for each patch
         num_tokens = embeddings.shape[0]
         token_positions = torch.arange(num_tokens, device=embeddings.device)
-        seg_ids = (token_positions.unsqueeze(0) >= lengths.cumsum(0).unsqueeze(1)).sum(0)
-        target_h = image_shapes[seg_ids, 1].to(dtype=torch.float32)
-        target_w = image_shapes[seg_ids, 2].to(dtype=torch.float32)
+        seq_ids = (token_positions.unsqueeze(0) >= lengths.cumsum(0).unsqueeze(1)).sum(0)
+        target_h = image_shapes[seq_ids, 1].to(dtype=torch.float32)
+        target_w = image_shapes[seq_ids, 2].to(dtype=torch.float32)
 
         # Normalize coordinates to [-1, 1] range for grid_sample
         norm_w = ((w_coords + 0.5) / target_w) * 2 - 1
@@ -612,7 +612,7 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
 
     def rot_pos_emb(self, grid_thw):
         warnings.warn(
-            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in a future version. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
+            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in v5.11. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
             FutureWarning,
             stacklevel=2,
         )
@@ -780,7 +780,7 @@ class Glm4vModel(Qwen2VLModel):
         super().__init__(config)
         self.visual = Glm4vVisionModel._from_config(config.vision_config)
 
-    @handle_extra_kwargs(modality="video")
+    @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_features(

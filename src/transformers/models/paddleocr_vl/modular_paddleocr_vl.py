@@ -54,7 +54,8 @@ from ...utils import (
     torch_compilable_check,
     torch_int,
 )
-from ...utils.generic import handle_extra_kwargs, merge_with_config_defaults
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
 from ..ernie4_5.configuration_ernie4_5 import Ernie4_5Config
@@ -777,6 +778,9 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
         head_dim = embed_dim // num_heads
         self.rotary_pos_emb = PaddleOCRVisionRotaryEmbedding(head_dim // 2)
 
+    @can_return_tuple
+    @auto_docstring
+    @deprecate_kwarg("image_grid_thw", new_name="grid_thw", version="5.11.0")
     def forward(
         self,
         inputs_embeds: torch.FloatTensor,
@@ -844,6 +848,7 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
+    @deprecate_kwarg("image_grid_thw", new_name="grid_thw", version="5.11.0")
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -890,6 +895,7 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @deprecate_kwarg("image_grid_thw", new_name="grid_thw", version="5.11.0")
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -935,7 +941,7 @@ class PaddleOCRVLModel(Qwen2VLModel):
     def get_video_features(self):
         raise AttributeError("PaddleOCRVLModel does not support video.")
 
-    @handle_extra_kwargs(modality="image")
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -951,7 +957,7 @@ class PaddleOCRVLModel(Qwen2VLModel):
             The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype).unsqueeze(0)
-        vision_outputs = self.visual(pixel_values=pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
+        vision_outputs = self.visual(pixel_values=pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_embeds = vision_outputs.last_hidden_state
         image_embeds = self.projector(image_embeds, image_grid_thw)
         vision_outputs.pooler_output = image_embeds

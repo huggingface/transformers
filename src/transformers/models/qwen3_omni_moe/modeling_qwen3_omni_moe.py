@@ -57,7 +57,7 @@ from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import (
     TransformersKwargs,
-    handle_extra_kwargs,
+    accepts_precomputed_kwargs,
     is_flash_attention_requested,
     maybe_autocast,
     merge_with_config_defaults,
@@ -662,11 +662,13 @@ def chunk_and_pad_features(
         chunk_lengths = kwargs.pop("chunk_lengths", None)
         if padded_feature is not None and chunk_lengths is not None:
             return padded_feature, chunk_lengths
+
     chunk_num = torch.ceil(feature_lens / (n_window * 2)).long()
     chunk_lengths = torch.full((chunk_num.sum(),), n_window * 2, dtype=torch.long, device=feature_lens.device)
     tail_chunk_index = F.pad(chunk_num, (1, 0), value=-1).cumsum(0)[1:]
     chunk_lengths[tail_chunk_index] = feature_lens % (n_window * 2)
     chunk_lengths = torch.where(chunk_lengths == 0, n_window * 2, chunk_lengths)
+
     chunk_list = input_features.T.split(chunk_lengths.tolist(), dim=0)
     padded_feature = nn.utils.rnn.pad_sequence(chunk_list, batch_first=True).transpose(1, 2)
     return padded_feature, chunk_lengths
@@ -715,17 +717,21 @@ def get_audio_cu_seqlens(
     """
     if kwargs is not None and (cu_seqlens := kwargs.pop("cu_seqlens", None)) is not None:
         return cu_seqlens
+
     aftercnn_lens = _get_feat_extract_output_lengths(feature_lens)
     feature_lens_after_cnn = _get_feat_extract_output_lengths(chunk_lengths)
     max_len_after_cnn = feature_lens_after_cnn.max().item()
-    cu_chunk_lens = [0]
+
     n_window_ratio = n_window_infer // (n_window * 2)
     window_aftercnn = max_len_after_cnn * n_window_ratio
+
+    cu_chunk_lens = [0]
     for cnn_len in aftercnn_lens:
         cu_chunk_lens += [window_aftercnn] * (cnn_len // window_aftercnn)
         remainder = cnn_len % window_aftercnn
         if remainder != 0:
             cu_chunk_lens += [remainder]
+
     return torch.tensor(cu_chunk_lens, device=feature_lens.device).cumsum(-1, dtype=torch.int32)
 
 
@@ -852,7 +858,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
         Then prepares a mask so that pad tokens are not attended to.
         """
         warnings.warn(
-            f"`{self.__class__.__name__}.padded_and_mask_function` is deprecated and will be removed in a future version. Use `chunk_and_pad_features` and `get_audio_cu_seqlens` helpers instead.",
+            f"`{self.__class__.__name__}.padded_and_mask_function` is deprecated and will be removed in v5.11. Use `chunk_and_pad_features` and `get_audio_cu_seqlens` helpers instead.",
             FutureWarning,
             stacklevel=2,
         )
@@ -1166,7 +1172,7 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
 
     def rot_pos_emb(self, grid_thw: torch.Tensor) -> torch.Tensor:
         warnings.warn(
-            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in a future version. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
+            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in v5.11. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
             FutureWarning,
             stacklevel=2,
         )
@@ -1176,12 +1182,14 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
 
     def fast_pos_embed_interpolate(self, grid_thw):
         warnings.warn(
-            f"`{self.__class__.__name__}.fast_pos_embed_interpolate` is deprecated and will be removed in a future version. Use `get_vision_bilinear_indices_and_weights` from `transformers.vision_utils` and apply `self.pos_embed`.",
+            f"`{self.__class__.__name__}.fast_pos_embed_interpolate` is deprecated and will be removed in v5.11. Use `get_vision_bilinear_indices_and_weights` from `transformers.vision_utils` and apply `self.pos_embed`.",
             FutureWarning,
             stacklevel=2,
         )
         bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
-            grid_thw, self.num_grid_per_side, self.config.spatial_merge_size
+            grid_thw,
+            num_grid_per_side=self.num_grid_per_side,
+            spatial_merge_size=self.config.spatial_merge_size,
         )
         return (self.pos_embed(bilinear_indices) * bilinear_weights[:, :, None]).sum(0)
 
@@ -1202,8 +1210,8 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
         """
         bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
             grid_thw,
-            self.num_grid_per_side,
-            self.config.spatial_merge_size,
+            num_grid_per_side=self.num_grid_per_side,
+            spatial_merge_size=self.config.spatial_merge_size,
             kwargs=kwargs,
         )
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
@@ -1913,7 +1921,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    @handle_extra_kwargs(modality="video")
+    @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_features(
@@ -1929,9 +1937,9 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             The temporal, height and width of feature shape of each video in LLM.
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-        return self.visual(pixel_values_videos, grid_thw=video_grid_thw, return_dict=True, **kwargs)
+        return self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
 
-    @handle_extra_kwargs(modality="image")
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -1947,7 +1955,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
-        return self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
+        return self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring
