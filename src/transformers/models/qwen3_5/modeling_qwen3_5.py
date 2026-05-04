@@ -451,9 +451,6 @@ class Qwen3_5GatedDeltaNet(nn.Module):
         a = self.in_proj_a(hidden_states)
 
         seq_idx = kwargs.get("seq_idx")
-        # The chunked FLA kernel takes a single `cu_seqlens` arg; for packed self-attention this matches q-side lengths.
-        cu_seqlens = kwargs.get("cu_seq_lens_q")
-
         if use_precomputed_states:
             # 2. Convolution sequence transformation
             # NOTE: the conv state is updated in `causal_conv1d_update`
@@ -501,6 +498,8 @@ class Qwen3_5GatedDeltaNet(nn.Module):
             query = query.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
             key = key.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
 
+        # The chunked FLA kernel takes a single `cu_seqlens` arg; for packed self-attention this matches q-side lengths.
+        cu_seqlens = kwargs.get("cu_seq_lens_q")
         if not use_precomputed_states:
             core_attn_out, last_recurrent_state = self.chunk_gated_delta_rule(
                 query,
