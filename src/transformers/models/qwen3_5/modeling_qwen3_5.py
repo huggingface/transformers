@@ -454,15 +454,9 @@ class Qwen3_5GatedDeltaNet(nn.Module):
         b = self.in_proj_b(hidden_states)
         a = self.in_proj_a(hidden_states)
 
-<<<<<<< HEAD
         seq_idx = kwargs.get("seq_idx")
-        if use_precomputed_states:
-            # 2. Convolution sequence transformation
-            # NOTE: the conv state is updated in `causal_conv1d_update`
-=======
         if use_precomputed_states and seq_len == 1:
             # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
->>>>>>> upstream/main
             mixed_qkv = self.causal_conv1d_update(
                 mixed_qkv,
                 conv_state,
@@ -515,26 +509,9 @@ class Qwen3_5GatedDeltaNet(nn.Module):
             query = query.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
             key = key.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
 
-<<<<<<< HEAD
         # The chunked FLA kernel takes a single `cu_seqlens` arg; for packed self-attention this matches q-side lengths.
         cu_seqlens = kwargs.get("cu_seq_lens_q")
-        if not use_precomputed_states:
-            core_attn_out, last_recurrent_state = self.chunk_gated_delta_rule(
-                query,
-                key,
-                value,
-                g=g,
-                beta=beta,
-                initial_state=None,
-                output_final_state=cache_params is not None,
-                use_qk_l2norm_in_kernel=True,
-                cu_seqlens=cu_seqlens,
-            )
-
-        else:
-=======
         if use_precomputed_states and seq_len == 1:
->>>>>>> upstream/main
             core_attn_out, last_recurrent_state = self.recurrent_gated_delta_rule(
                 query,
                 key,
@@ -556,6 +533,7 @@ class Qwen3_5GatedDeltaNet(nn.Module):
                 initial_state=recurrent_state if use_precomputed_states else None,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
+                cu_seqlens=cu_seqlens,
             )
 
         # Update cache

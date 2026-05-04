@@ -1369,7 +1369,6 @@ class DataCollatorWithFlattening(DefaultDataCollator):
     - uses `separator_id` to separate sequences within the concatenated `labels`, default value is -100
     - no padding will be added, returns `input_ids`, `labels` and `position_ids` by default
     - optionally returns the kwargs contained in FlashAttentionKwargs
-    - optionally returns `cu_seqlens` for FLA-style kernels
     - optionally returns seq_idx indicating which sequence each token belongs to
 
     <Tip warning={true}>
