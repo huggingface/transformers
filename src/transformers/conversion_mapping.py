@@ -24,6 +24,7 @@ from .core_model_loading import (
     MergeModulelist,
     PrefixChange,
     Transpose,
+    UnfuseAndPermuteForRope,
     WeightConverter,
     WeightRenaming,
     WeightTransform,
@@ -119,6 +120,16 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(
                 source_patterns=r"vision_tower.patch_embed.pos_emb.weight",
                 target_patterns="model.vision_tower.patch_embed.pos_emb.position_embeddings",
+            ),
+            # Unfuse qkv and apply rope permutation
+            WeightConverter(
+                source_patterns=["attn.qkv"],
+                target_patterns=[
+                    "attn.q_proj",
+                    "attn.k_proj",
+                    "attn.v_proj",
+                ],
+                operations=[UnfuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"])],
             ),
         ],
         "llava": [

@@ -405,6 +405,62 @@ class PermuteForRope(ConversionOps):
         return output
 
 
+class UnfuseAndPermuteForRope(ConversionOps):
+    """
+    Applies the permutation required to convert complex RoPE weights to the split sin/cos format on fused QKV.
+    Same as calling `Chunk() + PermuteForRope()` but lets us call `Permute` only on a subset of chunked tensors.
+    """
+
+    def __init__(self, dim: int = 0, permute_layer_names: list[str] | None = None):
+        self.dim = dim
+        self.permute_layer_names = permute_layer_names or []
+
+    def _apply_permutation(self, tensor: torch.Tensor) -> torch.Tensor:
+        dim1, dim2 = tensor.shape
+        config = self.config.vision_config
+        n_heads = getattr(config, "num_attention_heads", 1)
+
+        tensor = tensor.view(n_heads, dim1 // n_heads // 2, 2, dim2)
+        tensor = tensor.transpose(1, 2).reshape(dim1, dim2)
+        return tensor
+
+    def chunk_qkv(self, tensors: torch.Tensor, split_sizes: list[int]) -> list[torch.Tensor]:
+        chunks = torch.chunk(tensors, split_sizes, dim=self.dim)
+        return chunks
+
+    @torch.no_grad
+    def convert(
+        self,
+        input_dict: dict[str, list[torch.Tensor]],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        config,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        self.config = config
+
+        tensor = next(iter(input_dict.values()))[0]
+        targets = self.get_target_patterns(input_dict, target_patterns)
+        chunks = self.chunk_qkv(tensor, len(targets))
+
+        output: dict[str, torch.Tensor] = dict(zip(targets, chunks))
+        for key, value in output.items():
+            # Permute q and key weights (skip biases) to match RoPE implementation
+            if any(name in key for name in self.permute_layer_names) and value.ndim == 2:
+                output[key] = self._apply_permutation(value)
+        return output
+
+    def get_target_patterns(self, input_dict: dict, target_patterns: list[str]) -> list[str]:
+        # Here we always return the target patterns
+        if len(input_dict) > 1 or len(target_patterns) == 1:
+            raise ValueError("Undefined Operation encountered!")
+        return target_patterns
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return Concatenate(self.dim)
+
+
 class ErnieFuseAndSplitTextVisionExperts(ConversionOps):
     r"""
     Special operation that splits a module list over all keys and fuses over the number of original modules.
@@ -682,6 +738,8 @@ class WeightTransform:
         """
         # Try matching one of the alternation branches
         match_object = self.compiled_sources.search(source_key)
+        if "q_proj" in self.source_patterns:
+            print(self.compiled_sources, match_object)
         if match_object is None:
             return source_key, None
 

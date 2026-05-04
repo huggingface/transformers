@@ -170,7 +170,7 @@ class Kimi2_6VisionPatchEmbed(nn.Module):
         return hidden_states
 
 
-class Kimi2_6VisionRotaryEmbeddings(nn.Module):
+class Kimi2_6VisionRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: Kimi2_6VisionConfig, device=None):
@@ -227,28 +227,30 @@ class Kimi2_6VisionRotaryEmbeddings(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        seq_length = position_ids.shape[1]
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
 
-        # Multidimensional positions: [batch, num_patches, ndim]. Apply rotations to each spatial dim separately
-        all_cos, all_sin = [], []
-        position_ids = torch.flip(position_ids, dims=[-1])
-        for i in range(2):
-            dim_position_ids = position_ids[:, :, i]
-            dim_position_ids_expanded = dim_position_ids[:, None, :].float()
+        inv_freq_expanded = (
+            self.inv_freq[None, None, :, None].float().expand(2, position_ids.shape[1], -1, 1).to(x.device)
+        )
+        position_ids_expanded = position_ids[:, :, None, :].float()  # shape (2, bs, 1, positions)
 
-            with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-                freqs = (inv_freq_expanded.float() @ dim_position_ids_expanded.float()).transpose(1, 2)
-                emb = torch.cat((freqs, freqs), dim=-1).reshape(seq_length, -1, 2)
-                cos = emb.cos() * self.attention_scaling
-                sin = emb.sin() * self.attention_scaling
-            all_cos.append(cos)
-            all_sin.append(sin)
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
+            cos = freqs.cos() * self.attention_scaling
+            sin = freqs.sin() * self.attention_scaling
 
-        cos = torch.stack(all_cos, dim=-1).reshape(1, seq_length, -1)
-        sin = torch.stack(all_sin, dim=-1).reshape(1, seq_length, -1)
+        sin = self.recomposition_to_2d(sin)
+        cos = self.recomposition_to_2d(cos)
+
         return cos, sin
+
+    def recomposition_to_2d(self, freq):
+        # interleave freq on H/W and head-dim: [2, B, S, num_freqs] > [B, S, num_freqs*2]
+        seq_length = freq.shape[2]
+        freq_hw = torch.stack([freq[0], freq[1]], dim=0).permute(1, 2, 3, 0).reshape(seq_length, -1)
+        return freq_hw.repeat(1, 1, 2)  # repeat [B, S, num_freqs*4]
 
 
 class Kimi2_6VisionMLP(nn.Module):
@@ -327,7 +329,10 @@ class Kimi2_6VisionAttention(nn.Module):
         self.num_heads = config.num_attention_heads
         self.head_dim = self.dim // self.num_heads
         self.num_key_value_groups = 1  # needed for eager attention
-        self.qkv = nn.Linear(self.dim, self.dim * 3, bias=True)
+        # self.qkv = nn.Linear(self.dim, self.dim * 3, bias=True)
+        self.q_proj = nn.Linear(self.dim, self.dim, bias=True)
+        self.k_proj = nn.Linear(self.dim, self.dim, bias=True)
+        self.v_proj = nn.Linear(self.dim, self.dim, bias=True)
         self.proj = nn.Linear(self.dim, self.dim)
         self.scaling = self.head_dim**-0.5
         self.config = config
@@ -342,37 +347,18 @@ class Kimi2_6VisionAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        wqkv = self.qkv.weight.data
-        wq = wqkv[:self.dim, :]
-        wk = wqkv[self.dim:2*self.dim, :]
-        wv = wqkv[2*self.dim:, :]
-
-        def permute(w):
-            return (
-                w.view(self.num_heads, self.dim // self.num_heads // 2, 2, self.dim)
-                .transpose(1, 2)
-                .reshape(self.dim, self.dim)
-            )
-
-        wqkv = torch.cat([permute(wq), permute(wk), wv], dim=0)
-        # self.qkv.weight.data = wqkv
-
         seq_length = hidden_states.shape[0]
-        query_states, key_states, value_states = (
-            self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
-        ) # [S, H, HD]
-        # TODO: add rope-permuatation in conversion ops
-        key_states = key_states.reshape(-1, self.num_heads, self.head_dim//2, 2).transpose(-1, -2).reshape_as(value_states)  # interleave -> split
-        query_states = query_states.reshape(-1, self.num_heads, self.head_dim//2, 2).transpose(-1, -2).reshape_as(value_states)  # interleave -> split
+
+        query_states = self.q_proj(hidden_states).reshape(seq_length, self.num_heads, -1)
+        key_states = self.k_proj(hidden_states).reshape(seq_length, self.num_heads, -1)
+        value_states = self.v_proj(hidden_states).reshape(1, seq_length, self.num_heads, -1)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
-        query_states = query_states.reshape(-1, self.num_heads, 2, self.head_dim //2).transpose(-1, -2).reshape(-1, self.num_heads, self.head_dim)
-        key_states = key_states.reshape(-1, self.num_heads, 2, self.head_dim //2).transpose(-1, -2).reshape(-1, self.num_heads, self.head_dim)
 
-        query_states = query_states.transpose(0, 1).unsqueeze(0)
-        key_states = key_states.transpose(0, 1).unsqueeze(0)
-        value_states = value_states.transpose(0, 1).unsqueeze(0)
+        query_states = query_states.transpose(2, 1)
+        key_states = key_states.transpose(2, 1)
+        value_states = value_states.transpose(2, 1)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -484,7 +470,7 @@ class Kimi2_6VisionModel(Kimi2_6PreTrainedModel):
         self.merge_kernel_size = config.merge_kernel_size
         self.patch_embed = Kimi2_6VisionPatchEmbed(config)
 
-        self.rotary_emb = Kimi2_6VisionRotaryEmbeddings(config)
+        self.rotary_emb = Kimi2_6VisionRotaryEmbedding(config)
         self.encoder_blocks = nn.ModuleList(
             [Kimi2_6VisionEncoderLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)]
         )
@@ -522,13 +508,13 @@ class Kimi2_6VisionModel(Kimi2_6PreTrainedModel):
             w_ids = torch.arange(w, device=grid_thw.device)
 
             # (h, w, 2) grid of (row, col) coordinates
-            grid = torch.stack(torch.meshgrid(h_ids, w_ids, indexing="ij"), dim=-1)
+            grid = torch.stack(torch.meshgrid(h_ids, w_ids, indexing="xy"), dim=-1)
 
-            # (h*w, 2) -> repeat for each temporal frame -> (t*h*w, 2)
+            # (h*w, 2) -> repeat for each temporal frame in case of videos -> (t*h*w, 2)
             all_position_ids.append(grid.reshape(-1, 2).repeat(t, 1))
 
         position_ids = torch.cat(all_position_ids, dim=0).unsqueeze(0)
-        return position_ids  # (1, total_patches, 2)
+        return position_ids.permute(2, 0, 1)  # (2, batch, seq_len)
 
     @capture_outputs
     @auto_docstring
