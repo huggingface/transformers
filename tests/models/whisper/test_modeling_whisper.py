@@ -1220,6 +1220,46 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_generate_compilation_all_outputs(self):
         pass
 
+    def test_attention_no_unbound_is_updated_without_encoder_decoder_cache(self):
+        """Regression test for #45773: `UnboundLocalError` on non-EncoderDecoderCache caches.
+        This can happen e.g. when using assistant models for speculative decoding.
+        """
+        from transformers.cache_utils import DynamicCache
+        from transformers.models.whisper.modeling_whisper import WhisperAttention
+
+        config = self.model_tester.get_config()
+        embed_dim = config.d_model
+        num_heads = config.decoder_attention_heads
+
+        attn = WhisperAttention(
+            embed_dim=embed_dim,
+            num_heads=num_heads,
+            is_decoder=True,
+            layer_idx=0,
+            config=config,
+        ).to(torch_device)
+
+        batch_size = 2
+        seq_len = 4
+        encoder_seq_len = 8
+
+        hidden_states = torch.randn(batch_size, seq_len, embed_dim, device=torch_device)
+        key_value_states = torch.randn(batch_size, encoder_seq_len, embed_dim, device=torch_device)
+
+        cache = DynamicCache()
+        cache.update(
+            torch.randn(batch_size, num_heads, seq_len, embed_dim // num_heads, device=torch_device),
+            torch.randn(batch_size, num_heads, seq_len, embed_dim // num_heads, device=torch_device),
+            layer_idx=0,
+        )
+
+        output, _ = attn(
+            hidden_states=hidden_states,
+            key_value_states=key_value_states,
+            past_key_values=cache,
+        )
+        self.assertEqual(output.shape, (batch_size, seq_len, embed_dim))
+
 
 @require_torch
 @require_torchaudio

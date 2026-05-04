@@ -646,6 +646,37 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_model_base_model_prefix(self):
         pass
 
+    def test_attention_no_unbound_is_updated_without_encoder_decoder_cache(self):
+        """Regression test for #45773: `UnboundLocalError` on non-EncoderDecoderCache caches.
+        This can happen e.g. when using assistant models for speculative decoding.
+        """
+        from transformers.cache_utils import DynamicCache, EncoderDecoderCache
+        from transformers.models.pix2struct.modeling_pix2struct import Pix2StructTextAttention
+
+        text_config = self.model_tester.text_model_tester.get_config()
+        hidden_size = text_config.hidden_size
+
+        attn = Pix2StructTextAttention(
+            config=text_config,
+            has_relative_attention_bias=False,
+            layer_idx=0,
+        ).to(torch_device)
+
+        batch_size = 2
+        seq_len = 4
+        encoder_seq_len = 8
+
+        hidden_states = torch.randn(batch_size, seq_len, hidden_size, device=torch_device)
+        key_value_states = torch.randn(batch_size, encoder_seq_len, hidden_size, device=torch_device)
+
+        cache = EncoderDecoderCache(DynamicCache(), DynamicCache())
+        output = attn(
+            hidden_states=hidden_states,
+            key_value_states=key_value_states,
+            past_key_values=cache,
+        )
+        self.assertEqual(output[0].shape, (batch_size, seq_len, hidden_size))
+
 
 # We will verify our results on an image of a stop sign
 def prepare_img():
