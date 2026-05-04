@@ -36,14 +36,11 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast, TokenClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_qwen3_asr import Qwen3ASRConfig, Qwen3ASREncoderConfig, Qwen3ForcedAlignerConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 @auto_docstring
@@ -100,45 +97,20 @@ def eager_attention_forward(
 class Qwen3ASRAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(
-        self,
-        embed_dim: int,
-        num_heads: int,
-        dropout: float = 0.0,
-        is_decoder: bool = False,
-        bias: bool = True,
-        is_causal: bool = False,
-        layer_idx: int | None = None,
-        config: Qwen3ASRConfig | None = None,
-    ):
+    def __init__(self, config: Qwen3ASREncoderConfig, layer_idx: int | None = None):
         super().__init__()
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.dropout = dropout
-        self.head_dim = embed_dim // num_heads
         self.config = config
-
-        if (self.head_dim * num_heads) != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
-                f" and `num_heads`: {num_heads})."
-            )
-        self.scaling = self.head_dim**-0.5
-        self.is_decoder = is_decoder
-        self.is_causal = is_causal
-
-        if layer_idx is None and is_decoder:
-            logger.warning_once(
-                f"Instantiating a decoder {self.__class__.__name__} without passing `layer_idx` is not recommended and "
-                "will to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
-                "when creating this class."
-            )
         self.layer_idx = layer_idx
+        self.num_heads = config.encoder_attention_heads
+        self.head_dim = config.d_model // self.num_heads
+        self.scaling = self.head_dim**-0.5
+        self.dropout = config.attention_dropout
+        self.is_causal = False
 
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=False)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.k_proj = nn.Linear(config.d_model, config.d_model, bias=config.attention_bias)
+        self.v_proj = nn.Linear(config.d_model, config.d_model, bias=config.attention_bias)
+        self.q_proj = nn.Linear(config.d_model, config.d_model, bias=config.attention_bias)
+        self.out_proj = nn.Linear(config.d_model, config.d_model, bias=config.attention_bias)
 
     def forward(
         self,
@@ -216,16 +188,10 @@ class Qwen3ASRAttention(nn.Module):
 
 
 class Qwen3ASREncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: Qwen3ASRConfig):
+    def __init__(self, config: Qwen3ASREncoderConfig):
         super().__init__()
         self.embed_dim = config.d_model
-
-        self.self_attn = Qwen3ASRAttention(
-            embed_dim=self.embed_dim,
-            num_heads=config.encoder_attention_heads,
-            dropout=config.attention_dropout,
-            config=config,
-        )
+        self.self_attn = Qwen3ASRAttention(config=config)
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]

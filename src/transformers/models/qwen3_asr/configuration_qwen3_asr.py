@@ -63,6 +63,7 @@ class Qwen3ASREncoderConfig(PreTrainedConfig):
     output_dim: int = 3584
     n_window_infer: int = 800
     downsample_hidden_size: int = 480
+    attention_bias: bool = True
 
 
 @auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B")

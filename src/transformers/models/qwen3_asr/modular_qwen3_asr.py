@@ -65,6 +65,7 @@ class Qwen3ASREncoderConfig(Qwen2_5OmniAudioEncoderConfig):
     encoder_attention_heads: int = 16
     encoder_ffn_dim: int = 4096
     d_model: int = 1024
+    attention_bias: bool = True
 
 
 @auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B")
@@ -149,14 +150,36 @@ class Qwen3ASRPreTrainedModel(Qwen2AudioPreTrainedModel):
             )
 
 
-# NOTE (ebezzam): Whisper sets bias=False for self.k_proj, which differs from original Qwen3 ASR: https://github.com/QwenLM/Qwen3-ASR/blob/c17a131fe028b2e428b6e80a33d30bb4fa57b8df/qwen_asr/core/transformers_backend/modeling_qwen3_asr.py#L472
-# but does not make a difference since softmax is invariant to constant offsets in the logits
 class Qwen3ASRAttention(WhisperAttention):
-    pass
+    def __init__(self, config: Qwen3ASREncoderConfig, layer_idx: int | None = None):
+        nn.Module.__init__(self)
+        self.config = config
+        self.layer_idx = layer_idx
+        self.num_heads = config.encoder_attention_heads
+        self.head_dim = config.d_model // self.num_heads
+        self.scaling = self.head_dim**-0.5
+        self.dropout = config.attention_dropout
+        self.is_causal = False
+
+        self.k_proj = nn.Linear(config.d_model, config.d_model, bias=config.attention_bias)
+        self.v_proj = nn.Linear(config.d_model, config.d_model, bias=config.attention_bias)
+        self.q_proj = nn.Linear(config.d_model, config.d_model, bias=config.attention_bias)
+        self.out_proj = nn.Linear(config.d_model, config.d_model, bias=config.attention_bias)
 
 
 class Qwen3ASREncoderLayer(WhisperEncoderLayer):
-    pass
+    def __init__(self, config: Qwen3ASREncoderConfig):
+        super().__init__(
+            config=config,
+            self_attention=Qwen3ASRAttention(config),
+            d_model=config.d_model,
+            nhead=config.encoder_attention_heads,
+            dim_feedforward=config.encoder_ffn_dim,
+            dropout=config.dropout,
+            activation=config.activation_function,
+            attention_bias=config.attention_bias,
+        )
+        self.self_attn = Qwen3ASRAttention(config=config)
 
 
 @auto_docstring(
