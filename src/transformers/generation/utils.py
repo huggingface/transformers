@@ -1848,13 +1848,17 @@ class GenerationMixin(ContinuousMixin):
         # Assisted decoding and contrastive search require cache rollback, which is incompatible with sliding layers.
         # To handle this, we skip passing the model config to DynamicCache (forcing a full-layer cache).
         # The "dynamic_full" option is a shortcut for generate() users to avoid sliding layers on their own.
+        # Static caches are supported for decoder-only assisted generation (StaticLayer.crop() handles rollback).
+        # Encoder-decoder models still require dynamic caches because EncoderDecoderCache.crop() does not
+        # support static sub-caches.
         if generation_mode in (GenerationMode.ASSISTED_GENERATION, GenerationMode.CONTRASTIVE_SEARCH):
-            if generation_config.cache_implementation is not None:
-                logger.warning_once(
-                    "An assistant model is provided, using a dynamic cache instead of a cache of type="
-                    f"'{generation_config.cache_implementation}'."
-                )
-            generation_config.cache_implementation = "dynamic_full"
+            if (
+                generation_config.cache_implementation in ALL_STATIC_CACHE_IMPLEMENTATIONS
+                and not self.config.is_encoder_decoder
+            ):
+                pass
+            else:
+                generation_config.cache_implementation = "dynamic_full"
 
         dynamic_cache_kwargs = {}
         # linear attention models always need to pass the config, otherwise it will use an Attention cache for the LinearAttention layers
@@ -3475,14 +3479,8 @@ class GenerationMixin(ContinuousMixin):
             `return_dict_in_generate=True` or a [`~generation.GenerateEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
         """
-        # The cache must be dynamic for assisted generation, and the check must happen AFTER preparing cache
         if not model_kwargs["use_cache"]:
             raise ValueError("assisted generate requires `use_cache=True`")
-        if (
-            generation_config.cache_implementation in ["static", "hybrid", "sliding_window"]
-            or type(model_kwargs.get("past_key_values")) is StaticCache
-        ):
-            raise ValueError("assisted generate is not supported with Static cache classes`")
         # Get the candidate generator, given the parameterization
         candidate_generator = self._get_candidate_generator(
             generation_config=generation_config,
