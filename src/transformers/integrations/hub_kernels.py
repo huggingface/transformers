@@ -520,33 +520,6 @@ def allow_all_hub_kernels():
         ALLOW_ALL_KERNELS = False
 
 
-# Model class → {kernel_layer_name → [glob patterns]}
-# Populated via `register_fusion_patterns` for models that cannot be modified directly.
-_FUSION_PATTERNS_REGISTRY: dict[type, dict[str, list[str]]] = {}
-
-
-def register_fusion_patterns(
-    model_class_or_instance,
-    patterns: dict[str, list[str]],
-) -> None:
-    """
-    Register kernel fusion patterns for a model class without modifying it directly.
-
-    This is an alternative to setting `_kernel_fusion_patterns` as a class attribute,
-    useful when the model class is frozen or comes from an external library.
-
-    Args:
-        model_class_or_instance:
-            The model class (or an instance of it) for which patterns are being registered.
-        patterns (`dict[str, list[str]]`):
-            Mapping from `kernel_layer_name` to a list of glob-style module paths,
-            identical in format to `_kernel_fusion_patterns`.
-    """
-    if not isinstance(model_class_or_instance, type):
-        model_class_or_instance = type(model_class_or_instance)
-    _FUSION_PATTERNS_REGISTRY[model_class_or_instance] = patterns
-
-
 class FusedModuleBase(nn.Module):
     def __init__(
         self,
@@ -840,7 +813,6 @@ __all__ = [
     "get_kernel",
     "register_kernel_fusions",
     "lazy_load_kernel",
-    "register_fusion_patterns",
     "register_kernel_mapping",
     "register_kernel_mapping_transformers",
     "replace_kernel_forward_from_hub",
