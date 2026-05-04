@@ -1,3 +1,19 @@
+# Copyright 2026 The HuggingFace Inc. team
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Resolves a `ContinuousBatchingConfig` into a fully-specified config ready for cache and runner creation. Each
+helper mutates the config in place; `resolve_continuous_batching_config` orchestrates them in the required order."""
+
 from copy import deepcopy
 from math import ceil
 
@@ -13,24 +29,28 @@ from .utils import WorkloadHints
 
 def resolve_continuous_batching_config(
     config: PretrainedConfig,
-    _og_cb_config: ContinuousBatchingConfig,
+    cb_config: ContinuousBatchingConfig,
     workload_hints: WorkloadHints | None,
     has_logit_processors: bool,
 ) -> ContinuousBatchingConfig:
-    # Copy the continuous batching config to not alter the original config
-    cb_config = deepcopy(_og_cb_config)
+    """Returns a deep-copied and fully-resolved `ContinuousBatchingConfig`. The original `cb_config` is not mutated."""
+    cb_config = deepcopy(cb_config)
 
-    # Resolve missing attributes or which we have hints. Must happen before no-hints resolve.
-    decode_path_requested = resolve_using_hints(cb_config, workload_hints)
-
-    # Resolve missing attributes without hints. Must happen before decode fast path is checked.
+    # Look at whether the user explicitly asked for the decode fast path before we assign a default value
+    user_requested_decode_path = cb_config.max_blocks_per_request is not None
+    # Same for cuda graphs, if the user signals they want CUDA graphs via any padding/cached-graph parameter
     cuda_graph_requested = any(
         [cb_config.q_padding_interval_size, cb_config.kv_padding_interval_size, cb_config.max_cached_graphs]
     )
+
+    # Resolve missing attributes for which we have hints. Must happen before no-hints resolve.
+    resolve_using_hints(cb_config, workload_hints)
+
+    # Resolve remaining missing attributes. Must happen before decode fast path is checked.
     resolve_without_hints(cb_config)
 
-    # Check if the decode fast path is available. Must happen before the compile config
-    ensure_decode_fast_path_is_available(config, cb_config, decode_path_requested)
+    # Check if the decode fast path is available. Must happen before the compile config.
+    ensure_decode_fast_path_is_available(config, cb_config, user_requested_decode_path)
 
     # Decide if compile should be used. Must happen before CUDA graphs are decided.
     resolve_compile_configs(
@@ -54,31 +74,26 @@ def resolve_continuous_batching_config(
     return cb_config
 
 
-def resolve_using_hints(new_cb_config: ContinuousBatchingConfig, workload_hints: WorkloadHints | None) -> bool:
-    """Resolves the config using the given hints."""
-    # The max number of block per request is an even number large enough to hold the max request length
-    decode_path_requested = new_cb_config.max_blocks_per_request is not None
-    if not decode_path_requested and workload_hints is not None:
+def resolve_using_hints(cb_config: ContinuousBatchingConfig, workload_hints: WorkloadHints | None) -> None:
+    """Fills `max_blocks_per_request` from the workload hints, when the user did not set it explicitly."""
+    # The max number of blocks per request is an even number large enough to hold the max request length
+    if cb_config.max_blocks_per_request is None and workload_hints is not None:
         max_sequence_length = workload_hints.max_prompt_length + workload_hints.max_generated_length
         if max_sequence_length > 0:
-            blocks_per_request = int(ceil(max_sequence_length / new_cb_config.block_size)) + 1
-            new_cb_config.max_blocks_per_request = blocks_per_request + (blocks_per_request % 2)
-    return decode_path_requested
+            blocks_per_request = int(ceil(max_sequence_length / cb_config.block_size)) + 1
+            cb_config.max_blocks_per_request = blocks_per_request + (blocks_per_request % 2)
 
 
-def resolve_without_hints(new_cb_config: ContinuousBatchingConfig) -> None:
-    """Resolves the config without hints."""
-    # Max blocks per request
-    if new_cb_config.max_blocks_per_request is None:
-        new_cb_config.max_blocks_per_request = 32
-    # Q and KV padding intervals
-    if new_cb_config.q_padding_interval_size == 0:
-        new_cb_config.q_padding_interval_size = 64
-    if new_cb_config.kv_padding_interval_size == 0:
-        new_cb_config.kv_padding_interval_size = 64 * 256  # 64 blocks of 256 tokens ie. 16384 tokens
-    # Max cached graphs
-    if new_cb_config.max_cached_graphs == 0:
-        new_cb_config.max_cached_graphs = 32
+def resolve_without_hints(cb_config: ContinuousBatchingConfig) -> None:
+    """Fills any remaining unset/sentinel attribute with a fallback default."""
+    if cb_config.max_blocks_per_request is None:
+        cb_config.max_blocks_per_request = 32
+    if cb_config.q_padding_interval_size == 0:
+        cb_config.q_padding_interval_size = 64
+    if cb_config.kv_padding_interval_size == 0:
+        cb_config.kv_padding_interval_size = 64 * 256  # 64 blocks of 256 tokens ie. 16384 tokens
+    if cb_config.max_cached_graphs == 0:
+        cb_config.max_cached_graphs = 32
 
 
 def ensure_decode_fast_path_is_available(

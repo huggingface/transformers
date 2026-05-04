@@ -806,6 +806,7 @@ class ContinuousBatchingAsyncIOs:
         self.swap_io_pairs()
 
     def swap_io_pairs(self) -> None:
+        """Switch to the other IO pair so the next batch reads from / writes into a fresh set of static buffers."""
         self.current_pair = 1 - self.current_pair
 
     # This method is called after the switch and not during the first batch

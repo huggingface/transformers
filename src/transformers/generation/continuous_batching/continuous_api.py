@@ -180,22 +180,13 @@ class ContinuousBatchProcessor:
 
         # Retrieve the size of the sliding window if there is one
         self.sliding_window = 1 if getattr(config, "sliding_window", None) is None else config.sliding_window
-        # Cuda graphs for the generation step
-        self.use_cuda_graph_varlen, self.use_cuda_graph_decode = self.cb_config.get_cuda_graph_booleans()
 
         # Set up metrics collector
         self.max_batch_tokens = cache.max_batch_tokens
         self.metrics = ContinuousBatchProcessorMetrics(cache.max_batch_tokens)
 
-        # Resolve compile behavior
-        use_compile = self.cb_config.varlen_compile_config is not None
-        use_compile |= self.cb_config.decode_compile_config is not None
-
-        # Padding is turned on when either cuda graphs or compile is used
-        use_cuda_graphs = self.use_cuda_graph_varlen or self.use_cuda_graph_decode
-        self._pad_inputs = use_cuda_graphs or use_compile
-
         # Setup inputs and outputs
+        use_cuda_graph_varlen, _ = self.cb_config.get_cuda_graph_booleans()
         io_kwargs = {
             "cache": cache,
             "config": config,
@@ -203,7 +194,7 @@ class ContinuousBatchProcessor:
             "model_dtype": model_dtype,
             "return_logprobs": self.return_logprobs,
             "logit_processor": self.logit_processor,
-            "use_cuda_graph_varlen": self.use_cuda_graph_varlen,
+            "use_cuda_graph_varlen": use_cuda_graph_varlen,
         }
         self.use_async_batching = self.cb_config.use_async_batching
 
@@ -446,7 +437,7 @@ class ContinuousBatchProcessor:
         """Perform a single generation step."""
         # Retrieve the model kwargs with or without padding. After this function returns, everything happens on the
         # device. Hence, to make the limit clear, this is left out of the model runner scope.
-        batch_data = self.inputs_and_outputs.get_model_kwargs(use_padding=self._pad_inputs)
+        batch_data = self.inputs_and_outputs.get_model_kwargs(use_padding=self.model_runner.pad_inputs)
 
         # This takes care of the forward pass, logits processing, and sampling. After this returns, the compute is
         # scheduled on the device's compute stream, but may not have finished yet.
@@ -497,13 +488,9 @@ class ContinuousBatchingManager:
         # Internal arguments
         self.model = model.eval()
         self.generation_config = generation_config
-        self.continuous_batching_config = continuous_batching_config
         self.warmed_up = False  # Set to True after warmup is completed. Useful for persistent managers.
-        self.workload_hints = workload_hints
-        # This is an approximation until the cache is created: it will infer the correct value in cache.__init__
-        self._use_prefix_sharing = self.continuous_batching_config.allow_block_sharing
 
-        self.input_queue = queue.Queue(maxsize=self.continuous_batching_config.max_queue_size)
+        self.input_queue = queue.Queue(maxsize=continuous_batching_config.max_queue_size)
         self._has_new_requests = threading.Event()
         self.output_router = OutputRouter()
         self.stop_event = threading.Event()
@@ -518,9 +505,19 @@ class ContinuousBatchingManager:
 
         self.logit_processor = ContinuousBatchingLogitsProcessorList(
             logits_processor=self.model._get_logits_processor(generation_config),
-            per_request_processors=self.continuous_batching_config.per_request_processors,
-            drop_unsupported_processors=self.continuous_batching_config.drop_unsupported_processors,
+            per_request_processors=continuous_batching_config.per_request_processors,
+            drop_unsupported_processors=continuous_batching_config.drop_unsupported_processors,
         )
+
+        # Fully resolve the continuous batching config now that we have the model, the config and the logit processor.
+        self.continuous_batching_config = resolve_continuous_batching_config(
+            config=self.model.config,
+            cb_config=continuous_batching_config,
+            workload_hints=workload_hints,
+            has_logit_processors=self.logit_processor.do_processing,
+        )
+        # This is an approximation until the cache is created: it will infer the correct value in cache.__init__
+        self._use_prefix_sharing = self.continuous_batching_config.allow_block_sharing
 
     @traced
     def start(self) -> None:
@@ -765,15 +762,6 @@ class ContinuousBatchingManager:
         self.batch_processor._generation_step(self.model)
 
     def _create_batch_processor(self) -> ContinuousBatchProcessor:
-        # Resolve all missing attributes of the continuous batching config
-        self.continuous_batching_config = resolve_continuous_batching_config(
-            config=self.model.config,
-            _og_cb_config=self.continuous_batching_config,
-            workload_hints=self.workload_hints,
-            has_logit_processors=self.logit_processor.do_processing,
-        )
-        self.workload_hints = None  # does not make sense to keep them after initialization
-
         # Create the PagedAttentionCache
         paged_attention_cache = PagedAttentionCache(
             self.model.config,
