@@ -175,7 +175,9 @@ def decide_use_cuda_graphs(
     if not torch.cuda.is_available():
         intended_use_cuda_graph = any(cb_config.get_cuda_graph_booleans())
         if intended_use_cuda_graph:  # throw a warning only if the user intended to use cuda graphs
-            logger.warning(f"{cb_config.use_cuda_graph = } but {torch.cuda.is_available() = }: turning off cuda graphs")
+            logger.warning(
+                f"{cb_config.use_cuda_graph = } but {torch.cuda.is_available() = }: turning off cuda graphs"
+            )
         cb_config.use_cuda_graph = (False, False)
 
     # Else if use_cuda_graph is specified, we follow the user's choice and make sure it is a tuple of booleans

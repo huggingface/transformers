@@ -1739,7 +1739,6 @@ class ContinuousBatchingConfig:
     # are kept but warnings are logged for unsupported/unknown ones.
     drop_unsupported_processors: bool = True
 
-
     def account_for_cb_deprecated_arguments(
         self,
         max_queue_size: int = 0,
@@ -1779,7 +1778,6 @@ class ContinuousBatchingConfig:
                 "through the continuous_batching_config: " + ", ".join(kwargs_to_warn)
             )
 
-
     def get_cuda_graph_booleans(self) -> tuple[bool, bool]:
         """Returns the cuda graph booleans for the varlen and decode paths."""
         if self.use_cuda_graph is None:
@@ -1787,7 +1785,6 @@ class ContinuousBatchingConfig:
         if isinstance(self.use_cuda_graph, bool):
             return self.use_cuda_graph, self.use_cuda_graph
         return self.use_cuda_graph
-
 
     @property
     def fallback_max_blocks_per_request(self) -> int:
