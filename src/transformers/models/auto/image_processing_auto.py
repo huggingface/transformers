@@ -84,6 +84,7 @@ else:
             ("edgetam", {"torchvision": "Sam2ImageProcessor"}),
             ("emu3", {"pil": "Emu3ImageProcessor"}),
             ("eomt_dinov3", {"torchvision": "EomtImageProcessor", "pil": "EomtImageProcessorPil"}),
+            ("exaone4_5", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("florence2", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("focalnet", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
             ("gemma3n", {"torchvision": "SiglipImageProcessor", "pil": "SiglipImageProcessorPil"}),

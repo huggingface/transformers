@@ -1,3 +1,17 @@
+# Copyright 2026 The LG AI Research and HuggingFace Inc. team. All rights reserved.
+#
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """PyTorch EXAONE 4.5 model."""
 
 from collections.abc import Callable
@@ -296,10 +310,6 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
     Note: Unlike Qwen2VL, the EXAONE 4.5 vision encoder uses 2D rotary positional embeddings (2D-RoPE)
     and adopts a Grouped Query Attention (GQA) structure throughout the multimodal stack.
     """
-
-    def __init__(self, config: Exaone4_5_Config):
-        super().__init__(config)
-        self.model = Exaone4_5_Model(config)
 
     def _get_image_nums_and_video_nums(
         self,
