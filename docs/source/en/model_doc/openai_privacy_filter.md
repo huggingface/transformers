@@ -40,8 +40,9 @@ The example below demonstrates how to detect privacy-sensitive tokens with [`Pip
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 from transformers import pipeline
+
 
 classifier = pipeline(
     task="token-classification",
@@ -53,9 +54,11 @@ classifier("My name is Alice Smith")
 </hfoption>
 <hfoption id="AutoModelForTokenClassification">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForTokenClassification, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("openai/privacy-filter")
 model = AutoModelForTokenClassification.from_pretrained("openai/privacy-filter", device_map="auto")

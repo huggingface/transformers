@@ -35,7 +35,8 @@ Key architectural features:
 - The model supports `gradient_checkpointing` to reduce memory during fine-tuning.
 
 ```python
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 model_id = "tencent/Hy3-preview"
 tokenizer = AutoTokenizer.from_pretrained(model_id)

@@ -40,14 +40,13 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`A
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="text-generation",
     model="allenai/OLMo-7B-hf",
-    dtype=torch.float16,
     device=0,
 )
 
@@ -58,9 +57,9 @@ print(result)
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "allenai/OLMo-7B-hf"
@@ -68,7 +67,6 @@ tokenizer = AutoTokenizer.from_pretrained(
 
 model = AutoModelForCausalLM.from_pretrained(
     "allenai/OLMo-7B-hf",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -85,28 +83,26 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
 
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.float16,
-    bnb_4bit_use_double_quant=True,
+    bit_use_double_quant=True,
     bnb_4bit_quant_type="nf4"
 )
 
 model = AutoModelForCausalLM.from_pretrained(
     "allenai/OLMo-7B-hf",
     attn_implementation="sdpa",
-    dtype=torch.float16,
     device_map="auto",
     quantization_config=quantization_config
 )
 
 tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-7B-hf")
 
-inputs = tokenizer("Bitcoin is", return_tensors="pt")
+inputs = tokenizer("Bitcoin is", return_tensors="pt").to(model.device)
 inputs = {k: v.to(model.device) for k, v in inputs.items()}
 
 output = model.generate(**inputs, max_length=64)

@@ -68,20 +68,21 @@ Chameleon is a gated model so make sure to have access and login to Hugging Face
 Here's how to load the model and perform inference in half-precision (`torch.bfloat16`):
 
 ```python
-from transformers import ChameleonProcessor, ChameleonForConditionalGeneration
-import torch
-from PIL import Image
 import requests
+from PIL import Image
+
+from transformers import ChameleonForConditionalGeneration, ChameleonProcessor
+
 
 processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
-model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", dtype=torch.bfloat16, device_map="auto")
+model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", device_map="auto")
 
 # prepare image and text prompt
 url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
 image = Image.open(requests.get(url, stream=True).raw)
 prompt = "What do you see in this image?<image>"
 
-inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device)
 
 # autoregressively complete prompt
 output = model.generate(**inputs, max_new_tokens=50)
@@ -93,14 +94,15 @@ print(processor.decode(output[0], skip_special_tokens=True))
 Chameleon can perform inference with multiple images as input, where images either belong to the same prompt or different prompts (in batched inference). Here is how you can do it:
 
 ```python
-from transformers import ChameleonProcessor, ChameleonForConditionalGeneration
-import torch
-from PIL import Image
 import requests
+from PIL import Image
+
+from transformers import ChameleonForConditionalGeneration, ChameleonProcessor
+
 
 processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 
-model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", dtype=torch.bfloat16, device_map="auto")
+model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", device_map="auto")
 
 # Get three different images
 url = "https://www.ilankelman.org/stopsigns/australia.jpg"
@@ -120,7 +122,7 @@ prompts = [
 
 # We can simply feed images in the order they have to be used in the text prompt
 # Each "<image>" token uses one image leaving the next for the subsequent "<image>" tokens
-inputs = processor(images=[image_stop, image_cats, image_snowman], text=prompts, padding=True, return_tensors="pt").to(device=model.device, dtype=torch.bfloat16)
+inputs = processor(images=[image_stop, image_cats, image_snowman], text=prompts, padding=True, return_tensors="pt").to(device=model.device)
 
 # Generate
 generate_ids = model.generate(**inputs, max_new_tokens=50)
@@ -144,7 +146,8 @@ We value your feedback to help identify bugs before the full release! Check out 
 Simply change the snippet above with:
 
 ```python
-from transformers import ChameleonForConditionalGeneration, BitsAndBytesConfig
+from transformers import BitsAndBytesConfig, ChameleonForConditionalGeneration
+
 
 # specify how to quantize the model
 quantization_config = BitsAndBytesConfig(
@@ -163,12 +166,12 @@ The models supports both, Flash-Attention 2 and PyTorch's [`torch.nn.functional.
 ```python
 from transformers import ChameleonForConditionalGeneration
 
+
 model_id = "facebook/chameleon-7b"
 model = ChameleonForConditionalGeneration.from_pretrained(
     model_id,
-    dtype=torch.bfloat16,
     attn_implementation="flash_attention_2"
-).to(0)
+).to(0, device_map="auto")
 ```
 
 ## ChameleonConfig

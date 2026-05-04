@@ -39,22 +39,22 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`A
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
 
-pipeline = pipeline(task="text-generation", model="openai-community/gpt2", dtype=torch.float16, device=0)
+
+pipeline = pipeline(task="text-generation", model="openai-community/gpt2", device=0)
 pipeline("Hello, I'm a language model")
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2", dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+
+model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2", device_map="auto", attn_implementation="sdpa")
 tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
 
 input_ids = tokenizer("Hello, I'm a language model", return_tensors="pt").to(model.device)
@@ -76,9 +76,9 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
 
-```py
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, pipeline
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
 
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,

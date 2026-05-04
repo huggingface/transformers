@@ -35,14 +35,13 @@ The example below demonstrates how to use NanoChat for text generation with chat
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 chatbot = pipeline(
     task="text-generation",
     model="karpathy/nanochat-d32",
-    dtype=torch.bfloat16,
     device=0
 )
 
@@ -57,17 +56,17 @@ print(outputs[0]["generated_text"][-1]["content"])
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+
 model_id = "karpathy/nanochat-d32"
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 
@@ -81,7 +80,7 @@ inputs = tokenizer.apply_chat_template(
     tokenize=True,
     return_dict=True,
     return_tensors="pt"
-).to(device)
+).to(model.device)
 
 with torch.no_grad():
     outputs = model.generate(

@@ -57,11 +57,9 @@ Example of how to use the processor on chat messages:
 ```python
 import requests
 from PIL import Image
-from transformers import Idefics2Processor, Idefics2ForConditionalGeneration
-from accelerate import Accelerator
-import torch
 
-device = Accelerator().device
+from transformers import Idefics2ForConditionalGeneration, Idefics2Processor
+
 
 url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
 url_2 = "http://images.cocodataset.org/val2017/000000219578.jpg"
@@ -80,8 +78,7 @@ messages = [{
 }]
 
 processor = Idefics2Processor.from_pretrained("HuggingFaceM4/idefics2-8b")
-model = Idefics2ForConditionalGeneration.from_pretrained("HuggingFaceM4/idefics2-8b")
-model.to(device)
+model = Idefics2ForConditionalGeneration.from_pretrained("HuggingFaceM4/idefics2-8b", device_map="auto")
 
 # at inference time, one needs to pass `add_generation_prompt=True` in order to make sure the model completes the prompt
 text = processor.apply_chat_template(messages, add_generation_prompt=True)
@@ -100,9 +97,9 @@ print("Generated text:", generated_text)
 ```python
 import requests
 from PIL import Image
-from transformers import Idefics2Processor, Idefics2ForConditionalGeneration
-from accelerate import Accelerator
-import torch
+
+from transformers import Idefics2ForConditionalGeneration, Idefics2Processor
+
 
 url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
 url_2 = "http://images.cocodataset.org/val2017/000000219578.jpg"
@@ -126,11 +123,9 @@ messages = [{
     ],
 }]
 
-device = Accelerator().device
 
 processor = Idefics2Processor.from_pretrained("HuggingFaceM4/idefics2-8b")
-model = Idefics2ForConditionalGeneration.from_pretrained("HuggingFaceM4/idefics2-8b")
-model.to(device)
+model = Idefics2ForConditionalGeneration.from_pretrained("HuggingFaceM4/idefics2-8b", device_map="auto")
 
 text = processor.apply_chat_template(messages, add_generation_prompt=False)
 inputs = processor(images=images, text=text, return_tensors="pt").to(model.device)
@@ -167,7 +162,8 @@ model = Idefics2ForConditionalGeneration.from_pretrained(
     "HuggingFaceM4/idefics2-8b",
 +    dtype=torch.float16,
 +    attn_implementation="flash_attention_2",
-).to(device)
+    device_map="auto",
+)
 ```
 
 ## Shrinking down Idefics2 using quantization
@@ -189,7 +185,8 @@ model = Idefics2ForConditionalGeneration.from_pretrained(
     "HuggingFaceM4/idefics2-8b",
 +    dtype=torch.float16,
 +    quantization_config=quantization_config,
-).to(device)
+    device_map="auto",
+)
 ```
 
 ## Resources

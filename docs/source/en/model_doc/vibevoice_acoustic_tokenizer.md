@@ -46,6 +46,7 @@ Below is example usage to encode and decode audio:
 ```python
 import torch
 from scipy.io import wavfile
+
 from transformers import AutoFeatureExtractor, VibeVoiceAcousticTokenizerModel
 from transformers.audio_utils import load_audio_librosa
 
@@ -96,6 +97,7 @@ For streaming ASR or TTS, where cached states need to be tracked, the `use_cache
 ```python
 import torch
 from scipy.io import wavfile
+
 from transformers import AutoFeatureExtractor, VibeVoiceAcousticTokenizerModel
 from transformers.audio_utils import load_audio_librosa
 
@@ -131,7 +133,7 @@ with torch.no_grad():
     encoded_outputs = model.encode(inputs.input_values, sample=False, padding_cache=encoder_cache, use_cache=True)
     print("Latent shape:", encoded_outputs.latents.shape)
     # Latent shape: torch.Size([1, 70, 64])
-    
+
     decoded_outputs = model.decode(encoded_outputs.latents, padding_cache=decoder_cache, use_cache=True)
     print("Reconstructed audio shape:", decoded_outputs.audio.shape)
     # Reconstructed audio shape: torch.Size([1, 1, 224000])

@@ -24,6 +24,7 @@ The [GraniteMoeHybrid](https://www.ibm.com/new/announcements/ibm-granite-4-0-tin
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+
 model_path = "ibm-granite/granite-4.0-tiny-preview"
 tokenizer = AutoTokenizer.from_pretrained(model_path)
 
@@ -35,7 +36,7 @@ model.eval()
 prompt = "Write a code to find the maximum value in a list of numbers."
 
 # tokenize the text
-input_tokens = tokenizer(prompt, return_tensors="pt")
+input_tokens = tokenizer(prompt, return_tensors="pt").to(model.device)
 # generate output tokens
 output = model.generate(**input_tokens, max_new_tokens=100)
 # decode output tokens into text

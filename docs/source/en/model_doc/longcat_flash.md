@@ -45,8 +45,9 @@ The model is large: you will need 2x8 H100 to run inference.
 
 ```python
 # launch_longcat.py
-from transformers import LongcatFlashForCausalLM, AutoTokenizer
-import torch
+
+from transformers import AutoTokenizer, LongcatFlashForCausalLM
+
 
 model_id = "meituan-longcat/LongCat-Flash-Chat"
 
@@ -59,8 +60,7 @@ chat = [
 model = LongcatFlashForCausalLM.from_pretrained(
       model_id,
       tp_plan="auto",
-      dtype=torch.bfloat16,
-      )
+ device_map="auto")
 
 inputs = tokenizer.apply_chat_template(
       chat, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)

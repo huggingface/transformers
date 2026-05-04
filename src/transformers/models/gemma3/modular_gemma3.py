@@ -251,14 +251,12 @@ class Gemma3RMSNorm(Gemma2RMSNorm):
         super().__init__(dim=dim, eps=eps)
 
 
-class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
-    def __init__(self, config: Gemma3TextConfig, device=None, layer_type=None):
-        nn.Module.__init__()
+class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding, nn.Module):
+    def __init__(self, config: Gemma3TextConfig):
+        nn.Module.__init__(self)
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
-
         self.config = config
-
         self.layer_types = list(set(config.layer_types))
         self.rope_type = {}
         for layer_type in self.layer_types:
@@ -270,7 +268,7 @@ class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, layer_type=layer_type)
             self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
             self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)

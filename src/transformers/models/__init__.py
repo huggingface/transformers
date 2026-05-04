@@ -93,6 +93,7 @@ if TYPE_CHECKING:
     from .decision_transformer import *
     from .deepseek_v2 import *
     from .deepseek_v3 import *
+    from .deepseek_v4 import *
     from .deepseek_vl import *
     from .deepseek_vl_hybrid import *
     from .deformable_detr import *
@@ -179,6 +180,7 @@ if TYPE_CHECKING:
     from .gptj import *
     from .granite import *
     from .granite_speech import *
+    from .granite_speech_plus import *
     from .granitemoe import *
     from .granitemoehybrid import *
     from .granitemoeshared import *

@@ -54,20 +54,21 @@ The original code can be found [here](https://github.com/baaivision/Emu3).
 Here's how to load the model and perform inference in half-precision (`torch.bfloat16`) to generate textual output from text or text and image inputs:
 
 ```python
-from transformers import Emu3Processor, Emu3ForConditionalGeneration
-import torch
-from PIL import Image
 import requests
+from PIL import Image
+
+from transformers import Emu3ForConditionalGeneration, Emu3Processor
+
 
 processor = Emu3Processor.from_pretrained("BAAI/Emu3-Chat-hf")
-model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", dtype=torch.bfloat16, device_map="auto")
+model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", device_map="auto")
 
 # prepare image and text prompt
 url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
 image = Image.open(requests.get(url, stream=True).raw)
 prompt = "What do you see in this image?<image>"
 
-inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device)
 
 # autoregressively complete prompt
 output = model.generate(**inputs, max_new_tokens=50)
@@ -80,7 +81,7 @@ Emu3 can also generate images from textual input. Here is how you can do it:
 
 ```python
 processor = Emu3Processor.from_pretrained("BAAI/Emu3-Gen-hf")
-model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Gen-hf", dtype="bfloat16", device_map="auto", attn_implementation="flash_attention_2")
+model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Gen-hf", device_map="auto", attn_implementation="flash_attention_2")
 
 
 inputs = processor(
@@ -89,7 +90,7 @@ inputs = processor(
     return_tensors="pt",
     return_for_image_generation=True,
 )
-inputs = inputs.to(device=model.device, dtype=torch.bfloat16)
+inputs = inputs.to(device=model.device)
 
 neg_prompt = "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry."
 neg_inputs = processor(text=[neg_prompt] * 2, return_tensors="pt").to(device=model.device)
@@ -106,7 +107,7 @@ def prefix_allowed_tokens_fn(batch_id, input_ids):
     eos_token_id = torch.tensor([processor.tokenizer.eos_token_id], device=model.device)
     pad_token_id = torch.tensor([processor.tokenizer.pad_token_id], device=model.device)
     eof_token_id = torch.tensor([processor.tokenizer.eof_token_id], device=model.device)
-    eol_token_id = processor.tokenizer.encode("<|extra_200|>", return_tensors="pt")[0]
+    eol_token_id = processor.tokenizer.encode("<|extra_200|>", return_tensors="pt").to(model.device)[0]
 
     position = torch.nonzero(input_ids == image_wrapper_token_id, as_tuple=True)[0][0]
     offset = input_ids.shape[0] - position
@@ -134,7 +135,7 @@ out = model.generate(
 )
 
 image = model.decode_image_tokens(out.sequences[:, inputs.input_ids.shape[1]: ], height=HEIGHT, width=WIDTH)
-images = processor.postprocess(list(image.float()), return_tensors="PIL.Image.Image") # internally we convert to np but it's not supported in bf16 precision
+images = processor.postprocess(list(image.float()), return_tensors="PIL.Image.Image").to(model.device) # internally we convert to np but it's not supported in bf16 precision
 for i, image in enumerate(images['pixel_values']):
     image.save(f"result{i}.png")
 

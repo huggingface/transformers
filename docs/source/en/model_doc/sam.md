@@ -47,21 +47,21 @@ The original code can be found [here](https://github.com/facebookresearch/segmen
 Below is an example on how to run mask generation given an image and a 2D point:
 
 ```python
+import requests
 import torch
 from PIL import Image
-import requests
-from transformers import SamModel, SamProcessor
-from accelerate import Accelerator
 
-device = Accelerator().device
-model = SamModel.from_pretrained("facebook/sam-vit-huge").to(device)
+from transformers import SamModel, SamProcessor
+
+
+model = SamModel.from_pretrained("facebook/sam-vit-huge", device_map="auto")
 processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
 img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
 raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
 input_points = [[[450, 600]]]  # 2D location of a window in the image
 
-inputs = processor(raw_image, input_points=input_points, return_tensors="pt").to(device)
+inputs = processor(raw_image, input_points=input_points, return_tensors="pt").to(model.device)
 with torch.no_grad():
     outputs = model(**inputs)
 
@@ -74,14 +74,14 @@ scores = outputs.iou_scores
 You can also process your own masks alongside the input images in the processor to be passed to the model.
 
 ```python
+import requests
 import torch
 from PIL import Image
-import requests
-from transformers import SamModel, SamProcessor
-from accelerate import Accelerator
 
-device = Accelerator().device
-model = SamModel.from_pretrained("facebook/sam-vit-huge").to(device)
+from transformers import SamModel, SamProcessor
+
+
+model = SamModel.from_pretrained("facebook/sam-vit-huge", device_map="auto")
 processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
 img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
@@ -90,7 +90,7 @@ mask_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets
 segmentation_map = Image.open(requests.get(mask_url, stream=True).raw).convert("1")
 input_points = [[[450, 600]]]  # 2D location of a window in the image
 
-inputs = processor(raw_image, input_points=input_points, segmentation_maps=segmentation_map, return_tensors="pt").to(device)
+inputs = processor(raw_image, input_points=input_points, segmentation_maps=segmentation_map, return_tensors="pt").to(model.device)
 with torch.no_grad():
     outputs = model(**inputs)
 

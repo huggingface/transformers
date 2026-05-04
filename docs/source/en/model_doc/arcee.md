@@ -37,14 +37,13 @@ The example below demonstrates how to generate text with Arcee using [`Pipeline`
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="text-generation",
     model="arcee-ai/AFM-4.5B",
-    dtype=torch.float16,
     device=0
 )
 
@@ -55,18 +54,19 @@ print(output[0]["generated_text"])
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
-from transformers import AutoTokenizer, ArceeForCausalLM
+
+from transformers import ArceeForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("arcee-ai/AFM-4.5B")
 model = ArceeForCausalLM.from_pretrained(
     "arcee-ai/AFM-4.5B",
-    dtype=torch.float16,
     device_map="auto"
 )
 
-inputs = tokenizer("The key innovation in Arcee is", return_tensors="pt")
+inputs = tokenizer("The key innovation in Arcee is", return_tensors="pt").to(model.device)
 with torch.no_grad():
     outputs = model.generate(**inputs, max_new_tokens=50)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
