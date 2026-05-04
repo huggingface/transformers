@@ -243,10 +243,11 @@ class _BaseAutoModelClass:
                 # modules_to_not_convert and skip-module matching when composite-model module prefixes differ.
                 parent_config = config
                 config = config.get_text_config()
-                # Propagate quantization_config from the composite parent config so that
-                # `get_hf_quantizer` can correctly detect the model as pre-quantized.
-                if hasattr(parent_config, "quantization_config"):
-                    config.quantization_config = parent_config.quantization_config
+                # Check both `quantization_config` being present and also not null,
+                # as a `config.json` can have `"quantization_config": null` in it
+                parent_quant = getattr(parent_config, "quantization_config", None)
+                if parent_quant is not None:
+                    config.quantization_config = parent_quant
             return model_class._from_config(config, **kwargs)
 
         raise ValueError(
@@ -396,10 +397,11 @@ class _BaseAutoModelClass:
                 # modules_to_not_convert and skip-module matching when composite-model module prefixes differ.
                 parent_config = config
                 config = config.get_text_config()
-                # Propagate quantization_config from the composite parent config so that
-                # `get_hf_quantizer` can correctly detect the model as pre-quantized.
-                if hasattr(parent_config, "quantization_config"):
-                    config.quantization_config = parent_config.quantization_config
+                # Check both `quantization_config` being present and also not null,
+                # as a `config.json` can have `"quantization_config": null` in it
+                parent_quant = getattr(parent_config, "quantization_config", None)
+                if parent_quant is not None:
+                    config.quantization_config = parent_quant
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
             )
