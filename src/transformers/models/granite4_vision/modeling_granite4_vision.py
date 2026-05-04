@@ -143,13 +143,11 @@ class Granite4VisionWindowQFormerDownsampler(nn.Module):
         """(B, side*side, C) raster -> (B*num_win*num_win, window_size*window_size, C)"""
         batch, _, channels = features.shape
         num_win = side // window_size
-        return (
-            features.view(batch, side, side, channels)
-            .view(batch, num_win, window_size, num_win, window_size, channels)
-            .transpose(2, 3)
-            .flatten(0, 2)
-            .flatten(1, 2)
-        )
+        features = features.view(batch, side, side, channels)
+        features = features.view(batch, num_win, window_size, num_win, window_size, channels)
+        features = features.transpose(2, 3)
+        features = features.flatten(0, 2)
+        return features.flatten(1, 2)
 
     def _unwindowed_raster(self, windowed_features, num_win, window_size):
         """(B*num_win*num_win, window_size*window_size, C) -> (B, (num_win*window_size)^2, C)"""
@@ -158,13 +156,10 @@ class Granite4VisionWindowQFormerDownsampler(nn.Module):
             raise ValueError(f"Expected batch_win ({batch_win}) to be divisible by num_win^2 ({num_win**2}).")
         batch = batch_win // (num_win * num_win)
         side = num_win * window_size
-        return (
-            windowed_features.view(batch, num_win, num_win, window_size, window_size, channels)
-            .transpose(2, 3)
-            .contiguous()
-            .view(batch, side, side, channels)
-            .flatten(1, 2)
-        )
+        features = windowed_features.view(batch, num_win, num_win, window_size, window_size, channels)
+        features = features.transpose(2, 3).contiguous()
+        features = features.view(batch, side, side, channels)
+        return features.flatten(1, 2)
 
     def forward(self, image_features):
         batch, hw, channels = image_features.shape
@@ -566,20 +561,6 @@ class Granite4VisionPreTrainedModel(PreTrainedModel):
             init.normal_(module.query, mean=0.0, std=embed_std)
             init.normal_(module.image_positions, mean=0.0, std=embed_std)
 
-    def _deepstack_inject(
-        self,
-        hidden_states: torch.Tensor,
-        vision_mask: torch.Tensor,
-        features: torch.Tensor,
-    ) -> torch.Tensor:
-        """Add projected vision features into the image-token positions of hidden_states."""
-        vision_mask = vision_mask.to(hidden_states.device)
-        features = features.to(hidden_states.device, hidden_states.dtype)
-        return hidden_states.masked_scatter(
-            vision_mask,
-            (hidden_states[vision_mask] + features.flatten()).view(-1),
-        )
-
 
 @auto_docstring
 class Granite4VisionTextModel(Granite4VisionPreTrainedModel):
@@ -670,6 +651,20 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel):
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
+        )
+
+    def _deepstack_inject(
+        self,
+        hidden_states: torch.Tensor,
+        vision_mask: torch.Tensor,
+        features: torch.Tensor,
+    ) -> torch.Tensor:
+        """Add projected vision features into the image-token positions of hidden_states."""
+        vision_mask = vision_mask.to(hidden_states.device)
+        features = features.to(hidden_states.device, hidden_states.dtype)
+        return hidden_states.masked_scatter(
+            vision_mask,
+            (hidden_states[vision_mask] + features.flatten()).view(-1),
         )
 
 
@@ -800,7 +795,6 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         # Replace the inherited LLM backbone with our deepstack-aware subclass
         self.language_model = Granite4VisionTextModel(config.text_config)
 
-        self.spatial_projectors = None
         self.downsample_rate = config.downsample_rate
         self.projector_dropout = config.projector_dropout
 
@@ -810,10 +804,9 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         )
 
         # Spatial sampling projectors: 4 offset groups (TL, TR, BL, BR)
-        if config.use_spatial_sampling:
-            self.spatial_projectors = nn.ModuleList(
-                [Granite4VisionWindowQFormerDownsampler(config, spatial_offset=i) for i in range(4)]
-            )
+        self.spatial_projectors = nn.ModuleList(
+            [Granite4VisionWindowQFormerDownsampler(config, spatial_offset=i) for i in range(4)]
+        )
 
         self.pad_token_id = (
             self.config.text_config.pad_token_id if self.config.text_config.pad_token_id is not None else -1
@@ -955,24 +948,23 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
             all_features.append((llm_layer, packed_features))
 
         # Spatial features: extract 4 offset groups from a single vision layer
-        if self.config.use_spatial_sampling:
-            spatial_feature = vision_outputs.hidden_states[self.config.spatial_vision_layer]
+        spatial_feature = vision_outputs.hidden_states[self.config.spatial_vision_layer]
 
-            if vision_feature_select_strategy == "default":
-                spatial_feature = spatial_feature[:, 1:]
+        if vision_feature_select_strategy == "default":
+            spatial_feature = spatial_feature[:, 1:]
 
-            for group_idx, llm_layer in enumerate(self.config.spatial_target_layers):
-                projected_group = self.spatial_projectors[group_idx](spatial_feature)
-                projected_group_split = torch.split(projected_group, image_num_patches, dim=0)
+        for group_idx, llm_layer in enumerate(self.config.spatial_target_layers):
+            projected_group = self.spatial_projectors[group_idx](spatial_feature)
+            projected_group_split = torch.split(projected_group, image_num_patches, dim=0)
 
-                packed_group, _ = self.pack_image_features(
-                    projected_group_split,
-                    image_sizes,
-                    vision_feature_select_strategy=vision_feature_select_strategy,
-                    image_newline=self.image_newline,
-                )
+            packed_group, _ = self.pack_image_features(
+                projected_group_split,
+                image_sizes,
+                vision_feature_select_strategy=vision_feature_select_strategy,
+                image_newline=self.image_newline,
+            )
 
-                all_features.append((llm_layer, packed_group))
+            all_features.append((llm_layer, packed_group))
 
         return Granite4VisionImageFeaturesOutput(
             deepstack_features=all_features,
@@ -1002,6 +994,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         )
         return special_image_mask
 
+    @merge_with_config_defaults
     @can_return_tuple
     def forward(
         self,
@@ -1023,15 +1016,6 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
             Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
             If `"full"`, the full vision features are used.
         """
-        vision_feature_layer = (
-            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
-        )
-        vision_feature_select_strategy = (
-            vision_feature_select_strategy
-            if vision_feature_select_strategy is not None
-            else self.config.vision_feature_select_strategy
-        )
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1042,7 +1026,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         deepstack_features = None
         vision_mask = None
         image_features = None
-        if pixel_values is not None and pixel_values.size(0) > 0:
+        if pixel_values is not None:
             image_features = self.get_image_features(
                 pixel_values,
                 image_sizes,
@@ -1057,6 +1041,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
                     vision_mask = self.get_placeholder_mask(
                         input_ids, inputs_embeds=inputs_embeds, image_features=concat_features
                     )
+                    # Zero out image token positions — deepstack injection will sum features in during forward.
                     inputs_embeds = inputs_embeds.masked_fill(vision_mask, 0.0)
                 deepstack_features[llm_layer_idx] = concat_features
 
@@ -1148,6 +1133,7 @@ class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, Gene
             **kwargs,
         )
 
+    @merge_with_config_defaults
     @can_return_tuple
     def forward(
         self,
@@ -1198,15 +1184,6 @@ class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, Gene
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot (...)"
         ```"""
-        vision_feature_layer = (
-            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
-        )
-        vision_feature_select_strategy = (
-            vision_feature_select_strategy
-            if vision_feature_select_strategy is not None
-            else self.config.vision_feature_select_strategy
-        )
-
         outputs = self.model(
             input_ids,
             pixel_values=pixel_values,

@@ -28,7 +28,8 @@ from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, merge_with_config_defaults
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..granite.configuration_granite import GraniteConfig
@@ -143,14 +144,20 @@ class Granite4VisionConfig(LlavaNextConfig):
         if self.spatial_target_layers is None:
             self.spatial_target_layers = [12, 15, 18, 21]
 
-        # Deserialize vision_config and text_config first so self.vision_config is a typed object.
-        super().__post_init__(**kwargs)
-
+        # Convert qformer_config dict → typed object before super() so the _attn_implementation
+        # setter (called inside super().__post_init__) doesn't hit a raw dict when walking sub_configs.
+        # Building the default requires vision_config.hidden_size, which super() hasn't deserialized
+        # yet — so we read it from the dict directly for that case only.
         if isinstance(self.qformer_config, dict):
             model_type = self.qformer_config.get("model_type", "blip_2_qformer")
             self.qformer_config = CONFIG_MAPPING[model_type](**self.qformer_config)
         elif self.qformer_config is None:
-            vision_hidden_size = self.vision_config.hidden_size
+            if isinstance(self.vision_config, dict):
+                vision_hidden_size = self.vision_config.get("hidden_size", 1152)
+            elif self.vision_config is not None:
+                vision_hidden_size = self.vision_config.hidden_size
+            else:
+                vision_hidden_size = 1152
             self.qformer_config = CONFIG_MAPPING["blip_2_qformer"](
                 num_hidden_layers=1,
                 intermediate_size=3072,
@@ -161,6 +168,9 @@ class Granite4VisionConfig(LlavaNextConfig):
                 num_attention_heads=vision_hidden_size // 64,
                 encoder_hidden_size=vision_hidden_size,
             )
+
+        # Deserialize vision_config and text_config into typed objects.
+        super().__post_init__(**kwargs)
 
 
 # ── Processor ───────────────────────────────────────────────────────────────
@@ -349,6 +359,20 @@ class Granite4VisionPreTrainedModel(LlavaNextPreTrainedModel):
 
     def _init_weights(self, module):
         super()._init_weights(module)
+        if isinstance(module, nn.Embedding):
+            init.normal_(
+                module.weight,
+                mean=0.0,
+                std=getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range),
+            )
+            if module.padding_idx is not None:
+                init.zeros_(module.weight[module.padding_idx])
+        elif isinstance(module, nn.LayerNorm) or (
+            hasattr(module, "weight") and hasattr(module, "variance_epsilon") and not isinstance(module, nn.Linear)
+        ):
+            init.ones_(module.weight)
+            if hasattr(module, "bias") and module.bias is not None:
+                init.zeros_(module.bias)
         if isinstance(module, Granite4VisionTextRotaryEmbedding):
             # Non-persistent buffers (inv_freq, original_inv_freq) are replaced with
             # torch.empty_like() garbage by _move_missing_keys_from_meta_to_device.
