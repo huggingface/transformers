@@ -65,13 +65,9 @@ IGNORE_DUPLICATE_CONFIG = ["GPT2Config", "EvollaConfig", "MLCDVisionConfig"]
 def build_config_mapping_names() -> tuple[dict, dict]:
     model_type_map = OrderedDict()
     special_mappings = OrderedDict()
-    # Track which model_types were resolved by a "natural" match (model_type == module_name)
-    # so a later non-natural match (e.g. MaskFormerDetrConfig with model_type="detr" inside
-    # models/maskformer/) does not silently overwrite the canonical class.
-    natural_types: set[str] = set()
 
-    # `glob.glob` is filesystem-order dependent — sort to make the output deterministic.
-    all_files = sorted(glob.glob("src/transformers/models/**/configuration_*.py", recursive=True))
+    # root_path = Path(__file__).resolve().parents[2]
+    all_files = glob.glob("src/transformers/models/**/configuration_*.py", recursive=True)
     for config_path in all_files:
         module_name = config_path.split("/")[-2]
         with open(config_path, "r") as f:
@@ -101,18 +97,9 @@ def build_config_mapping_names() -> tuple[dict, dict]:
                 if not model_type:
                     continue
 
-                is_natural = model_type == module_name
-                # If we already recorded a natural match for this model_type, don't let a
-                # non-natural one overwrite it — the natural class is the canonical owner.
-                if model_type in natural_types and not is_natural:
-                    continue
-
-                model_type_map[model_type] = config_cls_name
-                if is_natural:
-                    natural_types.add(model_type)
-                    special_mappings.pop(model_type, None)
-                else:
+                if model_type != module_name:
                     special_mappings[model_type] = module_name
+                model_type_map[model_type] = config_cls_name
 
     return model_type_map, special_mappings
 
