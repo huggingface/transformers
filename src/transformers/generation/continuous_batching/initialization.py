@@ -188,7 +188,7 @@ def decide_use_cuda_graphs(
     """
     # If cuda is not available, we cannot use cuda graphs
     if not torch.cuda.is_available():
-        intended_use_cuda_graph = any(cb_config.get_cuda_graph_booleans())
+        intended_use_cuda_graph = any(cb_config.cuda_graph_booleans)
         if intended_use_cuda_graph:  # throw a warning only if the user intended to use cuda graphs
             logger.warning(
                 f"{cb_config.use_cuda_graph = } but {torch.cuda.is_available() = }: turning off cuda graphs"
@@ -237,7 +237,7 @@ def decide_use_async_batching(cb_config: ContinuousBatchingConfig, is_attn_mask_
     """
     # If the user specifies to use async or not, no need to decide ourselves
     if cb_config.use_async_batching is None:
-        use_cuda_graphs = any(cb_config.get_cuda_graph_booleans())
+        use_cuda_graphs = any(cb_config.cuda_graph_booleans)
         cb_config.use_async_batching = use_cuda_graphs and not is_attn_mask_needed
         logger.info(
             f"No behavior specified for use_async_batching, choosing {cb_config.use_async_batching = } because "

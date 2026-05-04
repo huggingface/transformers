@@ -186,7 +186,7 @@ class ContinuousBatchProcessor:
         self.metrics = ContinuousBatchProcessorMetrics(cache.max_batch_tokens)
 
         # Setup inputs and outputs
-        use_cuda_graph_varlen, _ = self.cb_config.get_cuda_graph_booleans()
+        use_cuda_graph_varlen, _ = self.cb_config.cuda_graph_booleans
         io_kwargs = {
             "cache": cache,
             "config": config,
