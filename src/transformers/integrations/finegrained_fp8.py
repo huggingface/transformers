@@ -750,8 +750,7 @@ class Fp8Quantize(ConversionOps):
         # DeepSeek V4-style storage (`scale_fmt="ue8m0"`): round inv_scales to UE8M0-representable
         # values (powers of 2) and cast to `float8_e8m0fnu` byte storage so the on-disk dtype
         # matches the parameter allocation in `FP8Linear`/`FP8Experts`.
-        scale_fmt = getattr(self.hf_quantizer.quantization_config, "scale_fmt", "float")
-        if scale_fmt == "ue8m0":
+        if self.hf_quantizer.quantization_config.scale_fmt == "ue8m0":
             inv_scales = torch.pow(2.0, torch.ceil(torch.log2(inv_scales.clamp(min=torch.finfo(torch.float32).tiny))))
             inv_scales = inv_scales.to(_UE8M0_SF_DTYPE)
         scale_key = key.rsplit(".", 1)[0] + ".weight_scale_inv" if key.endswith("weight") else key + "_scale_inv"
