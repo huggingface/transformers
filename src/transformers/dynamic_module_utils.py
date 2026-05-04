@@ -282,6 +282,7 @@ def get_class_in_module(
     Returns:
         `typing.Type`: The class looked for.
     """
+    init_hf_modules()
     name = os.path.normpath(module_path)
     name = name.removesuffix(".py")
     name = name.replace(os.path.sep, ".")
@@ -603,6 +604,7 @@ def get_class_from_dynamic_module(
     # module.
     cls = get_class_from_dynamic_module("sgugger/my-bert-model--modeling.MyBertModel", "sgugger/another-bert-model")
     ```"""
+
     # Catch the name of the repo if it's specified in `class_reference`
     if "--" in class_reference:
         repo_id, class_reference = class_reference.split("--")
