@@ -287,7 +287,6 @@ class FP8Linear(nn.Linear):
         )
 
 
-
 def fp8_batched_mm_experts_forward(
     self: torch.nn.Module,
     hidden_states: torch.Tensor,
