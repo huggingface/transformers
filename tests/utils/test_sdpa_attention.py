@@ -77,10 +77,14 @@ class UseGqaInSdpaLogicTest(unittest.TestCase):
     def test_flash_enabled_but_inputs_ineligible_rejects(self):
         # FA flag is on, but pytorch says FA can't actually run these inputs
         # (e.g. head_dim>256, fp32, sm<80). Must fall back to repeat_kv.
+        # SDPAParams must be mocked too — its C++ binding rejects our fake
+        # SimpleNamespace tensors, which would otherwise raise and route into
+        # the defensive `except` branch.
         with (
             patch.object(self.mod, "_is_torch_greater_or_equal_than_2_5", True),
             patch.object(self.mod, "_is_torch_xpu_available", False),
             patch.object(self.torch.backends.cuda, "flash_sdp_enabled", return_value=True),
+            patch.object(self.torch.backends.cuda, "SDPAParams", return_value=object()),
             patch.object(self.torch.backends.cuda, "can_use_flash_attention", return_value=False),
         ):
             self.assertFalse(self._call_cuda())
@@ -91,6 +95,7 @@ class UseGqaInSdpaLogicTest(unittest.TestCase):
             patch.object(self.mod, "_is_torch_greater_or_equal_than_2_5", True),
             patch.object(self.mod, "_is_torch_xpu_available", False),
             patch.object(self.torch.backends.cuda, "flash_sdp_enabled", return_value=True),
+            patch.object(self.torch.backends.cuda, "SDPAParams", return_value=object()),
             patch.object(self.torch.backends.cuda, "can_use_flash_attention", return_value=True),
         ):
             self.assertTrue(self._call_cuda())
