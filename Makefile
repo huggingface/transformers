@@ -36,11 +36,6 @@ REPO_CONSISTENCY_CHECKERS := \
 
 ALL_CHECKERS := $(CODE_QUALITY_CHECKERS), $(REPO_CONSISTENCY_CHECKERS)
 
-# `update_metadata` in --fix mode pushes to the `huggingface/transformers-metadata`
-# Hub dataset (requires an auth token); strip it from the local fix workflow.
-# `checkers.py` ignores the empty entry left behind.
-FIX_CHECKERS := $(subst update_metadata,,$(ALL_CHECKERS))
-
 
 # Runs all linting/formatting scripts, most notably ruff
 style:
@@ -64,7 +59,7 @@ check-repo:
 
 # Run all repo checks for which there is an automatic fix, most notably modular conversions
 fix-repo:
-	@python utils/checkers.py $(FIX_CHECKERS) --fix --keep-going
+	@python utils/checkers.py $(ALL_CHECKERS) --fix --keep-going
 
 # Run tests for the library, requires pytest-random-order
 test:
