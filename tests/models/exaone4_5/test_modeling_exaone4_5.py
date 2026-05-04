@@ -167,7 +167,7 @@ class Exaone4_5_IntegrationTest(unittest.TestCase):
     @slow
     def test_model_logits(self):
         input_ids = [70045, 1109, 115406, 16943, 11697, 115365, 19816, 12137, 375]
-        input_ids = torch.tensor([input_ids]).to(self.model.model.language_model.embed_tokens.weight.device)
+        input_ids = torch.tensor([input_ids]).to(torch_device)
 
         with torch.no_grad():
             out = self.model(input_ids).logits.float().cpu()
@@ -209,7 +209,7 @@ class Exaone4_5_IntegrationTest(unittest.TestCase):
             add_generation_prompt=True,
             return_tensors="pt",
             enable_thinking=False,
-        ).to(self.model.model.language_model.embed_tokens.weight.device)
+        ).to(torch_device)
 
         generated_ids = self.model.generate(input_ids=input_ids, max_new_tokens=20, do_sample=False)
         text = self.processor.decode(generated_ids[0], skip_special_tokens=True)
