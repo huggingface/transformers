@@ -259,12 +259,13 @@ def main(overwrite: bool):
 
     # 3. If the new auto-generate content is different, overwrite it
     # Dirty hack to sort and apply ruff to the file content, for easier matching
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py") as tmpfile:
-        tmpfile.write(new_content)
-        tmpfile_path = tmpfile.name
+    with tempfile.TemporaryDirectory() as temp_folder:
+        temp_filename = os.path.join(temp_folder, "temp.py")
+        with open(temp_filename, "w") as temp_file:
+            temp_file.write(new_content)
 
-        run_ruff_and_sort(tmpfile_path)
-        new_content = open(tmpfile_path, "r").read()
+        run_ruff_and_sort(temp_filename)
+        new_content = open(temp_filename, "r").read()
 
     if old_content != new_content:
         if not overwrite:

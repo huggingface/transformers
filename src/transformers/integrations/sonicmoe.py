@@ -21,6 +21,8 @@ Requirements: CUDA, `kernels`, `nvidia-cutlass-dsl`, has_gate=True.
 from __future__ import annotations
 
 import functools
+from collections.abc import Callable
+from dataclasses import dataclass
 
 import torch
 
@@ -34,17 +36,21 @@ logger = logging.get_logger(__name__)
 ACT_MAP = {"silu": "swiglu", "gelu": "geglu", "relu": "reglu"}
 
 
+@dataclass(frozen=True)
+class SonicMoE:
+    """Entry points exposed by the `kernels-community/sonic-moe` kernel."""
+
+    activation_type_enum: type
+    moe_general_routing_inputs: Callable
+
+
 @functools.cache
-def _load_sonic_kernel():
+def _load_sonicmoe_kernel() -> SonicMoE:
     """
-    Load sonic-moe once and return its required symbols.
+    Load sonic-moe once and return its entry points.
 
-    Raises:
-        ImportError if CUDA/hardware requirements are not met, or if the kernel or
-        required symbols are not found.
-
-    Returns:
-        Tuple of (ActivationType, moe_general_routing_inputs function) from the sonic-moe kernel.
+    Raises `ImportError` if CUDA/hardware requirements are not met, or if the kernel or
+    required symbols are not found.
     """
 
     if not torch.cuda.is_available():
@@ -67,13 +73,13 @@ def _load_sonic_kernel():
             "has a build matching the current torch/CUDA."
         )
 
-    ActivationType = getattr(getattr(kernel, "enums", None), "ActivationType", None)
+    activation_type_enum = getattr(getattr(kernel, "enums", None), "ActivationType", None)
     moe_general_routing_inputs = getattr(kernel, "moe_general_routing_inputs", None)
 
     missing = [
         name
         for name, attr in [
-            ("enums.ActivationType", ActivationType),
+            ("enums.ActivationType", activation_type_enum),
             ("moe_general_routing_inputs", moe_general_routing_inputs),
         ]
         if attr is None
@@ -84,7 +90,57 @@ def _load_sonic_kernel():
             "Make sure you have the `kernels` package and `nvidia-cutlass-dsl` installed."
         )
 
-    return ActivationType, moe_general_routing_inputs
+    return SonicMoE(
+        activation_type_enum=activation_type_enum,
+        moe_general_routing_inputs=moe_general_routing_inputs,
+    )
+
+
+@torch._dynamo.allow_in_graph
+def _sonicmoe_wrapper(
+    hidden_states: torch.Tensor,
+    router_scores: torch.Tensor,
+    expert_ids: torch.Tensor,
+    token_idx: torch.Tensor,
+    w1: torch.Tensor,
+    b1: torch.Tensor | None,
+    w2: torch.Tensor,
+    b2: torch.Tensor | None,
+    act_name: str,
+    num_experts: int,
+    concat_layout: bool,
+    is_inference_mode_enabled: bool,
+) -> torch.Tensor:
+    """Module-level shim around `moe_general_routing_inputs` so `allow_in_graph` can wrap it.
+
+    sonicmoe asserts `not torch.compiler.is_compiling()` internally because it dispatches
+    CuteDSL kernels, which Dynamo can't trace. `allow_in_graph` keeps the call in the FX
+    graph as a single opaque node (no tracing into the body, no graph break) while still
+    running the real Python at runtime — autograd through `_UpProjection` / `_DownProjection`
+    flows normally. The decorator must be applied at module load time, not inside the compiled
+    function — hence this shim plus the `allow_in_graph` decorator above.
+    """
+    sonicmoe = _load_sonicmoe_kernel()
+    activation_type_enum = sonicmoe.activation_type_enum
+    activation_type = getattr(
+        activation_type_enum, ACT_MAP.get(act_name, "swiglu").upper(), activation_type_enum.SWIGLU
+    )
+    output, _ = sonicmoe.moe_general_routing_inputs(
+        hidden_states,
+        router_scores,
+        token_idx,
+        expert_ids,
+        w1,
+        b1,
+        w2,
+        b2,
+        E=num_experts,
+        activation_type=activation_type,
+        is_inference_mode_enabled=is_inference_mode_enabled,
+        concat_layout=concat_layout,
+        stream_id=None,
+    )
+    return output
 
 
 @torch._dynamo.allow_in_graph

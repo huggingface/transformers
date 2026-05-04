@@ -169,17 +169,12 @@ class Ernie4_5_VLMoeImageProcessor(TorchvisionBackend):
             patches = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            if patches.ndim == 4:
-                # add a temporal dimension if we have images
-                patches = patches.unsqueeze(1)
 
-            # Main difference to Qwen2 VL - no temporal patches
-            batch_size, grid_t, channel = patches.shape[:3]
+            batch_size, channel = patches.shape[:2]
             grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
 
             patches = patches.view(
                 batch_size,
-                grid_t,
                 channel,
                 grid_h // merge_size,
                 merge_size,
@@ -189,17 +184,17 @@ class Ernie4_5_VLMoeImageProcessor(TorchvisionBackend):
                 patch_size,
             )
             # Reorder dimensions to group grid and patch information for subsequent flattening.
-            # [batch, grid_t, grid_h/merge, grid_w/merge, merge, merge, channel, patch, patch]
-            patches = patches.permute(0, 1, 3, 6, 4, 7, 2, 5, 8)
+            # [batch, grid_h/merge, grid_w/merge, merge, merge, channel, patch, patch]
+            patches = patches.permute(0, 2, 5, 3, 6, 1, 4, 7)
 
             flatten_patches = patches.reshape(
                 batch_size,
-                grid_t * grid_h * grid_w,
+                grid_h * grid_w,
                 channel * patch_size * patch_size,
             )
 
             processed_images_grouped[shape] = flatten_patches
-            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
+            processed_grids[shape] = [[1, grid_h, grid_w]] * batch_size
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_grids = reorder_images(processed_grids, grouped_images_index)

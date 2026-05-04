@@ -1726,7 +1726,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             raise ValueError(f"scale_fmt must be 'float' or 'ue8m0'; got {self.scale_fmt!r}")
 
     def get_loading_attributes(self):
-        return {"dequantize": self.dequantize}
+        return {"dequantize": self.dequantize, "modules_to_not_convert": self.modules_to_not_convert}
 
 
 class QuarkConfig(QuantizationConfigMixin):
