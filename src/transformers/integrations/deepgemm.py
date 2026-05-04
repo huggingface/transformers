@@ -31,7 +31,8 @@ Mega MoE additionally requires SM100+ at call time.
 from __future__ import annotations
 
 import functools
-from types import SimpleNamespace
+from collections.abc import Callable
+from dataclasses import dataclass
 
 import torch
 
@@ -52,10 +53,29 @@ _FP8_MIN = torch.finfo(_FP8_DTYPE).min
 _FP8_MAX = torch.finfo(_FP8_DTYPE).max
 
 
-@functools.cache
-def _load_deepgemm_kernel() -> SimpleNamespace:
+@dataclass(frozen=True)
+class DeepGEMM:
+    """Entry points exposed by the `kernels-community/deep-gemm` kernel.
+
+    Mega MoE entry points are always importable on a current build — they raise at call
+    time on SM90 (Hopper), guarded by a runtime device-capability check in
+    `deepgemm_fp8_fp4_megamoe_experts_forward`.
     """
-    Load DeepGEMM once and return its entry points as a `SimpleNamespace`.
+
+    fp8_fp4_matmul: Callable
+    grouped_fp8_fp4_matmul: Callable
+    grouped_bf16_matmul_nt: Callable
+    grouped_bf16_matmul_nn: Callable
+    per_token_cast_to_fp8: Callable
+    transform_weights_for_mega_moe: Callable
+    get_symm_buffer_for_mega_moe: Callable
+    fp8_fp4_mega_moe: Callable
+
+
+@functools.cache
+def _load_deepgemm_kernel() -> DeepGEMM:
+    """
+    Load DeepGEMM once and return its entry points.
 
     Raises `ImportError` if CUDA/hardware requirements are not met or any required entry
     point is missing.
@@ -105,10 +125,9 @@ def _load_deepgemm_kernel() -> SimpleNamespace:
     grouped_bf16_matmul_nt = getattr(kernel, "m_grouped_bf16_gemm_nt_contiguous", None)
     grouped_bf16_matmul_nn = getattr(kernel, "m_grouped_bf16_gemm_nn_contiguous", None)
     per_token_cast_to_fp8 = resolve_internal_import(kernel, chained_path="utils.per_token_cast_to_fp8")
-    symm_buffer_cls = getattr(kernel, "SymmBuffer", None)
-    fp8_fp4_mega_moe = getattr(kernel, "fp8_fp4_mega_moe", None)
-    get_symm_buffer_for_mega_moe = getattr(kernel, "get_symm_buffer_for_mega_moe", None)
     transform_weights_for_mega_moe = getattr(kernel, "transform_weights_for_mega_moe", None)
+    get_symm_buffer_for_mega_moe = getattr(kernel, "get_symm_buffer_for_mega_moe", None)
+    fp8_fp4_mega_moe = getattr(kernel, "fp8_fp4_mega_moe", None)
 
     missing = [
         name
@@ -118,10 +137,9 @@ def _load_deepgemm_kernel() -> SimpleNamespace:
             ("m_grouped_bf16_gemm_nt_contiguous", grouped_bf16_matmul_nt),
             ("m_grouped_bf16_gemm_nn_contiguous", grouped_bf16_matmul_nn),
             ("utils.per_token_cast_to_fp8", per_token_cast_to_fp8),
-            ("SymmBuffer", symm_buffer_cls),
-            ("fp8_fp4_mega_moe", fp8_fp4_mega_moe),
-            ("get_symm_buffer_for_mega_moe", get_symm_buffer_for_mega_moe),
             ("transform_weights_for_mega_moe", transform_weights_for_mega_moe),
+            ("get_symm_buffer_for_mega_moe", get_symm_buffer_for_mega_moe),
+            ("fp8_fp4_mega_moe", fp8_fp4_mega_moe),
         ]
         if attr is None
     ]
@@ -131,7 +149,7 @@ def _load_deepgemm_kernel() -> SimpleNamespace:
             "Please update the `kernels` package (`pip install -U kernels`)."
         )
 
-    return SimpleNamespace(
+    return DeepGEMM(
         fp8_fp4_matmul=fp8_fp4_matmul,
         grouped_fp8_fp4_matmul=grouped_fp8_fp4_matmul,
         grouped_bf16_matmul_nt=grouped_bf16_matmul_nt,
@@ -140,7 +158,6 @@ def _load_deepgemm_kernel() -> SimpleNamespace:
         transform_weights_for_mega_moe=transform_weights_for_mega_moe,
         get_symm_buffer_for_mega_moe=get_symm_buffer_for_mega_moe,
         fp8_fp4_mega_moe=fp8_fp4_mega_moe,
-        symm_buffer_cls=symm_buffer_cls,
     )
 
 

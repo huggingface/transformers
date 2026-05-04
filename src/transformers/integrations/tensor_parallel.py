@@ -1079,6 +1079,16 @@ class GroupedGemmParallel(TensorParallelLayer):
             module.num_experts = self.get_expected_sharded_shape((self.empty_param.shape[0],))[0]
 
 
+def _is_ep_native_experts_impl(mod: nn.Module) -> bool:
+    """Whether `mod`'s experts implementation handles EP dispatch + combine itself.
+
+    These kernels (e.g. DeepGEMM Mega MoE) want GLOBAL expert ids with unmasked routing
+    weights and produce the fully-reduced output, so `RouterParallel` skips the per-rank
+    index remap and `MoeTensorParalellExperts` skips the post-forward all-reduce.
+    """
+    return getattr(getattr(mod, "config", None), "_experts_implementation", None) in {"deepgemm_megamoe"}
+
+
 class RouterParallel(TensorParallelLayer):
     """
     Allows to reshape the router scores to support running expert parallel.
@@ -1141,7 +1151,7 @@ class RouterParallel(TensorParallelLayer):
         # does the EP token dispatch itself and needs GLOBAL expert ids with unmasked routing
         # weights. Mirrored on the experts side by `MoeTensorParalellExperts._prepare_output_fn`
         # which skips the post-forward all_reduce.
-        if getattr(getattr(mod, "config", None), "_experts_implementation", None) == "deepgemm_megamoe":
+        if _is_ep_native_experts_impl(mod):
             return outputs
 
         ep_rank, ep_size = device_mesh.get_local_rank(), device_mesh.size()
@@ -1201,14 +1211,14 @@ class MoeTensorParalellExperts(TensorParallelLayer):
 
         # Mega MoE handles EP dispatch + combine inside the kernel — append the EP `process_group`
         # so the forward can rendezvous the symm-buffer on first call.
-        if getattr(getattr(mod, "config", None), "_experts_implementation", None) == "deepgemm_megamoe":
+        if _is_ep_native_experts_impl(mod):
             return hidden_states, top_k_index, top_k_weights, device_mesh.get_group()
 
         return hidden_states, top_k_index, top_k_weights
 
     def _prepare_output_fn(self, mod, outputs, device_mesh):
         # Mega MoE handles the EP combine inside the kernel — output is already fully reduced.
-        if getattr(getattr(mod, "config", None), "_experts_implementation", None) == "deepgemm_megamoe":
+        if _is_ep_native_experts_impl(mod):
             return outputs
 
         # all_reduce_forward to sum partial expert outputs across GPUs
