@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
@@ -27,7 +26,7 @@ from ...utils import auto_docstring
 from ...video_utils import VideoInput
 
 
-class Kimi26ProcessorKwargs(ProcessingKwargs, total=False):
+class Kimi2_6ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -65,7 +64,7 @@ class Kimi2_6Processor(ProcessorMixin):
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         videos: VideoInput | None = None,
-        **kwargs: Unpack[Kimi26ProcessorKwargs],
+        **kwargs: Unpack[Kimi2_6ProcessorKwargs],
     ) -> BatchFeature:
         r"""
         Returns:
@@ -81,7 +80,7 @@ class Kimi2_6Processor(ProcessorMixin):
             - **video_grid_thw** -- List of video 3D grid in LLM. Returned when `videos` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
-            Kimi26ProcessorKwargs,
+            Kimi2_6ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -123,7 +122,7 @@ class Kimi2_6Processor(ProcessorMixin):
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
-        # self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
 
         if return_mm_token_type_ids:
             text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
@@ -145,7 +144,7 @@ class Kimi2_6Processor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = Kimi26ProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs = Kimi2_6ProcessorKwargs._defaults.get("images_kwargs", {})
             images_kwargs.update(kwargs)
             merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
 
@@ -157,7 +156,7 @@ class Kimi2_6Processor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         if video_sizes is not None:
-            videos_kwargs = Kimi26ProcessorKwargs._defaults.get("videos_kwargs", {})
+            videos_kwargs = Kimi2_6ProcessorKwargs._defaults.get("videos_kwargs", {})
             videos_kwargs.update(kwargs)
             num_video_patches = [
                 self.video_processor.get_number_of_video_patches(*video_size, videos_kwargs)

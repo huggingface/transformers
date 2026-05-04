@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Callable
 
 import numpy as np
 import torch
@@ -21,14 +22,15 @@ import torch.nn.functional as F
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel
-from ...processing_utils import ProcessorMixin, Unpack
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
     torch_compilable_check,
 )
+from ...utils.generic import is_flash_attention_requested, maybe_autocast
 from ...utils.output_capturing import capture_outputs
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..gemma4.modeling_gemma4 import Gemma4VisionRotaryEmbedding
@@ -38,6 +40,8 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLVisionBlock,
     VisionAttention,
     VisionMlp,
+    apply_rotary_pos_emb_vision,
+    eager_attention_forward,
 )
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 
@@ -68,6 +72,11 @@ class Kimi2_6VisionConfig(PreTrainedConfig):
     merge_kernel_size: tuple[int, int] | list[int] = (2, 2)
     rope_parameters: dict | None = None
     max_position_embeddings: int | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.rope_parameters is None:
+            self.rope_parameters = {"rope_theta": 10_000, "rope_type": "default"}
+        super().__post_init__(**kwargs)
 
 
 class Kimi2_6Config(PreTrainedConfig):
@@ -181,29 +190,128 @@ class Kimi2_6VisionPatchEmbed(nn.Module):
         return hidden_states
 
 
-class Kimi2_6VisionRotaryEmbeddings(Gemma4VisionRotaryEmbedding):
-    pass
+class Kimi2_6VisionRotaryEmbedding(Gemma4VisionRotaryEmbedding):
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+
+        inv_freq_expanded = (
+            self.inv_freq[None, None, :, None].float().expand(2, position_ids.shape[1], -1, 1).to(x.device)
+        )
+        position_ids_expanded = position_ids[:, :, None, :].float()  # shape (2, bs, 1, positions)
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
+            cos = freqs.cos() * self.attention_scaling
+            sin = freqs.sin() * self.attention_scaling
+
+        sin = self.recomposition_to_2d(sin)
+        cos = self.recomposition_to_2d(cos)
+
+        return cos, sin
+
+    def recomposition_to_2d(self, freq):
+        # For each position, interleave H and W frequencies on head-dim:
+        # [2, B, S, num_freqs] → [B, S, num_freqs*2], layout: (h0,w0, h1,w1, ..., hN,wN)
+        seq_length = freq.shape[2]
+        freq_hw = torch.stack([freq[0], freq[1]], dim=0).permute(1, 2, 3, 0).reshape(seq_length, -1)
+        return freq_hw.repeat(1, 1, 2)  # repeat to get full `head-dim`
 
 
 class Kimi2_6VisionMLP(VisionMlp):
     pass
 
 
+# Unfused qkv as we chunk and permute qk proj when converting!
 class Kimi2_6VisionAttention(VisionAttention):
     def __init__(self, config: Kimi2_6VisionConfig) -> None:
         super().__init__()
         self.dim = config.hidden_size
         self.num_heads = config.num_attention_heads
+        self.q_proj = nn.Linear(self.dim, self.dim, bias=True)
+        self.k_proj = nn.Linear(self.dim, self.dim, bias=True)
+        self.v_proj = nn.Linear(self.dim, self.dim, bias=True)
+        del self.qkv
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cu_seqlens: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs,
+    ) -> torch.Tensor:
+        seq_length = hidden_states.shape[0]
+
+        query_states = self.q_proj(hidden_states).reshape(seq_length, self.num_heads, -1)
+        key_states = self.k_proj(hidden_states).reshape(seq_length, self.num_heads, -1)
+        value_states = self.v_proj(hidden_states).reshape(1, seq_length, self.num_heads, -1)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
+
+        query_states = query_states.transpose(2, 1)
+        key_states = key_states.transpose(2, 1)
+        value_states = value_states.transpose(2, 1)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        if is_flash_attention_requested(self.config):
+            # Flash Attention: Use cu_seqlens for variable length attention
+            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            attn_output, _ = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask=None,
+                scaling=self.scaling,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                cu_seq_lens_q=cu_seqlens,
+                cu_seq_lens_k=cu_seqlens,
+                max_length_q=max_seqlen,
+                max_length_k=max_seqlen,
+                is_causal=False,
+                **kwargs,
+            )
+        else:
+            # Other implementations: Process each chunk separately
+            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
+            splits = [
+                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
+            ]
+
+            attn_outputs = [
+                attention_interface(
+                    self,
+                    q,
+                    k,
+                    v,
+                    attention_mask=None,
+                    scaling=self.scaling,
+                    dropout=0.0 if not self.training else self.attention_dropout,
+                    is_causal=False,
+                    **kwargs,
+                )[0]
+                for q, k, v in zip(*splits)
+            ]
+            attn_output = torch.cat(attn_outputs, dim=1)
+
+        attn_output = attn_output.reshape(seq_length, -1).contiguous()
+        attn_output = self.proj(attn_output)
+        return attn_output
 
 
+# Don't copy init from Qwen-VL due to non-standard config naming in Qwen
 class Kimi2_6VisionEncoderLayer(Qwen2VLVisionBlock):
     def __init__(self, config):
-        super().__init__()
-        self.norm1 = nn.LayerNorm(config.intermediate_size, eps=1e-5)
-        self.norm2 = nn.LayerNorm(config.intermediate_size, eps=1e-5)
-
+        nn.Module.__init__()
+        self.norm1 = nn.LayerNorm(config.hidden_size, eps=1e-5)
+        self.norm2 = nn.LayerNorm(config.hidden_size, eps=1e-5)
         self.attn = Kimi2_6VisionAttention(config=config)
-        self.mlp = Kimi2_6VisionMLP(config.intermediate_size, config.hidden_size, config.hidden_act)
+        self.mlp = Kimi2_6VisionMLP(config.hidden_size, config.intermediate_size, config.hidden_act)
 
 
 class Kimi2_6PreTrainedModel(Qwen2VLPreTrainedModel):
@@ -226,7 +334,7 @@ class Kimi2_6VisionModel(Kimi2_6PreTrainedModel):
         self.merge_kernel_size = config.merge_kernel_size
         self.patch_embed = Kimi2_6VisionPatchEmbed(config)
 
-        self.rotary_emb = Kimi2_6VisionRotaryEmbeddings(config)
+        self.rotary_emb = Kimi2_6VisionRotaryEmbedding(config)
         self.encoder_blocks = nn.ModuleList(
             [Kimi2_6VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)]
         )
@@ -264,13 +372,12 @@ class Kimi2_6VisionModel(Kimi2_6PreTrainedModel):
             w_ids = torch.arange(w, device=grid_thw.device)
 
             # (h, w, 2) grid of (row, col) coordinates
-            grid = torch.stack(torch.meshgrid(h_ids, w_ids, indexing="ij"), dim=-1)
+            grid = torch.stack(torch.meshgrid(h_ids, w_ids, indexing="xy"), dim=-1)
 
-            # (h*w, 2) -> repeat for each temporal frame -> (t*h*w, 2)
+            # (h*w, 2) -> repeat for each temporal frame in case of videos -> (t*h*w, 2)
             all_position_ids.append(grid.reshape(-1, 2).repeat(t, 1))
-
         position_ids = torch.cat(all_position_ids, dim=0).unsqueeze(0)
-        return position_ids  # (1, total_patches, 2)
+        return position_ids.permute(2, 0, 1)  # (2, batch, seq_len)
 
     @capture_outputs
     @auto_docstring
@@ -324,7 +431,7 @@ class Kimi2_6MultimodalProjection(nn.Module):
 
         self.in_proj = nn.Linear(self.hidden_size, self.hidden_size)
         self.act = nn.GELU()
-        self.out_proj = nn.Linear(self.hidden_size, self.hidden_size)
+        self.out_proj = nn.Linear(self.hidden_size, config.text_config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor):
         batch_size = hidden_states.shape[0]
@@ -543,6 +650,15 @@ class Kimi2_6ForConditionalGeneration(LlavaForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+class Kimi2_6ProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+            "return_mm_token_type_ids": False,
+        },
+    }
 
 
 class Kimi2_6Processor(Qwen2VLProcessor):

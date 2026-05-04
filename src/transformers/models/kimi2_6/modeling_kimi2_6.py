@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -247,10 +246,11 @@ class Kimi2_6VisionRotaryEmbedding(nn.Module):
         return cos, sin
 
     def recomposition_to_2d(self, freq):
-        # interleave freq on H/W and head-dim: [2, B, S, num_freqs] > [B, S, num_freqs*2]
+        # For each position, interleave H and W frequencies on head-dim:
+        # [2, B, S, num_freqs] → [B, S, num_freqs*2], layout: (h0,w0, h1,w1, ..., hN,wN)
         seq_length = freq.shape[2]
         freq_hw = torch.stack([freq[0], freq[1]], dim=0).permute(1, 2, 3, 0).reshape(seq_length, -1)
-        return freq_hw.repeat(1, 1, 2)  # repeat [B, S, num_freqs*4]
+        return freq_hw.repeat(1, 1, 2)  # repeat to get full `head-dim`
 
 
 class Kimi2_6VisionMLP(nn.Module):
@@ -323,22 +323,20 @@ def eager_attention_forward(
 
 
 class Kimi2_6VisionAttention(nn.Module):
-    def __init__(self, config: Kimi2_6VisionConfig, layer_idx=None) -> None:
+    def __init__(self, config: Kimi2_6VisionConfig) -> None:
         super().__init__()
         self.dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.dim // self.num_heads
         self.num_key_value_groups = 1  # needed for eager attention
-        # self.qkv = nn.Linear(self.dim, self.dim * 3, bias=True)
-        self.q_proj = nn.Linear(self.dim, self.dim, bias=True)
-        self.k_proj = nn.Linear(self.dim, self.dim, bias=True)
-        self.v_proj = nn.Linear(self.dim, self.dim, bias=True)
         self.proj = nn.Linear(self.dim, self.dim)
         self.scaling = self.head_dim**-0.5
         self.config = config
         self.attention_dropout = 0.0
         self.is_causal = False
-        self.layer_idx = layer_idx
+        self.q_proj = nn.Linear(self.dim, self.dim, bias=True)
+        self.k_proj = nn.Linear(self.dim, self.dim, bias=True)
+        self.v_proj = nn.Linear(self.dim, self.dim, bias=True)
 
     def forward(
         self,
@@ -411,13 +409,11 @@ class Kimi2_6VisionAttention(nn.Module):
 
 
 class Kimi2_6VisionEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config, layer_idx=None) -> None:
+    def __init__(self, config) -> None:
         super().__init__()
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=1e-5)
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=1e-5)
-        self.layer_idx = layer_idx
-
-        self.attn = Kimi2_6VisionAttention(config=config, layer_idx=layer_idx)
+        self.attn = Kimi2_6VisionAttention(config=config)
         self.mlp = Kimi2_6VisionMLP(config.hidden_size, config.intermediate_size, config.hidden_act)
 
     def forward(
@@ -472,7 +468,7 @@ class Kimi2_6VisionModel(Kimi2_6PreTrainedModel):
 
         self.rotary_emb = Kimi2_6VisionRotaryEmbedding(config)
         self.encoder_blocks = nn.ModuleList(
-            [Kimi2_6VisionEncoderLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)]
+            [Kimi2_6VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)]
         )
         self.final_layernorm = nn.LayerNorm(config.hidden_size)
         self.post_init()
@@ -512,7 +508,6 @@ class Kimi2_6VisionModel(Kimi2_6PreTrainedModel):
 
             # (h*w, 2) -> repeat for each temporal frame in case of videos -> (t*h*w, 2)
             all_position_ids.append(grid.reshape(-1, 2).repeat(t, 1))
-
         position_ids = torch.cat(all_position_ids, dim=0).unsqueeze(0)
         return position_ids.permute(2, 0, 1)  # (2, batch, seq_len)
 
