@@ -41,7 +41,10 @@ class VLMModelTester(MultiModalModelTester):
 
     def __init__(self, parent, **kwargs):
         # Overrides of _TEXT_MODEL_TESTER_DEFAULTS
-        kwargs.setdefault("seq_length", 7 + kwargs.get("num_image_tokens", (kwargs.get("image_size", 8) // kwargs.get("patch_size", 4)) ** 2))
+        kwargs.setdefault(
+            "seq_length",
+            7 + kwargs.get("num_image_tokens", (kwargs.get("image_size", 8) // kwargs.get("patch_size", 4)) ** 2),
+        )
         kwargs.setdefault("pad_token_id", 0)
 
         # VLM-specific defaults

@@ -14,9 +14,9 @@
 
 from inspect import signature
 
-from .test_configuration_common import ConfigTester
 from transformers.testing_utils import _TEXT_MODEL_TESTER_DEFAULTS
 
+from .test_configuration_common import ConfigTester
 from .test_modeling_common import (
     GenerationTesterMixin,
     ModelTesterMixin,
