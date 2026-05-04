@@ -22,6 +22,7 @@ from ...generation.configuration_utils import ContinuousBatchingConfig
 from ...utils.generic import is_flash_attention_requested
 from ...utils.metrics import attach_tracer, traced
 from .cache_manager import BlockManager, CacheAllocator, FullAttentionCacheAllocator, SlidingAttentionCacheAllocator
+from .initialization import resolve_max_memory_percent
 from .requests import RequestState, RequestStatus, get_device_and_memory_breakdown, logger
 
 
@@ -204,7 +205,7 @@ class PagedAttentionCache:
 
         # If somehow the max memory percent is not yet resolved, resolve it conservatively
         if continuous_batching_config.max_memory_percent is None:
-            continuous_batching_config.resolve_max_memory_percent(has_logit_processors=True)
+            resolve_max_memory_percent(cb_config=continuous_batching_config, has_logit_processors=True)
 
         num_blocks, max_batch_tokens = memory_handler.infer_num_blocks_and_max_batch_tokens(
             num_blocks=continuous_batching_config.num_blocks,

@@ -19,7 +19,6 @@ from typing import Any
 import torch
 
 from transformers.configuration_utils import PretrainedConfig
-from transformers.generation.configuration_utils import ContinuousBatchingConfig
 
 from .requests import FutureRequestState, RequestState, RequestStatus, logger
 
@@ -64,16 +63,6 @@ class WorkloadHints:
 
     max_prompt_length: int = 0
     max_generated_length: int = 0
-
-    # TODO: can this be fused with other resolve methods?
-    def resolve_using_hints(self, cb_config: "ContinuousBatchingConfig") -> None:
-        """Resolves the config using the given hints."""
-        # The max number of block per request is an even number large enough to hold the max request length
-        if self.max_prompt_length and self.max_generated_length:
-            if cb_config.max_blocks_per_request is None:
-                max_sequence_length = self.max_prompt_length + self.max_generated_length
-                blocks_per_request = int(ceil(max_sequence_length / cb_config.block_size)) + 1
-                cb_config.max_blocks_per_request = blocks_per_request + (blocks_per_request % 2)
 
 
 def attn_mask_is_needed(config: PretrainedConfig) -> bool:

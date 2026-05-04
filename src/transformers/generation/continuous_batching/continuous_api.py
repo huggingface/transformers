@@ -30,19 +30,18 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import ContinuousBatchingConfig, GenerationConfig
-from ...modeling_flash_attention_utils import lazy_import_paged_flash_attention
-from ...utils.generic import is_flash_attention_requested
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from ..logits_process import LogitsProcessorList
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
+from .initialization import resolve_continuous_batching_config
 from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
 from .model_runner import ModelRunner
 from .offloading_manager import OffloadingManager
 from .requests import GenerationOutput, RequestState, RequestStatus, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
-from .utils import WorkloadHints, attn_mask_is_needed, create_warmup_future_states, pad_to_interval
+from .utils import WorkloadHints
 
 
 """
@@ -188,15 +187,7 @@ class ContinuousBatchProcessor:
         self.max_batch_tokens = cache.max_batch_tokens
         self.metrics = ContinuousBatchProcessorMetrics(cache.max_batch_tokens)
 
-        # If the user turned on the decode fast path (ie. using a block table), check if it is available
-        self._ensure_decode_fast_path_is_available()  # this needs to happen before self.inputs_and_outputs is created
-
         # Resolve compile behavior
-        self.cb_config.resolve_compile_configs(
-            fallback_compile_config=getattr(generation_config, "compile_config", None),
-            is_flash_attn=is_flash_attention_requested(config=config),
-            decode_fast_path_available=self.cache.max_blocks_per_request > 0,
-        )
         use_compile = self.cb_config.varlen_compile_config is not None
         use_compile |= self.cb_config.decode_compile_config is not None
 
@@ -255,39 +246,6 @@ class ContinuousBatchProcessor:
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-
-    def _ensure_decode_fast_path_is_available(self) -> None:
-        """Ensures the decode fast path is available. If it is not, set the max blocks per request to 0. If it is
-        available, and no user-provided max blocks per request, set it to the fallback default."""
-        # First, set max blocks per request to 32 if it needs to be auto-inferred
-        user_requested = self.cb_config.max_blocks_per_request is not None
-        if not user_requested:
-            self.cache.max_blocks_per_request = self.cb_config.fallback_max_blocks_per_request
-
-        # Then, if the decode fast path is not turned off, check if it is available
-        if self.cache.max_blocks_per_request != 0:
-            # NOTE: block table should be available with FA2 and FA3, but there seems to be an issue with FA2 atm
-            if is_flash_attention_requested(self.config, version=3):
-                flash_attn_with_kvcache = lazy_import_paged_flash_attention(self.config._attn_implementation)[1]
-                conditions = [
-                    self.cache.num_sliding_attention_groups == 0,  # TODO: add support for sliding window layers
-                    torch.cuda.is_available(),  # Block table is only supported on CUDA
-                    flash_attn_with_kvcache is not None,  # The `flash_attn_with_kvcache` fn is needed
-                ]
-                # Throw a warning only if the decode fast path was requested by the user
-                if not all(conditions):
-                    logger_warning(
-                        f"Although {self.cache.max_blocks_per_request = }, the decode fast path is not available "
-                        f"because at least one condition is not met: {conditions}."
-                    )
-                    self.cache.max_blocks_per_request = 0
-            # Specific warning for attn implementation other than FA3
-            else:
-                logger_warning(
-                    f"Although {self.cache.max_blocks_per_request = }, the decode fast path is not available "
-                    f"because the attention implementation is not FA3. Got {self.config._attn_implementation = }."
-                )
-                self.cache.max_blocks_per_request = 0
 
     def reset(self) -> None:
         """Reset the batch processor for a new generation loop."""
@@ -522,6 +480,7 @@ class ContinuousBatchingManager:
         model: ProtoPretrainedModel,
         generation_config: GenerationConfig,
         continuous_batching_config: ContinuousBatchingConfig,
+        workload_hints: WorkloadHints | None = None,
     ) -> None:
         """Initialize the continuous batching manager.
 
@@ -529,6 +488,7 @@ class ContinuousBatchingManager:
             model: The language model for generation
             generation_config: Configuration for generation parameters
             continuous_batching_config: Configuration for continuous batching parameters
+            workload_hints: Workload hints for the continuous batching initialization (optional)
         """
         # Reload paged version of the attention implementation if necessary
         if "paged|" not in model.config._attn_implementation:
@@ -539,6 +499,7 @@ class ContinuousBatchingManager:
         self.generation_config = generation_config
         self.continuous_batching_config = continuous_batching_config
         self.warmed_up = False  # Set to True after warmup is completed. Useful for persistent managers.
+        self.workload_hints = workload_hints
         # This is an approximation until the cache is created: it will infer the correct value in cache.__init__
         self._use_prefix_sharing = self.continuous_batching_config.allow_block_sharing
 
@@ -560,22 +521,6 @@ class ContinuousBatchingManager:
             per_request_processors=self.continuous_batching_config.per_request_processors,
             drop_unsupported_processors=self.continuous_batching_config.drop_unsupported_processors,
         )
-
-        # Cuda graph behavior is determined below using either user-specified arguments or heuristics
-        is_attn_mask_needed = attn_mask_is_needed(self.model.config)
-        self.continuous_batching_config.decide_use_cuda_graphs(
-            compile_config=getattr(generation_config, "compile_config", None),
-            is_attn_mask_needed=is_attn_mask_needed,
-        )
-        # Same for asynchronous batching behavior
-        self.use_async_batching = self.continuous_batching_config.decide_use_async_batching(is_attn_mask_needed)
-
-        # Resolve default parameters for Q and KV interval sizes, and max cached graphs. If one of those parameters is
-        # not specified (set to 0) then we use the default value and change its value in the config.
-        self.continuous_batching_config.resolve_sentinel_values()
-        self.q_padding_interval_size = self.continuous_batching_config.q_padding_interval_size
-        self.kv_padding_interval_size = self.continuous_batching_config.kv_padding_interval_size
-        self.max_cached_graphs = self.continuous_batching_config.max_cached_graphs
 
     @traced
     def start(self) -> None:
@@ -820,8 +765,15 @@ class ContinuousBatchingManager:
         self.batch_processor._generation_step(self.model)
 
     def _create_batch_processor(self) -> ContinuousBatchProcessor:
-        # Resolve max_memory_percent now that we know whether any logit processors are active.
-        self.continuous_batching_config.resolve_max_memory_percent(self.logit_processor.do_processing)
+        # Resolve all missing attributes of the continuous batching config
+        self.continuous_batching_config = resolve_continuous_batching_config(
+            config=self.model.config,
+            _og_cb_config=self.continuous_batching_config,
+            workload_hints=self.workload_hints,
+            has_logit_processors=self.logit_processor.do_processing,
+        )
+        self.workload_hints = None  # does not make sense to keep them after initialization
+
         # Create the PagedAttentionCache
         paged_attention_cache = PagedAttentionCache(
             self.model.config,
@@ -988,12 +940,13 @@ class ContinuousMixin:
             else:
                 continuous_batching_config = ContinuousBatchingConfig()
         continuous_batching_config.account_for_cb_deprecated_arguments(**deprecated_kwargs)
-        if workload_hints is not None:
-            workload_hints.resolve_using_hints(continuous_batching_config)
 
         # Create and return the manager
         return ContinuousBatchingManager(
-            model=self, generation_config=gen_config, continuous_batching_config=continuous_batching_config
+            model=self,
+            generation_config=gen_config,
+            continuous_batching_config=continuous_batching_config,
+            workload_hints=workload_hints,
         )
 
     def destroy_cached_continuous_batching_manager(self) -> None:
