@@ -315,7 +315,6 @@ class TestDataCollatorWithFlattening(DataCollatorTestMixin, unittest.TestCase):
         self.assertEqual(batch["max_length_k"], 7)
         self.assertEqual(batch["max_length_q"], 7)
 
-
     def test_seq_idx(self):
         """Test flattening with seq_idx for sequence identification."""
         collator = DataCollatorWithFlattening(return_tensors="pt", return_seq_idx=True)
