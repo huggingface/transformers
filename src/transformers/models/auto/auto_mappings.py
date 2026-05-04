@@ -680,7 +680,6 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("data2vec-text", "data2vec"),
         ("data2vec-vision", "data2vec"),
         ("deberta-v2", "deberta_v2"),
-        ("detr", "maskformer"),
         ("dia_decoder", "dia"),
         ("dia_encoder", "dia"),
         ("donut-swin", "donut"),
