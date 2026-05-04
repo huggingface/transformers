@@ -1778,8 +1778,9 @@ class ContinuousBatchingConfig:
                 "through the continuous_batching_config: " + ", ".join(kwargs_to_warn)
             )
 
-    def get_cuda_graph_booleans(self) -> tuple[bool, bool]:
-        """Returns the cuda graph booleans for the varlen and decode paths."""
+    @property
+    def cuda_graph_booleans(self) -> tuple[bool, bool]:
+        """The cuda graph booleans for the varlen and decode paths."""
         if self.use_cuda_graph is None:
             return False, False
         if isinstance(self.use_cuda_graph, bool):

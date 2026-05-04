@@ -48,7 +48,7 @@ class ModelRunner:
         # Helper attributes
         self.do_sample = do_sample
         self.return_logprobs = return_logprobs
-        self.use_cuda_graph_varlen, self.use_cuda_graph_decode = self.cb_config.get_cuda_graph_booleans()
+        self.use_cuda_graph_varlen, self.use_cuda_graph_decode = self.cb_config.cuda_graph_booleans
         self.cache = cache
 
         # Padding only happen when CUDA graphs or compile is used
@@ -257,15 +257,15 @@ class ModelRunner:
             status = RequestStatus.DECODING
             num_q_tokens = 1
             max_kv_read = self.cache.block_size
-            logger.debug(f"Warming up decode fast path for {num_requests =}.")
+            logger.debug(f"Warming up decode fast path for {num_requests = }.")
         else:
             num_requests = 1
             status = RequestStatus.PREFILLING
-            logger.debug(f"Warming up varlen path for {num_q_tokens =}, {max_kv_read =}.")
+            logger.debug(f"Warming up varlen path for {num_q_tokens = }, {max_kv_read = }.")
         future_states = create_warmup_future_states(num_requests, status, num_q_tokens, max_kv_read, self.cache)
         if not future_states:
             logger.warning(
-                f"Failed to warm up: no blocks allocated for {num_requests =}, {num_q_tokens =}, {max_kv_read =}."
+                f"Failed to warm up: no blocks allocated for {num_requests = }, {num_q_tokens = }, {max_kv_read = }."
             )
             return 0.0
 
