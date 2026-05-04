@@ -664,6 +664,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("gemma3n", "Gemma3nForConditionalGeneration"),
         ("gemma3n_text", "Gemma3nForCausalLM"),
         ("gemma4", "Gemma4ForConditionalGeneration"),
+        ("gemma4_assistant", "Gemma4AssistantForCausalLM"),
         ("gemma4_text", "Gemma4ForCausalLM"),
         ("git", "GitForCausalLM"),
         ("glm", "GlmForCausalLM"),

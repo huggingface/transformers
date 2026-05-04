@@ -81,11 +81,63 @@ logger = logging.get_logger(__name__)
 
 
 class Gemma4ModelOutputWithPast(Gemma3nModelOutputWithPast):
-    pass
+    r"""
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    audio_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+        audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
+    shared_kv_states (`dict`, *optional*):
+        Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
+        Used to pass shared KV states between layers during KV sharing.
+    """
+
+    shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
 
 
 class Gemma4CausalLMOutputWithPast(Gemma3nCausalLMOutputWithPast):
-    pass
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.text_config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+        image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
+    audio_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+        audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
+    shared_kv_states (`dict`, *optional*):
+        Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
+        Used to pass shared KV states between layers during KV sharing.
+    """
+
+    shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
+
+
+@dataclass
+class Gemma4TextModelOutputWithPast(BaseModelOutputWithPast):
+    """
+    BaseModelOutputWithPast extended with shared_kv_states for KV sharing.
+
+    Args:
+        shared_kv_states (`dict`, *optional*):
+            Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
+            Used to pass shared KV states between layers during KV sharing.
+    """
+
+    shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
 
 
 @auto_docstring
@@ -923,18 +975,11 @@ class Gemma4TextAttention(nn.Module):
 
         # Shared kv cache
         first_kv_shared_layer_idx = self.config.num_hidden_layers - getattr(self.config, "num_kv_shared_layers", 0)
-        self.is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx > 0
+        self.is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx >= 0
         prev_layers = config.layer_types[:first_kv_shared_layer_idx]
-        if self.is_kv_shared_layer:
-            # For shared layers, find the last non-shared layer of the same type before sharing starts
-            self.kv_shared_layer_index = len(prev_layers) - 1 - prev_layers[::-1].index(config.layer_types[layer_idx])
-            self.store_full_length_kv = False
-        else:
-            self.kv_shared_layer_index = None
-            # For non-shared layers, store full-length kv if this is the last non-shared layer of its type
-            self.store_full_length_kv = layer_idx == len(prev_layers) - 1 - prev_layers[::-1].index(
-                config.layer_types[layer_idx]
-            )
+        self.store_full_length_kv = not self.is_kv_shared_layer and layer_idx == len(prev_layers) - 1 - prev_layers[
+            ::-1
+        ].index(config.layer_types[layer_idx])
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -964,7 +1009,7 @@ class Gemma4TextAttention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor,
         attention_mask: torch.Tensor | None,
-        shared_kv_states: dict[int, tuple[torch.Tensor, torch.Tensor]],
+        shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]],
         past_key_values: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
@@ -982,7 +1027,7 @@ class Gemma4TextAttention(nn.Module):
         # We cannot simply reuse the cached state if we have a Cache, as sliding layers will not remember the full states in their Cache
         # once we are past the sliding window - so we always use `shared_kv_states` instead, even when past_key_values is not None
         if self.is_kv_shared_layer:
-            key_states, value_states = shared_kv_states[self.kv_shared_layer_index]
+            key_states, value_states = shared_kv_states[self.layer_type]
             # Device of past layer may be different from current one
             key_states = key_states.to(query_states.device)
             value_states = value_states.to(query_states.device)
@@ -1000,7 +1045,7 @@ class Gemma4TextAttention(nn.Module):
         if past_key_values is not None and not self.is_kv_shared_layer:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
         if self.store_full_length_kv:
-            shared_kv_states[self.layer_idx] = key_states, value_states
+            shared_kv_states[self.layer_type] = key_states, value_states
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -1093,7 +1138,7 @@ class Gemma4TextDecoderLayer(Gemma3DecoderLayer):
         self,
         hidden_states: torch.Tensor,
         per_layer_input: torch.Tensor = None,
-        shared_kv_states: dict[int, tuple[torch.Tensor, torch.Tensor]] | None = None,
+        shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None,
         position_embeddings: torch.Tensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -1352,7 +1397,7 @@ class Gemma4TextModel(Gemma3TextModel):
         per_layer_inputs: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
+    ) -> Gemma4TextModelOutputWithPast:
         r"""
         per_layer_inputs (`torch.Tensor` of shape `(batch_size, sequence_length, num_hidden_layers, hidden_size_per_layer_input)`, *optional*):
             Pre-computed per-layer input embeddings. When provided, these are used directly instead of being
@@ -1402,8 +1447,8 @@ class Gemma4TextModel(Gemma3TextModel):
         for layer_type in self.unique_layer_types:
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
-        # Initialize as empty dict - it will be filled in the right layers
-        shared_kv_states = {}
+        # Initialize as empty dict - it will be filled in the right layers, or use passed ones
+        shared_kv_states = kwargs.pop("shared_kv_states", {})
 
         # decoder layers
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
@@ -1422,9 +1467,10 @@ class Gemma4TextModel(Gemma3TextModel):
 
         hidden_states = self.norm(hidden_states)
 
-        return BaseModelOutputWithPast(
+        return Gemma4TextModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
+            shared_kv_states=shared_kv_states if kwargs.get("return_shared_kv_states", False) else None,
         )
 
 
@@ -1438,6 +1484,70 @@ class Gemma4ForCausalLM(Gemma3ForCausalLM):
         self._keys_to_ignore_on_load_unexpected = [
             f"model.{name}" for name in self.model._keys_to_ignore_on_load_unexpected
         ]
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Gemma4CausalLMOutputWithPast:
+        r"""
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, Gemma4ForCausalLM
+
+        >>> model = Gemma4ForCausalLM.from_pretrained("google/gemma-2-9b")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b")
+
+        >>> prompt = "What is your favorite condiment?"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "What is your favorite condiment?"
+        ```"""
+        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        outputs: Gemma4TextModelOutputWithPast = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        if self.config.final_logit_softcapping is not None:
+            logits = logits / self.config.final_logit_softcapping
+            logits = torch.tanh(logits)
+            logits = logits * self.config.final_logit_softcapping
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
+
+        return Gemma4CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            shared_kv_states=outputs.shared_kv_states,
+        )
 
 
 class Gemma4AudioModel(Gemma4PreTrainedModel):
@@ -1971,6 +2081,7 @@ class Gemma4Model(Gemma3nModel):
             attentions=outputs.attentions,
             image_hidden_states=image_features if pixel_values is not None else None,
             audio_hidden_states=audio_features if input_features is not None else None,
+            shared_kv_states=outputs.shared_kv_states,
         )
 
     @can_return_tuple
@@ -2083,6 +2194,7 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
             audio_hidden_states=outputs.audio_hidden_states,
+            shared_kv_states=outputs.shared_kv_states,
         )
 
     @auto_docstring
