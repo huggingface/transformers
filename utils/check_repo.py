@@ -283,6 +283,7 @@ IGNORE_NON_TESTED = (
         "Gemma4VisionModel",  # Building part of a bigger model, tested implicitly
         "Gemma4AudioModel",  # Building part of a bigger model, tested implicitly
         "Sam3LiteTextTextModel",  # Building part of a bigger model, tested implicitly through Sam3LiteTextModel
+        "Granite4VisionTextModel",  # Building part of bigger (tested) model. Tested implicitly through Granite4VisionModel.
     ]
 )
 
@@ -509,6 +510,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Ernie4_5_VL_MoeModel",  # BC Alias
     "Ernie4_5_VL_MoeTextModel",  # BC Alias
     "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
+    "Granite4VisionTextModel",  # Building part of bigger (tested) model.
 ]
 
 

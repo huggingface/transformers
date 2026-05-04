@@ -1235,6 +1235,8 @@
         title: GlmOcr
       - local: model_doc/got_ocr2
         title: GOT-OCR2
+      - local: model_doc/granite4_vision
+        title: Granite4Vision
       - local: model_doc/granitevision
         title: GraniteVision
       - local: model_doc/grounding-dino
