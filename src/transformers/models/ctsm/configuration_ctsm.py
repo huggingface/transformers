@@ -52,7 +52,7 @@ class CtsmConfig(PreTrainedConfig):
         Whether to insert a learned special token between the coarse and fine streams.
     num_resolutions (`int`, *optional*, defaults to 3):
         Number of resolution embeddings (coarse, special token, fine).
-    agg_factor (`int`, *optional*, defaults to 60):
+    aggregation_factor (`int`, *optional*, defaults to 60):
         Aggregation factor between fine and coarse resolutions (e.g. 60 minutes -> 1 hour).
     max_position_embeddings (`int`, *optional*, defaults to 1025):
         Maximum number of patches in the concatenated sequence (coarse + special + fine).
@@ -110,7 +110,7 @@ class CtsmConfig(PreTrainedConfig):
     use_resolution_embeddings: bool = True
     use_special_token: bool = True
     num_resolutions: int = 3
-    agg_factor: int = 60
+    aggregation_factor: int = 60
     max_position_embeddings: int = 1025
     rope_parameters: RopeParameters | dict | None = None
 

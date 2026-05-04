@@ -17,7 +17,6 @@ rendered properly in your Markdown viewer.
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -34,6 +33,8 @@ CTSM is a decoder-only univariate zero-shot forecasting foundation model. Its ce
 The abstract from the paper is the following:
 
 *We introduce the Cisco Time Series Model, a univariate zero-shot forecaster. This time series foundation model is the result of a general architectural innovation to a time series model enabling it to accept multiresolution input, applied to a popular decoder-only time series model (TimesFM). The resulting multiresolution decoder-only model is trained on over 300B unique data points, with more than half coming from the observability domain. Quantitative and qualitative evaluations demonstrate that the resulting model achieves superior performance on observability datasets while retaining very similar performance on a standard general-purpose forecasting benchmark (GIFT-Eval), and suggest that the multiresolution structure enables the model to make more accurate predictions on long context input.*
+
+This model was contributed by [kashif](https://huggingface.co/kashif). The original inference code is at [github.com/splunk/cisco-time-series-model](https://github.com/splunk/cisco-time-series-model).
 
 ### Architecture
 
@@ -52,25 +53,17 @@ The 250M **CTSM 1.0** release checkpoint additionally introduces (over the 500M 
 - **Short-context training** (1/3 of training samples drawn with `|fine| ∈ [10, 511]`) for better robustness when less history is available.
 - Trained from scratch (not continued pre-training from TimesFM 2.0) on ~2× more internal observability data.
 
-### Inference
-
-For `horizon_len > config.horizon_length`, [`CtsmModelForPrediction`] runs an autoregressive multi-resolution decode loop, using a [`DynamicCache`] by default (opt out with `use_cache=False`). Each step feeds only the newly-appended fine patches through the stack and attends to cached K/V for every earlier position. Stream-normalization statistics are frozen to their step-1 values so that cached K/V remains valid; the coarse block is pinned and the cache is rebuilt if the concatenated sequence would outgrow `max_position_embeddings`.
-
-The checkpoint can be found at [`cisco-ai/cisco-time-series-model-1.0`](https://huggingface.co/cisco-ai/cisco-time-series-model-1.0). The original inference code is at [github.com/splunk/cisco-time-series-model](https://github.com/splunk/cisco-time-series-model).
-
-This model was contributed by [kashif](https://huggingface.co/kashif).
-
 ## Usage
 
-Pass a list of fine-resolution time series (e.g. minute-level); the coarse stream is built automatically by mean-aggregating consecutive blocks of `config.agg_factor` points.
+Pass a list of fine-resolution time series (e.g. minute-level); the coarse stream is built automatically by mean-aggregating consecutive blocks of `config.aggregation_factor` points.
 
 ```python
 import numpy as np
 import torch
-from transformers import CtsmModelForPrediction
+from transformers import AutoModelForTimeSeriesPrediction
 
 
-model = CtsmModelForPrediction.from_pretrained("cisco-ai/cisco-time-series-model-1.0", device_map="auto")
+model = AutoModelForTimeSeriesPrediction.from_pretrained("cisco-ai/cisco-time-series-model-1.0", device_map="auto")
 
 # ~8.5 hours of 1-minute data; the model will build a 512-hour coarse context by aggregation.
 series = np.sin(np.linspace(0, 200, 512 * 60)).astype(np.float32)
@@ -91,7 +84,10 @@ fine = torch.tensor(minutely_series, dtype=torch.float32)    # up to 512 points
 outputs = model(past_values=[(coarse, fine)], horizon_len=128)
 ```
 
-For `horizon_len > 128`, the model decodes autoregressively and extends the output accordingly.
+## Usage tips
+
+- For `horizon_len > config.horizon_length`, [`CtsmModelForPrediction`] runs an autoregressive multi-resolution decode loop, using a [`DynamicCache`] by default (opt out with `use_cache=False`). Each step feeds only the newly-appended fine patches through the stack and attends to cached K/V for every earlier position.
+- Stream-normalization statistics are frozen to their step-1 values so that cached K/V remains valid; the coarse block is pinned and the cache is rebuilt if the concatenated sequence would outgrow `max_position_embeddings`.
 
 ## CtsmConfig
 
@@ -106,17 +102,3 @@ For `horizon_len > 128`, the model decodes autoregressively and extends the outp
 
 [[autodoc]] CtsmModelForPrediction
     - forward
-
-## Citation
-
-```bibtex
-@misc{gou2025ciscotimeseriesmodel,
-      title={Cisco Time Series Model Technical Report},
-      author={Liang Gou and Archit Khare and Praneet Pabolu and Prachi Patel and Joseph Ross and Hercy Shen and Yuhan Song and Jingze Sun and Kristal Curtis and Vedant Dharnidharka and Abhinav Mathur and Hao Yang},
-      year={2025},
-      eprint={2511.19841},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG},
-      url={https://arxiv.org/abs/2511.19841}
-}
-```

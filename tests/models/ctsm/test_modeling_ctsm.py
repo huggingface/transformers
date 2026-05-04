@@ -45,7 +45,7 @@ class CtsmModelTester:
         num_key_value_heads: int = 2,
         rms_norm_eps: float = 1e-6,
         quantiles=(0.1, 0.5, 0.9),
-        agg_factor: int = 4,
+        aggregation_factor: int = 4,
         max_position_embeddings: int = 64,
         batch_size: int = 2,
         is_training: bool = True,
@@ -62,7 +62,7 @@ class CtsmModelTester:
         self.num_key_value_heads = num_key_value_heads
         self.rms_norm_eps = rms_norm_eps
         self.quantiles = list(quantiles)
-        self.agg_factor = agg_factor
+        self.aggregation_factor = aggregation_factor
         self.max_position_embeddings = max_position_embeddings
         self.batch_size = batch_size
         self.is_training = is_training
@@ -83,7 +83,7 @@ class CtsmModelTester:
             num_key_value_heads=self.num_key_value_heads,
             rms_norm_eps=self.rms_norm_eps,
             quantiles=self.quantiles,
-            agg_factor=self.agg_factor,
+            aggregation_factor=self.aggregation_factor,
             max_position_embeddings=self.max_position_embeddings,
         )
 
@@ -91,14 +91,14 @@ class CtsmModelTester:
         return self.get_config()
 
     def prepare_config_and_inputs(self):
-        bsize = self.batch_size
+        bsz = self.batch_size
         past_values = [
             torch.tensor(
-                np.sin(np.linspace(0, 20, self.agg_factor * self.context_length)),
+                np.sin(np.linspace(0, 20, self.aggregation_factor * self.context_length)),
                 dtype=torch.float32,
                 device=torch_device,
             )
-            for _ in range(bsize)
+            for _ in range(bsz)
         ]
         return self.get_config(), past_values
 

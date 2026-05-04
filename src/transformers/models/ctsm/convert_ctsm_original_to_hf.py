@@ -152,7 +152,7 @@ def _infer_config_from_state_dict(original_sd: dict[str, torch.Tensor]) -> CtsmC
         use_positional_embedding=False,
         use_resolution_embeddings="multi_resolution.weight" in original_sd,
         use_special_token="special_token" in original_sd,
-        agg_factor=60,
+        aggregation_factor=60,
         max_position_embeddings=1025,
     )
 

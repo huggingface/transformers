@@ -78,7 +78,7 @@ class CtsmConfig(TimesFmConfig):
         Whether to insert a learned special token between the coarse and fine streams.
     num_resolutions (`int`, *optional*, defaults to 3):
         Number of resolution embeddings (coarse, special token, fine).
-    agg_factor (`int`, *optional*, defaults to 60):
+    aggregation_factor (`int`, *optional*, defaults to 60):
         Aggregation factor between fine and coarse resolutions (e.g. 60 minutes -> 1 hour).
     max_position_embeddings (`int`, *optional*, defaults to 1025):
         Maximum number of patches in the concatenated sequence (coarse + special + fine).
@@ -121,7 +121,7 @@ class CtsmConfig(TimesFmConfig):
     use_resolution_embeddings: bool = True
     use_special_token: bool = True
     num_resolutions: int = 3
-    agg_factor: int = 60
+    aggregation_factor: int = 60
     max_position_embeddings: int = 1025
     rope_parameters: RopeParameters | dict | None = None
 
@@ -129,8 +129,8 @@ class CtsmConfig(TimesFmConfig):
     max_timescale = AttributeError()
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class CtsmOutput(TimesFmOutput):
     r"""
     loc (`torch.Tensor` of shape `(batch_size,)`):
@@ -158,8 +158,8 @@ class CtsmOutput(TimesFmOutput):
     past_key_values: Cache | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class CtsmOutputForPrediction(TimesFmOutputForPrediction):
     r"""
     mean_predictions (`torch.Tensor` of shape `(batch_size, horizon_length)`):
@@ -209,6 +209,9 @@ class CtsmAttention(TimesFmAttention):
 
         query_states = self._scale_query(query_states)
 
+        # Key difference vs `TimesFmAttention`: optionally append the new K/V to a running
+        # `past_key_values` cache so the long-horizon AR loop in `CtsmModelForPrediction`
+        # only has to compute K/V for the newly-appended fine patches.
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
@@ -223,6 +226,7 @@ class CtsmAttention(TimesFmAttention):
             value_states,
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
+            # `scaling=1.0` because per-dim Q scaling is already applied above via `_scale_query`.
             scaling=1.0,
             **kwargs,
         )
@@ -247,6 +251,7 @@ class CtsmDecoderLayer(TimesFmDecoderLayer):
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
+        # Self Attention
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
@@ -254,8 +259,11 @@ class CtsmDecoderLayer(TimesFmDecoderLayer):
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
+            **kwargs,
         )
         hidden_states = residual + hidden_states
+
+        # MLP
         hidden_states = self.mlp(hidden_states, paddings=paddings)
         return hidden_states
 
@@ -264,18 +272,13 @@ class CtsmDecoderLayer(TimesFmDecoderLayer):
 class CtsmPreTrainedModel(TimesFmPreTrainedModel):
     config: CtsmConfig
     base_model_prefix = "model"
-    _no_split_modules = ["CtsmDecoderLayer"]
     _supports_flash_attn = True
     _supports_flex_attn = True
-    _can_record_outputs = {
-        "hidden_states": CtsmDecoderLayer,
-        "attentions": CtsmAttention,
-    }
 
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, CtsmModel) and getattr(module, "special_token", None) is not None:
+        if isinstance(module, CtsmModel) and module.special_token is not None:
             init.normal_(module.special_token, mean=0.0, std=self.config.initializer_range)
 
 
@@ -290,16 +293,19 @@ class CtsmModel(TimesFmModel):
     def __init__(self, config: CtsmConfig):
         super().__init__(config)
 
+        # Parent only creates `position_emb` when `use_positional_embedding=True`; for CTSM the rotary
+        # embedding takes its place, so drop it if it was instantiated.
         if hasattr(self, "position_emb"):
             del self.position_emb
 
         self.rotary_emb = CtsmRotaryEmbedding(config)
 
-        if config.use_resolution_embeddings:
-            self.multi_resolution = nn.Embedding(config.num_resolutions, config.hidden_size)
-
-        if config.use_special_token:
-            self.special_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        self.multi_resolution = (
+            nn.Embedding(config.num_resolutions, config.hidden_size) if config.use_resolution_embeddings else None
+        )
+        self.special_token = (
+            nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if config.use_special_token else None
+        )
 
         self.post_init()
 
@@ -307,10 +313,13 @@ class CtsmModel(TimesFmModel):
     def _left_pad_to_patch_boundary(
         values: torch.Tensor, paddings: torch.Tensor, patch_length: int
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        rem = values.shape[1] % patch_length
-        if rem == 0:
+        """Left-pad ``values`` (and the matching ``paddings`` mask) so that the time dimension is a
+        multiple of ``patch_length``. Padding values are zeros; padded positions are flagged with ``1``
+        in ``paddings`` so downstream patchifying / normalization can ignore them."""
+        remaining = values.shape[1] % patch_length
+        if remaining == 0:
             return values, paddings
-        pad_len = patch_length - rem
+        pad_len = patch_length - remaining
         values_pad = torch.zeros((values.shape[0], pad_len), device=values.device, dtype=values.dtype)
         paddings_pad = torch.ones((paddings.shape[0], pad_len), device=paddings.device, dtype=paddings.dtype)
         return torch.cat([values_pad, values], dim=1), torch.cat([paddings_pad, paddings], dim=1)
@@ -330,9 +339,9 @@ class CtsmModel(TimesFmModel):
         count = valid.sum(dim=1, keepdim=True).clamp_min(1.0)
         mu = (context * valid).sum(dim=1, keepdim=True) / count
 
-        seq_len_f = context.new_tensor(float(context.shape[1]))
+        seq_len_float = context.new_tensor(float(context.shape[1]))
         filled = torch.where(padding.to(dtype=torch.bool), mu, context)
-        sigma = filled.std(dim=1, keepdim=True, unbiased=False) * torch.sqrt(seq_len_f / count)
+        sigma = filled.std(dim=1, keepdim=True, unbiased=False) * torch.sqrt(seq_len_float / count)
         sigma = sigma.clamp_min(1e-2)
 
         normalized = (context - mu) / (sigma + tolerance)
@@ -344,9 +353,9 @@ class CtsmModel(TimesFmModel):
         self, past_values: torch.Tensor, past_values_padding: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Patchify an already stream-normalized stream and project through the input tokenizer."""
-        bsize = past_values.shape[0]
-        patched_inputs = past_values.view(bsize, -1, self.config.patch_length)
-        patched_pads = past_values_padding.view(bsize, -1, self.config.patch_length)
+        bsz = past_values.shape[0]
+        patched_inputs = past_values.view(bsz, -1, self.config.patch_length)
+        patched_pads = past_values_padding.view(bsz, -1, self.config.patch_length)
 
         patched_inputs = patched_inputs * (1.0 - patched_pads)
         concat_inputs = torch.cat([patched_inputs, patched_pads], dim=-1)
@@ -373,11 +382,11 @@ class CtsmModel(TimesFmModel):
         return attention_mask
 
     def _build_incremental_attention_mask(
-        self, bsize: int, num_new: int, past_length: int, dtype: torch.dtype, device: torch.device
+        self, bsz: int, num_new: int, past_length: int, dtype: torch.dtype, device: torch.device
     ) -> torch.Tensor:
         """Mask for the incremental (cached) path: new fine Qs attend to all cached K/V plus causal within the new block."""
         min_value = torch.finfo(dtype).min
-        mask = torch.zeros((bsize, 1, num_new, past_length + num_new), dtype=dtype, device=device)
+        mask = torch.zeros((bsz, 1, num_new, past_length + num_new), dtype=dtype, device=device)
         if num_new > 1:
             causal_new = torch.triu(torch.full((num_new, num_new), min_value, dtype=dtype, device=device), diagonal=1)
             mask[:, :, :, past_length:] = causal_new
@@ -395,7 +404,6 @@ class CtsmModel(TimesFmModel):
         freq: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         loc_fine: torch.Tensor | None = None,
         scale_fine: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -423,9 +431,6 @@ class CtsmModel(TimesFmModel):
         use_cache (`bool`, *optional*):
             Whether to build and return a key/value cache in the `CtsmOutput`. Defaults to `False` unless
             `past_key_values` is provided (in which case caching is always on).
-        cache_position (`torch.LongTensor` of shape `(num_new,)`, *optional*):
-            Absolute positions (in the full `[coarse, special, fine]` sequence) of the new fine patches.
-            Only used in incremental mode; defaults to `torch.arange(past_length, past_length + num_new)`.
         loc_fine (`torch.Tensor` of shape `(batch_size,)`, *optional*):
             Fine-stream mean used for stream normalization. Required in incremental mode.
         scale_fine (`torch.Tensor` of shape `(batch_size,)`, *optional*):
@@ -446,7 +451,6 @@ class CtsmModel(TimesFmModel):
             past_values_fine_padding=past_values_fine_padding,
             freq=freq,
             past_key_values=past_key_values,
-            cache_position=cache_position,
             loc_fine=loc_fine,
             scale_fine=scale_fine,
             **kwargs,
@@ -487,14 +491,14 @@ class CtsmModel(TimesFmModel):
         coarse_embeddings, coarse_patch_padding = self._patchify(coarse_normalized, past_values_coarse_padding)
         fine_embeddings, fine_patch_padding = self._patchify(fine_normalized, past_values_fine_padding)
 
-        bsize, num_coarse_patches, hidden_size = coarse_embeddings.shape
+        bsz, num_coarse_patches, hidden_size = coarse_embeddings.shape
         num_fine_patches = fine_embeddings.shape[1]
         device = coarse_embeddings.device
         dtype = coarse_embeddings.dtype
 
         if self.config.use_special_token:
-            special = self.special_token.to(device=device, dtype=dtype).expand(bsize, 1, hidden_size)
-            special_padding = torch.zeros(bsize, 1, device=device, dtype=coarse_patch_padding.dtype)
+            special = self.special_token.to(device=device, dtype=dtype).expand(bsz, 1, hidden_size)
+            special_padding = torch.zeros(bsz, 1, device=device, dtype=coarse_patch_padding.dtype)
             model_input = torch.cat([coarse_embeddings, special, fine_embeddings], dim=1)
             patch_padding = torch.cat([coarse_patch_padding, special_padding, fine_patch_padding], dim=1)
             num_special = 1
@@ -507,18 +511,18 @@ class CtsmModel(TimesFmModel):
             mr_coarse = torch.zeros(num_coarse_patches, dtype=torch.long, device=device)
             mr_special = torch.full((num_special,), 1, dtype=torch.long, device=device)
             mr_fine = torch.full((num_fine_patches,), 2, dtype=torch.long, device=device)
-            mr_idx = torch.cat([mr_coarse, mr_special, mr_fine], dim=0).unsqueeze(0).expand(bsize, -1)
+            mr_idx = torch.cat([mr_coarse, mr_special, mr_fine], dim=0).unsqueeze(0).expand(bsz, -1)
             model_input = model_input + self.multi_resolution(mr_idx)
 
         if freq is None:
-            freq = torch.zeros((bsize, 1), dtype=torch.long, device=device)
+            freq = torch.zeros((bsz, 1), dtype=torch.long, device=device)
         else:
             freq = freq.to(device=device, dtype=torch.long)
         model_input = model_input + self.freq_emb(freq)
 
         attention_mask = self._build_attention_mask(patch_padding, num_coarse_patches, model_input.dtype)
         position_ids = (
-            torch.arange(model_input.shape[1], device=device, dtype=torch.long).unsqueeze(0).expand(bsize, -1)
+            torch.arange(model_input.shape[1], device=device, dtype=torch.long).unsqueeze(0).expand(bsz, -1)
         )
         position_embeddings = self.rotary_emb(model_input, position_ids)
 
@@ -552,7 +556,6 @@ class CtsmModel(TimesFmModel):
         past_values_fine_padding: torch.LongTensor | None,
         freq: torch.Tensor | None,
         past_key_values: Cache,
-        cache_position: torch.LongTensor | None,
         loc_fine: torch.Tensor | None,
         scale_fine: torch.Tensor | None,
         **kwargs: Unpack[TransformersKwargs],
@@ -578,27 +581,29 @@ class CtsmModel(TimesFmModel):
         fine_normalized = fine_normalized.clamp(-1000.0, 1000.0)
 
         new_embeddings, new_patch_padding = self._patchify(fine_normalized, past_values_fine_padding)
-        bsize, num_new, _ = new_embeddings.shape
+        bsz, num_new, _ = new_embeddings.shape
         device = new_embeddings.device
         dtype = new_embeddings.dtype
 
         if self.config.use_resolution_embeddings:
-            mr_idx = torch.full((bsize, num_new), 2, dtype=torch.long, device=device)
+            mr_idx = torch.full((bsz, num_new), 2, dtype=torch.long, device=device)
             new_embeddings = new_embeddings + self.multi_resolution(mr_idx)
 
         if freq is None:
-            freq = torch.zeros((bsize, 1), dtype=torch.long, device=device)
+            freq = torch.zeros((bsz, 1), dtype=torch.long, device=device)
         else:
             freq = freq.to(device=device, dtype=torch.long)
         new_embeddings = new_embeddings + self.freq_emb(freq)
 
         past_length = past_key_values.get_seq_length()
-        if cache_position is None:
-            cache_position = torch.arange(past_length, past_length + num_new, dtype=torch.long, device=device)
-        position_ids = cache_position.unsqueeze(0).expand(bsize, -1)
+        position_ids = (
+            torch.arange(past_length, past_length + num_new, dtype=torch.long, device=device)
+            .unsqueeze(0)
+            .expand(bsz, -1)
+        )
         position_embeddings = self.rotary_emb(new_embeddings, position_ids)
 
-        attention_mask = self._build_incremental_attention_mask(bsize, num_new, past_length, dtype, device)
+        attention_mask = self._build_incremental_attention_mask(bsz, num_new, past_length, dtype, device)
 
         hidden_states = new_embeddings
         for layer in self.layers[: self.config.num_hidden_layers]:
@@ -634,7 +639,7 @@ class CtsmModelForPrediction(TimesFmModelForPrediction):
       statistics are recomputed after each prediction is appended; in practice the drift is small
       when forecasts stay in-distribution.
     * If an AR step would grow the coarse block (a new coarse patch is formed once every
-      ``patch_length * agg_factor / output_patch_len`` steps, i.e. ~every 15 steps at the defaults),
+      ``patch_length * aggregation_factor / output_patch_len`` steps, i.e. ~every 15 steps at the defaults),
       the cache is discarded and a full forward is run, rebuilding the cache.
     """
 
@@ -654,23 +659,23 @@ class CtsmModelForPrediction(TimesFmModelForPrediction):
 
     @staticmethod
     def _build_multi_resolution(
-        series: torch.Tensor, agg_factor: int, coarse_len: int, fine_len: int
+        series: torch.Tensor, aggregation_factor: int, coarse_len: int, fine_len: int
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Build (coarse, fine) contexts from a 1-D fine-resolution series.
 
-        Coarse is the mean of the last `coarse_len * agg_factor` fine samples, aligned to block boundaries.
+        Coarse is the mean of the last `coarse_len * aggregation_factor` fine samples, aligned to block boundaries.
         Fine is the last `fine_len` samples.
         """
         series = series.to(torch.float32).reshape(-1)
-        needed = coarse_len * agg_factor
+        needed = coarse_len * aggregation_factor
         raw = series[-needed:]
-        remainder = raw.shape[0] % agg_factor
+        remainder = raw.shape[0] % aggregation_factor
         if remainder:
             raw = raw[remainder:]
         if raw.numel() == 0:
             coarse = series.new_empty((0,), dtype=torch.float32)
         else:
-            coarse = raw.reshape(-1, agg_factor).mean(dim=1)
+            coarse = raw.reshape(-1, aggregation_factor).mean(dim=1)
             if coarse.shape[0] > coarse_len:
                 coarse = coarse[-coarse_len:]
         fine = series[-fine_len:].to(torch.float32)
@@ -683,7 +688,7 @@ class CtsmModelForPrediction(TimesFmModelForPrediction):
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         coarse_len = self.config.context_length
         fine_len = self.config.context_length
-        agg = self.config.agg_factor
+        aggregation_factor = self.config.aggregation_factor
 
         coarse_batch = torch.zeros((len(past_values), coarse_len), dtype=torch.float32, device=device)
         coarse_pad = torch.zeros_like(coarse_batch)
@@ -697,23 +702,23 @@ class CtsmModelForPrediction(TimesFmModelForPrediction):
                 fine = torch.as_tensor(fine, dtype=torch.float32, device=device).reshape(-1)
             else:
                 series = torch.as_tensor(item, dtype=torch.float32, device=device).reshape(-1)
-                coarse, fine = self._build_multi_resolution(series, agg, coarse_len, fine_len)
+                coarse, fine = self._build_multi_resolution(series, aggregation_factor, coarse_len, fine_len)
 
-            c_n = coarse.shape[0]
-            if c_n >= coarse_len:
+            coarse_n = coarse.shape[0]
+            if coarse_n >= coarse_len:
                 coarse_batch[i] = coarse[-coarse_len:]
-            elif c_n > 0:
-                coarse_batch[i, coarse_len - c_n :] = coarse
-                coarse_pad[i, : coarse_len - c_n] = 1.0
+            elif coarse_n > 0:
+                coarse_batch[i, coarse_len - coarse_n :] = coarse
+                coarse_pad[i, : coarse_len - coarse_n] = 1.0
             else:
                 coarse_pad[i] = 1.0
 
-            f_n = fine.shape[0]
-            if f_n >= fine_len:
+            fine_n = fine.shape[0]
+            if fine_n >= fine_len:
                 fine_batch[i] = fine[-fine_len:]
-            elif f_n > 0:
-                fine_batch[i, fine_len - f_n :] = fine
-                fine_pad[i, : fine_len - f_n] = 1.0
+            elif fine_n > 0:
+                fine_batch[i, fine_len - fine_n :] = fine
+                fine_pad[i, : fine_len - fine_n] = 1.0
             else:
                 fine_pad[i] = 1.0
 
@@ -723,9 +728,9 @@ class CtsmModelForPrediction(TimesFmModelForPrediction):
         """Project the hidden state at `last_position` through the horizon head and denormalize."""
         last_hidden = outputs.last_hidden_state[:, last_position : last_position + 1, :]
         head = self.horizon_ff_layer(last_hidden)
-        bsize = head.shape[0]
+        bsz = head.shape[0]
         num_outputs = 1 + len(self.config.quantiles)
-        head = head.view(bsize, self.config.horizon_length, num_outputs)
+        head = head.view(bsz, self.config.horizon_length, num_outputs)
 
         loc = outputs.loc[:, None, None]
         scale = outputs.scale[:, None, None]
@@ -816,14 +821,14 @@ class CtsmModelForPrediction(TimesFmModelForPrediction):
         num_decode_patches = (horizon_len + output_patch_len - 1) // output_patch_len
 
         coarse, coarse_pad, fine, fine_pad = self._prepare_context(past_values, device=device)
-        bsize = coarse.shape[0]
+        bsz = coarse.shape[0]
 
         if freq is None:
-            freq_tensor = torch.zeros((bsize, 1), dtype=torch.long, device=device)
+            freq_tensor = torch.zeros((bsz, 1), dtype=torch.long, device=device)
         else:
             freq_tensor = torch.as_tensor(
                 list(freq) if not isinstance(freq, torch.Tensor) else freq, dtype=torch.long, device=device
-            ).view(bsize, 1)
+            ).view(bsz, 1)
 
         mean_chunks: list[torch.Tensor] = []
         quant_chunks: list[torch.Tensor] = []
@@ -831,13 +836,13 @@ class CtsmModelForPrediction(TimesFmModelForPrediction):
         last_outputs: CtsmOutput | None = None
         max_fine = self.config.context_length
         max_coarse = self.config.context_length
-        agg = self.config.agg_factor
+        aggregation_factor = self.config.aggregation_factor
         new_fine_patches = self.config.horizon_length // self.config.patch_length
 
         past_key_values: Cache | None = None
         frozen_loc_fine: torch.Tensor | None = None
         frozen_scale_fine: torch.Tensor | None = None
-        coarse_buffer = torch.zeros((bsize, 0), dtype=torch.float32, device=device)
+        coarse_buffer = torch.zeros((bsz, 0), dtype=torch.float32, device=device)
 
         if use_cache is None:
             use_cache = num_decode_patches > 1
@@ -885,20 +890,24 @@ class CtsmModelForPrediction(TimesFmModelForPrediction):
             # invalidation) sees the right state. Mirrors the reference AR loop.
             fine = torch.cat([fine, new_fine], dim=1)
             fine_pad = torch.cat(
-                [fine_pad, torch.zeros((bsize, output_patch_len), device=device, dtype=fine_pad.dtype)], dim=1
+                [fine_pad, torch.zeros((bsz, output_patch_len), device=device, dtype=fine_pad.dtype)], dim=1
             )
             if fine.shape[1] > max_fine:
                 fine = fine[:, -max_fine:]
                 fine_pad = fine_pad[:, -max_fine:]
 
             coarse_buffer = torch.cat([coarse_buffer, new_fine], dim=1)
-            full_blocks = coarse_buffer.shape[1] // agg
+            full_blocks = coarse_buffer.shape[1] // aggregation_factor
             if full_blocks > 0:
-                blocks = coarse_buffer[:, : full_blocks * agg].view(bsize, full_blocks, agg).mean(dim=2)
-                coarse_buffer = coarse_buffer[:, full_blocks * agg :]
+                blocks = (
+                    coarse_buffer[:, : full_blocks * aggregation_factor]
+                    .view(bsz, full_blocks, aggregation_factor)
+                    .mean(dim=2)
+                )
+                coarse_buffer = coarse_buffer[:, full_blocks * aggregation_factor :]
                 coarse = torch.cat([coarse, blocks], dim=1)
                 coarse_pad = torch.cat(
-                    [coarse_pad, torch.zeros((bsize, full_blocks), device=device, dtype=coarse_pad.dtype)], dim=1
+                    [coarse_pad, torch.zeros((bsz, full_blocks), device=device, dtype=coarse_pad.dtype)], dim=1
                 )
                 if coarse.shape[1] > max_coarse:
                     coarse = coarse[:, -max_coarse:]
