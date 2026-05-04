@@ -32,6 +32,7 @@ check-code-quality:
 # Runs a full repository consistency check.
 check-repository-consistency:
 	@python utils/checkers.py \
+		auto_mappings,\
 		imports,\
 		import_complexity,\
 		copies,\
