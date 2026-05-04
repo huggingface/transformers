@@ -221,6 +221,102 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+def eager_swa_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    swa: bool = False,
+    swa_window_size: int = 16,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    if swa:
+        q_len = query.shape[-2]
+        kv_len = key_states.shape[-2]
+        device = attn_weights.device
+        min_dtype = torch.finfo(attn_weights.dtype).min
+
+        # Query position i can only attend to keys in [i - swa_window_size + 1, i].
+        # During decoding q_len < kv_len, so query positions are the *last* q_len kv slots.
+        q_positions = torch.arange(kv_len - q_len, kv_len, device=device)
+        kv_positions = torch.arange(kv_len, device=device)
+        too_old = kv_positions[None, :] < (q_positions[:, None] - swa_window_size + 1)
+        attn_weights = attn_weights.masked_fill(too_old[None, None, :, :], min_dtype)
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+    return attn_output, attn_weights
+
+
+def eager_linear_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    causal: bool = True,
+    eps: float = 1e-6,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    """Vectorized linear attention with the elu+1 feature map (Katharopoulos et al., 2020).
+
+    Standard softmax attention computes  softmax(Q Kᵀ / √d) V  in O(N²·d).
+    Linear attention replaces softmax with a non-negative feature map φ(x) = elu(x) + 1:
+        attn = φ(Q) (φ(K)ᵀ V) / (φ(Q) (φ(K)ᵀ 1))
+    which reduces it to O(N·d²). The causal variant uses prefix sums (cumsum)
+    so it is fully vectorized — no Python-level loops over the sequence.
+    """
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    q = (nn.functional.elu(query) + 1.0) * scaling
+    k = nn.functional.elu(key_states) + 1.0
+
+    # Eager attention masks are float biases with 0 = keep, -inf = drop.
+    # Reduce to a per-key keep mask and zero out padded keys/values.
+    if attention_mask is not None:
+        keep = (attention_mask > torch.finfo(attention_mask.dtype).min / 2).any(dim=-2, keepdim=True)
+        keep = keep.transpose(-1, -2).to(k.dtype)
+        k = k * keep
+        value_states = value_states * keep
+
+    if causal:
+        # KV: (B, H, N, d_k, d_v) prefix sum along the sequence dim.
+        kv = torch.einsum("bhnk,bhnv->bhnkv", k, value_states)
+        kv = torch.cumsum(kv, dim=2)
+        # K_sum: (B, H, N, d_k) running sum of keys for the denominator.
+        k_sum = torch.cumsum(k, dim=2)
+
+        numerator = torch.einsum("bhnk,bhnkv->bhnv", q, kv)
+        denominator = torch.einsum("bhnk,bhnk->bhn", q, k_sum).unsqueeze(-1)
+    else:
+        kv = torch.einsum("bhnk,bhnv->bhkv", k, value_states)
+        k_sum = k.sum(dim=2)
+
+        numerator = torch.einsum("bhnk,bhkv->bhnv", q, kv)
+        denominator = torch.einsum("bhnk,bhk->bhn", q, k_sum).unsqueeze(-1)
+
+    attn_output = numerator / (denominator + eps)
+    attn_output = nn.functional.dropout(attn_output, p=dropout, training=module.training)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+    # Linear attention does not produce explicit (B, H, N, N) weights.
+    return attn_output, None
+
+
 @use_kernelized_func(apply_rotary_pos_emb)
 class LlamaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
