@@ -261,13 +261,23 @@ class FakeMesh:
 
 
 def _make_dtensor_shard_op(mesh, placements, param_shape, local_shape):
-    """Build a DtensorShardOperation without requiring a real DTensor / distributed init."""
+    """Build a DtensorShardOperation without requiring a real DTensor / distributed init.
+
+    The expert-axis ownership cache is computed by mimicking
+    ``compute_local_shape_and_global_offset`` for the leading dim only:
+    locate the mesh dim that shards param dim 0 (if any) and use its local rank.
+    """
     op = object.__new__(DtensorShardOperation)
     op.device_mesh = mesh
     op.placements = tuple(placements)
-    op.param_shape = tuple(param_shape)
     op.param_ndim = len(param_shape)
-    op.local_shape = tuple(local_shape)
+    op._first_owned_expert = 0
+    op._owned_experts_count = local_shape[0]
+    for mesh_dim, p in enumerate(placements):
+        if hasattr(p, "dim") and (p.dim % len(param_shape)) == 0:
+            sub = mesh[mesh.mesh_dim_names[mesh_dim]] if mesh.ndim > 1 else mesh
+            op._first_owned_expert = sub.get_local_rank() * local_shape[0]
+            break
     return op
 
 
@@ -1060,7 +1070,9 @@ class TestDtensorShardOperation(unittest.TestCase):
         }
         for rank in range(4):
             mesh = FakeMesh(shape=(2, 2), rank=rank)
-            op = _make_dtensor_shard_op(mesh, [Shard(0), Shard(1)], param_shape=(4, 4, 2), local_shape=(2, 2, 2))
+            op = _make_dtensor_shard_op(
+                mesh, [Shard(0), Shard(1)], param_shape=(4, 4, 2), local_shape=(2, 2, 2)
+            )
             shard = op.shard_tensor(tensor, tensor_idx=1)
             if expected[rank] is None:
                 self.assertIsNone(shard)
