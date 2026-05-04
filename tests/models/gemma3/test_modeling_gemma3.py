@@ -22,6 +22,7 @@ from parameterized import parameterized
 from pytest import mark
 
 from transformers import (
+    AutoConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
     Gemma3Config,
@@ -394,16 +395,25 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
     def test_load_with_mismatched_shapes(self):
         pass
 
-    def test_automodelforcausallm(self):
+    @parameterized.expand([("from_pretrained",), ("from_config",)])
+    def test_automodelforcausallm(self, loader: str) -> None:
         """
-        Regression test for #36741/#36917 -- make sure `AutoModelForCausalLM` works with a Gemma3 config, i.e. that
-        `AutoModelForCausalLM.from_pretrained` pulls the text config before loading the model
+        Check `AutoModelForCausalLM` classmethod produce a `Gemma3ForConditionalGeneration`.
+
+        Originally a regression test for #36741/#36917 (making sure
+        `AutoModelForCausalLM.from_pretrained`] works with a Gemma3 config,
+        i.e. that `AutoModelForCausalLM.from_pretrained` pulls the text config
+        before loading the model), then expanded to cover `from_config` for #45759.
         """
         config = self.model_tester.get_config()
         model = Gemma3ForConditionalGeneration(config)
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(tmp_dir)
-            for_causal_lm = AutoModelForCausalLM.from_pretrained(tmp_dir)
+            if loader == "from_pretrained":
+                for_causal_lm = AutoModelForCausalLM.from_pretrained(tmp_dir)
+            else:
+                reloaded_config = AutoConfig.from_pretrained(tmp_dir)
+                for_causal_lm = AutoModelForCausalLM.from_config(reloaded_config)
             self.assertIsInstance(for_causal_lm, Gemma3ForConditionalGeneration)
 
     @require_flash_attn
