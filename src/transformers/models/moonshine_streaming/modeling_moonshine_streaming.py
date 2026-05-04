@@ -626,6 +626,7 @@ class MoonshineStreamingAttention(nn.Module):
         )
 
         is_cross_attention = key_value_states is not None
+        is_updated = False
         if past_key_values is not None:
             is_updated = past_key_values.is_updated.get(self.layer_idx)
             if is_cross_attention:

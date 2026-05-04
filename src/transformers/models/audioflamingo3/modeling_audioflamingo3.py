@@ -141,6 +141,7 @@ class AudioFlamingo3Attention(nn.Module):
         query_states = (self.q_proj(hidden_states) * self.scaling).view(hidden_shape).transpose(1, 2).contiguous()
 
         # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
+        is_updated = False
         if past_key_values is not None and isinstance(past_key_values, EncoderDecoderCache):
             is_updated = past_key_values.is_updated.get(self.layer_idx)
             if is_cross_attention:
