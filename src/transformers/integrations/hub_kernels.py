@@ -837,11 +837,9 @@ def register_kernel_fusions(
 __all__ = [
     "FusedModuleBase",
     "LayerRepository",
-    "LocalLayerRepository",
     "get_kernel",
     "register_kernel_fusions",
     "lazy_load_kernel",
-    "make_fused_module_class",
     "register_fusion_patterns",
     "register_kernel_mapping",
     "register_kernel_mapping_transformers",
