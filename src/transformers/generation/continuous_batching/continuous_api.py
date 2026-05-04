@@ -784,6 +784,10 @@ class ContinuousBatchingManager:
         )
         self._use_prefix_sharing = paged_attention_cache.use_prefix_sharing  # update the approximation
 
+        # Disable the decode path if the model has sliding window attention (TODO)
+        if paged_attention_cache.num_sliding_attention_groups > 0:
+            self.continuous_batching_config.max_blocks_per_request = 0
+
         # Create the scheduler
         scheduler_type = self.continuous_batching_config.scheduler_type
         scheduler = SCHEDULER_MAPPING.get(scheduler_type, None)

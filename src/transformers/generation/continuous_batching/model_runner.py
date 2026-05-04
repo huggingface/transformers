@@ -51,6 +51,11 @@ class ModelRunner:
         self.use_cuda_graph_varlen, self.use_cuda_graph_decode = self.cb_config.get_cuda_graph_booleans()
         self.cache = cache
 
+        # Padding only happen when CUDA graphs or compile is used
+        cuda_graph = self.use_cuda_graph_varlen or self.use_cuda_graph_decode
+        compile = self.cb_config.varlen_compile_config is not None or self.cb_config.decode_compile_config is not None
+        self.pad_inputs = cuda_graph or compile
+
         # Set up the graph pool. This allows all graphs to share the same memory pool, greatly saving memory.
         if self.use_cuda_graph_varlen or self.use_cuda_graph_decode:
             self.graph_pool = torch.cuda.graph_pool_handle()
@@ -73,6 +78,8 @@ class ModelRunner:
 
     def maybe_pad_inputs(self, num_q_tokens: int, max_kv_read: int, use_decode_fast_path: bool) -> tuple[int, int]:
         """Pads the input sizes for the next batch if it is needed. Often it is, for max performance."""
+        if not self.pad_inputs:
+            return num_q_tokens, max_kv_read
         max_batch_tokens = self.cache.max_batch_tokens
         # For varlen batches, we pad using interval sizes
         if not use_decode_fast_path:
@@ -209,9 +216,7 @@ class ModelRunner:
         """Pre-capture CUDA graphs and/or trigger compile warmup for varlen and decode paths (if available). Unless the
         force_warmup flag is set, the warmup is only performed if the CUDA graphs or compile are enabled."""
         # Early return if the warmup is not needed
-        cuda_graph_off = not (self.use_cuda_graph_varlen or self.use_cuda_graph_decode)
-        compile_off = self.cb_config.varlen_compile_config is None or self.cb_config.decode_compile_config is None
-        if cuda_graph_off and compile_off:
+        if not self.pad_inputs:
             return None
 
         # In async mode, each IO pair has its own graph buffer and static tensors, so we warm up both
