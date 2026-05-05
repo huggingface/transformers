@@ -38,6 +38,14 @@ Parakeet models, [introduced by NVIDIA NeMo](https://developer.nvidia.com/blog/p
     - LSTM prediction network maintains language context across token predictions.
     - Joint network combines encoder and decoder outputs.
     - Duration head predicts how many frames to skip, enabling fast inference.
+- [**ParakeetForRNNT**](#parakeetforrnnt): a Fast Conformer Encoder + an RNN-T (RNN Transducer) decoder
+  - **RNN-T Decoder**: Standard transducer with token-only output (no duration head):
+    - LSTM prediction network shared with the TDT decoder.
+    - Joint network projects encoder and decoder outputs and emits vocabulary-sized logits.
+    - Greedy decoding emits a non-blank symbol or advances one encoder frame on blank.
+  - Supports cache-aware checkpoints trained with `att_context_size`, `causal_downsampling`, and
+    `conv_norm_type=layer_norm`. They run offline in this PR; streaming inference will land
+    alongside the cache-aware encoder PR.
 
 The original implementation can be found in [NVIDIA NeMo](https://github.com/NVIDIA/NeMo).
 Model checkpoints are to be found under [the NVIDIA organization](https://huggingface.co/nvidia/models?search=parakeet).
@@ -154,6 +162,52 @@ Transcription: ['mister Quilter is the apostle of the middle classes, and we are
 
 Timestamped tokens: [[{'token': 'm', 'start': 0.24, 'end': 0.48}, {'token': 'ister', 'start': 0.48, 'end': 0.64}, {'token': 'Qu', 'start': 0.64, 'end': 0.88}, {'token': 'il', 'start': 0.88, 'end': 1.12}, {'token': 'ter', 'start': 1.12, 'end': 1.36}, {'token': 'is', 'start': 1.36, 'end': 1.44}, {'token': 'the', 'start': 1.44, 'end': 1.6}, {'token': 'ap', 'start': 1.6, 'end': 1.76}, {'token': 'ost', 'start': 1.76, 'end': 1.92}, {'token': 'le', 'start': 2.0, 'end': 2.16}, {'token': 'of', 'start': 2.16, 'end': 2.24}, {'token': 'the', 'start': 2.24, 'end': 2.4}, {'token': 'mid', 'start': 2.4, 'end': 2.48}, {'token': 'd', 'start': 2.48, 'end': 2.56}, {'token': 'le', 'start': 2.56, 'end': 2.64}, {'token': 'clas', 'start': 2.72, 'end': 2.88}, {'token': 's', 'start': 2.88, 'end': 3.04}, {'token': 'es', 'start': 3.04, 'end': 3.12}, {'token': ',', 'start': 3.12, 'end': 3.12}, {'token': 'and', 'start': 3.2800000000000002, 'end': 3.44}, {'token': 'we', 'start': 3.44, 'end': 3.6}, {'token': 'are', 'start': 3.6, 'end': 3.7600000000000002}, {'token': 'gl', 'start': 3.7600000000000002, 'end': 3.92}, {'token': 'ad', 'start': 3.92, 'end': 4.08}, {'token': 'to', 'start': 4.08, 'end': 4.24}, {'token': 'wel', 'start': 4.24, 'end': 4.4}, {'token': 'c', 'start': 4.4, 'end': 4.48}, {'token': 'ome', 'start': 4.48, 'end': 4.72}, {'token': 'his', 'start': 4.72, 'end': 4.96}, {'token': 'gos', 'start': 4.96, 'end': 5.12}, {'token': 'pel', 'start': 5.36, 'end': 5.6000000000000005}, {'token': '.', 'start': 5.6000000000000005, 'end': 5.6000000000000005}]]
 """
+```
+
+</hfoption>
+</hfoptions>
+
+### `ParakeetForRNNT` usage
+
+Parakeet RNN-T uses an LSTM prediction network and a joint network producing vocabulary-only logits.
+Both the regular checkpoint and cache-aware variants (trained with limited attention context, causal
+convolutions, layer norm) load through the same class and run offline through `generate`. Streaming
+inference for cache-aware checkpoints requires the cache-aware encoder support being added in a
+companion PR.
+
+<hfoptions id="rnnt-usage">
+<hfoption id="Pipeline">
+
+```py
+from transformers import pipeline
+
+pipe = pipeline("automatic-speech-recognition", model="nvidia/parakeet-rnnt-1.1b")
+out = pipe("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3")
+print(out)
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+from transformers import AutoModelForRNNT, AutoProcessor
+from datasets import load_dataset, Audio
+import torch
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+model_id = "nvidia/parakeet-rnnt-1.1b"
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForRNNT.from_pretrained(model_id, dtype="auto", device_map=device)
+
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+speech_samples = [el["array"] for el in ds["audio"][:5]]
+
+inputs = processor(speech_samples, sampling_rate=processor.feature_extractor.sampling_rate)
+inputs.to(model.device, dtype=model.dtype)
+outputs = model.generate(**inputs)
+print(processor.batch_decode(outputs.sequences, skip_special_tokens=True))
 ```
 
 </hfoption>
@@ -325,6 +379,10 @@ outputs.loss.backward()
 
 [[autodoc]] ParakeetTDTConfig
 
+## ParakeetRNNTConfig
+
+[[autodoc]] ParakeetRNNTConfig
+
 ## ParakeetEncoder
 
 [[autodoc]] ParakeetEncoder
@@ -336,3 +394,7 @@ outputs.loss.backward()
 ## ParakeetForTDT
 
 [[autodoc]] ParakeetForTDT
+
+## ParakeetForRNNT
+
+[[autodoc]] ParakeetForRNNT

@@ -175,7 +175,10 @@ def write_processor(
         }
     )
 
-    feature_extractor_keys_to_ignore = ["_target_", "pad_to", "frame_splicing", "dither", "window", "log"]
+    feature_extractor_keys_to_ignore = [
+        "_target_", "pad_to", "frame_splicing", "dither", "window", "log",
+        "nb_augmentation_prob",  # parakeet-rnnt augmentation flag, training-only
+    ]
     feature_extractor_config_keys_mapping = {
         "sample_rate": "sampling_rate",
         "window_size": "win_length",
