@@ -764,7 +764,9 @@ def register_kernel_fusions(
             if not all(hasattr(module, name) for name in child_names):
                 continue
             seen.add(module_cls)
-            fused_parent_cls, fused_cls = make_fused_parent_class(module_cls, child_names, source_names, kernel_layer_name)
+            fused_parent_cls, fused_cls = make_fused_parent_class(
+                module_cls, child_names, source_names, kernel_layer_name
+            )
             patch_mapping[module_cls.__name__] = fused_parent_cls
 
         if not patch_mapping:
