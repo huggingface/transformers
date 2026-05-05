@@ -156,13 +156,19 @@ def _coerce_sf_for_kernel(sf: torch.Tensor) -> torch.Tensor:
     """Normalize a scale-factor tensor for the DeepGEMM kernel boundary.
 
     Two SF flavors are produced by our path:
-      - `float32` (DeepSeek V3-style): pass through; the kernel transforms float→int internally
-        on SM100 to feed the 1D1D path.
-      - `torch.float8_e8m0fnu` (DeepSeek V4-style, 1 byte per scale): reinterpret 4 contiguous
-        bytes as one `int32`. No copy; last-dim shrinks 4×.
+      - `float32` (DeepSeek V3-style): the kernel's `check_sf_layout` requires the
+        SF tensor to be MN-major (`sf.stride(-2) == 1`). Default contiguous tensors
+        are K-major, so flip via transpose+contiguous+transpose. No-op when the
+        layout is already MN-major.
+      - `torch.float8_e8m0fnu` (DeepSeek V4-style, 1 byte per scale): the kernel
+        expects MN-major TMA-aligned packed `int32` (4 contiguous K-bytes per
+        lane). Use DeepGEMM's helper which guarantees that exact layout.
     """
     if sf.dtype == torch.float8_e8m0fnu:
-        return sf.contiguous().view(torch.int32)
+        deepgemm = _load_deepgemm_kernel()
+        return deepgemm.get_mn_major_tma_aligned_packed_ue8m0_tensor(sf)
+    if sf.stride(-2) != 1:
+        sf = sf.transpose(-1, -2).contiguous().transpose(-1, -2)
     return sf
 
 
