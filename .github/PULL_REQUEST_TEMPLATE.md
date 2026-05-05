@@ -20,7 +20,7 @@ The Transformers repo is currently being overwhelmed by a large number of PRs an
 code agents. We are currently bottlenecked by our ability to review and respond to them. As a result, 
 **we ask that new users do not submit pure code agent PRs** at this time. 
 You may use code agents in drafting or to help you diagnose issues. We'd also ask autonomous "OpenClaw"-like agents
-not to open any PRs or issues for the moment. 
+not to open any PRs or issues for the moment.
 
 PRs that appear to be fully agent-written will probably be closed without review, and we may block users who do this
 repeatedly or maliciously. We will also close PRs with AI-written descriptions. This is deliberately intended
