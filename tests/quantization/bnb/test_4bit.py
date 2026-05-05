@@ -868,3 +868,22 @@ class Bnb4bitCompile(unittest.TestCase):
                 max_new_tokens=10,
                 cache_implementation="static",
             )
+
+    def test_get_keys_to_not_convert_excludes_audio_modules(self):
+        """Audio modules should be excluded from quantization by default."""
+        from transformers.quantizers.base import get_keys_to_not_convert
+        import torch.nn as nn
+
+        class DummyMultimodalModel(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.audio_tower = nn.Sequential(nn.Linear(10, 10), nn.Linear(10, 10))
+                self.embed_audio = nn.Linear(10, 10)
+                self.language_model = nn.Linear(10, 10)
+
+        model = DummyMultimodalModel()
+        keys = get_keys_to_not_convert(model)
+
+        self.assertIn("audio_tower", keys)
+        self.assertIn("embed_audio", keys)
+        self.assertNotIn("audio_tower.0", keys)
