@@ -146,8 +146,8 @@ def _make_causal_mask(
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class BaseModelOutputWithProjectionAttentions(BaseModelOutputWithPooling):
     r"""
     projection_attentions (`tuple(torch.FloatTensor)`):
@@ -161,12 +161,12 @@ class BaseModelOutputWithProjectionAttentions(BaseModelOutputWithPooling):
     projection_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for text model's outputs that also contains a pooling of the last hidden states.
     """
 )
+@dataclass
 class Kosmos2ModelOutput(ModelOutput):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -202,12 +202,12 @@ class Kosmos2ModelOutput(ModelOutput):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Model output class for `Kosmos2ForConditionalGeneration`.
     """
 )
+@dataclass
 class Kosmos2ForConditionalGenerationModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

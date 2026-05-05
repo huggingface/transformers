@@ -37,13 +37,13 @@ from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoder
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for sam vision model's outputs that also contains image embeddings obtained by applying the projection
     layer to the pooler_output.
     """
 )
+@dataclass
 class SamVisionEncoderOutput(ModelOutput):
     r"""
     image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
@@ -56,12 +56,12 @@ class SamVisionEncoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Segment-Anything model's output
     """
 )
+@dataclass
 class SamImageSegmentationOutput(ModelOutput):
     r"""
     iou_scores (`torch.FloatTensor` of shape `(batch_size, num_masks)`):
