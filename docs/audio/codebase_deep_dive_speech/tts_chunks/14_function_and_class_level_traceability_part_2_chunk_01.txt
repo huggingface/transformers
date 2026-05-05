@@ -1,0 +1,123 @@
+### `PreTrainedTokenizerBase.from_pretrained`
+
+Beginner explanation: loads the text translator files.
+
+Technical explanation: resolves tokenizer config/vocab/special token files and constructs the tokenizer class.
+
+Call graph:
+
+- Called by: `AutoTokenizer.from_pretrained`, direct user code, processors.
+- Calls into: `_from_pretrained`, Hub file resolution, tokenizer config loading.
+- Depends on: tokenizer artifact files and class-specific required files.
+- Returns to / influences: tokenizer object.
+
+Failure modes:
+
+- missing vocab
+- wrong tokenizer class
+- optional backend missing
+- special token mismatch
+
+### `PreTrainedTokenizerBase.__call__`
+
+Beginner explanation: converts text into model-ready numbers.
+
+Technical explanation: public encoding method that handles single/batch inputs, padding, truncation, tensors, and special tokens.
+
+Call graph:
+
+- Called by: users, pipelines, serving handlers, examples.
+- Calls into: tokenizer subclass encoding methods, padding/truncation helpers.
+- Depends on: tokenizer vocabulary and settings.
+- Returns to / influences: `BatchEncoding` consumed by models.
+
+Failure modes:
+
+- invalid input type
+- truncation/padding surprises
+- missing special tokens
+
+### `PreTrainedTokenizerBase.apply_chat_template`
+
+Beginner explanation: turns chat messages into the exact text format a chat model expects.
+
+Technical explanation: applies a tokenizer chat template, optionally tokenizes the result, and supports tool/message formatting.
+
+Call graph:
+
+- Called by: users, chat pipelines, serving handlers, processors.
+- Calls into: chat template rendering and tokenizer encoding.
+- Depends on: template availability and message schema.
+- Returns to / influences: model prompt tokens.
+
+Failure modes:
+
+- missing template
+- unsupported message structure
+- duplicated or missing special tokens
+
+AI-quality implication: bad chat templates can degrade model output even when model weights are correct.
+
+### `ProcessorMixin.from_pretrained`
+
+Beginner explanation: loads a bundle of translators for multimodal models.
+
+Technical explanation: loads component tokenizers/processors based on processor class attributes and saved config.
+
+Call graph:
+
+- Called by: `AutoProcessor.from_pretrained`, direct user code, serving.
+- Calls into: component `.from_pretrained` methods such as tokenizer and image processor loaders.
+- Depends on: saved processor config and component names.
+- Returns to / influences: processor object used for multimodal inputs.
+
+Failure modes:
+
+- missing component
+- incompatible component class
+- special multimodal token mismatch
+
+### `pipeline`
+
+Beginner explanation: builds a ready-to-use task tool.
+
+Technical explanation: factory in `pipelines/__init__.py` that resolves task, config, model, tokenizer/processor, device, dtype, and pipeline class.
+
+Step-by-step logic:
+
+1. Validate/normalize task.
+2. Resolve model/config defaults or explicit model ID.
+3. Load config.
+4. Choose/load model.
+5. Load tokenizer/image processor/feature extractor/processor.
+6. Instantiate the task-specific pipeline class.
+7. Return callable pipeline.
+
+Call graph:
+
+- Called by: users, docs, examples, tests.
+- Calls into: `get_task`, `check_task`, `AutoConfig`, `load_model`, `AutoTokenizer`, `AutoProcessor`, pipeline class constructors.
+- Depends on: task registry, model compatibility, processors.
+- Returns to / influences: high-level callable task object.
+
+Failure modes:
+
+- unsupported task
+- missing model default
+- task/model class mismatch
+- missing processor dependency
+
+### `load_model`
+
+Beginner explanation: tries to load the model class suitable for a pipeline.
+
+Technical explanation: helper in `pipelines/base.py` that tries candidate model classes and handles fallback dtype behavior.
+
+Call graph:
+
+- Called by: `pipeline`.
+- Calls into: model class `.from_pretrained`.
+- Depends on: candidate classes from pipeline task registry.
+- Returns to / influences: concrete model instance.
+
+Failure modes:

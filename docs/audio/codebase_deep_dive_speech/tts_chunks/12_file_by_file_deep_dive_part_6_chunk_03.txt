@@ -1,0 +1,24 @@
+1. Plain-English explanation: runnable recipes.
+2. ELI5 analogy: sample projects showing how to use the tools.
+3. Technical role: demonstrate task-specific use of `Auto*`, tokenizers/processors, datasets, `Trainer`, metrics, and inference.
+4. Important symbols: script-specific argument dataclasses and main functions.
+5. Interactions: users run them; tests/CI may validate examples.
+6. What would break if disappeared: users would lose supported training/inference templates.
+
+#### `.github/workflows/*.yml`
+
+1. Plain-English explanation: automated checks on GitHub.
+2. ELI5 analogy: machines that run tests every time someone proposes a change.
+3. Technical role: define CI, docs, benchmarks, Docker builds, release, security, scheduled jobs.
+4. Important symbols: workflow jobs and steps.
+5. Interactions: call Makefile targets, tests, Docker builds, docs builds.
+6. What would break if disappeared: automated quality and release workflows would fail.
+
+#### `docker/**`
+
+1. Plain-English explanation: reproducible machine environments.
+2. ELI5 analogy: pre-packed kitchens with all ingredients installed.
+3. Technical role: Dockerfiles for hardware/backend/docs/quality/example environments.
+4. Important symbols: Dockerfile stages and install commands.
+5. Interactions: CI and developers build/run these images.
+6. What would break if disappeared: environment reproducibility would weaken.

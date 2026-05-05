@@ -1,0 +1,15 @@
+Technical explanation: `tests` and `utils/check_*.py` validate behavior and consistency without becoming runtime dependencies.
+
+Likely rationale: runtime installs should stay lighter, while CI can run extensive checks.
+
+Tradeoffs: some generated/runtime assumptions are only obvious after reading tests and utils.
+
+### Why Model Files Are Placed Where They Are
+
+Beginner explanation: every model family gets its own drawer.
+
+Technical explanation: `src/transformers/models/<family>` keeps config, modeling, tokenizer, processor, and conversion logic together.
+
+Likely rationale: researchers can understand and modify one architecture without jumping across many abstractions.
+
+Tradeoffs: duplicated patterns require repository tooling and careful consistency checks.

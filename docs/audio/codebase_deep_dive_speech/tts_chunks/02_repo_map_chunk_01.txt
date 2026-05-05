@@ -1,0 +1,56 @@
+## Repo Map
+
+### What This Means In Plain English
+
+This repository is the source code for the Hugging Face `transformers` Python library. It is a toolbox that lets people download, load, run, train, serve, and save many different artificial intelligence models through one mostly consistent interface.
+
+### ELI5 Analogy
+
+Imagine a giant universal adapter kit for toy robots. Every robot brand uses different batteries, controllers, manuals, and spare parts. This repo builds the adapter kit, labels all the parts, provides instruction manuals, and includes tests to make sure each robot still works.
+
+### Technical Explanation
+
+Technically, this is a Python package with:
+
+- a public import layer in `src/transformers/__init__.py`
+- model loading registries in `src/transformers/models/auto`
+- base model, config, tokenizer, processor, generation, training, and Hub utilities in `src/transformers`
+- hundreds of model-family implementations in `src/transformers/models`
+- inference pipelines in `src/transformers/pipelines`
+- text generation machinery in `src/transformers/generation`
+- training abstractions in `src/transformers/trainer.py` and related files
+- optional integrations, quantization, serving, examples, tests, docs, CI, and release tooling
+
+### Why It Matters In This Codebase
+
+The core design goal is not to make one small app. The goal is to make a stable common language for many AI model families and many runtime environments. Most architectural choices exist to protect that promise: lazy imports, optional dependency checks, generated registries, consistent `from_pretrained` and `save_pretrained` behavior, and repeated model-file patterns.
+
+### Repository Size Signals
+
+Confirmed from repository scan:
+
+| Area | Tracked files | Scanned lines | Main responsibility |
+|---|---:|---:|---|
+| `src` | 2,657 | 1,086,259 | Runtime package code |
+| `tests` | 1,526 | 423,669 | Unit, integration, model, utility, and regression tests |
+| `docs` | 1,281 | 232,476 | Documentation and user guides |
+| `examples` | 148 | 44,649 | Task scripts and runnable recipes |
+| `utils` | 78 | 24,267 | Repository maintenance, generation, and consistency tools |
+| `.github` | 67 | 6,949 | GitHub Actions CI and issue/PR automation |
+| `docker` | 23 | 1,876 | Container environments |
+| `i18n` | 17 | 643 | Documentation localization config |
+| `benchmark` | 13 | 994 | Older benchmark support |
+| `benchmark_v2` | 9 | 790 | Newer benchmark support |
+| `.circleci` | 4 | 632 | CircleCI support |
+| `scripts` | 3 | 8 | Small helper scripts |
+
+File-extension distribution:
+
+- `4312` Python files
+- `1322` Markdown files
+- `76` YAML workflow/config files
+- `36` text files
+- `31` JSON files
+- smaller shell, Dockerfile, TOML, INI, and template files
+
+### Top-Level Map

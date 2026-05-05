@@ -1,0 +1,69 @@
+## File-By-File Deep Dive
+
+### What This Means In Plain English
+
+This section explains the most important files as if each file were an employee with a job description.
+
+### ELI5 Analogy
+
+Each file is a labeled drawer. Some drawers hold the main tools, some hold manuals, some hold spare parts, and some hold testing equipment.
+
+### Technical Explanation
+
+The runtime files form a dependency chain from public imports to auto dispatch to artifact loading to concrete model execution.
+
+### Why It Matters In This Codebase
+
+When debugging a user call, you need to know which file owns the behavior. Without that map, a simple issue like "model failed to load" can involve configs, auto mappings, Hub cache, optional dependencies, quantization, and model constructors.
+
+### Top-Level Files
+
+#### `README.md`
+
+1. Plain-English explanation: the front-page explanation of what the project is.
+2. ELI5 analogy: the sign outside the store telling customers what is inside.
+3. Technical role: documents product positioning, installation, quickstart, model breadth, and key APIs such as `pipeline`.
+4. Important symbols: not code symbols; important product terms include "state-of-the-art pretrained models", "pipeline", "AutoModel", and "training/inference".
+5. Interactions: points users toward runtime APIs and docs.
+6. What would break if disappeared: package runtime would not break, but onboarding and product communication would be much worse.
+
+Upstream assumptions: the reader wants to understand what the library does.
+
+Downstream behaviors: examples and user expectations align with the APIs described here.
+
+#### `setup.py`
+
+1. Plain-English explanation: tells Python packaging tools how to install the library.
+2. ELI5 analogy: the shipping label and ingredient list on a box.
+3. Technical role: defines version `5.8.0.dev0`, Python versions, install requirements, optional extras, package data, and CLI entry point.
+4. Important symbols: `deps`, `extras`, `DepsTableUpdateCommand`, `entry_points`, `install_requires`.
+5. Interactions: package installs expose `transformers=transformers.cli.transformers:main`; dependency table generation writes `src/transformers/dependency_versions_table.py`.
+6. What would break if disappeared: packaging, installation, dependency metadata, and CLI entry point would break or become incomplete.
+
+Upstream assumptions: package build tools execute `setup.py` or consume metadata derived from it.
+
+Downstream behaviors: users can `pip install transformers`, optional extras can be selected, CLI can be run.
+
+#### `pyproject.toml`
+
+1. Plain-English explanation: tells development tools how to check and test the code.
+2. ELI5 analogy: the classroom rules for formatting homework and taking exams.
+3. Technical role: configures Ruff, pytest markers/options, type-checking ignores, target Python version, line length.
+4. Important symbols: `[tool.ruff]`, `[tool.pytest.ini_options]`, `[tool.ty.rules]`.
+5. Interactions: used by `make style`, CI, local tests, typing checks.
+6. What would break if disappeared: code may still run, but tooling behavior would become inconsistent.
+
+Upstream assumptions: maintainers use shared lint/test config.
+
+Downstream behaviors: CI and local tooling apply consistent rules.
+
+#### `Makefile`
+
+1. Plain-English explanation: a menu of common maintainer commands.
+2. ELI5 analogy: buttons labeled "clean", "test", "fix labels", and "check everything".
+3. Technical role: wraps style, typing, testing, repo checks, repo fixes, benchmarks, and AI-agent helper commands.
+4. Important targets: `style`, `typing`, `check-repo`, `fix-repo`, `test`, `test-examples`, `benchmark`, `codex`, `claude`.
+5. Interactions: calls `utils/check_*.py`, `utils/modular_model_converter.py`, test commands, lint commands.
+6. What would break if disappeared: underlying tools could still be run manually, but standard contributor workflow would degrade.
+
+Upstream assumptions: maintainers prefer stable command names.

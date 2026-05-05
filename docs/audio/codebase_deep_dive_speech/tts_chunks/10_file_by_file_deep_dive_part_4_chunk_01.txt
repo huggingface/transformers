@@ -1,0 +1,55 @@
+### Generation Files
+
+#### `src/transformers/generation/utils.py`
+
+1. Plain-English explanation: the main text-generation engine.
+2. ELI5 analogy: the machine that asks, "What token should come next?" again and again until stopping.
+3. Technical role: defines `GenerationMixin`, input preparation, generation config merging, cache setup, logits processor setup, decoding-mode selection, and decoding loops.
+4. Important symbols: `GenerationMixin`, `generate`, `_sample`, `_beam_search`, `_assisted_decoding`, `_get_logits_processor`, `_get_stopping_criteria`, `_prepare_model_inputs`, `_prepare_cache_for_generation`, `_prepare_special_tokens`, `GENERATION_MODES_MAPPING`.
+5. Interactions: mixed into or used by generative model classes; called by pipelines and serving.
+6. What would break if disappeared: `model.generate()` and text-generation workflows would fail.
+
+Upstream assumptions: model forward returns logits and supports expected cache/input semantics.
+
+Downstream behaviors: generated token sequences, scores, streamers, stopping behavior, and serving output depend on it.
+
+#### `src/transformers/generation/configuration_utils.py`
+
+1. Plain-English explanation: settings for how generation should behave.
+2. ELI5 analogy: instructions like "write no more than 50 words", "be more creative", or "stop when you see this token".
+3. Technical role: defines `GenerationConfig`, validation, save/load, and default generation parameters.
+4. Important symbols: `GenerationConfig`.
+5. Interactions: used by `PreTrainedModel`, `GenerationMixin.generate`, pipelines, serving.
+6. What would break if disappeared: generation defaults and serialized generation settings would fail.
+
+Upstream assumptions: generation settings can be represented as a serializable config.
+
+Downstream behaviors: decoding algorithms use these fields.
+
+#### `src/transformers/generation/logits_process.py`
+
+1. Plain-English explanation: rules that adjust next-token scores before choosing a token.
+2. ELI5 analogy: a teacher saying "do not repeat that word", "make answers shorter", or "avoid banned words" before the model picks the next word.
+3. Technical role: defines logits processors and warpers for temperature, top-k, top-p, repetition penalty, forced tokens, suppressed tokens, bad words, watermarking, and task-specific constraints.
+4. Important symbols: `LogitsProcessor`, `LogitsProcessorList`, `TemperatureLogitsWarper`, `TopKLogitsWarper`, `TopPLogitsWarper`, `RepetitionPenaltyLogitsProcessor`, `NoBadWordsLogitsProcessor`, `ForcedBOSTokenLogitsProcessor`, `ForcedEOSTokenLogitsProcessor`, watermark and guidance processors.
+5. Interactions: built by `GenerationMixin._get_logits_processor`.
+6. What would break if disappeared: generation controls would be greatly reduced and many generation configs would fail.
+
+Upstream assumptions: processors receive token IDs and logits tensors.
+
+Downstream behaviors: output quality, safety constraints, diversity, and stop behavior are affected.
+
+#### `src/transformers/generation/stopping_criteria.py`
+
+1. Plain-English explanation: decides when generation should stop.
+2. ELI5 analogy: a timer, page limit, or stop sign.
+3. Technical role: defines stopping criteria classes and lists for max length, time, stop strings, EOS token, and confidence.
+4. Important symbols: `StoppingCriteria`, `StoppingCriteriaList`, `MaxLengthCriteria`, `MaxTimeCriteria`, `StopStringCriteria`, `EosTokenCriteria`, `ConfidenceCriteria`.
+5. Interactions: built by `GenerationMixin._get_stopping_criteria`; evaluated inside generation loops.
+6. What would break if disappeared: generation could not reliably stop under configured conditions.
+
+Upstream assumptions: criteria can inspect current IDs, scores, or elapsed time.
+
+Downstream behaviors: generated sequence length and termination depend on it.
+
+#### `src/transformers/generation/streamers.py`

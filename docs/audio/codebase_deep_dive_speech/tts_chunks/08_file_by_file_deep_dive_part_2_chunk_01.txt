@@ -1,0 +1,64 @@
+### Configuration, Model, Tokenizer, And Processor Bases
+
+#### `src/transformers/configuration_utils.py`
+
+1. Plain-English explanation: the main definition of a model instruction card.
+2. ELI5 analogy: a form describing the robot's size, buttons, vocabulary, and special behavior.
+3. Technical role: defines `PreTrainedConfig`, serialization, deserialization, validation, Hub interaction, auto-class registration, and conversion helpers.
+4. Important symbols: `PreTrainedConfig`, `save_pretrained`, `from_pretrained`, `get_config_dict`, `_get_config_dict`, `from_dict`, `to_dict`, `to_diff_dict`, `to_json_file`, `register_for_auto_class`, `get_text_config`, validation functions.
+5. Interactions: called by `AutoConfig`, model constructors, generation config code, processors, serving, tests.
+6. What would break if disappeared: configs could not be loaded, saved, validated, or used for Auto class dispatch.
+
+Calls:
+
+- `cached_file` from `utils/hub.py`
+- `GenerationConfig` in generation config handling
+- GGUF loading helpers when relevant
+- validation helpers for architecture/token/layer settings
+
+Called by:
+
+- `AutoConfig.from_pretrained`
+- `PreTrainedModel.from_pretrained`
+- model-family config subclasses
+- tests and examples
+
+Upstream assumptions: every model checkpoint has serializable configuration metadata.
+
+Downstream behaviors: model class selection, model construction, validation, and save/load compatibility depend on configs.
+
+Why separated: model settings must be loadable without importing heavy model code.
+
+#### `src/transformers/modeling_utils.py`
+
+1. Plain-English explanation: the main machinery for pretrained PyTorch models.
+2. ELI5 analogy: the master mechanic that builds a robot body, installs saved parts, checks missing screws, and prepares it for use.
+3. Technical role: defines `PreTrainedModel`, common model utilities, checkpoint loading, dtype/device handling, weight tying, quantizer hooks, state-dict loading, and generation-related setup.
+4. Important symbols: `PreTrainedModel`, `ModuleUtilsMixin`, `EmbeddingAccessMixin`, `AttentionInterface`, `LoadStateDictConfig`, `load_state_dict`, `_get_resolved_checkpoint_files`, `_get_dtype`, `_load_pretrained_model`, `_finalize_model_loading`, `remove_tied_weights_from_state_dict`.
+5. Interactions: every PyTorch model-family class subclasses `PreTrainedModel` directly or indirectly.
+6. What would break if disappeared: pretrained model loading, saving, many base utilities, and model classes would fail.
+
+Calls:
+
+- config loading from `configuration_utils.py`
+- Hub checkpoint resolution from `utils/hub.py`
+- quantizer selection from `quantizers/auto.py`
+- optional integration helpers from `integrations`
+- generation config creation from `generation/configuration_utils.py`
+- state dict and safetensors/PyTorch loading helpers
+
+Called by:
+
+- concrete model classes such as `BertPreTrainedModel` and `LlamaPreTrainedModel`
+- Auto model classes
+- pipelines, trainer, serving, examples
+
+Upstream assumptions: configs define model architecture; checkpoint files contain compatible named tensors; optional backends are checked before use.
+
+Downstream behaviors: all pretrained model execution depends on successful initialization/loading here.
+
+Why separated: loading weights and shared model behavior are common across hundreds of model families.
+
+Risk: this file is over 5,000 lines, which makes it a central complexity hotspot.
+
+#### `src/transformers/tokenization_utils_base.py`

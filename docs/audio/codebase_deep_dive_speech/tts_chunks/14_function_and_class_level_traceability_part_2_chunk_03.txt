@@ -1,0 +1,116 @@
+- bad batch keys
+- loss missing
+- mixed precision/distributed failure
+
+### `Trainer.compute_loss`
+
+Beginner explanation: calculates how wrong the model was.
+
+Technical explanation: calls model forward, extracts loss or applies label smoothing/custom loss logic.
+
+Call graph:
+
+- Called by: `training_step`, sometimes evaluation/prediction paths.
+- Calls into: model forward, label smoother or custom loss hooks.
+- Depends on: model outputs and labels.
+- Returns to / influences: scalar loss used for gradients and metrics.
+
+Failure modes:
+
+- model does not return loss
+- labels missing or wrong shape
+- custom loss mismatch
+
+### `cached_file`
+
+Beginner explanation: finds one required file locally or downloads it.
+
+Technical explanation: Hub utility that resolves a filename for a model path/ID, cache, revision, and offline/auth settings.
+
+Call graph:
+
+- Called by: config loading, tokenizer loading, processor loading, checkpoint helpers.
+- Calls into: local path checks and Hugging Face Hub download APIs.
+- Depends on: path/ID, filename, cache state, network/auth.
+- Returns to / influences: concrete local file path.
+
+Failure modes:
+
+- file missing
+- network unavailable
+- unauthorized private repo
+- revision not found
+
+### `get_class_from_dynamic_module`
+
+Beginner explanation: loads a custom class from model code outside this installed package.
+
+Technical explanation: dynamic module utility that downloads/caches Python code and imports a class by reference after trust is resolved.
+
+Call graph:
+
+- Called by: `AutoConfig.from_pretrained`, `_BaseAutoModelClass.from_pretrained`, tokenizer/processor auto paths.
+- Calls into: `get_cached_module_file`, Python import machinery.
+- Depends on: `auto_map`, trust decision, code files.
+- Returns to / influences: custom config/model/tokenizer class.
+
+Failure modes:
+
+- untrusted remote code
+- missing custom file/class
+- dependency requirements not met
+- security risk from executing external code
+
+### `get_hf_quantizer`
+
+Beginner explanation: chooses the compression loader for a quantized model.
+
+Technical explanation: function in `quantizers/auto.py` that resolves quantization config to a concrete quantizer.
+
+Call graph:
+
+- Called by: `PreTrainedModel.from_pretrained`.
+- Calls into: `AutoQuantizationConfig`, `AutoHfQuantizer`.
+- Depends on: quantization config fields and backend availability.
+- Returns to / influences: quantizer object that changes model loading.
+
+Failure modes:
+
+- unsupported quantization method
+- missing quantization backend
+- incompatible model/device
+
+### `ModelManager.load_model_and_processor`
+
+Beginner explanation: serving asks this to get a model and its translators ready.
+
+Technical explanation: method in `cli/serving/model_manager.py` that coordinates loading/caching model and processor objects with locks and timeout/cache behavior.
+
+Call graph:
+
+- Called by: serving endpoint handlers.
+- Calls into: `_load_processor`, `_load_model`, Auto classes, quantization config helpers.
+- Depends on: model name, serving options, cache state, optional dependencies.
+- Returns to / influences: loaded serving model package.
+
+Failure modes:
+
+- model load timeout
+- invalid quantization config
+- incompatible modality
+- concurrent loading race if locks fail
+
+### `ChatCompletionHandler`
+
+Beginner explanation: handles chat requests for the server.
+
+Technical explanation: validates OpenAI-style chat completion requests, loads/gets model and processor, applies chat template, configures generation, and returns streaming or non-streaming response.
+
+Call graph:
+
+- Called by: `/v1/chat/completions` route in `cli/serving/server.py`.
+- Calls into: `ModelManager`, tokenizer/processor `apply_chat_template`, generation helpers, response utilities.
+- Depends on: request schema, model modality, tokenizer/processor chat template, generation support.
+- Returns to / influences: HTTP response body or stream.
+
+Failure modes:

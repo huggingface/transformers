@@ -1,0 +1,103 @@
+- Model loading touches config, Hub, quantization, device placement, generation config, adapters, and optional integrations in one path.
+- Trainer handles many responsibilities in one class.
+- Serving handlers need to understand model loading, processors, chat templates, and generation.
+
+Interpretation: these are not necessarily mistakes. They reflect real cross-cutting concerns in machine-learning systems.
+
+### Observability Weaknesses
+
+Confirmed:
+
+- Logging exists but cross-flow structured tracing is limited.
+- Loading reports are useful but can be verbose and hard for beginners.
+- Serving has request IDs and health checks, but deeper model/generation telemetry is not central in the runtime.
+
+Risk: production debugging may require external instrumentation.
+
+### Validation Risks
+
+Confirmed:
+
+- Validation exists for configs, optional dependencies, generation settings, and serving requests.
+- Because model features evolve quickly, validation can become too strict or incomplete.
+
+Risk: users may hit errors before model code if metadata is slightly nonstandard.
+
+### Performance Risks
+
+Confirmed:
+
+- Lazy imports protect startup performance.
+- Generation performance depends heavily on cache, dtype, device map, attention implementation, and quantization.
+- Trainer performance depends on data loading, distributed config, precision, and integration backends.
+
+Likely inference:
+
+- The biggest performance bottlenecks are usually backend/hardware/model-specific, not pure Python dispatch.
+
+### Hidden Coupling
+
+Confirmed:
+
+- Auto mappings couple config names to model classes.
+- `model_type` strings couple saved configs to code.
+- Tokenizer/processor special tokens couple preprocessing to model behavior.
+- Generation depends on model forward signatures and cache behavior.
+- Tests and docs depend on generated import/mapping consistency.
+
+### AI Subsystem Assessment
+
+Prompt quality:
+
+- Confirmed: no central prompt registry exists in the core runtime.
+- Confirmed: chat formatting is mostly tokenizer/processor-template driven.
+- Strength: model-specific templates can match training format.
+- Weakness: prompt behavior is distributed and can be hard to audit.
+
+Schema design:
+
+- Strong: configs, generation configs, training args, quantization configs, and serving request types give structure.
+- Weak: many config surfaces can confuse users.
+
+Validation:
+
+- Helpful: catches missing backends, bad generation settings, invalid model types, and serving request problems.
+- Risk: validation may reject emerging model patterns until updated.
+
+Fallback:
+
+- Helpful: fast/slow tokenizers, dtype fallback, optional deps, local/remote cache, dynamic code paths.
+- Risk: users may not know which fallback path ran.
+
+Repair loops:
+
+- Confirmed: generation has controls and processors, but no universal automatic prompt repair loop in core.
+- Inference: serving or user applications may implement repair externally.
+
+Observability:
+
+- Weak for AI-quality debugging. There is no central trace that records prompt template, generation config, logits processors, stop criteria, and decoded outputs for every generation call.
+
+Evals:
+
+- Confirmed: tests emphasize correctness, compatibility, and regression.
+- Inference: open-ended generation quality evaluation is not as central as unit/integration correctness tests.
+
+Token usage:
+
+- Confirmed: the library exposes truncation, max tokens, chat templates, and generation controls.
+- Weakness: it does not globally optimize prompts or token budgets for users.
+
+AI-first versus deterministic-first:
+
+- The repo is deterministic infrastructure around probabilistic AI models. It is not an agent framework; it is a model/runtime framework.
+
+Top AI-quality bottlenecks:
+
+- chat template correctness
+- tokenizer special tokens
+- generation config defaults
+- decoding controls
+- model-specific processor behavior
+- user prompt quality outside the library
+- lack of central generation observability

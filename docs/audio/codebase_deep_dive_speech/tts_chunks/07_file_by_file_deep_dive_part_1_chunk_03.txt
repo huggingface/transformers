@@ -1,0 +1,68 @@
+Upstream assumptions: optional libraries such as PyTorch, TensorFlow, tokenizers, PIL, torchvision, and serving dependencies may not be installed.
+
+Downstream behaviors: importing `transformers` works in partial environments, and missing dependency errors are delayed until use.
+
+Why separated: dependency probing is shared infrastructure and should not live in model or pipeline files.
+
+#### `src/transformers/utils/__init__.py`
+
+1. Plain-English explanation: a shortcut shelf for common utility names.
+2. ELI5 analogy: a labeled toolbox drawer that re-exports frequently used tools.
+3. Technical role: re-exports constants, logging, Hub utilities, generic helpers, import checks, and other utility classes.
+4. Important symbols: `ModelOutput`, `PushToHubMixin`, `cached_file`, `is_torch_available`, `logging`, many constants.
+5. Interactions: imported throughout the package.
+6. What would break if disappeared: many imports from `transformers.utils` would fail.
+
+Upstream assumptions: utility APIs are a stable internal and public-ish surface.
+
+Downstream behaviors: model, config, pipeline, and tests rely on central utility names.
+
+#### `src/transformers/utils/hub.py`
+
+1. Plain-English explanation: finds model files either on your computer or from the Hugging Face Hub.
+2. ELI5 analogy: a librarian that checks your desk first, then the central library, then saves a copy locally.
+3. Technical role: file resolution, cache management, model card metadata, shard-file helpers, Hub push mixin.
+4. Important symbols: `cached_file`, `cached_files`, `has_file`, `get_checkpoint_shard_files`, `PushToHubMixin`, `DownloadKwargs`.
+5. Interactions: called by configs, tokenizers, processors, model loading, generation config loading, and Hub upload workflows.
+6. What would break if disappeared: loading by Hub ID or cached/local path would fail for most pretrained workflows.
+
+Calls:
+
+- Hugging Face Hub client functions
+- local file checks
+- cache resolution logic
+
+Called by:
+
+- `PreTrainedConfig._get_config_dict`
+- tokenizer/processor `from_pretrained`
+- model checkpoint resolution in `modeling_utils.py`
+- `save_pretrained`/push workflows through `PushToHubMixin`
+
+Upstream assumptions: model artifacts are file-based and may live locally or remotely.
+
+Downstream behaviors: `from_pretrained("org/model")` can resolve configs, weights, tokenizers, and processor files.
+
+Why separated: remote/local artifact resolution is shared across many object types.
+
+#### `src/transformers/utils/generic.py`
+
+1. Plain-English explanation: a box of small shared building blocks.
+2. ELI5 analogy: screws, washers, and measuring tools used everywhere.
+3. Technical role: framework-neutral tensor helpers, base output containers, enums, context manager grouping, retry utilities, generic interfaces.
+4. Important symbols: `ModelOutput`, `ExplicitEnum`, `TensorType`, `PaddingStrategy`, `ContextManagers`, `GeneralInterface`, `retry`.
+5. Interactions: used by configs, models, tokenizers, generation, pipelines, trainer, and tests.
+6. What would break if disappeared: many common return types and helper functions would fail.
+
+Upstream assumptions: different backends and object types need common behavior without circular dependencies.
+
+Downstream behaviors: model outputs behave like dataclasses/dicts, padding strategies are standardized, retry/context helpers are reusable.
+
+#### `src/transformers/utils/logging.py`
+
+1. Plain-English explanation: controls how the library talks to users through logs and warnings.
+2. ELI5 analogy: the library's announcement speaker.
+3. Technical role: configures package loggers, verbosity, warning-once/info-once behavior, and progress bar helpers.
+4. Important symbols: `get_logger`, `set_verbosity`, `enable_progress_bar`, `disable_progress_bar`, `warning_once`.
+5. Interactions: imported by almost every major subsystem.
+6. What would break if disappeared: logs and warnings would be inconsistent or imports would fail.

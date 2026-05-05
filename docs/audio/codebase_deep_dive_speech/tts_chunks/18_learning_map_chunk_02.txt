@@ -1,0 +1,133 @@
+Plain English: a bundle of translators for text, images, audio, or video.
+
+Technical: a `ProcessorMixin` subclass coordinating tokenizer, image processor, feature extractor, or video processor components.
+
+#### Feature Extractor
+
+Plain English: a converter for raw signals like audio.
+
+Technical: a `FeatureExtractionMixin` object that converts raw features to model-ready tensors.
+
+#### Image Processor
+
+Plain English: a converter for pictures.
+
+Technical: an image preprocessing class that resizes, normalizes, crops, pads, and batches image tensors.
+
+#### Pipeline
+
+Plain English: a ready-made task workflow.
+
+Technical: a `Pipeline` subclass that implements preprocess, forward, and postprocess for a task.
+
+#### Auto Class
+
+Plain English: a chooser that picks the right concrete class.
+
+Technical: classes such as `AutoConfig`, `AutoModelForCausalLM`, and `AutoTokenizer` that dispatch using mappings and config metadata.
+
+#### Lazy Import
+
+Plain English: waiting to fetch a tool until someone asks for it.
+
+Technical: `_LazyModule` defers importing modules/classes until attribute access.
+
+#### Backend
+
+Plain English: an optional engine or supporting tool.
+
+Technical: external libraries such as PyTorch, tokenizers, TensorFlow, JAX, PIL, torchvision, Accelerate, or serving dependencies.
+
+#### Optional Dependency
+
+Plain English: a tool you only need for some jobs.
+
+Technical: a package checked through `import_utils` and required only by specific features.
+
+#### Hub
+
+Plain English: an online library of model files.
+
+Technical: the Hugging Face Hub, accessed through `huggingface_hub` helpers and cache utilities.
+
+#### Cache
+
+Plain English: a local saved copy of downloaded files.
+
+Technical: local filesystem storage for resolved artifacts so repeated loads avoid repeated downloads.
+
+#### State Dict
+
+Plain English: a dictionary of saved model parts.
+
+Technical: mapping from parameter names to tensors used by PyTorch model loading.
+
+#### Safetensors
+
+Plain English: a safer file format for model weights.
+
+Technical: a tensor serialization format designed to avoid arbitrary code execution during loading.
+
+#### GenerationConfig
+
+Plain English: settings for how a model writes output.
+
+Technical: serializable config controlling max tokens, sampling, beams, penalties, stopping, and related generation behavior.
+
+#### Logits
+
+Plain English: raw next-token scores before choosing a token.
+
+Technical: unnormalized model output scores over the vocabulary.
+
+#### Logits Processor
+
+Plain English: a rule that edits token scores before selection.
+
+Technical: a callable object in `generation/logits_process.py` that modifies logits during decoding.
+
+#### Stopping Criteria
+
+Plain English: stop signs for generation.
+
+Technical: criteria objects evaluated during decoding to decide when generation is complete.
+
+#### Beam Search
+
+Plain English: keeping several possible answers while writing.
+
+Technical: decoding algorithm that tracks multiple candidate sequences and scores.
+
+#### Sampling
+
+Plain English: choosing with controlled randomness.
+
+Technical: probabilistic token selection from transformed logits.
+
+#### KV Cache
+
+Plain English: remembered intermediate work so generation does not redo everything.
+
+Technical: cached key/value attention tensors used during autoregressive decoding.
+
+#### Continuous Batching
+
+Plain English: serving many generation requests together efficiently.
+
+Technical: scheduling and cache management that batches prefill/decode work across requests.
+
+#### Quantization
+
+Plain English: storing model numbers with fewer bits.
+
+Technical: compressed numerical representation of weights/activations using backend-specific quantizers.
+
+#### Device Map
+
+Plain English: a plan for which hardware holds which model parts.
+
+Technical: mapping from model modules to devices such as CPU, GPU, or disk/offload.
+
+#### Tensor Parallelism
+
+Plain English: splitting model math across multiple devices.

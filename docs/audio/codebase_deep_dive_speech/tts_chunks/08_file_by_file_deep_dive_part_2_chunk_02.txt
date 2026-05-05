@@ -1,0 +1,65 @@
+1. Plain-English explanation: the shared rules for converting text into model tokens.
+2. ELI5 analogy: the general translator manual.
+3. Technical role: defines `PreTrainedTokenizerBase`, `BatchEncoding`, truncation/padding strategies, encoding/decoding APIs, chat templating, and save/load behavior.
+4. Important symbols: `BatchEncoding`, `PreTrainedTokenizerBase`, `TruncationStrategy`, `AddedToken`, `from_pretrained`, `_from_pretrained`, `save_pretrained`, `__call__`, `encode`, `decode`, `batch_decode`, `pad`, `_pad`, `apply_chat_template`, `parse_response`.
+5. Interactions: slow and fast tokenizer classes inherit from it; pipelines, generation, serving, processors, and tests call it.
+6. What would break if disappeared: tokenizer loading and most text model usage would fail.
+
+Calls:
+
+- Hub utilities for tokenizer files
+- tokenizer config loading
+- chat template rendering support
+- padding/truncation helpers
+
+Called by:
+
+- `PreTrainedTokenizer`
+- `PreTrainedTokenizerFast`
+- `AutoTokenizer`
+- pipelines and serving handlers
+
+Upstream assumptions: tokenizers have vocab/config files and special token definitions.
+
+Downstream behaviors: model inputs, attention masks, generated text decoding, and chat formatting depend on correct tokenizer behavior.
+
+#### `src/transformers/tokenization_python.py`
+
+1. Plain-English explanation: base class for tokenizers written mostly in Python.
+2. ELI5 analogy: a translator who reads a paper dictionary by hand.
+3. Technical role: defines `PreTrainedTokenizer`, slow tokenizer behavior, conversion hooks, model-input preparation, truncation, and vocabulary saving.
+4. Important symbols: `PreTrainedTokenizer`, `_tokenize`, `_convert_token_to_id`, `_convert_id_to_token`, `prepare_for_model`, `truncate_sequences`, `save_vocabulary`.
+5. Interactions: model-specific Python tokenizers subclass it.
+6. What would break if disappeared: slow tokenizers and Python-only tokenizer paths would fail.
+
+Upstream assumptions: subclass implements vocabulary-specific methods.
+
+Downstream behaviors: compatibility with tokenizers that do not use the Rust backend.
+
+#### `src/transformers/tokenization_utils_tokenizers.py`
+
+1. Plain-English explanation: base class for fast tokenizers backed by the `tokenizers` library.
+2. ELI5 analogy: a translator using a fast machine dictionary.
+3. Technical role: defines `PreTrainedTokenizerFast` and `TokenizersBackend`, wrapping the Rust-backed tokenizer engine.
+4. Important symbols: `PreTrainedTokenizerFast`, `TokenizersBackend`, `backend_tokenizer`, `_convert_encoding`, `_encode_plus`, `_batch_encode_plus`, `_decode`, `train_new_from_iterator`.
+5. Interactions: `AutoTokenizer` prefers fast classes when available; pipelines and serving get faster encoding.
+6. What would break if disappeared: fast tokenizer support would fail.
+
+Upstream assumptions: optional `tokenizers` dependency is installed for fast paths.
+
+Downstream behaviors: speed and offset-mapping features depend on this path.
+
+#### `src/transformers/tokenization_utils_sentencepiece.py`
+
+1. Plain-English explanation: compatibility support for tokenizers that use SentencePiece.
+2. ELI5 analogy: a translator trained with a different dictionary-making machine.
+3. Technical role: provides SentencePiece-backed tokenizer support and aliases used in V5 compatibility.
+4. Important symbols: SentencePiece tokenizer base utilities and aliases.
+5. Interactions: used by model families with SentencePiece vocabularies, and by import aliases in `__init__.py`.
+6. What would break if disappeared: SentencePiece tokenizers would fail or need another base.
+
+Upstream assumptions: optional `sentencepiece` dependency may be required.
+
+Downstream behaviors: Llama-like and multilingual tokenizers often depend on this ecosystem.
+
+#### `src/transformers/processing_utils.py`

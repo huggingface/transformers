@@ -1,0 +1,23 @@
+- corrupted checkpoint
+- mismatched keys
+- unsupported device map
+- memory errors
+
+### `_finalize_model_loading`
+
+Beginner explanation: does final cleanup after weights are loaded.
+
+Technical explanation: initializes missing weights, handles meta tensors, ties weights, adjusts load reports, and logs diagnostics.
+
+Call graph:
+
+- Called by: `PreTrainedModel.from_pretrained`.
+- Calls into: model initialization/tie-weight helpers.
+- Depends on: loading result, missing/unexpected keys, config.
+- Returns to / influences: final model readiness.
+
+Failure modes:
+
+- uninitialized meta tensors
+- tied weight mismatch
+- hidden loading errors masked by configuration

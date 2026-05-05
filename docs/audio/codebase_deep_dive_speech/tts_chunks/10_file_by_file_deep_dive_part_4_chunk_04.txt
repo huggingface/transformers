@@ -1,0 +1,23 @@
+1. Plain-English explanation: hooks that let training react to events.
+2. ELI5 analogy: assistants who can say "save now", "stop early", or "print progress".
+3. Technical role: callback base classes, state/control objects, handler, default flow, progress, printer, early stopping.
+4. Important symbols: `TrainerState`, `TrainerControl`, `TrainerCallback`, `CallbackHandler`, `DefaultFlowCallback`, `ProgressCallback`, `PrinterCallback`, `EarlyStoppingCallback`.
+5. Interactions: `Trainer` calls callback handler throughout training/evaluation.
+6. What would break if disappeared: extensible training hooks and default logging/save/eval flow would break.
+
+Upstream assumptions: training needs event-based extension without editing `Trainer`.
+
+Downstream behaviors: checkpoints, logs, evaluations, and early stopping can be controlled by callbacks.
+
+#### `src/transformers/trainer_utils.py` And `src/transformers/trainer_pt_utils.py`
+
+1. Plain-English explanation: helper functions and data structures for training.
+2. ELI5 analogy: measuring cups, timers, and score sheets for the coach.
+3. Technical role: checkpoint helpers, RNG helpers, metrics containers, samplers, accelerator config, label smoothing, distributed tensor utilities.
+4. Important symbols: training helper dataclasses/functions, samplers, `LabelSmoother`, metrics helpers.
+5. Interactions: imported by `Trainer`, tests, examples.
+6. What would break if disappeared: `Trainer` would become larger and many helper behaviors would fail.
+
+Upstream assumptions: training loop needs reusable helper utilities.
+
+Downstream behaviors: metrics, checkpoint sorting, sampling, label smoothing, and distributed helpers depend on these files.

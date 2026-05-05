@@ -1,0 +1,23 @@
+1. Plain-English explanation: handles chat-completion requests.
+2. ELI5 analogy: the worker who takes a chat form, formats it for the robot, and streams or returns the answer.
+3. Technical role: validates requests, resolves model, chooses modality/continuous batching path, applies chat template, creates generation config, handles streaming/non-streaming responses, parses tool calls.
+4. Important symbols: `ChatCompletionHandler`.
+5. Interactions: called by server route; uses `ModelManager`, tokenizer/processor, generation.
+6. What would break if disappeared: `/v1/chat/completions` would fail.
+
+Upstream assumptions: requests follow supported OpenAI-style schema and loaded model supports required modality.
+
+Downstream behaviors: chat API output and streaming depend on this handler.
+
+#### `src/transformers/cli/serving/completion.py`, `response.py`, `transcription.py`, `utils.py`
+
+1. Plain-English explanation: handlers and helpers for other serving endpoints.
+2. ELI5 analogy: different service windows for plain completion, response objects, audio transcription, and shared paperwork.
+3. Technical role: implement OpenAI-style completions, responses, audio transcription, shared request/response utilities.
+4. Important symbols: endpoint handler classes and request/response helper functions.
+5. Interactions: registered by `server.py` and backed by `ModelManager`.
+6. What would break if disappeared: corresponding serving endpoints would fail.
+
+Upstream assumptions: endpoint-specific request formats can be mapped to Transformers model calls.
+
+Downstream behaviors: clients depending on those endpoints receive structured responses.

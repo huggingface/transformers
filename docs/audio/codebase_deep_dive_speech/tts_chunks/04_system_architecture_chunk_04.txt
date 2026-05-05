@@ -1,0 +1,38 @@
+Plain English: the normal lifecycle is import, load, preprocess, run, postprocess, maybe save.
+
+Technical explanation:
+
+For `pipeline("text-generation", model="...")`:
+
+1. `pipeline` identifies the task in `pipelines/__init__.py`.
+2. It loads `AutoConfig`.
+3. It selects a model class through auto mappings.
+4. It loads weights through `PreTrainedModel.from_pretrained`.
+5. It loads tokenizer/processor objects.
+6. It creates a `Pipeline` subclass.
+7. `Pipeline.__call__` preprocesses input.
+8. It calls the model or `model.generate`.
+9. It postprocesses model outputs into user-friendly output.
+
+Likely rationale: the same pieces can be reused independently or through a high-level API.
+
+Tradeoff: high-level convenience hides many defaults and branches.
+
+### 14. AI Subsystem Architecture
+
+Plain English: the AI part is not one chatbot prompt. It is the machinery for loading model brains, translating inputs, and controlling generation.
+
+Technical explanation:
+
+- Model architecture: `models/<family>/modeling_*.py`.
+- Tokenization/processing: tokenizer, image, audio, video, and processor utilities.
+- Generation: `generation/utils.py`, logits processors, stopping criteria, cache handling.
+- Chat formatting: tokenizer/processor chat templates, usually stored with tokenizer artifacts or model-specific logic.
+- Serving: OpenAI-style API handlers route requests into tokenization and generation.
+
+Likely rationale: different AI model families need different input formatting and generation controls, so the library keeps those concerns configurable and model-specific.
+
+Tradeoffs:
+
+- Strong: deterministic infrastructure around nondeterministic models.
+- Weak: prompt behavior is distributed across tokenizer templates, processors, model cards, and user requests rather than one central prompt registry.

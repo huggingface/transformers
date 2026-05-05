@@ -1,0 +1,5 @@
+- invalid request
+- unsupported model modality
+- missing chat template
+- generation failure
+- streaming disconnect

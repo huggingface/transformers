@@ -1,0 +1,81 @@
+## Function And Class-Level Traceability
+
+### What This Means In Plain English
+
+This section follows the most important named pieces of code and explains who calls them, what they call, and what result they influence.
+
+### ELI5 Analogy
+
+It is like tracing a package through a delivery network: who hands it off, where it goes next, and what happens if one station fails.
+
+### Technical Explanation
+
+The most important runtime call graphs are around import, auto dispatch, config loading, model loading, tokenization, generation, pipelines, training, Hub access, dynamic modules, quantization, and serving.
+
+### Why It Matters In This Codebase
+
+Most bugs in this library are not isolated to one function. A loading bug can cross config, Hub cache, auto mapping, model class, quantization, dtype, and optional dependencies.
+
+### `_LazyModule.__getattr__`
+
+Beginner explanation: when someone asks for a tool, this method fetches it only then.
+
+Technical explanation: `_LazyModule` in `src/transformers/utils/import_utils.py` overrides attribute access to import submodules lazily, resolve placeholders, and expose classes/functions.
+
+Why it exists: importing every model and dependency at startup would be slow and would fail in partial installs.
+
+Step-by-step logic:
+
+1. User accesses an attribute on a lazy module.
+2. `_LazyModule.__getattr__` checks whether the name is a known object, module, or placeholder.
+3. If it is backed by a module, it imports the module.
+4. It returns and caches the requested object.
+5. If dependencies are missing, it can return a placeholder or raise a helpful missing-backend error.
+
+Call graph:
+
+- Called by: Python attribute access on `transformers`, `transformers.models`, and lazy model-family packages.
+- Calls into: import helpers inside `utils/import_utils.py`, concrete modules under `src/transformers`.
+- Depends on: `_import_structure`, optional backend availability, module naming conventions.
+- Returns to / influences: public imports such as `from transformers import AutoModel`.
+- File location of dependencies: `src/transformers/__init__.py`, `src/transformers/models/__init__.py`, `src/transformers/utils/import_utils.py`.
+
+Failure modes:
+
+- missing optional dependency
+- incorrect import structure
+- missing symbol in module `__all__`
+- circular import mistakes
+
+Why this logic belongs here: lazy importing is a package-wide infrastructure concern, not a model-family concern.
+
+### `define_import_structure`
+
+Beginner explanation: builds a list of what a folder can export.
+
+Technical explanation: scans package files and creates an import structure used by `_LazyModule`.
+
+Why it exists: `transformers` has hundreds of modules; manually maintaining every lazy import entry would be error-prone.
+
+Call graph:
+
+- Called by: `src/transformers/__init__.py`, `src/transformers/models/__init__.py`, model-family `__init__.py` files.
+- Calls into: `create_import_structure_from_path` in `utils/import_utils.py`.
+- Depends on: `__all__`, `@requires`, file naming conventions, default backend rules.
+- Returns to / influences: `_import_structure` used by `_LazyModule`.
+
+Failure modes:
+
+- wrong `__all__`
+- missing requirement annotation
+- generated dummy objects out of sync
+
+### `AutoConfig.from_pretrained`
+
+Beginner explanation: reads a model's instruction file and builds the right config object.
+
+Technical explanation: class method in `src/transformers/models/auto/configuration_auto.py` that loads config dict, handles remote code, then dispatches to a concrete `PreTrainedConfig` subclass.
+
+Why it exists: users should not need to know which config class matches a model ID.
+
+Step-by-step logic:

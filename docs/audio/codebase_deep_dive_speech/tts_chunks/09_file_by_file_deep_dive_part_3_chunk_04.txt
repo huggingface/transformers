@@ -1,0 +1,36 @@
+1. Plain-English explanation: Llama's instruction card.
+2. ELI5 analogy: tells the Llama robot its context length, layers, attention heads, vocabulary size, and rotary-position settings.
+3. Technical role: defines `LlamaConfig` and validates Llama architecture settings.
+4. Important symbols: `LlamaConfig`, `validate_architecture`.
+5. Interactions: `AutoConfig`, Llama model classes, generation, serving, tests.
+6. What would break if disappeared: Llama-like model loading through the built-in implementation would fail.
+
+Upstream assumptions: Llama checkpoints expose config fields compatible with this class.
+
+Downstream behaviors: Llama model construction, attention implementation, and generation depend on it.
+
+#### `src/transformers/models/llama/modeling_llama.py`
+
+1. Plain-English explanation: Llama's neural-network implementation.
+2. ELI5 analogy: the blueprint for a modern text-writing robot.
+3. Technical role: implements RMS norm, rotary embeddings, MLP, attention, decoder layers, base model, causal language modeling head, and task heads.
+4. Important symbols: `LlamaRMSNorm`, `LlamaRotaryEmbedding`, `apply_rotary_pos_emb`, `LlamaMLP`, `LlamaAttention`, `LlamaDecoderLayer`, `LlamaPreTrainedModel`, `LlamaModel`, `LlamaForCausalLM`, classification/QA/token-classification heads.
+5. Interactions: subclasses `PreTrainedModel`; `LlamaForCausalLM` uses `GenerationMixin` behavior for generation.
+6. What would break if disappeared: built-in Llama inference/generation/training would fail.
+
+Calls:
+
+- `LlamaModel.forward` applies embeddings, attention masks, decoder layers, and final norm.
+- `LlamaForCausalLM.forward` calls `LlamaModel.forward` and applies the language-model head.
+- generation calls model forward repeatedly through `GenerationMixin.generate`.
+
+Called by:
+
+- `AutoModelForCausalLM`
+- text-generation pipelines
+- serving handlers
+- tests and examples
+
+Upstream assumptions: input IDs or input embeddings are valid; config layer/head dimensions match checkpoint weights.
+
+Downstream behaviors: generated logits and text depend on this implementation.

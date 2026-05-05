@@ -1,0 +1,82 @@
+### Auto Registry Files
+
+#### `src/transformers/models/__init__.py`
+
+1. Plain-English explanation: lists all model-family shelves without opening them immediately.
+2. ELI5 analogy: a warehouse directory.
+3. Technical role: lazy import entry point for all model directories.
+4. Important symbols: `define_import_structure`, `_LazyModule`.
+5. Interactions: imported by package root and auto mappings.
+6. What would break if disappeared: `transformers.models` import and lazy model-family discovery would fail.
+
+Upstream assumptions: model-family directories expose `__all__` and follow naming patterns.
+
+Downstream behaviors: public model imports rely on lazy model package structure.
+
+#### `src/transformers/models/auto/auto_mappings.py`
+
+1. Plain-English explanation: a generated phone book connecting model type names to config class names.
+2. ELI5 analogy: the index at the back of a catalog.
+3. Technical role: auto-generated mapping names, especially `CONFIG_MAPPING_NAMES`.
+4. Important symbols: `CONFIG_MAPPING_NAMES` and related mapping constants.
+5. Interactions: consumed by `configuration_auto.py` and other auto files.
+6. What would break if disappeared: auto config/model resolution would lose its central model-type map.
+
+Upstream assumptions: generated from known model configs; maintainers should not hand-edit lightly.
+
+Downstream behaviors: `AutoConfig` can map `model_type` to config classes.
+
+#### `src/transformers/models/auto/configuration_auto.py`
+
+1. Plain-English explanation: chooses the right config class from a model name or config file.
+2. ELI5 analogy: reads the instruction card and says, "This is a BERT card" or "This is a Llama card."
+3. Technical role: implements `AutoConfig`, lazy config mapping, model-type/class-name conversion, config registration, and doc helpers.
+4. Important symbols: `AutoConfig`, `_LazyConfigMapping`, `CONFIG_MAPPING`, `model_type_to_module_name`, `config_class_to_model_type`, `replace_list_option_in_docstrings`.
+5. Interactions: calls `PreTrainedConfig.get_config_dict`; chooses remote dynamic code or a local config class.
+6. What would break if disappeared: `AutoConfig.from_pretrained` and most high-level loading would fail.
+
+Calls:
+
+- `PreTrainedConfig.get_config_dict` from `configuration_utils.py`
+- `resolve_trust_remote_code` and `get_class_from_dynamic_module` from `dynamic_module_utils.py`
+- lazy config class imports through `_LazyConfigMapping`
+
+Called by:
+
+- `pipeline`
+- auto model loading
+- examples
+- serving
+- tests
+
+Upstream assumptions: config JSON contains `model_type` or `auto_map` metadata.
+
+Downstream behaviors: correct concrete config class is returned.
+
+#### `src/transformers/models/auto/auto_factory.py`
+
+1. Plain-English explanation: shared factory logic for all auto model classes.
+2. ELI5 analogy: a factory manager that chooses the right assembly line.
+3. Technical role: defines `_BaseAutoModelClass`, `_LazyAutoMapping`, remote-code handling, model-class selection, and `from_pretrained`/`from_config` dispatch.
+4. Important symbols: `_BaseAutoModelClass`, `_LazyAutoMapping`, `auto_class_update`, `_get_model_class`, `add_generation_mixin_to_remote_model`.
+5. Interactions: used by `modeling_auto.py` and other auto model modules.
+6. What would break if disappeared: all task-specific auto model classes would lose shared loading logic.
+
+Calls:
+
+- `AutoConfig.from_pretrained`
+- concrete model class `.from_pretrained`
+- remote dynamic code helpers
+- PEFT adapter detection helpers where relevant
+
+Called by:
+
+- `AutoModel.from_pretrained`
+- `AutoModelForCausalLM.from_pretrained`
+- many other `AutoModelFor*` classes
+
+Upstream assumptions: a config class can be mapped to a model class for the requested task.
+
+Downstream behaviors: returns a concrete `PreTrainedModel` subclass instance.
+
+#### `src/transformers/models/auto/modeling_auto.py`

@@ -1,0 +1,81 @@
+## Product Overview
+
+### What This Means In Plain English
+
+This software helps people use AI models without rewriting loading, preprocessing, generation, training, saving, and deployment code for every model family. The product is a library first, not a single app with screens.
+
+### ELI5 Analogy
+
+It is like a big library card catalog plus a set of universal instructions. You can ask for "BERT" or "Llama", and the system knows which shelves, manuals, tools, and safety checks are needed.
+
+### Technical Explanation
+
+The package exposes a consistent Python API around many model architectures. The most important user-facing concepts are:
+
+- `AutoConfig`: finds and builds the right configuration class.
+- `AutoModel`, `AutoModelForCausalLM`, and many task-specific `AutoModelFor*` classes: choose and load the correct neural-network class.
+- `AutoTokenizer`, `AutoProcessor`, `AutoImageProcessor`, `AutoFeatureExtractor`, `AutoVideoProcessor`: load input/output conversion tools.
+- `pipeline`: combines model, config, tokenizer/processor, and task-specific postprocessing into one high-level callable.
+- `GenerationMixin.generate`: implements token generation.
+- `Trainer`: implements reusable PyTorch training loops.
+- `transformers serve`: exposes models through a local HTTP server with OpenAI-style endpoints.
+
+### Why It Matters In This Codebase
+
+The repository is optimized for breadth, compatibility, and ecosystem integration. It needs to support hundreds of model families, many optional dependencies, local and remote checkpoints, research workflows, production inference, and documentation examples.
+
+### Likely Users
+
+Confirmed by code and README:
+
+- machine-learning engineers loading pretrained models
+- researchers adding or modifying model architectures
+- application developers using pipelines or serving
+- educators and students learning model usage
+- maintainers testing many backends, hardware targets, and integrations
+
+### Main Job Of The Software
+
+The main job is to turn a model identifier, local path, or configuration into a usable Python object that can tokenize/process inputs, run a model, generate outputs, train/fine-tune, save artifacts, or serve an API.
+
+### Major Moving Pieces For A Complete Beginner
+
+- **Package entry point:** the front door. In code this is `src/transformers/__init__.py`.
+- **Config:** the model's settings. In code this is `PreTrainedConfig` and concrete files such as `models/bert/configuration_bert.py`.
+- **Model:** the math machine. In code this is `PreTrainedModel` and concrete files such as `models/llama/modeling_llama.py`.
+- **Tokenizer/processor:** the translator between human data and model numbers. In code this is `tokenization_utils_base.py`, tokenizer subclasses, and `processing_utils.py`.
+- **Auto classes:** the dispatcher that chooses the correct class. In code these live under `models/auto`.
+- **Generation:** the loop that predicts one token after another. In code this is `generation/utils.py`.
+- **Pipeline:** a packaged task workflow. In code this is `pipelines/__init__.py` and `pipelines/base.py`.
+- **Trainer:** a general training engine. In code this is `trainer.py`.
+- **Hub/cache:** the system that downloads and reuses model files. In code this is `utils/hub.py`.
+- **Tests/tools:** the safety net and maintenance machinery. In code these are `tests` and `utils`.
+
+### Central Versus Secondary
+
+Central:
+
+- `src/transformers/__init__.py`
+- `src/transformers/utils/import_utils.py`
+- `src/transformers/configuration_utils.py`
+- `src/transformers/modeling_utils.py`
+- `src/transformers/tokenization_utils_base.py`
+- `src/transformers/processing_utils.py`
+- `src/transformers/models/auto`
+- `src/transformers/models`
+- `src/transformers/generation`
+- `src/transformers/pipelines`
+- `src/transformers/trainer.py`
+- `src/transformers/utils/hub.py`
+
+Secondary but important:
+
+- `tests`
+- `utils`
+- `docs`
+- `examples`
+- `.github`
+- `docker`
+- benchmarks
+
+Current versus legacy/scaffolding:

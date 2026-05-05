@@ -1,0 +1,3 @@
+- Current signals: version `5.8.0.dev0`, V5 migration guide, simplified tokenizer aliases, image processor aliasing, modular model conversion, continuous batching, and serving CLI.
+- Legacy or compatibility signals: `tokenization_bert_legacy.py`, old conversion scripts, deprecated model lists, duplicated `# Copied from` blocks, `benchmark` alongside `benchmark_v2`, and compatibility aliases for older import paths.
+- Scaffolding/support signals: templates, issue forms, CI workflows, Dockerfiles, generated docs/config files.

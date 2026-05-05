@@ -1,0 +1,70 @@
+1. Plain-English explanation: ready-made text generation workflow.
+2. ELI5 analogy: a writing station that takes a prompt and returns completed text.
+3. Technical role: implements preprocessing prompts/chat, calls model generation, decodes outputs, and formats results.
+4. Important symbols: text generation pipeline class and helper methods.
+5. Interactions: uses tokenizer, `model.generate`, generation config.
+6. What would break if disappeared: `pipeline("text-generation")` would fail.
+
+Upstream assumptions: model supports generation and tokenizer can encode/decode.
+
+Downstream behaviors: beginner text-generation APIs and serving-like examples depend on it.
+
+#### `src/transformers/pipelines/text_classification.py`
+
+1. Plain-English explanation: ready-made text classification workflow.
+2. ELI5 analogy: a sorting station that puts text into labeled bins.
+3. Technical role: tokenizes text, runs a classification model, maps logits to labels/scores.
+4. Important symbols: text classification pipeline class and postprocessing helpers.
+5. Interactions: uses tokenizer, model forward pass, config label mappings.
+6. What would break if disappeared: `pipeline("text-classification")` and sentiment/classification examples would fail.
+
+Upstream assumptions: model has a classification head and config label mapping.
+
+Downstream behaviors: returned labels and scores depend on it.
+
+### Training Files
+
+#### `src/transformers/trainer.py`
+
+1. Plain-English explanation: a general-purpose training engine.
+2. ELI5 analogy: a coach that repeats: show examples, compute mistakes, adjust, test, save progress.
+3. Technical role: defines `Trainer`, training loop, evaluation loop, prediction loop, checkpointing, optimizer/scheduler setup, callback integration, distributed handling, metric logging, and model saving.
+4. Important symbols: `Trainer`, `train`, `_inner_training_loop`, `_run_epoch`, `training_step`, `compute_loss`, `evaluate`, `evaluation_loop`, `predict`, `prediction_step`, `save_model`.
+5. Interactions: uses `TrainingArguments`, callbacks, trainer utilities, data collators, datasets, model outputs, integrations.
+6. What would break if disappeared: standard training/fine-tuning examples and user workflows would fail.
+
+Calls:
+
+- model forward
+- optimizer/scheduler step
+- data loaders and collators
+- callbacks through `CallbackHandler`
+- metric functions
+- checkpoint helpers
+
+Called by:
+
+- user training scripts
+- examples
+- tests
+
+Upstream assumptions: model follows PyTorch module behavior; data batches match model forward signature; `TrainingArguments` are valid.
+
+Downstream behaviors: training state, checkpoints, metrics, and saved models depend on it.
+
+Risk: at over 4,000 lines, this is a major complexity hotspot.
+
+#### `src/transformers/training_args.py`
+
+1. Plain-English explanation: all the knobs for training.
+2. ELI5 analogy: the coach's settings sheet: speed, batch size, where to save, how often to test.
+3. Technical role: defines `TrainingArguments`, optimizer names, parallel mode, distributed/device settings, logging/eval/save intervals, precision flags, and validation.
+4. Important symbols: `TrainingArguments`, `OptimizerNames`, `ParallelMode`.
+5. Interactions: consumed by `Trainer` and examples.
+6. What would break if disappeared: `Trainer` could not receive standardized training configuration.
+
+Upstream assumptions: users need many configurable training behaviors.
+
+Downstream behaviors: batch size, device, checkpointing, logging, precision, and distributed training depend on this object.
+
+#### `src/transformers/trainer_callback.py`

@@ -1,0 +1,75 @@
+### Tests And Tooling Files
+
+#### `tests/test_modeling_common.py`
+
+1. Plain-English explanation: shared exam for model classes.
+2. ELI5 analogy: one checklist every robot must pass.
+3. Technical role: common tests/mixins for model behavior, outputs, save/load, gradients, generation compatibility, and framework assumptions.
+4. Important symbols: common test mixins and model tester helpers.
+5. Interactions: per-model tests inherit or use these common checks.
+6. What would break if disappeared: model test coverage would become duplicated and inconsistent.
+
+Upstream assumptions: model-family tests can expose a standard tester interface.
+
+Downstream behaviors: regression protection across hundreds of model classes depends on it.
+
+#### `tests/test_tokenization_common.py`
+
+1. Plain-English explanation: shared exam for tokenizers.
+2. ELI5 analogy: checks that every translator can read, write, save, and reload dictionaries.
+3. Technical role: common tokenizer tests for encoding, decoding, save/load, added tokens, special tokens, fast/slow compatibility.
+4. Important symbols: tokenizer test mixins.
+5. Interactions: per-model tokenizer tests.
+6. What would break if disappeared: tokenizer regression coverage would fragment.
+
+Upstream assumptions: tokenizer classes expose common APIs.
+
+Downstream behaviors: reliable text preprocessing depends on these tests.
+
+#### `tests/test_image_processing_common.py`, `tests/test_feature_extraction_common.py`, `tests/test_processing_common.py`, `tests/test_video_processing_common.py`
+
+1. Plain-English explanation: shared exams for image, audio/feature, multimodal, and video processors.
+2. ELI5 analogy: checks every prep station follows the same safety rules.
+3. Technical role: common test patterns for processor load/save/call behavior.
+4. Important symbols: common processor test mixins.
+5. Interactions: model-specific processor tests.
+6. What would break if disappeared: multimodal preprocessing regressions would be easier to miss.
+
+Upstream assumptions: processor classes follow base mixin contracts.
+
+Downstream behaviors: pipeline and serving input correctness depend on these behaviors.
+
+#### `tests/test_training_mixin.py`, `tests/test_pipeline_mixin.py`
+
+1. Plain-English explanation: reusable test helpers for training and pipelines.
+2. ELI5 analogy: common exam sections for coaches and service counters.
+3. Technical role: common tests for trainer and pipeline behavior.
+4. Important symbols: mixin classes and helpers.
+5. Interactions: used by more specific tests.
+6. What would break if disappeared: duplicated or missing test coverage.
+
+Upstream assumptions: common behavior can be tested across many task implementations.
+
+Downstream behaviors: CI consistency depends on these mixins.
+
+#### `tests/models/**`
+
+1. Plain-English explanation: model-family-specific exams.
+2. ELI5 analogy: each robot type has its own final exam.
+3. Technical role: per-model tests for configs, models, tokenizers, processors, conversion assumptions, generation, and task heads.
+4. Important symbols: vary per model family, usually `*ModelTest`, `*ModelTester`, tokenizer/processor tests.
+5. Interactions: import model-family runtime files and common test mixins.
+6. What would break if disappeared: regressions in specific model families would escape.
+
+Upstream assumptions: each model family has expected tiny configs and fixtures.
+
+Downstream behaviors: maintainers rely on these tests when editing shared or model-specific code.
+
+#### `tests/fixtures/**`
+
+1. Plain-English explanation: tiny sample files used by tests.
+2. ELI5 analogy: sample worksheets, toy dictionaries, and small pictures for exams.
+3. Technical role: stores vocab files, configs, model files, image/audio/text fixtures.
+4. Important symbols: file artifacts rather than code symbols.
+5. Interactions: tests load these artifacts.
+6. What would break if disappeared: tests needing fixture files would fail.

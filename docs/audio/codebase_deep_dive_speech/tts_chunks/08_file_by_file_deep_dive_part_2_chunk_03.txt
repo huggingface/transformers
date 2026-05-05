@@ -1,0 +1,49 @@
+1. Plain-English explanation: coordinates multiple input converters for multimodal models.
+2. ELI5 analogy: a receptionist who sends text, images, audio, and video to the right translator.
+3. Technical role: defines `ProcessorMixin`, typed kwargs, multimodal data helpers, loading/saving of processor components, chat templates, and multimodal output postprocessing.
+4. Important symbols: `ProcessorMixin`, `MultiModalData`, `_LazyAutoProcessorMapping`, `from_pretrained`, `save_pretrained`, `apply_chat_template`, `post_process_multimodal_output`, `_check_special_mm_tokens`.
+5. Interactions: `AutoProcessor`, model-specific processors, serving, pipelines.
+6. What would break if disappeared: multimodal processor loading and save/load behavior would fail.
+
+Upstream assumptions: processors are composed of named subcomponents such as tokenizer and image processor.
+
+Downstream behaviors: multimodal models depend on correct component coordination.
+
+#### `src/transformers/image_processing_base.py` And `src/transformers/image_processing_utils.py`
+
+1. Plain-English explanation: shared image input rules.
+2. ELI5 analogy: a photo-prep station that resizes, crops, normalizes, and packs images for the robot.
+3. Technical role: define image processor mixins and base image processor behavior.
+4. Important symbols: `ImageProcessingMixin`, `BaseImageProcessor`, `BatchFeature`.
+5. Interactions: `AutoImageProcessor`, model-specific `image_processing_*.py`, pipelines, processors.
+6. What would break if disappeared: vision and multimodal input processing would fail.
+
+Upstream assumptions: images need model-specific size, format, channel, and normalization handling.
+
+Downstream behaviors: vision model predictions depend on exact preprocessing.
+
+#### `src/transformers/feature_extraction_utils.py`
+
+1. Plain-English explanation: shared rules for non-text features, especially audio.
+2. ELI5 analogy: a sound-prep station that turns waveforms into numbers.
+3. Technical role: defines `FeatureExtractionMixin`, `BatchFeature`, save/load and call patterns for feature extractors.
+4. Important symbols: `FeatureExtractionMixin`, `BatchFeature`.
+5. Interactions: `AutoFeatureExtractor`, audio models, processors, pipelines.
+6. What would break if disappeared: feature extractor loading and many audio workflows would fail.
+
+Upstream assumptions: raw signals require model-specific preprocessing.
+
+Downstream behaviors: speech/audio predictions depend on it.
+
+#### `src/transformers/video_processing_utils.py`
+
+1. Plain-English explanation: shared video input rules.
+2. ELI5 analogy: a film-strip prep station.
+3. Technical role: base utilities for video processors.
+4. Important symbols: `BaseVideoProcessor` and related video processor helpers.
+5. Interactions: `AutoVideoProcessor`, video model families, multimodal processors.
+6. What would break if disappeared: video model preprocessing would fail.
+
+Upstream assumptions: videos need frame sampling, resizing, normalization, and batching.
+
+Downstream behaviors: video tasks depend on it.

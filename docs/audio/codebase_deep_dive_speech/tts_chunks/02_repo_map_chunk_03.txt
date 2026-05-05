@@ -1,0 +1,34 @@
+| Subsystem | Main paths | Product role |
+|---|---|---|
+| Public package surface | `src/transformers/__init__.py`, `src/transformers/utils/import_utils.py` | Lets users import many symbols without eagerly importing every dependency |
+| Hub and file loading | `src/transformers/utils/hub.py`, `src/transformers/dynamic_module_utils.py` | Finds local or remote model files and optional custom code |
+| Configuration | `src/transformers/configuration_utils.py`, `src/transformers/models/*/configuration_*.py`, `src/transformers/generation/configuration_utils.py`, `src/transformers/training_args.py`, `src/transformers/utils/quantization_config.py` | Defines model, generation, training, and quantization settings |
+| Auto classes | `src/transformers/models/auto/*.py` | Chooses the right concrete class from a model name or config |
+| Model implementations | `src/transformers/modeling_utils.py`, `src/transformers/models/*/modeling_*.py` | Defines neural-network modules and load/save behavior |
+| Tokenizers and processors | `src/transformers/tokenization_*.py`, `src/transformers/processing_utils.py`, `src/transformers/image_processing_*.py`, `src/transformers/feature_extraction_utils.py`, `src/transformers/video_processing_utils.py` | Turns user inputs into tensors and model outputs into readable forms |
+| Generation | `src/transformers/generation/*.py` | Produces text or tokens autoregressively |
+| Pipelines | `src/transformers/pipelines/*.py` | Provides high-level task APIs such as text generation and classification |
+| Training | `src/transformers/trainer.py`, `src/transformers/trainer_*.py`, `src/transformers/data/*.py` | Provides reusable training loops and helpers |
+| Integrations | `src/transformers/integrations/*.py`, `src/transformers/quantizers/*.py` | Connects to optional libraries such as Accelerate, DeepSpeed, PEFT, kernels, trackers, and quantizers |
+| Serving CLI | `src/transformers/cli/*.py`, `src/transformers/cli/serving/*.py` | Runs local OpenAI-compatible model serving |
+| Tests | `tests/**/*.py` | Confirms model, utility, pipeline, generation, trainer, and repo behaviors |
+| Repo maintenance | `utils/*.py`, `Makefile` | Generates files, checks consistency, validates copy blocks and mappings |
+| Docs/examples | `docs`, `examples`, `notebooks` | Teaches usage and provides runnable recipes |
+| CI/deploy | `.github`, `.circleci`, `docker` | Runs tests, builds docs, builds containers, supports releases |
+
+### Dependency Map
+
+The important dependency direction is:
+
+1. User code imports `transformers`.
+2. `src/transformers/__init__.py` exposes symbols lazily using `utils/import_utils.py`.
+3. User calls high-level APIs such as `pipeline`, `AutoModel.from_pretrained`, `AutoTokenizer.from_pretrained`, `Trainer`, or `model.generate`.
+4. Auto classes in `src/transformers/models/auto` inspect configs and choose model-family implementations.
+5. Base utilities in `configuration_utils.py`, `modeling_utils.py`, tokenizer/processor files, and `utils/hub.py` load files, validate settings, and instantiate objects.
+6. Model-family files in `src/transformers/models/<model_name>` implement concrete neural-network architecture.
+7. Generation, pipelines, training, quantization, integrations, and serving call into those loaded models.
+8. Tests, examples, docs, and CI depend on the runtime package and repository tooling.
+
+The runtime core intentionally points inward toward common abstractions. Model-family files depend on common base classes, not the other way around, except for generated auto mappings that know about many model families.
+
+### Runtime Flow Map

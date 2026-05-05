@@ -1,0 +1,65 @@
+1. Plain-English explanation: defines many "automatic model" classes for different tasks.
+2. ELI5 analogy: one counter for "general robot", another for "question-answer robot", another for "text-writing robot".
+3. Technical role: creates lazy mappings and classes such as `AutoModel`, `AutoModelForCausalLM`, `AutoModelForSequenceClassification`, and others.
+4. Important symbols: `MODEL_MAPPING`, `MODEL_FOR_CAUSAL_LM_MAPPING`, `MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING`, `AutoModel`, `AutoModelForCausalLM`, many `AutoModelFor*` classes.
+5. Interactions: imports `_BaseAutoModelClass` and `_LazyAutoMapping` from `auto_factory.py`.
+6. What would break if disappeared: task-specific auto model loading would fail.
+
+Upstream assumptions: generated mapping names match available model-family classes.
+
+Downstream behaviors: user calls return the correct task head class.
+
+#### `src/transformers/models/auto/tokenization_auto.py`
+
+1. Plain-English explanation: chooses the right tokenizer class.
+2. ELI5 analogy: chooses the right language dictionary for the robot.
+3. Technical role: maps model types to tokenizer classes, including V5 fast-tokenizer aliases.
+4. Important symbols: `AutoTokenizer`, `TOKENIZER_MAPPING_NAMES`, `REGISTERED_TOKENIZER_CLASSES`, `REGISTERED_FAST_ALIASES`.
+5. Interactions: loads tokenizer configs and dispatches to `PreTrainedTokenizerBase.from_pretrained`.
+6. What would break if disappeared: `AutoTokenizer.from_pretrained` would fail.
+
+Upstream assumptions: tokenizer config or model config identifies tokenizer class.
+
+Downstream behaviors: tokenization and chat templating work for model IDs.
+
+#### `src/transformers/models/auto/processing_auto.py`, `image_processing_auto.py`, `feature_extraction_auto.py`, `video_processing_auto.py`
+
+1. Plain-English explanation: choose the right processor for images, audio/features, video, or multimodal inputs.
+2. ELI5 analogy: picks the right prep station for each kind of input.
+3. Technical role: maps configs/model types to processor-related classes.
+4. Important symbols: `AutoProcessor`, `AutoImageProcessor`, `AutoFeatureExtractor`, `AutoVideoProcessor`.
+5. Interactions: used by pipelines, serving, examples, and users.
+6. What would break if disappeared: high-level processor loading for non-text and multimodal models would fail.
+
+Upstream assumptions: model artifacts include processor metadata or class mappings.
+
+Downstream behaviors: inputs are transformed in the exact way expected by the model.
+
+### Model Family Files
+
+#### General Model Directory Pattern: `src/transformers/models/<model_name>/`
+
+1. Plain-English explanation: one folder per model family.
+2. ELI5 analogy: one drawer per robot type.
+3. Technical role: implements config, model architecture, tokenizer, processor, conversion scripts, and modular source for a family.
+4. Important file patterns:
+   - `__init__.py`: lazy exports for that family
+   - `configuration_<name>.py`: config subclass
+   - `modeling_<name>.py`: PyTorch architecture and task heads
+   - `tokenization_<name>.py`: tokenizer class
+   - `processing_<name>.py`: multimodal processor
+   - `image_processing_<name>.py`: image preprocessing
+   - `feature_extraction_<name>.py`: audio/feature preprocessing
+   - `video_processing_<name>.py`: video preprocessing
+   - `convert_<name>*.py`: checkpoint conversion scripts
+   - `modular_<name>.py`: compact source used to generate expanded files
+5. Interactions: auto mappings import these classes lazily; tests mirror model behavior.
+6. What would break if disappeared: that model family would no longer load or run through normal APIs.
+
+Upstream assumptions: model-family files follow naming and export conventions.
+
+Downstream behaviors: docs, tests, auto mappings, pipelines, and examples depend on these classes.
+
+Tradeoff: repeated files make each model easy to inspect, but global changes require tooling such as `check_copies.py` and modular conversion.
+
+#### `src/transformers/models/bert/configuration_bert.py`

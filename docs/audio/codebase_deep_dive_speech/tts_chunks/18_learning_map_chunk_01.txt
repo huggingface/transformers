@@ -1,0 +1,104 @@
+## Learning Map
+
+### What This Means In Plain English
+
+This section tells you what to study first and what words you must understand.
+
+### ELI5 Analogy
+
+It is the map for learning a city: start with main roads, then neighborhoods, then side streets.
+
+### Technical Explanation
+
+The best learning path follows the runtime flow: import -> auto config -> auto model -> config/model/tokenizer bases -> concrete model -> generation/pipeline/trainer -> Hub/integrations -> tests/tools.
+
+### Why It Matters In This Codebase
+
+Studying files alphabetically would be overwhelming. Studying by flow builds a useful mental model.
+
+### 15 Most Important Files To Understand First
+
+1. `src/transformers/__init__.py`
+2. `src/transformers/utils/import_utils.py`
+3. `src/transformers/models/auto/configuration_auto.py`
+4. `src/transformers/models/auto/auto_factory.py`
+5. `src/transformers/models/auto/modeling_auto.py`
+6. `src/transformers/configuration_utils.py`
+7. `src/transformers/modeling_utils.py`
+8. `src/transformers/tokenization_utils_base.py`
+9. `src/transformers/processing_utils.py`
+10. `src/transformers/generation/utils.py`
+11. `src/transformers/pipelines/__init__.py`
+12. `src/transformers/pipelines/base.py`
+13. `src/transformers/trainer.py`
+14. `src/transformers/utils/hub.py`
+15. `src/transformers/models/bert/modeling_bert.py` or `src/transformers/models/llama/modeling_llama.py`
+
+### 15 Next Files To Understand Second
+
+1. `src/transformers/training_args.py`
+2. `src/transformers/trainer_callback.py`
+3. `src/transformers/trainer_utils.py`
+4. `src/transformers/trainer_pt_utils.py`
+5. `src/transformers/tokenization_utils_tokenizers.py`
+6. `src/transformers/image_processing_utils.py`
+7. `src/transformers/feature_extraction_utils.py`
+8. `src/transformers/models/auto/tokenization_auto.py`
+9. `src/transformers/generation/configuration_utils.py`
+10. `src/transformers/generation/logits_process.py`
+11. `src/transformers/generation/stopping_criteria.py`
+12. `src/transformers/quantizers/auto.py`
+13. `src/transformers/quantizers/base.py`
+14. `src/transformers/utils/quantization_config.py`
+15. `src/transformers/dynamic_module_utils.py`
+
+Also study `src/transformers/cli/serve.py` and `src/transformers/cli/serving/server.py` if serving is your focus.
+
+### Best Order To Study The Repo
+
+1. Read `README.md` for product intent.
+2. Read `setup.py` for install/dependency surfaces.
+3. Read `src/transformers/__init__.py` for public import shape.
+4. Read `utils/import_utils.py` for lazy import and optional dependency behavior.
+5. Trace `AutoConfig.from_pretrained`.
+6. Trace `_BaseAutoModelClass.from_pretrained`.
+7. Trace `PreTrainedConfig.from_pretrained`.
+8. Trace `PreTrainedModel.from_pretrained`.
+9. Trace `AutoTokenizer.from_pretrained`.
+10. Study one older encoder model family, such as BERT.
+11. Study one modern decoder model family, such as Llama.
+12. Study `GenerationMixin.generate`.
+13. Study `pipeline` and `Pipeline.__call__`.
+14. Study `Trainer.train`.
+15. Study Hub utilities and dynamic module loading.
+16. Study quantizers and integrations if working on performance/loading.
+17. Study serving if working on APIs.
+18. Study tests and `utils/check_*.py` before contributing model changes.
+
+### Glossary
+
+#### Checkpoint
+
+Plain English: saved model brain data.
+
+Technical: files containing trained tensor weights, often safetensors or PyTorch state dict shards.
+
+#### Config
+
+Plain English: the model's instruction card.
+
+Technical: a `PreTrainedConfig` subclass serialized to JSON, containing architecture and behavior metadata.
+
+#### Model
+
+Plain English: the math machine that makes predictions.
+
+Technical: a `PreTrainedModel` subclass, usually a PyTorch `nn.Module`, with architecture code and loaded weights.
+
+#### Tokenizer
+
+Plain English: a text translator between words and numbers.
+
+Technical: a `PreTrainedTokenizerBase` subclass that maps text to token IDs and token IDs back to text.
+
+#### Processor

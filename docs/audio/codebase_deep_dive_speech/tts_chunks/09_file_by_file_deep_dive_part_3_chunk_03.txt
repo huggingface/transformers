@@ -1,0 +1,60 @@
+1. Plain-English explanation: BERT's instruction card.
+2. ELI5 analogy: tells the BERT robot how many layers, hidden units, attention heads, and vocabulary entries it has.
+3. Technical role: defines `BertConfig`, a `PreTrainedConfig` subclass with BERT-specific defaults.
+4. Important symbols: `BertConfig`.
+5. Interactions: used by `AutoConfig`, `BertModel`, task heads, tests, docs, and conversion scripts.
+6. What would break if disappeared: BERT config loading and BERT auto dispatch would fail.
+
+Upstream assumptions: BERT checkpoints use a `model_type` and field names understood by `BertConfig`.
+
+Downstream behaviors: `BertModel(config)` and `AutoModel.from_pretrained` depend on it.
+
+#### `src/transformers/models/bert/modeling_bert.py`
+
+1. Plain-English explanation: BERT's neural-network implementation.
+2. ELI5 analogy: the blueprint and wiring diagram for building BERT.
+3. Technical role: defines BERT embeddings, attention, encoder layers, pooler, pretrained base class, bare model, and task-specific heads.
+4. Important symbols: `BertEmbeddings`, `BertSelfAttention`, `BertAttention`, `BertIntermediate`, `BertOutput`, `BertLayer`, `BertEncoder`, `BertPooler`, `BertPreTrainedModel`, `BertModel`, `BertForPreTraining`, `BertLMHeadModel`, `BertForMaskedLM`, `BertForNextSentencePrediction`, `BertForSequenceClassification`, `BertForMultipleChoice`, `BertForTokenClassification`, `BertForQuestionAnswering`.
+5. Interactions: subclasses `PreTrainedModel`; task heads are used by auto mappings; tests exercise common model behavior.
+6. What would break if disappeared: BERT inference/training through PyTorch would fail.
+
+Calls:
+
+- `BertModel.forward` calls `BertEmbeddings`, `_create_attention_masks`, `BertEncoder`, and `BertPooler`.
+- task heads call `BertModel.forward` and then apply classifier/language-model heads.
+
+Called by:
+
+- `AutoModel*` classes through mappings
+- pipelines for BERT-compatible tasks
+- trainer/examples/tests
+
+Upstream assumptions: inputs include token IDs, optional token type IDs, attention masks, and compatible config fields.
+
+Downstream behaviors: task logits, hidden states, attentions, and losses depend on this implementation.
+
+#### `src/transformers/models/bert/tokenization_bert.py`
+
+1. Plain-English explanation: BERT's text translator.
+2. ELI5 analogy: BERT's dictionary and word-splitting rules.
+3. Technical role: implements BERT tokenization, vocab loading, basic tokenization, wordpiece tokenization, and conversion between tokens and IDs.
+4. Important symbols: `BertTokenizer`, `BasicTokenizer`, `WordpieceTokenizer`.
+5. Interactions: `AutoTokenizer`, BERT pipelines, examples, tests.
+6. What would break if disappeared: slow BERT tokenizer loading and BERT text preprocessing would fail.
+
+Upstream assumptions: BERT vocab file exists and special tokens match expected names.
+
+Downstream behaviors: input IDs for BERT models depend on exact WordPiece behavior.
+
+#### `src/transformers/models/bert/tokenization_bert_legacy.py`
+
+1. Plain-English explanation: older BERT tokenizer behavior kept for compatibility.
+2. ELI5 analogy: an old dictionary edition kept because some old homework was written with it.
+3. Technical role: preserves legacy tokenization behavior.
+4. Important symbols: legacy BERT tokenizer classes/functions.
+5. Interactions: compatibility paths and tests.
+6. What would break if disappeared: older workflows requiring legacy behavior could fail.
+
+Inference: this file exists to protect backwards compatibility during tokenizer behavior changes.
+
+#### `src/transformers/models/llama/configuration_llama.py`

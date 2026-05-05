@@ -1,0 +1,87 @@
+## Architecture Rationale
+
+### What This Means In Plain English
+
+This section explains why the code is split the way it is, not just what is split.
+
+### ELI5 Analogy
+
+A restaurant separates cooks, waiters, dishwashers, menus, and supply ordering because each job changes for different reasons.
+
+### Technical Explanation
+
+The code separates dispatch, configuration, model architecture, preprocessing, generation, training, integrations, and tooling because each has different dependencies and failure modes.
+
+### Why It Matters In This Codebase
+
+Good boundaries let one new model be added without rewriting pipelines, trainer, Hub loading, or generation.
+
+### Why Services Are Separated From Routes/Controllers
+
+Beginner explanation: in serving, the route is the door, and the handler/service does the work.
+
+Technical explanation: `server.py` registers FastAPI routes; handler files such as `chat_completion.py` and `completion.py` process endpoint-specific logic; `model_manager.py` owns model loading/caching.
+
+Likely rationale: routes stay thin, request logic stays testable, and model management is shared across endpoints.
+
+Tradeoffs: more files and indirection, but clearer boundaries.
+
+### Why Schemas, Types, And Models Are Separated
+
+Beginner explanation: the recipe, the machine, and the request form are different things.
+
+Technical explanation:
+
+- `PreTrainedConfig` describes architecture settings.
+- `PreTrainedModel` implements weights and computation.
+- tokenizer/processor classes describe input conversion.
+- serving request types validate API inputs.
+- training args configure training process.
+
+Likely rationale: each object is saved, loaded, validated, and changed independently.
+
+Tradeoffs: many object types can confuse beginners, but separation prevents one giant object from owning everything.
+
+### Why Adapters And Integrations Exist
+
+Beginner explanation: the library talks to many outside tools through adapter plugs.
+
+Technical explanation: files in `integrations` and `quantizers` isolate optional external APIs.
+
+Likely rationale: optional tools should not become hard runtime requirements.
+
+Tradeoffs: conditional code paths multiply, and failures can be backend-specific.
+
+### Why Validation Is Separate From Generation Or Business Logic
+
+Beginner explanation: checking the form before using the machine gives clearer errors.
+
+Technical explanation: config validation, generation config validation, tokenizer special-token checks, and serving request validation happen before deep model execution when possible.
+
+Likely rationale: tensor failures are hard to interpret; validation gives better user messages.
+
+Tradeoffs: validators must stay current with fast-moving model features.
+
+### Why Prompts, Templates, And Config Are Separated
+
+Beginner explanation: the model's brain and the way you talk to it are not the same thing.
+
+Technical explanation: chat templates live with tokenizers/processors or model artifacts, while generation settings live in `GenerationConfig` and model architecture settings live in `PreTrainedConfig`.
+
+Likely rationale: two models can share architecture but require different chat formatting, and users need to override generation without changing weights.
+
+Tradeoffs: prompt behavior can be hard to audit because it is distributed.
+
+### Why Fallback And Retry Paths Exist
+
+Beginner explanation: if the best tool is missing, the library tries a compatible path or gives a helpful message.
+
+Technical explanation: fallback paths include optional dependency dummy objects, fast/slow tokenizer choices, dtype fallbacks, safetensors/PyTorch checkpoint alternatives, local/remote cache resolution, remote/local code dispatch, and quantization backend checks.
+
+Likely rationale: the ecosystem is heterogeneous and users run many install profiles.
+
+Tradeoffs: fallback behavior can hide which path actually ran.
+
+### Why Tests And Evals Are Separate From Runtime Logic
+
+Beginner explanation: exams should not be inside the product.

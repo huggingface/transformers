@@ -1,0 +1,68 @@
+#### `src/transformers/data/data_collator.py`
+
+1. Plain-English explanation: batches examples together before training or inference.
+2. ELI5 analogy: puts worksheets into neat stacks of the same size.
+3. Technical role: data collators handle padding, masking, labels, and batch formatting.
+4. Important symbols: data collator classes for language modeling, token classification, seq2seq, and default collation.
+5. Interactions: examples and `Trainer` use collators.
+6. What would break if disappeared: many training examples would fail to batch variable-length inputs correctly.
+
+Upstream assumptions: datasets yield per-example dictionaries.
+
+Downstream behaviors: model forward receives batched tensors.
+
+### CLI And Serving Files
+
+#### `src/transformers/cli/transformers.py`
+
+1. Plain-English explanation: the command-line entry point.
+2. ELI5 analogy: the front desk you can talk to from a terminal.
+3. Technical role: defines a Typer CLI with commands such as `add_new_model_like`, `chat`, `download`, `env`, `serve`, and `version`.
+4. Important symbols: `main`, Typer app, command registration.
+5. Interactions: exposed by `setup.py` entry point.
+6. What would break if disappeared: `transformers` command-line command would fail.
+
+Upstream assumptions: users may want terminal workflows.
+
+Downstream behaviors: environment reporting, downloads, chat, and serving use this entry point.
+
+#### `src/transformers/cli/serve.py`
+
+1. Plain-English explanation: starts a local model server.
+2. ELI5 analogy: opens a help desk where other programs can ask the model questions.
+3. Technical role: validates serving dependencies, configures seed/logging, creates `ModelManager`, creates generation state, builds endpoint handlers, builds FastAPI app, and runs uvicorn.
+4. Important symbols: `Serve` and serving command options.
+5. Interactions: calls `build_server` from `cli/serving/server.py`, `ModelManager`, and endpoint handlers.
+6. What would break if disappeared: `transformers serve` would not work.
+
+Upstream assumptions: serving dependencies are optional and must be checked.
+
+Downstream behaviors: local HTTP serving depends on this command orchestration.
+
+#### `src/transformers/cli/serving/server.py`
+
+1. Plain-English explanation: builds the web server routes.
+2. ELI5 analogy: puts signs on different service windows: chat, completions, audio, health.
+3. Technical role: creates FastAPI app, middleware, request IDs, and routes for `/v1/chat/completions`, `/v1/completions`, `/v1/responses`, `/v1/audio/transcriptions`, `/load_model`, `/reset`, `/v1/models`, `/health`.
+4. Important symbols: `build_server`.
+5. Interactions: called by `Serve`; delegates endpoint behavior to handler classes.
+6. What would break if disappeared: serving routes would not be registered.
+
+Upstream assumptions: endpoint handlers provide request-processing methods.
+
+Downstream behaviors: HTTP clients depend on these route definitions.
+
+#### `src/transformers/cli/serving/model_manager.py`
+
+1. Plain-English explanation: loads, caches, and unloads models for serving.
+2. ELI5 analogy: a warehouse manager who keeps popular robots ready and locks shelves while loading.
+3. Technical role: manages timed model cache, model locks, loading streams, quantization config, processor loading, model loading, modality detection, shutdown.
+4. Important symbols: `TimedModel`, `ModelManager`, `process_model_name`, `get_quantization_config`, `_load_processor`, `_load_model`, `load_model_and_processor`, `load_model_streaming`, `shutdown`, `get_model_modality`, `get_gen_models`.
+5. Interactions: endpoint handlers call it to obtain model and processor objects.
+6. What would break if disappeared: serving would repeatedly or unsafely load models and lose model cache behavior.
+
+Upstream assumptions: model loading is expensive and must be coordinated.
+
+Downstream behaviors: request latency, model reuse, modality routing, and resource cleanup depend on it.
+
+#### `src/transformers/cli/serving/chat_completion.py`

@@ -1,0 +1,11 @@
+| Flow | Human description | Technical path |
+|---|---|---|
+| Import package | "Open the toolbox" | `import transformers` -> `src/transformers/__init__.py` -> `_LazyModule` in `utils/import_utils.py` |
+| Load config | "Read the model's instruction card" | `AutoConfig.from_pretrained` -> `PreTrainedConfig.get_config_dict` -> `cached_file` -> concrete config class |
+| Load model | "Build the right robot and install its saved parts" | `AutoModel*.from_pretrained` -> `_BaseAutoModelClass.from_pretrained` -> concrete `PreTrainedModel.from_pretrained` -> checkpoint resolution/loading |
+| Load tokenizer | "Load the text translator for this robot" | `AutoTokenizer.from_pretrained` -> tokenizer mappings -> `PreTrainedTokenizerBase.from_pretrained` |
+| Run pipeline | "Use a ready-made task button" | `pipeline()` -> load config/model/tokenizer/processor -> instantiate `Pipeline` subclass -> `Pipeline.__call__` |
+| Generate text | "Ask the model to keep writing tokens" | `model.generate()` -> `GenerationMixin.generate` -> logits processors -> sampling/beam/assisted decoding loop |
+| Train model | "Teach or fine-tune the robot" | `Trainer.train()` -> `_inner_training_loop` -> `_run_epoch` -> `training_step` -> `compute_loss` |
+| Serve model | "Run a small web server around the model" | `transformers serve` -> Typer CLI -> FastAPI app -> serving handlers -> model manager -> generation/transcription |
+| Maintain repo | "Check the toolbox labels still match the parts" | `make check-repo` -> `utils/check_*.py`; `make fix-repo` -> generators such as modular converter |

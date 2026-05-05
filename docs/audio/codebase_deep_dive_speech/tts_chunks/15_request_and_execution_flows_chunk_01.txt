@@ -1,0 +1,87 @@
+## Request And Execution Flows
+
+### What This Means In Plain English
+
+This section shows what happens from start to finish for the most important user actions.
+
+### ELI5 Analogy
+
+It is like following a customer order from the front desk through the warehouse, workshop, quality check, and delivery.
+
+### Technical Explanation
+
+Flows are traced through trigger, first file/function, next calls, data transformations, final result, persistence/surfacing, and logging.
+
+### Why It Matters In This Codebase
+
+The same objects appear in many flows. Learning these paths lets you debug by locating the correct layer.
+
+### Flow 1: Package Import
+
+Human terms: Python opens the `transformers` toolbox but does not pull every heavy tool off the shelf yet.
+
+Technical flow:
+
+1. Trigger: `import transformers`.
+2. First file/function reached: `src/transformers/__init__.py`.
+3. Next call: optional dependency checks from `utils/import_utils.py`.
+4. Next call: `define_import_structure` builds model import structure.
+5. Data transformed: module file metadata becomes `_import_structure`.
+6. Final output/result: Python module object backed by `_LazyModule`.
+7. Persisted/surfaced: no persistence; public symbols appear importable.
+8. Logging/debug metadata: missing dependency messages are prepared for later use.
+
+### Flow 2: Config Loading
+
+Human terms: the library reads the model's instruction card.
+
+Technical flow:
+
+1. Trigger: `AutoConfig.from_pretrained(model_id)`.
+2. First file/function: `configuration_auto.py::AutoConfig.from_pretrained`.
+3. Next call: `configuration_utils.py::PreTrainedConfig.get_config_dict`.
+4. Next call: `utils/hub.py::cached_file` or local file resolution.
+5. Data transformed: JSON config file becomes Python dict, then concrete config object.
+6. Final output/result: `BertConfig`, `LlamaConfig`, or another `PreTrainedConfig` subclass.
+7. Persisted/surfaced: config object returned to caller; no new persistence unless saved later.
+8. Logging/debug metadata: warnings/errors for unknown config, remote code, or missing files.
+
+### Flow 3: Model Loading
+
+Human terms: the system chooses the right model type, builds it, and fills it with saved weights.
+
+Technical flow:
+
+1. Trigger: `AutoModelForCausalLM.from_pretrained(model_id)`.
+2. First file/function: `auto_factory.py::_BaseAutoModelClass.from_pretrained`.
+3. Next call: `AutoConfig.from_pretrained` if config not supplied.
+4. Next call: `_get_model_class` chooses concrete class from lazy mapping.
+5. Next call: concrete class `PreTrainedModel.from_pretrained` in `modeling_utils.py`.
+6. Next call: `_get_resolved_checkpoint_files`.
+7. Next call: `_load_pretrained_model`.
+8. Next call: `_finalize_model_loading`.
+9. Data transformed: config metadata and checkpoint tensors become an initialized model object.
+10. Final output/result: concrete model instance such as `LlamaForCausalLM`.
+11. Persisted/surfaced: files may be cached locally; model object returned.
+12. Logging/debug metadata: missing/unexpected key reports, dtype/device/quantization warnings.
+
+### Flow 4: Tokenizer Or Processor Loading
+
+Human terms: the library loads the translator that converts user input into model input.
+
+Technical flow:
+
+1. Trigger: `AutoTokenizer.from_pretrained(model_id)` or `AutoProcessor.from_pretrained(model_id)`.
+2. First file/function: `tokenization_auto.py` or `processing_auto.py`.
+3. Next call: resolve class from tokenizer/processor config or model config.
+4. Next call: `PreTrainedTokenizerBase.from_pretrained` or `ProcessorMixin.from_pretrained`.
+5. Data transformed: tokenizer/processor files become Python objects with vocab, special tokens, templates, and component links.
+6. Final output/result: tokenizer or processor instance.
+7. Persisted/surfaced: files may be cached locally.
+8. Logging/debug metadata: warnings for missing fast tokenizer, missing files, template issues.
+
+### Flow 5: Pipeline Inference
+
+Human terms: the user asks for a task tool, then uses it on input.
+
+Technical flow:

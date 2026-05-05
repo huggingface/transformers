@@ -1,0 +1,114 @@
+- all candidate classes fail
+- dtype/device mismatch
+- checkpoint incompatible with task class
+
+### `Pipeline.__call__`
+
+Beginner explanation: runs the ready-made task.
+
+Technical explanation: merges initialization and call parameters, chooses iterator/list/single execution, and uses preprocess -> forward -> postprocess.
+
+Call graph:
+
+- Called by: users invoking a pipeline object.
+- Calls into: subclass `preprocess`, `forward`/`_forward`, `postprocess`, model/tokenizer/processor.
+- Depends on: subclass implementation and loaded components.
+- Returns to / influences: user-facing task output.
+
+Failure modes:
+
+- invalid input type
+- batching edge cases
+- postprocessing mismatch
+
+### `GenerationMixin.generate`
+
+Beginner explanation: controls the whole process of generated output.
+
+Technical explanation: prepares model inputs, merges `GenerationConfig`, validates tokens, creates logits processors/stopping criteria, chooses generation mode, and executes decoding loop.
+
+Call graph:
+
+- Called by: users, text-generation pipeline, serving handlers, examples.
+- Calls into: `_prepare_model_inputs`, `_prepare_special_tokens`, `_prepare_cache_for_generation`, `_get_logits_processor`, `_get_stopping_criteria`, `_sample`, `_beam_search`, `_assisted_decoding`, model forward.
+- Depends on: model forward signature, config, tokenizer special token IDs, generation config.
+- Returns to / influences: generated token IDs and optional scores/metadata.
+
+Failure modes:
+
+- invalid generation config
+- missing `pad_token_id`/`eos_token_id`
+- model does not support cache/generation mode
+- memory pressure from long sequences
+
+### `GenerationMixin._sample`
+
+Beginner explanation: chooses tokens one at a time, sometimes randomly based on probabilities.
+
+Technical explanation: decoding loop used for greedy and sampling modes, applying logits processors/warpers and stopping criteria until completion.
+
+Call graph:
+
+- Called by: `generate` through `GENERATION_MODES_MAPPING`.
+- Calls into: model forward, logits processors, stopping criteria, streamers.
+- Depends on: input IDs, model logits, generation config.
+- Returns to / influences: generated sequences.
+
+Failure modes:
+
+- numerical instability
+- bad logits processor config
+- failure to stop before max limits
+
+### `GenerationMixin._beam_search`
+
+Beginner explanation: keeps several possible answers alive and chooses strong candidates.
+
+Technical explanation: beam decoding loop that tracks beam scores, expands candidates, applies constraints, and finalizes best sequences.
+
+Call graph:
+
+- Called by: `generate` when beam mode is selected.
+- Calls into: model forward, logits processors, beam scorer/finalizer logic, stopping criteria.
+- Depends on: beam parameters and model logits.
+- Returns to / influences: best generated sequences under beam objective.
+
+Failure modes:
+
+- high memory use
+- length bias
+- invalid beam settings
+
+### `Trainer.train`
+
+Beginner explanation: starts the training process.
+
+Technical explanation: public method in `Trainer` that prepares checkpoint/resume behavior, initializes state, and enters the internal training loop.
+
+Call graph:
+
+- Called by: user scripts and examples.
+- Calls into: `_inner_training_loop`, checkpoint loading helpers, callbacks.
+- Depends on: model, args, train dataset, data collator, optimizer/scheduler settings.
+- Returns to / influences: training output, saved state, checkpoints, metrics.
+
+Failure modes:
+
+- no train dataset
+- invalid resume checkpoint
+- distributed setup errors
+
+### `Trainer.training_step`
+
+Beginner explanation: teaches the model from one batch.
+
+Technical explanation: prepares model for train mode, computes loss, backpropagates through accelerator/distributed helpers, returns detached loss.
+
+Call graph:
+
+- Called by: `_inner_training_loop` / `_run_epoch`.
+- Calls into: `compute_loss`, accelerator backward, model forward.
+- Depends on: valid batch tensors and labels.
+- Returns to / influences: gradient updates.
+
+Failure modes:

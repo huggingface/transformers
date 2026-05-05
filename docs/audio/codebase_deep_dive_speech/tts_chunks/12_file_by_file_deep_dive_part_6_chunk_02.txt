@@ -1,0 +1,68 @@
+Upstream assumptions: tests should not download large real assets unnecessarily.
+
+Downstream behaviors: deterministic local tests depend on fixtures.
+
+#### `utils/check_repo.py`
+
+1. Plain-English explanation: checks that repository structure stays consistent.
+2. ELI5 analogy: an inspector checking labels on every shelf.
+3. Technical role: checks model init, main init, tests, docs, auto classes, auto mappings, and deprecated model lists.
+4. Important symbols: repository check functions.
+5. Interactions: called by `make check-repo` and CI.
+6. What would break if disappeared: repo consistency drift would be harder to detect.
+
+Upstream assumptions: model files follow naming and registration conventions.
+
+Downstream behaviors: adding models safely depends on these checks.
+
+#### `utils/check_copies.py`
+
+1. Plain-English explanation: verifies copied code blocks stay synchronized.
+2. ELI5 analogy: checks that copied recipe cards still match the original.
+3. Technical role: validates `# Copied from` references.
+4. Important symbols: copy-checking functions.
+5. Interactions: called by `make check-repo` or related maintainer commands.
+6. What would break if disappeared: copied model code could silently diverge.
+
+Upstream assumptions: duplication is allowed but should be traceable.
+
+Downstream behaviors: maintainers can copy architecture blocks while preserving consistency.
+
+#### `utils/modular_model_converter.py` And `utils/check_modular_conversion.py`
+
+1. Plain-English explanation: generate expanded model files from compact modular definitions and verify the result.
+2. ELI5 analogy: turns a short recipe into a full cookbook page and checks it matches.
+3. Technical role: supports `modular_<name>.py` source files that generate standalone model files.
+4. Important symbols: modular conversion and validation routines.
+5. Interactions: `make fix-repo`, model-family files, generated files.
+6. What would break if disappeared: modular model workflow would fail and generated files could drift.
+
+Upstream assumptions: maintainers edit modular source for some models, then regenerate expanded files.
+
+Downstream behaviors: generated model files remain consistent and readable.
+
+#### `utils/check_auto.py`, `utils/check_inits.py`, `utils/check_dummies.py`, `utils/check_pipeline_typing.py`
+
+1. Plain-English explanation: specialized inspectors for auto mappings, imports, dummy objects, and pipeline typing.
+2. ELI5 analogy: label checker, door checker, missing-tool sign checker, and type checker.
+3. Technical role: validates generated registries, lazy import surfaces, optional dependency dummy modules, and pipeline typing support.
+4. Important symbols: check functions per script.
+5. Interactions: local maintainer commands and CI.
+6. What would break if disappeared: mapping/import/dummy/type drift would be harder to catch.
+
+Upstream assumptions: generated and lazy import structures require consistency checks.
+
+Downstream behaviors: package import and optional dependency behavior depend on these checks.
+
+### Documentation, Examples, CI, And Docker File Families
+
+#### `docs/**/*.md`
+
+1. Plain-English explanation: user and contributor manuals.
+2. ELI5 analogy: textbooks and how-to cards.
+3. Technical role: explain APIs, tasks, models, installation, migration, and concepts.
+4. Important symbols: docs reference code symbols but are not runtime code.
+5. Interactions: docs builds and examples link to runtime APIs.
+6. What would break if disappeared: user education and API reference would be severely damaged.
+
+#### `examples/**/*.py`

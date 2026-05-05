@@ -1,0 +1,74 @@
+1. Plain-English explanation: streams generated text as it is produced.
+2. ELI5 analogy: reading words aloud as they are written, not waiting for the whole page.
+3. Technical role: streamer classes receive generated token IDs and expose incremental output.
+4. Important symbols: streamer classes used by generation and serving.
+5. Interactions: `GenerationMixin.generate` calls streamers during decoding.
+6. What would break if disappeared: streaming generation UX would fail or need custom replacement.
+
+Upstream assumptions: generated tokens can be decoded incrementally.
+
+Downstream behaviors: chat/serve streaming depends on this.
+
+#### `src/transformers/generation/continuous_batching/*.py`
+
+1. Plain-English explanation: coordinates multiple generation requests together for efficiency.
+2. ELI5 analogy: instead of baking one cookie tray at a time, the oven schedules many trays efficiently.
+3. Technical role: request state, paged-attention cache, block allocation, schedulers, input/output containers, router, and batch processor.
+4. Important symbols: `RequestStatus`, `GenerationOutput`, `RequestState`, `FutureRequestState`, `PagedAttentionCache`, `PagedAttentionMemoryHandler`, `Block`, `BlockManager`, `Scheduler`, `FIFOScheduler`, `PrefillFirstScheduler`, `PagedAttentionArgs`, `ContinuousBatchingIOs`, `ContinuousBatchingAsyncIOs`, `OutputRouter`, `ContinuousBatchProcessor`.
+5. Interactions: serving can enable continuous batching for generative models.
+6. What would break if disappeared: continuous batched serving would fail; simple `generate()` could still work.
+
+Upstream assumptions: model and attention backend support paged attention or required cache semantics.
+
+Downstream behaviors: throughput/latency in serving depend on scheduling and cache allocation.
+
+### Pipeline Files
+
+#### `src/transformers/pipelines/__init__.py`
+
+1. Plain-English explanation: creates ready-made task pipelines.
+2. ELI5 analogy: the "choose task" menu at a service counter.
+3. Technical role: defines supported task registry, task aliases, pipeline factory, task checking, default model resolution, and loading orchestration.
+4. Important symbols: `pipeline`, `SUPPORTED_TASKS`, `TASK_ALIASES`, `PIPELINE_REGISTRY`, `get_task`, `check_task`.
+5. Interactions: calls Auto config/model/tokenizer/processor classes and `load_model`.
+6. What would break if disappeared: `pipeline()` and many beginner workflows would fail.
+
+Calls:
+
+- `AutoConfig.from_pretrained`
+- `load_model` from `pipelines/base.py`
+- `AutoTokenizer`, `AutoImageProcessor`, `AutoFeatureExtractor`, `AutoProcessor`
+- pipeline class constructors
+
+Called by:
+
+- users, README examples, docs, tests
+
+Upstream assumptions: task registry knows which model classes/processors are appropriate.
+
+Downstream behaviors: returns a concrete `Pipeline` subclass ready for use.
+
+#### `src/transformers/pipelines/base.py`
+
+1. Plain-English explanation: common behavior shared by all pipelines.
+2. ELI5 analogy: the conveyor belt every task station uses.
+3. Technical role: defines `Pipeline`, `ChunkPipeline`, registry/data-format classes, `load_model`, batching and iterator behavior, preprocessing/forward/postprocessing orchestration.
+4. Important symbols: `Pipeline`, `ChunkPipeline`, `PipelineRegistry`, `PipelineDataFormat`, `CsvPipelineDataFormat`, `JsonPipelineDataFormat`, `PipedPipelineDataFormat`, `load_model`.
+5. Interactions: task-specific pipelines subclass `Pipeline`.
+6. What would break if disappeared: all task pipelines would lose shared execution behavior.
+
+Calls:
+
+- model class `.from_pretrained` in `load_model`
+- subclass `preprocess`, `_forward`/`forward`, and `postprocess` methods
+
+Called by:
+
+- `pipeline()` factory
+- task-specific pipeline subclasses
+
+Upstream assumptions: subclasses implement task-specific transform methods.
+
+Downstream behaviors: every pipeline call uses this lifecycle.
+
+#### `src/transformers/pipelines/text_generation.py`

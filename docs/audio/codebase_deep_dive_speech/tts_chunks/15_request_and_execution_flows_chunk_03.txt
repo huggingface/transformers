@@ -1,0 +1,43 @@
+1. Trigger: serving configuration enables continuous batching and requests arrive.
+2. First file/function: serving handler creates/request state.
+3. Next call: `ContinuousBatchProcessor`.
+4. Next call: scheduler selects prefill/decode work.
+5. Next call: cache manager allocates KV-cache blocks.
+6. Next call: model runs batched forward passes.
+7. Next call: output router sends tokens/results to the correct request.
+8. Data transformed: separate requests -> batched tensors/cache blocks -> per-request outputs.
+9. Final output/result: each request receives its own generated output.
+10. Persisted/surfaced: streamed/returned over HTTP; cache blocks reused/freed.
+11. Logging/debug metadata: serving logs and request states.
+
+### Flow 10: Save And Push
+
+Human terms: the user saves a model or uploads it to the Hub.
+
+Technical flow:
+
+1. Trigger: `model.save_pretrained(path)` or `push_to_hub`.
+2. First file/function: `PreTrainedModel.save_pretrained` or `PushToHubMixin`.
+3. Next call: config/tokenizer/processor save helpers as applicable.
+4. Next call: checkpoint serialization, sharding, safetensors/PyTorch format handling.
+5. Data transformed: in-memory model/config/tokenizer objects -> files.
+6. Final output/result: local directory or Hub repository with artifacts.
+7. Persisted/surfaced: filesystem and/or Hub.
+8. Logging/debug metadata: warnings for file format, sharding, push status.
+
+### Flow 11: Repository Consistency And Modular Generation
+
+Human terms: maintainers check that generated labels, copies, imports, and docs still match.
+
+Technical flow:
+
+1. Trigger: `make check-repo` or `make fix-repo`.
+2. First file/function: `Makefile` target.
+3. Next call: scripts in `utils`.
+4. For modular models: `utils/modular_model_converter.py` expands `modular_<name>.py`.
+5. For copies: `utils/check_copies.py` checks `# Copied from`.
+6. For imports/dummies: `check_inits.py` and `check_dummies.py`.
+7. Data transformed: source/generator files -> validated or regenerated package files.
+8. Final output/result: pass/fail diagnostics or updated generated files.
+9. Persisted/surfaced: generated files when fix targets are used.
+10. Logging/debug metadata: script output and CI logs.

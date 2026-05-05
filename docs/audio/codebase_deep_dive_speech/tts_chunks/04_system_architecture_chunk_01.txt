@@ -1,0 +1,80 @@
+## System Architecture
+
+### What This Means In Plain English
+
+The system is built like a city. There is a front gate, a directory service, factories, translators, roads to warehouses, quality inspectors, and optional bridges to other cities.
+
+### ELI5 Analogy
+
+If AI models are appliances, `transformers` is the store, the warehouse, the instruction manual, the universal power adapter, the repair desk, and the delivery service.
+
+### Technical Explanation
+
+The high-level architecture has these layers:
+
+1. **Public API layer:** `src/transformers/__init__.py` exposes names and uses lazy imports.
+2. **Dependency and import layer:** `src/transformers/utils/import_utils.py` checks optional libraries and delays imports.
+3. **Registry layer:** `src/transformers/models/auto` maps config/model types to classes.
+4. **Artifact loading layer:** `src/transformers/utils/hub.py` and `dynamic_module_utils.py` find files locally or remotely.
+5. **Base abstraction layer:** `configuration_utils.py`, `modeling_utils.py`, tokenizer/processor/image/audio/video utilities.
+6. **Concrete implementation layer:** `src/transformers/models/<family>`.
+7. **Task orchestration layer:** `pipelines`, `generation`, `trainer`, `cli/serving`.
+8. **Integration layer:** `integrations`, `quantizers`, `loss`, distributed helpers.
+9. **Quality and maintenance layer:** `tests`, `utils`, `Makefile`, CI.
+
+### Why It Matters In This Codebase
+
+The separation allows one user-facing call, such as `AutoModelForCausalLM.from_pretrained("meta-llama/...")`, to work even though the underlying model family, tokenizer type, checkpoint format, optional libraries, hardware setup, and generation configuration can all vary.
+
+### 1. What The Product Does
+
+Plain English: it gives users a common way to use many pretrained AI models.
+
+Technical explanation:
+
+- `pipeline` gives high-level task APIs.
+- `Auto*` classes choose concrete classes from configuration metadata.
+- `PreTrainedModel.from_pretrained` loads weights.
+- `PreTrainedTokenizerBase.from_pretrained` and processor/image/audio/video mixins load preprocessors.
+- `GenerationMixin.generate` runs decoding loops.
+- `Trainer` runs training and evaluation.
+- `transformers serve` wraps loaded models in HTTP endpoints.
+
+Likely evolution: early model-specific APIs grew into common base classes, then auto classes, then Hub integration, then task pipelines, then training, then serving and continuous batching.
+
+Tradeoffs:
+
+- The API is convenient for users.
+- The internals are complex because they must support many model families and optional environments.
+- Repeated code in model files is intentional for researcher readability, but it creates maintenance burden.
+
+### 2. What The Current Codebase Appears Optimized For
+
+Plain English: it is optimized for compatibility, extensibility, and model coverage more than for minimal code size.
+
+Technical explanation:
+
+- Lazy imports avoid importing PyTorch, TensorFlow, tokenizers, image libraries, audio libraries, and serving dependencies unless needed.
+- Auto mappings centralize class resolution.
+- Generated files and consistency checks reduce drift.
+- Optional dependency fallbacks allow partial installs.
+- Model implementations stay close to papers and upstream research code.
+
+Likely evolution: the library had to grow from a few NLP models to a multi-modal, multi-backend ecosystem.
+
+Tradeoffs:
+
+- Good: broad support, stable user API, manageable optional dependencies.
+- Bad: large import graphs, many compatibility branches, difficult onboarding.
+
+### 3. High-Level Architecture
+
+Plain English: a user asks for a model or task; the library figures out which parts are needed; then it loads those parts and runs them.
+
+Technical explanation:
+
+The common path is:
+
+`user call` -> `Auto/pipeline registry` -> `config resolution` -> `class selection` -> `artifact loading` -> `object construction` -> `task execution`.
+
+Important files:

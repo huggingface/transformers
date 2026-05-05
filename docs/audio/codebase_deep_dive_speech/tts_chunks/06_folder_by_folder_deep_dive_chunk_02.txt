@@ -1,0 +1,109 @@
+Department analogy: the textbook and user manual department.
+
+Technical role: Markdown documentation, task guides, model docs, API docs, migration guides, and generated documentation surfaces.
+
+Why it exists: the library's product is an API, so documentation is a major part of the user experience.
+
+Connections: examples, source docstrings, CI docs builds.
+
+Core versus support: secondary to runtime but central to adoption.
+
+Current versus legacy: mixed current and historical docs.
+
+What would break if missing: package imports would work, but users and maintainers would lose onboarding, API reference, and migration guidance.
+
+### `examples/`
+
+Department analogy: demonstration kitchen.
+
+Technical role: runnable scripts for PyTorch tasks such as language modeling, text classification, token classification, question answering, summarization, translation, speech, image classification, object detection, and segmentation.
+
+Why it exists: examples show correct composition of datasets, tokenizers/processors, models, trainer, metrics, and task-specific arguments.
+
+Connections: uses `Trainer`, `Auto*`, datasets, and task heads.
+
+Core versus support: support but important learning surface.
+
+What would break if missing: runtime would work; users would have fewer reliable recipes.
+
+### `i18n/`
+
+Department analogy: translation coordination office.
+
+Technical role: localization configuration for documentation.
+
+Why it exists: the project has global users.
+
+Connections: docs build, translated docs.
+
+Core versus support: support.
+
+What would break if missing: translated documentation workflow would weaken; runtime would not break.
+
+### `notebooks/`
+
+Department analogy: interactive classroom.
+
+Technical role: notebook content for demos or tutorials.
+
+Why it exists: notebooks are common in machine-learning education and experimentation.
+
+Connections: examples, docs, runtime APIs.
+
+Core versus support: support.
+
+What would break if missing: no runtime break; fewer interactive teaching assets.
+
+### `scripts/`
+
+Department analogy: small utility drawer.
+
+Technical role: small shell helper scripts.
+
+Why it exists: convenience for specific repository operations.
+
+Connections: minor maintainer workflows.
+
+Core versus support: support.
+
+What would break if missing: only the specific helper commands would break.
+
+### `src/`
+
+Department analogy: the factory floor where the product is built.
+
+Technical role: contains the installable Python package `transformers`.
+
+Why it exists: source layout keeps package code separate from tests, docs, and scripts.
+
+Connections: all runtime APIs, tests, examples, docs, CI, and packaging.
+
+Core versus support: central.
+
+What would break if missing: the library would not exist.
+
+### `src/transformers/`
+
+Department analogy: the central operations building.
+
+Technical role: package root for imports, base abstractions, model implementations, pipelines, generation, training, serving, integrations, quantizers, utilities, data helpers, loss functions, and CLI.
+
+Why it exists: this is the namespace installed as `transformers`.
+
+Connections: everything runtime-related.
+
+Core versus support: central.
+
+What would break if missing: all `transformers` imports fail.
+
+### `src/transformers/models/`
+
+Department analogy: the model warehouse with one aisle per model family.
+
+Technical role: contains 463 model directories plus the `auto` registry. File patterns include `configuration_*.py`, `modeling_*.py`, `tokenization_*.py`, `processing_*.py`, `image_processing_*.py`, `feature_extraction_*.py`, `video_processing_*.py`, `convert_*.py`, and `modular_*.py`.
+
+Why it exists: each model family has architecture-specific logic and artifacts.
+
+Connections: auto classes import model-family classes lazily; tests mirror these directories; docs document them.
+
+Core versus support: central.

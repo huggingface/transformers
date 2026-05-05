@@ -1,0 +1,66 @@
+### Integration, Quantization, Loss, And Data Files
+
+#### `src/transformers/integrations/*.py`
+
+1. Plain-English explanation: bridges to optional external systems.
+2. ELI5 analogy: adapters that let one charger fit many sockets.
+3. Technical role: integration points for Accelerate, DeepSpeed, FSDP, PEFT, tensor parallelism, attention kernels, tracking tools, and hardware/backends.
+4. Important symbols: vary by file; representative files include `peft.py`, `tensor_parallel.py`, `integration_utils.py`, and attention/backend helpers.
+5. Interactions: called by model loading, trainer, quantizers, generation, and serving.
+6. What would break if disappeared: advanced distributed, tracking, adapter, and optimized-kernel workflows would fail.
+
+Upstream assumptions: optional libraries may be installed and should be used only when requested/available.
+
+Downstream behaviors: memory usage, speed, scaling, and training/inference integration depend on these bridges.
+
+#### `src/transformers/quantizers/base.py`
+
+1. Plain-English explanation: base rules for loading models in compressed form.
+2. ELI5 analogy: instructions for packing a large suitcase smaller without losing the important items.
+3. Technical role: defines `HfQuantizer`, lifecycle hooks for preprocessing, postprocessing, dequantization, and modules-to-skip decisions.
+4. Important symbols: `HfQuantizer`, `preprocess_model`, `postprocess_model`, `dequantize`, `get_modules_to_not_convert`.
+5. Interactions: model loading calls quantizer hooks.
+6. What would break if disappeared: shared quantizer lifecycle would fail.
+
+Upstream assumptions: quantization backends need a common interface.
+
+Downstream behaviors: compressed model loading and dispatch depend on it.
+
+#### `src/transformers/quantizers/auto.py`
+
+1. Plain-English explanation: chooses the right quantizer.
+2. ELI5 analogy: chooses the right compression machine.
+3. Technical role: auto config and quantizer selection.
+4. Important symbols: `AutoQuantizationConfig`, `AutoHfQuantizer`, `get_hf_quantizer`, registration functions.
+5. Interactions: called from `modeling_utils.py` during `from_pretrained`.
+6. What would break if disappeared: automatic quantized loading would fail.
+
+Upstream assumptions: quantization config identifies a supported quantization method.
+
+Downstream behaviors: model loading modifies modules/weights according to quantization backend.
+
+#### `src/transformers/utils/quantization_config.py`
+
+1. Plain-English explanation: settings for quantized model loading.
+2. ELI5 analogy: the compression recipe.
+3. Technical role: defines quantization config mixin and many backend-specific config classes.
+4. Important symbols: `QuantizationConfigMixin`, `BitsAndBytesConfig`, `GPTQConfig`, `AwqConfig`, and other quantization config classes.
+5. Interactions: parsed by model loading and quantizer auto selection.
+6. What would break if disappeared: quantization settings could not be represented consistently.
+
+Upstream assumptions: many quantization backends expose different knobs but need shared serialization/validation patterns.
+
+Downstream behaviors: memory-efficient model loading depends on these configs.
+
+#### `src/transformers/loss/loss_utils.py`
+
+1. Plain-English explanation: standard ways to calculate model mistakes for different tasks.
+2. ELI5 analogy: different grading rubrics for essays, multiple choice, fill-in-the-blank, and span finding.
+3. Technical role: task-specific loss functions and a loss mapping.
+4. Important symbols: `ForCausalLMLoss`, `ForMaskedLMLoss`, `ForSequenceClassificationLoss`, `ForQuestionAnsweringLoss`, `ForTokenClassification`, `LOSS_MAPPING`.
+5. Interactions: model heads and trainer workflows use task losses.
+6. What would break if disappeared: many models would need duplicated loss logic or lose standardized loss behavior.
+
+Upstream assumptions: model outputs and labels follow expected shapes.
+
+Downstream behaviors: training losses and gradient updates depend on correct loss selection.

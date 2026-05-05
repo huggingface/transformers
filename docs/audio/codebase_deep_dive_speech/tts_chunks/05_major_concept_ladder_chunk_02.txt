@@ -1,0 +1,67 @@
+ELI5 analogy: you give the librarian a book title, and the librarian finds the correct shelf and edition.
+
+Repo-specific role: `AutoConfig`, `AutoModel`, `AutoTokenizer`, and related classes dispatch from metadata to implementation.
+
+Technical implementation detail: mappings in `src/transformers/models/auto` use `model_type` and lazy imports.
+
+Why it matters: users should not need to import `BertModel` or `LlamaForCausalLM` manually for every checkpoint.
+
+What depends on it: nearly every high-level loading workflow.
+
+What can go wrong: unknown `model_type`, mapping drift, remote code trust decisions, optional dependency failure.
+
+Tradeoffs and design implications: auto dispatch is convenient but adds hidden indirection.
+
+### Pipeline
+
+Plain-English explanation: a pipeline is a ready-made task workflow.
+
+ELI5 analogy: instead of collecting flour, eggs, bowl, and oven yourself, you press the "make cake" button.
+
+Repo-specific role: `pipeline()` loads the right model and processors for common tasks and returns a callable object.
+
+Technical implementation detail: `pipeline` lives in `src/transformers/pipelines/__init__.py`; common execution is in `Pipeline` in `pipelines/base.py`.
+
+Why it matters: it makes common AI tasks approachable.
+
+What depends on it: quickstarts, examples, beginner users, simple inference apps.
+
+What can go wrong: task/model mismatch, unsupported processor, unexpected default model, device/dtype mismatch.
+
+Tradeoffs and design implications: convenience can obscure lower-level control.
+
+### Generation
+
+Plain-English explanation: generation is the process of choosing the next token again and again.
+
+ELI5 analogy: the model writes one word, looks at what it has written, then chooses the next word.
+
+Repo-specific role: `GenerationMixin.generate` powers text generation, chat completions, and many pipelines.
+
+Technical implementation detail: `src/transformers/generation/utils.py` prepares inputs, caches, logits processors, stopping criteria, and decoding loops.
+
+Why it matters: generation behavior defines user-visible model output.
+
+What depends on it: language model pipelines, serving, chat examples, tests.
+
+What can go wrong: bad special tokens, infinite generation until max length, poor sampling settings, cache bugs, memory pressure.
+
+Tradeoffs and design implications: many algorithms and knobs are powerful but hard for beginners to understand.
+
+### Trainer
+
+Plain-English explanation: the trainer is a reusable teaching loop for models.
+
+ELI5 analogy: it is a coach that shows examples to the robot, checks answers, and adjusts the robot's brain.
+
+Repo-specific role: `Trainer` orchestrates training, evaluation, checkpointing, callbacks, metrics, and distributed helpers.
+
+Technical implementation detail: `src/transformers/trainer.py` works with `TrainingArguments`, datasets, data collators, optimizers, schedulers, callbacks, and model outputs.
+
+Why it matters: many users fine-tune models rather than only run inference.
+
+What depends on it: examples, tests, user training scripts.
+
+What can go wrong: incorrect labels, data collation mismatch, distributed configuration errors, checkpoint/resume errors, metric shape issues.
+
+Tradeoffs and design implications: one general trainer helps many tasks, but its file is large and hard to reason about.

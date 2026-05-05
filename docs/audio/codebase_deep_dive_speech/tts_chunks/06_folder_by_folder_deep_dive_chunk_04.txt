@@ -1,0 +1,45 @@
+Technical role: common test mixins, per-model tests, pipeline tests, generation tests, trainer tests, quantization tests, utility tests, fixtures, and integration markers.
+
+Why it exists: broad model coverage needs broad tests.
+
+Connections: imports runtime package and tooling; CI runs subsets/matrices.
+
+Core versus support: central to quality.
+
+What would break if missing: runtime could still import, but regression risk would become unacceptable.
+
+### `utils/`
+
+Department analogy: maintenance engineers.
+
+Technical role: repository checks and code generators, including auto mappings, dummy objects, copy consistency, modular model conversion, docs consistency, pipeline typing, and repo hygiene.
+
+Why it exists: the repo contains generated and patterned files that must stay synchronized.
+
+Connections: `Makefile`, CI, maintainers adding models.
+
+Core versus support: central for maintainers, not installed runtime.
+
+What would break if missing: generated files would drift; adding models would become more error-prone.
+
+### Best Folder Study Order
+
+1. `README.md`, `setup.py`, and `pyproject.toml`
+2. `src/transformers/__init__.py`
+3. `src/transformers/utils/import_utils.py`
+4. `src/transformers/models/auto`
+5. `src/transformers/configuration_utils.py`
+6. `src/transformers/modeling_utils.py`
+7. tokenizer and processor base files
+8. one model family, such as `models/bert` or `models/llama`
+9. `src/transformers/generation`
+10. `src/transformers/pipelines`
+11. `src/transformers/trainer.py` and training helpers
+12. `src/transformers/utils/hub.py`
+13. `src/transformers/integrations` and `quantizers`
+14. `src/transformers/cli/serving`
+15. `tests`, `utils`, `docs`, `examples`, CI, Docker
+
+Folders that matter most for deep product understanding: `src/transformers`, especially `models/auto`, model-family directories, generation, pipelines, trainer, tokenizers/processors, and Hub utilities.
+
+Folders to deprioritize at first: `.github`, `.circleci`, `docker`, `i18n`, `benchmark`, `benchmark_v2`, `notebooks`, and most docs pages, unless your goal is contribution infrastructure or documentation.

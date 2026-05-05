@@ -1,0 +1,104 @@
+- Called by: `AutoConfig.from_pretrained`, `PreTrainedConfig.from_pretrained`.
+- Calls into: `cached_file` from `utils/hub.py`, JSON loading, optional GGUF helpers.
+- Depends on: artifact location, cache settings, revision, token/auth kwargs.
+- Returns to / influences: config object construction.
+
+Failure modes:
+
+- network/cache error
+- missing `config.json`
+- invalid JSON
+
+### `PreTrainedModel.__init__`
+
+Beginner explanation: stores the model's instruction card and prepares shared model behavior.
+
+Technical explanation: base initializer in `modeling_utils.py` validates config, stores config/name, checks attention and expert settings, creates generation config when supported, and sets loss behavior.
+
+Call graph:
+
+- Called by: concrete model base classes such as `BertPreTrainedModel` and `LlamaPreTrainedModel`.
+- Calls into: config validation and generation config helpers.
+- Depends on: valid `PreTrainedConfig`.
+- Returns to / influences: initialized PyTorch module object.
+
+Failure modes:
+
+- wrong config type
+- invalid attention implementation
+- missing generation config assumptions
+
+### `PreTrainedModel.from_pretrained`
+
+Beginner explanation: builds a model object and fills it with saved weights.
+
+Technical explanation: the central pretrained model loader in `modeling_utils.py`.
+
+Why it exists: every model family needs consistent save/load, cache, dtype, device, quantization, and checkpoint behavior.
+
+Step-by-step logic:
+
+1. Parse loading kwargs.
+2. Load config if needed.
+3. Detect adapter and quantization settings.
+4. Resolve checkpoint files.
+5. Determine dtype/device/loading context.
+6. Instantiate the model from config.
+7. Load state dict shards into the model.
+8. Handle missing, unexpected, or mismatched keys.
+9. Tie weights and initialize missing parameters.
+10. Put the model in evaluation mode by default.
+11. Return model, optionally with loading info.
+
+Call graph:
+
+- Called by: concrete model classes, `_BaseAutoModelClass.from_pretrained`, pipelines, serving, examples, tests.
+- Calls into: `PreTrainedConfig.from_pretrained`, `_get_resolved_checkpoint_files`, `_get_dtype`, `_load_pretrained_model`, `_finalize_model_loading`, quantizer helpers, Hub helpers.
+- Depends on: config, checkpoint files, optional backend availability, dtype/device/quantization kwargs.
+- Returns to / influences: usable `PreTrainedModel` instance.
+
+Failure modes:
+
+- checkpoint not found
+- tensor shape mismatch
+- missing backend
+- out-of-memory
+- incompatible quantization/device map
+- remote code/security decisions upstream
+
+Why this logic belongs here: shared pretrained loading is central to the package contract and should not be duplicated in every model family.
+
+### `_get_resolved_checkpoint_files`
+
+Beginner explanation: finds the saved weight files.
+
+Technical explanation: helper in `modeling_utils.py` that resolves local/remote checkpoint filenames, variants, shards, safetensors versus PyTorch files.
+
+Call graph:
+
+- Called by: `PreTrainedModel.from_pretrained`.
+- Calls into: `cached_file`, `cached_files`, `get_checkpoint_shard_files` from `utils/hub.py`.
+- Depends on: model path/ID, revision, filename patterns, sharded index files.
+- Returns to / influences: list of checkpoint files loaded by `_load_pretrained_model`.
+
+Failure modes:
+
+- no compatible checkpoint
+- wrong variant
+- missing shard
+- network/cache failure
+
+### `_load_pretrained_model`
+
+Beginner explanation: puts saved numbers into the model.
+
+Technical explanation: lower-level checkpoint loading function in `modeling_utils.py` handling state dicts, shards, offload/device maps, conversions, and missing/unexpected keys.
+
+Call graph:
+
+- Called by: `PreTrainedModel.from_pretrained`.
+- Calls into: `load_state_dict`, device/offload helpers, quantizer hooks, state-dict assignment helpers.
+- Depends on: instantiated model, resolved checkpoint files, dtype/device map, expected key names.
+- Returns to / influences: model parameters and load diagnostics.
+
+Failure modes:

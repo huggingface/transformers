@@ -1,0 +1,91 @@
+Architectural smell or explicit design choice: high duplication. README and repo instructions indicate this is intentional to help researchers understand and modify model code.
+
+What would break if missing: auto model loading and concrete architecture support would fail.
+
+### `src/transformers/models/auto/`
+
+Department analogy: the reception desk that routes every model request to the right aisle.
+
+Technical role: maps `model_type` and config classes to concrete model, tokenizer, processor, image processor, video processor, feature extractor, and backbone classes.
+
+Why it exists: users can call `AutoModel.from_pretrained` instead of manually selecting `BertModel`, `LlamaForCausalLM`, etc.
+
+Connections: depends on generated mappings and lazy imports; called by pipelines, examples, serving, and most user code.
+
+Core versus support: central.
+
+What would break if missing: high-level loading would become manual and most examples would fail.
+
+### `src/transformers/generation/`
+
+Department analogy: the writing room where language models choose what to say next.
+
+Technical role: decoding algorithms, generation config, logits processors, stopping criteria, streamers, candidate generators, watermarking, continuous batching.
+
+Why it exists: generation is complex and shared across many model families.
+
+Connections: `GenerationMixin` is mixed into many model classes; pipelines and serving call `model.generate`.
+
+Core versus support: central for generative models.
+
+What would break if missing: text generation, chat completion, and many language-model examples would fail.
+
+### `src/transformers/pipelines/`
+
+Department analogy: the ready-made service counter.
+
+Technical role: high-level task APIs that combine model loading, preprocessing, forward/generation, and postprocessing.
+
+Why it exists: users often want task outputs, not raw tensors.
+
+Connections: `pipeline()` calls Auto classes, processors, tokenizers, model loading, and task-specific pipeline subclasses.
+
+Core versus support: central for beginner/user convenience.
+
+What would break if missing: `from transformers import pipeline` quickstart workflows would fail.
+
+### `src/transformers/integrations/`
+
+Department analogy: bridge-building team to other companies' tools.
+
+Technical role: adapters for Accelerate, DeepSpeed, FSDP, PEFT, tensor parallelism, tracking, attention kernels, and other optional libraries.
+
+Why it exists: model training/inference often requires external tools for scale, speed, memory, and monitoring.
+
+Connections: `Trainer`, model loading, quantizers, generation, and serving.
+
+Core versus support: central for advanced users, optional for basic users.
+
+What would break if missing: many optimized or distributed workflows would fail, but simple CPU inference might still work.
+
+### `src/transformers/quantizers/`
+
+Department analogy: the compression workshop.
+
+Technical role: quantization abstractions and auto selection for compressed model loading.
+
+Why it exists: large models often need fewer bits to fit in memory or run faster.
+
+Connections: `modeling_utils.py` calls quantizer selection and lifecycle hooks during `from_pretrained`.
+
+Core versus support: advanced runtime support.
+
+What would break if missing: quantized loading paths and related configs would fail.
+
+### `src/transformers/cli/`
+
+Department analogy: command-line front desk.
+
+Technical role: Typer CLI commands for environment info, downloads, chat, serving, version, and adding new model-like code.
+
+Why it exists: not every workflow starts from Python source code; some users want terminal commands.
+
+Connections: calls runtime loading, serving, and utility code.
+
+Core versus support: support for product surface; serving is increasingly runtime-relevant.
+
+What would break if missing: `transformers` command-line entry point would fail.
+
+### `tests/`
+
+Department analogy: quality assurance and regression lab.

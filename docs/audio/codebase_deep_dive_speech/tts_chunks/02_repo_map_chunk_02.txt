@@ -1,0 +1,26 @@
+| Path | What it is | Central or secondary | Current, legacy, or scaffolding |
+|---|---|---|---|
+| `.ai/` | Instructions for AI coding agents working in this repo | Support | Current project-specific guidance |
+| `.circleci/` | CircleCI configuration | Support | Legacy or secondary CI surface, because GitHub Actions is larger |
+| `.github/` | GitHub Actions, issue templates, PR automation | Support | Current CI and repository automation |
+| `benchmark/` | Older benchmarking scripts/config | Support | Mixed, likely older benchmark surface |
+| `benchmark_v2/` | Newer benchmarking scripts/config | Support | Current or newer benchmark surface |
+| `docker/` | Dockerfiles for runtime, CI, docs, hardware variants | Support | Current infra support |
+| `docs/` | User and contributor documentation | Secondary to runtime, central to adoption | Current docs plus historical docs |
+| `examples/` | Example training and inference scripts | Support | Current user-facing recipes |
+| `i18n/` | Localization configuration | Support | Current docs support |
+| `notebooks/` | Notebook material | Support | Examples/learning support |
+| `scripts/` | Small shell helpers | Support | Minor tooling |
+| `src/transformers/` | The installed Python package | Central | Current runtime core |
+| `tests/` | Test suite | Central quality surface | Current plus legacy regression fixtures |
+| `utils/` | Maintenance scripts and code generators | Central for maintainers | Current internal tooling |
+| `AGENTS.md` | Symlink to `.ai/AGENTS.md` | Support | Current contributor guidance |
+| `CLAUDE.md` | Symlink to `.ai/AGENTS.md` | Support | Current contributor guidance |
+| `setup.py` | Package metadata, dependencies, release version, CLI entry point | Central build surface | Current |
+| `pyproject.toml` | Ruff, pytest, typing configuration | Central tooling surface | Current |
+| `Makefile` | Developer commands for style, typing, tests, repo checks | Central maintainer surface | Current |
+| `README.md` | Product entry point and quickstart | Central communication surface | Current |
+| `CONTRIBUTING.md` | Contribution guide | Support | Current |
+| `MIGRATION_GUIDE_V5.md` | Migration notes for version 5 | Support | Current transition guide |
+
+### Subsystem Map

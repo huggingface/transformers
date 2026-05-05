@@ -1,0 +1,104 @@
+1. Receive a model ID, local path, or config path.
+2. Call `PreTrainedConfig.get_config_dict`.
+3. Inspect config metadata such as `model_type` and `auto_map`.
+4. Resolve whether remote code should be trusted.
+5. If remote code is used, load the custom config class.
+6. Otherwise look up the local config class in `CONFIG_MAPPING`.
+7. Return `ConcreteConfig.from_dict`.
+
+Call graph:
+
+- Called by: `pipeline`, `_BaseAutoModelClass.from_pretrained`, user code, serving.
+- Calls into: `PreTrainedConfig.get_config_dict` in `configuration_utils.py`; `resolve_trust_remote_code` and `get_class_from_dynamic_module` in `dynamic_module_utils.py`; `_LazyConfigMapping`.
+- Depends on: config JSON, `model_type`, auto mappings.
+- Returns to / influences: model-class selection and concrete model construction.
+
+Failure modes:
+
+- missing config file
+- unknown `model_type`
+- remote code required but not trusted
+- malformed config JSON
+
+Why this logic belongs here: config dispatch is the first auto-loading decision and should remain independent of model weight loading.
+
+### `_BaseAutoModelClass.from_pretrained`
+
+Beginner explanation: chooses the right model class and asks it to load itself.
+
+Technical explanation: shared auto model loader in `src/transformers/models/auto/auto_factory.py`.
+
+Why it exists: many `AutoModelFor*` classes need the same dispatch logic.
+
+Step-by-step logic:
+
+1. Accept model ID/path plus kwargs.
+2. Load or receive a config.
+3. Detect adapter and remote-code cases when relevant.
+4. Decide whether the config maps to a supported model class for this auto class.
+5. Choose the concrete class through `_get_model_class`.
+6. Call concrete class `.from_pretrained`.
+7. Return the loaded model.
+
+Call graph:
+
+- Called by: `AutoModel.from_pretrained`, `AutoModelForCausalLM.from_pretrained`, task-specific AutoModel classes.
+- Calls into: `AutoConfig.from_pretrained`, `_get_model_class`, `get_class_from_dynamic_module`, concrete `PreTrainedModel.from_pretrained`.
+- Depends on: config class, mapping for the requested task, remote code policy.
+- Returns to / influences: loaded concrete model instance used by pipelines/trainer/serving.
+
+Failure modes:
+
+- model type has no class for requested task
+- remote custom code not trusted
+- concrete loading failure
+- optional dependency missing
+
+Why this logic belongs here: it avoids duplicating dispatch behavior across dozens of AutoModel classes.
+
+### `_LazyAutoMapping.__getitem__`
+
+Beginner explanation: looks up the real class only when needed.
+
+Technical explanation: lazy mapping in `auto_factory.py` that maps config classes to model classes without importing every model at startup.
+
+Why it exists: auto classes need broad mappings but imports must stay lazy.
+
+Call graph:
+
+- Called by: `_BaseAutoModelClass.from_pretrained`, auto mapping access.
+- Calls into: lazy import of model modules.
+- Depends on: config-to-model mapping constants.
+- Returns to / influences: concrete model class choice.
+
+Failure modes:
+
+- mapping references missing class
+- module import fails due to missing backend
+
+### `PreTrainedConfig.from_pretrained`
+
+Beginner explanation: load a saved instruction card from disk or the Hub.
+
+Technical explanation: class method in `configuration_utils.py` that calls `get_config_dict`, merges kwargs, and creates config object.
+
+Call graph:
+
+- Called by: concrete config classes, `AutoConfig`, direct user code.
+- Calls into: `get_config_dict`, `from_dict`, validation methods.
+- Depends on: config file resolution and class fields.
+- Returns to / influences: model initialization and auto dispatch.
+
+Failure modes:
+
+- missing or incompatible config file
+- invalid kwargs
+- malformed fields
+
+### `PreTrainedConfig.get_config_dict` And `_get_config_dict`
+
+Beginner explanation: find and read the JSON instruction file.
+
+Technical explanation: resolves `config.json` or equivalent, supports local/remote paths, handles nested config metadata, and returns a dictionary plus unused kwargs.
+
+Call graph:

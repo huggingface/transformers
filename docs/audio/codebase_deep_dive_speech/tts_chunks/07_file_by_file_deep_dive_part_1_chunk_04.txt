@@ -1,0 +1,18 @@
+Upstream assumptions: library code should not own the user's whole logging environment.
+
+Downstream behaviors: model loading, generation, trainer, and pipelines can communicate warnings.
+
+#### `src/transformers/dynamic_module_utils.py`
+
+1. Plain-English explanation: safely handles model code that lives outside the installed library when the user explicitly trusts it.
+2. ELI5 analogy: borrowing a custom tool from another workshop after asking permission.
+3. Technical role: downloads/caches custom Python modules, resolves `trust_remote_code`, imports classes dynamically, saves custom objects.
+4. Important symbols: `get_class_from_dynamic_module`, `get_cached_module_file`, `resolve_trust_remote_code`, `custom_object_save`, `check_python_requirements`.
+5. Interactions: called by Auto classes when configs contain `auto_map`.
+6. What would break if disappeared: custom model repositories requiring `trust_remote_code=True` would not load.
+
+Upstream assumptions: some Hub models require code not yet merged into `transformers`; executing remote code is a security-sensitive user choice.
+
+Downstream behaviors: Auto classes can load custom architectures while preserving explicit trust checks.
+
+Risk: `trust_remote_code` is powerful and inherently risky if users trust unreviewed code.

@@ -1,0 +1,83 @@
+- `src/transformers/__init__.py`
+- `src/transformers/models/auto/configuration_auto.py`
+- `src/transformers/models/auto/auto_factory.py`
+- `src/transformers/configuration_utils.py`
+- `src/transformers/modeling_utils.py`
+- `src/transformers/utils/hub.py`
+
+Likely rationale: separate "decide what class" from "load files" from "run model" so new models can plug into the same surface.
+
+Tradeoff: indirection makes debugging harder. A beginner may call one function and pass through ten layers.
+
+### 4. Major Subsystems And Layers
+
+Plain English: each subsystem owns one kind of work.
+
+Technical explanation:
+
+- `models/auto`: maps model metadata to classes.
+- `models/<family>`: concrete architecture and tokenizer files.
+- `generation`: decoding algorithms and token filters.
+- `pipelines`: high-level task orchestration.
+- `trainer`: training orchestration.
+- `utils`: shared infrastructure.
+- `integrations` and `quantizers`: optional backend bridges.
+- `cli/serving`: runtime HTTP serving.
+
+Likely rationale: this keeps commonly reused code out of individual model files while letting model files remain readable.
+
+Tradeoff: logic sometimes crosses boundaries because loading, generation, quantization, and optional backends are tightly coupled.
+
+### 5. Frontend Architecture
+
+Plain English: there is no traditional browser frontend in the runtime package.
+
+ELI5 analogy: this repo is mostly the engine and the repair manual, not the car dashboard.
+
+Technical explanation:
+
+- No React/Vue/Svelte application exists in the runtime tree.
+- User-facing surfaces are Python APIs, CLI commands, docs, notebooks, and optional HTTP endpoints.
+- Documentation pages in `docs` are the closest thing to a frontend, but they are not application runtime code.
+
+Likely rationale: `transformers` is a library, not an end-user web app.
+
+Tradeoff: product behavior is experienced through code and APIs, so docs/examples are especially important.
+
+### 6. Backend Architecture
+
+Plain English: the backend is mostly a Python library, plus an optional local server.
+
+Technical explanation:
+
+- Library backend: `src/transformers` exports importable Python objects.
+- Serving backend: `src/transformers/cli/serve.py` and `src/transformers/cli/serving/server.py` build a FastAPI app when serving dependencies are installed.
+- The server delegates to handlers such as `ChatCompletionHandler`, `CompletionHandler`, `ResponsesHandler`, and `TranscriptionHandler`.
+- Handlers use `ModelManager` to load/cache model and processor objects.
+
+Likely rationale: serving is useful but should not force web dependencies on every library install.
+
+Tradeoff: the serving code must validate OpenAI-like requests while still respecting the library's broad model support.
+
+### 7. Persistence And Data Architecture
+
+Plain English: there is no database. Data lives in files: configs, weights, tokenizer files, processor files, caches, and saved outputs.
+
+Technical explanation:
+
+- Remote/local artifacts are resolved by `utils/hub.py`.
+- Checkpoints are usually `model.safetensors`, sharded safetensors, PyTorch `.bin`, or other backend-specific formats.
+- Configs are JSON files handled by `PreTrainedConfig`.
+- Tokenizer and processor files are saved and loaded by their mixins.
+- `save_pretrained` writes local directories.
+- `PushToHubMixin` can upload to the Hugging Face Hub.
+
+Likely rationale: AI model distribution is artifact-centric. A database would not fit the main use case.
+
+Tradeoff: file compatibility and cache management become central complexity.
+
+### 8. Configuration Architecture
+
+Plain English: configuration objects are the instruction cards that tell the system what kind of model it is dealing with.
+
+Technical explanation:

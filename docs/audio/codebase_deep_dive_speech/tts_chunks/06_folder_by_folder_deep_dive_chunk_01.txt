@@ -1,0 +1,97 @@
+## Folder-By-Folder Deep Dive
+
+### What This Means In Plain English
+
+This section treats each folder like a department in a company: what it owns, why it exists, and how it talks to other departments.
+
+### ELI5 Analogy
+
+The repository is a school. `src` is the classroom where work happens, `tests` are exams, `docs` are textbooks, `utils` are office staff tools, and CI is the school inspection process.
+
+### Technical Explanation
+
+Folders separate runtime code, documentation, examples, tests, tooling, CI, and infrastructure. The separation matters because library code must be installable, while tests and maintenance tools should not become runtime dependencies.
+
+### Why It Matters In This Codebase
+
+The repository is large enough that folder boundaries are the first survival tool for a new engineer.
+
+### `.ai/`
+
+Department analogy: internal work rules for automated coding assistants.
+
+Technical role: contains `.ai/AGENTS.md`, symlinked by `AGENTS.md` and `CLAUDE.md`. It explains repository-specific instructions such as using `make style`, `make typing`, `make check-repo`, and respecting generated `# Copied from` blocks and modular model files.
+
+Why it exists: contributors and agents need repo-specific process guidance.
+
+Connections: informs how to edit `src/transformers/models` and run repository checks.
+
+Core versus support: support.
+
+Smells/confusing placement: symlinks at repo root are convenient but can look duplicated to new contributors.
+
+What would break if missing: runtime would not break; contributor workflows and AI-agent consistency would degrade.
+
+### `.github/`
+
+Department analogy: the automated inspection and paperwork office for GitHub.
+
+Technical role: issue templates, pull request templates, labels, and GitHub Actions workflows for CI, docs, releases, Docker builds, scheduled jobs, benchmarks, and security scans.
+
+Why it exists: repository quality depends on automated checks across many dependency and hardware combinations.
+
+Connections: calls tests, style checks, docs builds, Docker builds, and repository consistency scripts.
+
+Core versus support: support but essential to project health.
+
+Current versus legacy: current.
+
+What would break if missing: local library code could run, but CI automation, release safety, and contribution process would suffer.
+
+### `.circleci/`
+
+Department analogy: an older or secondary inspection office.
+
+Technical role: CircleCI configuration. It is smaller than `.github/workflows`, so it appears secondary.
+
+Why it exists: likely historical or specialized CI jobs.
+
+Connections: CI-only, not runtime.
+
+Core versus support: support.
+
+Inference: GitHub Actions appears to be the primary CI surface because `.github/workflows` is much larger.
+
+What would break if missing: any CircleCI jobs relying on it would stop; runtime would not break.
+
+### `benchmark/` And `benchmark_v2/`
+
+Department analogy: performance labs.
+
+Technical role: benchmark scripts and config for measuring speed, memory, and runtime behavior.
+
+Why they exist: performance matters for model inference/training, and regressions need measurement.
+
+Connections: use runtime package, model loading, generation, and possibly CI.
+
+Core versus support: support.
+
+Current versus legacy: `benchmark_v2` looks newer; `benchmark` may be older or parallel support.
+
+What would break if missing: no direct runtime break; performance regression detection would weaken.
+
+### `docker/`
+
+Department analogy: shipping containers for reproducible environments.
+
+Technical role: Dockerfiles for CPU, GPU, AMD, XPU, TPU, docs, quality, quantization, examples, and other target environments.
+
+Why it exists: machine-learning libraries depend heavily on OS, Python, CUDA, hardware drivers, and optional libraries.
+
+Connections: CI, examples, docs, development, release validation.
+
+Core versus support: infrastructure support.
+
+What would break if missing: contributors and CI would lose reproducible environments; runtime package would still exist.
+
+### `docs/`
