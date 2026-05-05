@@ -29,6 +29,11 @@ on:
         required: false
         type: string
         default: ''
+      only_process_job:
+        description: "Skip find-commits jobs and only run the process job, fetching its artifacts from source_run_id"
+        required: false
+        type: boolean
+        default: false
       max_num_runners:
         required: false
         type: number
@@ -54,6 +59,7 @@ env:
 jobs:
   setup_check_new_failures:
     name: "Setup matrix for finding commits"
+    if: ${{ !inputs.only_process_job }}
     runs-on: ubuntu-22.04
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -122,7 +128,7 @@ jobs:
   check_new_failures:
     name: "Find commits for new failing tests"
     needs: setup_check_new_failures
-    if: needs.setup_check_new_failures.outputs.process == 'true'
+    if: ${{ !inputs.only_process_job && needs.setup_check_new_failures.outputs.process == 'true' }}
     strategy:
       matrix:
         run_idx: ${{ fromJson(needs.setup_check_new_failures.outputs.matrix) }}
@@ -261,7 +267,7 @@ jobs:
   process_new_failures_with_commit_info:
     name: "process bad commit reports"
     needs: check_new_failures
-    if: needs.check_new_failures.outputs.process == 'true'
+    if: ${{ always() && !cancelled() && (inputs.only_process_job || needs.check_new_failures.outputs.process == 'true') }}
     runs-on:
       group: aws-g5-4xlarge-cache
     container:
@@ -282,6 +288,8 @@ jobs:
           pattern: new_failures_with_bad_commit_${{ inputs.job }}*
           path: /transformers/new_failures_with_bad_commit_${{ inputs.job }}
           merge-multiple: true
+          run-id: ${{ inputs.only_process_job && inputs.source_run_id || github.run_id }}
+          github-token: ${{ github.token }}
 
       - name: Check files
         working-directory: /transformers
