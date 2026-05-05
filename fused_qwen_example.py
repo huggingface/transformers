@@ -22,12 +22,15 @@ print("Baseline output shape:", baseline_out.shape)
 # --- fused model ---
 print("=" * 60)
 print("Loading fused model...")
+
+kernel_repo_id = "michaelbenayoun/dummy-rmsnorm-mlp:RMSNormMLP"
+kernel_repo_id = "michaelbenayoun/dummy-rmsnorm-mlp-with-transformations:RMSNormMLP"
 kernel_config = KernelConfig(
     {
         (
             ("RMSNorm", "model.layers.*.post_attention_layernorm"),
             ("MLP",     "model.layers.*.mlp"),
-        ): "michaelbenayoun/dummy-rmsnorm-mlp:RMSNormMLP",
+        ): kernel_repo_id,
     },
 )
 
