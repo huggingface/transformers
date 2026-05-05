@@ -24,6 +24,11 @@ on:
       pr_number:
         required: false
         type: string
+      source_run_id:
+        description: "Source workflow run ID to download artifacts from (for re-run scenarios)"
+        required: false
+        type: string
+        default: ''
       max_num_runners:
         required: false
         type: number
@@ -60,6 +65,8 @@ jobs:
         with:
           name: ci_results_${{ inputs.job }}
           path: ci_results_${{ inputs.job }}
+          run-id: ${{ inputs.source_run_id || github.run_id }}
+          github-token: ${{ github.token }}
 
       - name: Set matrix
         id: set-matrix
@@ -131,6 +138,8 @@ jobs:
         with:
           name: ci_results_${{ inputs.job }}
           path: /transformers/ci_results_${{ inputs.job }}
+          run-id: ${{ inputs.source_run_id || github.run_id }}
+          github-token: ${{ github.token }}
 
       - uses: actions/download-artifact@v8
         env:
@@ -139,6 +148,8 @@ jobs:
           pattern: setup_values*
           path: setup_values
           merge-multiple: true
+          run-id: ${{ inputs.source_run_id || github.run_id }}
+          github-token: ${{ github.token }}
 
       - name: Prepare some setup values
         run: |
@@ -261,6 +272,8 @@ jobs:
         with:
           name: ci_results_${{ inputs.job }}
           path: /transformers/ci_results_${{ inputs.job }}
+          run-id: ${{ inputs.source_run_id || github.run_id }}
+          github-token: ${{ github.token }}
 
       - uses: actions/download-artifact@v8
         env:
