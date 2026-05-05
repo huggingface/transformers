@@ -454,7 +454,7 @@ class Kimi_K25PreTrainedModel(PreTrainedModel):
 class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
     config: Kimi_K25VisionConfig
     input_modalities = ("image", "video")
-    can_record_outputs = {
+    _can_record_outputs = {
         "hidden_states": Kimi_K25VisionEncoderLayer,
         "attentions": Kimi_K25VisionAttention,
     }
