@@ -743,8 +743,6 @@ class WhisperDecoder(WhisperPreTrainedModel):
                 if encoder_hidden_states is not None or self.config.is_encoder_decoder
                 else DynamicCache(config=self.config)
             )
-        elif use_cache and encoder_hidden_states is not None and not isinstance(past_key_values, EncoderDecoderCache):
-            past_key_values = EncoderDecoderCache(past_key_values, DynamicCache(config=self.config))
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
