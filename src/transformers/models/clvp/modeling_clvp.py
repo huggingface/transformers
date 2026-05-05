@@ -147,13 +147,13 @@ def _pad_extra_bos_eos_tokens(
     return modified_input_ids, attention_mask
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for CLVP encoder's outputs that contains a pooling of the last hidden states as well as a projection
     output (a linear layer on top of the pooled output).
     """
 )
+@dataclass
 class ClvpEncoderOutput(ModelOutput):
     r"""
     embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when model is initialized with `with_projection=True`):
