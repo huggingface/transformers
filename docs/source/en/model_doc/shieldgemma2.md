@@ -39,9 +39,11 @@ This model was contributed by [Ryan Mullins](https://huggingface.co/RyanMullins)
 ### Classification against Built-in Policies
 
 ```python
-from PIL import Image
 import requests
+from PIL import Image
+
 from transformers import AutoProcessor, ShieldGemma2ForImageClassification
+
 
 model_id = "google/shieldgemma-2-4b-it"
 model = ShieldGemma2ForImageClassification.from_pretrained(model_id, device_map="auto")
@@ -59,9 +61,11 @@ print(output.probabilities)
 ### Classification against Custom Policies
 
 ```python
-from PIL import Image
 import requests
+from PIL import Image
+
 from transformers import AutoProcessor, ShieldGemma2ForImageClassification
+
 
 model_id = "google/shieldgemma-2-4b-it"
 model = ShieldGemma2ForImageClassification.from_pretrained(model_id, device_map="auto")

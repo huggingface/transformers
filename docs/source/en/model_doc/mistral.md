@@ -40,39 +40,39 @@ The example below demonstrates how to chat with [`Pipeline`] or the [`AutoModel`
 <hfoption id="Pipeline">
 
 ```python
->>> import torch
->>> from transformers import pipeline
+from transformers import pipeline
 
->>> messages = [
-...     {"role": "user", "content": "What is your favourite condiment?"},
-...     {"role": "assistant", "content": "Well, I'm quite partial to a good squeeze of fresh lemon juice. It adds just the right amount of zesty flavour to whatever I'm cooking up in the kitchen!"},
-...     {"role": "user", "content": "Do you have mayonnaise recipes?"}
-... ]
 
->>> chatbot = pipeline("text-generation", model="mistralai/Mistral-7B-Instruct-v0.3", dtype=torch.bfloat16, device=0)
->>> chatbot(messages)
+messages = [
+    {"role": "user", "content": "What is your favourite condiment?"},
+    {"role": "assistant", "content": "Well, I'm quite partial to a good squeeze of fresh lemon juice. It adds just the right amount of zesty flavour to whatever I'm cooking up in the kitchen!"},
+    {"role": "user", "content": "Do you have mayonnaise recipes?"}
+]
+
+chatbot = pipeline("text-generation", model="mistralai/Mistral-7B-Instruct-v0.3", device=0)
+chatbot(messages)
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
 ```python
->>> import torch
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3", dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
 
->>> messages = [
-...     {"role": "user", "content": "What is your favourite condiment?"},
-...     {"role": "assistant", "content": "Well, I'm quite partial to a good squeeze of fresh lemon juice. It adds just the right amount of zesty flavour to whatever I'm cooking up in the kitchen!"},
-...     {"role": "user", "content": "Do you have mayonnaise recipes?"}
-... ]
+model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3", attn_implementation="sdpa", device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
 
->>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to(model.device)
+messages = [
+    {"role": "user", "content": "What is your favourite condiment?"},
+    {"role": "assistant", "content": "Well, I'm quite partial to a good squeeze of fresh lemon juice. It adds just the right amount of zesty flavour to whatever I'm cooking up in the kitchen!"},
+    {"role": "user", "content": "Do you have mayonnaise recipes?"}
+]
 
->>> generated_ids = model.generate(model_inputs, max_new_tokens=100, do_sample=True)
->>> tokenizer.batch_decode(generated_ids)[0]
+model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to(model.device)
+
+generated_ids = model.generate(model_inputs, max_new_tokens=100, do_sample=True)
+tokenizer.batch_decode(generated_ids)[0]
 "Mayonnaise can be made as follows: (...)"
 ```
 
@@ -91,41 +91,42 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
 
 ```python
->>> import torch
->>> from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
->>> # specify how to quantize the model
->>> quantization_config = BitsAndBytesConfig(
-...         load_in_4bit=True,
-...         bnb_4bit_quant_type="nf4",
-...         bnb_4bit_compute_dtype="torch.float16",
-... )
 
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3", quantization_config=True, dtype=torch.bfloat16, device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
+# specify how to quantize the model
+quantization_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype="torch.float16",
+)
 
->>> prompt = "My favourite condiment is"
+model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3", quantization_config=True, device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
 
->>> messages = [
-...     {"role": "user", "content": "What is your favourite condiment?"},
-...     {"role": "assistant", "content": "Well, I'm quite partial to a good squeeze of fresh lemon juice. It adds just the right amount of zesty flavour to whatever I'm cooking up in the kitchen!"},
-...     {"role": "user", "content": "Do you have mayonnaise recipes?"}
-... ]
+prompt = "My favourite condiment is"
 
->>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to(model.device)
+messages = [
+    {"role": "user", "content": "What is your favourite condiment?"},
+    {"role": "assistant", "content": "Well, I'm quite partial to a good squeeze of fresh lemon juice. It adds just the right amount of zesty flavour to whatever I'm cooking up in the kitchen!"},
+    {"role": "user", "content": "Do you have mayonnaise recipes?"}
+]
 
->>> generated_ids = model.generate(model_inputs, max_new_tokens=100, do_sample=True)
->>> tokenizer.batch_decode(generated_ids)[0]
+model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to(model.device)
+
+generated_ids = model.generate(model_inputs, max_new_tokens=100, do_sample=True)
+tokenizer.batch_decode(generated_ids)[0]
 "The expected output"
 ```
 
 Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
 
-```py
->>> from transformers.utils.attention_visualizer import AttentionMaskVisualizer
+```python
+from transformers.utils.attention_visualizer import AttentionMaskVisualizer
 
->>> visualizer = AttentionMaskVisualizer("mistralai/Mistral-7B-Instruct-v0.3")
->>> visualizer("Do you have mayonnaise recipes?")
+
+visualizer = AttentionMaskVisualizer("mistralai/Mistral-7B-Instruct-v0.3")
+visualizer("Do you have mayonnaise recipes?")
 ```
 
 <div class="flex justify-center">

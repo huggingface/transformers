@@ -41,8 +41,11 @@ You can run the model in `FP8` automatically, using 2 nodes of 8 H100 should be 
 
 ```python
 # `run_deepseek_v1.py`
-from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
+
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+
 torch.manual_seed(30)
 
 tokenizer = AutoTokenizer.from_pretrained("deepseek-r1")
@@ -54,9 +57,11 @@ chat = [
 ]
 
 
-model = AutoModelForCausalLM.from_pretrained("deepseek-r1", device_map="auto", dtype=torch.bfloat16)
+model = AutoModelForCausalLM.from_pretrained("deepseek-r1", device_map="auto")
 inputs = tokenizer.apply_chat_template(chat, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)
 import time
+
+
 start = time.time()
 outputs = model.generate(inputs, max_new_tokens=50)
 print(tokenizer.batch_decode(outputs))

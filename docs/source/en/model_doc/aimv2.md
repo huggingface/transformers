@@ -35,15 +35,17 @@ Here is an example of Image Feature Extraction using specific checkpoints on res
 ```python
 import requests
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModel
+
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 
 processor = AutoImageProcessor.from_pretrained("apple/aimv2-large-patch14-native")
-model = AutoModel.from_pretrained("apple/aimv2-large-patch14-native")
+model = AutoModel.from_pretrained("apple/aimv2-large-patch14-native", device_map="auto")
 
-inputs = processor(images=image, return_tensors="pt")
+inputs = processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 ```
 
@@ -52,14 +54,16 @@ Here is an example of a checkpoint performing zero-shot classification:
 ```python
 import requests
 from PIL import Image
-from transformers import AutoProcessor, AutoModel
+
+from transformers import AutoModel, AutoProcessor
+
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 text = ["Picture of a dog.", "Picture of a cat.", "Picture of a horse."]
 
 processor = AutoProcessor.from_pretrained("apple/aimv2-large-patch14-224-lit")
-model = AutoModel.from_pretrained("apple/aimv2-large-patch14-224-lit")
+model = AutoModel.from_pretrained("apple/aimv2-large-patch14-224-lit", device_map="auto")
 
 inputs = processor(
     images=image,

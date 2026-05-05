@@ -43,39 +43,41 @@ alt="drawing" width="600"/>
 ## Example
 
 ```python
->>> from PIL import Image
->>> import requests
->>> from transformers import AutoProcessor, Kosmos2ForConditionalGeneration
+import requests
+from PIL import Image
 
->>> model = Kosmos2ForConditionalGeneration.from_pretrained("microsoft/kosmos-2-patch14-224")
->>> processor = AutoProcessor.from_pretrained("microsoft/kosmos-2-patch14-224")
+from transformers import AutoProcessor, Kosmos2ForConditionalGeneration
 
->>> url = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg"
->>> image = Image.open(requests.get(url, stream=True).raw)
 
->>> prompt = "<grounding> An image of"
+model = Kosmos2ForConditionalGeneration.from_pretrained("microsoft/kosmos-2-patch14-224", device_map="auto")
+processor = AutoProcessor.from_pretrained("microsoft/kosmos-2-patch14-224")
 
->>> inputs = processor(text=prompt, images=image, return_tensors="pt")
+url = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
 
->>> generated_ids = model.generate(
-...     pixel_values=inputs["pixel_values"],
-...     input_ids=inputs["input_ids"],
-...     attention_mask=inputs["attention_mask"],
-...     image_embeds=None,
-...     image_embeds_position_mask=inputs["image_embeds_position_mask"],
-...     use_cache=True,
-...     max_new_tokens=64,
-... )
->>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
->>> processed_text = processor.post_process_generation(generated_text, cleanup_and_extract=False)
->>> processed_text
+prompt = "<grounding> An image of"
+
+inputs = processor(text=prompt, images=image, return_tensors="pt").to(model.device)
+
+generated_ids = model.generate(
+    pixel_values=inputs["pixel_values"],
+    input_ids=inputs["input_ids"],
+    attention_mask=inputs["attention_mask"],
+    image_embeds=None,
+    image_embeds_position_mask=inputs["image_embeds_position_mask"],
+    use_cache=True,
+    max_new_tokens=64,
+)
+generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+processed_text = processor.post_process_generation(generated_text, cleanup_and_extract=False)
+processed_text
 '<grounding> An image of<phrase> a snowman</phrase><object><patch_index_0044><patch_index_0863></object> warming himself by<phrase> a fire</phrase><object><patch_index_0005><patch_index_0911></object>.'
 
->>> caption, entities = processor.post_process_generation(generated_text)
->>> caption
+caption, entities = processor.post_process_generation(generated_text)
+caption
 'An image of a snowman warming himself by a fire.'
 
->>> entities
+entities
 [('a snowman', (12, 21), [(0.390625, 0.046875, 0.984375, 0.828125)]), ('a fire', (41, 47), [(0.171875, 0.015625, 0.484375, 0.890625)])]
 ```
 

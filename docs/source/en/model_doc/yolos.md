@@ -41,14 +41,13 @@ The example below demonstrates how to detect objects with [`Pipeline`] or the [`
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 detector = pipeline(
     task="object-detection",
     model="hustvl/yolos-base",
-    dtype=torch.float16,
     device=0
 )
 detector("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png")
@@ -57,17 +56,16 @@ detector("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.pn
 </hfoption>
 <hfoption id="Automodel">
 
-```py
+```python
+import requests
 import torch
 from PIL import Image
-import requests
-from transformers import AutoImageProcessor, AutoModelForObjectDetection
-from accelerate import Accelerator
 
-device = Accelerator().device
+from transformers import AutoImageProcessor, AutoModelForObjectDetection
+
 
 processor = AutoImageProcessor.from_pretrained("hustvl/yolos-base")
-model = AutoModelForObjectDetection.from_pretrained("hustvl/yolos-base", dtype=torch.float16, attn_implementation="sdpa").to(device)
+model = AutoModelForObjectDetection.from_pretrained("hustvl/yolos-base", attn_implementation="sdpa", device_map="auto")
 
 url = "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png"
 image = Image.open(requests.get(url, stream=True).raw).convert("RGB")

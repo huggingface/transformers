@@ -42,39 +42,39 @@ This model was contributed by [yonigozlan](https://huggingface.co/yonigozlan) an
 ### Text-Only Prompts
 
 ```python
->>> from transformers import Sam3Processor, Sam3Model
->>> import torch
->>> from PIL import Image
->>> import requests
+import requests
+import torch
+from PIL import Image
 
->>> device = "cuda" if torch.cuda.is_available() else "cpu"
+from transformers import Sam3Model, Sam3Processor
 
->>> model = Sam3Model.from_pretrained("facebook/sam3").to(device)
->>> processor = Sam3Processor.from_pretrained("facebook/sam3")
 
->>> # Load image
->>> image_url = "http://images.cocodataset.org/val2017/000000077595.jpg"
->>> image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
+model = Sam3Model.from_pretrained("facebook/sam3", device_map="auto")
+processor = Sam3Processor.from_pretrained("facebook/sam3")
 
->>> # Segment using text prompt
->>> inputs = processor(images=image, text="ear", return_tensors="pt").to(device)
+# Load image
+image_url = "http://images.cocodataset.org/val2017/000000077595.jpg"
+image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
 
->>> with torch.no_grad():
-...     outputs = model(**inputs)
+# Segment using text prompt
+inputs = processor(images=image, text="ear", return_tensors="pt").to(model.device)
 
->>> # Post-process results
->>> results = processor.post_process_instance_segmentation(
-...     outputs,
-...     threshold=0.5,
-...     mask_threshold=0.5,
-...     target_sizes=inputs.get("original_sizes").tolist()
-... )[0]
+with torch.no_grad():
+    outputs = model(**inputs)
 
->>> print(f"Found {len(results['masks'])} objects")
->>> # Results contain:
->>> # - masks: Binary masks resized to original image size
->>> # - boxes: Bounding boxes in absolute pixel coordinates (xyxy format)
->>> # - scores: Confidence scores
+# Post-process results
+results = processor.post_process_instance_segmentation(
+    outputs,
+    threshold=0.5,
+    mask_threshold=0.5,
+    target_sizes=inputs.get("original_sizes").tolist()
+)[0]
+
+print(f"Found {len(results['masks'])} objects")
+# Results contain:
+# - masks: Binary masks resized to original image size
+# - boxes: Bounding boxes in absolute pixel coordinates (xyxy format)
+# - scores: Confidence scores
 ```
 
 ### Single Bounding Box Prompt
@@ -82,29 +82,29 @@ This model was contributed by [yonigozlan](https://huggingface.co/yonigozlan) an
 Segment objects using a bounding box on the visual concept:
 
 ```python
->>> # Box in xyxy format: [x1, y1, x2, y2] in pixel coordinates
->>> # Example: laptop region
->>> box_xyxy = [100, 150, 500, 450]
->>> input_boxes = [[box_xyxy]]  # [batch, num_boxes, 4]
->>> input_boxes_labels = [[1]]  # 1 = positive box
+# Box in xyxy format: [x1, y1, x2, y2] in pixel coordinates
+# Example: laptop region
+box_xyxy = [100, 150, 500, 450]
+input_boxes = [[box_xyxy]]  # [batch, num_boxes, 4]
+input_boxes_labels = [[1]]  # 1 = positive box
 
->>> inputs = processor(
-...     images=image,
-...     input_boxes=input_boxes,
-...     input_boxes_labels=input_boxes_labels,
-...     return_tensors="pt"
-... ).to(device)
+inputs = processor(
+    images=image,
+    input_boxes=input_boxes,
+    input_boxes_labels=input_boxes_labels,
+    return_tensors="pt"
+).to(model.device)
 
->>> with torch.no_grad():
-...     outputs = model(**inputs)
+with torch.no_grad():
+    outputs = model(**inputs)
 
->>> # Post-process results
->>> results = processor.post_process_instance_segmentation(
-...     outputs,
-...     threshold=0.5,
-...     mask_threshold=0.5,
-...     target_sizes=inputs.get("original_sizes").tolist()
-... )[0]
+# Post-process results
+results = processor.post_process_instance_segmentation(
+    outputs,
+    threshold=0.5,
+    mask_threshold=0.5,
+    target_sizes=inputs.get("original_sizes").tolist()
+)[0]
 ```
 
 ### Multiple Box Prompts (Positive and Negative)
@@ -112,34 +112,34 @@ Segment objects using a bounding box on the visual concept:
 Use multiple boxes with positive and negative labels to refine the concept:
 
 ```python
->>> # Load kitchen image
->>> kitchen_url = "http://images.cocodataset.org/val2017/000000136466.jpg"
->>> kitchen_image = Image.open(requests.get(kitchen_url, stream=True).raw).convert("RGB")
+# Load kitchen image
+kitchen_url = "http://images.cocodataset.org/val2017/000000136466.jpg"
+kitchen_image = Image.open(requests.get(kitchen_url, stream=True).raw).convert("RGB")
 
->>> # Define two positive boxes (e.g., dial and button on oven)
->>> # Boxes are in xyxy format [x1, y1, x2, y2] in pixel coordinates
->>> box1_xyxy = [59, 144, 76, 163]  # Dial box
->>> box2_xyxy = [87, 148, 104, 159]  # Button box
->>> input_boxes = [[box1_xyxy, box2_xyxy]]
->>> input_boxes_labels = [[1, 1]]  # Both positive
+# Define two positive boxes (e.g., dial and button on oven)
+# Boxes are in xyxy format [x1, y1, x2, y2] in pixel coordinates
+box1_xyxy = [59, 144, 76, 163]  # Dial box
+box2_xyxy = [87, 148, 104, 159]  # Button box
+input_boxes = [[box1_xyxy, box2_xyxy]]
+input_boxes_labels = [[1, 1]]  # Both positive
 
->>> inputs = processor(
-...     images=kitchen_image,
-...     input_boxes=input_boxes,
-...     input_boxes_labels=input_boxes_labels,
-...     return_tensors="pt"
-... ).to(device)
+inputs = processor(
+    images=kitchen_image,
+    input_boxes=input_boxes,
+    input_boxes_labels=input_boxes_labels,
+    return_tensors="pt"
+).to(model.device)
 
->>> with torch.no_grad():
-...     outputs = model(**inputs)
+with torch.no_grad():
+    outputs = model(**inputs)
 
->>> # Post-process results
->>> results = processor.post_process_instance_segmentation(
-...     outputs,
-...     threshold=0.5,
-...     mask_threshold=0.5,
-...     target_sizes=inputs.get("original_sizes").tolist()
-... )[0]
+# Post-process results
+results = processor.post_process_instance_segmentation(
+    outputs,
+    threshold=0.5,
+    mask_threshold=0.5,
+    target_sizes=inputs.get("original_sizes").tolist()
+)[0]
 ```
 
 ### Combined Prompts (Text + Negative Box)
@@ -147,31 +147,31 @@ Use multiple boxes with positive and negative labels to refine the concept:
 Use text prompts with negative visual prompts to refine the concept:
 
 ```python
->>> # Segment "handle" but exclude the oven handle using a negative box
->>> text = "handle"
->>> # Negative box covering oven handle area (xyxy): [40, 183, 318, 204]
->>> oven_handle_box = [40, 183, 318, 204]
->>> input_boxes = [[oven_handle_box]]
+# Segment "handle" but exclude the oven handle using a negative box
+text = "handle"
+# Negative box covering oven handle area (xyxy): [40, 183, 318, 204]
+oven_handle_box = [40, 183, 318, 204]
+input_boxes = [[oven_handle_box]]
 
->>> inputs = processor(
-...     images=kitchen_image,
-...     text=text,
-...     input_boxes=input_boxes,
-...     input_boxes_labels=[[0]],  # 0 = negative (exclude this region)
-...     return_tensors="pt"
-... ).to(device)
+inputs = processor(
+    images=kitchen_image,
+    text=text,
+    input_boxes=input_boxes,
+    input_boxes_labels=[[0]],  # 0 = negative (exclude this region)
+    return_tensors="pt"
+).to(model.device)
 
->>> with torch.no_grad():
-...     outputs = model(**inputs)
+with torch.no_grad():
+    outputs = model(**inputs)
 
->>> # Post-process results
->>> results = processor.post_process_instance_segmentation(
-...     outputs,
-...     threshold=0.5,
-...     mask_threshold=0.5,
-...     target_sizes=inputs.get("original_sizes").tolist()
-... )[0]
->>> # This will segment pot handles but exclude the oven handle
+# Post-process results
+results = processor.post_process_instance_segmentation(
+    outputs,
+    threshold=0.5,
+    mask_threshold=0.5,
+    target_sizes=inputs.get("original_sizes").tolist()
+)[0]
+# This will segment pot handles but exclude the oven handle
 ```
 
 ### Batched Inference with Text Prompts
@@ -179,31 +179,31 @@ Use text prompts with negative visual prompts to refine the concept:
 Process multiple images with different text prompts efficiently:
 
 ```python
->>> cat_url = "http://images.cocodataset.org/val2017/000000077595.jpg"
->>> kitchen_url = "http://images.cocodataset.org/val2017/000000136466.jpg"
->>> images = [
-...     Image.open(requests.get(cat_url, stream=True).raw).convert("RGB"),
-...     Image.open(requests.get(kitchen_url, stream=True).raw).convert("RGB")
-... ]
+cat_url = "http://images.cocodataset.org/val2017/000000077595.jpg"
+kitchen_url = "http://images.cocodataset.org/val2017/000000136466.jpg"
+images = [
+    Image.open(requests.get(cat_url, stream=True).raw).convert("RGB"),
+    Image.open(requests.get(kitchen_url, stream=True).raw).convert("RGB")
+]
 
->>> # Different text prompt for each image
->>> text_prompts = ["ear", "dial"]
+# Different text prompt for each image
+text_prompts = ["ear", "dial"]
 
->>> inputs = processor(images=images, text=text_prompts, return_tensors="pt").to(device)
+inputs = processor(images=images, text=text_prompts, return_tensors="pt").to(model.device)
 
->>> with torch.no_grad():
-...     outputs = model(**inputs)
+with torch.no_grad():
+    outputs = model(**inputs)
 
->>> # Post-process results for both images
->>> results = processor.post_process_instance_segmentation(
-...     outputs,
-...     threshold=0.5,
-...     mask_threshold=0.5,
-...     target_sizes=inputs.get("original_sizes").tolist()
-... )
+# Post-process results for both images
+results = processor.post_process_instance_segmentation(
+    outputs,
+    threshold=0.5,
+    mask_threshold=0.5,
+    target_sizes=inputs.get("original_sizes").tolist()
+)
 
->>> print(f"Image 1: {len(results[0]['masks'])} objects found")
->>> print(f"Image 2: {len(results[1]['masks'])} objects found")
+print(f"Image 1: {len(results[0]['masks'])} objects found")
+print(f"Image 2: {len(results[1]['masks'])} objects found")
 ```
 
 ### Batched Mixed Prompts
@@ -211,29 +211,29 @@ Process multiple images with different text prompts efficiently:
 Use different prompt types for different images in the same batch:
 
 ```python
->>> # Image 1: text prompt "laptop"
->>> # Image 2: visual prompt (dial box)
->>> box2_xyxy = [59, 144, 76, 163]
+# Image 1: text prompt "laptop"
+# Image 2: visual prompt (dial box)
+box2_xyxy = [59, 144, 76, 163]
 
->>> inputs = processor(
-...     images=images,
-...     text=["laptop", None],  # Only first image has text
-...     input_boxes=[None, [box2_xyxy]],  # Only second image has box
-...     input_boxes_labels=[None, [1]],  # Positive box for second image
-...     return_tensors="pt"
-... ).to(device)
+inputs = processor(
+    images=images,
+    text=["laptop", None],  # Only first image has text
+    input_boxes=[None, [box2_xyxy]],  # Only second image has box
+    input_boxes_labels=[None, [1]],  # Positive box for second image
+    return_tensors="pt"
+).to(model.device)
 
->>> with torch.no_grad():
-...     outputs = model(**inputs)
+with torch.no_grad():
+    outputs = model(**inputs)
 
->>> # Post-process results for both images
->>> results = processor.post_process_instance_segmentation(
-...     outputs,
-...     threshold=0.5,
-...     mask_threshold=0.5,
-...     target_sizes=inputs.get("original_sizes").tolist()
-... )
->>> # Both images processed in single forward pass
+# Post-process results for both images
+results = processor.post_process_instance_segmentation(
+    outputs,
+    threshold=0.5,
+    mask_threshold=0.5,
+    target_sizes=inputs.get("original_sizes").tolist()
+)
+# Both images processed in single forward pass
 ```
 
 ### Semantic Segmentation Output
@@ -241,19 +241,19 @@ Use different prompt types for different images in the same batch:
 SAM3 also provides semantic segmentation alongside instance masks:
 
 ```python
->>> inputs = processor(images=image, text="ear", return_tensors="pt").to(device)
+inputs = processor(images=image, text="ear", return_tensors="pt").to(model.device)
 
->>> with torch.no_grad():
-...     outputs = model(**inputs)
+with torch.no_grad():
+    outputs = model(**inputs)
 
->>> # Instance segmentation masks
->>> instance_masks = torch.sigmoid(outputs.pred_masks)  # [batch, num_queries, H, W]
+# Instance segmentation masks
+instance_masks = torch.sigmoid(outputs.pred_masks)  # [batch, num_queries, H, W]
 
->>> # Semantic segmentation (single channel)
->>> semantic_seg = outputs.semantic_seg  # [batch, 1, H, W]
+# Semantic segmentation (single channel)
+semantic_seg = outputs.semantic_seg  # [batch, 1, H, W]
 
->>> print(f"Instance masks: {instance_masks.shape}")
->>> print(f"Semantic segmentation: {semantic_seg.shape}")
+print(f"Instance masks: {instance_masks.shape}")
+print(f"Semantic segmentation: {semantic_seg.shape}")
 ```
 
 ### Efficient Multi-Prompt Inference on Single Image
@@ -261,44 +261,43 @@ SAM3 also provides semantic segmentation alongside instance masks:
 When running multiple text prompts on the same image, pre-compute vision embeddings to avoid redundant computation:
 
 ```python
->>> from transformers import Sam3Processor, Sam3Model
->>> import torch
->>> from PIL import Image
->>> import requests
+from transformers import Sam3Processor, Sam3Model
+import torch
+from PIL import Image
+import requests
 
->>> device = "cuda" if torch.cuda.is_available() else "cpu"
 
->>> model = Sam3Model.from_pretrained("facebook/sam3").to(device)
->>> processor = Sam3Processor.from_pretrained("facebook/sam3")
+model = Sam3Model.from_pretrained("facebook/sam3", device_map="auto")
+processor = Sam3Processor.from_pretrained("facebook/sam3")
 
->>> # Load image
->>> image_url = "http://images.cocodataset.org/val2017/000000077595.jpg"
->>> image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
+# Load image
+image_url = "http://images.cocodataset.org/val2017/000000077595.jpg"
+image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
 
->>> # Pre-process image and compute vision embeddings once
->>> img_inputs = processor(images=image, return_tensors="pt").to(device)
->>> with torch.no_grad():
-...     vision_embeds = model.get_vision_features(pixel_values=img_inputs.pixel_values)
+# Pre-process image and compute vision embeddings once
+img_inputs = processor(images=image, return_tensors="pt").to(model.device)
+with torch.no_grad():
+    vision_embeds = model.get_vision_features(pixel_values=img_inputs.pixel_values)
 
->>> # Run multiple text prompts efficiently
->>> text_prompts = ["ear", "eye", "nose"]
->>> all_results = []
+# Run multiple text prompts efficiently
+text_prompts = ["ear", "eye", "nose"]
+all_results = []
 
->>> for prompt in text_prompts:
-...     text_inputs = processor(text=prompt, return_tensors="pt").to(device)
-...     with torch.no_grad():
-...         outputs = model(vision_embeds=vision_embeds, **text_inputs)
+for prompt in text_prompts:
+    text_inputs = processor(text=prompt, return_tensors="pt").to(model.device)
+    with torch.no_grad():
+        outputs = model(vision_embeds=vision_embeds, **text_inputs)
 ...
-...     results = processor.post_process_instance_segmentation(
-...         outputs,
-...         threshold=0.5,
-...         mask_threshold=0.5,
-...         target_sizes=img_inputs.get("original_sizes").tolist()
-...     )[0]
-...     all_results.append({"prompt": prompt, "results": results})
+    results = processor.post_process_instance_segmentation(
+        outputs,
+        threshold=0.5,
+        mask_threshold=0.5,
+        target_sizes=img_inputs.get("original_sizes").tolist()
+    )[0]
+    all_results.append({"prompt": prompt, "results": results})
 
->>> for item in all_results:
-...     print(f"Prompt '{item['prompt']}': {len(item['results']['masks'])} objects found")
+for item in all_results:
+    print(f"Prompt '{item['prompt']}': {len(item['results']['masks'])} objects found")
 ```
 
 ### Efficient Single-Prompt Inference on Multiple Images
@@ -306,52 +305,51 @@ When running multiple text prompts on the same image, pre-compute vision embeddi
 When running the same text prompt on multiple images, pre-compute text embeddings to avoid redundant computation:
 
 ```python
->>> from transformers import Sam3Processor, Sam3Model
->>> import torch
->>> from PIL import Image
->>> import requests
+from transformers import Sam3Processor, Sam3Model
+import torch
+from PIL import Image
+import requests
 
->>> device = "cuda" if torch.cuda.is_available() else "cpu"
 
->>> model = Sam3Model.from_pretrained("facebook/sam3").to(device)
->>> processor = Sam3Processor.from_pretrained("facebook/sam3")
+model = Sam3Model.from_pretrained("facebook/sam3", device_map="auto")
+processor = Sam3Processor.from_pretrained("facebook/sam3")
 
->>> # Pre-compute text embeddings once
->>> text_prompt = "ear"
->>> text_inputs = processor(text=text_prompt, return_tensors="pt").to(device)
->>> with torch.no_grad():
-...     text_embeds = model.get_text_features(**text_inputs)
+# Pre-compute text embeddings once
+text_prompt = "ear"
+text_inputs = processor(text=text_prompt, return_tensors="pt").to(model.device)
+with torch.no_grad():
+    text_embeds = model.get_text_features(**text_inputs)
 
->>> # Load multiple images
->>> image_urls = [
-...     "http://images.cocodataset.org/val2017/000000077595.jpg",
-...     "http://images.cocodataset.org/val2017/000000039769.jpg",
-... ]
->>> images = [Image.open(requests.get(url, stream=True).raw).convert("RGB") for url in image_urls]
+# Load multiple images
+image_urls = [
+    "http://images.cocodataset.org/val2017/000000077595.jpg",
+    "http://images.cocodataset.org/val2017/000000039769.jpg",
+]
+images = [Image.open(requests.get(url, stream=True).raw).convert("RGB") for url in image_urls]
 
->>> # Run inference on each image reusing text embeddings
->>> # Note: attention_mask must be passed along with text_embeds for proper masking
->>> all_results = []
+# Run inference on each image reusing text embeddings
+# Note: attention_mask must be passed along with text_embeds for proper masking
+all_results = []
 
->>> for image in images:
-...     img_inputs = processor(images=image, return_tensors="pt").to(device)
-...     with torch.no_grad():
-...         outputs = model(
-...             pixel_values=img_inputs.pixel_values,
-...             text_embeds=text_embeds,
-...             attention_mask=text_inputs.attention_mask,
-...         )
+for image in images:
+    img_inputs = processor(images=image, return_tensors="pt").to(model.device)
+    with torch.no_grad():
+        outputs = model(
+            pixel_values=img_inputs.pixel_values,
+            text_embeds=text_embeds,
+            attention_mask=text_inputs.attention_mask,
+        )
 ...
-...     results = processor.post_process_instance_segmentation(
-...         outputs,
-...         threshold=0.5,
-...         mask_threshold=0.5,
-...         target_sizes=img_inputs.get("original_sizes").tolist()
-...     )[0]
-...     all_results.append(results)
+    results = processor.post_process_instance_segmentation(
+        outputs,
+        threshold=0.5,
+        mask_threshold=0.5,
+        target_sizes=img_inputs.get("original_sizes").tolist()
+    )[0]
+    all_results.append(results)
 
->>> for i, results in enumerate(all_results):
-...     print(f"Image {i+1}: {len(results['masks'])} '{text_prompt}' objects found")
+for i, results in enumerate(all_results):
+    print(f"Image {i+1}: {len(results['masks'])} '{text_prompt}' objects found")
 ```
 
 ### Custom Resolution Inference
@@ -363,10 +361,10 @@ When running the same text prompt on multiple images, pre-compute text embedding
 For faster inference or lower memory usage:
 
 ```python
->>> config = Sam3Config.from_pretrained("facebook/sam3")
->>> config.image_size = 560
->>> model = Sam3Model.from_pretrained("facebook/sam3", config=config).to(device)
->>> processor = Sam3Processor.from_pretrained("facebook/sam3", size={"height": 560, "width": 560})
+config = Sam3Config.from_pretrained("facebook/sam3")
+config.image_size = 560
+model = Sam3Model.from_pretrained("facebook/sam3", config=config, device_map="auto")
+processor = Sam3Processor.from_pretrained("facebook/sam3", size={"height": 560, "width": 560})
 ```
 
 ### Prompt Label Conventions

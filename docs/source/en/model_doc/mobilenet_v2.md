@@ -36,13 +36,12 @@ The examples below demonstrate how to classify an image with [`Pipeline`] or the
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="image-classification",
     model="google/mobilenet_v2_1.4_224",
-    dtype=torch.float16,
     device=0
 )
 pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
@@ -52,21 +51,24 @@ pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resol
 <hfoption id="AutoModel">
 
 ```python
-import torch
 import requests
+import torch
 from PIL import Image
-from transformers import AutoModelForImageClassification, AutoImageProcessor
+
+from transformers import AutoImageProcessor, AutoModelForImageClassification
+
 
 image_processor = AutoImageProcessor.from_pretrained(
     "google/mobilenet_v2_1.4_224",
 )
 model = AutoModelForImageClassification.from_pretrained(
     "google/mobilenet_v2_1.4_224",
+    device_map="auto",
 )
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
-inputs = image_processor(image, return_tensors="pt")
+inputs = image_processor(image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
   logits = model(**inputs).logits

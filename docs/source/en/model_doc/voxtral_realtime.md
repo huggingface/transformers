@@ -29,9 +29,10 @@ The model combines an audio encoder with a Mistral-based language model decoder,
 For transcribing complete audio files, use the processor and model directly. The generation length is automatically determined from the audio length.
 
 ```python
-import torch
-from transformers import VoxtralRealtimeForConditionalGeneration, AutoProcessor
 from datasets import load_dataset
+
+from transformers import AutoProcessor, VoxtralRealtimeForConditionalGeneration
+
 
 repo_id = "mistralai/Voxtral-Mini-4B-Realtime-2602"
 
@@ -41,7 +42,7 @@ model = VoxtralRealtimeForConditionalGeneration.from_pretrained(repo_id, device_
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 audio = ds[0]["audio"]["array"]
 
-inputs = processor(audio, return_tensors="pt")
+inputs = processor(audio, return_tensors="pt").to(model.device)
 inputs = inputs.to(model.device, dtype=model.dtype)
 
 outputs = model.generate(**inputs)
@@ -55,9 +56,10 @@ print(decoded_outputs[0])
 Multiple audio samples can be transcribed in a single forward pass:
 
 ```python
-import torch
-from transformers import VoxtralRealtimeForConditionalGeneration, AutoProcessor
 from datasets import load_dataset
+
+from transformers import AutoProcessor, VoxtralRealtimeForConditionalGeneration
+
 
 repo_id = "mistralai/Voxtral-Mini-4B-Realtime-2602"
 
@@ -67,7 +69,7 @@ model = VoxtralRealtimeForConditionalGeneration.from_pretrained(repo_id, device_
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 audio = [ds[i]["audio"]["array"] for i in range(2)]
 
-inputs = processor(audio, return_tensors="pt")
+inputs = processor(audio, return_tensors="pt").to(model.device)
 inputs = inputs.to(model.device, dtype=model.dtype)
 
 outputs = model.generate(**inputs)
@@ -84,14 +86,17 @@ for decoded_output in decoded_outputs:
 For real-time transcription, audio is split into chunks following:
 
 ```python
-from transformers import (
-    VoxtralRealtimeProcessor,
-    VoxtralRealtimeForConditionalGeneration,
-    TextIteratorStreamer,
-)
-from datasets import load_dataset
 from threading import Thread
+
 import numpy as np
+from datasets import load_dataset
+
+from transformers import (
+    TextIteratorStreamer,
+    VoxtralRealtimeForConditionalGeneration,
+    VoxtralRealtimeProcessor,
+)
+
 
 model_id = "mistralai/Voxtral-Mini-4B-Realtime-2602"
 processor = VoxtralRealtimeProcessor.from_pretrained(model_id)
@@ -116,7 +121,7 @@ def input_features_generator():
     mel_frame_idx = processor.num_mel_frames_first_audio_chunk
     hop_length = processor.feature_extractor.hop_length
     win_length = processor.feature_extractor.win_length
-    
+
     start_idx = mel_frame_idx * hop_length - win_length // 2
     end_idx = start_idx + processor.num_samples_per_audio_chunk
 
