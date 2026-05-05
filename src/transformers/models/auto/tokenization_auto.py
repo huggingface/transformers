@@ -762,7 +762,9 @@ class AutoTokenizer:
         # Give priority to a tokenizer class from MAPPING over `config` when it is remote
         # and users has requested explicitly `trust_remote_code=False`
         if (
-            has_remote_code and not trust_remote_code and tokenizer_config_class is not None
+            has_remote_code
+            and not trust_remote_code
+            and tokenizer_config_class is not None
             and tokenizer_class_from_name(tokenizer_config_class) is None
             and (tokenizer_class_from_config := TOKENIZER_MAPPING.get(type(config), None)) is not None
         ):

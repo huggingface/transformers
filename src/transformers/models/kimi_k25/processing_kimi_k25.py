@@ -47,10 +47,11 @@ class Kimi_K25Processor(ProcessorMixin):
         self,
         image_processor=None,
         tokenizer=None,
+        video_processor=None,
         chat_template=None,
         **kwargs,
     ):
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+        super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
         self.image_token = "<|media_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = (
             "<|kimi_k25_video_placeholder|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
@@ -138,7 +139,7 @@ class Kimi_K25Processor(ProcessorMixin):
                     metadata.fps = 24 if metadata.fps is None else metadata.fps
 
                     for chunk_id in range(0, num_frames, temporal_patch_size):
-                        timestamp = metadata.timestamps[chunk_id]
+                        timestamp = float(metadata.timestamps[chunk_id])
                         current_chunk = metadata.timestamps[chunk_id : chunk_id + temporal_patch_size]
                         timestamp_str = (
                             time.strftime("%H:%M:%S", time.gmtime(timestamp)) + f".{int(timestamp % 1 * 1000):03d}"
@@ -156,7 +157,6 @@ class Kimi_K25Processor(ProcessorMixin):
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
 
-        print(type(self.tokenizer), self.image_token, self.image_token_id)
         if return_mm_token_type_ids:
             text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
 
@@ -226,12 +226,6 @@ class Kimi_K25Processor(ProcessorMixin):
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
-
-    @property
-    def model_input_names(self):
-        model_input_names = super().model_input_names
-        model_input_names.append("mm_token_type_ids")
-        return model_input_names
 
 
 __all__ = ["Kimi_K25Processor"]

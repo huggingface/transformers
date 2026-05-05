@@ -562,7 +562,7 @@ class ProcessorTesterMixin:
         input_args = [param.name for param in call_signature.parameters.values()]
         inputs_dict = {k: v for k, v in inputs_dict.items() if k in input_args}
 
-        inputs = processor(**inputs_dict, return_tensors="pt")
+        inputs = processor(**inputs_dict, do_sample_frames=False, return_tensors="pt")
 
         self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))
 

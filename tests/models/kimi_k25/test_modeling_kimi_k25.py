@@ -22,8 +22,8 @@ from parameterized import parameterized
 from transformers import (
     AutoProcessor,
     DeepseekV3Config,
-    Kimi2_6Config,
-    Kimi2_6VisionConfig,
+    Kimi_K25Config,
+    Kimi_K25VisionConfig,
     is_torch_available,
     is_vision_available,
 )
@@ -44,19 +44,19 @@ from ...vlm_tester import VLMModelTest, VLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import Kimi2_6ForConditionalGeneration, Kimi2_6Model
+    from transformers import Kimi_K25ForConditionalGeneration, Kimi_K25Model
 
 
 if is_vision_available():
     from PIL import Image
 
 
-class Kimi2_6VisionText2TextModelTester(VLMModelTester):
-    base_model_class = Kimi2_6Model
-    config_class = Kimi2_6Config
+class Kimi_K25VisionText2TextModelTester(VLMModelTester):
+    base_model_class = Kimi_K25Model
+    config_class = Kimi_K25Config
     text_config_class = DeepseekV3Config
-    vision_config_class = Kimi2_6VisionConfig
-    conditional_generation_class = Kimi2_6ForConditionalGeneration
+    vision_config_class = Kimi_K25VisionConfig
+    conditional_generation_class = Kimi_K25ForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("image_token_id", 3)
@@ -116,8 +116,8 @@ class Kimi2_6VisionText2TextModelTester(VLMModelTester):
 
 
 @require_torch
-class Kimi2_6ModelTest(VLMModelTest, unittest.TestCase):
-    model_tester_class = Kimi2_6VisionText2TextModelTester
+class Kimi_K25ModelTest(VLMModelTest, unittest.TestCase):
+    model_tester_class = Kimi_K25VisionText2TextModelTester
 
     # Kimi has images shaped as (bs*patch_len, dim) so we can't slice to batches in generate
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
@@ -222,7 +222,7 @@ class Kimi26IntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test(self):
-        model = Kimi2_6ForConditionalGeneration.from_pretrained("todo", dtype="auto", device_map="auto")
+        model = Kimi_K25ForConditionalGeneration.from_pretrained("todo", dtype="auto", device_map="auto")
 
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text], images=[self.image], return_tensors="pt")
@@ -257,7 +257,7 @@ class Kimi26IntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch(self):
-        model = Kimi2_6ForConditionalGeneration.from_pretrained("todo", dtype="auto", device_map="auto")
+        model = Kimi_K25ForConditionalGeneration.from_pretrained("todo", dtype="auto", device_map="auto")
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text, text], images=[self.image, self.image], return_tensors="pt").to(
             torch_device
@@ -277,7 +277,7 @@ class Kimi26IntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_expand(self):
-        model = Kimi2_6ForConditionalGeneration.from_pretrained("todo", dtype="auto", device_map="auto")
+        model = Kimi_K25ForConditionalGeneration.from_pretrained("todo", dtype="auto", device_map="auto")
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text], images=[self.image], return_tensors="pt").to(torch_device)
 
@@ -295,7 +295,7 @@ class Kimi26IntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch_wo_image(self):
-        model = Kimi2_6ForConditionalGeneration.from_pretrained("todo", dtype="auto", device_map="auto")
+        model = Kimi_K25ForConditionalGeneration.from_pretrained("todo", dtype="auto", device_map="auto")
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         messages2 = [
             {"role": "system", "content": "You are a helpful assistant."},

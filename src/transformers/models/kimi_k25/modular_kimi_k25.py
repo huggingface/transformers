@@ -679,10 +679,11 @@ class Kimi_K25Processor(Qwen2VLProcessor):
         self,
         image_processor=None,
         tokenizer=None,
+        video_processor=None,
         chat_template=None,
         **kwargs,
     ):
-        ProcessorMixin.__init__(image_processor, tokenizer, chat_template=chat_template)
+        ProcessorMixin.__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
         self.image_token = "<|media_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = (
             "<|kimi_k25_video_placeholder|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
@@ -769,7 +770,7 @@ class Kimi_K25Processor(Qwen2VLProcessor):
                     metadata.fps = 24 if metadata.fps is None else metadata.fps
 
                     for chunk_id in range(0, num_frames, temporal_patch_size):
-                        timestamp = metadata.timestamps[chunk_id]
+                        timestamp = float(metadata.timestamps[chunk_id])
                         current_chunk = metadata.timestamps[chunk_id : chunk_id + temporal_patch_size]
                         timestamp_str = (
                             time.strftime("%H:%M:%S", time.gmtime(timestamp)) + f".{int(timestamp % 1 * 1000):03d}"
@@ -791,6 +792,10 @@ class Kimi_K25Processor(Qwen2VLProcessor):
             text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
 
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
+
+    @property
+    def model_input_names(self):
+        raise AttributeError("Shouldn't be copied from Qwen-VL!")
 
 
 __all__ = [

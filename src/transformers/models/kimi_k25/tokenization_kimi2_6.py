@@ -1,7 +1,6 @@
 import os
 from collections.abc import Iterator
 from shutil import copyfile
-from typing import cast
 
 from ...convert_slow_tokenizer import bytes_to_unicode
 from ...tokenization_python import PythonBackend

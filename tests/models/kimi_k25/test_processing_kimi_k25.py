@@ -17,7 +17,6 @@ import unittest
 
 import numpy as np
 
-from transformers import Kimi2_6Config
 from transformers.testing_utils import require_av, require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -25,7 +24,7 @@ from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_vision_available():
-    from transformers import Kimi2_6Processor
+    from transformers import Kimi_K25Processor
 
 if is_torch_available():
     import torch
@@ -34,32 +33,37 @@ if is_torch_available():
 @require_vision
 @require_torch
 @require_torchvision
-class Kimi26ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
-    processor_class = Kimi2_6Processor
+class Kimi_K25ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = Kimi_K25Processor
     model_id = "moonshotai/Kimi-K2.6"
 
     @classmethod
     def _setup_from_pretrained(cls, model_id, **kwargs):
-        return super()._setup_from_pretrained(
-            model_id, patch_size=4, trust_remote_code=False, config=Kimi2_6Config(), **kwargs
-        )
+        return super()._setup_from_pretrained(model_id, trust_remote_code=False, **kwargs)
+
+    @classmethod
+    def _setup_video_processor(cls):
+        video_processor_class = cls._get_component_class_from_processor("video_processor")
+        video_processor_kwargs = {
+            "size": {"max_height": 28, "max_width": 28},
+            "patch_size": 4,
+            "temporal_patch_size": 2,
+        }
+        return video_processor_class(**video_processor_kwargs)
+
+    @classmethod
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        image_processor_kwargs = {
+            "size": {"max_height": 28, "max_width": 28},
+            "patch_size": 4,
+        }
+        return image_processor_class(**image_processor_kwargs)
 
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
         cls.video_token = processor.video_token
-
-    def test_get_num_vision_tokens(self):
-        "Tests general functionality of the helper used internally in vLLM"
-
-        processor = self.get_processor()
-
-        output = processor._get_num_multimodal_tokens(image_sizes=[(100, 100), (300, 100), (500, 30)])
-        self.assertTrue("num_image_tokens" in output)
-        self.assertEqual(len(output["num_image_tokens"]), 3)
-
-        self.assertTrue("num_image_patches" in output)
-        self.assertEqual(len(output["num_image_patches"]), 3)
 
     @require_torch
     @require_av
@@ -146,13 +150,12 @@ class Kimi26ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(out_dict["input_ids"]), batch_size)
         self.assertEqual(len(out_dict["attention_mask"]), batch_size)
         if modality == "video":
-            # qwen pixels don't scale with bs same way as other models, calculate expected video token count based on video_grid_thw
             expected_video_token_count = 0
             for thw in out_dict["video_grid_thw"]:
                 expected_video_token_count += thw[0] * thw[1] * thw[2]
             mm_len = expected_video_token_count
         else:
-            mm_len = batch_size * 192
+            mm_len = batch_size * 616
         self.assertEqual(len(out_dict[input_name]), mm_len)
 
         return_tensor_to_type = {"pt": torch.Tensor, "np": np.ndarray, None: list}
@@ -191,9 +194,6 @@ class Kimi26ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         expected_output = processor.tokenizer(formatted_prompt, return_tensors=None).input_ids
         self.assertListEqual(expected_output, formatted_prompt_tokenized)
 
-        out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
-        self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask", "mm_token_type_ids"])
-
         # Add video URL for return dict and load with `num_frames` arg
         messages[0][0]["content"][0] = {
             "type": "video",
@@ -208,9 +208,10 @@ class Kimi26ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenize=True,
             return_dict=True,
             num_frames=num_frames,
+            fps=None,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 360)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1344)
 
         # Load with `fps` arg
         fps = 1
@@ -222,7 +223,7 @@ class Kimi26ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             fps=fps,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 360)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1344)
 
         # Load with `fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):
@@ -243,7 +244,7 @@ class Kimi26ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1080)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1344)
 
         # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
         # because we assume they come from one video

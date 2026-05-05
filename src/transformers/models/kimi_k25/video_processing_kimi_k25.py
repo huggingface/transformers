@@ -68,6 +68,7 @@ class Kimi_K25VideoProcessor(BaseVideoProcessor):
     temporal_patch_size = 4
     merge_size = 2
     max_patches = 16384
+    fps = 2
     do_sample_frames = True
     valid_kwargs = Kimi_K25VideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
