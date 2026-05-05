@@ -109,7 +109,6 @@ class LightGlueConfig(PreTrainedConfig):
             raise ValueError("descriptor_dim % num_heads is different from zero")
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of LightGlue keypoint matching models. Due to the nature of keypoint detection and matching,
@@ -119,6 +118,7 @@ class LightGlueConfig(PreTrainedConfig):
     matching information.
     """
 )
+@dataclass
 class LightGlueKeypointMatchingOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*):

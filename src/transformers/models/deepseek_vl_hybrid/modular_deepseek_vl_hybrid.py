@@ -114,8 +114,8 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
         super().__post_init__(**kwargs)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class BaseModelOutputWithHighResVisionEncodings(BaseModelOutputWithPooling):
     r"""
     high_res_vision_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):

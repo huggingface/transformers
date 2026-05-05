@@ -314,6 +314,28 @@ class GotOcr2PreTrainedModel(PreTrainedModel):
                 init.zeros_(module.pos_embed)
 
 
+<<<<<<< multimodal-encode-generation
+=======
+@auto_docstring(
+    custom_intro="""
+    Base class for got_ocr2 vision model's outputs that also contains image embeddings obtained by applying the projection
+    layer to the pooler_output.
+    """
+)
+@dataclass
+class GotOcr2VisionEncoderOutput(ModelOutput):
+    r"""
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+        The image embeddings obtained by applying the projection layer to the pooler_output.
+    """
+
+    image_embeds: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+
+
+>>>>>>> main
 class GotOcr2PatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
@@ -473,12 +495,12 @@ class GotOcr2MultiModalProjector(nn.Module):
         return hidden_state
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for GotOcr2 causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class GotOcr2CausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

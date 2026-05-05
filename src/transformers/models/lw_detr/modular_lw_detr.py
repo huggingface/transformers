@@ -974,12 +974,12 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the LwDetr backbone-decoder model.
     """
 )
+@dataclass
 class LwDetrModelOutput(ModelOutput):
     r"""
     init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
@@ -1258,12 +1258,12 @@ class LwDetrMLPPredictionHead(DeformableDetrMLPPredictionHead):
     pass
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`LwDetrForObjectDetection`].
     """
 )
+@dataclass
 class LwDetrObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):

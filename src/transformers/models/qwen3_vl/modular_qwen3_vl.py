@@ -68,8 +68,8 @@ from ..qwen3.modeling_qwen3 import (
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
     r"""
     deepstack_features (`List[torch.FloatTensor]`, *optional*):

@@ -665,12 +665,12 @@ class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Llava causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Llama4CausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

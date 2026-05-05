@@ -517,12 +517,12 @@ class MetaClip2TextModel(MetaClip2PreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for text model's outputs that also contains a pooling of the last hidden states.
     """
 )
+@dataclass
 class MetaClip2TextModelOutput(ModelOutput):
     r"""
     text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
@@ -1003,12 +1003,12 @@ class MetaClip2VisionModel(MetaClip2PreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
     """
 )
+@dataclass
 class MetaClip2VisionModelOutput(ModelOutput):
     r"""
     image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
