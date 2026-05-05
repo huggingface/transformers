@@ -636,10 +636,10 @@ jobs:
         run: mkdir warnings_in_ci
 
       - uses: actions/download-artifact@v8
-        env:
-          ACTIONS_ARTIFACT_MAX_ARTIFACT_COUNT: 2000
+#        env:
+#          ACTIONS_ARTIFACT_MAX_ARTIFACT_COUNT: 2000
         with:
-          pattern: single-gpu_run_models_gpu_models_vit_test*
+          pattern: single-gpu_run_models_gpu_models_dino*
           path: warnings_in_ci2
           merge-multiple: true
           # repository: ${{ github.repository }}
