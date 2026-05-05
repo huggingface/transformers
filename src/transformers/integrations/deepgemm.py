@@ -67,6 +67,7 @@ class DeepGEMM:
     grouped_bf16_matmul_nt: Callable
     grouped_bf16_matmul_nn: Callable
     per_token_cast_to_fp8: Callable
+    get_mn_major_tma_aligned_packed_ue8m0_tensor: Callable
     transform_weights_for_mega_moe: Callable
     get_symm_buffer_for_mega_moe: Callable
     fp8_fp4_mega_moe: Callable
@@ -116,6 +117,7 @@ def _load_deepgemm_kernel() -> DeepGEMM:
     grouped_bf16_matmul_nt = getattr(kernel, "m_grouped_bf16_gemm_nt_contiguous", None)
     grouped_bf16_matmul_nn = getattr(kernel, "m_grouped_bf16_gemm_nn_contiguous", None)
     per_token_cast_to_fp8 = resolve_internal_import(kernel, chained_path="utils.per_token_cast_to_fp8")
+    get_mn_major_tma_aligned_packed_ue8m0_tensor = getattr(kernel, "get_mn_major_tma_aligned_packed_ue8m0_tensor", None)
     transform_weights_for_mega_moe = getattr(kernel, "transform_weights_for_mega_moe", None)
     get_symm_buffer_for_mega_moe = getattr(kernel, "get_symm_buffer_for_mega_moe", None)
     fp8_fp4_mega_moe = getattr(kernel, "fp8_fp4_mega_moe", None)
@@ -128,6 +130,7 @@ def _load_deepgemm_kernel() -> DeepGEMM:
             ("m_grouped_bf16_gemm_nt_contiguous", grouped_bf16_matmul_nt),
             ("m_grouped_bf16_gemm_nn_contiguous", grouped_bf16_matmul_nn),
             ("utils.per_token_cast_to_fp8", per_token_cast_to_fp8),
+            ("get_mn_major_tma_aligned_packed_ue8m0_tensor", get_mn_major_tma_aligned_packed_ue8m0_tensor),
             ("transform_weights_for_mega_moe", transform_weights_for_mega_moe),
             ("get_symm_buffer_for_mega_moe", get_symm_buffer_for_mega_moe),
             ("fp8_fp4_mega_moe", fp8_fp4_mega_moe),
@@ -146,6 +149,7 @@ def _load_deepgemm_kernel() -> DeepGEMM:
         grouped_bf16_matmul_nt=grouped_bf16_matmul_nt,
         grouped_bf16_matmul_nn=grouped_bf16_matmul_nn,
         per_token_cast_to_fp8=per_token_cast_to_fp8,
+        get_mn_major_tma_aligned_packed_ue8m0_tensor=get_mn_major_tma_aligned_packed_ue8m0_tensor,
         transform_weights_for_mega_moe=transform_weights_for_mega_moe,
         get_symm_buffer_for_mega_moe=get_symm_buffer_for_mega_moe,
         fp8_fp4_mega_moe=fp8_fp4_mega_moe,
