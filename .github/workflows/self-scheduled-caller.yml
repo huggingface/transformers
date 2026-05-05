@@ -8,11 +8,11 @@ on:
 jobs:
   download:
     runs-on: ubuntu-latest
-    env:
-      ACTIONS_ARTIFACT_MAX_ARTIFACT_COUNT: 2000
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v8
+        env:
+          ACTIONS_ARTIFACT_MAX_ARTIFACT_COUNT: 2000
         with:
           pattern: new_failures_with_bad_commit_run_models_gpu*
           path: ./downloaded
