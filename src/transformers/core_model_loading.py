@@ -655,6 +655,12 @@ class WeightTransform:
         for i, source_pattern in enumerate(self.source_patterns):
             group_name = f"g{i}"
             pattern = source_pattern.replace(".*.", r"\..*\.")
+            # Auto-anchor leaf-style patterns (those ending with an identifier char) at a key
+            # boundary, so e.g. ``experts.gate_up_proj`` does not also match
+            # ``experts.gate_up_proj_scale_inv``. Skip patterns that already end in an explicit
+            # anchor (``$``) or that intentionally end on a separator (``\.``) for prefix renames.
+            if pattern and (pattern[-1].isalnum() or pattern[-1] == "_"):
+                pattern = f"{pattern}(?=$|\\.)"
             branches.append(f"(?P<{group_name}>{pattern})")
         self.compiled_sources = re.compile("|".join(branches))
 
