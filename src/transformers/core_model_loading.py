@@ -823,30 +823,57 @@ def spawn_materialize(
 
 
 class DtensorShardOperation:
-
     def __init__(self, param: DTensor):
         self.device_mesh = param.device_mesh
         self.placements = tuple(param.placements)
         self.param_ndim = param.ndim
-        local_shape, offsets = compute_local_shape_and_global_offset(
-            param.shape, self.device_mesh, self.placements
-        )
-        self._first_owned_expert = offsets[0]
-        self._owned_experts_count = local_shape[0]
+        local_shape, offsets = compute_local_shape_and_global_offset(param.shape, self.device_mesh, self.placements)
+        # Where this rank's slice starts along axis 0, and how many indices
+        # it covers. Example: param of shape [8, in, out] with Shard(0) on
+        # 2 ranks gives:
+        #   rank 0 → _axis0_offset=0, _axis0_local_size=4  (owns experts 0..3)
+        #   rank 1 → _axis0_offset=4, _axis0_local_size=4  (owns experts 4..7)
+        # When the checkpoint stores one tensor per expert, shard_tensor
+        # checks whether tensor_idx falls in this rank's range to decide
+        # whether to keep the piece or drop it.
+        self._axis0_offset = offsets[0]
+        self._axis0_local_size = local_shape[0]
 
     def shard_tensor(
         self, source: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
     ) -> torch.Tensor | None:
+        """Slice source down to this rank's shard.
+
+        The checkpoint can store the parameter in two layouts. Take a stack
+        of N MoE experts of shape [in, out] as a running example — the
+        param shape is [N, in, out]:
+
+        - Single tensor (tensor_idx is None): the checkpoint holds one
+          [N, in, out] tensor, so source.shape == param.shape. Every
+          sharded dim is sliced here, including axis 0.
+
+        - One tensor per piece (tensor_idx given): the checkpoint holds N
+          separate [in, out] tensors, one per expert. shard_tensor is
+          called once per expert; on each call source is the [in, out]
+          tensor for expert number tensor_idx (so 0 <= tensor_idx < N).
+          Note: source has one fewer dim than the param: the axis-0
+          index lives in tensor_idx, not in source.shape.
+          If this rank does not own tensor_idx along axis 0, return None
+          and the piece is discarded. Otherwise slice only the inner
+          dims; the caller (MergeModulelist / Concatenate) collects the
+          kept pieces and stacks them back along axis 0 to rebuild the
+          full [N, in, out] param.
+        """
         source_shape = list(source.shape) if isinstance(source, torch.Tensor) else source.get_shape()
         placements = [(md, p) for md, p in enumerate(self.placements) if hasattr(p, "dim")]
 
+        # Dense path
         if tensor_idx is None:
-            # Source already has the param's shape -> slice every dim directly.
             if not placements:
                 return source[...].to(device=device, dtype=dtype)
             has_strided = any(not p.is_shard() for _, p in placements)
             intervals = [[(0, size)] for size in source_shape]
-            for mesh_dim, placement in placements:
+            for mesh_dim, placement in placements:  # [i.e: (0, Shard(0)), (1, Shard(-1))]
                 sub_mesh = self._get_sub_mesh(mesh_dim)
                 rank, world_size = sub_mesh.get_local_rank(), sub_mesh.size()
                 source_dim = self._norm_dim(placement.dim)
@@ -862,22 +889,29 @@ class DtensorShardOperation:
             slices = tuple(slice(*(pieces[0] if pieces else (0, 0))) for pieces in intervals)
             return source[slices].to(device=device, dtype=dtype)
 
-        # Source is one of N pieces. Ownership check on the leading axis;
-        # MergeModulelist / Concatenate will assemble the param from kept pieces.
-        # Inner dims only use _contiguous_intervals, which yields one piece per dim,
-        # so we can slice directly -- no cat needed.
-        shards_expert_axis = any(self._norm_dim(p.dim) == 0 for _, p in placements)
-        owns_expert = self._first_owned_expert <= tensor_idx < self._first_owned_expert + self._owned_experts_count
-        if shards_expert_axis and not owns_expert:
+        # MoE path: drop the piece if this rank does not own tensor_idx
+        # along axis 0. Once shard_tensor has been called for all N pieces,
+        # the caller (MergeModulelist) stacks the kept slices along axis 0 to
+        # form this rank's local shard of the param.
+        shards_leading_axis = any(self._norm_dim(p.dim) == 0 for _, p in placements)
+        owns_index = self._axis0_offset <= tensor_idx < self._axis0_offset + self._axis0_local_size
+        if shards_leading_axis and not owns_index:
             return None
+
+        # Inner dims use only _contiguous_intervals (one piece per dim), so a
+        # single slice suffices
         inner_placements = [(md, p) for md, p in placements if self._norm_dim(p.dim) != 0]
         if not inner_placements:
             return source[...].to(device=device, dtype=dtype)
         slice_per_dim: list[tuple[int, int]] = [(0, size) for size in source_shape]
+        # placement.dim is indexed in param space (e.g. axis 2 of [N, in, out]).
+        # source is in source space (e.g. axis 1 of [in, out]), so we translate
+        # from one to the other by stripping the leading axis.
         for mesh_dim, placement in inner_placements:
             sub_mesh = self._get_sub_mesh(mesh_dim)
             rank, world_size = sub_mesh.get_local_rank(), sub_mesh.size()
-            source_dim = self._norm_dim(placement.dim) - 1  # exactly one leading dim missing
+            param_dim = self._norm_dim(placement.dim)
+            source_dim = param_dim - 1
             pieces = self._contiguous_intervals([slice_per_dim[source_dim]], rank, world_size)
             slice_per_dim[source_dim] = pieces[0] if pieces else (0, 0)
         return source[tuple(slice(s, e) for s, e in slice_per_dim)].to(device=device, dtype=dtype)
@@ -954,6 +988,7 @@ class DtensorShardOperation:
         return self.device_mesh[self.device_mesh.mesh_dim_names[mesh_dim]]
 
     def _norm_dim(self, dim: int) -> int:
+        # if dim is negative, it should be normalized to the last axis
         return dim if dim >= 0 else self.param_ndim + dim
 
 
