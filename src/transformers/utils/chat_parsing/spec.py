@@ -5,7 +5,7 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
-"""Spec loading and validation for response_format dicts."""
+"""Spec loading and validation for response_template dicts."""
 
 from __future__ import annotations
 
@@ -69,7 +69,7 @@ class Spec:
             if idx < 0:
                 if log_if_missing:
                     logger.warning_once(
-                        "response_format defines start_anchor but the anchor was not found "
+                        "response_template defines start_anchor but the anchor was not found "
                         "in the prefix; the parser will process the entire prefix instead."
                     )
                 return text
@@ -80,7 +80,7 @@ class Spec:
         if last_end is None:
             if log_if_missing:
                 logger.warning_once(
-                    "response_format defines start_anchor_pattern but the anchor was not "
+                    "response_template defines start_anchor_pattern but the anchor was not "
                     "found in the prefix; the parser will process the entire prefix instead."
                 )
             return text
@@ -91,7 +91,7 @@ def _compile_anchor(scope: str, fd: dict, lit_key: str, pat_key: str) -> tuple[r
     """Return (compiled, literal). `literal` is populated only when the anchor
     was given as a literal string (not "eos" and not a regex); the streaming
     executor uses it to compute safe-to-emit boundaries. `scope` prefixes
-    error messages — e.g. `"Field 'thinking'"` or `"response_format"`."""
+    error messages — e.g. `"Field 'thinking'"` or `"response_template"`."""
     if lit_key in fd and pat_key in fd:
         raise ValueError(f"{scope}: cannot specify both '{lit_key}' and '{pat_key}'")
     if lit_key in fd:
@@ -108,24 +108,24 @@ def _compile_anchor(scope: str, fd: dict, lit_key: str, pat_key: str) -> tuple[r
 
 
 def load_spec(spec: dict | Spec) -> Spec:
-    """Validate and normalize a response_format dict. Idempotent: a `Spec`
+    """Validate and normalize a response_template dict. Idempotent: a `Spec`
     passed in is returned as-is."""
     if isinstance(spec, Spec):
         return spec
     if not isinstance(spec, dict):
-        raise ValueError(f"response_format must be a dict, got {type(spec).__name__}")
+        raise ValueError(f"response_template must be a dict, got {type(spec).__name__}")
     unknown = set(spec) - _ALLOWED_TOP_KEYS
     if unknown:
-        raise ValueError(f"Unknown keys in response_format: {sorted(unknown)}")
+        raise ValueError(f"Unknown keys in response_template: {sorted(unknown)}")
     version = spec.get("version", 1)
     if version != 1:
-        raise ValueError(f"Unsupported response_format version: {version}")
+        raise ValueError(f"Unsupported response_template version: {version}")
     defaults = spec.get("defaults", {})
     if not isinstance(defaults, dict):
-        raise ValueError("response_format.defaults must be a dict")
+        raise ValueError("response_template.defaults must be a dict")
     fields_raw = spec.get("fields", {})
     if not isinstance(fields_raw, dict) or not fields_raw:
-        raise ValueError("response_format.fields must be a non-empty dict")
+        raise ValueError("response_template.fields must be a non-empty dict")
 
     fields: dict[str, Field] = {}
     implicit_fields: list[str] = []
@@ -166,7 +166,7 @@ def load_spec(spec: dict | Spec) -> Spec:
             f"implicit-open / leftover sink). Found: {', '.join(implicit_fields)}"
         )
     start_anchor_re, start_anchor_lit = _compile_anchor(
-        "response_format", spec, "start_anchor", "start_anchor_pattern"
+        "response_template", spec, "start_anchor", "start_anchor_pattern"
     )
     return Spec(
         defaults=dict(defaults),
