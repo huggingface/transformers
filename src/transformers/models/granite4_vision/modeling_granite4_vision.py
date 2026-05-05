@@ -185,27 +185,27 @@ class Granite4VisionWindowQFormerDownsampler(nn.Module):
                 "Check that the vision encoder image_size and patch_size match the config."
             )
         num_windows = self.image_side // self.window_side
-        interp_side = int(self.image_side * Fraction(self._downsample_rate))
+        interpolated_side = int(self.image_side * Fraction(self._downsample_rate))
         image_features = self.norm(image_features)
-        enc = self._windowed_raster(image_features, self.image_side, self.window_side)
+        windowed_image_features = self._windowed_raster(image_features, self.image_side, self.window_side)
 
         if self._spatial_offset is not None:
             downsampled = spatial_offset_downsample(image_features, self.image_side, self._spatial_offset)
         else:
-            downsampled = interpolate_downsample(image_features, self.image_side, interp_side)
+            downsampled = interpolate_downsample(image_features, self.image_side, interpolated_side)
 
         downsampled_side = num_windows * self.query_side
-        downsampled_w = self._windowed_raster(downsampled, downsampled_side, self.query_side)
+        downsampled_windowed = self._windowed_raster(downsampled, downsampled_side, self.query_side)
 
-        query_embeds = self.query + downsampled_w
-        encoder_embeds = self.dropout(enc + self.image_positions)
-        out_w = self.qformer(
+        query_embeds = self.query + downsampled_windowed
+        encoder_embeds = self.dropout(windowed_image_features + self.image_positions)
+        out_windowed = self.qformer(
             query_embeds=query_embeds,
             encoder_hidden_states=encoder_embeds,
             return_dict=True,
         ).last_hidden_state
 
-        out = self._unwindowed_raster(out_w, num_win=num_windows, window_size=self.query_side)
+        out = self._unwindowed_raster(out_windowed, num_win=num_windows, window_size=self.query_side)
         out = self.dropout(out)
         return self.out_linear(out)
 
@@ -618,7 +618,9 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel):
 
         for layer_idx, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             if deepstack_features is not None and layer_idx in deepstack_features:
-                hidden_states = self._deepstack_inject(hidden_states, vision_mask, deepstack_features[layer_idx])
+                features = deepstack_features[layer_idx].to(hidden_states.device, hidden_states.dtype)
+                mask = vision_mask.to(hidden_states.device)
+                hidden_states = hidden_states.masked_scatter(mask, (hidden_states[mask] + features.flatten()).view(-1))
 
             hidden_states = decoder_layer(
                 hidden_states,
@@ -635,20 +637,6 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel):
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-        )
-
-    def _deepstack_inject(
-        self,
-        hidden_states: torch.Tensor,
-        vision_mask: torch.Tensor,
-        features: torch.Tensor,
-    ) -> torch.Tensor:
-        """Add projected vision features into the image-token positions of hidden_states."""
-        vision_mask = vision_mask.to(hidden_states.device)
-        features = features.to(hidden_states.device, hidden_states.dtype)
-        return hidden_states.masked_scatter(
-            vision_mask,
-            (hidden_states[vision_mask] + features.flatten()).view(-1),
         )
 
 

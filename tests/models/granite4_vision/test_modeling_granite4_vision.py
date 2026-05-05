@@ -15,8 +15,6 @@
 
 import unittest
 
-import requests
-
 from transformers import (
     AutoProcessor,
     CLIPVisionConfig,
@@ -35,6 +33,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_modeling_common import floats_tensor
+from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
@@ -150,7 +149,7 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained(self.model_id)
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        self.image = Image.open(requests.get(url, stream=True).raw)
+        self.image = Image.open(url_to_local_path(url))
 
     def make_prompt(self, question):
         messages = [{"role": "user", "content": [{"type": "image"}, {"type": "text", "text": question}]}]
@@ -180,7 +179,7 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
         )
 
         url2 = "http://images.cocodataset.org/val2017/000000001000.jpg"
-        image2 = Image.open(requests.get(url2, stream=True).raw)
+        image2 = Image.open(url_to_local_path(url2))
 
         prompt = self.make_prompt("What do you see in this image?")
         inputs = self.processor(
@@ -213,7 +212,7 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
 
         # Batch inference (same image as first in batch)
         url2 = "http://images.cocodataset.org/val2017/000000001000.jpg"
-        image2 = Image.open(requests.get(url2, stream=True).raw)
+        image2 = Image.open(url_to_local_path(url2))
         inputs_batch = self.processor(
             text=[prompt, prompt],
             images=[self.image, image2],
