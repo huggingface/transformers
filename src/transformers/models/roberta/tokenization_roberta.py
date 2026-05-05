@@ -169,7 +169,7 @@ class RobertaTokenizer(TokenizersBackend):
         )
         self._tokenizer.post_processor = processors.RobertaProcessing(
             sep=(str(sep_token), self.sep_token_id),
-            cls=(str(cls_token), self.cls_token_id),
+            cls_token=(str(cls_token), self.cls_token_id),
             add_prefix_space=add_prefix_space,
             trim_offsets=trim_offsets,
         )

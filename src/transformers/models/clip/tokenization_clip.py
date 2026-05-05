@@ -116,7 +116,7 @@ class CLIPTokenizer(TokenizersBackend):
 
         self._tokenizer.post_processor = processors.RobertaProcessing(
             sep=(str(eos_token), self.eos_token_id),
-            cls=(str(bos_token), self.bos_token_id),
+            cls_token=(str(bos_token), self.bos_token_id),
             add_prefix_space=False,
             trim_offsets=False,
         )
