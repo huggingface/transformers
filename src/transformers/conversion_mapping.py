@@ -268,15 +268,15 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightConverter(
                 source_patterns=[
-                    "experts.*.w1.weight",
-                    "experts.*.w3.weight",
+                    r"mlp\.experts\..*\.w1\.weight",
+                    r"mlp\.experts\..*\.w3\.weight",
                 ],
-                target_patterns="experts.gate_up_proj",
+                target_patterns=r"mlp.experts.gate_up_proj",
                 operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
             ),
             WeightConverter(
-                source_patterns="experts.*.w2.weight",
-                target_patterns="experts.down_proj",
+                source_patterns=r"mlp\.experts\..*\.w2\.weight",
+                target_patterns=r"mlp.experts.down_proj",
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
