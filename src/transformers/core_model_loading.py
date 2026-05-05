@@ -733,7 +733,7 @@ class WeightTransform:
                 lambda m: match_object.group(group_start + int(m.group(1))),
                 replacement,
             )
-        renamed_key = source_key.replace(match_object.group(0), replacement, 1)
+        renamed_key = key_to_match.replace(match_object.group(0), replacement, 1)
         if prefix_dot is not None:
             renamed_key = prefix_dot + renamed_key
         return renamed_key, source_pattern_that_matched
