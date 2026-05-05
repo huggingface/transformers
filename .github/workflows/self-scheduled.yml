@@ -608,7 +608,7 @@ jobs:
           path: warnings_in_ci
           repository: ${{ github.repository }}
           run-id: ${{ github.run_id }}
-#          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Show artifacts
         run: echo "$(python3 -c 'import os; d = os.listdir(); print(d)')"
