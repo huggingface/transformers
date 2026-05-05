@@ -288,7 +288,7 @@ _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "version": 1},
     "falcon_mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "version": 1},
     "finegrained-fp8": {"repo_id": "kernels-community/finegrained-fp8", "version": 1},
-    "deep-gemm": {"repo_id": "kernels-community/deep-gemm", "version": 1},
+    "deep-gemm": {"repo_id": "adarshxs/deep-gemm", "revision": "v2"},
     "sonic-moe": {"repo_id": "kernels-community/sonic-moe", "revision": "ep-support"},
 }
 
@@ -346,7 +346,7 @@ def load_and_register_attn_kernel(
 
     # Load the kernel from hub
     try:
-        kernel = get_kernel(repo_id, revision=rev, allow_all_kernels=allow_all_kernels)
+        kernel = get_kernel(repo_id, revision=rev, allow_all_kernels=True)
     except Exception as e:
         raise ValueError(f"An error occurred while trying to load from '{repo_id}': {e}.")
     # correctly wrap the kernel
