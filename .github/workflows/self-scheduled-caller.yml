@@ -1,50 +1,61 @@
 name: Nvidia CI
 
 on:
+  repository_dispatch:
+  schedule:
+    - cron: "17 2 * * *"
   push:
     branches:
       - remove_strange_block
+  workflow_dispatch:
+    inputs:
+      prev_workflow_run_id:
+        description: 'previous workflow run id to compare'
+        type: string
+        required: false
+        default: ""
+      other_workflow_run_id:
+        description: 'other workflow run id to compare'
+        type: string
+        required: false
+        default: ""
+
+
+# Used for `push` to easily modify the target workflow runs to compare against
+env:
+    prev_workflow_run_id: ""
+    other_workflow_run_id: ""
+
 
 jobs:
-  download:
-    runs-on:
-      group: aws-g5-4xlarge-cache
-    container:
-      image: huggingface/transformers-all-latest-gpu
-      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-
+  setup:
+    name: Setup
+    runs-on: ubuntu-22.04
     steps:
-      - name: Download specific artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: ci_results_run_models_gpu
-          path: ./downloaded2
-          repository: huggingface/transformers
-          run-id: 25356138915
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: List downloaded files
-        run: |
-          echo "=== Downloaded files ==="
-          find ./downloaded2 -type f | sort || echo "No files found"
-          echo "=== Total count ==="
-          find ./downloaded2 -type f | wc -l
-
-      - name: Download artifacts
-        uses: actions/download-artifact@v8
+      - name: Setup
         env:
-          ACTIONS_ARTIFACT_MAX_ARTIFACT_COUNT: 2000
-        with:
-          pattern: new_failures_with_bad_commit_run_models_gpu*
-          path: ./downloaded
-          merge-multiple: true
-          repository: huggingface/transformers
-          run-id: 25356138915
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: List downloaded files
+          prev_workflow_run_id: ${{ inputs.prev_workflow_run_id || env.prev_workflow_run_id }}
+          other_workflow_run_id: ${{ inputs.other_workflow_run_id || env.other_workflow_run_id }}
         run: |
-          echo "=== Downloaded files ==="
-          find ./downloaded -type f | sort || echo "No files found"
-          echo "=== Total count ==="
-          find ./downloaded -type f | wc -l
+          mkdir "setup_values"
+          echo "$prev_workflow_run_id" > "setup_values/prev_workflow_run_id.txt"
+          echo "$other_workflow_run_id" > "setup_values/other_workflow_run_id.txt"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: setup_values
+          path: setup_values
+
+  model-ci:
+    name: Model CI
+    uses: ./.github/workflows/self-scheduled.yml
+    with:
+      job: run_models_gpu
+      slack_report_channel: "#transformers-ci-dummy"
+      docker: huggingface/transformers-all-latest-gpu
+      ci_event: Daily CI
+      runner_type: "a10"
+      report_repo_id: hf-internal-testing/transformers_daily_ci
+      commit_sha: ${{ github.sha }}
+    secrets: inherit
