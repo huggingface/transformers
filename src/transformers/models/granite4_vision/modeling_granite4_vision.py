@@ -535,8 +535,12 @@ class Granite4VisionPreTrainedModel(PreTrainedModel):
         "attentions": Granite4VisionTextAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
+        if isinstance(module, Granite4VisionModel):
+            embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
+            init.normal_(module.image_newline, mean=0.0, std=embed_std)
         if isinstance(module, Granite4VisionWindowQFormerDownsampler):
             embed_std = 1 / math.sqrt(module.query.shape[-1])
             init.normal_(module.query, mean=0.0, std=embed_std)

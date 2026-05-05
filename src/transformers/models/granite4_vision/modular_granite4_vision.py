@@ -365,12 +365,11 @@ class Granite4VisionPreTrainedModel(LlavaNextPreTrainedModel):
     }
 
     def _init_weights(self, module):
-        PreTrainedModel._init_weights(module)
+        super()._init_weights(module)
         if isinstance(module, Granite4VisionWindowQFormerDownsampler):
             embed_std = 1 / math.sqrt(module.query.shape[-1])
             init.normal_(module.query, mean=0.0, std=embed_std)
             init.normal_(module.image_positions, mean=0.0, std=embed_std)
-
 
 class Granite4VisionTextModel(Granite4VisionPreTrainedModel, GraniteModel):
     """Granite LLM backbone with deepstack feature injection support."""

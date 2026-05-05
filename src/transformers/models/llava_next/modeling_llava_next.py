@@ -234,6 +234,12 @@ class LlavaNextPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
 
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, LlavaNextModel):
+            embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
+            init.normal_(module.image_newline, mean=0.0, std=embed_std)
 
 @auto_docstring(
     custom_intro="""
