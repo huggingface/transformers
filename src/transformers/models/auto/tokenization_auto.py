@@ -30,6 +30,7 @@ from ...utils import (
     extract_commit_hash,
     is_g2p_en_available,
     is_sentencepiece_available,
+    is_tiktoken_available,
     is_tokenizers_available,
     logging,
 )
@@ -162,6 +163,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("internvl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("jais2", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("jina_embeddings_v3", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
+        ("kimi2_6", "Kimi2_6Tokenizer" if is_tiktoken_available() else None),
         ("kosmos-2", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("lasr_ctc", "LasrTokenizer" if is_tokenizers_available() else None),
         ("lasr_encoder", "LasrTokenizer" if is_tokenizers_available() else None),

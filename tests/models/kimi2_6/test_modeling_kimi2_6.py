@@ -171,7 +171,7 @@ class Kimi2_6ModelTest(VLMModelTest, unittest.TestCase):
             self.assertEqual(layer.keys.shape, expected_key_shape)
             self.assertEqual(layer.values.shape, expected_value_shape)
 
-     def test_reverse_loading_mapping(self):
+    def test_reverse_loading_mapping(self):
         super().test_reverse_loading_mapping(skip_base_model=True)
 
     @parameterized.expand([("random",), ("same",)])

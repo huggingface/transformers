@@ -100,7 +100,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"layer\.", target_patterns="layers."),
         ],
         "kimi2_6": [
-            # Same as llava, add `model` as prefix if needed 
+            # Same as llava, add `model` as prefix if needed
             WeightRenaming(source_patterns=r"language_model.model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"language_model.lm_head", target_patterns="lm_head"),
             WeightRenaming(source_patterns=r"vision_tower.encoder", target_patterns="model.vision_tower"),

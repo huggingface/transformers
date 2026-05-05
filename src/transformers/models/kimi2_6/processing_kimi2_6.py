@@ -18,12 +18,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import time
+
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
 from ...video_utils import VideoInput
+
+
+logger = logging.get_logger(__name__)
 
 
 class Kimi2_6ProcessorKwargs(ProcessingKwargs, total=False):
@@ -32,6 +37,7 @@ class Kimi2_6ProcessorKwargs(ProcessingKwargs, total=False):
             "padding": False,
             "return_mm_token_type_ids": False,
         },
+        "videos_kwargs": {"return_metadata": True},
     }
 
 
@@ -46,17 +52,15 @@ class Kimi2_6Processor(ProcessorMixin):
     ):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
         self.image_token = "<|media_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
-        self.video_token = "<|media_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
+        self.video_token = (
+            "<|kimi_k25_video_placeholder|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
+        )
         self.image_token_id = (
             tokenizer.image_token_id
             if getattr(tokenizer, "image_token_id", None)
             else tokenizer.convert_tokens_to_ids(self.image_token)
         )
-        self.video_token_id = (
-            tokenizer.video_token_id
-            if getattr(tokenizer, "video_token_id", None)
-            else tokenizer.convert_tokens_to_ids(self.video_token)
-        )
+        self.video_token_id = self.image_token_id
 
     @auto_docstring
     def __call__(
@@ -93,6 +97,11 @@ class Kimi2_6Processor(ProcessorMixin):
         if videos is not None:
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             video_grid_thw = videos_inputs["video_grid_thw"]
+            # If user has not requested video metadata, pop it
+            if not kwargs.get("return_metadata"):
+                video_metadata = videos_inputs.pop("video_metadata")
+            else:
+                video_metadata = videos_inputs["video_metadata"]
 
         if not isinstance(text, list):
             text = [text]
@@ -111,18 +120,41 @@ class Kimi2_6Processor(ProcessorMixin):
 
         if videos is not None:
             merge_length = self.video_processor.merge_size**2
+            temporal_patch_size = self.video_processor.temporal_patch_size
             index = 0
             for i in range(len(text)):
                 while self.video_token in text[i]:
-                    num_video_tokens = video_grid_thw[index].prod() // merge_length
-                    text[i] = text[i].replace(self.video_token, "<|placeholder|>" * num_video_tokens, 1)
+                    num_frames = video_grid_thw[index][0]
+                    num_frame_tokens = video_grid_thw[index][1:].prod() // merge_length
+                    video_structure = ""
+
+                    metadata = video_metadata[index]
+                    if metadata.fps is None:
+                        logger.warning_once(
+                            "SmolVLM requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
+                            "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
+                            "Defaulting to `fps=24`. Please provide `video_metadata` for more accurate results."
+                        )
+                    metadata.fps = 24 if metadata.fps is None else metadata.fps
+
+                    for chunk_id in range(0, num_frames, temporal_patch_size):
+                        timestamp = metadata.timestamps[chunk_id]
+                        current_chunk = metadata.timestamps[chunk_id : chunk_id + temporal_patch_size]
+                        timestamp_str = (
+                            time.strftime("%H:%M:%S", time.gmtime(timestamp)) + f".{int(timestamp % 1 * 1000):03d}"
+                        )
+                        num_video_tokens = num_frame_tokens * "<|placeholder|>" * len(current_chunk)
+                        video_structure += (
+                            f"{timestamp_str}<|media_begin|>video<|media_content|>{num_video_tokens}<|media_end|>"
+                        )
+
+                    text[i] = text[i].replace(self.video_token, video_structure, 1)
                     index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.video_token)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
-        self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
 
         if return_mm_token_type_ids:
             text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])

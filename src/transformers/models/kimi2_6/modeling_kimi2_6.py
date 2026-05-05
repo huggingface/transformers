@@ -21,7 +21,6 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -108,24 +107,18 @@ class Kimi2_6VisionPositionEmbeddings(nn.Module):
         self.position_embeddings = nn.Parameter(
             torch.randn(config.pos_emb_height, config.pos_emb_width, config.hidden_size)
         )
-        time_position_embeddings = self.get_1d_sincos_pos_embed()
+        time_position_embeddings = self.compute_pos_embed()
         self.register_buffer("time_position_embeddings", time_position_embeddings, persistent=False)
 
-    # TODO: compute in torch
-    def get_1d_sincos_pos_embed(self):
-        grid_t = np.arange(self.num_frames, dtype=np.float32)
-        omega = np.arange(self.dim // 2, dtype=np.float32)
+    def compute_pos_embed(self):
+        grid_t = torch.arange(self.num_frames, dtype=torch.float32)
+        omega = torch.arange(self.dim // 2, dtype=torch.float32)
         omega /= self.dim / 2.0
         omega = 1.0 / 10000**omega  # (D/2,)
 
-        grid_t = grid_t.reshape(-1)  # (M,)
-        out = np.einsum("m,d->md", grid_t, omega)  # (M, D/2), outer product
-        emb_sin = np.sin(out)  # (M, D/2)
-        emb_cos = np.cos(out)  # (M, D/2)
-
-        pos_embed = np.concatenate([emb_sin, emb_cos], axis=1)  # (M, D)
-        pos_embed = torch.tensor(pos_embed, dtype=torch.float).unsqueeze(1)
-        return pos_embed
+        out = torch.outer(grid_t, omega)  # (M, D/2)
+        pos_embed = torch.cat([out.sin(), out.cos()], dim=1)  # (M, D)
+        return pos_embed.unsqueeze(1)
 
     def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
         pos_embs = []
@@ -453,7 +446,7 @@ class Kimi2_6PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Kimi2_6VisionPositionEmbeddings):
-            buffer_value = module.get_1d_sincos_pos_embed()
+            buffer_value = module.compute_pos_embed()
             init.copy_(module.time_position_embeddings, buffer_value)
             init.trunc_normal_(module.position_embeddings, mean=0.0)
 
@@ -502,7 +495,6 @@ class Kimi2_6VisionModel(Kimi2_6PreTrainedModel):
         return torch.cat(outputs, dim=0)
 
     def get_position_ids(self, grid_thw: torch.Tensor) -> torch.Tensor:
-        "Builds (h_pos, w_pos) grid for each sample, then cat across batch"
         all_position_ids = []
         for t, h, w in grid_thw.tolist():
             h_ids = torch.arange(h, device=grid_thw.device)

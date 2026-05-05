@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import time
 from collections.abc import Callable
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -22,17 +22,22 @@ import torch.nn.functional as F
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
+from ...feature_extraction_utils import BatchFeature
+from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    logging,
     torch_compilable_check,
 )
 from ...utils.generic import is_flash_attention_requested, maybe_autocast
 from ...utils.output_capturing import capture_outputs
+from ...video_utils import VideoInput
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..gemma4.modeling_gemma4 import Gemma4VisionRotaryEmbedding
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaForConditionalGeneration, LlavaModelOutputWithPast
@@ -45,6 +50,9 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     eager_attention_forward,
 )
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
+
+
+logger = logging.get_logger(__name__)
 
 
 class Kimi2_6VisionConfig(PreTrainedConfig):
@@ -129,24 +137,18 @@ class Kimi2_6VisionPositionEmbeddings(nn.Module):
         self.position_embeddings = nn.Parameter(
             torch.randn(config.pos_emb_height, config.pos_emb_width, config.hidden_size)
         )
-        time_position_embeddings = self.get_1d_sincos_pos_embed()
+        time_position_embeddings = self.compute_pos_embed()
         self.register_buffer("time_position_embeddings", time_position_embeddings, persistent=False)
 
-    # TODO: compute in torch
-    def get_1d_sincos_pos_embed(self):
-        grid_t = np.arange(self.num_frames, dtype=np.float32)
-        omega = np.arange(self.dim // 2, dtype=np.float32)
+    def compute_pos_embed(self):
+        grid_t = torch.arange(self.num_frames, dtype=torch.float32)
+        omega = torch.arange(self.dim // 2, dtype=torch.float32)
         omega /= self.dim / 2.0
         omega = 1.0 / 10000**omega  # (D/2,)
 
-        grid_t = grid_t.reshape(-1)  # (M,)
-        out = np.einsum("m,d->md", grid_t, omega)  # (M, D/2), outer product
-        emb_sin = np.sin(out)  # (M, D/2)
-        emb_cos = np.cos(out)  # (M, D/2)
-
-        pos_embed = np.concatenate([emb_sin, emb_cos], axis=1)  # (M, D)
-        pos_embed = torch.tensor(pos_embed, dtype=torch.float).unsqueeze(1)
-        return pos_embed
+        out = torch.outer(grid_t, omega)  # (M, D/2)
+        pos_embed = torch.cat([out.sin(), out.cos()], dim=1)  # (M, D)
+        return pos_embed.unsqueeze(1)
 
     def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
         pos_embs = []
@@ -191,6 +193,8 @@ class Kimi2_6VisionPatchEmbed(nn.Module):
         return hidden_states
 
 
+# Similarly to gemma4, applies the same freq to H and W grids
+# The difference is that gemma4 stcak H/W embeds, while Kimi interleaves them
 class Kimi2_6VisionRotaryEmbedding(Gemma4VisionRotaryEmbedding):
     def forward(self, x, position_ids):
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
@@ -224,7 +228,7 @@ class Kimi2_6VisionMLP(VisionMlp):
     pass
 
 
-# Unfused qkv as we chunk and permute qk proj when converting!
+# Difference from Qwen: unfused qkv as we chunk and permute qk proj when converting!
 class Kimi2_6VisionAttention(VisionAttention):
     def __init__(self, config: Kimi2_6VisionConfig) -> None:
         super().__init__()
@@ -305,7 +309,7 @@ class Kimi2_6VisionAttention(VisionAttention):
         return attn_output
 
 
-# Don't copy init from Qwen-VL due to non-standard config naming in Qwen
+# Don't copy `init` from Qwen-VL due to non-standard config naming in Qwen
 class Kimi2_6VisionEncoderLayer(Qwen2VLVisionBlock):
     def __init__(self, config):
         nn.Module.__init__()
@@ -321,7 +325,7 @@ class Kimi2_6PreTrainedModel(Qwen2VLPreTrainedModel):
     def _init_weights(self, module):
         PreTrainedModel._init_weights(module)
         if isinstance(module, Kimi2_6VisionPositionEmbeddings):
-            buffer_value = module.get_1d_sincos_pos_embed()
+            buffer_value = module.compute_pos_embed()
             init.copy_(module.time_position_embeddings, buffer_value)
             init.trunc_normal_(module.position_embeddings, mean=0.0)
 
@@ -370,7 +374,6 @@ class Kimi2_6VisionModel(Kimi2_6PreTrainedModel):
         return torch.cat(outputs, dim=0)
 
     def get_position_ids(self, grid_thw: torch.Tensor) -> torch.Tensor:
-        "Builds (h_pos, w_pos) grid for each sample, then cat across batch"
         all_position_ids = []
         for t, h, w in grid_thw.tolist():
             h_ids = torch.arange(h, device=grid_thw.device)
@@ -665,6 +668,7 @@ class Kimi2_6ProcessorKwargs(ProcessingKwargs, total=False):
             "padding": False,
             "return_mm_token_type_ids": False,
         },
+        "videos_kwargs": {"return_metadata": True},
     }
 
 
@@ -678,17 +682,113 @@ class Kimi2_6Processor(Qwen2VLProcessor):
     ):
         ProcessorMixin.__init__(image_processor, tokenizer, chat_template=chat_template)
         self.image_token = "<|media_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
-        self.video_token = "<|media_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
+        self.video_token = (
+            "<|kimi_k25_video_placeholder|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
+        )
         self.image_token_id = (
             tokenizer.image_token_id
             if getattr(tokenizer, "image_token_id", None)
             else tokenizer.convert_tokens_to_ids(self.image_token)
         )
-        self.video_token_id = (
-            tokenizer.video_token_id
-            if getattr(tokenizer, "video_token_id", None)
-            else tokenizer.convert_tokens_to_ids(self.video_token)
+        self.video_token_id = self.image_token_id
+
+    def __call__(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        videos: VideoInput | None = None,
+        **kwargs: Unpack[Kimi2_6ProcessorKwargs],
+    ) -> BatchFeature:
+        r"""
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+            - **pixel_values_videos** -- Pixel values of videos to be fed to a model. Returned when `videos` is not `None`.
+            - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
+            - **video_grid_thw** -- List of video 3D grid in LLM. Returned when `videos` is not `None`.
+        """
+        output_kwargs = self._merge_kwargs(
+            Kimi2_6ProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
         )
+
+        image_inputs = videos_inputs = {}
+        if images is not None:
+            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
+            image_grid_thw = image_inputs["image_grid_thw"]
+
+        if videos is not None:
+            videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
+            video_grid_thw = videos_inputs["video_grid_thw"]
+            # If user has not requested video metadata, pop it
+            if not kwargs.get("return_metadata"):
+                video_metadata = videos_inputs.pop("video_metadata")
+            else:
+                video_metadata = videos_inputs["video_metadata"]
+
+        if not isinstance(text, list):
+            text = [text]
+
+        text = text.copy()  # below lines change text in-place
+
+        if images is not None:
+            merge_length = self.image_processor.merge_size**2
+            index = 0
+            for i in range(len(text)):
+                while self.image_token in text[i]:
+                    num_image_tokens = image_grid_thw[index].prod() // merge_length
+                    text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
+                    index += 1
+                text[i] = text[i].replace("<|placeholder|>", self.image_token)
+
+        if videos is not None:
+            merge_length = self.video_processor.merge_size**2
+            temporal_patch_size = self.video_processor.temporal_patch_size
+            index = 0
+            for i in range(len(text)):
+                while self.video_token in text[i]:
+                    num_frames = video_grid_thw[index][0]
+                    num_frame_tokens = video_grid_thw[index][1:].prod() // merge_length
+                    video_structure = ""
+
+                    metadata = video_metadata[index]
+                    if metadata.fps is None:
+                        logger.warning_once(
+                            "SmolVLM requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
+                            "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
+                            "Defaulting to `fps=24`. Please provide `video_metadata` for more accurate results."
+                        )
+                    metadata.fps = 24 if metadata.fps is None else metadata.fps
+
+                    for chunk_id in range(0, num_frames, temporal_patch_size):
+                        timestamp = metadata.timestamps[chunk_id]
+                        current_chunk = metadata.timestamps[chunk_id : chunk_id + temporal_patch_size]
+                        timestamp_str = (
+                            time.strftime("%H:%M:%S", time.gmtime(timestamp)) + f".{int(timestamp % 1 * 1000):03d}"
+                        )
+                        num_video_tokens = num_frame_tokens * "<|placeholder|>" * len(current_chunk)
+                        video_structure += (
+                            f"{timestamp_str}<|media_begin|>video<|media_content|>{num_video_tokens}<|media_end|>"
+                        )
+
+                    text[i] = text[i].replace(self.video_token, video_structure, 1)
+                    index += 1
+                text[i] = text[i].replace("<|placeholder|>", self.video_token)
+
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
+
+        if return_mm_token_type_ids:
+            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
+
+        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
 
 __all__ = [

@@ -45,7 +45,8 @@ class Kimi2_6VideoProcessorInitKwargs(VideosKwargs, total=False):
         The spatial patch size of the vision encoder.
     merge_kernel_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
-    TODO:  temporal_patch_size
+    temporal_patch_size (`int`, *optional*, defaults to 4):
+        The temporal patch size of the vision encoder.
     """
 
     max_patches: int
