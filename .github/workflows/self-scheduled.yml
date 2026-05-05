@@ -613,3 +613,39 @@ jobs:
       - name: Show artifacts
         run: echo "$(python3 -c 'import os; d = os.listdir(); print(d)')"
         working-directory: warnings_in_ci
+
+  run_extract_warnings2:
+    # Let's only do this for the job `run_models_gpu` to simplify the (already complex) logic.
+    if: ${{ always() && inputs.job == 'run_models_gpu' }}
+    name: Extract warnings in CI artifacts
+    runs-on: ubuntu-22.04
+    needs: [setup, run_models_gpu]
+    steps:
+      # Checkout in order to run `utils/extract_warnings.py`. Avoid **explicit** checkout (i.e. don't specify `ref`) for
+      # security reason.
+      - name: Checkout transformers
+        uses: actions/checkout@v4
+
+      - name: Install transformers
+        run: pip install transformers
+
+      - name: Show installed libraries and their versions
+        run: pip freeze
+
+      - name: Create output directory
+        run: mkdir warnings_in_ci
+
+      - uses: actions/download-artifact@v8
+        env:
+          ACTIONS_ARTIFACT_MAX_ARTIFACT_COUNT: 2000
+        with:
+          pattern: single-gpu_run_models_gpu_models_vit_test*
+          path: warnings_in_ci2
+          merge-multiple: true
+          # repository: ${{ github.repository }}
+#          run-id: ${{ github.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Show artifacts
+        run: echo "$(python3 -c 'import os; d = os.listdir(); print(d)')"
+        working-directory: warnings_in_ci2
