@@ -35,13 +35,15 @@ The example below demonstrates question answering with the [`AutoModel`] class.
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
 from datasets import load_dataset
+
 from transformers import AutoTokenizer, LayoutLMForQuestionAnswering
 
+
 tokenizer = AutoTokenizer.from_pretrained("impira/layoutlm-document-qa", add_prefix_space=True)
-model = LayoutLMForQuestionAnswering.from_pretrained("impira/layoutlm-document-qa", dtype=torch.float16)
+model = LayoutLMForQuestionAnswering.from_pretrained("impira/layoutlm-document-qa", device_map="auto")
 
 dataset = load_dataset("nielsr/funsd", split="train")
 example = dataset[0]
@@ -98,6 +100,7 @@ def normalize_bbox(bbox, width, height):
 
 ```python
 from PIL import Image
+
 
 # Document can be a png, jpg, etc. PDFs must be converted to images.
 image = Image.open(name_of_your_document).convert("RGB")

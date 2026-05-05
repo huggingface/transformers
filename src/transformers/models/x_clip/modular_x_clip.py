@@ -173,6 +173,12 @@ class XCLIPVisionEncoderLayer(CLIPEncoderLayer):
 class XCLIPPreTrainedModel(CLIPPreTrainedModel):
     config: XCLIPConfig
     base_model_prefix = "x_clip"
+    _no_split_modules = [
+        "XCLIPTextEmbeddings",
+        "XCLIPEncoderLayer",
+        "XCLIPVisionEmbeddings",
+        "XCLIPVisionEncoderLayer",
+    ]
     _can_record_outputs = {
         "hidden_states": [XCLIPEncoderLayer, XCLIPVisionEncoderLayer],
         "attentions": OutputRecorder(XCLIPAttention, layer_name="self_attn", index=1),

@@ -35,18 +35,18 @@ The example below demonstrates how to estimate depth with [`Pipeline`] or the [`
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 import requests
-import torch
-from transformers import pipeline
 from PIL import Image
+
+from transformers import pipeline
+
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 pipeline = pipeline(
     task="depth-estimation",
     model="Intel/zoedepth-nyu-kitti",
-    dtype=torch.float16,
     device=0
 )
 results = pipeline(image)
@@ -56,11 +56,13 @@ results["depth"]
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 import requests
+import torch
 from PIL import Image
-from transformers import AutoModelForDepthEstimation, AutoImageProcessor
+
+from transformers import AutoImageProcessor, AutoModelForDepthEstimation
+
 
 image_processor = AutoImageProcessor.from_pretrained(
     "Intel/zoedepth-nyu-kitti"

@@ -67,8 +67,8 @@ logger = logging.get_logger(__name__)
 @deprecate_attribute(
     "rope_deltas", version="v5.20", additional_message="Please use `model.base_model.rope_deltas` instead."
 )
-@dataclass
 @auto_docstring
+@dataclass
 class Qwen2VLModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
@@ -82,8 +82,8 @@ class Qwen2VLModelOutputWithPast(BaseModelOutputWithPast):
 @deprecate_attribute(
     "rope_deltas", version="v5.20", additional_message="Please use `model.base_model.rope_deltas` instead."
 )
-@dataclass
 @auto_docstring
+@dataclass
 class Qwen2VLCausalLMOutputWithPast(CausalLMOutputWithPast):
     r"""
     rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):

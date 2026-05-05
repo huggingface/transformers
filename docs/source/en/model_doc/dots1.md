@@ -31,14 +31,13 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`A
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="text-generation",
     model="rednote-hilab/dots.llm1.base",
-    dtype=torch.bfloat16,
 )
 pipe("The advantage of mixture-of-experts models is")
 ```
@@ -46,14 +45,13 @@ pipe("The advantage of mixture-of-experts models is")
 </hfoption>
 <hfoption id="AutoModelForCausalLM">
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("rednote-hilab/dots.llm1.base")
 model = AutoModelForCausalLM.from_pretrained(
     "rednote-hilab/dots.llm1.base",
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 input_ids = tokenizer("The advantage of mixture-of-experts models is", return_tensors="pt").to(model.device)

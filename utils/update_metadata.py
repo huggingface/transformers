@@ -48,7 +48,10 @@ CHECKER_CONFIG = {
     # at runtime. Does not iterate over files matching these globs directly.
     "file_globs": ["src/transformers/models/**/*.py", "docs/**/*.md"],
     "check_args": ["--check-only"],
-    "fix_args": [],
+    # No safe local "fix" mode: running without `--check-only` pushes to the
+    # `huggingface/transformers-metadata` Hub dataset (requires an auth token).
+    # `fix_args=None` makes `make fix-repo` skip this checker, like other check-only ones.
+    "fix_args": None,
 }
 
 # All paths are set with the intent you should run this script from the root of the repo with the command

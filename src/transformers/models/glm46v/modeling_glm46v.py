@@ -61,12 +61,12 @@ class Glm46VPreTrainedModel(PreTrainedModel):
 @deprecate_attribute(
     "rope_deltas", version="v5.20", additional_message="Please use `model.base_model.rope_deltas` instead."
 )
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Llava outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class Glm46VModelOutputWithPast(ModelOutput):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -474,12 +474,12 @@ class Glm46VModel(Glm46VPreTrainedModel):
 @deprecate_attribute(
     "rope_deltas", version="v5.20", additional_message="Please use `model.base_model.rope_deltas` instead."
 )
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Glm46V causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Glm46VCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

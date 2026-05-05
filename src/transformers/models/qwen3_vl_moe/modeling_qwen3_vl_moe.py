@@ -545,8 +545,8 @@ class Qwen3VLMoeVisionBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
     r"""
     deepstack_features (`List[torch.FloatTensor]`, *optional*):
@@ -1021,12 +1021,12 @@ class Qwen3VLMoeTextModel(Qwen3VLMoePreTrainedModel):
 @deprecate_attribute(
     "rope_deltas", version="v5.20", additional_message="Please use `model.base_model.rope_deltas` instead."
 )
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Llava outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class Qwen3VLMoeModelOutputWithPast(ModelOutput):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -1049,12 +1049,12 @@ class Qwen3VLMoeModelOutputWithPast(ModelOutput):
 @deprecate_attribute(
     "rope_deltas", version="v5.20", additional_message="Please use `model.base_model.rope_deltas` instead."
 )
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Qwen3VLMoe causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Qwen3VLMoeCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

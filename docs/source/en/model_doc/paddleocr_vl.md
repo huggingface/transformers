@@ -73,8 +73,9 @@ The example below demonstrates how to generate text with PaddleOCRVL using [`Pip
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 from transformers import pipeline
+
 
 pipe = pipeline("image-text-to-text", model="PaddlePaddle/PaddleOCR-VL", dtype="bfloat16")
 messages = [
@@ -94,10 +95,11 @@ print(result[0]["generated_text"])
 
 <hfoption id="AutoModel">
 
-```py
-from transformers import AutoProcessor, AutoModelForImageTextToText
+```python
+from transformers import AutoModelForImageTextToText, AutoProcessor
 
-model = AutoModelForImageTextToText.from_pretrained("PaddlePaddle/PaddleOCR-VL", dtype="bfloat16")
+
+model = AutoModelForImageTextToText.from_pretrained("PaddlePaddle/PaddleOCR-VL", dtype="bfloat16", device_map="auto")
 processor = AutoProcessor.from_pretrained("PaddlePaddle/PaddleOCR-VL")
 messages = [
     {
@@ -131,8 +133,9 @@ PaddleOCRVL also supports batched inference. We advise users to use `padding_sid
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 from transformers import pipeline
+
 
 pipe = pipeline("image-text-to-text", model="PaddlePaddle/PaddleOCR-VL", dtype="bfloat16")
 messages = [
@@ -153,10 +156,11 @@ print(result[1][0]["generated_text"])
 
 <hfoption id="AutoModel">
 
-```py
-from transformers import AutoProcessor, AutoModelForImageTextToText
+```python
+from transformers import AutoModelForImageTextToText, AutoProcessor
 
-model = AutoModelForImageTextToText.from_pretrained("PaddlePaddle/PaddleOCR-VL", dtype="bfloat16")
+
+model = AutoModelForImageTextToText.from_pretrained("PaddlePaddle/PaddleOCR-VL", dtype="bfloat16", device_map="auto")
 processor = AutoProcessor.from_pretrained("PaddlePaddle/PaddleOCR-VL")
 messages = [
     {
@@ -199,7 +203,9 @@ pip install flash-attn --no-build-isolation
 
 ```python
 from transformers import AutoModelForImageTextToText
-model = AutoModelForImageTextToText.from_pretrained("PaddlePaddle/PaddleOCR-VL", dtype="bfloat16", attn_implementation="flash_attention_2")
+
+
+model = AutoModelForImageTextToText.from_pretrained("PaddlePaddle/PaddleOCR-VL", dtype="bfloat16", attn_implementation="flash_attention_2", device_map="auto")
 ```
 
 ## PaddleOCRVLForConditionalGeneration
