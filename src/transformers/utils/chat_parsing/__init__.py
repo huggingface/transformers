@@ -6,7 +6,7 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 """Response parsing: convert model-emitted text into the assistant-message
-dict used by chat templates, driven by a declarative `response_format` spec."""
+dict used by chat templates, driven by a declarative `response_template` spec."""
 
 from .executor import ResponseEventStream, parse_response
 
