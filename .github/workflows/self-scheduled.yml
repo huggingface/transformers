@@ -606,7 +606,7 @@ jobs:
           ACTIONS_ARTIFACT_MAX_ARTIFACT_COUNT: 2000
         with:
           path: warnings_in_ci
-          repository: ${{ github.repository }}
+          # repository: ${{ github.repository }}
           run-id: ${{ github.run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
