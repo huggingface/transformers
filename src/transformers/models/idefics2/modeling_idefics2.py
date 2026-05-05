@@ -465,7 +465,7 @@ class Idefics2VisionTransformer(Idefics2PreTrainedModel):
         pixel_values,
         patch_attention_mask: torch.BoolTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutput:
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         patch_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_patches_height, num_patches_width)`, *optional*):
             The attention mask for the patches.
@@ -500,7 +500,7 @@ class Idefics2VisionTransformer(Idefics2PreTrainedModel):
         last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.post_layernorm(last_hidden_state)
 
-        return BaseModelOutput(last_hidden_state=last_hidden_state)
+        return BaseModelOutputWithPooling(last_hidden_state=last_hidden_state)
 
 
 # Copied from transformers.models.llama.modeling_llama.repeat_kv

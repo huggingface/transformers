@@ -41,6 +41,22 @@ from ..auto import AutoModel
 from .configuration_got_ocr2 import GotOcr2Config, GotOcr2VisionConfig
 
 
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for got_ocr2 vision model's outputs that also contains image embeddings obtained by applying the projection
+    layer to the pooler_output.
+    """
+)
+class GotOcr2VisionEncoderOutput(BaseModelOutputWithPooling):
+    r"""
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+        The image embeddings obtained by applying the projection layer to the pooler_output.
+    """
+
+    image_embeds: torch.FloatTensor | None = None
+
+
 class GotOcr2MLPBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -296,25 +312,6 @@ class GotOcr2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, GotOcr2VisionEncoder):
             if module.pos_embed is not None:
                 init.zeros_(module.pos_embed)
-
-
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for got_ocr2 vision model's outputs that also contains image embeddings obtained by applying the projection
-    layer to the pooler_output.
-    """
-)
-class GotOcr2VisionEncoderOutput(ModelOutput):
-    r"""
-    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
-        The image embeddings obtained by applying the projection layer to the pooler_output.
-    """
-
-    image_embeds: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 class GotOcr2PatchEmbeddings(nn.Module):

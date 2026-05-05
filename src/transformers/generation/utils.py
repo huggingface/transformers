@@ -942,7 +942,8 @@ class GenerationMixin(ContinuousMixin):
         def _expand_dict_for_generation(dict_to_expand):
             for key in dict_to_expand:
                 if dict_to_expand[key] is not None:
-                    if isinstance(dict_to_expand[key], torch.Tensor):
+                    # some base-model-outputs return a loss, e.g. VQVAE returns an embedding loss
+                    if isinstance(dict_to_expand[key], torch.Tensor) and "loss" not in key:
                         dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
                     # Don't update `tuple` which is usually reserved for intermediate outputs (attentions/hidden_states)
                     elif isinstance(dict_to_expand[key], list):

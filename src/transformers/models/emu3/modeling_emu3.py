@@ -1407,7 +1407,7 @@ class Emu3Model(Emu3PreTrainedModel):
         bpe_tokens = torch.cat(bpe_tokens_list)
         image_embeddings = self.get_input_embeddings()(bpe_tokens)
         image_features = torch.split(image_embeddings, split_sizes)
-        vqmodel_outputs.pooler_output = image_features
+        vqmodel_outputs.pooler_output = list(image_features)
 
         return vqmodel_outputs
 

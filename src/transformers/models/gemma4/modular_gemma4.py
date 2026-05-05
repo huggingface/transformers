@@ -1587,7 +1587,7 @@ class Gemma4VisionModel(Gemma4PreTrainedModel):
         if self.config.standardize:
             hidden_states = (hidden_states - self.std_bias) * self.std_scale
 
-        return BaseModelOutputWithPast(last_hidden_state=hidden_states)
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
 
 class Gemma4MultimodalEmbedder(Gemma3nMultimodalEmbedder):

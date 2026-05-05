@@ -338,7 +338,7 @@ class SmolVLMVisionTransformer(SmolVLMPreTrainedModel):
         pixel_values,
         patch_attention_mask: torch.BoolTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutput:
+    ) -> tuple | BaseModelOutputWithPooling:
         batch_size = pixel_values.size(0)
         if patch_attention_mask is None:
             patch_size = self.patch_size
@@ -369,7 +369,7 @@ class SmolVLMVisionTransformer(SmolVLMPreTrainedModel):
         last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.post_layernorm(last_hidden_state)
 
-        return BaseModelOutput(
+        return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
         )
 

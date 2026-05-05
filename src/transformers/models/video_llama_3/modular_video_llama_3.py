@@ -439,7 +439,7 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
         last_hidden_state = self.post_layernorm(last_hidden_state)
         last_hidden_state = self.pixel_unshuffle(last_hidden_state, grid_thw, merge_sizes)
 
-        return BaseModelOutput(last_hidden_state=last_hidden_state)
+        return BaseModelOutputWithPooling(last_hidden_state=last_hidden_state)
 
 
 class VideoLlama3Projector(nn.Module):
@@ -819,6 +819,9 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
         return model_inputs
 
     def _prepare_position_ids_for_generation(self):
+        raise AttributeError("Not needed for VideoLLaMA3")
+
+    def _expand_inputs_for_generation(self):
         raise AttributeError("Not needed for VideoLLaMA3")
 
 
