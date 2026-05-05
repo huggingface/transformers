@@ -704,10 +704,7 @@ class Granite4VisionModel(LlavaNextModel):
                     inputs_embeds = inputs_embeds.masked_fill(vision_mask, 0.0)
                 deepstack_features[llm_layer_idx] = concat_features
 
-        # Bypass nn.Module.__call__ overhead by calling the unbound forward directly.
-        # nn.Module.__call__ has non-trivial per-call overhead that accumulates across 40 layers × N steps.
-        outputs = Granite4VisionTextModel.forward(
-            self.language_model,
+        outputs = self.language_model(
             input_ids=None,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
