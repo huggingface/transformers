@@ -756,7 +756,7 @@ class ContinuousBatchingManager:
         self.model = model.eval()
         self.generation_config = generation_config
         self.continuous_batching_config = continuous_batching_config
-        self.warmed_up = False  # Set to True after warmup is completed. Usefull for persistent managers.
+        self.warmed_up = False  # Set to True after warmup is completed. Useful for persistent managers.
         # This is an approximation until the cache is created: it will infer the correct value in cache.__init__
         self._use_prefix_sharing = self.continuous_batching_config.allow_block_sharing
 

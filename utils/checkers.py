@@ -135,12 +135,14 @@ def _discover_checkers() -> tuple[dict, dict]:
 
 
 # Inline checkers have no separate script file; they use custom runner functions below.
+# fix_args=[] marks a checker as fix-capable (its custom runner handles --fix internally);
+# fix_args=None marks a check-only entry that `make fix-repo` should silently skip.
 _INLINE_CHECKERS = {
-    "deps_table": ("Dependency versions table", None, None, None),
+    "deps_table": ("Dependency versions table", None, None, []),
     "imports": ("Public imports", None, None, None),
     "import_complexity": ("Import complexity", "check_import_complexity.py", [], None),
-    "ruff_check": ("Ruff linting", None, None, None),
-    "ruff_format": ("Ruff formatting", None, None, None),
+    "ruff_check": ("Ruff linting", None, None, []),
+    "ruff_format": ("Ruff formatting", None, None, []),
 }
 
 _INLINE_FILE_GLOBS = {
@@ -516,6 +518,18 @@ def main():
         print(f"Unknown checkers: {', '.join(unknown)}")
         print(f"Available: {', '.join(sorted(CHECKERS.keys()))}")
         sys.exit(1)
+
+    # In --fix mode, drop checkers that have no fix capability (fix_args is None) so
+    # they don't print bogus "(0.00s)" lines or inflate the final pass count. Print
+    # one transparency line listing what we're skipping.
+    if args.fix:
+        not_fixable = [n for n in names if CHECKERS[n][3] is None]
+        if not_fixable:
+            names = [n for n in names if CHECKERS[n][3] is not None]
+            print(
+                f"Skipping {len(not_fixable)} check-only checker(s) in fix mode: {', '.join(not_fixable)}\n",
+                flush=True,
+            )
 
     is_ci = os.environ.get("GITHUB_ACTIONS") == "true" or os.environ.get("CIRCLECI") == "true"
     is_tty = sys.stdout.isatty() and not is_ci
