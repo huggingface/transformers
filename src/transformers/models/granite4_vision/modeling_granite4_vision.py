@@ -74,10 +74,10 @@ class Granite4VisionModelOutputWithPast(BaseModelOutputWithPast):
 @dataclass
 class Granite4VisionCausalLMOutputWithPast(ModelOutput):
     r"""
-    loss (<fill_type>):
-        <fill_docstring>
-    logits (<fill_type>):
-        <fill_docstring>
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     deepstack_features (`list[tuple[int, list[torch.Tensor]]]`, *optional*):
         List of `(llm_layer_idx, packed_features)` pairs produced by the deepstack
         and spatial projectors. Each entry targets one LLM decoder layer; `packed_features`
