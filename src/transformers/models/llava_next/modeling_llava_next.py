@@ -20,7 +20,6 @@ import numpy as np
 import torch
 from torch import nn
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
@@ -234,18 +233,6 @@ class LlavaNextPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_flex_attn = True
     _supports_attention_backend = True
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
-
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, LlavaNextModel):
-            embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
-            init.normal_(module.image_newline, mean=0.0, std=embed_std)
 
 
 @auto_docstring(

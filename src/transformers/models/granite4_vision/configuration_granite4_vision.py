@@ -141,13 +141,6 @@ class Granite4VisionConfig(PreTrainedConfig):
     qformer_config: dict | PreTrainedConfig | None = None
 
     def __post_init__(self, **kwargs):
-        if self.deepstack_layer_map is not None:
-            self.deepstack_layer_map = [(int(v), int(l)) for v, l in self.deepstack_layer_map]
-        if self.spatial_target_layers is None:
-            self.spatial_target_layers = [12, 15, 18, 21]
-        if isinstance(self.qformer_config, dict):
-            model_type = self.qformer_config.get("model_type", "blip_2_qformer")
-            self.qformer_config = CONFIG_MAPPING[model_type](**self.qformer_config)
         if isinstance(self.vision_config, dict):
             self.vision_config["model_type"] = self.vision_config.get("model_type", "clip_vision_model")
             self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
@@ -176,6 +169,15 @@ class Granite4VisionConfig(PreTrainedConfig):
         )
 
         super().__post_init__(**kwargs)
+        if self.deepstack_layer_map is not None:
+            self.deepstack_layer_map = [(int(v), int(l)) for v, l in self.deepstack_layer_map]
+
+        if self.spatial_target_layers is None:
+            self.spatial_target_layers = [12, 15, 18, 21]
+
+        if isinstance(self.qformer_config, dict):
+            model_type = self.qformer_config.get("model_type", "blip_2_qformer")
+            self.qformer_config = CONFIG_MAPPING[model_type](**self.qformer_config)
         if self.qformer_config is None:
             vision_hidden_size = self.vision_config.hidden_size
             self.qformer_config = CONFIG_MAPPING["blip_2_qformer"](

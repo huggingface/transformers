@@ -15,7 +15,6 @@
 
 import unittest
 
-import pytest
 import requests
 
 from transformers import (
@@ -121,18 +120,7 @@ class Granite4VisionModelTest(VLMModelTest, unittest.TestCase):
     # (GraniteDecoderLayer discards attention weights internally)
     test_attention_outputs = False
     has_attentions = False
-
-    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
-    def test_training_gradient_checkpointing(self):
-        super().test_training_gradient_checkpointing()
-
-    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        super().test_training_gradient_checkpointing_use_reentrant_false()
-
-    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        super().test_training_gradient_checkpointing_use_reentrant_true()
+    test_all_params_have_gradient = False
 
     @unittest.skip(
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"

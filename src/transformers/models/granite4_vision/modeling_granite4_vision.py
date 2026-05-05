@@ -48,6 +48,11 @@ from .configuration_granite4_vision import Granite4VisionConfig, Granite4VisionT
 
 
 @dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for Llava outputs, with hidden states and attentions.
+    """
+)
 class Granite4VisionModelOutputWithPast(BaseModelOutputWithPast):
     """
     Args:
@@ -63,11 +68,18 @@ class Granite4VisionModelOutputWithPast(BaseModelOutputWithPast):
 
 
 @dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for Granite4Vision causal language model (or autoregressive) outputs.
+    """
+)
 class Granite4VisionCausalLMOutputWithPast(ModelOutput):
     """
     Args:
         deepstack_features (`list[tuple[int, list[torch.Tensor]]]`, *optional*):
-            List of `(llm_layer_idx, packed_features)` pairs. See `Granite4VisionModelOutputWithPast`.
+            List of `(llm_layer_idx, packed_features)` pairs produced by the deepstack
+            and spatial projectors. Each entry targets one LLM decoder layer; `packed_features`
+            is a per-image list of tensors of shape `(num_image_tokens, hidden_size)`.
     """
 
     loss: torch.FloatTensor | None = None
@@ -80,16 +92,21 @@ class Granite4VisionCausalLMOutputWithPast(ModelOutput):
     deepstack_features: list | None = None
 
 
+@auto_docstring(
+    custom_intro="""
+    Base class for Granite4Vision causal language model (or autoregressive) outputs.
+    """
+)
 @dataclass
 class Granite4VisionImageFeaturesOutput(BaseModelOutputWithPooling):
     """
     Output of `Granite4VisionModel.get_image_features`.
 
     Args:
-        deepstack_features (`list[tuple[int, list[torch.Tensor]]]`):
-            List of `(llm_layer_idx, packed_features)` pairs. Each entry targets one LLM
-            decoder layer; `packed_features` is a per-image list of tensors of shape
-            `(num_image_tokens, hidden_size)`.
+        deepstack_features (`list[tuple[int, list[torch.Tensor]]]`, *optional*):
+            List of `(llm_layer_idx, packed_features)` pairs produced by the deepstack
+            and spatial projectors. Each entry targets one LLM decoder layer; `packed_features`
+            is a per-image list of tensors of shape `(num_image_tokens, hidden_size)`.
     """
 
     deepstack_features: list | None = None
@@ -161,7 +178,7 @@ class Granite4VisionWindowQFormerDownsampler(nn.Module):
         features = features.view(batch, side, side, channels)
         return features.flatten(1, 2)
 
-    def forward(self, image_features):
+    def forward(self, image_features: torch.Tensor) -> torch.Tensor:
         batch, hw, channels = image_features.shape
         if self.image_side * self.image_side != hw:
             raise ValueError(
@@ -518,44 +535,8 @@ class Granite4VisionPreTrainedModel(PreTrainedModel):
         "attentions": Granite4VisionTextAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
-
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, Granite4VisionModel):
-            embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
-            init.normal_(module.image_newline, mean=0.0, std=embed_std)
-        if isinstance(module, nn.Embedding):
-            init.normal_(
-                module.weight,
-                mean=0.0,
-                std=getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range),
-            )
-            if module.padding_idx is not None:
-                init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, nn.LayerNorm) or (
-            hasattr(module, "weight") and hasattr(module, "variance_epsilon") and not isinstance(module, nn.Linear)
-        ):
-            init.ones_(module.weight)
-            if hasattr(module, "bias") and module.bias is not None:
-                init.zeros_(module.bias)
-        if isinstance(module, Granite4VisionTextRotaryEmbedding):
-            # Non-persistent buffers (inv_freq, original_inv_freq) are replaced with
-            # torch.empty_like() garbage by _move_missing_keys_from_meta_to_device.
-            # Recompute them here so _initialize_missing_keys restores correct values.
-            rope_type = module.config.rope_parameters.get("rope_type", "default")
-            if rope_type != "default":
-                rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
-            else:
-                rope_init_fn = module.compute_default_rope_parameters
-            inv_freq, attention_scaling = rope_init_fn(module.config, module.inv_freq.device)
-            init.copy_(module.inv_freq, inv_freq)
-            init.copy_(module.original_inv_freq, inv_freq)
-            module.attention_scaling = attention_scaling
+        super()._init_weights(module)
         if isinstance(module, Granite4VisionWindowQFormerDownsampler):
             embed_std = 1 / math.sqrt(module.query.shape[-1])
             init.normal_(module.query, mean=0.0, std=embed_std)
@@ -565,6 +546,8 @@ class Granite4VisionPreTrainedModel(PreTrainedModel):
 @auto_docstring
 class Granite4VisionTextModel(Granite4VisionPreTrainedModel):
     """Granite LLM backbone with deepstack feature injection support."""
+
+    config_class = Granite4VisionTextConfig
 
     def __init__(self, config: Granite4VisionTextConfig):
         super().__init__(config)
@@ -583,6 +566,7 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
     def forward(
@@ -594,7 +578,7 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         vision_mask: torch.BoolTensor | None = None,
-        deepstack_features: dict | None = None,
+        deepstack_features: dict[int, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         r"""
@@ -875,14 +859,18 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features[0].device)
         return new_image_features, feature_lens
 
+    @merge_with_config_defaults
     @can_return_tuple
-    @auto_docstring
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_sizes: torch.Tensor,
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
+        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> Granite4VisionImageFeaturesOutput:
         """
@@ -895,11 +883,6 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         2. Spatial: if enabled, extracts the spatial_vision_layer and creates 4 spatial
            offset groups (TL, TR, BL, BR), each targeting a different LLM layer.
         """
-        vision_feature_select_strategy = (
-            vision_feature_select_strategy
-            if vision_feature_select_strategy is not None
-            else self.config.vision_feature_select_strategy
-        )
 
         image_num_patches = [
             image_size_to_num_patches(
@@ -916,9 +899,6 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         elif pixel_values.dim() != 4:
             raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
 
-        output_hidden_states = kwargs.pop("output_hidden_states", None)
-        if output_hidden_states is None:
-            output_hidden_states = getattr(self.config, "output_hidden_states", False)
         vision_outputs = self.vision_tower(pixel_values, output_hidden_states=True, **kwargs)
 
         # Deepstack features: extract from multiple vision layers, downsample via interpolation
@@ -962,7 +942,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
 
         return Granite4VisionImageFeaturesOutput(
             deepstack_features=all_features,
-            hidden_states=vision_outputs.hidden_states if output_hidden_states else None,
+            hidden_states=vision_outputs.hidden_states,
         )
 
     def get_placeholder_mask(
@@ -990,6 +970,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
 
     @merge_with_config_defaults
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1067,7 +1048,6 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
 )
 class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-    config_class = Granite4VisionConfig
 
     def __init__(self, config: Granite4VisionConfig):
         super().__init__(config)
@@ -1126,6 +1106,7 @@ class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, Gene
 
     @merge_with_config_defaults
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1192,19 +1173,16 @@ class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, Gene
 
         hidden_states = outputs.last_hidden_state
 
-        loss = None
-        logits = self.lm_head(hidden_states)
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
         logits = logits / self.config.text_config.logits_scaling
+
+        loss = None
         if labels is not None:
             loss = self.loss_function(
-                logits,
-                labels,
-                vocab_size=self.config.text_config.vocab_size,
-                **kwargs,
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
-
-        if isinstance(logits_to_keep, int) and logits_to_keep > 0:
-            logits = logits[:, -logits_to_keep:, :]
 
         return Granite4VisionCausalLMOutputWithPast(
             loss=loss,

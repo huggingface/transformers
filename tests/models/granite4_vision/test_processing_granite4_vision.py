@@ -1,4 +1,4 @@
-# Copyright 2025 IBM. All rights reserved.
+# Copyright 2026 IBM. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,9 +18,7 @@ import unittest
 import torch
 
 from transformers import Granite4VisionProcessor
-from transformers.testing_utils import (
-    require_vision,
-)
+from transformers.testing_utils import require_vision
 
 from ...test_processing_common import ProcessorTesterMixin
 
