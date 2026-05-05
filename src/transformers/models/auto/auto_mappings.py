@@ -201,6 +201,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("gemma3n_text", "Gemma3nTextConfig"),
         ("gemma3n_vision", "Gemma3nVisionConfig"),
         ("gemma4", "Gemma4Config"),
+        ("gemma4_assistant", "Gemma4AssistantConfig"),
         ("gemma4_audio", "Gemma4AudioConfig"),
         ("gemma4_text", "Gemma4TextConfig"),
         ("gemma4_vision", "Gemma4VisionConfig"),

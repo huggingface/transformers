@@ -1219,6 +1219,8 @@
         title: FLAVA
       - local: model_doc/florence2
         title: Florence2
+      - local: model_doc/gemma4_assistant
+        title: Gemma 4 Assistant
       - local: model_doc/gemma3
         title: Gemma3
       - local: model_doc/gemma3n

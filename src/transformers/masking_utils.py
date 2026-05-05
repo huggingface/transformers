@@ -1016,8 +1016,6 @@ def create_bidirectional_mask(
         inputs_embeds (`torch.Tensor`):
             The input embeddings of shape (batch_size, query_length, hidden_dim). This is only used to infer metadata
             such as the batch size, query length, dtype, and device.
-        past_key_values (`Cache`, optional):
-            The past key values, if we use a cache.
         attention_mask (`torch.Tensor`, optional):
             The 2D attention mask corresponding to padded tokens of shape (batch_size, kv_length).
             It can also be an already prepared 4D mask of shape (batch_size, 1, query_length, kv_length),
@@ -1025,6 +1023,8 @@ def create_bidirectional_mask(
         encoder_hidden_states (`torch.Tensor`, optional):
             The input embeddings of shape (batch_size, kv_length, hidden_dim). If provided, it is used instead of
             `inputs_embeds` to infer the batch size, kv length and dtype.
+        past_key_values (`Cache`, optional):
+            The past key values, if we use a cache.
         or_mask_function (`Callable`, optional):
             An optional mask function to combine with the base mask function (by doing the union of both). This is
             useful to easily overlay another mask on top, for example for image tokens handling.
@@ -1212,6 +1212,7 @@ def create_bidirectional_sliding_window_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
+    encoder_hidden_states: torch.Tensor | None = None,
     past_key_values: Cache | None = None,
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
@@ -1225,12 +1226,15 @@ def create_bidirectional_sliding_window_mask(
         inputs_embeds (`torch.Tensor`):
             The input embeddings of shape (batch_size, query_length, hidden_dim). This is only used to infer metadata
             such as the batch size, query length, dtype, and device.
-        past_key_values (`Cache`, optional):
-            The past key values, if we use a cache.
         attention_mask (`torch.Tensor`, optional):
             The 2D attention mask corresponding to padded tokens of shape (batch_size, kv_length).
             It can also be an already prepared 4D mask of shape (batch_size, 1, query_length, kv_length),
             in which case it is returned as-is.
+        encoder_hidden_states (`torch.Tensor`, optional):
+            The input embeddings of shape (batch_size, kv_length, hidden_dim). If provided, it is used instead of
+            `inputs_embeds` to infer the batch size, kv length and dtype.
+        past_key_values (`Cache`, optional):
+            The past key values, if we use a cache.
         or_mask_function (`Callable`, optional):
             An optional mask function to combine with the base mask function (by doing the union of both). This is
             useful to easily overlay another mask on top, for example for image tokens handling.
@@ -1240,7 +1244,7 @@ def create_bidirectional_sliding_window_mask(
     """
     # We ignore a few irrelevant arguments at the end as we do not have a (growing) cache here
     early_exit, attention_mask, _, q_length, kv_length, q_offset, kv_offset = _preprocess_mask_arguments(
-        config, inputs_embeds, attention_mask, past_key_values, None, 0
+        config, inputs_embeds, attention_mask, past_key_values, None, 0, encoder_hidden_states
     )
     if early_exit:
         return attention_mask
@@ -1249,7 +1253,8 @@ def create_bidirectional_sliding_window_mask(
     if sliding_window is None:
         raise ValueError("Could not find a `sliding_window` argument in the config, or it is not set")
 
-    batch_size, dtype, device = inputs_embeds.shape[0], inputs_embeds.dtype, inputs_embeds.device
+    embeds = encoder_hidden_states if encoder_hidden_states is not None else inputs_embeds
+    batch_size, dtype, device = embeds.shape[0], embeds.dtype, embeds.device
     mask_factory_function = sliding_window_bidirectional_mask_function(sliding_window)
     mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
 
