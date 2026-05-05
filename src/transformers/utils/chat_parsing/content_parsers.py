@@ -37,7 +37,7 @@ def _jmespath(value: Any, transform: str | None) -> Any:
 
     if not is_jmespath_available():
         raise ImportError(
-            "response_format uses a jmespath 'transform', but jmespath is not installed. "
+            "response_template uses a jmespath 'transform', but jmespath is not installed. "
             "Install with `pip install jmespath`."
         )
     import jmespath

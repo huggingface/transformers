@@ -21,8 +21,9 @@ a [reasoning model](https://huggingface.co/reasoning-course) might emit a chain 
 while a [tool calling](./chat_extras) model might emit function names and arguments to be called.
 
 In all of these cases, though, the model simply emits a chain of tokens. We need some system to turn those tokens into
-a structured response dict. That system is **response parsing**. It is controlled by a **response format**: a
-small declarative spec that describes how the model's output is laid out.
+a structured response dict. That system is **response parsing**. It is controlled by a **response template**: a
+small declarative spec that describes how the model's output is laid out. The response template is the parsing
+counterpart of [`chat_template`](./chat_templating) — same role on the tokenizer, opposite direction.
 
 Calling the parser is simple — you pass the generated text to [`~PreTrainedTokenizerBase.parse_response`]:
 
@@ -41,10 +42,10 @@ print(tokenizer.parse_response(out_text))
 # → {"role": "assistant", "thinking": "...", "content": "..."}
 ```
 
-If the tokenizer has no response format set, `parse_response` raises. Not every tokenizer ships one yet — support
+If the tokenizer has no response template set, `parse_response` raises. Not every tokenizer ships one yet — support
 is being added model by model.
 
-## Writing a response format
+## Writing a response template
 
 The spec describes the **input stream**, left-to-right: a flat list of fields, where each field declares what opens
 its region in the stream, what closes it, and what kind of content lives inside. The output dict falls out as a
@@ -75,7 +76,7 @@ The spec that parses this:
             "content_args": {"transform": "{type: 'function', function: @}"},
         },
         "content": {
-            "close_pattern": r"(?:<\|im_end\|>|$)",
+            "close": "<|im_end|>",
             "content": "text",
         },
     },
@@ -88,7 +89,7 @@ Three fields, each describing one region of the stream. The `content` field has 
 You attach the spec to a tokenizer the same way you attach a chat template:
 
 ```python
-tokenizer.response_format = spec
+tokenizer.response_template = spec
 tokenizer.save_pretrained(...)  # persisted to tokenizer_config.json
 ```
 
@@ -113,6 +114,11 @@ Use **either** `open` or `open_pattern`, not both. Same for `close`/`close_patte
 
 A field with **neither** `open` nor `open_pattern` is the **implicit** field: it's active whenever no explicit
 region is open, so it captures leftover text. At most one field can be implicit.
+
+If a region opens but its `close` is never seen — e.g., generation was truncated mid-response, or the model
+omitted the closing delimiter — the parser auto-closes the region at end-of-input and commits the buffered
+body. You don't need to spell out `close_pattern: r"(?:</tag>|$)"` to handle truncation; plain
+`close: "</tag>"` already does the right thing.
 
 ## Content parsers
 
@@ -164,12 +170,18 @@ feed text incrementally as the model generates:
 ```python
 streamer = tokenizer.response_event_stream()
 for chunk in text_streamer:
-    streamer.feed(chunk)
-message = streamer.finalize()
+    for event in streamer.feed(chunk):
+        handle(event)
+message, final_events = streamer.finalize()
+for event in final_events:
+    handle(event)  # close events for any EOS-bounded region, then stream_end
 ```
 
-The invariant that matters: `tokenizer.parse_response(full_text)` equals
-`streamer.feed(chunk1); streamer.feed(chunk2); ...; streamer.finalize()` for any chunking of `full_text`.
+The invariant that matters: for any chunking of the response, the streamed `finalize()` output equals
+`tokenizer.parse_response(response)`. If your template defines a `start_anchor` and you have prefix bytes
+to discard, pass them via `tokenizer.response_event_stream(prefix=...)` — `feed()` itself does not look
+for the anchor, so feeding `prompt + response` chunks without `prefix=` will treat the prompt as response.
+Only `parse_response(prompt + response)` auto-truncates; the streaming path expects pre-cut input.
 
 ## Example: re-expressing real formats
 
@@ -205,6 +217,6 @@ No model-specific Python — Gemma's format is fully expressed by configuring `j
 ## Legacy `response_schema`
 
 An earlier, nested-JSON-schema-shaped parser lives under `tokenizer.response_schema`. It is still honored by
-`parse_response` for tokenizers that have it set, but new models should ship `response_format` instead — the new
-format streams, handles format quirks without custom parsers, and is significantly shorter in practice. The legacy
-path is expected to be removed in a future release.
+`parse_response` for tokenizers that have it set, but new models should ship `response_template` instead — the
+template-driven parser streams, handles format quirks without custom parsers, and is significantly shorter in
+practice. The legacy path is expected to be deprecated and removed in a future release.
