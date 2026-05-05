@@ -1510,13 +1510,46 @@ class ParakeetForRNNT(ParakeetPreTrainedModel, ParakeetRNNTGenerationMixin):
         self.joint = ParakeetRNNTJointNetwork(config)
         self.max_symbols_per_step = config.max_symbols_per_step
 
+        # Optional prompt-conditioning: a small MLP projecting `[encoder_output, one_hot_prompt]`
+        # back into encoder_hidden. Mirrors NeMo's hybrid_rnnt_ctc_bpe_models_prompt structure.
+        self.num_prompts = config.num_prompts
+        self.prompt_dictionary = dict(config.prompt_dictionary) if config.prompt_dictionary else None
+        if self.num_prompts > 0:
+            enc_hidden = config.encoder_config.hidden_size
+            self.prompt_kernel = nn.Sequential(
+                nn.Linear(self.num_prompts + enc_hidden, 2 * enc_hidden),
+                nn.ReLU(),
+                nn.Linear(2 * enc_hidden, enc_hidden),
+            )
+
         self.post_init()
+
+    def _resolve_prompt_id(self, target_lang: str | None, prompt_id: int | None) -> int | None:
+        """Map a `target_lang` code to its prompt index, or pass `prompt_id` through."""
+        if self.num_prompts == 0:
+            return None
+        if prompt_id is not None:
+            if not (0 <= prompt_id < self.num_prompts):
+                raise ValueError(f"prompt_id {prompt_id} out of range [0, {self.num_prompts}).")
+            return prompt_id
+        if target_lang is None:
+            raise ValueError(
+                "This is a prompt-conditioned model (num_prompts > 0). Pass `target_lang=<code>` "
+                f"or `prompt_id=<int>`. Available languages: {sorted(self.prompt_dictionary.keys())[:10]}..."
+            )
+        if target_lang not in self.prompt_dictionary:
+            raise ValueError(
+                f"Unknown target_lang {target_lang!r}. Available: {sorted(self.prompt_dictionary.keys())[:10]}..."
+            )
+        return self.prompt_dictionary[target_lang]
 
     @can_return_tuple
     def get_audio_features(
         self,
         input_features: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
+        target_lang: str | None = None,
+        prompt_id: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ParakeetEncoderModelOutput:
         encoder_outputs = self.encoder(
@@ -1524,7 +1557,18 @@ class ParakeetForRNNT(ParakeetPreTrainedModel, ParakeetRNNTGenerationMixin):
             attention_mask=attention_mask,
             **kwargs,
         )
-        encoder_outputs.pooler_output = self.encoder_projector(encoder_outputs.last_hidden_state)
+        hidden = encoder_outputs.last_hidden_state
+
+        # Prompt conditioning: concat one-hot prompt to encoder output and project back.
+        if self.num_prompts > 0:
+            resolved_id = self._resolve_prompt_id(target_lang, prompt_id)
+            B, T, _ = hidden.shape
+            prompt = hidden.new_zeros(B, T, self.num_prompts)
+            prompt[:, :, resolved_id] = 1.0
+            hidden = self.prompt_kernel(torch.cat([hidden, prompt], dim=-1))
+            encoder_outputs.last_hidden_state = hidden
+
+        encoder_outputs.pooler_output = self.encoder_projector(hidden)
         return encoder_outputs
 
     @auto_docstring
@@ -1538,6 +1582,8 @@ class ParakeetForRNNT(ParakeetPreTrainedModel, ParakeetRNNTGenerationMixin):
         use_decoder_cache: bool | None = None,
         encoder_outputs: ParakeetEncoderModelOutput | tuple[torch.FloatTensor] | None = None,
         labels: torch.Tensor | None = None,
+        target_lang: str | None = None,
+        prompt_id: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ParakeetRNNTOutput:
         r"""
@@ -1549,6 +1595,11 @@ class ParakeetForRNNT(ParakeetPreTrainedModel, ParakeetRNNTGenerationMixin):
             Whether to allocate and use a decoder cache when none is provided.
         encoder_outputs (`tuple(torch.FloatTensor)`, *optional*):
             Pre-computed encoder outputs (last_hidden_state, pooler_output, ...).
+        target_lang (`str`, *optional*):
+            Language code for prompt-conditioned multilingual checkpoints (e.g. `"en-US"`).
+            Required when `config.num_prompts > 0` and `prompt_id` is not provided.
+        prompt_id (`int`, *optional*):
+            Direct integer prompt index, alternative to `target_lang`. Must be in `[0, num_prompts)`.
 
         Example:
 
@@ -1571,6 +1622,8 @@ class ParakeetForRNNT(ParakeetPreTrainedModel, ParakeetRNNTGenerationMixin):
             encoder_outputs = self.get_audio_features(
                 input_features=input_features,
                 attention_mask=attention_mask,
+                target_lang=target_lang,
+                prompt_id=prompt_id,
                 **kwargs,
             )
         elif not isinstance(encoder_outputs, ParakeetEncoderModelOutput):

@@ -326,10 +326,17 @@ class ParakeetRNNTGenerationMixin(GenerationMixin):
     def _prepare_model_inputs(self, *args, **kwargs):
         inputs, input_name, model_kwargs = super()._prepare_model_inputs(*args, **kwargs)
 
+        # Pop the prompt-conditioning args so the inner forward (which gets one slice of the
+        # encoder output per step) doesn't receive them — we only need them to run the encoder.
+        target_lang = model_kwargs.pop("target_lang", None)
+        prompt_id = model_kwargs.pop("prompt_id", None)
+
         encoder_outputs = self.get_audio_features(
             input_features=inputs,
             attention_mask=model_kwargs.get("attention_mask", None),
             output_attention_mask=True,
+            target_lang=target_lang,
+            prompt_id=prompt_id,
         )
         model_kwargs["encoder_outputs"] = encoder_outputs
 

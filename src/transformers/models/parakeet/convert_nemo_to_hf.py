@@ -461,10 +461,23 @@ def convert_rnnt_config(nemo_config, encoder_config):
     activation = jointnet.get("activation", "relu")
     max_symbols_per_step = nemo_config.get("decoding", {}).get("greedy", {}).get("max_symbols", 10)
 
+    # Prompt-conditioned multilingual variant (e.g. ealbasiri's 40-lang model).
+    model_defaults = nemo_config.get("model_defaults", {}) or {}
+    num_prompts = 0
+    prompt_dictionary = None
+    if model_defaults.get("initialize_prompt_feature", False):
+        num_prompts = int(model_defaults.get("num_prompts", 128))
+        prompt_dictionary = dict(model_defaults.get("prompt_dictionary") or {})
+        if not prompt_dictionary:
+            raise ValueError(
+                "initialize_prompt_feature=True but model_defaults.prompt_dictionary is empty."
+            )
+
     print(
         f"RNN-T config: vocab_size={vocab_size} (including blank token), "
         f"decoder_hidden={decoder_hidden_size}, joint_hidden={joint_hidden_size}, "
-        f"decoder_layers={num_decoder_layers}, max_symbols_per_step={max_symbols_per_step}"
+        f"decoder_layers={num_decoder_layers}, max_symbols_per_step={max_symbols_per_step}, "
+        f"num_prompts={num_prompts}"
     )
 
     return ParakeetRNNTConfig(
@@ -477,6 +490,8 @@ def convert_rnnt_config(nemo_config, encoder_config):
         encoder_config=encoder_config.to_dict(),
         pad_token_id=pad_token_id,
         blank_token_id=blank_token_id,
+        num_prompts=num_prompts,
+        prompt_dictionary=prompt_dictionary,
     )
 
 

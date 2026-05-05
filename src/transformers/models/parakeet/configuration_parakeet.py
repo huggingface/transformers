@@ -244,6 +244,14 @@ class ParakeetRNNTConfig(PreTrainedConfig):
         The config object or dictionary of the encoder.
     blank_token_id (`int`, *optional*, defaults to 1024):
         Blank token id. Different from `pad_token_id` for RNNT.
+    num_prompts (`int`, *optional*, defaults to 0):
+        Number of language/task prompts for prompt-conditioned multilingual checkpoints. When `> 0`,
+        the model exposes a `prompt_kernel` MLP that conditions the encoder output on a one-hot
+        prompt ID supplied at inference (`generate(..., target_lang="en-US")`). Set to `0` for
+        standard non-prompted models.
+    prompt_dictionary (`dict[str, int]`, *optional*):
+        Mapping from language/task code (e.g. `"en-US"`) to prompt index, required when
+        `num_prompts > 0`. Indices must be in `[0, num_prompts)`.
 
     Example:
     ```python
@@ -273,6 +281,8 @@ class ParakeetRNNTConfig(PreTrainedConfig):
     pad_token_id: int = 0
     blank_token_id: int = 1024
     is_encoder_decoder: bool = True
+    num_prompts: int = 0
+    prompt_dictionary: dict | None = None
 
     def __post_init__(self, **kwargs):
         if isinstance(self.encoder_config, dict):
@@ -286,6 +296,14 @@ class ParakeetRNNTConfig(PreTrainedConfig):
                 "RNNT checkpoints satisfy this; if you have a checkpoint where they differ, please "
                 "open an issue."
             )
+        if self.num_prompts > 0:
+            if not self.prompt_dictionary:
+                raise ValueError("prompt_dictionary must be provided when num_prompts > 0.")
+            bad = [k for k, v in self.prompt_dictionary.items() if not (0 <= v < self.num_prompts)]
+            if bad:
+                raise ValueError(
+                    f"prompt_dictionary contains indices outside [0, num_prompts={self.num_prompts}): {bad}"
+                )
         self.initializer_range = self.encoder_config.initializer_range
         # The decoder starts on the blank token at frame 0 (NeMo's blank_as_pad convention).
         kwargs.setdefault("decoder_start_token_id", self.blank_token_id)
