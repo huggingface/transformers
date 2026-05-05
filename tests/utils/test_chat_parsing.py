@@ -5,9 +5,9 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
-"""Tests for the new declarative response_format parser.
+"""Tests for the new declarative response_template parser.
 
-All six real-model format fixtures from the legacy test suite are re-expressed
+All six real-model template fixtures from the legacy test suite are re-expressed
 here in the new region-spec shape and asserted against the same expected
 output dicts. Any divergence indicates a regression in the new executor."""
 
@@ -20,22 +20,22 @@ from transformers.testing_utils import require_jmespath
 from transformers.utils.chat_parsing import ResponseEventStream, parse_response
 
 
-cohere_format = {
+cohere_template = {
     "defaults": {"role": "assistant"},
     "fields": {
         "content": {
             "open": "<|START_RESPONSE|>",
-            "close_pattern": r"(?:<\|END_RESPONSE\|>|$)",
+            "close": "<|END_RESPONSE|>",
             "content": "text",
         },
         "thinking": {
             "open": "<|START_THINKING|>",
-            "close_pattern": r"(?:<\|END_THINKING\|>|$)",
+            "close": "<|END_THINKING|>",
             "content": "text",
         },
         "tool_calls": {
             "open": "<|START_ACTION|>",
-            "close_pattern": r"(?:<\|END_ACTION\|>|$)",
+            "close": "<|END_ACTION|>",
             "content": "json",
             "content_args": {
                 "transform": "[*].{type: 'function', function: {name: tool_name, arguments: parameters}}"
@@ -45,7 +45,7 @@ cohere_format = {
 }
 
 
-ernie_format = {
+ernie_template = {
     "defaults": {"role": "assistant"},
     "fields": {
         "thinking": {
@@ -69,7 +69,7 @@ ernie_format = {
 }
 
 
-gpt_oss_format = {
+gpt_oss_template = {
     "defaults": {"role": "assistant"},
     "fields": {
         "thinking": {
@@ -96,7 +96,7 @@ gpt_oss_format = {
 }
 
 
-smollm_format = {
+smollm_template = {
     "defaults": {"role": "assistant"},
     "fields": {
         "thinking": {"open": "<think>", "close": "</think>", "content": "text"},
@@ -108,14 +108,14 @@ smollm_format = {
             "content_args": {"transform": "{type: 'function', function: @}"},
         },
         "content": {
-            "close_pattern": r"(?:<\|im_end\|>|$)",
+            "close": "<|im_end|>",
             "content": "text",
         },
     },
 }
 
 
-qwen3_format = {
+qwen3_template = {
     "defaults": {"role": "assistant"},
     "fields": {
         "thinking": {"open": "<think>", "close": "</think>", "content": "text"},
@@ -137,7 +137,7 @@ qwen3_format = {
 }
 
 
-gemma4_format = {
+gemma4_template = {
     "defaults": {"role": "assistant"},
     "fields": {
         "thinking": {
@@ -164,18 +164,18 @@ gemma4_format = {
 
 
 @require_jmespath
-class ChatResponseFormatParserTest(unittest.TestCase):
-    def test_response_format_save_load(self):
+class ChatResponseTemplateParserTest(unittest.TestCase):
+    def test_response_template_save_load(self):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        tokenizer.response_format = ernie_format
+        tokenizer.response_template = ernie_template
         with tempfile.TemporaryDirectory() as tmpdir:
             tokenizer.save_pretrained(tmpdir)
             reloaded = AutoTokenizer.from_pretrained(tmpdir)
-        self.assertEqual(reloaded.response_format, ernie_format)
+        self.assertEqual(reloaded.response_template, ernie_template)
 
     def test_tokenizer_parse_response(self):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        tokenizer.response_format = cohere_format
+        tokenizer.response_template = cohere_template
         model_out = (
             "<|START_THINKING|>I should call a tool.<|END_THINKING|>"
             '<|START_ACTION|>[\n    {"tool_call_id": "0", "tool_name": "simple_tool", '
@@ -195,7 +195,7 @@ class ChatResponseFormatParserTest(unittest.TestCase):
 
     def test_batched_inputs(self):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        tokenizer.response_format = cohere_format
+        tokenizer.response_template = cohere_template
         model_out = (
             "<|START_THINKING|>I should call a tool.<|END_THINKING|>"
             '<|START_ACTION|>[\n    {"tool_call_id": "0", "tool_name": "simple_tool", '
@@ -207,7 +207,7 @@ class ChatResponseFormatParserTest(unittest.TestCase):
 
     def test_token_id_inputs(self):
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
-        tokenizer.response_format = cohere_format
+        tokenizer.response_template = cohere_template
         model_out = (
             "<|START_THINKING|>I should call a tool.<|END_THINKING|>"
             '<|START_ACTION|>[\n    {"tool_call_id": "0", "tool_name": "simple_tool", '
@@ -225,7 +225,7 @@ class ChatResponseFormatParserTest(unittest.TestCase):
             '"parameters": {"temperature_format": "Celsius"}}\n]<|END_ACTION|><|END_OF_TURN_TOKEN|>'
         )
         self.assertEqual(
-            parse_response(model_out, cohere_format),
+            parse_response(model_out, cohere_template),
             {
                 "role": "assistant",
                 "thinking": "I should call a tool.",
@@ -250,7 +250,7 @@ class ChatResponseFormatParserTest(unittest.TestCase):
             '<tool_call>\n{"name": "get_current_temperature", "arguments": {"location": "Paris"}}\n</tool_call>\n</s>'
         )
         self.assertEqual(
-            parse_response(model_out, ernie_format),
+            parse_response(model_out, ernie_template),
             {
                 "role": "assistant",
                 "thinking": (
@@ -284,7 +284,7 @@ class ChatResponseFormatParserTest(unittest.TestCase):
             "have!\n</response>\n</s>"
         )
         self.assertEqual(
-            parse_response(model_out, ernie_format),
+            parse_response(model_out, ernie_template),
             {
                 "role": "assistant",
                 "content": (
@@ -316,7 +316,7 @@ class ChatResponseFormatParserTest(unittest.TestCase):
             'to=functions.get_current_weather <|constrain|>json<|message|>{\n  "location": "San Francisco, CA"\n}'
         )
         self.assertEqual(
-            parse_response(model_out, gpt_oss_format),
+            parse_response(model_out, gpt_oss_template),
             {
                 "role": "assistant",
                 "thinking": (
@@ -344,7 +344,7 @@ class ChatResponseFormatParserTest(unittest.TestCase):
             "<|end|><|start|>assistant<|channel|>final<|message|>2"
         )
         self.assertEqual(
-            parse_response(model_out, gpt_oss_format),
+            parse_response(model_out, gpt_oss_template),
             {
                 "role": "assistant",
                 "content": "2",
@@ -364,7 +364,7 @@ class ChatResponseFormatParserTest(unittest.TestCase):
             'just want to chat, feel free to let me know!"}}</tool_call>'
         )
         self.assertEqual(
-            parse_response(model_out, smollm_format),
+            parse_response(model_out, smollm_template),
             {
                 "role": "assistant",
                 "thinking": (
@@ -395,7 +395,7 @@ class ChatResponseFormatParserTest(unittest.TestCase):
     def test_smollm_tool_call_no_thinking(self):
         model_out = '<tool_call>{"name": "get_weather", "arguments": {"city": "Paris"}}</tool_call>'
         self.assertEqual(
-            parse_response(model_out, smollm_format),
+            parse_response(model_out, smollm_template),
             {
                 "role": "assistant",
                 "tool_calls": [
@@ -413,7 +413,7 @@ class ChatResponseFormatParserTest(unittest.TestCase):
             "Some content about gravity goes here but I'm cutting it off to make this shorter!"
         )
         self.assertEqual(
-            parse_response(model_out, smollm_format),
+            parse_response(model_out, smollm_template),
             {
                 "role": "assistant",
                 "content": "Some content about gravity goes here but I'm cutting it off to make this shorter!",
@@ -433,7 +433,7 @@ class ChatResponseFormatParserTest(unittest.TestCase):
             "<parameter=temp_units>\ncelsius\n</parameter>\n</function>\n</tool_call>"
         )
         self.assertEqual(
-            parse_response(model_out, qwen3_format),
+            parse_response(model_out, qwen3_template),
             {
                 "role": "assistant",
                 "tool_calls": [
@@ -459,7 +459,7 @@ class ChatResponseFormatParserTest(unittest.TestCase):
             'unit:<|"|>celsius<|"|>}<tool_call|><|tool_response>'
         )
         self.assertEqual(
-            parse_response(model_out, gemma4_format),
+            parse_response(model_out, gemma4_template),
             {
                 "role": "assistant",
                 "thinking": (
@@ -486,7 +486,7 @@ class ChatResponseFormatParserTest(unittest.TestCase):
             'struct_value:{foo:<|"|>bar<|"|>}}<tool_call|>'
         )
         self.assertEqual(
-            parse_response(model_out, gemma4_format),
+            parse_response(model_out, gemma4_template),
             {
                 "role": "assistant",
                 "thinking": "Let me call the tool.",
@@ -510,7 +510,7 @@ class ChatResponseFormatParserTest(unittest.TestCase):
         )
 
     def test_optional_false_raises_when_missing(self):
-        format_spec = {
+        template_spec = {
             "defaults": {"role": "assistant"},
             "fields": {
                 "content": {
@@ -522,11 +522,11 @@ class ChatResponseFormatParserTest(unittest.TestCase):
             },
         }
         with self.assertRaises(ValueError) as cm:
-            parse_response("no response here", format_spec)
+            parse_response("no response here", template_spec)
         self.assertIn("content", str(cm.exception))
 
     def test_coerce_int(self):
-        format_spec = {
+        template_spec = {
             "defaults": {"role": "assistant"},
             "fields": {
                 "count": {
@@ -537,10 +537,10 @@ class ChatResponseFormatParserTest(unittest.TestCase):
                 },
             },
         }
-        self.assertEqual(parse_response("<n>42</n>", format_spec), {"role": "assistant", "count": 42})
+        self.assertEqual(parse_response("<n>42</n>", template_spec), {"role": "assistant", "count": 42})
 
     def test_kv_lines_parser(self):
-        format_spec = {
+        template_spec = {
             "defaults": {"role": "assistant"},
             "fields": {
                 "metadata": {
@@ -551,21 +551,21 @@ class ChatResponseFormatParserTest(unittest.TestCase):
             },
         }
         self.assertEqual(
-            parse_response("<meta>name: alice\nage: 30</meta>", format_spec),
+            parse_response("<meta>name: alice\nage: 30</meta>", template_spec),
             {"role": "assistant", "metadata": {"name": "alice", "age": "30"}},
         )
 
     def test_unknown_content_parser_rejected(self):
-        bad_format = {
+        bad_template = {
             "defaults": {"role": "assistant"},
             "fields": {"x": {"open": "[", "close": "]", "content": "not-a-real-parser"}},
         }
         with self.assertRaises(ValueError) as cm:
-            parse_response("[hi]", bad_format)
+            parse_response("[hi]", bad_template)
         self.assertIn("unknown content parser", str(cm.exception).lower())
 
     def test_two_implicit_fields_rejected(self):
-        bad_format = {
+        bad_template = {
             "defaults": {"role": "assistant"},
             "fields": {
                 "a": {"content": "text"},
@@ -573,16 +573,16 @@ class ChatResponseFormatParserTest(unittest.TestCase):
             },
         }
         with self.assertRaises(ValueError):
-            parse_response("hello", bad_format)
+            parse_response("hello", bad_template)
 
 
-# Fixtures shared by the streaming tests: one representative input per format,
+# Fixtures shared by the streaming tests: one representative input per template,
 # re-used for both the correctness invariant (any chunking → same dict) and the
 # event-shape tests (do we emit the right events in the right order?).
 _STREAMING_FIXTURES = [
     (
         "cohere",
-        cohere_format,
+        cohere_template,
         (
             "<|START_THINKING|>I should call a tool.<|END_THINKING|>"
             '<|START_ACTION|>[{"tool_call_id": "0", "tool_name": "simple_tool", '
@@ -591,7 +591,7 @@ _STREAMING_FIXTURES = [
     ),
     (
         "ernie",
-        ernie_format,
+        ernie_template,
         (
             "<think>some deliberation here</think>\n\n"
             '<tool_call>\n{"name": "get_current_temperature", "arguments": {"location": "Paris"}}\n</tool_call>\n</s>'
@@ -599,17 +599,17 @@ _STREAMING_FIXTURES = [
     ),
     (
         "gpt_oss",
-        gpt_oss_format,
+        gpt_oss_template,
         "<|channel|>analysis<|message|>thinking chunk<|end|><|channel|>final<|message|>done text",
     ),
     (
         "smollm",
-        smollm_format,
+        smollm_template,
         '<think>thinking</think>\n<tool_call>{"name": "fn", "arguments": {"x": 1}}</tool_call>',
     ),
     (
         "qwen3",
-        qwen3_format,
+        qwen3_template,
         (
             "<think>short thought</think>\n"
             "<tool_call>\n<function=get_weather>\n"
@@ -619,7 +619,7 @@ _STREAMING_FIXTURES = [
     ),
     (
         "gemma4",
-        gemma4_format,
+        gemma4_template,
         '<|channel>thought\nhi<channel|><|tool_call>call:foo{a:1,b:<|"|>bar<|"|>}<tool_call|>',
     ),
 ]
@@ -646,32 +646,34 @@ def _chunk_random(text: str, rng: random.Random):
 
 @require_jmespath
 class ResponseEventStreamTest(unittest.TestCase):
-    def test_stream_matches_whole_string_all_formats_fixed_chunking(self):
+    def test_stream_matches_whole_string_all_templates_fixed_chunking(self):
         """For every fixed chunking step we try, the streamed finalize()
         output must equal the whole-string parse. Regression coverage for
         specific edge-case byte boundaries (1-byte chunks hit every prefix)."""
-        for name, fmt, text in _STREAMING_FIXTURES:
-            expected = parse_response(text, fmt)
+        for name, tmpl, text in _STREAMING_FIXTURES:
+            expected = parse_response(text, tmpl)
             for step in (1, 2, 3, 5, 7, 13, 31):
                 with self.subTest(fixture=name, step=step):
-                    streamer = ResponseEventStream(fmt)
+                    streamer = ResponseEventStream(tmpl)
                     for chunk in _chunk_fixed(text, step):
                         streamer.feed(chunk)
-                    self.assertEqual(streamer.finalize(), expected)
+                    message, _ = streamer.finalize()
+                    self.assertEqual(message, expected)
 
-    def test_stream_matches_whole_string_all_formats_random_chunking(self):
+    def test_stream_matches_whole_string_all_templates_random_chunking(self):
         """Property-style: for many random chunkings per fixture, the streamed
         finalize() output must equal the whole-string parse. Seeded so failures
         reproduce."""
         rng = random.Random(0xC0DE_5EED)
-        for name, fmt, text in _STREAMING_FIXTURES:
-            expected = parse_response(text, fmt)
+        for name, tmpl, text in _STREAMING_FIXTURES:
+            expected = parse_response(text, tmpl)
             for trial in range(30):
                 with self.subTest(fixture=name, trial=trial):
-                    streamer = ResponseEventStream(fmt)
+                    streamer = ResponseEventStream(tmpl)
                     for chunk in _chunk_random(text, rng):
                         streamer.feed(chunk)
-                    self.assertEqual(streamer.finalize(), expected)
+                    message, _ = streamer.finalize()
+                    self.assertEqual(message, expected)
 
     def test_events_well_formed_for_every_chunking(self):
         """Every event batch, across every fixture and every chunking, must be
@@ -680,15 +682,15 @@ class ResponseEventStreamTest(unittest.TestCase):
         final event stream ends with stream_end; and the concatenation of all
         region_chunk payloads for a text/raw field equals the final value."""
         rng = random.Random(0xBEEF)
-        for name, fmt, text in _STREAMING_FIXTURES:
+        for name, tmpl, text in _STREAMING_FIXTURES:
             for trial in range(10):
                 with self.subTest(fixture=name, trial=trial):
-                    streamer = ResponseEventStream(fmt)
+                    streamer = ResponseEventStream(tmpl)
                     all_events: list[dict] = []
                     for chunk in _chunk_random(text, rng):
                         all_events.extend(streamer.feed(chunk))
-                    streamer.finalize()
-                    all_events.extend(streamer.final_events)
+                    _, final_events = streamer.finalize()
+                    all_events.extend(final_events)
                     self._assert_event_stream_well_formed(all_events)
 
     def _assert_event_stream_well_formed(self, events: list[dict]) -> None:
@@ -722,12 +724,12 @@ class ResponseEventStreamTest(unittest.TestCase):
         regions emit no chunks and report the full parsed value only on close."""
         # Single representative case with a long text region and a JSON region.
         text = _STREAMING_FIXTURES[0][2]  # cohere fixture
-        streamer = ResponseEventStream(cohere_format)
+        streamer = ResponseEventStream(cohere_template)
         events: list[dict] = []
         for ch in text:  # 1-byte chunks hit the most anchor boundaries
             events.extend(streamer.feed(ch))
-        streamer.finalize()
-        events.extend(streamer.final_events)
+        _, final_events = streamer.finalize()
+        events.extend(final_events)
 
         # Reconstruct per-field.
         per_field_chunks: dict[str, list[str]] = {}
@@ -749,19 +751,19 @@ class ResponseEventStreamTest(unittest.TestCase):
     def test_open_event_carries_named_captures(self):
         """Named groups in open_pattern must land in region_open's `meta`."""
         text = "<|channel|>analysis<|message|>think<|end|><|channel|>commentary to=functions.foo<|message|>{}<|call|>"
-        streamer = ResponseEventStream(gpt_oss_format)
+        streamer = ResponseEventStream(gpt_oss_template)
         events: list[dict] = []
         for ch in text:
             events.extend(streamer.feed(ch))
-        streamer.finalize()
-        events.extend(streamer.final_events)
+        _, final_events = streamer.finalize()
+        events.extend(final_events)
 
         tool_opens = [e for e in events if e["type"] == "region_open" and e["field"] == "tool_calls"]
         self.assertEqual(len(tool_opens), 1)
         self.assertEqual(tool_opens[0]["meta"], {"name": "foo"})
 
     def test_feed_after_finalize_raises(self):
-        streamer = ResponseEventStream(smollm_format)
+        streamer = ResponseEventStream(smollm_template)
         streamer.feed("<think>x</think>")
         streamer.finalize()
         with self.assertRaises(RuntimeError):
@@ -770,12 +772,12 @@ class ResponseEventStreamTest(unittest.TestCase):
             streamer.finalize()
 
     def test_empty_input_streams_cleanly(self):
-        streamer = ResponseEventStream(smollm_format)
+        streamer = ResponseEventStream(smollm_template)
         self.assertEqual(streamer.feed(""), [])
-        result = streamer.finalize()
+        result, final_events = streamer.finalize()
         # Only the default fields should remain; nothing else is required.
         self.assertEqual(result, {"role": "assistant"})
-        self.assertEqual(streamer.final_events[-1], {"type": "stream_end"})
+        self.assertEqual(final_events[-1], {"type": "stream_end"})
 
 
 # ChatML-style anchor used by Qwen / SmolLM templates: assistant header is
@@ -784,8 +786,8 @@ class ResponseEventStreamTest(unittest.TestCase):
 # role label) doesn't pollute downstream parsing.
 _CHATML_ANCHOR = "<|im_start|>assistant\n"
 
-qwen3_format_with_anchor = {**qwen3_format, "start_anchor": _CHATML_ANCHOR}
-smollm_format_with_anchor = {**smollm_format, "start_anchor": _CHATML_ANCHOR}
+qwen3_template_with_anchor = {**qwen3_template, "start_anchor": _CHATML_ANCHOR}
+smollm_template_with_anchor = {**smollm_template, "start_anchor": _CHATML_ANCHOR}
 
 
 @require_jmespath
@@ -799,14 +801,14 @@ class PrefixAndTruncationTest(unittest.TestCase):
             "<|im_start|>assistant\n<think>\n"
         )
         generated = "Let me think...</think>"
-        stream = ResponseEventStream(qwen3_format_with_anchor, prefix=prompt)
+        stream = ResponseEventStream(qwen3_template_with_anchor, prefix=prompt)
         # The stream surfaces a synthetic open so the caller knows the state.
         self.assertEqual(
             stream.initial_event,
             {"type": "region_open", "field": "thinking", "meta": {}},
         )
         events = stream.feed(generated)
-        result = stream.finalize()
+        result, _ = stream.finalize()
         # thinking should capture only the generated body, not the template prefix.
         self.assertEqual(result, {"role": "assistant", "thinking": "Let me think..."})
         # We should see a region_close event for thinking from the generated chunk;
@@ -824,7 +826,7 @@ class PrefixAndTruncationTest(unittest.TestCase):
             "<|im_start|>user\nFollowup<|im_end|>\n"
             "<|im_start|>assistant\n<think>\n"
         )
-        stream = ResponseEventStream(qwen3_format_with_anchor, prefix=prompt)
+        stream = ResponseEventStream(qwen3_template_with_anchor, prefix=prompt)
         # We landed inside `thinking` (from the LAST assistant turn's `<think>\n`),
         # not in some earlier-turn artifact.
         self.assertIsNotNone(stream.initial_event)
@@ -838,7 +840,7 @@ class PrefixAndTruncationTest(unittest.TestCase):
         """With no `start_anchor` in the spec, the prefix is processed verbatim
         (silently). Useful when the caller has already pre-cut the prefix."""
         prompt = "<think>\n"
-        stream = ResponseEventStream(qwen3_format, prefix=prompt)  # no anchor
+        stream = ResponseEventStream(qwen3_template, prefix=prompt)  # no anchor
         self.assertEqual(
             stream.initial_event,
             {"type": "region_open", "field": "thinking", "meta": {}},
@@ -851,7 +853,7 @@ class PrefixAndTruncationTest(unittest.TestCase):
         """Spec has start_anchor but the prefix doesn't contain it: parser
         falls back to processing the entire prefix (with a logged warning)."""
         prompt = "<think>\n"  # no <|im_start|>assistant\n
-        stream = ResponseEventStream(qwen3_format_with_anchor, prefix=prompt)
+        stream = ResponseEventStream(qwen3_template_with_anchor, prefix=prompt)
         # Even without truncation, the prefix opens `thinking` silently.
         self.assertEqual(
             stream.initial_event,
@@ -867,26 +869,27 @@ class PrefixAndTruncationTest(unittest.TestCase):
         `parse_response(g, prefix=p)`. Auto-truncation makes "one long array"
         equivalent to the explicit two-input form."""
         prompt = "<|im_start|>system\nA<|im_end|>\n<|im_start|>user\nB<|im_end|>\n<|im_start|>assistant\n<think>\n"
-        for name, fmt_dict, gen_text in _STREAMING_FIXTURES:
+        for name, tmpl_dict, gen_text in _STREAMING_FIXTURES:
             if "thinking" not in gen_text and "<think>" not in gen_text:
                 continue
             # Only fixtures whose generation text is compatible with starting
             # inside `thinking`. Restrict to qwen3 / smollm shape for clarity.
             if name not in ("qwen3", "smollm"):
                 continue
-            fmt_with_anchor = {**fmt_dict, "start_anchor": _CHATML_ANCHOR}
+            tmpl_with_anchor = {**tmpl_dict, "start_anchor": _CHATML_ANCHOR}
             # Expected: feed (prefix + gen) without prefix kwarg, but auto-truncate
             # via parse_response should match feeding gen with prefix kwarg.
-            via_prefix = parse_response(gen_text, fmt_with_anchor, prefix=prompt)
-            via_concat = parse_response(prompt + gen_text, fmt_with_anchor)
+            via_prefix = parse_response(gen_text, tmpl_with_anchor, prefix=prompt)
+            via_concat = parse_response(prompt + gen_text, tmpl_with_anchor)
             self.assertEqual(via_prefix, via_concat, msg=f"fixture={name}")
             # Streaming forms.
             for step in (1, 3, 7, 31):
                 with self.subTest(fixture=name, step=step):
-                    stream = ResponseEventStream(fmt_with_anchor, prefix=prompt)
+                    stream = ResponseEventStream(tmpl_with_anchor, prefix=prompt)
                     for chunk in _chunk_fixed(gen_text, step):
                         stream.feed(chunk)
-                    self.assertEqual(stream.finalize(), via_prefix)
+                    message, _ = stream.finalize()
+                    self.assertEqual(message, via_prefix)
 
     def test_prefix_with_open_close_inside_truncated_region(self):
         """Synthetic spec where the post-truncation prefix opens AND closes a
@@ -905,7 +908,7 @@ class PrefixAndTruncationTest(unittest.TestCase):
         # Closed-and-discarded inside prefix → no initial_event.
         self.assertIsNone(stream.initial_event)
         stream.feed("real generated body")
-        result = stream.finalize()
+        result, _ = stream.finalize()
         # `tag` was closed inside the silent prefix, so it does NOT appear.
         self.assertNotIn("tag", result)
         self.assertEqual(result["body"], "real generated body")
@@ -915,7 +918,7 @@ class PrefixAndTruncationTest(unittest.TestCase):
         the match; the synthetic `initial_event` is None (no region opened
         within the prefix yet) and the open fires from `feed()`."""
         prefix = "<|im_start|>assistant\n<thi"  # incomplete `<think>`
-        stream = ResponseEventStream(qwen3_format_with_anchor, prefix=prefix)
+        stream = ResponseEventStream(qwen3_template_with_anchor, prefix=prefix)
         self.assertIsNone(stream.initial_event)
         events = stream.feed("nk>real body</think>")
         types = [e["type"] for e in events]
@@ -927,7 +930,7 @@ class PrefixAndTruncationTest(unittest.TestCase):
         """The tokenizer-level helper accepts token IDs as prefix (decoded
         internally), matching how `response` is handled."""
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
-        tokenizer.response_format = qwen3_format_with_anchor
+        tokenizer.response_template = qwen3_template_with_anchor
         prefix_text = "<|im_start|>assistant\n<think>\n"
         prefix_ids = tokenizer(prefix_text).input_ids
         from_str = tokenizer.parse_response("hi</think>", prefix=prefix_text)
@@ -938,13 +941,13 @@ class PrefixAndTruncationTest(unittest.TestCase):
         """`tokenizer.response_event_stream(prefix=...)` returns a stream that
         is already in the right initial state."""
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        tokenizer.response_format = qwen3_format_with_anchor
+        tokenizer.response_template = qwen3_template_with_anchor
         prefix = "<|im_start|>assistant\n<think>\n"
         stream = tokenizer.response_event_stream(prefix=prefix)
         self.assertIsNotNone(stream.initial_event)
         self.assertEqual(stream.initial_event["field"], "thinking")
         stream.feed("body</think>")
-        result = stream.finalize()
+        result, _ = stream.finalize()
         self.assertEqual(result, {"role": "assistant", "thinking": "body"})
 
 

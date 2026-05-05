@@ -18,7 +18,7 @@ r"""Utility to convert Gemma models from Orbax to HF Transformers checkpoint.
 python src/transformers/models/gemma4/convert_gemma4_weights.py \
     --variant='gemma-4-e2b' \
     --include_chat_template \
-    --include_response_format \
+    --include_response_template \
     --tokenizer_path="$HOME/tokenizers/gemma4/gemma4_cleaned_262144.model" \
     --checkpoint_path="$HOME/gemma4/checkpoints/gemma_e2b_it_orbax" \
     --output_path="$HOME/gemma4/checkpoints/gemma_e2b_it_safetensors"
@@ -71,7 +71,7 @@ from transformers.utils.quantization_config import GemmaQuantizationConfig
 _CHAT_TEMPLATE = pathlib.Path(cached_file("gg-hf-gg/gemma-4-E4B-it", "chat_template.jinja")).read_text()
 _CHAT_TEMPLATE_LARGE = pathlib.Path(cached_file("gg-hf-gg/gemma-4-31B-it", "chat_template.jinja")).read_text()
 
-_RESPONSE_FORMAT = {
+_RESPONSE_TEMPLATE = {
     "defaults": {"role": "assistant"},
     "fields": {
         "thinking": {
@@ -94,7 +94,7 @@ _RESPONSE_FORMAT = {
             },
         },
         "content": {
-            "close_pattern": r"(?:<turn\|>|<\|tool_response>|$)",
+            "close_pattern": r"<turn\|>|<\|tool_response>",
             "content": "text",
         },
     },
@@ -380,10 +380,10 @@ _INCLUDE_CHAT_TEMPLATE = flags.DEFINE_bool(
     name="include_chat_template", default=False, help="If true, will save the default chat template with the tokenizer"
 )
 
-_INCLUDE_RESPONSE_FORMAT = flags.DEFINE_bool(
-    name="include_response_format",
+_INCLUDE_RESPONSE_TEMPLATE = flags.DEFINE_bool(
+    name="include_response_template",
     default=False,
-    help="If true, will save the default response_format with the tokenizer",
+    help="If true, will save the default response_template with the tokenizer",
 )
 
 _OUTPUT_PATH = flags.DEFINE_string(
@@ -2555,7 +2555,9 @@ def main(*args):
 
     chat_template = _CHAT_TEMPLATE_LARGE if variant in _LARGE_MODEL_VARIANTS else _CHAT_TEMPLATE
     chat_template_kwargs = {"chat_template": chat_template} if _INCLUDE_CHAT_TEMPLATE.value else {}
-    response_format_kwargs = {"response_format": _RESPONSE_FORMAT} if _INCLUDE_RESPONSE_FORMAT.value else {}
+    response_template_kwargs = (
+        {"response_template": _RESPONSE_TEMPLATE} if _INCLUDE_RESPONSE_TEMPLATE.value else {}
+    )
 
     # Load the tokenizer from either a SentencePiece `.model` file (when the
     # path exists locally) or directly from a HF repo (e.g. `google/gemma-4-E2B-it`).
@@ -2590,7 +2592,7 @@ def main(*args):
                 "etd_token": "<tool|>",
             },
             **chat_template_kwargs,
-            **response_format_kwargs,
+            **response_template_kwargs,
         )
     else:
         from transformers import AutoTokenizer

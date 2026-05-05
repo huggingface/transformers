@@ -6,7 +6,7 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 """Region executor: a stream-first state machine that turns text into a
-message dict according to a response_format spec.
+message dict according to a response_template spec.
 
 The executor advances a single pointer through a growing buffer. At any point
 there is a "current region" -- either the implicit/sink field (if the spec
@@ -35,7 +35,7 @@ from .spec import Field, Spec, load_spec
 _REGEX_STREAM_LOOKBACK = 64
 
 
-def parse_response(text: str, response_format: dict | Spec, *, prefix: str | None = None) -> dict:
+def parse_response(text: str, response_template: dict | Spec, *, prefix: str | None = None) -> dict:
     """Whole-string parse: returns the assembled message dict.
 
     `prefix` is silently consumed up front to advance state without
@@ -44,26 +44,27 @@ def parse_response(text: str, response_format: dict | Spec, *, prefix: str | Non
     suffix beginning past the last anchor — supporting the "pass the whole
     rendered conversation as one string" shape.
     """
-    spec_obj = load_spec(response_format)
+    spec_obj = load_spec(response_template)
     if prefix is None and spec_obj.start_anchor_re is not None:
         text = spec_obj.truncate_past_last_anchor(text, log_if_missing=False)
     stream = ResponseEventStream(spec_obj, prefix=prefix)
     stream.feed(text)
-    return stream.finalize()
+    message, _events = stream.finalize()
+    return message
 
 
 class ResponseEventStream:
-    """Incremental parser over a `response_format` spec.
+    """Incremental parser over a `response_template` spec.
 
     Usage:
-        streamer = ResponseEventStream(response_format, prefix=chat_prompt)
+        streamer = ResponseEventStream(response_template, prefix=chat_prompt)
         if streamer.initial_event:
             handle(streamer.initial_event)
         for chunk in model_text_stream:
             for event in streamer.feed(chunk):
                 handle(event)
-        message = streamer.finalize()
-        for event in streamer.final_events:
+        message, final_events = streamer.finalize()
+        for event in final_events:
             handle(event)  # region_close for any EOS-bounded region, then stream_end
 
     Event types (all dicts):
@@ -82,12 +83,20 @@ class ResponseEventStream:
     side effect is `self.initial_event`, a synthetic `region_open` that
     reports the post-prefix state when it's an explicit region.
 
-    Correctness invariant (property-tested): for any chunking of the input,
-    finalize() returns the same dict as the whole-string parse_response().
+    `feed()` itself does not look for `start_anchor`. If your spec has one
+    and you have prefix bytes to discard, pass them via `prefix=` rather
+    than feeding them as part of the stream. The whole-string
+    `parse_response()` is the only entry point that auto-truncates a glued
+    prompt+response — the streaming path expects pre-cut input.
+
+    Correctness invariant (property-tested): for any chunking of a
+    response-only input (i.e., what `feed()` sees after `prefix=` is
+    consumed), finalize() returns the same dict as
+    `parse_response(response, ..., prefix=prefix)`.
     """
 
-    def __init__(self, response_format: dict | Spec, prefix: str | None = None):
-        self._spec = load_spec(response_format)
+    def __init__(self, response_template: dict | Spec, prefix: str | None = None):
+        self._spec = load_spec(response_template)
         self._buffer: str = ""
         self._pos: int = 0
         self._output: dict[str, Any] = dict(self._spec.defaults)
@@ -102,7 +111,6 @@ class ResponseEventStream:
         self._opened: bool = False
         self._finalized: bool = False
         self._prefill_mode: bool = False
-        self.final_events: list[dict] = []
         self.initial_event: dict | None = None
         if prefix:
             self._consume_prefix(prefix)
@@ -144,18 +152,22 @@ class ResponseEventStream:
         self._process(events, eos=False)
         return events
 
-    def finalize(self) -> dict:
+    def finalize(self) -> tuple[dict, list[dict]]:
+        """Close the stream and return the final message dict together with
+        any events emitted during finalization (region_close events for
+        EOS-bounded regions, followed by a single stream_end)."""
         if self._finalized:
             raise RuntimeError("ResponseEventStream already finalized")
-        self._process(self.final_events, eos=True)
+        events: list[dict] = []
+        self._process(events, eos=True)
         missing = [n for n, f in self._spec.fields.items() if not f.optional and n not in self._output]
         if missing:
-            raise ValueError(f"Required response_format fields missing from parsed output: {missing}")
+            raise ValueError(f"Required response_template fields missing from parsed output: {missing}")
         defaults = self._spec.defaults
         self._output = {k: v for k, v in self._output.items() if k in defaults or not _is_empty(v)}
         self._finalized = True
-        self.final_events.append({"type": "stream_end"})
-        return self._output
+        events.append({"type": "stream_end"})
+        return self._output, events
 
     # --- state machine ---
 

@@ -154,15 +154,15 @@ def get_tool_call_config(processor, model: "PreTrainedModel") -> dict | None:
     tokenizer = getattr(processor, "tokenizer", processor)
     stc = getattr(tokenizer, "stc_token", None)
     etc = getattr(tokenizer, "etc_token", None)
-    response_format = getattr(tokenizer, "response_format", None)
+    response_template = getattr(tokenizer, "response_template", None)
     response_schema = getattr(tokenizer, "response_schema", None)
 
     schema: dict | None = None
-    # Prefer the new-style response_format (e.g. Gemma 4).
-    if stc and etc and response_format and "tool_calls" in response_format.get("fields", {}):
+    # Prefer the new-style response_template (e.g. Gemma 4).
+    if stc and etc and response_template and "tool_calls" in response_template.get("fields", {}):
         schema = {
             "defaults": {},
-            "fields": {"tool_calls": response_format["fields"]["tool_calls"]},
+            "fields": {"tool_calls": response_template["fields"]["tool_calls"]},
         }
     # Legacy response_schema path (still supported for old tokenizers).
     elif stc and etc and response_schema:
@@ -211,7 +211,7 @@ def parse_tool_calls(processor, generated_ids, schema: dict) -> list[dict] | Non
     Returns a list of ``{"name": str, "arguments": str}`` dicts, or ``None`` if none found.
     """
     parsed = processor.parse_response(generated_ids, schema)
-    # The new response_format path returns a dict like {"tool_calls": [...]}; unwrap.
+    # The new response_template path returns a dict like {"tool_calls": [...]}; unwrap.
     if isinstance(parsed, dict) and "tool_calls" in parsed:
         parsed = parsed["tool_calls"]
     if not parsed:
