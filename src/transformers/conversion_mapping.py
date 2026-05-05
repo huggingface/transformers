@@ -99,7 +99,7 @@ def _build_checkpoint_conversion_mapping():
         "altclip": [
             WeightRenaming(source_patterns=r"layer\.", target_patterns="layers."),
         ],
-        "kimi2_6": [
+        "kimi_k25": [
             # Same as llava, add `model` as prefix if needed
             WeightRenaming(source_patterns=r"language_model.model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"language_model.lm_head", target_patterns="lm_head"),

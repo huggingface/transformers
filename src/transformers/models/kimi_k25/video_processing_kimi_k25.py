@@ -34,10 +34,10 @@ from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import group_videos_by_shape, reorder_videos
-from .image_processing_kimi2_6 import navit_resize
+from .image_processing_kimi_k25 import navit_resize
 
 
-class Kimi2_6VideoProcessorInitKwargs(VideosKwargs, total=False):
+class Kimi_K25VideoProcessorInitKwargs(VideosKwargs, total=False):
     r"""
     max_patches (`int`, *optional*, defaults to `16384`):
         The max limit to resize resize the video.
@@ -55,7 +55,7 @@ class Kimi2_6VideoProcessorInitKwargs(VideosKwargs, total=False):
     temporal_patch_size: int
 
 
-class Kimi2_6VideoProcessor(BaseVideoProcessor):
+class Kimi_K25VideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     size = {"max_height": 512, "max_width": 512}
     image_mean = IMAGENET_STANDARD_MEAN
@@ -69,10 +69,10 @@ class Kimi2_6VideoProcessor(BaseVideoProcessor):
     merge_size = 2
     max_patches = 16384
     do_sample_frames = True
-    valid_kwargs = Kimi2_6VideoProcessorInitKwargs
+    valid_kwargs = Kimi_K25VideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
 
-    def __init__(self, **kwargs: Unpack[Kimi2_6VideoProcessorInitKwargs]):
+    def __init__(self, **kwargs: Unpack[Kimi_K25VideoProcessorInitKwargs]):
         super().__init__(**kwargs)
 
     def _validate_preprocess_kwargs(
@@ -161,4 +161,4 @@ class Kimi2_6VideoProcessor(BaseVideoProcessor):
         )
 
 
-__all__ = ["Kimi2_6VideoProcessor"]
+__all__ = ["Kimi_K25VideoProcessor"]

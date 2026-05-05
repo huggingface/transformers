@@ -18,7 +18,7 @@ if is_tokenizers_available():
 logger = logging.get_logger(__name__)
 
 
-class Kimi2_6Tokenizer(PythonBackend):
+class Kimi_K25Tokenizer(PythonBackend):
     """
     Tokenizing and encoding/decoding text using the Tiktoken tokenizer. See megatron/tokenizer/tiktoken_tokenizer.py.
 
@@ -187,21 +187,6 @@ class Kimi2_6Tokenizer(PythonBackend):
 
         return t
 
-    def decode(self, token_ids: int | list[int], **kwargs) -> str:
-        """
-        Decodes a list of token IDs into a string.
-
-        Args:
-            token_ids (List[int]): The list of token IDs to be decoded.
-
-        Returns:
-            str: The decoded string.
-        """
-        if type(token_ids) is int:
-            token_ids = [token_ids]
-
-        return self.model.decode(cast(list[int], token_ids))
-
     @staticmethod
     def _split_whitespaces_or_nonwhitespaces(s: str, max_consecutive_slice_len: int) -> Iterator[str]:
         """
@@ -266,4 +251,4 @@ class Kimi2_6Tokenizer(PythonBackend):
         return (out_vocab_file,)
 
 
-__all__ = ["Kimi2_6Tokenizer"]
+__all__ = ["Kimi_K25Tokenizer"]

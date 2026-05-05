@@ -32,7 +32,7 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
 
-class Kimi2_6ImageProcessorKwargs(ImagesKwargs, total=False):
+class Kimi_K25ImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     max_patches (`int`, *optional*, defaults to `16384`):
         The max limit to resize resize the image.
@@ -83,7 +83,7 @@ def navit_resize(
 
 
 @auto_docstring
-class Kimi2_6ImageProcessor(TorchvisionBackend):
+class Kimi_K25ImageProcessor(TorchvisionBackend):
     do_resize = True
     resample = PILImageResampling.BICUBIC
     size = {"max_height": 512, "max_width": 512}
@@ -96,10 +96,10 @@ class Kimi2_6ImageProcessor(TorchvisionBackend):
     do_convert_rgb = True
     patch_size = 14
     merge_size = 2
-    valid_kwargs = Kimi2_6ImageProcessorKwargs
+    valid_kwargs = Kimi_K25ImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw"]
 
-    def __init__(self, **kwargs: Unpack[Kimi2_6ImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[Kimi_K25ImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def _validate_preprocess_kwargs(
@@ -118,7 +118,7 @@ class Kimi2_6ImageProcessor(TorchvisionBackend):
     def preprocess(
         self,
         images: ImageInput,
-        **kwargs: Unpack[Kimi2_6ImageProcessorKwargs],
+        **kwargs: Unpack[Kimi_K25ImageProcessorKwargs],
     ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
@@ -189,4 +189,4 @@ class Kimi2_6ImageProcessor(TorchvisionBackend):
         )
 
 
-__all__ = ["Kimi2_6ImageProcessor"]
+__all__ = ["Kimi_K25ImageProcessor"]

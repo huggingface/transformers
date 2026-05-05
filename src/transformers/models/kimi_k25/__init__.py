@@ -19,12 +19,12 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_kimi2_6 import *
-    from .image_processing_kimi2_6 import *
-    from .modeling_kimi2_6 import *
-    from .processing_kimi2_6 import *
-    from .tokenization_kimi2_6 import *
-    from .video_processing_kimi2_6 import *
+    from .configuration_kimi_k25 import *
+    from .image_processing_kimi_k25 import *
+    from .modeling_kimi_k25 import *
+    from .processing_kimi_k25 import *
+    from .tokenization_kimi_k25 import *
+    from .video_processing_kimi_k25 import *
 else:
     import sys
 

@@ -40,7 +40,9 @@ class Kimi26ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def _setup_from_pretrained(cls, model_id, **kwargs):
-        return super()._setup_from_pretrained(model_id, patch_size=4, trust_remote_code=False, config=Kimi2_6Config(), **kwargs)
+        return super()._setup_from_pretrained(
+            model_id, patch_size=4, trust_remote_code=False, config=Kimi2_6Config(), **kwargs
+        )
 
     @classmethod
     def _setup_test_attributes(cls, processor):

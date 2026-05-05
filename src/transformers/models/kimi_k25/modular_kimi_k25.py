@@ -55,7 +55,7 @@ from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 logger = logging.get_logger(__name__)
 
 
-class Kimi2_6VisionConfig(PreTrainedConfig):
+class Kimi_K25VisionConfig(PreTrainedConfig):
     r"""
     pos_emb_height (`int`, *optional*):
         Initial position embedding height.
@@ -67,7 +67,7 @@ class Kimi2_6VisionConfig(PreTrainedConfig):
         Kernel size for patch merging.
     """
 
-    model_type = "kimi2_6_vision"
+    model_type = "kimi_k25_vision"
 
     patch_size: int = 14
     pos_emb_height: int = 64
@@ -88,14 +88,14 @@ class Kimi2_6VisionConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-class Kimi2_6Config(PreTrainedConfig):
+class Kimi_K25Config(PreTrainedConfig):
     r"""
     projection_ln_eps (`float`, *optional*):
         Layer norm epsilon for projector.
     """
 
-    model_type = "kimi2_6"
-    sub_configs = {"text_config": AutoConfig, "vision_config": Kimi2_6VisionConfig}
+    model_type = "kimi_k25"
+    sub_configs = {"text_config": AutoConfig, "vision_config": Kimi_K25VisionConfig}
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -108,27 +108,29 @@ class Kimi2_6Config(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "deepseek_v3")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+            model_type = self.text_config.get("model_type", "deepseek_v3")
+            if model_type == "kimi_k2":
+                model_type = "deepseek_v3"
+            self.text_config = CONFIG_MAPPING[model_type](**self.text_config)
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["deepseek_v3"]()
 
         if isinstance(self.vision_config, dict):
-            self.vision_config = Kimi2_6VisionConfig(**self.vision_config)
+            self.vision_config = Kimi_K25VisionConfig(**self.vision_config)
         elif self.vision_config is None:
-            self.vision_config = Kimi2_6VisionConfig()
+            self.vision_config = Kimi_K25VisionConfig()
         super().__post_init__(**kwargs)
 
 
-class Kimi2_6ModelOutputWithPast(LlavaModelOutputWithPast):
+class Kimi_K25ModelOutputWithPast(LlavaModelOutputWithPast):
     pass
 
 
-class Kimi2_6CausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
+class Kimi_K25CausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
     pass
 
 
-class Kimi2_6VisionPositionEmbeddings(nn.Module):
+class Kimi_K25VisionPositionEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dim = config.hidden_size
@@ -178,14 +180,14 @@ class Kimi2_6VisionPositionEmbeddings(nn.Module):
         return hidden_states
 
 
-class Kimi2_6VisionPatchEmbed(nn.Module):
+class Kimi_K25VisionPatchEmbed(nn.Module):
     def __init__(self, config):
         super().__init__()
         patch_size = (
             config.patch_size if not isinstance(config.patch_size, int) else (config.patch_size, config.patch_size)
         )
         self.proj = nn.Conv2d(3, config.hidden_size, kernel_size=patch_size, stride=patch_size)
-        self.pos_emb = Kimi2_6VisionPositionEmbeddings(config)
+        self.pos_emb = Kimi_K25VisionPositionEmbeddings(config)
 
     def forward(self, pixel_values: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
         hidden_states = self.proj(pixel_values).view(pixel_values.size(0), -1)
@@ -195,7 +197,7 @@ class Kimi2_6VisionPatchEmbed(nn.Module):
 
 # Similarly to gemma4, applies the same freq to H and W grids
 # The difference is that gemma4 stcak H/W embeds, while Kimi interleaves them
-class Kimi2_6VisionRotaryEmbedding(Gemma4VisionRotaryEmbedding):
+class Kimi_K25VisionRotaryEmbedding(Gemma4VisionRotaryEmbedding):
     def forward(self, x, position_ids):
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
@@ -224,13 +226,13 @@ class Kimi2_6VisionRotaryEmbedding(Gemma4VisionRotaryEmbedding):
         return freq_hw.repeat(1, 1, 2)  # repeat to get full `head-dim`
 
 
-class Kimi2_6VisionMLP(VisionMlp):
+class Kimi_K25VisionMLP(VisionMlp):
     pass
 
 
 # Difference from Qwen: unfused qkv as we chunk and permute qk proj when converting!
-class Kimi2_6VisionAttention(VisionAttention):
-    def __init__(self, config: Kimi2_6VisionConfig) -> None:
+class Kimi_K25VisionAttention(VisionAttention):
+    def __init__(self, config: Kimi_K25VisionConfig) -> None:
         super().__init__()
         self.dim = config.hidden_size
         self.num_heads = config.num_attention_heads
@@ -310,42 +312,42 @@ class Kimi2_6VisionAttention(VisionAttention):
 
 
 # Don't copy `init` from Qwen-VL due to non-standard config naming in Qwen
-class Kimi2_6VisionEncoderLayer(Qwen2VLVisionBlock):
+class Kimi_K25VisionEncoderLayer(Qwen2VLVisionBlock):
     def __init__(self, config):
         nn.Module.__init__()
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=1e-5)
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=1e-5)
-        self.attn = Kimi2_6VisionAttention(config=config)
-        self.mlp = Kimi2_6VisionMLP(config.hidden_size, config.intermediate_size, config.hidden_act)
+        self.attn = Kimi_K25VisionAttention(config=config)
+        self.mlp = Kimi_K25VisionMLP(config.hidden_size, config.intermediate_size, config.hidden_act)
 
 
-class Kimi2_6PreTrainedModel(Qwen2VLPreTrainedModel):
-    _no_split_modules = ["Kimi2_6VisionEncoderLayer"]
+class Kimi_K25PreTrainedModel(Qwen2VLPreTrainedModel):
+    _no_split_modules = ["Kimi_K25VisionEncoderLayer"]
 
     def _init_weights(self, module):
         PreTrainedModel._init_weights(module)
-        if isinstance(module, Kimi2_6VisionPositionEmbeddings):
+        if isinstance(module, Kimi_K25VisionPositionEmbeddings):
             buffer_value = module.compute_pos_embed()
             init.copy_(module.time_position_embeddings, buffer_value)
             init.trunc_normal_(module.position_embeddings, mean=0.0)
 
 
-class Kimi2_6VisionModel(Kimi2_6PreTrainedModel):
-    config: Kimi2_6VisionConfig
+class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
+    config: Kimi_K25VisionConfig
     input_modalities = ("image", "video")
     can_record_outputs = {
-        "hidden_states": Kimi2_6VisionEncoderLayer,
-        "attentions": Kimi2_6VisionAttention,
+        "hidden_states": Kimi_K25VisionEncoderLayer,
+        "attentions": Kimi_K25VisionAttention,
     }
 
-    def __init__(self, config: Kimi2_6VisionConfig):
+    def __init__(self, config: Kimi_K25VisionConfig):
         super().__init__(config)
         self.merge_kernel_size = config.merge_kernel_size
-        self.patch_embed = Kimi2_6VisionPatchEmbed(config)
+        self.patch_embed = Kimi_K25VisionPatchEmbed(config)
 
-        self.rotary_emb = Kimi2_6VisionRotaryEmbedding(config)
+        self.rotary_emb = Kimi_K25VisionRotaryEmbedding(config)
         self.encoder_blocks = nn.ModuleList(
-            [Kimi2_6VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)]
+            [Kimi_K25VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)]
         )
         self.final_layernorm = nn.LayerNorm(config.hidden_size)
         self.post_init()
@@ -431,7 +433,7 @@ class Kimi2_6VisionModel(Kimi2_6PreTrainedModel):
         )
 
 
-class Kimi2_6MultimodalProjection(nn.Module):
+class Kimi_K25MultimodalProjection(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.hidden_size = config.vision_config.hidden_size * (
@@ -452,12 +454,12 @@ class Kimi2_6MultimodalProjection(nn.Module):
         return hidden_states
 
 
-class Kimi2_6Model(Kimi2_6PreTrainedModel):
-    def __init__(self, config: Kimi2_6Config):
+class Kimi_K25Model(Kimi_K25PreTrainedModel):
+    def __init__(self, config: Kimi_K25Config):
         super().__init__(config)
-        self.vision_tower = Kimi2_6VisionModel._from_config(config.vision_config)
+        self.vision_tower = Kimi_K25VisionModel._from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
-        self.mm_projector = Kimi2_6MultimodalProjection(config)
+        self.mm_projector = Kimi_K25MultimodalProjection(config)
         self.post_init()
 
     def get_input_embeddings(self):
@@ -523,7 +525,7 @@ class Kimi2_6Model(Kimi2_6PreTrainedModel):
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Kimi2_6ModelOutputWithPast:
+    ) -> tuple | Kimi_K25ModelOutputWithPast:
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
@@ -546,7 +548,7 @@ class Kimi2_6Model(Kimi2_6PreTrainedModel):
             use_cache=use_cache,
             **kwargs,
         )
-        return Kimi2_6ModelOutputWithPast(
+        return Kimi_K25ModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
@@ -554,7 +556,7 @@ class Kimi2_6Model(Kimi2_6PreTrainedModel):
         )
 
 
-class Kimi2_6ForConditionalGeneration(LlavaForConditionalGeneration):
+class Kimi_K25ForConditionalGeneration(LlavaForConditionalGeneration):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -584,7 +586,7 @@ class Kimi2_6ForConditionalGeneration(LlavaForConditionalGeneration):
         image_grid_thw: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Kimi2_6CausalLMOutputWithPast:
+    ) -> tuple | Kimi_K25CausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -596,7 +598,7 @@ class Kimi2_6ForConditionalGeneration(LlavaForConditionalGeneration):
         Example:
 
         ```python
-        >>> from transformers import AutoProcessor, Kimi2_6ForConditionalGeneration
+        >>> from transformers import AutoProcessor, Kimi_K25ForConditionalGeneration
 
         >>> model = Qwen2VLForConditionalGeneration.from_pretrained("TODO")
         >>> processor = AutoProcessor.from_pretrained("TODO")
@@ -630,7 +632,7 @@ class Kimi2_6ForConditionalGeneration(LlavaForConditionalGeneration):
         ```
         """
 
-        outputs: Kimi2_6ModelOutputWithPast = self.model(
+        outputs: Kimi_K25ModelOutputWithPast = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
@@ -653,7 +655,7 @@ class Kimi2_6ForConditionalGeneration(LlavaForConditionalGeneration):
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return Kimi2_6CausalLMOutputWithPast(
+        return Kimi_K25CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
@@ -662,7 +664,7 @@ class Kimi2_6ForConditionalGeneration(LlavaForConditionalGeneration):
         )
 
 
-class Kimi2_6ProcessorKwargs(ProcessingKwargs, total=False):
+class Kimi_K25ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -672,7 +674,7 @@ class Kimi2_6ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-class Kimi2_6Processor(Qwen2VLProcessor):
+class Kimi_K25Processor(Qwen2VLProcessor):
     def __init__(
         self,
         image_processor=None,
@@ -697,7 +699,7 @@ class Kimi2_6Processor(Qwen2VLProcessor):
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         videos: VideoInput | None = None,
-        **kwargs: Unpack[Kimi2_6ProcessorKwargs],
+        **kwargs: Unpack[Kimi_K25ProcessorKwargs],
     ) -> BatchFeature:
         r"""
         Returns:
@@ -713,7 +715,7 @@ class Kimi2_6Processor(Qwen2VLProcessor):
             - **video_grid_thw** -- List of video 3D grid in LLM. Returned when `videos` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
-            Kimi2_6ProcessorKwargs,
+            Kimi_K25ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -792,11 +794,11 @@ class Kimi2_6Processor(Qwen2VLProcessor):
 
 
 __all__ = [
-    "Kimi2_6Config",
-    "Kimi2_6VisionConfig",
-    "Kimi2_6ForConditionalGeneration",
-    "Kimi2_6Model",
-    "Kimi2_6PreTrainedModel",
-    "Kimi2_6VisionModel",
-    "Kimi2_6Processor",
+    "Kimi_K25Config",
+    "Kimi_K25VisionConfig",
+    "Kimi_K25ForConditionalGeneration",
+    "Kimi_K25Model",
+    "Kimi_K25PreTrainedModel",
+    "Kimi_K25VisionModel",
+    "Kimi_K25Processor",
 ]
