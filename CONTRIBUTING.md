@@ -23,10 +23,8 @@ limitations under the License.
 >code agents. We are currently bottlenecked by our ability to review and respond to them. As a result, 
 >**we ask that new users do not submit pure code agent PRs** at this time. 
 >You may use code agents in drafting or to help you diagnose issues. We'd also ask autonomous agents
->not to open any PRs or issues for the moment.
->
->PRs that appear to be fully agent-written will probably be closed without review, and we may block users who do this
->repeatedly or maliciously.
+>not to open any PRs or issues for the moment. PR descriptions must be human-written; we will immediately close PRs 
+>with AI-generated descriptions.
 
 <details>
 

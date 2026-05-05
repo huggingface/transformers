@@ -46,6 +46,7 @@ gh pr list --repo huggingface/transformers --state open --search "<short area ke
 ### Accountability for AI-assisted patches
 - Pure code-agent PRs are not allowed: a human submitter must understand and be able to defend the change end-to-end.
 - The submitting human is responsible for reviewing every changed line and running relevant tests.
+- PR descriptions should not be AI-written! Even when a code agent is used, the description should be human-written.
 - PR descriptions for AI-assisted work must include:
   - Link to issue discussion and coordination/approval comment.
   - Why this is not duplicating an existing PR.
@@ -53,11 +54,6 @@ gh pr list --repo huggingface/transformers --state open --search "<short area ke
   - Clear statement that AI assistance was used.
 
 Do not raise PRs without human validation.
-
-### Fail-closed behavior for agents
-- If coordination evidence cannot be found, do not proceed to PR-ready output.
-- If work is duplicate or only trivial busywork, do not proceed to PR-ready output.
-- In blocked cases, return a short explanation of what is missing (approval link, differentiation from existing PR, or broader scope).
 
 ## Copies and Modular Models
 
