@@ -6,43 +6,44 @@ on:
       - remove_strange_block
 
 jobs:
-  download:
-    runs-on:
-      group: aws-g5-4xlarge-cache
-    container:
-      image: huggingface/transformers-all-latest-gpu
-      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-
+  upload-test-artifacts:
+    name: Upload 1030 test artifacts
+    runs-on: ubuntu-22.04
     steps:
-      - name: Download specific artifacts
-        uses: actions/download-artifact@v8
+      - name: Upload 1030 separate artifacts
+        uses: actions/github-script@v7
         with:
-          name: ci_results_run_models_gpu
-          path: ./downloaded2
-          repository: huggingface/transformers
-          run-id: 25356138915
+          script: |
+            const { DefaultArtifactClient } = require('@actions/artifact');
+            const fs = require('fs');
 
-      - name: List downloaded files
-        run: |
-          echo "=== Downloaded files ==="
-          find ./downloaded2 -type f | sort || echo "No files found"
-          echo "=== Total count ==="
-          find ./downloaded2 -type f | wc -l
+            const client = new DefaultArtifactClient();
 
-      - name: Download artifacts
-        uses: actions/download-artifact@v8
-        env:
-          ACTIONS_ARTIFACT_MAX_ARTIFACT_COUNT: 2000
+            for (let i = 1; i <= 1030; i++) {
+              const filename = `test_artifact_file_${i}.txt`;
+              fs.writeFileSync(filename, `artifact content ${i}`);
+              await client.uploadArtifact(
+                `test_artifact_${String(i).padStart(4, '0')}`,
+                [filename],
+                '.'
+              );
+            }
+            console.log('Done uploading 1030 artifacts');
+
+  download-test-artifacts:
+    name: Download test artifacts
+    runs-on: ubuntu-22.04
+    needs: upload-test-artifacts
+    steps:
+      - name: "Download WITHOUT token"
+        uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
-          pattern: new_failures_with_bad_commit_run_models_gpu*
-          path: ./downloaded
+          pattern: test_artifact_*
+          path: ./without_token
           merge-multiple: true
-          repository: huggingface/transformers
-          run-id: 25356138915
 
-      - name: List downloaded files
+      - name: Count without token
         run: |
-          echo "=== Downloaded files ==="
-          find ./downloaded -type f | sort || echo "No files found"
-          echo "=== Total count ==="
-          find ./downloaded -type f | wc -l
+          echo "=== Without token ==="
+          find ./without_token -type f 2>/dev/null | wc -l
