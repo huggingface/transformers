@@ -24,6 +24,10 @@ on:
       pr_number:
         required: false
         type: string
+      max_num_runners:
+        required: false
+        type: number
+        default: 4
       source_run_id:
         description: "Source workflow run ID to download artifacts from (for re-run scenarios)"
         required: false
@@ -34,10 +38,6 @@ on:
         required: false
         type: boolean
         default: false
-      max_num_runners:
-        required: false
-        type: number
-        default: 4
     outputs:
       is_check_failures_ok:
         description: "Whether the failure checking infrastructure succeeded"

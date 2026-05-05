@@ -129,7 +129,6 @@ jobs:
     needs: prepare
     uses: ./.github/workflows/check_failed_tests.yml
     with:
-      source_run_id: ${{ needs.prepare.outputs.source_workflow_run_id }}
       docker: ${{ needs.prepare.outputs.docker }}
       job: ${{ needs.prepare.outputs.job }}
       slack_report_channel: ${{ needs.prepare.outputs.slack_report_channel }}
@@ -137,6 +136,7 @@ jobs:
       report_repo_id: ${{ needs.prepare.outputs.report_repo_id }}
       commit_sha: ${{ needs.prepare.outputs.commit_sha }}
       pr_number: ${{ needs.prepare.outputs.pr_number }}
-      max_num_runners: ${{ fromJSON(needs.prepare.outputs.max_num_runners || '4') }}
+      max_num_runners: ${{ needs.prepare.outputs.max_num_runners }}
+      source_run_id: ${{ needs.prepare.outputs.source_workflow_run_id }}
       only_process_job: ${{ fromJSON(needs.prepare.outputs.only_process_job) }}
     secrets: inherit
