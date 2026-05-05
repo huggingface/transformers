@@ -128,7 +128,7 @@ jobs:
   check_new_failures:
     name: "Find commits for new failing tests"
     needs: setup_check_new_failures
-    if: ${{ !inputs.only_process_job && needs.setup_check_new_failures.outputs.process == 'true' }}
+    if: ${{ needs.setup_check_new_failures.outputs.process == 'true' }}
     strategy:
       matrix:
         run_idx: ${{ fromJson(needs.setup_check_new_failures.outputs.matrix) }}
@@ -267,6 +267,7 @@ jobs:
   process_new_failures_with_commit_info:
     name: "process bad commit reports"
     needs: check_new_failures
+    # We need `always()` here, otherwise if `check_new_failures` is not run (i.e. `only_process_job` is `true`), the following `if` condition is not evaluated at all.
     if: ${{ always() && !cancelled() && (inputs.only_process_job || needs.check_new_failures.outputs.process == 'true') }}
     runs-on:
       group: aws-g5-4xlarge-cache
