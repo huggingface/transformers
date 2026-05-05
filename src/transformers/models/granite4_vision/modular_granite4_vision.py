@@ -561,15 +561,18 @@ class Granite4VisionModel(LlavaNextModel):
         output_hidden_states: bool | None = None,
         **kwargs,
     ) -> Granite4VisionImageFeaturesOutput:
-        """
-        Extract image features via deepstack (multi-layer) and spatial sampling projections.
-
-        Runs the vision tower once, then:
-        1. Deepstack: for each (vision_layer, llm_layer) in deepstack_layer_map,
-           extracts features from that vision layer, downsamples via interpolation + QFormer,
-           and pairs them with the target LLM layer.
-        2. Spatial: if enabled, extracts the spatial_vision_layer and creates 4 spatial
-           offset groups (TL, TR, BL, BR), each targeting a different LLM layer.
+        r"""
+        pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_patches, channels, height, width)`)
+            The tensors corresponding to the input images.
+        image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
+            Actual image size of each images (H, W).
+        vision_feature_layer (`Union[int, list[int]]`, *optional*):
+            The index of the layer to select the vision feature. If multiple indices are provided,
+            the vision feature of the corresponding indices will be concatenated to form the
+            vision features.
+        vision_feature_select_strategy (`str`, *optional*):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Can be one of `"default"` or `"full"`
         """
 
         image_num_patches = [

@@ -876,6 +876,19 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         output_hidden_states: bool | None = None,
         **kwargs,
     ) -> Granite4VisionImageFeaturesOutput:
+        r"""
+        pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_patches, channels, height, width)`)
+            The tensors corresponding to the input images.
+        image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
+            Actual image size of each images (H, W).
+        vision_feature_layer (`Union[int, list[int]]`, *optional*):
+            The index of the layer to select the vision feature. If multiple indices are provided,
+            the vision feature of the corresponding indices will be concatenated to form the
+            vision features.
+        vision_feature_select_strategy (`str`, *optional*):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Can be one of `"default"` or `"full"`
+        """
 
         image_num_patches = [
             image_size_to_num_patches(
