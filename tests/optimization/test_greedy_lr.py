@@ -202,7 +202,7 @@ class GreedyLRTest(unittest.TestCase):
         self.assertEqual(scheduler2.warmup_counter, scheduler1.warmup_counter)
         self.assertAlmostEqual(optimizer2.param_groups[0]["lr"], optimizer1.param_groups[0]["lr"], places=7)
 
-        # Both schedulers should behave identically going forward
+        # - Both schedulers should behave identically going forward
         for m in [5.0, 4.0, 3.0]:
             scheduler1.step(m)
             scheduler2.step(m)
