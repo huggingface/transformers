@@ -39,8 +39,8 @@ from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from ..fastspeech2_conformer.modeling_fastspeech2_conformer import FastSpeech2ConformerConvolutionModule
 from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
-from .configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig, ParakeetTDTConfig
-from .generation_parakeet import ParakeetTDTDecoderCache, ParakeetTDTGenerationMixin
+from .configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig, ParakeetRNNTConfig, ParakeetTDTConfig
+from .generation_parakeet import ParakeetRNNTGenerationMixin, ParakeetTDTDecoderCache, ParakeetTDTGenerationMixin
 
 
 logger = logging.get_logger(__name__)
@@ -134,6 +134,73 @@ class ParakeetEncoderFeedForward(nn.Module):
 class ParakeetEncoderConvolutionModule(FastSpeech2ConformerConvolutionModule):
     def __init__(self, config: ParakeetEncoderConfig, module_config=None):
         super().__init__(config, module_config)
+        channels = config.hidden_size
+        kernel_size = config.conv_kernel_size
+
+        # Replace BatchNorm with LayerNorm for cache-aware checkpoints.
+        if config.conv_norm_type == "layer_norm":
+            self.norm = nn.LayerNorm(channels)
+
+        # Resolve depthwise conv left/right padding.
+        ctx = config.conv_context_size
+        if ctx is None:
+            self._conv_left = (kernel_size - 1) // 2
+            self._conv_right = (kernel_size - 1) // 2
+        elif ctx == "causal":
+            self._conv_left = kernel_size - 1
+            self._conv_right = 0
+        else:  # explicit [left, right]
+            self._conv_left, self._conv_right = ctx
+
+        # Symmetric padding is the default; override depthwise conv if asymmetric.
+        sym = (kernel_size - 1) // 2
+        if self._conv_left != sym or self._conv_right != sym:
+            self.depthwise_conv = nn.Conv1d(
+                channels,
+                channels,
+                kernel_size,
+                stride=1,
+                padding=0,
+                groups=channels,
+                bias=config.convolution_bias,
+            )
+
+    def forward(self, hidden_states, attention_mask=None):
+        # Override the parent forward to support asymmetric (causal/custom) conv padding
+        # and LayerNorm (which requires channel-last layout).
+        # exchange the temporal dimension and the feature dimension
+        hidden_states = hidden_states.transpose(1, 2)
+
+        # GLU mechanism
+        hidden_states = self.pointwise_conv1(hidden_states)
+        hidden_states = nn.functional.glu(hidden_states, dim=1)
+
+        # Apply padding mask before convolution
+        if attention_mask is not None:
+            if attention_mask.dtype == torch.bool:
+                all_masked_rows = torch.all(~attention_mask, dim=2)
+            else:
+                all_masked_rows = torch.all(~(attention_mask == 0.0), dim=2)
+            hidden_states = hidden_states.masked_fill(all_masked_rows, 0.0)
+
+        # Manual asymmetric padding when needed (depthwise_conv has padding=0 in that case)
+        sym = (self.depthwise_conv.kernel_size[0] - 1) // 2
+        if self._conv_left != sym or self._conv_right != sym:
+            hidden_states = nn.functional.pad(hidden_states, (self._conv_left, self._conv_right))
+        hidden_states = self.depthwise_conv(hidden_states)
+
+        # Norm: BatchNorm1d expects (B,C,T); LayerNorm expects (B,T,C).
+        if isinstance(self.norm, nn.LayerNorm):
+            hidden_states = hidden_states.transpose(1, 2)
+            hidden_states = self.norm(hidden_states)
+            hidden_states = hidden_states.transpose(1, 2)
+        else:
+            hidden_states = self.norm(hidden_states)
+
+        hidden_states = self.activation(hidden_states)
+        hidden_states = self.pointwise_conv2(hidden_states)
+
+        return hidden_states.transpose(1, 2)
 
 
 class ParakeetEncoderAttention(LlamaAttention):
@@ -224,11 +291,27 @@ class ParakeetEncoderSubsamplingConv2D(nn.Module):
         self.channels = config.subsampling_conv_channels
         self.padding = (self.kernel_size - 1) // 2
         self.num_layers = int(math.log2(config.subsampling_factor))
+        self.causal_downsampling = config.causal_downsampling
+
+        # Causal downsampling: pad on the left of the time axis only. Conv2d's `padding=0` on time
+        # combined with manual `F.pad` produces left-only padding; freq axis keeps symmetric padding.
+        # NeMo's dw_striding causal mode also adds one extra zero bin on the right of the freq axis
+        # before the first conv (via _initial_freq_pad), giving a 1-larger output dim per layer.
+        if self.causal_downsampling:
+            self._time_pad_left = self.kernel_size - 1
+            self._time_pad_right = 0
+            self._initial_freq_pad = 1
+            conv_padding = (0, self.padding)  # (time, freq)
+        else:
+            self._time_pad_left = self.padding
+            self._time_pad_right = self.padding
+            self._initial_freq_pad = 0
+            conv_padding = self.padding
 
         # define layers
         self.layers = nn.ModuleList()
         self.layers.append(
-            nn.Conv2d(1, self.channels, kernel_size=self.kernel_size, stride=self.stride, padding=self.padding)
+            nn.Conv2d(1, self.channels, kernel_size=self.kernel_size, stride=self.stride, padding=conv_padding)
         )
         self.layers.append(nn.ReLU())
         for i in range(self.num_layers - 1):
@@ -239,7 +322,7 @@ class ParakeetEncoderSubsamplingConv2D(nn.Module):
                     self.channels,
                     kernel_size=self.kernel_size,
                     stride=self.stride,
-                    padding=self.padding,
+                    padding=conv_padding,
                     groups=self.channels,
                 )
             )
@@ -248,25 +331,40 @@ class ParakeetEncoderSubsamplingConv2D(nn.Module):
             # activation
             self.layers.append(nn.ReLU())
 
-        out_length = config.num_mel_bins // (self.stride**self.num_layers)
+        # Compute output freq length by simulating the conv chain with the actual padding applied.
+        out_length = config.num_mel_bins + self._initial_freq_pad
+        for _ in range(self.num_layers):
+            out_length = (out_length + 2 * self.padding - self.kernel_size) // self.stride + 1
         self.linear = nn.Linear(config.subsampling_conv_channels * out_length, config.hidden_size, bias=True)
 
     def _get_output_length(self, input_lengths: torch.Tensor, conv_layer: nn.Conv2d):
         if hasattr(conv_layer, "stride") and conv_layer.stride != (1, 1):
-            padding = conv_layer.padding
             kernel_size = conv_layer.kernel_size[0]
             stride = conv_layer.stride[0]
-
-            output_lengths = (input_lengths + padding[0] + padding[1] - kernel_size) // stride + 1
+            time_pad_total = self._time_pad_left + self._time_pad_right
+            output_lengths = (input_lengths + time_pad_total - kernel_size) // stride + 1
             return output_lengths
 
         return input_lengths
 
     def forward(self, input_features: torch.Tensor, attention_mask: torch.Tensor = None):
+        # input_features is (B, T, F); after unsqueeze(1) it is (B, 1, T, F).
+        # F.pad pads from the *last* axis outward, so the tuple is (F_l, F_r, T_l, T_r).
         hidden_states = input_features.unsqueeze(1)
+        # Causal downsampling: pre-pad freq axis on the right by one zero bin, matching NeMo's
+        # dw_striding behaviour (the cascade then yields one extra freq bin per layer vs. a
+        # plain symmetric chain).
+        if self._initial_freq_pad:
+            # Pad freq on the RIGHT (high-frequency end). NeMo's dw_striding causal mode pre-pads
+            # one zero bin so the cascade yields one extra freq bin per layer (e.g. 128 → 17 with 3 layers).
+            hidden_states = nn.functional.pad(hidden_states, (0, self._initial_freq_pad, 0, 0))
         current_lengths = attention_mask.sum(-1) if attention_mask is not None else None
 
         for layer in self.layers:
+            # Causal downsampling: manually left-pad time axis before strided Conv2d (which has
+            # padding=0 in the time dimension). Freq-axis padding is already inside the conv.
+            if self.causal_downsampling and isinstance(layer, nn.Conv2d) and layer.stride != (1, 1):
+                hidden_states = nn.functional.pad(hidden_states, (0, 0, self._time_pad_left, self._time_pad_right))
             hidden_states = layer(hidden_states)
 
             # mask the hidden states
@@ -422,6 +520,49 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
 
         self.post_init()
 
+    def _resolve_att_context_size(self) -> list | None:
+        """Pick the inference attention context: first entry of multi-lookahead, or the single pair, or None."""
+        configured = self.config.att_context_size
+        if configured is None:
+            return None
+        if isinstance(configured[0], list):
+            return configured[0]
+        return configured
+
+    def _apply_att_context_mask(self, attention_mask: torch.Tensor) -> torch.Tensor:
+        """
+        Combine the existing (B, 1, T, T) padding mask with a limited-attention windowing mask.
+
+        - `regular`: per-position window — q at t attends to k in [t-left, t+right].
+        - `chunked_limited`: chunks of size `right + 1`. q in chunk c attends to all keys in chunks
+          [c - left // (right + 1), c]. Within and across allowed chunks all positions are visible
+          (matches NeMo's offline equivalent of chunk-aware streaming).
+        """
+        ctx = self._resolve_att_context_size()
+        if ctx is None:
+            return attention_mask
+        left, right = ctx
+        # full-context shorthand
+        if left < 0 and right < 0:
+            return attention_mask
+
+        seq_len = attention_mask.shape[-1]
+        device = attention_mask.device
+
+        if self.config.att_context_style == "chunked_limited":
+            chunk_size = right + 1
+            chunks_left = left // chunk_size
+            q_chunk = (torch.arange(seq_len, device=device) // chunk_size).unsqueeze(1)
+            k_chunk = (torch.arange(seq_len, device=device) // chunk_size).unsqueeze(0)
+            window = (k_chunk <= q_chunk) & (k_chunk >= q_chunk - chunks_left)
+        else:  # regular
+            q_idx = torch.arange(seq_len, device=device).unsqueeze(1)
+            k_idx = torch.arange(seq_len, device=device).unsqueeze(0)
+            dist = q_idx - k_idx
+            window = (dist <= left) & (dist >= -right)
+
+        return attention_mask & window.unsqueeze(0).unsqueeze(0)
+
     @auto_docstring
     @merge_with_config_defaults
     @capture_outputs
@@ -472,6 +613,17 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
             attention_mask = output_mask.unsqueeze(1).expand(-1, hidden_states.shape[1], -1)
             attention_mask = attention_mask & attention_mask.transpose(1, 2)
             attention_mask = attention_mask.unsqueeze(1)
+        elif self.config.att_context_size is not None:
+            # No padding mask supplied but the model was trained with a limited attention context —
+            # still need to build a (1,1,T,T) mask so windowing is applied.
+            attention_mask = torch.ones(
+                hidden_states.shape[0], 1, hidden_states.shape[1], hidden_states.shape[1],
+                dtype=torch.bool, device=hidden_states.device,
+            )
+
+        # Apply limited attention windowing (cache-aware models).
+        if self.config.att_context_size is not None and attention_mask is not None:
+            attention_mask = self._apply_att_context_mask(attention_mask)
 
         for encoder_layer in self.layers:
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
@@ -886,4 +1038,163 @@ class ParakeetForTDT(ParakeetPreTrainedModel, ParakeetTDTGenerationMixin):
         )
 
 
-__all__ = ["ParakeetForCTC", "ParakeetForTDT", "ParakeetEncoder", "ParakeetPreTrainedModel"]
+class ParakeetRNNTJointNetwork(nn.Module):
+    """Joint network that combines encoder and decoder outputs to predict tokens (no duration head)."""
+
+    def __init__(self, config: ParakeetRNNTConfig):
+        super().__init__()
+        self.activation = ACT2FN[config.hidden_act]
+        self.head = nn.Linear(config.joint_hidden_size, config.vocab_size)
+
+    def forward(
+        self,
+        decoder_hidden_states: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
+    ) -> torch.Tensor:
+        joint_output = self.activation(encoder_hidden_states + decoder_hidden_states)
+        return self.head(joint_output)
+
+
+@dataclass
+class ParakeetRNNTOutput(BaseModelOutputWithPooling):
+    """
+    Output of the Parakeet RNNT forward pass.
+
+    Args:
+        loss (`torch.FloatTensor`, *optional*):
+            RNNT loss, returned when `labels` are provided. Currently not implemented; raises if used.
+        logits (`torch.FloatTensor`):
+            Joint token logits. Shape is `(batch, T, U+1, vocab_size)` for training or
+            `(batch, 1, 1, vocab_size)` for single-step inference.
+        decoder_cache (`ParakeetTDTDecoderCache`, *optional*):
+            Decoder LSTM cache containing hidden state, cell state, and last output.
+    """
+
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    decoder_cache: ParakeetTDTDecoderCache | None = None
+
+
+@auto_docstring(
+    custom_intro="""
+    Parakeet Encoder with an RNN-T (Recurrent Neural Network Transducer) head.
+    """
+)
+class ParakeetForRNNT(ParakeetPreTrainedModel, ParakeetRNNTGenerationMixin):
+    config: ParakeetRNNTConfig
+    _no_split_modules = ["ParakeetTDTDecoder"]
+    _supported_generation_modes = [GenerationMode.GREEDY_SEARCH]
+
+    def __init__(self, config: ParakeetRNNTConfig):
+        super().__init__(config)
+        self.encoder = AutoModel.from_config(config.encoder_config)
+        self.encoder_projector = nn.Linear(config.encoder_config.hidden_size, config.joint_hidden_size)
+        self.decoder = ParakeetTDTDecoder(config)
+        self.joint = ParakeetRNNTJointNetwork(config)
+        self.max_symbols_per_step = config.max_symbols_per_step
+
+        self.post_init()
+
+    @can_return_tuple
+    def get_audio_features(
+        self,
+        input_features: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> ParakeetEncoderModelOutput:
+        encoder_outputs = self.encoder(
+            input_features=input_features,
+            attention_mask=attention_mask,
+            **kwargs,
+        )
+        encoder_outputs.pooler_output = self.encoder_projector(encoder_outputs.last_hidden_state)
+        return encoder_outputs
+
+    @auto_docstring
+    @can_return_tuple
+    def forward(
+        self,
+        input_features: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_cache: ParakeetTDTDecoderCache | None = None,
+        use_decoder_cache: bool | None = None,
+        encoder_outputs: ParakeetEncoderModelOutput | tuple[torch.FloatTensor] | None = None,
+        labels: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> ParakeetRNNTOutput:
+        r"""
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*):
+            Decoder input token ids for single-step inference.
+        decoder_cache (`ParakeetTDTDecoderCache`, *optional*):
+            Decoder LSTM cache. Reused on blank predictions to skip the LSTM step.
+        use_decoder_cache (`bool`, *optional*):
+            Whether to allocate and use a decoder cache when none is provided.
+        encoder_outputs (`tuple(torch.FloatTensor)`, *optional*):
+            Pre-computed encoder outputs (last_hidden_state, pooler_output, ...).
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoProcessor, ParakeetForRNNT
+        >>> from datasets import load_dataset, Audio
+
+        >>> model_id = "nvidia/parakeet-rnnt-1.1b"
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+        >>> model = ParakeetForRNNT.from_pretrained(model_id)
+
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+
+        >>> inputs = processor(ds[0]["audio"]["array"])
+        >>> outputs = model(**inputs)
+        ```
+        """
+        if encoder_outputs is None:
+            encoder_outputs = self.get_audio_features(
+                input_features=input_features,
+                attention_mask=attention_mask,
+                **kwargs,
+            )
+        elif not isinstance(encoder_outputs, ParakeetEncoderModelOutput):
+            encoder_outputs = ParakeetEncoderModelOutput(
+                last_hidden_state=encoder_outputs[0] if len(encoder_outputs) > 0 else None,
+                pooler_output=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                hidden_states=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+                attentions=encoder_outputs[3] if len(encoder_outputs) > 3 else None,
+                attention_mask=encoder_outputs[4] if len(encoder_outputs) > 4 else None,
+            )
+
+        if use_decoder_cache and decoder_cache is None:
+            decoder_cache = ParakeetTDTDecoderCache()
+
+        decoder_hidden_states = self.decoder(decoder_input_ids, cache=decoder_cache)
+        logits = self.joint(
+            encoder_hidden_states=encoder_outputs.pooler_output[:, :, None, :],
+            decoder_hidden_states=decoder_hidden_states[:, None, :, :],
+        ).squeeze(2)
+
+        if labels is not None:
+            raise NotImplementedError(
+                "RNN-T training loss is not yet implemented for ParakeetForRNNT. "
+                "Inference (greedy decoding) works."
+            )
+
+        return ParakeetRNNTOutput(
+            loss=None,
+            logits=logits,
+            last_hidden_state=encoder_outputs.last_hidden_state,
+            pooler_output=encoder_outputs.pooler_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+            decoder_cache=decoder_cache,
+        )
+
+
+__all__ = [
+    "ParakeetForCTC",
+    "ParakeetForRNNT",
+    "ParakeetForTDT",
+    "ParakeetEncoder",
+    "ParakeetPreTrainedModel",
+]

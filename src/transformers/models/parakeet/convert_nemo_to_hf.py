@@ -27,8 +27,10 @@ from transformers import (
     ParakeetEncoderConfig,
     ParakeetFeatureExtractor,
     ParakeetForCTC,
+    ParakeetForRNNT,
     ParakeetForTDT,
     ParakeetProcessor,
+    ParakeetRNNTConfig,
     ParakeetTDTConfig,
     ParakeetTokenizer,
 )
@@ -49,7 +51,9 @@ NEMO_TO_HF_WEIGHT_MAPPING = {
     r"linear_pos": r"relative_k_proj",
 }
 
-# Additional mappings for TDT decoder and joint network
+# Additional mappings for transducer (TDT and RNN-T) decoder and joint network.
+# Both TDT and NeMo's RNNTBPE share the same submodule layout: prediction.embed +
+# prediction.dec_rnn.lstm + joint.enc + joint.pred + joint.joint_net.[activation, dropout, linear].
 NEMO_TDT_WEIGHT_MAPPING = {
     r"decoder\.prediction\.embed\.": r"decoder.embedding.",
     r"decoder\.prediction\.dec_rnn\.lstm\.": r"decoder.lstm.",
@@ -57,6 +61,7 @@ NEMO_TDT_WEIGHT_MAPPING = {
     r"joint\.pred\.": r"decoder.decoder_projector.",
     r"joint\.joint_net\.2\.": r"joint.head.",
 }
+NEMO_RNNT_WEIGHT_MAPPING = NEMO_TDT_WEIGHT_MAPPING
 
 
 def convert_key(key, mapping):
@@ -159,8 +164,8 @@ def write_processor(
         # Normally CTC doesn't have while TDT has at token id = 2
         tokenizer_converted_fast.add_tokens([AddedToken("<pad>", normalized=False, special=True)])
         print(f"Added <pad> token at ID: {tokenizer_converted_fast.convert_tokens_to_ids('<pad>')}")
-    if model_type == "tdt":
-        # TDT needs a separate blank token
+    if model_type in ("tdt", "rnnt"):
+        # Transducer models need a separate blank token at the end of the vocab.
         tokenizer_converted_fast.add_tokens([AddedToken("<blank>", normalized=False, special=True)])
         print(f"Added <blank> token at ID: {tokenizer_converted_fast.convert_tokens_to_ids('<blank>')}")
     tokenizer_converted_fast.add_special_tokens(
@@ -170,7 +175,7 @@ def write_processor(
         }
     )
 
-    feature_extractor_keys_to_ignore = ["_target_", "pad_to", "frame_splicing", "dither", "normalize", "window", "log"]
+    feature_extractor_keys_to_ignore = ["_target_", "pad_to", "frame_splicing", "dither", "window", "log"]
     feature_extractor_config_keys_mapping = {
         "sample_rate": "sampling_rate",
         "window_size": "win_length",
@@ -189,6 +194,15 @@ def write_processor(
     converted_feature_extractor_config = {}
 
     for key, value in nemo_config["preprocessor"].items():
+        if key == "normalize":
+            # NeMo's `per_feature` normalizes per-utterance (HF default); `NA` / null disables it.
+            if value in (None, "NA", False):
+                converted_feature_extractor_config["do_normalize"] = False
+            elif value == "per_feature":
+                converted_feature_extractor_config["do_normalize"] = True
+            else:
+                raise ValueError(f"Unsupported NeMo preprocessor.normalize value: {value!r}")
+            continue
         if key in feature_extractor_keys_to_ignore:
             continue
         if key in feature_extractor_config_keys_mapping:
@@ -217,20 +231,15 @@ def write_processor(
 def convert_encoder_config(nemo_config):
     """Convert NeMo encoder config to HF encoder config."""
     encoder_keys_to_ignore = [
-        "att_context_size",
-        "causal_downsampling",
         "stochastic_depth_start_layer",
         "feat_out",
         "stochastic_depth_drop_prob",
         "_target_",
         "ff_expansion_factor",
         "untie_biases",
-        "att_context_style",
         "self_attention_model",
-        "conv_norm_type",
         "subsampling",
         "stochastic_depth_mode",
-        "conv_context_size",
         "dropout_pre_encoder",
         "reduction",
         "reduction_factor",
@@ -250,6 +259,12 @@ def convert_encoder_config(nemo_config):
         "dropout_att": "attention_dropout",
         "xscaling": "scale_input",
         "use_bias": "attention_bias",
+        # Cache-aware (streaming-trained) fields — passed through verbatim.
+        "att_context_size": "att_context_size",
+        "att_context_style": "att_context_style",
+        "conv_context_size": "conv_context_size",
+        "causal_downsampling": "causal_downsampling",
+        "conv_norm_type": "conv_norm_type",
     }
     converted_encoder_config = {}
 
@@ -257,6 +272,9 @@ def convert_encoder_config(nemo_config):
         if key in encoder_keys_to_ignore:
             continue
         if key in encoder_config_keys_mapping:
+            # Translate NeMo's full-context shorthand to HF's None default.
+            if key == "att_context_size" and value in ([-1, -1], [[-1, -1]]):
+                continue
             converted_encoder_config[encoder_config_keys_mapping[key]] = value
             if key == "use_bias":
                 converted_encoder_config["convolution_bias"] = value
@@ -396,6 +414,117 @@ def write_tdt_model(nemo_config, encoder_config, model_files, output_dir, push_t
     print("Model reloaded successfully.")
 
 
+def _resolve_transducer_labels(nemo_config: dict) -> tuple[list, int]:
+    """
+    Return (labels, pad_token_id) for transducer (TDT/RNN-T) models.
+
+    Some NeMo configs (e.g. cache-aware RNN-T) keep the vocab under `joint.vocabulary`
+    instead of the top-level `labels` field. Falls back to that when needed.
+    """
+    labels = nemo_config.get("labels")
+    if not labels:
+        labels = nemo_config.get("joint", {}).get("vocabulary") or []
+    if not labels:
+        raise ValueError(
+            "Could not find vocabulary in NeMo config. Looked under top-level `labels` and `joint.vocabulary`."
+        )
+    pad_token_id = labels.index("<pad>") if "<pad>" in labels else 0
+    return list(labels), pad_token_id
+
+
+def convert_rnnt_config(nemo_config, encoder_config):
+    """Convert NeMo RNN-T config to HF RNN-T config."""
+    decoder_config = nemo_config["decoder"]
+    joint_config = nemo_config["joint"]
+    labels, pad_token_id = _resolve_transducer_labels(nemo_config)
+    blank_token_id = len(labels)
+    vocab_size = len(labels) + 1  # +1 for blank token, matches NeMo's joint output dim
+
+    prednet = decoder_config.get("prednet", {})
+    decoder_hidden_size = prednet.get("pred_hidden", 640)
+    num_decoder_layers = prednet.get("pred_rnn_layers", 2)
+    jointnet = joint_config.get("jointnet", {})
+    joint_hidden_size = jointnet.get("joint_hidden", decoder_hidden_size)
+    activation = jointnet.get("activation", "relu")
+    max_symbols_per_step = nemo_config.get("decoding", {}).get("greedy", {}).get("max_symbols", 10)
+
+    print(
+        f"RNN-T config: vocab_size={vocab_size} (including blank token), "
+        f"decoder_hidden={decoder_hidden_size}, joint_hidden={joint_hidden_size}, "
+        f"decoder_layers={num_decoder_layers}, max_symbols_per_step={max_symbols_per_step}"
+    )
+
+    return ParakeetRNNTConfig(
+        vocab_size=vocab_size,
+        decoder_hidden_size=decoder_hidden_size,
+        joint_hidden_size=joint_hidden_size,
+        num_decoder_layers=num_decoder_layers,
+        hidden_act=activation,
+        max_symbols_per_step=max_symbols_per_step,
+        encoder_config=encoder_config.to_dict(),
+        pad_token_id=pad_token_id,
+        blank_token_id=blank_token_id,
+    )
+
+
+def load_and_convert_rnnt_state_dict(model_files):
+    """Load NeMo RNN-T state dict and convert keys to HF format."""
+    state_dict = torch.load(model_files["model_weights"], map_location="cpu", weights_only=True)
+    converted_state_dict = {}
+    all_mappings = {**NEMO_TO_HF_WEIGHT_MAPPING, **NEMO_RNNT_WEIGHT_MAPPING}
+
+    for key, value in state_dict.items():
+        if key.endswith("featurizer.window") or key.endswith("featurizer.fb"):
+            print(f"Skipping preprocessing weight: {key}")
+            continue
+        # Skip the auxiliary CTC head weights present in some hybrid checkpoints.
+        if key.startswith("ctc_decoder.") or "ctc_loss" in key:
+            print(f"Skipping auxiliary CTC weight: {key}")
+            continue
+        converted_key = convert_key(key, all_mappings)
+        converted_state_dict[converted_key] = value
+
+    return converted_state_dict
+
+
+def write_rnnt_model(nemo_config, encoder_config, model_files, output_dir, push_to_repo_id=None, revision=None):
+    """Write RNN-T model using encoder config, RNN-T config, and converted state dict."""
+    model_config = convert_rnnt_config(nemo_config, encoder_config)
+    print(f"Converted RNN-T config: {model_config}")
+
+    converted_state_dict = load_and_convert_rnnt_state_dict(model_files)
+
+    print("Loading the checkpoint in a Parakeet RNN-T model.")
+    with torch.device("meta"):
+        model = ParakeetForRNNT(model_config)
+
+    missing_keys, unexpected_keys = model.load_state_dict(converted_state_dict, strict=False, assign=True)
+
+    if missing_keys:
+        print(f"Warning: Missing keys: {missing_keys}")
+    if unexpected_keys:
+        print(f"Warning: Unexpected keys: {unexpected_keys}")
+    if not missing_keys and not unexpected_keys:
+        print("All weights loaded successfully!")
+
+    del model.config._name_or_path
+
+    model.generation_config.decoder_start_token_id = model.config.blank_token_id
+
+    print("Saving the model.")
+    model.save_pretrained(output_dir)
+
+    if push_to_repo_id:
+        model.push_to_hub(push_to_repo_id, revision=revision)
+
+    del model
+
+    gc.collect()
+    print("Reloading the model to check if it's saved correctly.")
+    ParakeetForRNNT.from_pretrained(output_dir, dtype=torch.bfloat16, device_map="auto")
+    print("Model reloaded successfully.")
+
+
 def write_model(nemo_config, model_files, model_type, output_dir, push_to_repo_id=None, revision=None):
     """Main model conversion function."""
     encoder_config = convert_encoder_config(nemo_config)
@@ -406,6 +535,8 @@ def write_model(nemo_config, model_files, model_type, output_dir, push_to_repo_i
         write_ctc_model(encoder_config, converted_state_dict, output_dir, push_to_repo_id, revision)
     elif model_type == "tdt":
         write_tdt_model(nemo_config, encoder_config, model_files, output_dir, push_to_repo_id, revision)
+    elif model_type == "rnnt":
+        write_rnnt_model(nemo_config, encoder_config, model_files, output_dir, push_to_repo_id, revision)
     else:
         raise ValueError(f"Model type {model_type} not supported.")
 
@@ -417,11 +548,18 @@ def main(
     push_to_repo_id=None,
     create_pr=True,
     revision=None,
+    nemo_file=None,
 ):
-    nemo_filename = f"{hf_repo_id.split('/')[-1]}.nemo"
-    filepath = cached_file(hf_repo_id, nemo_filename)
+    if nemo_file is not None:
+        filepath = nemo_file
+        extract_dir = os.path.join(output_dir, "_nemo_extract")
+        os.makedirs(extract_dir, exist_ok=True)
+    else:
+        nemo_filename = f"{hf_repo_id.split('/')[-1]}.nemo"
+        filepath = cached_file(hf_repo_id, nemo_filename)
+        extract_dir = os.path.dirname(filepath)
 
-    model_files = extract_nemo_archive(filepath, os.path.dirname(filepath))
+    model_files = extract_nemo_archive(filepath, extract_dir)
     nemo_config = yaml.load(open(model_files["model_config"], "r"), Loader=yaml.FullLoader)
 
     # When revision is given (e.g. "refs/pr/3"), both pushes target that existing PR branch.
@@ -456,11 +594,35 @@ python src/transformers/models/parakeet/convert_nemo_to_hf.py \
     --output_dir OUTPUT_DIR  \
     --push_to_repo_id USERNAME/parakeet-tdt-0.6b-v3-hf
 ```
+
+RNN-T conversion example (Hub):
+```bash
+python src/transformers/models/parakeet/convert_nemo_to_hf.py \
+    --hf_repo_id nvidia/parakeet-rnnt-1.1b \
+    --model_type rnnt \
+    --output_dir OUTPUT_DIR
+```
+
+RNN-T conversion example (local .nemo file, e.g. cache-aware checkpoint):
+```bash
+python src/transformers/models/parakeet/convert_nemo_to_hf.py \
+    --nemo_file /path/to/cache_aware_rnnt.nemo \
+    --hf_repo_id local/cache-aware-rnnt \
+    --model_type rnnt \
+    --output_dir OUTPUT_DIR
+```
 """
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--hf_repo_id", required=True, help="Model repo on huggingface.co")
-    parser.add_argument("--model_type", required=True, choices=["ctc", "tdt"], help="Model type (`ctc`, `tdt`)")
+    parser.add_argument("--hf_repo_id", required=True, help="Model repo on huggingface.co (or any identifier when --nemo_file is set)")
+    parser.add_argument(
+        "--nemo_file",
+        default=None,
+        help="Path to a local .nemo archive. When set, --hf_repo_id is only used for naming/output.",
+    )
+    parser.add_argument(
+        "--model_type", required=True, choices=["ctc", "rnnt", "tdt"], help="Model type (`ctc`, `rnnt`, `tdt`)"
+    )
     parser.add_argument("--output_dir", required=True, help="Output directory for HuggingFace model")
     parser.add_argument("--push_to_repo_id", help="Repository ID to push the model to on the Hub")
     parser.add_argument(
@@ -482,4 +644,5 @@ if __name__ == "__main__":
         args.push_to_repo_id,
         args.create_pr,
         args.revision,
+        nemo_file=args.nemo_file,
     )

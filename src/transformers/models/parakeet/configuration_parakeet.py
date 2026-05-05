@@ -40,6 +40,24 @@ class ParakeetEncoderConfig(PreTrainedConfig):
         The dropout ratio for the positions in the input sequence.
     scale_input (`bool`, *optional*, defaults to `True`):
         Whether to scale the input embeddings.
+    att_context_size (`list[int]` or `list[list[int]]`, *optional*, defaults to `None`):
+        Attention context window `[left, right]` (in subsampled encoder frames). `None` (or `[-1, -1]`)
+        means full bidirectional context. A single pair like `[70, 13]` constrains attention to
+        ±frames per-position (cache-aware models). A list of pairs `[[70, 13], [70, 0]]` enables
+        multi-lookahead training; the first entry is the inference default.
+    att_context_style (`str`, *optional*, defaults to `"regular"`):
+        Attention context style. `"regular"` masks per-position with the chosen `att_context_size`.
+        `"chunked_limited"` groups frames into fixed chunks (size `right + 1`) and masks at chunk
+        boundaries — matches NeMo's cache-aware streaming semantics.
+    conv_context_size (`str` or `list[int]`, *optional*, defaults to `None`):
+        Padding for the depthwise Conformer convolution. `None` uses symmetric `[(k-1)//2, (k-1)//2]`.
+        `"causal"` uses left-only `[k-1, 0]`. A `[left, right]` pair (with `left + right + 1 == conv_kernel_size`)
+        applies custom asymmetric padding.
+    causal_downsampling (`bool`, *optional*, defaults to `False`):
+        Whether the input subsampling Conv2d uses causal (left-only) padding in the time dimension.
+        Required for cache-aware checkpoints.
+    conv_norm_type (`str`, *optional*, defaults to `"batch_norm"`):
+        Normalization for the depthwise convolution in the Conformer block: `"batch_norm"` or `"layer_norm"`.
 
     Example:
     ```python
@@ -80,9 +98,29 @@ class ParakeetEncoderConfig(PreTrainedConfig):
     max_position_embeddings: int = 5000
     scale_input: bool = True
     initializer_range: float = 0.02
+    att_context_size: list | None = None
+    att_context_style: str = "regular"
+    conv_context_size: str | list | None = None
+    causal_downsampling: bool = False
+    conv_norm_type: str = "batch_norm"
 
     def __post_init__(self, **kwargs):
         self.num_key_value_heads = self.num_attention_heads
+        if isinstance(self.conv_context_size, list):
+            left, right = self.conv_context_size
+            if left + right + 1 != self.conv_kernel_size:
+                raise ValueError(
+                    f"conv_context_size {self.conv_context_size} must satisfy "
+                    f"left + right + 1 == conv_kernel_size ({self.conv_kernel_size})."
+                )
+        if self.att_context_style not in {"regular", "chunked_limited"}:
+            raise ValueError(
+                f"att_context_style must be 'regular' or 'chunked_limited', got {self.att_context_style!r}."
+            )
+        if self.conv_norm_type not in {"batch_norm", "layer_norm"}:
+            raise ValueError(
+                f"conv_norm_type must be 'batch_norm' or 'layer_norm', got {self.conv_norm_type!r}."
+            )
         super().__post_init__(**kwargs)
 
 
@@ -187,4 +225,71 @@ class ParakeetTDTConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["ParakeetCTCConfig", "ParakeetEncoderConfig", "ParakeetTDTConfig"]
+@auto_docstring(checkpoint="nvidia/parakeet-rnnt-1.1b")
+@strict
+class ParakeetRNNTConfig(PreTrainedConfig):
+    r"""
+    decoder_hidden_size (`int`, *optional*, defaults to 640):
+        Hidden size of the LSTM prediction network (NeMo's `pred_hidden`).
+    joint_hidden_size (`int`, *optional*, defaults to 640):
+        Hidden size of the joint network's encoder/decoder projections (NeMo's `joint_hidden`).
+        Encoder and decoder outputs are projected to this size before being summed and activated.
+    num_decoder_layers (`int`, *optional*, defaults to 2):
+        Number of LSTM layers in the prediction network.
+    hidden_act (`str`, *optional*, defaults to `"relu"`):
+        Activation in the joint network.
+    max_symbols_per_step (`int`, *optional*, defaults to 10):
+        Maximum number of non-blank symbols emitted per encoder time step during greedy decoding.
+    encoder_config (`Union[dict, ParakeetEncoderConfig]`, *optional*):
+        The config object or dictionary of the encoder.
+    blank_token_id (`int`, *optional*, defaults to 1024):
+        Blank token id. Different from `pad_token_id` for RNNT.
+
+    Example:
+    ```python
+    >>> from transformers import ParakeetForRNNT, ParakeetRNNTConfig
+
+    >>> # Initializing a Parakeet RNNT configuration
+    >>> configuration = ParakeetRNNTConfig()
+
+    >>> # Initializing a model from the configuration
+    >>> model = ParakeetForRNNT(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
+    """
+
+    model_type = "parakeet_rnnt"
+    sub_configs = {"encoder_config": ParakeetEncoderConfig}
+
+    vocab_size: int = 1025
+    decoder_hidden_size: int = 640
+    joint_hidden_size: int = 640
+    num_decoder_layers: int = 2
+    hidden_act: str = "relu"
+    max_symbols_per_step: int = 10
+    encoder_config: dict | PreTrainedConfig | None = None
+    pad_token_id: int = 0
+    blank_token_id: int = 1024
+    is_encoder_decoder: bool = True
+
+    def __post_init__(self, **kwargs):
+        if isinstance(self.encoder_config, dict):
+            self.encoder_config = ParakeetEncoderConfig(**self.encoder_config)
+        elif self.encoder_config is None:
+            self.encoder_config = ParakeetEncoderConfig()
+        if self.decoder_hidden_size != self.joint_hidden_size:
+            raise ValueError(
+                "ParakeetRNNTConfig currently requires decoder_hidden_size == joint_hidden_size "
+                f"(got {self.decoder_hidden_size} and {self.joint_hidden_size}). All known NeMo "
+                "RNNT checkpoints satisfy this; if you have a checkpoint where they differ, please "
+                "open an issue."
+            )
+        self.initializer_range = self.encoder_config.initializer_range
+        # The decoder starts on the blank token at frame 0 (NeMo's blank_as_pad convention).
+        kwargs.setdefault("decoder_start_token_id", self.blank_token_id)
+        super().__post_init__(**kwargs)
+
+
+__all__ = ["ParakeetCTCConfig", "ParakeetEncoderConfig", "ParakeetRNNTConfig", "ParakeetTDTConfig"]

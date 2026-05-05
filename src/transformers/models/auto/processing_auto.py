@@ -138,6 +138,7 @@ else:
             ("paddleocr_vl", "PaddleOCRVLProcessor"),
             ("paligemma", "PaliGemmaProcessor"),
             ("parakeet_ctc", "ParakeetProcessor"),
+            ("parakeet_rnnt", "ParakeetProcessor"),
             ("parakeet_tdt", "ParakeetProcessor"),
             ("perception_lm", "PerceptionLMProcessor"),
             ("phi4_multimodal", "Phi4MultimodalProcessor"),
