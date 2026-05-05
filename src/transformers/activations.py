@@ -214,6 +214,13 @@ class ReLUSquaredActivation(nn.Module):
         return squared
 
 
+class SqrtSoftplusActivation(nn.Module):
+    """sqrt(softplus(x)) — the router scoring function used by DeepSeek V4."""
+
+    def forward(self, input):
+        return nn.functional.softplus(input).sqrt()
+
+
 class ClassInstantier(OrderedDict):
     def __getitem__(self, key):
         content = super().__getitem__(key)
@@ -334,6 +341,7 @@ ACT2CLS = {
     "relu6": nn.ReLU6,
     "sigmoid": nn.Sigmoid,
     "silu": SiLUActivation,
+    "sqrtsoftplus": SqrtSoftplusActivation,
     "swish": nn.SiLU,
     "tanh": nn.Tanh,
     "prelu": nn.PReLU,

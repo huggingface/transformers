@@ -22,9 +22,11 @@ rendered properly in your Markdown viewer.
 <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
 </div>
 
-```py3
-import transformers
+```python
 import torch
+
+import transformers
+
 
 model_id = "meta-llama/Meta-Llama-3-8B"
 
@@ -50,7 +52,7 @@ The original code of the authors can be found [here](https://github.com/meta-lla
 The `Llama3` models were trained using `bfloat16`, but the original inference uses `float16`. The checkpoints uploaded on the Hub use `dtype = 'float16'`, which will be
 used by the `AutoModel` API to cast the checkpoints from `torch.float32` to `torch.float16`.
 
-The `dtype` of the online weights is mostly irrelevant unless you are using `dtype="auto"` when initializing a model using `model = AutoModelForCausalLM.from_pretrained("path", dtype = "auto")`. The reason is that the model will first be downloaded ( using the `dtype` of the checkpoints online), then it will be casted to the default `dtype` of `torch` (becomes `torch.float32`), and finally, if there is a `dtype` or `torch_dtype` provided in the config, it will be used.
+The `dtype` of the online weights is mostly irrelevant unless you are using `dtype="auto"` when initializing a model using `model = AutoModelForCausalLM.from_pretrained("path", dtype = "auto")`. The reason is that the model will first be downloaded ( using the `dtype` of the checkpoints online), then it will be casted to the default `dtype` of `torch` (becomes `torch.float32`, device_map="auto"), and finally, if there is a `dtype` or `torch_dtype` provided in the config, it will be used.
 
 Training the model in `float16` is not recommended and is known to produce `nan`; as such, the model should be trained in `bfloat16`.
 
@@ -75,7 +77,7 @@ Tips:
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     tokenizer = AutoTokenizer.from_pretrained("/output/path")
-    model = AutoModelForCausalLM.from_pretrained("/output/path")
+    model = AutoModelForCausalLM.from_pretrained("/output/path", device_map="auto")
     ```
 
     Note that executing the script requires enough CPU RAM to host the whole model in float16 precision (even if the biggest versions

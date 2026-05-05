@@ -156,8 +156,11 @@ class Concatenate(ConversionOps):
         target_pattern = self.get_target_pattern(target_patterns)
         all_tensors = []
         # Very important to keep the relative order of the source patterns here, so we iterate over them not the
-        # input directly as it's unordered!
+        # input directly as it's unordered! Skip patterns that prior ops in the chain (e.g. ``Fp8Dequantize``)
+        # have already consumed and dropped from ``input_dict``.
         for source_pattern in source_patterns:
+            if source_pattern not in input_dict:
+                continue
             tensors = input_dict[source_pattern]
             if isinstance(tensors, list):
                 all_tensors.extend(tensors)
@@ -719,13 +722,18 @@ class WeightTransform:
         source_pattern_that_matched = self.source_patterns[int(matching_group_name[1:])]
         # If we matched, we always replace with the first target pattern, in case we have several (one to many transform)
         replacement = self.target_patterns[0]
-        # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper, sam3)
-        if r"\1" in replacement:
-            # The index of the internal group we need to replace is the index of the matched named group as it comes
-            # inside that matched named group
-            replaced_group_idx = self.compiled_sources.groupindex[matching_group_name] + 1
-            replacement = replacement.replace(r"\1", match_object.group(replaced_group_idx))
-        renamed_key = key_to_match.replace(match_object.group(0), replacement, 1)
+        # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper, sam3).
+        # Backreferences `\1..\9` in the target are substituted from the matched source pattern's
+        # inner capturing groups, indexed off the matched named group so they stay correct under the
+        # `(?P<g0>...)|(?P<g1>...)|...` alternation `compiled_sources` builds.
+        if re.search(r"\\\d", replacement):
+            group_start = self.compiled_sources.groupindex[matching_group_name]
+            replacement = re.sub(
+                r"\\(\d+)",
+                lambda m: match_object.group(group_start + int(m.group(1))),
+                replacement,
+            )
+        renamed_key = source_key.replace(match_object.group(0), replacement, 1)
         if prefix_dot is not None:
             renamed_key = prefix_dot + renamed_key
         return renamed_key, source_pattern_that_matched
