@@ -775,9 +775,12 @@ class WeightTransform:
     ) -> dict[str, torch.Tensor]: ...
 
     @abstractmethod
-    def transform_model(self, model: PreTrainedModel) -> None:
+    def transform_model(self, model: PreTrainedModel, layer_name: str) -> None:
         """
-        Optionally restructure the live model graph before weights are loaded.
+        Analogous to `convert` but restructures `model`'s module graph rather than operating on tensor data.
+
+        Called once per target parameter group (identified by `layer_name`) while the model is on the meta device.
+        Access the associated source parameter names via `self.layer_targets[layer_name]`.
         """
         ...
 
@@ -820,6 +823,29 @@ class WeightRenaming(WeightTransform):
                 )
 
         return collected_tensors
+
+    def transform_model(self, model: PreTrainedModel, layer_name: str) -> None:
+        source_names = list(self.layer_targets.get(layer_name, []))
+        if not source_names:
+            return
+        source_name = source_names[0]
+        if source_name == layer_name:
+            return
+
+        source_mod_path, _, source_attr = source_name.rpartition(".")
+        target_mod_path, _, target_attr = layer_name.rpartition(".")
+
+        try:
+            source_mod = model.get_submodule(source_mod_path) if source_mod_path else model
+        except AttributeError:
+            return  # already moved
+
+        if source_attr in source_mod._parameters:
+            obj = source_mod._parameters.pop(source_attr)
+            model.get_submodule(target_mod_path).register_parameter(target_attr, obj)
+        elif source_attr in source_mod._buffers:
+            obj = source_mod._buffers.pop(source_attr)
+            model.get_submodule(target_mod_path).register_buffer(target_attr, obj)
 
 
 class PrefixChange(WeightRenaming):
@@ -951,8 +977,38 @@ class WeightConverter(WeightTransform):
                 )
         return collected_tensors
 
-    def transform_model(self, model: PreTrainedModel) -> None:
-        print(f"[DEBUG] Applying model transformation for {self}...")
+    def transform_model(self, model: PreTrainedModel, layer_name: str) -> None:
+        pass
+
+
+def apply_transforms_to_meta_model(
+    model: PreTrainedModel,
+    weight_conversions: list[WeightRenaming | WeightConverter],
+) -> None:
+    """
+    Restructure `model`'s module graph in-place according to `weight_conversions`, analogously to
+    `convert_and_load_state_dict_in_model` but operating on module attributes rather than checkpoint tensors.
+
+    Designed to be called while the model is on the meta device, making the operation cost-free.
+    """
+    meta_state_dict = model.state_dict()
+
+    renamings = [x for x in weight_conversions if isinstance(x, WeightRenaming)]
+    converters = [x for x in weight_conversions if isinstance(x, WeightConverter)]
+    pattern_to_converter = {k: c for c in converters for k in c.source_patterns}
+    param_name_to_transform: dict[str, WeightRenaming | WeightConverter] = {}
+
+    for param_name in sorted(meta_state_dict, key=dot_natural_key):
+        renamed_key, source_pattern = rename_source_key(param_name, renamings, converters)
+        if source_pattern is not None:
+            transform = param_name_to_transform.setdefault(renamed_key, deepcopy(pattern_to_converter[source_pattern]))
+        else:
+            transform = param_name_to_transform.setdefault(renamed_key, WeightRenaming(param_name, renamed_key))
+            source_pattern = param_name
+        transform.layer_targets[renamed_key].add(param_name)
+
+    for layer_name, transform in param_name_to_transform.items():
+        transform.transform_model(model, layer_name)
 
 
 # For I/O bound operations (i.e. here reading files), it is better to have fewer threads, e.g. 4 is a good default.
