@@ -653,7 +653,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
         video_features = self.vision_resampler(selected_video_features)
         video_features = self.multi_modal_projector(video_features)
         video_features = torch.split(video_features, frames, dim=0)
-        video_outputs.pooler_output = video_features
+        video_outputs.pooler_output = list(video_features)
 
         return video_outputs
 
