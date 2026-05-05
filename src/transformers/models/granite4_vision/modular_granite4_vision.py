@@ -106,9 +106,6 @@ class Granite4VisionConfig(LlavaNextConfig):
     deepstack_layer_map (`list`, *optional*):
         List of `[vision_layer_idx, llm_layer_idx]` pairs. Features from each vision encoder layer
         are projected and injected at the corresponding LLM decoder layer during forward pass.
-    use_spatial_sampling (`bool`, *optional*, defaults to `False`):
-        Whether to enable spatial offset sampling, which creates 4 groups (TL, TR, BL, BR) from
-        a single vision layer, each injected at a different LLM layer.
     spatial_vision_layer (`int`, *optional*, defaults to `-1`):
         Index of the vision encoder layer used for spatial sampling.
     spatial_target_layers (`list`, *optional*, defaults to `[12, 15, 18, 21]`):
@@ -131,7 +128,6 @@ class Granite4VisionConfig(LlavaNextConfig):
 
     downsample_rate: str | None = None
     deepstack_layer_map: list | None = None
-    use_spatial_sampling: bool = False
     spatial_vision_layer: int = -1
     spatial_target_layers: list | None = None
     projector_dropout: float = 0.1
