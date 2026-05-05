@@ -47,12 +47,12 @@ from ..auto import AutoModel
 from .configuration_granite4_vision import Granite4VisionConfig, Granite4VisionTextConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Llava outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class Granite4VisionModelOutputWithPast(BaseModelOutputWithPast):
     """
     Args:
@@ -67,12 +67,12 @@ class Granite4VisionModelOutputWithPast(BaseModelOutputWithPast):
     deepstack_features: list | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Granite4Vision causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Granite4VisionCausalLMOutputWithPast(ModelOutput):
     """
     Args:
