@@ -103,7 +103,7 @@ from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
 logger = logging.get_logger(__name__)
 
 
-def _get_feat_extract_output_lengths(input_lengths: torch.Tensor) -> torch.Tensor:
+def _get_feat_extract_output_lengths(input_lengths):
     """Compute output lengths after the 3-layer CNN feature extractor with deepstack.
 
     Three stride-2 convolutions within each 100-frame block, plus 13 output frames
