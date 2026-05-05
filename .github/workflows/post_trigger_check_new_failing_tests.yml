@@ -33,6 +33,8 @@ jobs:
     name: Fetch inputs from source run
     runs-on: ubuntu-22.04
     outputs:
+      source_workflow_run_id: ${{ steps.resolve.outputs.source_workflow_run_id }}
+      only_process_job: ${{ steps.resolve.outputs.only_process_job }}
       docker: ${{ steps.fetch-inputs.outputs.docker }}
       job: ${{ steps.fetch-inputs.outputs.job }}
       slack_report_channel: ${{ steps.fetch-inputs.outputs.slack_report_channel }}
@@ -42,6 +44,15 @@ jobs:
       pr_number: ${{ steps.fetch-inputs.outputs.pr_number }}
       max_num_runners: ${{ steps.fetch-inputs.outputs.max_num_runners }}
     steps:
+      - name: Resolve inputs
+        id: resolve
+        env:
+          source_workflow_run_id: ${{ inputs.source_workflow_run_id || env.source_workflow_run_id }}
+          only_process_job: ${{ inputs.only_process_job || env.only_process_job }}
+        run: |
+          echo "source_workflow_run_id=$source_workflow_run_id" >> $GITHUB_OUTPUT
+          echo "only_process_job=$only_process_job" >> $GITHUB_OUTPUT
+
       - name: Fetch inputs from source run job log
         id: fetch-inputs
         uses: actions/github-script@v6
@@ -118,7 +129,7 @@ jobs:
     needs: prepare
     uses: ./.github/workflows/check_failed_tests.yml
     with:
-      source_run_id: ${{ inputs.source_workflow_run_id || env.source_workflow_run_id }}
+      source_run_id: ${{ needs.prepare.outputs.source_workflow_run_id }}
       docker: ${{ needs.prepare.outputs.docker }}
       job: ${{ needs.prepare.outputs.job }}
       slack_report_channel: ${{ needs.prepare.outputs.slack_report_channel }}
@@ -127,5 +138,5 @@ jobs:
       commit_sha: ${{ needs.prepare.outputs.commit_sha }}
       pr_number: ${{ needs.prepare.outputs.pr_number }}
       max_num_runners: ${{ fromJSON(needs.prepare.outputs.max_num_runners || '4') }}
-      only_process_job: ${{ fromJSON(inputs.only_process_job || env.only_process_job) }}
+      only_process_job: ${{ fromJSON(needs.prepare.outputs.only_process_job) }}
     secrets: inherit
