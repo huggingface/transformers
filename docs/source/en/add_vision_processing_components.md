@@ -54,6 +54,9 @@ class MyModelImageProcessor(TorchvisionBackend):
         super().__init__(**kwargs)
 ```
 
+> [!TIP]
+> See [`LlavaOnevisionImageProcessor`] for reference.
+
 ## PIL
 
 Create `image_processing_pil_<model_name>.py` with a class that inherits from [`PilBackend`]. Duplicate the kwargs class here instead of importing it from the torchvision file because it can fail when torchvision isn't installed. Add an `# Adapted from` comment so the two stay in sync. For processors with no custom parameters, use [`ImagesKwargs`] directly.
@@ -84,7 +87,19 @@ class MyModelImageProcessorPil(PilBackend):
 ```
 
 > [!TIP]
-> See [`CLIPImageProcessor`]/[`CLIPImageProcessorPil`] and [`LlavaOnevisionImageProcessor`]/[`LlavaOnevisionImageProcessorPil`] for reference.
+> See [`LlavaOnevisionImageProcessorPil`] for reference.
+
+## Register the classes
+
+Expose both image processor classes from the model package `__init__.py`. Follow the lazy import pattern used by nearby models and guard imports with the same optional dependencies required by each backend.
+
+Map the new classes to the model config so [`AutoImageProcessor`] can load them. The generated auto mapping file has a warning at the top. Do not edit it by hand. Add or update the model config, then run:
+
+```bash
+python utils/check_auto.py --fix_and_overwrite
+```
+
+After the mapping is generated, verify the model type appears in `IMAGE_PROCESSOR_MAPPING_NAMES` with both backend classes.
 
 ## Next steps
 
