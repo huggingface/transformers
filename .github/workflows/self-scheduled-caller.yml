@@ -7,7 +7,12 @@ on:
 
 jobs:
   download:
-    runs-on: ubuntu-latest
+    runs-on:
+      group: aws-g5-4xlarge-cache
+    container:
+      image: huggingface/transformers-all-latest-gpu
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+
     steps:
       - name: Download specific artifacts
         uses: actions/download-artifact@v8
