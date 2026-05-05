@@ -150,6 +150,7 @@ class Serve:
             completion_handler=self._completion_handler,
             response_handler=self._response_handler,
             transcription_handler=self._transcription_handler,
+            generation_state=self._generation_state,
             enable_cors=enable_cors,
         )
 

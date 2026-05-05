@@ -90,12 +90,12 @@ class Gemma4ModelOutputWithPast(BaseModelOutputWithPast):
     audio_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Gemma4 causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Gemma4CausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -125,8 +125,8 @@ class Gemma4CausalLMOutputWithPast(ModelOutput):
     audio_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Gemma4AudioModelOutput(BaseModelOutputWithPooling):
     r"""
     attention_mask (`torch.BoolTensor`, *optional*):
@@ -189,7 +189,7 @@ class Gemma4RMSNorm(nn.Module):
 class Gemma4AudioRelPositionalEncoding(nn.Module):
     """Sinusoidal relative positional encoding for the audio encoder.
 
-    Produces position embeddings of shape [1, 2*context_size - 1, hidden_size] with
+    Produces position embeddings of shape [1, context_size // 2 + 1, hidden_size] with
     concatenated [sin..., cos...] layout matching the original Gemma4 convention.
     """
 
@@ -210,7 +210,7 @@ class Gemma4AudioRelPositionalEncoding(nn.Module):
 
     @torch.no_grad()
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        position_ids = torch.arange(12, -1, -1, device=hidden_states.device)
+        position_ids = torch.arange(self.context_size // 2, -1, -1, device=hidden_states.device)
         position_ids = position_ids[..., None]
         scaled_time = position_ids * self.inv_timescales.to(device=hidden_states.device)
         pos_embed = torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=-1)

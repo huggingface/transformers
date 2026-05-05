@@ -56,12 +56,12 @@ class VipLlavaModelOutputWithPast(BaseModelOutputWithPast):
     image_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for VipLlava causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class VipLlavaCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

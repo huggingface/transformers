@@ -1620,9 +1620,9 @@ class ContinuousBatchingConfig:
             Maximum percentage of free GPU memory (after the model is loaded) to use for the KV cache. When `None`,
             resolved at runtime to 0.9 if there is no logit processing and 0.8 if there is, to leave headroom for
             vocabulary-sized temporary tensors.
-        max_blocks_per_request (`int`, *optional*, defaults to 0):
+        max_blocks_per_request (`int`, *optional*):
             Maximum blocks per request, used in the `flash_attn_with_kvcache` fast decode path to dimension
-            the block table. Setting this to 0 disables the fast decode path.
+            the block table. Setting this to 0 disables the fast decode path. Default is None (auto-inferred).
         allow_block_sharing (`bool`, *optional*, defaults to `True`):
             Whether to allow block sharing for prefix caching. Block sharing can only be allowed, never forced,
             as some models do not support it. Disable if you have few short prompts but long generation lengths.
@@ -1653,6 +1653,13 @@ class ContinuousBatchingConfig:
             Scheduler type to use.
         return_logprobs (`bool`, *optional*, defaults to `False`):
             Whether to return log probabilities along with the generated tokens.
+        cpu_offload_space (`float`, *optional*, defaults to 0.0):
+            CPU swap space in GiB for KV cache offloading. A pre-allocated pinned CPU buffer of this size is
+            created at initialization. When the GPU cache is full, evicted requests' KV caches are copied here
+            instead of being discarded. 0 disables offloading (default).
+        cpu_offload_space_safety_threshold (`float`, *optional*, defaults to 0.8):
+            If `cpu_offload_space` exceeds this fraction of total system RAM, it is clamped to avoid host OOM.
+            Set to 1.0 to disable the safety cap. Ignored when psutil is not available.
         max_queue_size (`int`, *optional*, defaults to 0):
             Maximum request queue size for serving. 0 means unlimited.
         per_request_processors (`bool`, *optional*, defaults to `False`):
@@ -1674,8 +1681,8 @@ class ContinuousBatchingConfig:
     max_memory_percent: float | None = None
 
     # This is only used in the flash_attn_with_kvcache fast decode path to dimension the block table. If it is set to 0,
-    # the fast decode path will not be used. Currently turned off by default.
-    max_blocks_per_request: int | None = 0
+    # the fast decode path will not be used. Auto-inferred from GPU memory when `None` (default).
+    max_blocks_per_request: int | None = None
 
     # Block sharing can only be allowed, but never forced: some model just do not support it. If you only have a few
     # short prompts, but long generation lengths, you might want to disable block sharing.
@@ -1712,6 +1719,16 @@ class ContinuousBatchingConfig:
     # probabilities will be returned along with the generated tokens in the generation output.
     return_logprobs: bool = False
 
+    # CPU swap space in GiB for KV cache offloading. When the GPU cache is full and a request must be evicted, its KV
+    # cache is copied to this pre-allocated pinned CPU buffer instead of being discarded. Default to 0.0 GiB. You can
+    # also set this to None to dimension the pool using only the safety threshold, but this will error out if psutil is
+    # not available.
+    # TODO: use async transfer and move this to a non-zero value
+    cpu_offload_space: float | None = 0.0
+    # Safety cap: if cpu_offload_space exceeds this fraction of total system RAM, it is clamped. Set to 0.0 to disable
+    # offloading.
+    cpu_offload_space_safety_threshold: float = 0.8
+
     # The parameters below are mostly useful in the context of serving
     max_queue_size: int = 0
 
@@ -1721,6 +1738,11 @@ class ContinuousBatchingConfig:
     # When True, processors explicitly marked as unsupported are removed with a warning. When False, all processors
     # are kept but warnings are logged for unsupported/unknown ones.
     drop_unsupported_processors: bool = True
+
+    @property
+    def fallback_max_blocks_per_request(self) -> int:
+        """A good default for the size of the block table for the decode path"""
+        return 32
 
     def account_for_cb_deprecated_arguments(
         self,

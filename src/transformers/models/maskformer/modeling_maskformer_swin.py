@@ -34,12 +34,12 @@ from ...utils.generic import can_return_tuple
 from .configuration_maskformer_swin import MaskFormerSwinConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for MaskFormerSwinModel's outputs that also contains the spatial dimensions of the hidden states.
     """
 )
+@dataclass
 class MaskFormerSwinModelOutputWithPooling(ModelOutput):
     r"""
     pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
@@ -57,12 +57,12 @@ class MaskFormerSwinModelOutputWithPooling(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for SwinEncoder's outputs.
     """
 )
+@dataclass
 class MaskFormerSwinBaseModelOutput(ModelOutput):
     r"""
     hidden_states_spatial_dimensions (`tuple(tuple(int, int))`, *optional*):

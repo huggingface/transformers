@@ -43,13 +43,13 @@ if is_accelerate_available():
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Mask2Former's pixel decoder module output, practically a Multi-Scale Deformable Attention based decoder. It returns
     the mask features and the multiscale features.
     """
 )
+@dataclass
 class Mask2FormerPixelDecoderOutput(ModelOutput):
     r"""
     multi_scale_features (`tuple(torch.FloatTensor)`):
@@ -134,12 +134,12 @@ class Mask2FormerPixelLevelModuleOutput(ModelOutput):
     decoder_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`Mask2FormerModel`]. This class returns all the needed hidden states to compute the logits.
     """
 )
+@dataclass
 class Mask2FormerModelOutput(ModelOutput):
     r"""
     encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`, *optional*):

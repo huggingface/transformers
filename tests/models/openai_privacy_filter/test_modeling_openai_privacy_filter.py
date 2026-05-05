@@ -24,7 +24,7 @@ from transformers import (
 from transformers.models.openai_privacy_filter.configuration_openai_privacy_filter import (
     OPENAI_PRIVACY_FILTER_NER_LABELS,
 )
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import Expectations, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -38,7 +38,11 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
+    import torch
+
     from transformers import (
+        AutoModelForTokenClassification,
+        AutoTokenizer,
         OpenAIPrivacyFilterForTokenClassification,
         OpenAIPrivacyFilterModel,
     )
@@ -199,7 +203,29 @@ class OpenAIPrivacyFilterModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
 
 @slow
 @require_torch
-@unittest.skip(reason="Waiting for official release and ckpts for now")
 class OpenAIPrivacyFilterModelIntegrationTest(unittest.TestCase):
-    def test_inference_no_head_absolute_embedding(self):
-        pass
+    def test_inference_predicted_token_classification(self):
+        model = AutoModelForTokenClassification.from_pretrained("openai/privacy-filter").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("openai/privacy-filter")
+
+        inputs = tokenizer(
+            "My name is Harry Potter and my email is harry.potter@hogwarts.edu.", return_tensors="pt"
+        ).to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        expected_logits_shape = torch.Size((1, 19, 33))
+        self.assertEqual(outputs.logits.shape, expected_logits_shape)
+
+        expected_token_classes = Expectations(
+            {
+                ("cuda", (8, 6)): ['O', 'O', 'O', 'B-private_person', 'E-private_person', 'O', 'O', 'O', 'O', 'B-private_email', 'I-private_email', 'I-private_email', 'I-private_email', 'I-private_email', 'I-private_email', 'I-private_email', 'I-private_email', 'E-private_email', 'O'],
+            }
+        )  # fmt: skip
+        EXPECTED_TOKEN_CLASSES = expected_token_classes.get_expectation()
+
+        predicted_token_class_ids = outputs.logits.argmax(dim=-1)
+        predicted_token_classes = [model.config.id2label[token_id.item()] for token_id in predicted_token_class_ids[0]]
+
+        self.assertEqual(predicted_token_classes, EXPECTED_TOKEN_CLASSES)

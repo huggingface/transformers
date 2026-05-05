@@ -41,14 +41,13 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`A
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="text-generation",
     model="google/gemma-2b",
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 
@@ -58,14 +57,13 @@ pipeline("LLMs generate text through a process known as", max_new_tokens=50)
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
 model = AutoModelForCausalLM.from_pretrained(
     "google/gemma-2b",
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -84,14 +82,13 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to int4.
 
-```py
+```python
 #!pip install bitsandbytes
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
 
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.bfloat16,
     bnb_4bit_quant_type="nf4"
 )
 tokenizer = AutoTokenizer.from_pretrained("google/gemma-7b")
@@ -114,8 +111,9 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
 
-```py
+```python
 from transformers.utils.attention_visualizer import AttentionMaskVisualizer
+
 
 visualizer = AttentionMaskVisualizer("google/gemma-2b")
 visualizer("LLMs generate text through a process known as")
@@ -136,8 +134,7 @@ visualizer("LLMs generate text through a process known as")
    tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
    model = AutoModelForCausalLM.from_pretrained(
        "google/gemma-2b",
-       dtype=torch.bfloat16,
-       device_map="auto",
+          device_map="auto",
        attn_implementation="sdpa"
    )
    input_text = "LLMs generate text through a process known as"

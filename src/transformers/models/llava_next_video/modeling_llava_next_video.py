@@ -69,12 +69,12 @@ class LlavaNextVideoModelOutputWithPast(BaseModelOutputWithPast):
     video_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for LlavaNextVideo causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class LlavaNextVideoCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
