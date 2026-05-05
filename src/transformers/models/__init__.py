@@ -93,6 +93,7 @@ if TYPE_CHECKING:
     from .decision_transformer import *
     from .deepseek_v2 import *
     from .deepseek_v3 import *
+    from .deepseek_v4 import *
     from .deepseek_vl import *
     from .deepseek_vl_hybrid import *
     from .deformable_detr import *
@@ -134,6 +135,7 @@ if TYPE_CHECKING:
     from .esm import *
     from .evolla import *
     from .exaone4 import *
+    from .exaone4_5 import *
     from .exaone_moe import *
     from .falcon import *
     from .falcon_h1 import *
@@ -154,6 +156,7 @@ if TYPE_CHECKING:
     from .gemma3 import *
     from .gemma3n import *
     from .gemma4 import *
+    from .gemma4_assistant import *
     from .git import *
     from .glm import *
     from .glm4 import *

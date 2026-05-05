@@ -58,6 +58,8 @@ jobs:
       - uses: actions/download-artifact@v8
         env:
           ACTIONS_ARTIFACT_MAX_ARTIFACT_COUNT: 2000
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Prepare some setup values
         run: |

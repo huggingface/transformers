@@ -124,12 +124,12 @@ class Mistral3MultiModalProjector(nn.Module):
         return hidden_states
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Mistral3 causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Mistral3CausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

@@ -76,6 +76,7 @@ else:
             ("emu3", "Emu3Processor"),
             ("ernie4_5_vl_moe", "Ernie4_5_VLMoeProcessor"),
             ("evolla", "EvollaProcessor"),
+            ("exaone4_5", "Exaone4_5_Processor"),
             ("flava", "FlavaProcessor"),
             ("florence2", "Florence2Processor"),
             ("fuyu", "FuyuProcessor"),
