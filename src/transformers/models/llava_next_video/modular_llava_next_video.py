@@ -19,7 +19,16 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
-from transformers.models.llava_next.modeling_llava_next import (
+from ...cache_utils import Cache
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_outputs import BaseModelOutputWithPooling
+from ...processing_utils import Unpack
+from ...utils import auto_docstring, logging, torch_compilable_check
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ..auto import CONFIG_MAPPING, AutoConfig
+from ..llava_next.modeling_llava_next import (
     LlavaNextCausalLMOutputWithPast,
     LlavaNextForConditionalGeneration,
     LlavaNextModel,
@@ -29,15 +38,6 @@ from transformers.models.llava_next.modeling_llava_next import (
     TransformersKwargs,
     image_size_to_num_patches,
 )
-
-from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPooling
-from ...processing_utils import Unpack
-from ...utils import auto_docstring, logging, torch_compilable_check
-from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -299,18 +299,19 @@ class LlavaNextVideoModel(LlavaNextModel):
 
     @merge_with_config_defaults
     @can_return_tuple
+    @deprecate_kwarg("pixel_values", version="v5.12.0", new_name="pixel_values_videos")
     @auto_docstring(
         custom_intro="Obtains video last hidden states from the vision tower and apply multimodal projection."
     )
     def get_video_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values_videos: torch.FloatTensor,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
+        pixel_values_videos (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
             The tensors corresponding to the input video.
         vision_feature_layer (`Union[int, list[int]]`, *optional;*):
             The index of the layer to select the vision feature. If multiple indices are provided,
@@ -320,8 +321,8 @@ class LlavaNextVideoModel(LlavaNextModel):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`
         """
-        batch_size, frames, channels, height, width = pixel_values.shape
-        pixel_values = pixel_values.reshape(batch_size * frames, channels, height, width)
+        batch_size, frames, channels, height, width = pixel_values_videos.shape
+        pixel_values = pixel_values_videos.reshape(batch_size * frames, channels, height, width)
 
         kwargs["output_hidden_states"] = True  # Ignore arg on purpose
         video_outputs = self.vision_tower(
@@ -481,16 +482,17 @@ class LlavaNextVideoModel(LlavaNextModel):
 class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
     @merge_with_config_defaults
     @can_return_tuple
+    @deprecate_kwarg("pixel_values", version="v5.12.0", new_name="pixel_values_videos")
     @auto_docstring
     def get_video_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values_videos: torch.FloatTensor,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
+        pixel_values_videos (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
             The tensors corresponding to the input video.
         vision_feature_layer (`Union[int, list[int]]`, *optional;*):
             The index of the layer to select the vision feature. If multiple indices are provided,
@@ -501,7 +503,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
             Can be one of `"default"` or `"full"`
         """
         return self.model.get_video_features(
-            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
             vision_feature_layer=vision_feature_layer,
             vision_feature_select_strategy=vision_feature_select_strategy,
             **kwargs,
