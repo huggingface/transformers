@@ -1053,7 +1053,6 @@ class JanusModel(JanusPreTrainedModel):
             image_outputs = self.get_image_features(pixel_values, return_dict=True)
 
         if image_outputs is not None:
-            image_outputs.pooler_output
             image_features = image_outputs.pooler_output.reshape(-1, inputs_embeds.shape[-1])
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             image_attention_mask = self.get_placeholder_mask(

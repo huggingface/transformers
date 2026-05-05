@@ -727,8 +727,8 @@ class GlmImageModel(Glm4vModel):
             The tensors corresponding to the input images.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
-        images_per_sample (<fill_type>):
-            <fill_docstring>
+        images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            The number of image inputs per each sample in the batch.
         """
         if (
             images_per_sample is not None
@@ -939,6 +939,8 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             The tensors corresponding to the input images.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
+        images_per_sample (<fill_type>):
+            <fill_docstring>
         """
         return self.model.get_image_features(pixel_values, image_grid_thw, images_per_sample, **kwargs)
 
