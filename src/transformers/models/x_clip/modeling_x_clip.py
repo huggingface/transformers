@@ -422,7 +422,12 @@ class XCLIPPreTrainedModel(PreTrainedModel):
     config: XCLIPConfig
     base_model_prefix = "x_clip"
     input_modalities = ("image", "text")
-    _no_split_modules = ["XCLIPTextEmbeddings", "XCLIPEncoderLayer", "XCLIPVisionEmbeddings"]
+    _no_split_modules = [
+        "XCLIPTextEmbeddings",
+        "XCLIPEncoderLayer",
+        "XCLIPVisionEmbeddings",
+        "XCLIPVisionEncoderLayer",
+    ]
 
     supports_gradient_checkpointing = True
     _supports_sdpa = True

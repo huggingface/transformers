@@ -39,15 +39,14 @@ The example below demonstrates how to generate text based on an image with [`Pip
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="image-text-to-text",
     model="google/paligemma2-3b-mix-224",
     device=0,
-    dtype=torch.bfloat16
 )
 pipeline(
     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
@@ -58,15 +57,15 @@ pipeline(
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 import requests
 from PIL import Image
+
 from transformers import AutoProcessor, PaliGemmaForConditionalGeneration
+
 
 model = PaliGemmaForConditionalGeneration.from_pretrained(
     "google/paligemma2-3b-mix-224",
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -90,17 +89,17 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
 
-```py
+```python
 # pip install torchao
-import torch
 import requests
 from PIL import Image
-from transformers import TorchAoConfig, AutoProcessor, PaliGemmaForConditionalGeneration
+
+from transformers import AutoProcessor, PaliGemmaForConditionalGeneration, TorchAoConfig
+
 
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 model = PaliGemmaForConditionalGeneration.from_pretrained(
     "google/paligemma2-28b-mix-224",
-    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )
@@ -119,8 +118,9 @@ print(processor.decode(output[0], skip_special_tokens=True))
 
 Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
 
-```py
+```python
 from transformers.utils.attention_visualizer import AttentionMaskVisualizer
+
 
 visualizer = AttentionMaskVisualizer("google/paligemma2-3b-mix-224")
 visualizer("<img> What is in this image?")
@@ -138,7 +138,7 @@ visualizer("<img> What is in this image?")
     ```py
     prompt = "What is in this image?"
     answer = "a pallas cat"
-    inputs = processor(images=image, text=prompt, suffix=answer, return_tensors="pt")
+    inputs = processor(images=image, text=prompt, suffix=answer, return_tensors="pt").to(model.device)
     ```
 
 - PaliGemma can support multiple input images if it is fine-tuned to accept multiple images. For example, the [NLVR2](https://huggingface.co/google/paligemma-3b-ft-nlvr2-448) checkpoint supports multiple images. Pass the images as a list to the processor.
@@ -149,7 +149,7 @@ visualizer("<img> What is in this image?")
     from PIL import Image
     from transformers import TorchAoConfig, AutoProcessor, PaliGemmaForConditionalGeneration
 
-    model = PaliGemmaForConditionalGeneration.from_pretrained("google/paligemma-3b-ft-nlvr2-448")
+    model = PaliGemmaForConditionalGeneration.from_pretrained("google/paligemma-3b-ft-nlvr2-448", device_map="auto")
     processor = AutoProcessor.from_pretrained("google/paligemma-3b-ft-nlvr2-448")
 
     prompt = "Are these two images the same?"
@@ -162,7 +162,7 @@ visualizer("<img> What is in this image?")
         ).raw
     )
 
-    inputs = processor(images=[[cat_image, cow_image]], text=prompt, return_tensors="pt")
+    inputs = processor(images=[[cat_image, cow_image]], text=prompt, return_tensors="pt").to(model.device)
 
     output = model.generate(**inputs, max_new_tokens=20, cache_implementation="static")
     print(processor.decode(output[0], skip_special_tokens=True))

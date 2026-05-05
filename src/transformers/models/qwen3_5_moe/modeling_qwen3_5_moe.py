@@ -284,7 +284,7 @@ def torch_chunk_gated_delta_rule(
     value = attn @ v_beta
     k_cumdecay = attn @ (k_beta * g.exp().unsqueeze(-1))
     last_recurrent_state = (
-        torch.zeros(batch_size, num_heads, k_head_dim, v_head_dim).to(value)
+        torch.zeros(batch_size, num_heads, k_head_dim, v_head_dim, dtype=value.dtype, device=value.device)
         if initial_state is None
         else initial_state.to(value)
     )
@@ -328,9 +328,11 @@ def torch_recurrent_gated_delta_rule(
     scale = 1 / (query.shape[-1] ** 0.5)
     query = query * scale
 
-    core_attn_out = torch.zeros(batch_size, num_heads, sequence_length, v_head_dim).to(value)
+    core_attn_out = torch.zeros(
+        batch_size, num_heads, sequence_length, v_head_dim, dtype=value.dtype, device=value.device
+    )
     last_recurrent_state = (
-        torch.zeros(batch_size, num_heads, k_head_dim, v_head_dim).to(value)
+        torch.zeros(batch_size, num_heads, k_head_dim, v_head_dim, dtype=value.dtype, device=value.device)
         if initial_state is None
         else initial_state.to(value)
     )
@@ -431,9 +433,11 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
         # Set up dimensions for reshapes later
         batch_size, seq_len, _ = hidden_states.shape
 
-        use_precomputed_states = (
-            cache_params is not None and cache_params.has_previous_state(self.layer_idx) and seq_len == 1
-        )
+        # We have cached `conv_state` / `recurrent_state` to continue from. The two cached modes
+        # (single-token decode and chunk-tokens continuation) share the state read here; they only
+        # diverge in how the conv input is assembled and which kernel consumes the states below,
+        # which we gate locally on `seq_len`.
+        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
 
         # getting projected states from cache if it exists
         if use_precomputed_states:
@@ -449,9 +453,8 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
         b = self.in_proj_b(hidden_states)
         a = self.in_proj_a(hidden_states)
 
-        if use_precomputed_states:
-            # 2. Convolution sequence transformation
-            # NOTE: the conv state is updated in `causal_conv1d_update`
+        if use_precomputed_states and seq_len == 1:
+            # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
             mixed_qkv = self.causal_conv1d_update(
                 mixed_qkv,
                 conv_state,
@@ -460,9 +463,15 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
                 self.activation,
             )
         else:
+            # Multi-token forward (prefill, or chunked-tokens decode when the cache has prior state).
+            if use_precomputed_states:
+                # Cached chunked-tokens decode: prepend the cached conv context so the causal conv
+                # sees the correct left-context rather than zero-padding. Dropped from the output
+                # at the end of this branch.
+                mixed_qkv = torch.cat([conv_state, mixed_qkv], dim=-1)
             if cache_params is not None:
-                conv_state = F.pad(mixed_qkv, (self.conv_kernel_size - mixed_qkv.shape[-1], 0))
-                conv_state = cache_params.update_conv_state(conv_state, self.layer_idx)
+                new_conv_state = F.pad(mixed_qkv, (self.conv_kernel_size - mixed_qkv.shape[-1], 0))
+                cache_params.update_conv_state(new_conv_state, self.layer_idx)
             if self.causal_conv1d_fn is not None:
                 mixed_qkv = self.causal_conv1d_fn(
                     x=mixed_qkv,
@@ -472,7 +481,9 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
                     seq_idx=None,
                 )
             else:
-                mixed_qkv = F.silu(self.conv1d(mixed_qkv)[:, :, :seq_len])
+                mixed_qkv = F.silu(self.conv1d(mixed_qkv)[:, :, : mixed_qkv.shape[-1]])
+            if use_precomputed_states:
+                mixed_qkv = mixed_qkv[:, :, -seq_len:]
 
         mixed_qkv = mixed_qkv.transpose(1, 2)
         query, key, value = torch.split(
@@ -496,19 +507,7 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
             query = query.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
             key = key.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
 
-        if not use_precomputed_states:
-            core_attn_out, last_recurrent_state = self.chunk_gated_delta_rule(
-                query,
-                key,
-                value,
-                g=g,
-                beta=beta,
-                initial_state=None,
-                output_final_state=cache_params is not None,
-                use_qk_l2norm_in_kernel=True,
-            )
-
-        else:
+        if use_precomputed_states and seq_len == 1:
             core_attn_out, last_recurrent_state = self.recurrent_gated_delta_rule(
                 query,
                 key,
@@ -516,6 +515,18 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
                 g=g,
                 beta=beta,
                 initial_state=recurrent_state,
+                output_final_state=cache_params is not None,
+                use_qk_l2norm_in_kernel=True,
+            )
+
+        else:
+            core_attn_out, last_recurrent_state = self.chunk_gated_delta_rule(
+                query,
+                key,
+                value,
+                g=g,
+                beta=beta,
+                initial_state=recurrent_state if use_precomputed_states else None,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
             )

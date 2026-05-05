@@ -1414,6 +1414,8 @@ LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
     "full_attention": create_causal_mask,
     "sliding_attention": create_sliding_window_causal_mask,
     "chunked_attention": create_chunked_causal_mask,
+    "compressed_sparse_attention": create_sliding_window_causal_mask,
+    "heavily_compressed_attention": create_sliding_window_causal_mask,
 }
 
 

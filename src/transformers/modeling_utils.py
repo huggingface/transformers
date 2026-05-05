@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from functools import partial, wraps
 from itertools import cycle
 from threading import Thread
-from typing import Any, Optional, TypeVar, get_type_hints
+from typing import TYPE_CHECKING, Any, TypeVar, get_type_hints, overload
 from zipfile import is_zipfile
 
 import torch
@@ -121,7 +121,7 @@ from .utils import (
     is_torch_xpu_available,
     logging,
 )
-from .utils.generic import GeneralInterface, is_flash_attention_requested
+from .utils.generic import GeneralInterface, is_flash_attention_requested, split_attention_implementation
 from .utils.hub import DownloadKwargs, create_and_tag_model_card, get_checkpoint_shard_files
 from .utils.import_utils import (
     is_flash_attn_greater_or_equal,
@@ -138,6 +138,9 @@ from .utils.quantization_config import QuantizationMethod
 if is_accelerate_available():
     from accelerate.hooks import add_hook_to_module
     from accelerate.utils import extract_model_from_parallel
+
+if TYPE_CHECKING:
+    from ._typing import DeviceMeshLike
 
 
 _torch_distributed_available = torch.distributed.is_available()
@@ -178,7 +181,7 @@ class LoadStateDictConfig:
     dtype: torch.dtype | None = None
     dtype_plan: dict = field(default_factory=dict)
     hf_quantizer: HfQuantizer | None = None
-    device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None
+    device_mesh: "DeviceMeshLike | None" = None
     weights_only: bool = True
     weight_mapping: list[WeightConverter | WeightRenaming] | None = None
     disable_mmap: bool | None = None
@@ -188,12 +191,22 @@ class LoadStateDictConfig:
         return self.hf_quantizer is not None
 
 
-def is_local_dist_rank_0():
+def _is_torch_distributed_initialized() -> bool:
     return (
-        torch.distributed.is_available()
+        _torch_distributed_available
+        and hasattr(torch.distributed, "is_initialized")
         and torch.distributed.is_initialized()
-        and int(os.environ.get("LOCAL_RANK", "-1")) == 0
     )
+
+
+def _get_torch_distributed_world_size() -> int:
+    if not _is_torch_distributed_initialized() or not hasattr(torch.distributed, "get_world_size"):
+        return 1
+    return torch.distributed.get_world_size()
+
+
+def is_local_dist_rank_0():
+    return _is_torch_distributed_initialized() and int(os.environ.get("LOCAL_RANK", "-1")) == 0
 
 
 @contextmanager
@@ -330,17 +343,18 @@ def load_state_dict(
     being memory-mapped. When `disable_mmap` is None (default), it is auto-detected to True
     on hf-mount FUSE filesystems (see `_is_on_hf_mount`).
     """
+    checkpoint_path = os.fspath(checkpoint_file)
     if disable_mmap is None:
-        disable_mmap = _is_on_hf_mount(checkpoint_file)
+        disable_mmap = _is_on_hf_mount(checkpoint_path)
     # Use safetensors if possible
-    if checkpoint_file.endswith(".safetensors"):
+    if checkpoint_path.endswith(".safetensors"):
         if disable_mmap and map_location != "meta":
-            with open(checkpoint_file, "rb") as _fh:
+            with open(checkpoint_path, "rb") as _fh:
                 state_dict = _safe_load_bytes(_fh.read())
             if map_location != "cpu":
                 state_dict = {k: v.to(map_location) for k, v in state_dict.items()}
             return state_dict
-        with safe_open(checkpoint_file, framework="pt") as f:
+        with safe_open(checkpoint_path, framework="pt") as f:
             state_dict = {}
             for k in f.keys():
                 if map_location == "meta":
@@ -360,10 +374,10 @@ def load_state_dict(
         check_torch_load_is_safe()
     extra_args = {}
     # mmap can only be used with files serialized with zipfile-based format.
-    if isinstance(checkpoint_file, str) and map_location != "meta" and is_zipfile(checkpoint_file):
+    if map_location != "meta" and is_zipfile(checkpoint_path):
         extra_args = {"mmap": True}
 
-    return torch.load(checkpoint_file, map_location=map_location, weights_only=weights_only, **extra_args)
+    return torch.load(checkpoint_path, map_location=map_location, weights_only=weights_only, **extra_args)
 
 
 def _end_ptr(tensor: torch.Tensor) -> int:
@@ -414,9 +428,11 @@ def _find_disjoint(tensors: list[set[str]], state_dict: dict[str, torch.Tensor])
     return shared_tensors, disjoint_tensors
 
 
-def _find_identical(tensors: list[set[str]], state_dict: dict[str, torch.Tensor]) -> tuple[list[set[str]], set[str]]:
+def _find_identical(
+    tensors: list[set[str]], state_dict: dict[str, torch.Tensor]
+) -> tuple[list[set[str]], list[set[str]]]:
     shared_tensors = []
-    identical = []
+    identical: list[set[str]] = []
     for shared in tensors:
         if len(shared) < 2:
             continue
@@ -887,7 +903,7 @@ class ModuleUtilsMixin:
     """
 
     @property
-    def device(self) -> torch.device:
+    def device(self: "PreTrainedModel") -> torch.device:
         """
         `torch.device`: The device on which the module is (assuming that all the module parameters are on the same
         device).
@@ -895,13 +911,13 @@ class ModuleUtilsMixin:
         return next(param.device for param in self.parameters())
 
     @property
-    def dtype(self) -> torch.dtype:
+    def dtype(self: "PreTrainedModel") -> torch.dtype:
         """
         `torch.dtype`: The dtype of the module (assuming that all the module parameters have the same dtype).
         """
         return next(param.dtype for param in self.parameters() if param.is_floating_point())
 
-    def invert_attention_mask(self, encoder_attention_mask: Tensor) -> Tensor:
+    def invert_attention_mask(self: "PreTrainedModel", encoder_attention_mask: Tensor) -> Tensor:
         """
         Invert an attention mask (e.g., switches 0. and 1.).
 
@@ -946,7 +962,7 @@ class ModuleUtilsMixin:
         return extended_attention_mask
 
     def get_extended_attention_mask(
-        self,
+        self: "PreTrainedModel",
         attention_mask: Tensor,
         input_shape: tuple[int, ...],
         dtype: torch.dtype | None = None,
@@ -994,7 +1010,7 @@ class ModuleUtilsMixin:
         extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(dtype).min
         return extended_attention_mask
 
-    def num_parameters(self, only_trainable: bool = False, exclude_embeddings: bool = False) -> int:
+    def num_parameters(self: "PreTrainedModel", only_trainable: bool = False, exclude_embeddings: bool = False) -> int:
         """
         Get number of (optionally, trainable or non-embeddings) parameters in the module.
 
@@ -1063,16 +1079,17 @@ class EmbeddingAccessMixin:
         if (default_embedding := getattr(self, name, None)) is not None:
             return default_embedding
         # 2) Nested embeddings (e.g., self.embeddings.patch_embedding for vision/audio models).
-        if hasattr(self, "embeddings") and hasattr(self.embeddings, name):
-            return getattr(self.embeddings, name)
+        embeddings = getattr(self, "embeddings", None)
+        if embeddings is not None and hasattr(embeddings, name):
+            return getattr(embeddings, name)
         # 3) Encoder/decoder wrappers (e.g., `self.model.embed_tokens` or similar overrides).
-        if hasattr(self, "model") and hasattr(self.model, name):
-            return getattr(self.model, name)
+        model = getattr(self, "model", None)
+        if model is not None and hasattr(model, name):
+            return getattr(model, name)
 
-        if hasattr(self, "base_model"):
-            base_model = self.base_model
-            if base_model is not None and base_model is not self:
-                return base_model.get_input_embeddings()
+        base_model = getattr(self, "base_model", None)
+        if base_model is not None and base_model is not self and hasattr(base_model, "get_input_embeddings"):
+            return base_model.get_input_embeddings()
 
         raise NotImplementedError(
             f"`get_input_embeddings` not auto‑handled for {self.__class__.__name__}; please override in the subclass."
@@ -1095,14 +1112,18 @@ class EmbeddingAccessMixin:
         if hasattr(self, name):
             setattr(self, name, value)
         # 2) Nested embeddings (e.g., self.embeddings.patch_embedding for vision models)
-        elif hasattr(self, "embeddings") and hasattr(self.embeddings, name):
-            setattr(self.embeddings, name, value)
+        elif (embeddings := getattr(self, "embeddings", None)) is not None and hasattr(embeddings, name):
+            setattr(embeddings, name, value)
         # 3) encoder/decoder and VLMs like `Gemma3nForConditionalGeneration`
-        elif hasattr(self, "model") and hasattr(self.model, name):
-            setattr(self.model, name, value)
+        elif (model := getattr(self, "model", None)) is not None and hasattr(model, name):
+            setattr(model, name, value)
         # 4) recurse once into the registered *base* model (e.g. for encoder/decoder)
-        elif hasattr(self, "base_model") and self.base_model is not self:
-            self.base_model.set_input_embeddings(value)
+        elif (
+            (base_model := getattr(self, "base_model", None)) is not None
+            and base_model is not self
+            and hasattr(base_model, "set_input_embeddings")
+        ):
+            base_model.set_input_embeddings(value)
         else:
             raise NotImplementedError(
                 f"`set_input_embeddings` not auto‑handled for {self.__class__.__name__}; please override in the subclass."
@@ -1605,8 +1626,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         flash_attn_version: int,
         general_availability_check: Callable,
         pkg_availability_check: Callable,
-        supported_devices: tuple[tuple[Callable, str]],
-        custom_supported_devices: tuple[tuple[Callable, str]] = (),
+        supported_devices: tuple[tuple[Callable, str], ...],
+        custom_supported_devices: tuple[tuple[Callable, str], ...] = (),
         cuda_min_major_version: int | None = None,
     ):
         """
@@ -1832,11 +1853,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             `str`: The final attention implementation to use, including potential fallbacks from sdpa to eager, or from
             None to sdpa (to potentially eager).
         """
+        is_paged, base_implementation = split_attention_implementation(attn_implementation)
+
         # Auto-correct model's default flash implementation if specified
         if attn_implementation is not None:
-            is_paged = attn_implementation.startswith("paged|")
-            base_implementation = attn_implementation.removeprefix("paged|")
-
             compatible_flash_implementations = getattr(self, "_compatible_flash_implementations", None)
             if (
                 is_flash_attention_requested(requested_attention_implementation=base_implementation)
@@ -1853,18 +1873,20 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 )
                 attn_implementation = default_flash_implementation
 
+        is_paged, base_implementation = split_attention_implementation(attn_implementation)
+
         applicable_attn_implementation = attn_implementation
-        is_paged = attn_implementation is not None and attn_implementation.startswith("paged|")
 
         requested_original_flash_attn = False
-        if is_flash_attention_requested(requested_attention_implementation=attn_implementation):
+        if is_flash_attention_requested(requested_attention_implementation=base_implementation):
             # If FA not installed, do not fail but use kernels instead if possible
             for fa_version in FLASH_ATTENTION_COMPATIBILITY_MATRIX.keys():
                 # Check whether we have an original FA requested but not available in the env
-                if requested_original_flash_attn := (
-                    attn_implementation.removeprefix("paged|") == f"flash_attention_{fa_version}"
+                if (
+                    base_implementation == f"flash_attention_{fa_version}"
                     and not FLASH_ATTENTION_COMPATIBILITY_MATRIX[fa_version]["general_availability_check"]()
                 ):
+                    requested_original_flash_attn = True
                     break
 
         if (
@@ -1873,9 +1895,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             and is_kernels_available()
             and not is_torch_npu_available()
         ):
-            applicable_attn_implementation = FLASH_ATTN_KERNEL_FALLBACK[attn_implementation.removeprefix("paged|")]
+            applicable_attn_implementation = FLASH_ATTN_KERNEL_FALLBACK[base_implementation]
 
-            if is_torch_xpu_available() and attn_implementation.removeprefix("paged|") == "flash_attention_2":
+            if is_torch_xpu_available() and base_implementation == "flash_attention_2":
                 # On XPU, kernels library is the native implementation
                 # Disabling this flag to avoid giving wrong fallbacks on errors and warnings
                 requested_original_flash_attn = False
@@ -1902,7 +1924,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             except Exception as e:
                 # raise the proper exception for requested flash attention
                 if requested_original_flash_attn:
-                    fa_version = int(attn_implementation[-1])  # "flash_attention_(2|3|...)"
+                    fa_version = int(base_implementation[-1])  # "flash_attention_(2|3|...)"
                     self._flash_attn_can_dispatch(flash_attn_version=fa_version, is_init_check=is_init_check)
 
                 # error properly out if a kernel was specifically requested
@@ -2349,7 +2371,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)):
             if getattr(module, "weight", None) is not None:
-                init.normal_(module.weight, mean=0.0, std=std)
+                init.normal_(module.weight.float(), mean=0.0, std=std)
             if module.bias is not None:
                 init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
@@ -2426,20 +2448,22 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if not hasattr(torch.nn.Module, "smart_apply"):
             # This function is equivalent to `torch.nn.Module.apply`, except that it dynamically adjust the function
             # to apply as we go down the graph
-            def smart_apply(self, fn, is_remote_code):
-                for module in self.children():
+            def smart_apply(module: nn.Module, fn: Callable[[nn.Module, bool], None], is_remote_code: bool):
+                for child in module.children():
                     # We found a sub-model: recursively dispatch its own init function now!
-                    if isinstance(module, PreTrainedModel):
-                        module.smart_apply(module._initialize_weights, is_remote_code)
+                    if isinstance(child, PreTrainedModel):
+                        smart_apply(child, child._initialize_weights, is_remote_code)
                     else:
-                        module.smart_apply(fn, is_remote_code)
-                fn(self, is_remote_code)
-                return self
+                        smart_apply(child, fn, is_remote_code)
+                fn(module, is_remote_code)
+                return module
 
-            torch.nn.Module.smart_apply = smart_apply
+            setattr(torch.nn.Module, "smart_apply", smart_apply)
 
         # Let the magic happen with this simple call
-        self.smart_apply(self._initialize_weights, self.is_remote_code())
+        smart_apply_fn = getattr(self, "smart_apply")
+        # `getattr(self, ...)` returns a bound method, so `self` is already provided as the receiver.
+        smart_apply_fn(self._initialize_weights, self.is_remote_code())
 
     def get_expanded_tied_weights_keys(self, all_submodels: bool = False) -> dict:
         r"""
@@ -3035,7 +3059,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 new_lm_head, old_lm_head, num_tokens_to_copy, transposed, has_new_lm_head_bias
             )
 
-        new_lm_head._is_hf_initialized = True
+        setattr(new_lm_head, "_is_hf_initialized", True)
         return new_lm_head
 
     def _init_added_embeddings_weights_with_mean(
@@ -3181,8 +3205,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         for module in self.modules():
             if hasattr(module, "gradient_checkpointing"):
-                module._gradient_checkpointing_func = gradient_checkpointing_func
-                module.gradient_checkpointing = enable
+                setattr(module, "_gradient_checkpointing_func", gradient_checkpointing_func)
+                setattr(module, "gradient_checkpointing", enable)
                 is_gradient_checkpointing_set = True
 
         if not is_gradient_checkpointing_set:
@@ -3304,10 +3328,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return
 
         os.makedirs(save_directory, exist_ok=True)
+        save_directory_path = os.fspath(save_directory)
 
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
-            repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
+            repo_id = kwargs.pop("repo_id", save_directory_path.split(os.path.sep)[-1])
             create_pr = kwargs.pop("create_pr", False)
             repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
@@ -4070,7 +4095,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Load config if we don't provide a configuration
         if not isinstance(config, PreTrainedConfig):
             config_path = config if config is not None else pretrained_model_name_or_path
-            config, model_kwargs = cls.config_class.from_pretrained(
+            config_class = cls.config_class
+            if config_class is None:
+                raise ValueError(
+                    f"{cls.__name__} does not define `config_class`; pass an explicit config to `from_pretrained`."
+                )
+            config, model_kwargs = config_class.from_pretrained(
                 config_path,
                 return_unused_kwargs=True,
                 gguf_file=gguf_file,
@@ -4263,8 +4293,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         expected_keys: list[str] | None = None,
     ) -> tuple[LoadStateDictInfo, dict]:
         """Perform the actual loading of some checkpoints into a `model`, by reading them from disk and dispatching them accordingly."""
+        hf_quantizer = load_config.hf_quantizer
         is_quantized = load_config.is_quantized
-        is_hqq_or_quark = is_quantized and load_config.hf_quantizer.quantization_config.quant_method in {
+        is_hqq_or_quark = hf_quantizer is not None and hf_quantizer.quantization_config.quant_method in {
             QuantizationMethod.HQQ,
             QuantizationMethod.QUARK,
         }
@@ -4604,7 +4635,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self,
         missing_keys: list[str],
         device_map: dict | None,
-        device_mesh: "torch.distributed.device_mesh.DeviceMesh | None",
+        device_mesh: "DeviceMeshLike | None",
         hf_quantizer: HfQuantizer | None,
     ) -> None:
         """Move the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts)
@@ -4726,7 +4757,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         running inits on them is very costly."""
         for tied_param in getattr(self, "all_tied_weights_keys", {}).keys():
             param = self.get_parameter(tied_param)
-            param._is_hf_initialized = True
+            setattr(param, "_is_hf_initialized", True)
 
         # Some remote code models define module tying (not parameter tying) in their __init__. When modules themselves are shared,
         # weights inside both modules appear in the `state_dict` but only one will appear in the safetensors checkpoints
@@ -4805,6 +4836,14 @@ if PreTrainedModel.push_to_hub.__doc__ is not None:
     )
 
 
+@overload
+def unwrap_model(model: PreTrainedModel, recursive: bool = False) -> PreTrainedModel: ...
+
+
+@overload
+def unwrap_model(model: nn.Module, recursive: bool = False) -> nn.Module: ...
+
+
 def unwrap_model(model: nn.Module, recursive: bool = False) -> nn.Module:
     """
     Recursively unwraps a model from potential containers (as used in distributed training).
@@ -4850,7 +4889,7 @@ def get_total_byte_count(
 
     total_byte_count = defaultdict(lambda: 0)
     tied_param_names = model.all_tied_weights_keys.keys()
-    tp_plan = model._tp_plan if torch.distributed.is_available() and torch.distributed.is_initialized() else []
+    tp_plan = model._tp_plan if _is_torch_distributed_initialized() else []
 
     for param_name, device in accelerator_device_map.items():
         # Skip if the parameter has already been accounted for (tied weights)
@@ -4868,7 +4907,7 @@ def get_total_byte_count(
 
         if len(tp_plan) > 0:
             is_part_of_plan = _get_parameter_tp_plan(param_name, tp_plan, is_weight=True) is not None
-            param_byte_count //= torch.distributed.get_world_size() if is_part_of_plan else 1
+            param_byte_count //= _get_torch_distributed_world_size() if is_part_of_plan else 1
 
         total_byte_count[device] += param_byte_count
     return total_byte_count
