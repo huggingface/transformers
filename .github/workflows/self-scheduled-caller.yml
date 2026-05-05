@@ -9,6 +9,22 @@ jobs:
   download:
     runs-on: ubuntu-latest
     steps:
+      - name: Download specific artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: ci_results_run_models_gpu
+          path: ./downloaded2
+          repository: huggingface/transformers
+          run-id: 25356138915
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: List downloaded files
+        run: |
+          echo "=== Downloaded files ==="
+          find ./downloaded2 -type f | sort || echo "No files found"
+          echo "=== Total count ==="
+          find ./downloaded2 -type f | wc -l
+
       - name: Download artifacts
         uses: actions/download-artifact@v8
         env:
