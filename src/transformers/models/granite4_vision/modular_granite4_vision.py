@@ -49,24 +49,22 @@ from ..llava_next.processing_llava_next import LlavaNextProcessor
 
 
 class Granite4VisionModelOutputWithPast(LlavaNextModelOutputWithPast):
-    """
-    Args:
-        deepstack_features (`list[tuple[int, list[torch.Tensor]]]`, *optional*):
-            List of `(llm_layer_idx, packed_features)` pairs produced by the deepstack
-            and spatial projectors. Each entry targets one LLM decoder layer; `packed_features`
-            is a per-image list of tensors of shape `(num_image_tokens, hidden_size)`.
+    r"""
+    deepstack_features (`list[tuple[int, list[torch.Tensor]]]`, *optional*):
+        List of `(llm_layer_idx, packed_features)` pairs produced by the deepstack
+        and spatial projectors. Each entry targets one LLM decoder layer; `packed_features`
+        is a per-image list of tensors of shape `(num_image_tokens, hidden_size)`.
     """
 
     deepstack_features: list | None = None
 
 
 class Granite4VisionCausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
-    """
-    Args:
-        deepstack_features (`list[tuple[int, list[torch.Tensor]]]`, *optional*):
-            List of `(llm_layer_idx, packed_features)` pairs produced by the deepstack
-            and spatial projectors. Each entry targets one LLM decoder layer; `packed_features`
-            is a per-image list of tensors of shape `(num_image_tokens, hidden_size)`.
+    r"""
+    deepstack_features (`list[tuple[int, list[torch.Tensor]]]`, *optional*):
+        List of `(llm_layer_idx, packed_features)` pairs produced by the deepstack
+        and spatial projectors. Each entry targets one LLM decoder layer; `packed_features`
+        is a per-image list of tensors of shape `(num_image_tokens, hidden_size)`.
     """
 
     deepstack_features: list | None = None
@@ -79,14 +77,11 @@ class Granite4VisionCausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
 )
 @dataclass
 class Granite4VisionImageFeaturesOutput(BaseModelOutputWithPooling):
-    """
-    Output of `Granite4VisionModel.get_image_features`.
-
-    Args:
-        deepstack_features (`list[tuple[int, list[torch.Tensor]]]`, *optional*):
-            List of `(llm_layer_idx, packed_features)` pairs produced by the deepstack
-            and spatial projectors. Each entry targets one LLM decoder layer; `packed_features`
-            is a per-image list of tensors of shape `(num_image_tokens, hidden_size)`.
+    r"""
+    deepstack_features (`list[tuple[int, list[torch.Tensor]]]`, *optional*):
+        List of `(llm_layer_idx, packed_features)` pairs produced by the deepstack
+        and spatial projectors. Each entry targets one LLM decoder layer; `packed_features`
+        is a per-image list of tensors of shape `(num_image_tokens, hidden_size)`.
     """
 
     deepstack_features: list | None = None
@@ -102,6 +97,9 @@ class Granite4VisionTextConfig(GraniteConfig):
 
 class Granite4VisionConfig(LlavaNextConfig):
     r"""
+    image_grid_pinpoints (`list`, *optional*):
+        A list of possible resolutions to use for processing high resolution images. Each item in the list should be a
+        tuple or list of the form `(height, width)`.
     downsample_rate (`str`, *optional*):
         Fractional downsample rate for the Window Q-Former projector, e.g. `"1/4"` or `"3/8"`.
         The numerator is the query window side, the denominator is the key window side.
@@ -117,9 +115,6 @@ class Granite4VisionConfig(LlavaNextConfig):
     qformer_config (`dict` or `Blip2QFormerConfig`, *optional*):
         Configuration for the Window Q-Former projector. If `None`, defaults are derived from
         `vision_config.hidden_size`.
-    image_grid_pinpoints (`list`, *optional*):
-        A list of possible resolutions to use for processing high resolution images. Each item in the list should be a
-        tuple or list of the form `(height, width)`.
     """
 
     model_type = "granite4_vision"
@@ -369,6 +364,7 @@ class Granite4VisionPreTrainedModel(LlavaNextPreTrainedModel):
             embed_std = 1 / math.sqrt(module.query.shape[-1])
             init.normal_(module.query, mean=0.0, std=embed_std)
             init.normal_(module.image_positions, mean=0.0, std=embed_std)
+
 
 class Granite4VisionTextModel(Granite4VisionPreTrainedModel, GraniteModel):
     """Granite LLM backbone with deepstack feature injection support."""

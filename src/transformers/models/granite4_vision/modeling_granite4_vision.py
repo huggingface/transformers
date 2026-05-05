@@ -54,12 +54,11 @@ from .configuration_granite4_vision import Granite4VisionConfig, Granite4VisionT
 )
 @dataclass
 class Granite4VisionModelOutputWithPast(BaseModelOutputWithPast):
-    """
-    Args:
-        deepstack_features (`list[tuple[int, list[torch.Tensor]]]`, *optional*):
-            List of `(llm_layer_idx, packed_features)` pairs produced by the deepstack
-            and spatial projectors. Each entry targets one LLM decoder layer; `packed_features`
-            is a per-image list of tensors of shape `(num_image_tokens, hidden_size)`.
+    r"""
+    deepstack_features (`list[tuple[int, list[torch.Tensor]]]`, *optional*):
+        List of `(llm_layer_idx, packed_features)` pairs produced by the deepstack
+        and spatial projectors. Each entry targets one LLM decoder layer; `packed_features`
+        is a per-image list of tensors of shape `(num_image_tokens, hidden_size)`.
     """
 
     image_hidden_states: torch.FloatTensor | None = None
@@ -74,12 +73,15 @@ class Granite4VisionModelOutputWithPast(BaseModelOutputWithPast):
 )
 @dataclass
 class Granite4VisionCausalLMOutputWithPast(ModelOutput):
-    """
-    Args:
-        deepstack_features (`list[tuple[int, list[torch.Tensor]]]`, *optional*):
-            List of `(llm_layer_idx, packed_features)` pairs produced by the deepstack
-            and spatial projectors. Each entry targets one LLM decoder layer; `packed_features`
-            is a per-image list of tensors of shape `(num_image_tokens, hidden_size)`.
+    r"""
+    loss (<fill_type>):
+        <fill_docstring>
+    logits (<fill_type>):
+        <fill_docstring>
+    deepstack_features (`list[tuple[int, list[torch.Tensor]]]`, *optional*):
+        List of `(llm_layer_idx, packed_features)` pairs produced by the deepstack
+        and spatial projectors. Each entry targets one LLM decoder layer; `packed_features`
+        is a per-image list of tensors of shape `(num_image_tokens, hidden_size)`.
     """
 
     loss: torch.FloatTensor | None = None
@@ -99,14 +101,11 @@ class Granite4VisionCausalLMOutputWithPast(ModelOutput):
 )
 @dataclass
 class Granite4VisionImageFeaturesOutput(BaseModelOutputWithPooling):
-    """
-    Output of `Granite4VisionModel.get_image_features`.
-
-    Args:
-        deepstack_features (`list[tuple[int, list[torch.Tensor]]]`, *optional*):
-            List of `(llm_layer_idx, packed_features)` pairs produced by the deepstack
-            and spatial projectors. Each entry targets one LLM decoder layer; `packed_features`
-            is a per-image list of tensors of shape `(num_image_tokens, hidden_size)`.
+    r"""
+    deepstack_features (`list[tuple[int, list[torch.Tensor]]]`, *optional*):
+        List of `(llm_layer_idx, packed_features)` pairs produced by the deepstack
+        and spatial projectors. Each entry targets one LLM decoder layer; `packed_features`
+        is a per-image list of tensors of shape `(num_image_tokens, hidden_size)`.
     """
 
     deepstack_features: list | None = None
@@ -877,16 +876,6 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         output_hidden_states: bool | None = None,
         **kwargs,
     ) -> Granite4VisionImageFeaturesOutput:
-        """
-        Extract image features via deepstack (multi-layer) and spatial sampling projections.
-
-        Runs the vision tower once, then:
-        1. Deepstack: for each (vision_layer, llm_layer) in deepstack_layer_map,
-           extracts features from that vision layer, downsamples via interpolation + QFormer,
-           and pairs them with the target LLM layer.
-        2. Spatial: if enabled, extracts the spatial_vision_layer and creates 4 spatial
-           offset groups (TL, TR, BL, BR), each targeting a different LLM layer.
-        """
 
         image_num_patches = [
             image_size_to_num_patches(

@@ -100,6 +100,9 @@ class Granite4VisionTextConfig(PreTrainedConfig):
 @strict
 class Granite4VisionConfig(PreTrainedConfig):
     r"""
+    image_grid_pinpoints (`list`, *optional*):
+        A list of possible resolutions to use for processing high resolution images. Each item in the list should be a
+        tuple or list of the form `(height, width)`.
     downsample_rate (`str`, *optional*):
         Fractional downsample rate for the Window Q-Former projector, e.g. `"1/4"` or `"3/8"`.
         The numerator is the query window side, the denominator is the key window side.
@@ -115,9 +118,6 @@ class Granite4VisionConfig(PreTrainedConfig):
     qformer_config (`dict` or `Blip2QFormerConfig`, *optional*):
         Configuration for the Window Q-Former projector. If `None`, defaults are derived from
         `vision_config.hidden_size`.
-    image_grid_pinpoints (`list`, *optional*):
-        A list of possible resolutions to use for processing high resolution images. Each item in the list should be a
-        tuple or list of the form `(height, width)`.
     """
 
     model_type = "granite4_vision"
