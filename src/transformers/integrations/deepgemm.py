@@ -162,19 +162,20 @@ def _coerce_sf_for_kernel(sf: torch.Tensor) -> torch.Tensor:
     The kernel's `check_sf_layout` requires `sf.stride(-2) == 1` (MN-major).
     Default contiguous PyTorch tensors are K-major; flip when needed.
 
-    Two SF flavors are handled:
-      - `float32` (DeepSeek V3-style): only flip layout if it's K-major.
-      - `torch.float8_e8m0fnu` (DeepSeek V4-style, 1 byte per scale): pack
-        4 contiguous K-bytes into one `int32` (last dim shrinks 4×) and
-        ensure MN-major layout. Mirrors what
+    Three SF flavors arrive at this boundary:
+      - `float32` (DeepSeek V3-style): flip layout only.
+      - `int32` (already-packed UE8M0 from `per_token_cast_to_fp8(
+        use_packed_ue8m0=True)` or saved checkpoints): flip layout only.
+      - `float8_e8m0fnu` (raw UE8M0 bytes, 1 byte per scale; e.g. on-disk
+        weights): pack 4 contiguous K-bytes into `int32` (last dim shrinks
+        4×) AND flip layout. Mirrors what
         `get_mn_major_tma_aligned_packed_ue8m0_tensor` produces from a
-        float32 SF, just starting from already-packed bytes.
+        float32 SF, just starting from already-quantized bytes.
     """
     if sf.dtype == torch.float8_e8m0fnu:
-        # `view(int32)` requires the source to be contiguous (4 K-bytes adjacent).
+        # `view(int32)` requires the source contiguous (4 K-bytes adjacent).
         # Pack first while still K-major, then flip to MN-major.
-        packed = sf.contiguous().view(torch.int32)
-        return packed.transpose(-1, -2).contiguous().transpose(-1, -2)
+        sf = sf.contiguous().view(torch.int32)
     if sf.stride(-2) != 1:
         sf = sf.transpose(-1, -2).contiguous().transpose(-1, -2)
     return sf
@@ -458,7 +459,7 @@ def deepgemm_fp8_fp4_experts_forward(
     act_scales = _pad_for_deepgemm(act_scales, sorted_to_padded, total_padded_rows)
     proj_out = torch.empty(total_padded_rows, w_up.shape[1], device=device, dtype=torch.bfloat16)
     deepgemm.grouped_fp8_fp4_matmul(
-        (act_fp8, act_scales),
+        (act_fp8, _coerce_sf_for_kernel(act_scales)),
         (w_up, _coerce_sf_for_kernel(ws_up)),
         proj_out,
         grouped_layout,
@@ -475,7 +476,7 @@ def deepgemm_fp8_fp4_experts_forward(
     proj_fp8, proj_scales = deepgemm.per_token_cast_to_fp8(proj_out, **cast_kwargs)
     proj_out = torch.empty(total_padded_rows, hidden_dim, device=device, dtype=torch.bfloat16)
     deepgemm.grouped_fp8_fp4_matmul(
-        (proj_fp8, proj_scales),
+        (proj_fp8, _coerce_sf_for_kernel(proj_scales)),
         (self.down_proj, _coerce_sf_for_kernel(self.down_proj_scale_inv)),
         proj_out,
         grouped_layout,
