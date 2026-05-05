@@ -778,9 +778,6 @@ class WeightTransform:
     def transform_model(self, model: PreTrainedModel, layer_name: str) -> None:
         """
         Analogous to `convert` but restructures `model`'s module graph rather than operating on tensor data.
-
-        Called once per target parameter group (identified by `layer_name`) while the model is on the meta device.
-        Access the associated source parameter names via `self.layer_targets[layer_name]`.
         """
         ...
 
@@ -842,10 +839,10 @@ class WeightRenaming(WeightTransform):
 
         if source_attr in source_mod._parameters:
             obj = source_mod._parameters.pop(source_attr)
-            model.get_submodule(target_mod_path).register_parameter(target_attr, obj)
+            _get_submodule_or_create(model, target_mod_path).register_parameter(target_attr, obj)
         elif source_attr in source_mod._buffers:
             obj = source_mod._buffers.pop(source_attr)
-            model.get_submodule(target_mod_path).register_buffer(target_attr, obj)
+            _get_submodule_or_create(model, target_mod_path).register_buffer(target_attr, obj)
 
 
 class PrefixChange(WeightRenaming):
@@ -978,7 +975,91 @@ class WeightConverter(WeightTransform):
         return collected_tensors
 
     def transform_model(self, model: PreTrainedModel, layer_name: str) -> None:
-        pass
+        source_names = list(self.layer_targets.get(layer_name, []))
+        if not source_names:
+            return
+
+        collected_tensors = self.materialize_tensors()
+
+        result: dict[str, Any] = dict(collected_tensors)
+        for op in self.operations:
+            result = op.convert(result, source_patterns=self.source_patterns, target_patterns=self.target_patterns)
+
+        # Expand target pattern keys to full parameter names (same logic as convert)
+        full_name = layer_name.replace(".*.", ".0.") if ".*." in layer_name else layer_name
+        try:
+            prefix, _, suffix = next(full_name.partition(k) for k in result if k in full_name)
+            result = {prefix + k + suffix: v for k, v in result.items()}
+        except StopIteration:
+            pass
+
+        # Retrieve one of the source modules to use as original module when creating missing target modules
+        original_mod: type[torch.nn.Module] | None = None
+        for sname in source_names:
+            smod_path = sname.rpartition(".")[0]
+            try:
+                original_mod = model.get_submodule(smod_path) if smod_path else model
+                break
+            except AttributeError:
+                pass
+
+        # Remove source parameters/buffers
+        for source_name in source_names:
+            mod_path, _, attr = source_name.rpartition(".")
+            try:
+                source_mod = model.get_submodule(mod_path) if mod_path else model
+            except AttributeError:
+                continue
+            source_mod._parameters.pop(attr, None)
+
+        # Register the target parameters, creating any missing module at the leaf path.
+        for target_name, meta_val in result.items():
+            meta_tensor = meta_val[0] if isinstance(meta_val, list) else meta_val
+            t_mod_path, _, t_attr = target_name.rpartition(".")
+            target_mod = _get_submodule_or_create(
+                model, t_mod_path, original_module=original_mod, future_weight=meta_tensor
+            )
+            if not isinstance(meta_tensor, torch.nn.Parameter):
+                meta_tensor = torch.nn.Parameter(meta_tensor, requires_grad=meta_tensor.is_floating_point())
+            target_mod.register_parameter(t_attr, meta_tensor)
+
+
+def _get_submodule_or_create(
+    model: torch.nn.Module,
+    module_path: str,
+    original_module: torch.nn.Module | None = None,
+    future_weight: torch.Tensor | None = None,
+) -> torch.nn.Module:
+    if not module_path:
+        return model
+
+    if original_module is not None and future_weight is None:
+        raise ValueError("original_module cannot be provided without future_weight to infer the module class")
+    parent, _, mod_name = module_path.rpartition(".")
+    parent_mod = model.get_submodule(parent) if parent else model
+    if mod_name not in parent_mod._modules:
+        cls_ = original_module.__class__ if original_module is not None else torch.nn.Module
+        if cls_ is torch.nn.Linear:
+            out_features, in_features = future_weight.shape
+            mod = cls_(in_features=in_features, out_features=out_features, bias=original_module.bias is not None)
+        elif cls_ is torch.nn.Embedding:
+            num_embeddings, embedding_dim = future_weight.shape
+            mod = cls_(
+                num_embeddings=num_embeddings,
+                embedding_dim=embedding_dim,
+                padding_idx=original_module.padding_idx,
+                max_norm=original_module.max_norm,
+                norm_type=original_module.norm_type,
+                scale_grad_by_freq=original_module.scale_grad_by_freq,
+                sparse=original_module.sparse,
+            )
+        else:
+            mod = cls_()
+        parent_mod.add_module(mod_name, mod)
+    else:
+        mod = parent_mod._modules[mod_name]
+
+    return mod
 
 
 def apply_transforms_to_meta_model(
@@ -1005,7 +1086,8 @@ def apply_transforms_to_meta_model(
         else:
             transform = param_name_to_transform.setdefault(renamed_key, WeightRenaming(param_name, renamed_key))
             source_pattern = param_name
-        transform.layer_targets[renamed_key].add(param_name)
+
+        transform.add_tensor(renamed_key, param_name, source_pattern, meta_state_dict[param_name])
 
     for layer_name, transform in param_name_to_transform.items():
         transform.transform_model(model, layer_name)
