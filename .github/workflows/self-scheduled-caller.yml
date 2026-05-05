@@ -21,7 +21,6 @@ jobs:
           path: ./downloaded2
           repository: huggingface/transformers
           run-id: 25356138915
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: List downloaded files
         run: |
@@ -40,7 +39,6 @@ jobs:
           merge-multiple: true
           repository: huggingface/transformers
           run-id: 25356138915
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: List downloaded files
         run: |
