@@ -63,6 +63,8 @@ ALLOWED_LAYER_TYPES = (
     "full_attention",
     "sliding_attention",
     "chunked_attention",
+    "compressed_sparse_attention",  # CSA, used in deepseek_v4
+    "heavily_compressed_attention",  # HCA, used in deepseek_v4
     "linear_attention",  # used in minimax
     "conv",  # used in LFMv2
     "mamba",

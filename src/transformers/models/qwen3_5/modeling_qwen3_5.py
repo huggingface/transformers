@@ -1193,12 +1193,12 @@ class Qwen3_5VisionModel(Qwen3_5PreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Llava outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class Qwen3_5ModelOutputWithPast(ModelOutput):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -1782,12 +1782,12 @@ class Qwen3_5ForSequenceClassification(GenericForSequenceClassification, Qwen3_5
     config: Qwen3_5TextConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Qwen3_5 causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Qwen3_5CausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
