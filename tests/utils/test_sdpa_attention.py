@@ -51,16 +51,17 @@ class UseGqaInSdpaLogicTest(unittest.TestCase):
         with patch.object(self.mod, "_is_torch_greater_or_equal_than_2_5", False):
             self.assertFalse(self._call_cuda())
 
-    def test_cpu_inputs_reject_without_probing(self):
-        # FA is CUDA-only; on CPU we must fall back to repeat_kv without
-        # touching `torch.backends.cuda.*`.
+    def test_cpu_inputs_keep_bc_without_probing(self):
+        # CPU SDPA honors `enable_gqa=True` natively. Preserve pre-PR behavior
+        # for non-CUDA / non-XPU devices: return True without touching the
+        # CUDA-only `torch.backends.cuda.*` probe surface.
         with (
             patch.object(self.mod, "_is_torch_greater_or_equal_than_2_5", True),
             patch.object(self.mod, "_is_torch_xpu_available", False),
             patch.object(self.torch.backends.cuda, "flash_sdp_enabled") as fse,
             patch.object(self.torch.backends.cuda, "can_use_flash_attention") as cufa,
         ):
-            self.assertFalse(self._call_cpu())
+            self.assertTrue(self._call_cpu())
             fse.assert_not_called()
             cufa.assert_not_called()
 

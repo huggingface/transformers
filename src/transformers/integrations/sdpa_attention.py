@@ -33,27 +33,24 @@ def use_gqa_in_sdpa(
     is_causal: bool,
     dropout: float = 0.0,
 ) -> bool:
-    # `enable_gqa=True` is only honored by torch's flash-attention backend. If the
-    # active SDPA backend (chosen by `sdpa_kernel(...)` context, global toggles, or
-    # shape constraints like head_dim>256 / fp32) is anything else, the dispatcher
-    # silently falls through and may run the wrong kernel or error. Probe the
-    # canonical FA-eligibility predicate on the actual inputs so we agree with
-    # whatever pytorch will actually do.
-    #
+    # GQA can only be used under the following conditions
     # 1. xpu
     #   - torch version >= 2.8
-    # 2. cuda or Ascend NPU
+    # 2. cuda
     #   - torch version >= 2.5
     #   - attention_mask is None (otherwise dispatch falls back to the math kernel)
-    #   - flash backend is enabled and applicable for these inputs
+    #   - the active backend is FA *and* FA can actually run these inputs (the
+    #     `enable_gqa=True` shortcut is FA-only, so EFFICIENT/CUDNN/MATH would
+    #     silently misroute or error)
+    # 3. cpu / other accelerators
+    #   - torch version >= 2.5 + no mask (existing BC behavior — CPU SDPA
+    #     honors `enable_gqa=True` natively)
     if _is_torch_xpu_available:
         return _is_torch_greater_or_equal_than_2_8
     if not (_is_torch_greater_or_equal_than_2_5 and attention_mask is None):
         return False
-    # FA is a CUDA-only kernel; the probe below only makes sense on CUDA tensors.
-    # On CPU (and other accelerators without FA), fall back to repeat_kv.
     if query.device.type != "cuda":
-        return False
+        return True
     if not torch.backends.cuda.flash_sdp_enabled():
         return False
     try:
@@ -79,7 +76,7 @@ def sdpa_attention_forward(
             "`sdpa` attention does not support `output_attentions=True`."
             " Please set your attention to `eager` if you want any of these features."
         )
-    # Resolve `is_causal` first so we can hand the resolved value to the GQA probe.
+    # Instead of relying on the value set in the module directly, we use the is_causal passed in kwargs if it is presented
     is_causal = is_causal if is_causal is not None else getattr(module, "is_causal", True)
 
     sdpa_kwargs = {}
