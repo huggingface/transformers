@@ -137,6 +137,6 @@ jobs:
       commit_sha: ${{ needs.prepare.outputs.commit_sha }}
       pr_number: ${{ needs.prepare.outputs.pr_number }}
       max_num_runners: ${{ needs.prepare.outputs.max_num_runners }}
-      source_workflow_run_id: ${{ needs.prepare.outputs.source_workflow_run_id }}
+      source_workflow_run_id: ${{ fromJSON(needs.prepare.outputs.source_workflow_run_id) }}
       only_process_job: ${{ fromJSON(needs.prepare.outputs.only_process_job) }}
     secrets: inherit
