@@ -1023,6 +1023,23 @@ class WeightConverter(WeightTransform):
                 meta_tensor = torch.nn.Parameter(meta_tensor, requires_grad=meta_tensor.is_floating_point())
             target_mod.register_parameter(t_attr, meta_tensor)
 
+        # Remove source modules if they are empty after the transform.
+        for source_name in source_names:
+            mod_path, _, attr = source_name.rpartition(".")
+            try:
+                source_mod = model.get_submodule(mod_path) if mod_path else model
+            except AttributeError:
+                continue
+            if (
+                all(p is None for p in source_mod._parameters.values())
+                and all(b is None for b in source_mod._buffers.values())
+                and (m is None for m in source_mod._modules.values())
+            ):
+                # If the module is now empty, we can remove it from its parent to avoid keeping empty modules after conversion
+                parent_path, _, mod_name = mod_path.rpartition(".")
+                parent_mod = model.get_submodule(parent_path) if parent_path else model
+                parent_mod._modules.pop(mod_name, None)
+
 
 def _get_submodule_or_create(
     model: torch.nn.Module,
