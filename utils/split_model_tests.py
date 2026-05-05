@@ -73,6 +73,8 @@ if __name__ == "__main__":
                 d.append(f"models/{x}")
         d = sorted(d)
 
+    d = d[:251]
+
     num_jobs = len(d)
     num_jobs_per_splits = num_jobs // args.num_splits
 
@@ -85,5 +87,5 @@ if __name__ == "__main__":
         if len(d[start:end]) > 0:
             model_splits.append(d[start:end])
 
-    model_splits = [["models/vit"], ["models/clip"]]
+    # model_splits = [["models/vit"], ["models/clip"]]
     print(model_splits)
