@@ -241,19 +241,48 @@ def id_tensor_storage(tensor: torch.Tensor) -> tuple[torch.device, int, int]:
 @wraps(lru_cache)
 def compile_compatible_method_lru_cache(*lru_args, **lru_kwargs):
     """
-    LRU cache decorator from standard functools library, but with a workaround to disable
-    caching when torchdynamo is compiling. Expected to work with class methods.
+    LRU cache decorator that disables caching when torchdynamo is compiling.
+
+    When used on a method, the cache is stored per-instance so that deleting the instance
+    also frees the cache (avoiding the memory leak from class-level lru_cache holding a
+    strong reference to `self` as a cache key -- see gh-45412).
+
+    When used on a standalone function, falls back to a single shared lru_cache.
     """
 
     def decorator(func):
-        func_with_cache = lru_cache(*lru_args, **lru_kwargs)(func)
+        # Detect if this decorates a method (first param is 'self' or 'cls')
+        params = list(inspect.signature(func).parameters.keys())
+        is_method = len(params) > 0 and params[0] in ("self", "cls")
+
+        if not is_method:
+            # Standalone function: use a single shared cache (no leak risk)
+            func_with_cache = lru_cache(*lru_args, **lru_kwargs)(func)
+
+            @wraps(func)
+            def wrapper(*args, **kwargs):
+                if is_torchdynamo_compiling():
+                    return func(*args, **kwargs)
+                return func_with_cache(*args, **kwargs)
+
+            return wrapper
+
+        # Method: store a per-instance cache to avoid preventing garbage collection
+        cache_attr = f"_cache_{func.__name__}"
 
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(self, *args, **kwargs):
             if is_torchdynamo_compiling():
-                return func(*args, **kwargs)
-            else:
-                return func_with_cache(*args, **kwargs)
+                return func(self, *args, **kwargs)
+            cached_fn = getattr(self, cache_attr, None)
+            if cached_fn is None:
+
+                @lru_cache(*lru_args, **lru_kwargs)
+                def cached_fn(*a, **kw):
+                    return func(self, *a, **kw)
+
+                object.__setattr__(self, cache_attr, cached_fn)
+            return cached_fn(*args, **kwargs)
 
         return wrapper
 
