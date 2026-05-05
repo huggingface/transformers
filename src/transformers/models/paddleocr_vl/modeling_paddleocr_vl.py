@@ -590,6 +590,7 @@ class PaddleOCRVisionEmbeddings(nn.Module):
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return patch_pos_embed
 
+    @deprecate_kwarg("image_grid_thw", new_name="grid_thw", version="5.11.0")
     def forward(
         self,
         pixel_values: torch.FloatTensor,
