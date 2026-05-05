@@ -1,0 +1,131 @@
+name: Post-trigger check new failing tests
+
+on:
+  push:
+    branches:
+      - post_trigger_check_new_failing_tests
+  workflow_dispatch:
+    inputs:
+      source_workflow_run_id:
+        description: 'Workflow run ID to re-analyze (where check_new_failures failed/was skipped)'
+        required: true
+        type: string
+      job_name:
+        description: 'CI suite name as shown in GitHub UI, e.g. "Quantization CI", "Model CI"'
+        required: true
+        type: string
+      only_process_job:
+        description: 'Skip "Find commits" jobs and only re-run the process job (use when find-commits already ran successfully but the process step failed)'
+        required: false
+        type: boolean
+        default: false
+
+
+# For `push` runs: set these values directly to test without workflow_dispatch
+env:
+  source_workflow_run_id: "25356138915"
+  job_name: "Model CI"
+  only_process_job: "true"
+
+
+jobs:
+  prepare:
+    name: Fetch inputs from source run
+    runs-on: ubuntu-22.04
+    outputs:
+      docker: ${{ steps.fetch-inputs.outputs.docker }}
+      job: ${{ steps.fetch-inputs.outputs.job }}
+      slack_report_channel: ${{ steps.fetch-inputs.outputs.slack_report_channel }}
+      ci_event: ${{ steps.fetch-inputs.outputs.ci_event }}
+      report_repo_id: ${{ steps.fetch-inputs.outputs.report_repo_id }}
+      commit_sha: ${{ steps.fetch-inputs.outputs.commit_sha }}
+      pr_number: ${{ steps.fetch-inputs.outputs.pr_number }}
+      max_num_runners: ${{ steps.fetch-inputs.outputs.max_num_runners }}
+    steps:
+      - name: Fetch inputs from source run job log
+        id: fetch-inputs
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const sourceRunId = parseInt('${{ inputs.source_workflow_run_id || env.source_workflow_run_id }}');
+            const jobName = `${{ inputs.job_name || env.job_name }}`;
+            const targetJobName = `${jobName} / Check new failures / Setup matrix for finding commits`;
+
+            // Find the job (paginate in case there are many jobs in the run)
+            let targetJobId = null;
+            let page = 1;
+            while (true) {
+              const { data } = await github.rest.actions.listJobsForWorkflowRun({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: sourceRunId,
+                per_page: 100,
+                page: page,
+              });
+              const job = data.jobs.find(j => j.name === targetJobName);
+              if (job) {
+                targetJobId = job.id;
+                break;
+              }
+              if (data.jobs.length < 100) break;
+              page++;
+            }
+
+            if (!targetJobId) {
+              core.setFailed(`Job "${targetJobName}" not found in run ${sourceRunId}. Check that job_name matches the first segment of the full job name in the GitHub UI.`);
+              return;
+            }
+
+            // Download the job log (GitHub returns a redirect which Octokit follows)
+            const logResponse = await github.rest.actions.downloadJobLogsForWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              job_id: targetJobId,
+            });
+
+            const logText = logResponse.data;
+            const parsedInputs = {};
+            let inInputs = false;
+
+            for (const line of logText.split('\n')) {
+              // Strip the timestamp prefix: "2026-05-05T06:02:50.3702012Z "
+              const content = line.replace(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z /, '');
+              if (content.includes('##[group]Inputs') || content.includes('##[group] Inputs')) {
+                inInputs = true;
+                continue;
+              }
+              if (inInputs) {
+                if (content.includes('##[endgroup]')) break;
+                // Each input line is "  key: value" (2-space indent)
+                const match = content.match(/^  (\w+): ?(.*)/);
+                if (match) parsedInputs[match[1]] = match[2].trim();
+              }
+            }
+
+            if (Object.keys(parsedInputs).length === 0) {
+              core.setFailed('Could not parse any inputs from the job log. The ##[group] Inputs section may be missing or in an unexpected format.');
+              return;
+            }
+
+            console.log('Extracted inputs:');
+            for (const [key, value] of Object.entries(parsedInputs)) {
+              console.log(`  ${key}: ${value}`);
+              core.setOutput(key, value);
+            }
+
+  check_new_failures:
+    name: Check new failures
+    needs: prepare
+    uses: ./.github/workflows/check_failed_tests.yml
+    with:
+      source_run_id: ${{ inputs.source_workflow_run_id || env.source_workflow_run_id }}
+      docker: ${{ needs.prepare.outputs.docker }}
+      job: ${{ needs.prepare.outputs.job }}
+      slack_report_channel: ${{ needs.prepare.outputs.slack_report_channel }}
+      ci_event: ${{ needs.prepare.outputs.ci_event }}
+      report_repo_id: ${{ needs.prepare.outputs.report_repo_id }}
+      commit_sha: ${{ needs.prepare.outputs.commit_sha }}
+      pr_number: ${{ needs.prepare.outputs.pr_number }}
+      max_num_runners: ${{ fromJSON(needs.prepare.outputs.max_num_runners || '4') }}
+      only_process_job: ${{ fromJSON(inputs.only_process_job || env.only_process_job) }}
+    secrets: inherit
