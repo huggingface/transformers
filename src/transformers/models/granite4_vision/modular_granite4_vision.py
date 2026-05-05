@@ -51,7 +51,6 @@ from ..llava_next.processing_llava_next import LlavaNextProcessor
 # ── Output classes ──────────────────────────────────────────────────────────
 
 
-@dataclass
 class Granite4VisionModelOutputWithPast(LlavaNextModelOutputWithPast):
     """
     Args:
@@ -286,7 +285,7 @@ class Granite4VisionWindowQFormerDownsampler(nn.Module):
         features = features.view(batch, side, side, channels)
         return features.flatten(1, 2)
 
-    def forward(self, image_features):
+    def forward(self, image_features: torch.Tensor) -> torch.Tensor:
         batch, hw, channels = image_features.shape
         if self.image_side * self.image_side != hw:
             raise ValueError(
@@ -335,7 +334,6 @@ class Granite4VisionTextDecoderLayer(GraniteDecoderLayer):
 
 
 class Granite4VisionPreTrainedModel(LlavaNextPreTrainedModel):
-    base_model_prefix = "model"
     _no_split_modules = ["Granite4VisionTextDecoderLayer"]
     _can_record_outputs = {
         "hidden_states": Granite4VisionTextDecoderLayer,
