@@ -107,6 +107,24 @@ SPECIAL_CASES_TO_ALLOW = {
     "HiggsAudioV2TokenizerConfig": ["downsample_factor"],
     "CsmConfig": ["tie_codebooks_embeddings"],
     "DeepseekV2Config": ["norm_topk_prob"],
+    "DeepseekV4Config": [
+        # All BC / config-compat surface that the modeling code never reads but
+        # checkpoints in the wild expose (so we keep accepting them in `__init__`):
+        # `attention_bias` — V4 has no bias on any linear; kept for parity with V3 configs.
+        # `n_shared_experts` — V4 always builds exactly one shared MLP; the count
+        #   isn't read because there's no loop over shared experts.
+        # `norm_topk_prob` — V3 router knob; V4's `DeepseekV4TopKRouter` always normalises.
+        # `num_key_value_heads` — V4 is shared-KV MQA (always 1); not read at runtime.
+        # `num_nextn_predict_layers` — MTP layer count from upstream checkpoints; the
+        #   MTP head isn't instantiated by transformers' V4 implementation.
+        # `router_jitter_noise` — inherited from Mixtral; V4 routers don't apply jitter.
+        "attention_bias",
+        "n_shared_experts",
+        "norm_topk_prob",
+        "num_key_value_heads",
+        "num_nextn_predict_layers",
+        "router_jitter_noise",
+    ],
     "EsmFoldConfig": ["esm_ablate_pairwise", "esm_ablate_sequence", "esm_input_dropout", "esm_type"],
     "TrunkConfig": ["cpu_grad_checkpoint", "layer_drop"],
     "SeamlessM4TConfig": True,
