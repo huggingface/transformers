@@ -69,7 +69,6 @@ class Granite4VisionModelTester(VLMModelTester):
         # Granite4Vision-specific
         kwargs.setdefault("downsample_rate", "1/2")
         kwargs.setdefault("deepstack_layer_map", [[1, 0]])
-        kwargs.setdefault("use_spatial_sampling", False)
         kwargs.setdefault("projector_dropout", 0.0)
         kwargs.setdefault("image_token_index", kwargs.get("image_token_id", 3))
 
@@ -104,8 +103,8 @@ class Granite4VisionModelTester(VLMModelTester):
         config.image_grid_pinpoints = [[self.image_size, self.image_size]]
         config.downsample_rate = self.downsample_rate
         config.deepstack_layer_map = self.deepstack_layer_map
-        config.use_spatial_sampling = self.use_spatial_sampling
         config.projector_dropout = self.projector_dropout
+        config.qformer_config.intermediate_size = 64
         return config
 
 
