@@ -11,7 +11,7 @@ on:
     types: [completed]
   push:
     branches:
-      - run_amd_scheduled_ci_caller*
+      - run_amd_scheduled_ci_caller_mi355*
 
 jobs:
   model-ci:
