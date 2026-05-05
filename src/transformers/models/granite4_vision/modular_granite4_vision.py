@@ -26,7 +26,6 @@ from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import select_best_resolution
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel

@@ -20,6 +20,7 @@ import numpy as np
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
