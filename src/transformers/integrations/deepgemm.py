@@ -159,18 +159,22 @@ def _load_deepgemm_kernel() -> DeepGEMM:
 def _coerce_sf_for_kernel(sf: torch.Tensor) -> torch.Tensor:
     """Normalize a scale-factor tensor for the DeepGEMM kernel boundary.
 
-    Two SF flavors are produced by our path:
-      - `float32` (DeepSeek V3-style): the kernel's `check_sf_layout` requires the
-        SF tensor to be MN-major (`sf.stride(-2) == 1`). Default contiguous tensors
-        are K-major, so flip via transpose+contiguous+transpose. No-op when the
-        layout is already MN-major.
-      - `torch.float8_e8m0fnu` (DeepSeek V4-style, 1 byte per scale): the kernel
-        expects MN-major TMA-aligned packed `int32` (4 contiguous K-bytes per
-        lane). Use DeepGEMM's helper which guarantees that exact layout.
+    The kernel's `check_sf_layout` requires `sf.stride(-2) == 1` (MN-major).
+    Default contiguous PyTorch tensors are K-major; flip when needed.
+
+    Two SF flavors are handled:
+      - `float32` (DeepSeek V3-style): only flip layout if it's K-major.
+      - `torch.float8_e8m0fnu` (DeepSeek V4-style, 1 byte per scale): pack
+        4 contiguous K-bytes into one `int32` (last dim shrinks 4×) and
+        ensure MN-major layout. Mirrors what
+        `get_mn_major_tma_aligned_packed_ue8m0_tensor` produces from a
+        float32 SF, just starting from already-packed bytes.
     """
     if sf.dtype == torch.float8_e8m0fnu:
-        deepgemm = _load_deepgemm_kernel()
-        return deepgemm.get_mn_major_tma_aligned_packed_ue8m0_tensor(sf)
+        # `view(int32)` requires the source to be contiguous (4 K-bytes adjacent).
+        # Pack first while still K-major, then flip to MN-major.
+        packed = sf.contiguous().view(torch.int32)
+        return packed.transpose(-1, -2).contiguous().transpose(-1, -2)
     if sf.stride(-2) != 1:
         sf = sf.transpose(-1, -2).contiguous().transpose(-1, -2)
     return sf
