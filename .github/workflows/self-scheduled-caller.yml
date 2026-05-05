@@ -28,26 +28,6 @@ env:
 
 
 jobs:
-  download-test:
-    name: Download test
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/download-artifact@v8
-        env:
-          ACTIONS_ARTIFACT_MAX_ARTIFACT_COUNT: 2000
-        with:
-          path: warnings_in_ci
-          repository: huggingface/transformers
-          run-id: ${{ github.run_id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: List downloaded files
-        run: |
-          echo "=== Downloaded files ==="
-          find ./warnings_in_ci -type f | sort || echo "No files found"
-          echo "=== Total count ==="
-          find ./warnings_in_ci -type f | wc -l
-
   setup:
     name: Setup
     runs-on: ubuntu-22.04
