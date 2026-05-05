@@ -88,7 +88,6 @@ def get_vision_window_index(
     spatial_merge_size: int,
     window_size: int,
     patch_size: int,
-    spatial_merge_unit: int,
     *,
     kwargs: dict | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -99,7 +98,6 @@ def get_vision_window_index(
         spatial_merge_size: merge block size from vision config.
         window_size: window size from vision config.
         patch_size: patch size from vision config.
-        spatial_merge_unit: ``spatial_merge_size ** 2``.
         kwargs: optional caller kwargs — if it contains both ``"window_index"`` and ``"cu_window_seqlens"`` they are popped and returned.
 
     Returns:
@@ -115,6 +113,7 @@ def get_vision_window_index(
     cu_window_seqlens: list = [0]
     window_index_id = 0
     vit_merger_window_size = window_size // spatial_merge_size // patch_size
+    spatial_merge_unit = spatial_merge_size**2
 
     for grid_t, grid_h, grid_w in grid_thw.tolist():
         grid_t, grid_h, grid_w = int(grid_t), int(grid_h), int(grid_w)

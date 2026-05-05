@@ -1619,7 +1619,6 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
             spatial_merge_size=self.spatial_merge_size,
             window_size=self.window_size,
             patch_size=self.patch_size,
-            spatial_merge_unit=self.spatial_merge_unit,
             kwargs=kwargs,
         )
 

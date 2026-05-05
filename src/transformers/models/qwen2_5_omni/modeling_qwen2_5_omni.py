@@ -1268,7 +1268,6 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
             spatial_merge_size=self.spatial_merge_size,
             window_size=self.window_size,
             patch_size=self.patch_size,
-            spatial_merge_unit=self.spatial_merge_unit,
         )
         return window_index, cu_window_seqlens.tolist()
 
@@ -1294,7 +1293,6 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
             spatial_merge_size=self.spatial_merge_size,
             window_size=self.window_size,
             patch_size=self.patch_size,
-            spatial_merge_unit=self.spatial_merge_unit,
             kwargs=kwargs,
         )
 
