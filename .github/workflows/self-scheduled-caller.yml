@@ -9,7 +9,7 @@ jobs:
   download:
     runs-on: ubuntu-latest
     env:
-      ACTIONS_ARTIFACT_MAX_ARTIFACT_COUNT: ${{ inputs.max_count }}
+      ACTIONS_ARTIFACT_MAX_ARTIFACT_COUNT: 2000
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v8
