@@ -149,28 +149,9 @@ class Granite4VisionConfig(PreTrainedConfig):
 
         # Convert qformer_config dict → typed object before super() so the _attn_implementation
         # setter (called inside super().__post_init__) doesn't hit a raw dict when walking sub_configs.
-        # Building the default requires vision_config.hidden_size, which super() hasn't deserialized
-        # yet — so we read it from the dict directly for that case only.
         if isinstance(self.qformer_config, dict):
             model_type = self.qformer_config.get("model_type", "blip_2_qformer")
             self.qformer_config = CONFIG_MAPPING[model_type](**self.qformer_config)
-        elif self.qformer_config is None:
-            if isinstance(self.vision_config, dict):
-                vision_hidden_size = self.vision_config.get("hidden_size", 1152)
-            elif self.vision_config is not None:
-                vision_hidden_size = self.vision_config.hidden_size
-            else:
-                vision_hidden_size = 1152
-            self.qformer_config = CONFIG_MAPPING["blip_2_qformer"](
-                num_hidden_layers=1,
-                intermediate_size=3072,
-                cross_attention_frequency=1,
-                max_position_embeddings=2048,
-                use_qformer_text_input=False,
-                hidden_size=vision_hidden_size,
-                num_attention_heads=vision_hidden_size // 64,
-                encoder_hidden_size=vision_hidden_size,
-            )
         if isinstance(self.vision_config, dict):
             self.vision_config["model_type"] = self.vision_config.get("model_type", "clip_vision_model")
             self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
@@ -199,6 +180,20 @@ class Granite4VisionConfig(PreTrainedConfig):
         )
 
         super().__post_init__(**kwargs)
+
+        # Build default qformer_config after super() so vision_config is already a typed object.
+        if self.qformer_config is None:
+            vision_hidden_size = self.vision_config.hidden_size
+            self.qformer_config = CONFIG_MAPPING["blip_2_qformer"](
+                num_hidden_layers=1,
+                intermediate_size=3072,
+                cross_attention_frequency=1,
+                max_position_embeddings=2048,
+                use_qformer_text_input=False,
+                hidden_size=vision_hidden_size,
+                num_attention_heads=vision_hidden_size // 64,
+                encoder_hidden_size=vision_hidden_size,
+            )
 
 
 __all__ = ["Granite4VisionConfig", "Granite4VisionTextConfig"]

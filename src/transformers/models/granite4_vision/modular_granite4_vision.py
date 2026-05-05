@@ -142,18 +142,16 @@ class Granite4VisionConfig(LlavaNextConfig):
 
         # Convert qformer_config dict → typed object before super() so the _attn_implementation
         # setter (called inside super().__post_init__) doesn't hit a raw dict when walking sub_configs.
-        # Building the default requires vision_config.hidden_size, which super() hasn't deserialized
-        # yet — so we read it from the dict directly for that case only.
         if isinstance(self.qformer_config, dict):
             model_type = self.qformer_config.get("model_type", "blip_2_qformer")
             self.qformer_config = CONFIG_MAPPING[model_type](**self.qformer_config)
-        elif self.qformer_config is None:
-            if isinstance(self.vision_config, dict):
-                vision_hidden_size = self.vision_config.get("hidden_size", 1152)
-            elif self.vision_config is not None:
-                vision_hidden_size = self.vision_config.hidden_size
-            else:
-                vision_hidden_size = 1152
+
+        # Deserialize vision_config and text_config into typed objects.
+        super().__post_init__(**kwargs)
+
+        # Build default qformer_config after super() so vision_config is already a typed object.
+        if self.qformer_config is None:
+            vision_hidden_size = self.vision_config.hidden_size
             self.qformer_config = CONFIG_MAPPING["blip_2_qformer"](
                 num_hidden_layers=1,
                 intermediate_size=3072,
@@ -164,9 +162,6 @@ class Granite4VisionConfig(LlavaNextConfig):
                 num_attention_heads=vision_hidden_size // 64,
                 encoder_hidden_size=vision_hidden_size,
             )
-
-        # Deserialize vision_config and text_config into typed objects.
-        super().__post_init__(**kwargs)
 
 
 # ── Processor ───────────────────────────────────────────────────────────────
@@ -348,6 +343,8 @@ class Granite4VisionTextDecoderLayer(GraniteDecoderLayer):
 
 
 class Granite4VisionPreTrainedModel(LlavaNextPreTrainedModel):
+    base_model_prefix = "model"
+    _no_split_modules = ["Granite4VisionTextDecoderLayer"]
     _can_record_outputs = {
         "hidden_states": Granite4VisionTextDecoderLayer,
         "attentions": Granite4VisionTextAttention,
@@ -390,9 +387,6 @@ class Granite4VisionPreTrainedModel(LlavaNextPreTrainedModel):
 
 class Granite4VisionTextModel(Granite4VisionPreTrainedModel, GraniteModel):
     """Granite LLM backbone with deepstack feature injection support."""
-
-    base_model_prefix = "model"
-    _no_split_modules = ["Granite4VisionTextDecoderLayer"]
 
     def __init__(self, config: Granite4VisionTextConfig):
         super().__init__(config)
@@ -567,6 +561,8 @@ class Granite4VisionModel(LlavaNextModel):
         feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features[0].device)
         return new_image_features, feature_lens
 
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,

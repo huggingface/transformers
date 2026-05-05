@@ -504,7 +504,7 @@ class Granite4VisionPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LlamaDecoderLayer"]
+    _no_split_modules = ["Granite4VisionTextDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
 
     _supports_flash_attn = True
@@ -565,9 +565,6 @@ class Granite4VisionPreTrainedModel(PreTrainedModel):
 @auto_docstring
 class Granite4VisionTextModel(Granite4VisionPreTrainedModel):
     """Granite LLM backbone with deepstack feature injection support."""
-
-    base_model_prefix = "model"
-    _no_split_modules = ["Granite4VisionTextDecoderLayer"]
 
     def __init__(self, config: Granite4VisionTextConfig):
         super().__init__(config)
@@ -878,11 +875,8 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features[0].device)
         return new_image_features, feature_lens
 
-    @merge_with_config_defaults
     @can_return_tuple
-    @auto_docstring(
-        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
-    )
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
