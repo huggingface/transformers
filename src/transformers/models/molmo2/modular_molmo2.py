@@ -114,7 +114,9 @@ class Molmo2VisionAttention(Siglip2Attention):
         keys = keys.view(batch_size, seq_length, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         values = values.view(batch_size, seq_length, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface("sdpa", eager_attention_forward)
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -191,7 +193,9 @@ class Molmo2PoolingAttention(nn.Module):
         keys = keys.view(batch_size, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         values = values.view(batch_size, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface("sdpa", eager_attention_forward)
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.attn_implementation, eager_attention_forward
+        )
 
         attn_output, _ = attention_interface(
             self,
@@ -491,8 +495,8 @@ class Molmo2Attention(Olmo2Attention):
         self.att_proj = nn.Linear(config.hidden_size, sum(self.fused_dims), bias=config.qkv_bias)
         self.attn_out = nn.Linear(config.num_attention_heads * config.head_dim, config.hidden_size, bias=False)
 
-        self.q_norm = Molmo2RMSNorm(config.num_attention_heads * config.head_dim, eps=config.layer_norm_eps)
-        self.k_norm = Molmo2RMSNorm(config.num_key_value_heads * config.head_dim, eps=config.layer_norm_eps)
+        self.q_norm = Molmo2RMSNorm(config.head_dim, eps=config.layer_norm_eps)
+        self.k_norm = Molmo2RMSNorm(config.head_dim, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -509,12 +513,10 @@ class Molmo2Attention(Olmo2Attention):
         qkv = self.att_proj(hidden_states)
         query_states, key_states, value_states = qkv.split(self.fused_dims, dim=-1)
 
-        query_states = self.q_norm(query_states)
-        key_states = self.k_norm(key_states)
-
-        query_states = query_states.view(q_shape)
-        key_states = key_states.view(kv_shape)
+        query_states = self.q_norm(query_states.view(q_shape))
+        key_states = self.k_norm(key_states.view(kv_shape))
         value_states = value_states.view(kv_shape)
+
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
@@ -1235,7 +1237,7 @@ class Molmo2Model(Molmo2PreTrainedModel):
 
         image_features: torch.FloatTensor | None = None
         if images is not None:
-            image_features = self.vision_backbone(images, token_pooling).to(x.device)
+            image_features = self.vision_backbone(images, token_pooling)
             is_image_patch = input_ids.view(-1) == self.config.image_patch_id
             assert is_image_patch.sum() == len(image_features)
             x.view(-1, x.shape[-1])[is_image_patch] += image_features
@@ -1262,15 +1264,9 @@ class Molmo2Model(Molmo2PreTrainedModel):
         token_type_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Molmo2ModelOutputWithPast:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        use_cache = use_cache if use_cache is not None else self.config.text_config.use_cache
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1316,8 +1312,6 @@ class Molmo2Model(Molmo2PreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             **kwargs,
         )
 
@@ -1365,8 +1359,6 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Molmo2CausalLMOutputWithPast:
@@ -1408,8 +1400,6 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             **kwargs,
         )
 

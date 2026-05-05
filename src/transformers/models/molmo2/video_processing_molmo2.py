@@ -16,14 +16,11 @@
 
 import numpy as np
 import torch
-import torchvision.transforms
 
 from ...image_processing_utils import BatchFeature
-from ...image_transforms import normalize
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
-    ChannelDimension,
     PILImageResampling,
     SizeDict,
 )
@@ -31,131 +28,10 @@ from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, auto_docstring, logging
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata
+from .image_processing_molmo2 import arange_for_pooling, batch_pixels_to_patches
 
 
 logger = logging.get_logger(__name__)
-
-
-def resize_image(
-    image: np.ndarray,
-    desired_output_size: list[int],
-    resample: PILImageResampling,
-) -> np.ndarray:
-    """Resize an image or video and rescale to [0, 1] float32."""
-    if len(image.shape) == 3:
-        is_video = False
-        image = torch.permute(torch.from_numpy(image), [2, 0, 1])
-    else:
-        is_video = True
-        image = torch.permute(torch.from_numpy(image), [0, 3, 1, 2])
-
-    resized = torchvision.transforms.Resize(desired_output_size, resample, antialias=False)(image)
-    resized = torch.clip(resized, 0, 255).to(torch.uint8)
-    resized = resized.to(torch.float32) / 255.0
-
-    if is_video:
-        resized = torch.permute(resized, [0, 2, 3, 1]).numpy()
-    else:
-        resized = torch.permute(resized, [1, 2, 0]).numpy()
-
-    return resized
-
-
-def build_resized_image(
-    image: np.ndarray,
-    base_image_input_size: list[int],
-    resample: PILImageResampling,
-    image_mean: list[float],
-    image_std: list[float],
-    image_patch_size: int,
-) -> tuple[np.ndarray, np.ndarray]:
-    resized = resize_image(
-        image,
-        base_image_input_size,
-        resample,
-    )
-    resized = normalize(resized, image_mean, image_std, input_data_format=ChannelDimension.LAST)
-    if len(resized.shape) == 3:
-        resized = np.expand_dims(resized, 0)
-    crop_patch_w = base_image_input_size[1] // image_patch_size
-    crop_patch_h = base_image_input_size[0] // image_patch_size
-    resize_idx = np.arange(crop_patch_w * crop_patch_h).reshape([crop_patch_h, crop_patch_w])
-    return resized, resize_idx
-
-
-def batch_pixels_to_patches(array: np.ndarray, patch_size: int) -> np.ndarray:
-    """Reshape images of [n_images, h, w, 3] -> [n_images, n_patches, pixels_per_patch]"""
-    if len(array.shape) == 3:
-        n_crops, h, w = array.shape
-        h_patches = h // patch_size
-        w_patches = w // patch_size
-        array = np.reshape(array, [n_crops, h_patches, patch_size, w_patches, patch_size])
-        array = np.transpose(array, [0, 1, 3, 2, 4])
-        array = np.reshape(array, [n_crops, h_patches * w_patches, patch_size * patch_size])
-        return array
-    else:
-        n_crops, h, w, c = array.shape
-        h_patches = h // patch_size
-        w_patches = w // patch_size
-        array = np.reshape(array, [n_crops, h_patches, patch_size, w_patches, patch_size, c])
-        array = np.transpose(array, [0, 1, 3, 2, 4, 5])
-        array = np.reshape(array, [n_crops, h_patches * w_patches, patch_size * patch_size * c])
-        return array
-
-
-def arange_for_pooling(
-    idx_arr: np.ndarray,
-    pool_h: int,
-    pool_w: int,
-) -> np.ndarray:
-    h_pad = pool_h * ((idx_arr.shape[0] + pool_h - 1) // pool_h) - idx_arr.shape[0]
-    w_pad = pool_w * ((idx_arr.shape[1] + pool_w - 1) // pool_w) - idx_arr.shape[1]
-    idx_arr = np.pad(
-        idx_arr, [[h_pad // 2, (h_pad + 1) // 2], [w_pad // 2, (w_pad + 1) // 2]], mode="constant", constant_values=-1
-    )
-    h, w = idx_arr.shape[0] // pool_h, idx_arr.shape[1] // pool_w
-    return idx_arr.reshape(h, pool_h, w, pool_w).transpose(0, 2, 1, 3).reshape(h, w, pool_h * pool_w)
-
-
-def image_to_patches_and_grids(
-    image: np.ndarray,
-    base_image_input_size: list[int],
-    resample: PILImageResampling,
-    image_mean: list[float],
-    image_std: list[float],
-    image_patch_size: int,
-    image_pooling_w: int,
-    image_pooling_h: int,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """
-    :return image_grids, the shape of each image after pooling
-    :return crops, the image crops to processes with the ViT
-    :return pooled_patch_idx, for each patch_id tokens in `image_tokens`, the indices of the
-                                patches in `crops` to pool for that token, masked with -1
-    """
-    if isinstance(base_image_input_size, int):
-        base_image_input_size = (base_image_input_size, base_image_input_size)
-
-    pooling_w = image_pooling_w
-    pooling_h = image_pooling_h
-
-    resized, resize_idx = build_resized_image(
-        image,
-        base_image_input_size,
-        resample,
-        image_mean,
-        image_std,
-        image_patch_size,
-    )
-    pooling_idx = arange_for_pooling(resize_idx, pooling_h, pooling_w)
-    h, w = pooling_idx.shape[:2]
-    pooling_idx = pooling_idx.reshape([-1, pooling_h * pooling_w])
-    image_grid = [h, w]
-    return (
-        image_grid,
-        batch_pixels_to_patches(resized, image_patch_size),
-        pooling_idx,
-    )
 
 
 class Molmo2VideoProcessorKwargs(VideosKwargs, total=False):
@@ -250,6 +126,37 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         ).astype(int)
         return indices
 
+    def _build_frame_patches(
+        self,
+        frame_chw: torch.Tensor,
+        base_image_input_size: list[int],
+        resample: PILImageResampling,
+        image_mean: list[float],
+        image_std: list[float],
+        image_patch_size: int,
+        image_pooling_h: int,
+        image_pooling_w: int,
+    ) -> tuple[list[int], torch.Tensor, torch.Tensor]:
+        chw_resized = self.resize(
+            frame_chw,
+            size=SizeDict(height=base_image_input_size[0], width=base_image_input_size[1]),
+            resample=resample,
+            antialias=False,
+        )
+        chw_float = self.rescale(chw_resized.float(), scale=1.0 / 255.0)
+        chw_normalized = self.normalize(chw_float, mean=image_mean, std=image_std)
+        hwc = chw_normalized.permute(1, 2, 0).unsqueeze(0)  # → [1, H, W, C]
+
+        crop_patch_w = base_image_input_size[1] // image_patch_size
+        crop_patch_h = base_image_input_size[0] // image_patch_size
+        resize_idx = torch.arange(crop_patch_w * crop_patch_h, dtype=torch.int32).reshape(crop_patch_h, crop_patch_w)
+
+        pooling_idx = arange_for_pooling(resize_idx, image_pooling_h, image_pooling_w)
+        h, w = pooling_idx.shape[:2]
+        pooling_idx = pooling_idx.reshape([-1, image_pooling_h * image_pooling_w])
+
+        return [h, w], batch_pixels_to_patches(hwc, image_patch_size), pooling_idx
+
     def _preprocess(
         self,
         videos: list["torch.Tensor"],
@@ -270,40 +177,36 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         batch_pooled_patches_idx = []
 
         for video in videos:
-            # Convert from torch (T, C, H, W) to numpy (T, H, W, C)
-            if isinstance(video, torch.Tensor):
-                video = video.permute(0, 2, 3, 1).numpy()
-
             all_crops = []
             pooled_patches_idx = []
 
-            for frame in video:
-                image_grid, crops, pooled_idx = image_to_patches_and_grids(
-                    frame,
+            for frame_chw in video:
+                image_grid, crops, pooled_idx = self._build_frame_patches(
+                    frame_chw,
                     base_image_input_size,
                     resample,
                     image_mean,
                     image_std,
                     patch_size,
-                    image_pooling_w,
                     image_pooling_h,
+                    image_pooling_w,
                 )
-                offset = sum(np.prod(x.shape[:2]) for x in all_crops)
-                pooled_idx_with_offset = np.where(pooled_idx >= 0, pooled_idx + offset, pooled_idx)
+                offset = sum(c.shape[0] * c.shape[1] for c in all_crops) if all_crops else 0
+                pooled_idx_with_offset = torch.where(pooled_idx >= 0, pooled_idx + offset, pooled_idx)
                 pooled_patches_idx.append(pooled_idx_with_offset)
                 all_crops.append(crops)
 
-            video_grid = np.array([len(video), image_grid[0], image_grid[1]])
-            all_crops = np.concatenate(all_crops, 0)
-            pooled_patches_idx = np.concatenate(pooled_patches_idx, 0)
+            video_grid = torch.tensor([len(video), image_grid[0], image_grid[1]], dtype=torch.int64)
+            all_crops_tensor = torch.cat(all_crops, 0)
+            pooled_patches_idx_tensor = torch.cat(pooled_patches_idx, 0)
 
             batch_grids.append(video_grid)
-            batch_crops.append(all_crops)
-            batch_pooled_patches_idx.append(pooled_patches_idx)
+            batch_crops.append(all_crops_tensor)
+            batch_pooled_patches_idx.append(pooled_patches_idx_tensor)
 
-        video_grids = np.stack(batch_grids, 0)
-        pixel_values_videos = np.concatenate(batch_crops, 0)
-        video_token_pooling = np.concatenate(batch_pooled_patches_idx, 0)
+        video_grids = torch.stack(batch_grids, 0)
+        pixel_values_videos = torch.cat(batch_crops, 0)
+        video_token_pooling = torch.cat(batch_pooled_patches_idx, 0)
 
         data = {
             "pixel_values_videos": pixel_values_videos,

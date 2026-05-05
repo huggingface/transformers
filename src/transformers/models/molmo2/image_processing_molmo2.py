@@ -17,7 +17,6 @@
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torchvision.transforms
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
@@ -28,6 +27,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    SizeDict,
     infer_channel_dimension_format,
     make_flat_list_of_images,
     to_numpy_array,
@@ -38,24 +38,6 @@ from ...utils import TensorType, auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
-
-
-def resize_image(
-    image: np.ndarray | torch.Tensor,
-    desired_output_size: list[int],
-    resample: PILImageResampling,
-) -> torch.Tensor:
-    """Resize an image and rescale to [0, 1] float32."""
-    image = torch.as_tensor(image)
-    image = image.permute(2, 0, 1)
-    resized = torchvision.transforms.Resize(
-        desired_output_size,
-        resample,
-        antialias=False,
-    )(image)
-    resized = torch.clip(resized, 0, 255).to(torch.uint8)
-    resized = resized.to(torch.float32) / 255.0
-    return resized.permute(1, 2, 0)
 
 
 # Copied from transformers.models.cohere2_vision.image_processing_cohere2_vision.get_all_supported_aspect_ratios
@@ -115,127 +97,6 @@ def get_optimal_tiled_canvas(
     return best_grid  # (width, height)
 
 
-def normalize_image(image: torch.Tensor, image_mean: list[float], image_std: list[float]) -> torch.Tensor:
-    mean = torch.tensor(image_mean, dtype=image.dtype, device=image.device)
-    std = torch.tensor(image_std, dtype=image.dtype, device=image.device)
-    return (image - mean) / std
-
-
-def build_resized_image(
-    image: np.ndarray,
-    base_image_input_size: list[int],
-    resample: PILImageResampling,
-    image_mean: list[float],
-    image_std: list[float],
-    image_patch_size: int,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    resized = resize_image(
-        image,
-        base_image_input_size,
-        resample,
-    )
-    resized = normalize_image(resized, image_mean, image_std)
-    if len(resized.shape) == 3:
-        resized = resized.unsqueeze(0)
-    crop_patch_w = base_image_input_size[1] // image_patch_size
-    crop_patch_h = base_image_input_size[0] // image_patch_size
-    resize_idx = torch.arange(crop_patch_w * crop_patch_h, dtype=torch.int32).reshape(crop_patch_h, crop_patch_w)
-    return resized, resize_idx
-
-
-def build_overlapping_crops(
-    image: np.ndarray,
-    max_crops: int,
-    overlap_margins: list[int],
-    base_image_input_size: list[int],
-    resample: PILImageResampling,
-    image_mean: list[float],
-    image_std: list[float],
-    image_patch_size: int,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Decompose an image into a set of overlapping crops
-
-    :return crop_arr: [n_crops, h, w, 3] The crops
-    :return patch_idx: [overlap_patch_h, overlap_patch_w] For each patch in the resized image
-                        the crops were extracted from, what patch in `crop_arr` it corresponds to
-    """
-    original_image_h, original_image_w = image.shape[:2]
-    crop_size = base_image_input_size[0]
-    if base_image_input_size[0] != base_image_input_size[1]:
-        raise ValueError(f"Expected square base_image_input_size, got {base_image_input_size}")
-
-    left_margin, right_margin = overlap_margins
-    total_margin_pixels = image_patch_size * (right_margin + left_margin)  # pixels removed per dim
-    crop_patches = base_image_input_size[0] // image_patch_size  # patches per crop dim
-    crop_window_patches = crop_patches - (right_margin + left_margin)  # usable patches
-    crop_window_size = crop_window_patches * image_patch_size
-    crop_patch_w = base_image_input_size[1] // image_patch_size
-    crop_patch_h = base_image_input_size[0] // image_patch_size
-    original_image_h, original_image_w = image.shape[:2]
-    crop_size = base_image_input_size[0]
-
-    # Decide how to tile the image, to account for the overlap margins we compute the tiling
-    # as if we had an image without the margins and were using a crop size without the margins
-    effective_image_size = (original_image_h - total_margin_pixels, original_image_w - total_margin_pixels)
-    tiling_w, tiling_h = get_optimal_tiled_canvas(
-        original_image_size=effective_image_size,
-        target_tile_size=(crop_window_size, crop_window_size),
-        min_image_tiles=1,
-        max_image_tiles=max_crops,
-    )
-
-    src = resize_image(
-        image,
-        [tiling_h * crop_window_size + total_margin_pixels, tiling_w * crop_window_size + total_margin_pixels],
-        resample,
-    )
-    src = normalize_image(src, image_mean, image_std)
-
-    # Now we have to split the image into crops, and track what patches came from
-    # where in `patch_idx_arr`
-    n_crops = tiling_h * tiling_w
-    crop_arr = torch.empty((n_crops, crop_size, crop_size, 3), dtype=src.dtype)
-    patch_idx_arr = torch.empty((n_crops, crop_patch_h, crop_patch_w), dtype=torch.int32)
-    on_crop = 0
-    for i in range(tiling_h):
-        # Slide over `src` by `crop_window_size` steps, but extract crops of size `crops_size`
-        # which results in overlapping crop windows
-        y0 = i * crop_window_size
-        for j in range(tiling_w):
-            x0 = j * crop_window_size
-            crop_arr[on_crop] = src[y0 : y0 + crop_size, x0 : x0 + crop_size]
-            patch_idx = torch.arange(crop_patch_w * crop_patch_h, dtype=torch.int32).reshape(
-                crop_patch_h, crop_patch_w
-            )
-            patch_idx += on_crop * crop_patch_h * crop_patch_w
-
-            # Mask out idx that are in the overlap region
-            if i != 0:
-                patch_idx[:left_margin, :] = -1
-            if j != 0:
-                patch_idx[:, :left_margin] = -1
-            if i != tiling_h - 1:
-                patch_idx[-right_margin:, :] = -1
-            if j != tiling_w - 1:
-                patch_idx[:, -right_margin:] = -1
-            patch_idx_arr[on_crop] = patch_idx
-            on_crop += 1
-
-    # `patch_idx_arr` is ordered crop-by-crop, here we transpose `patch_idx_arr`
-    # so it is ordered left-to-right order
-    patch_idx_arr = patch_idx_arr.reshape(tiling_h, tiling_w, crop_patch_h, crop_patch_w)
-    patch_idx_arr = patch_idx_arr.permute(0, 2, 1, 3)
-    patch_idx_arr = patch_idx_arr.reshape(-1)
-
-    # Now get the parts not in the overlap region, so it should map each patch in `src`
-    # to the correct patch it should come from in `crop_arr`
-    patch_idx_arr = patch_idx_arr[patch_idx_arr >= 0].reshape(
-        src.shape[0] // image_patch_size,
-        src.shape[1] // image_patch_size,
-    )
-    return crop_arr, patch_idx_arr
-
-
 def batch_pixels_to_patches(array: torch.Tensor, patch_size: int) -> torch.Tensor:
     """Reshape images of [n_images, h, w, 3] -> [n_images, n_patches, pixels_per_patch]"""
     if len(array.shape) == 3:
@@ -271,70 +132,6 @@ def arange_for_pooling(
     )
     h, w = idx_arr.shape[0] // pool_h, idx_arr.shape[1] // pool_w
     return idx_arr.reshape(h, pool_h, w, pool_w).permute(0, 2, 1, 3).reshape(h, w, pool_h * pool_w)
-
-
-def image_to_patches_and_grids(
-    image: np.ndarray,
-    max_crops: int,
-    overlap_margins: list[int],
-    base_image_input_size: list[int],
-    resample: PILImageResampling,
-    image_mean: list[float],
-    image_std: list[float],
-    image_patch_size: int,
-    image_pooling_w: int,
-    image_pooling_h: int,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """
-    :return image_grids, the shape of each (low-res, high-res) image after pooling
-    :return crops, the image crops to processes with the ViT
-    :return pooled_patch_idx, for each patch_id tokens in `image_tokens`, the indices of the
-                                patches in `crops` to pool for that token, masked with -1
-    """
-    if isinstance(base_image_input_size, int):
-        base_image_input_size = (base_image_input_size, base_image_input_size)
-
-    base_image_input_d = image_patch_size
-    pooling_w = image_pooling_w
-    pooling_h = image_pooling_h
-    crop_patch_w = base_image_input_size[1] // base_image_input_d
-    crop_patch_h = base_image_input_size[0] // base_image_input_d
-
-    crop_arr, patch_idx_arr = build_overlapping_crops(
-        image,
-        max_crops,
-        overlap_margins,
-        base_image_input_size,
-        resample,
-        image_mean,
-        image_std,
-        image_patch_size,
-    )
-    pooling_idx = arange_for_pooling(patch_idx_arr, pooling_h, pooling_w)
-    h, w = pooling_idx.shape[:2]
-    pooling_idx = pooling_idx.reshape([-1, pooling_h * pooling_w])
-
-    # Finally do the same for the global image
-    resized, resize_idx = build_resized_image(
-        image,
-        base_image_input_size,
-        resample,
-        image_mean,
-        image_std,
-        image_patch_size,
-    )
-    crop_arr = torch.cat([resized, crop_arr], 0)
-
-    resize_idx = arange_for_pooling(resize_idx, pooling_h, pooling_w)
-    resized_h, resized_w = resize_idx.shape[:2]
-    resize_idx = resize_idx.reshape([-1, pooling_h * pooling_w])
-
-    # Global image goes first, so the order of patches in previous crops gets increased
-    pooling_idx = torch.where(pooling_idx >= 0, pooling_idx + crop_patch_h * crop_patch_w, -1)
-    pooling_idx = torch.cat([resize_idx, pooling_idx])
-    image_grid = torch.tensor([[resized_h, resized_w, h, w]], dtype=torch.int64)
-
-    return image_grid, batch_pixels_to_patches(crop_arr, image_patch_size), pooling_idx
 
 
 class Molmo2ImagesKwargs(ImagesKwargs, total=False):
@@ -374,6 +171,192 @@ class Molmo2ImageProcessor(TorchvisionBackend):
 
     def __init__(self, **kwargs: Unpack[Molmo2ImagesKwargs]):
         super().__init__(**kwargs)
+
+    def _build_resized_image(
+        self,
+        image: np.ndarray | torch.Tensor,
+        base_image_input_size: list[int],
+        resample: PILImageResampling,
+        image_mean: list[float],
+        image_std: list[float],
+        image_patch_size: int,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        chw = torch.as_tensor(image).permute(2, 0, 1)
+        chw_resized = self.resize(
+            chw,
+            size=SizeDict(height=base_image_input_size[0], width=base_image_input_size[1]),
+            resample=resample,
+            antialias=False,
+        )
+        chw_float = self.rescale(chw_resized.float(), scale=1.0 / 255.0)
+        chw_normalized = self.normalize(chw_float, mean=image_mean, std=image_std)
+        resized = chw_normalized.permute(1, 2, 0).unsqueeze(0)  # → [1, H, W, 3]
+        crop_patch_w = base_image_input_size[1] // image_patch_size
+        crop_patch_h = base_image_input_size[0] // image_patch_size
+        resize_idx = torch.arange(crop_patch_w * crop_patch_h, dtype=torch.int32).reshape(crop_patch_h, crop_patch_w)
+        return resized, resize_idx
+
+    def _build_overlapping_crops(
+        self,
+        image: np.ndarray | torch.Tensor,
+        max_crops: int,
+        overlap_margins: list[int],
+        base_image_input_size: list[int],
+        resample: PILImageResampling,
+        image_mean: list[float],
+        image_std: list[float],
+        image_patch_size: int,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Decompose an image into a set of overlapping crops
+
+        :return crop_arr: [n_crops, h, w, 3] The crops
+        :return patch_idx: [overlap_patch_h, overlap_patch_w] For each patch in the resized image
+                            the crops were extracted from, what patch in `crop_arr` it corresponds to
+        """
+        image_tensor = torch.as_tensor(image)
+        original_image_h, original_image_w = image_tensor.shape[:2]
+        crop_size = base_image_input_size[0]
+        if base_image_input_size[0] != base_image_input_size[1]:
+            raise ValueError(f"Expected square base_image_input_size, got {base_image_input_size}")
+
+        left_margin, right_margin = overlap_margins
+        total_margin_pixels = image_patch_size * (right_margin + left_margin)  # pixels removed per dim
+        crop_patches = base_image_input_size[0] // image_patch_size  # patches per crop dim
+        crop_window_patches = crop_patches - (right_margin + left_margin)  # usable patches
+        crop_window_size = crop_window_patches * image_patch_size
+        crop_patch_w = base_image_input_size[1] // image_patch_size
+        crop_patch_h = base_image_input_size[0] // image_patch_size
+
+        # Decide how to tile the image, to account for the overlap margins we compute the tiling
+        # as if we had an image without the margins and were using a crop size without the margins
+        effective_image_size = (original_image_h - total_margin_pixels, original_image_w - total_margin_pixels)
+        tiling_w, tiling_h = get_optimal_tiled_canvas(
+            original_image_size=effective_image_size,
+            target_tile_size=(crop_window_size, crop_window_size),
+            min_image_tiles=1,
+            max_image_tiles=max_crops,
+        )
+
+        src_h = tiling_h * crop_window_size + total_margin_pixels
+        src_w = tiling_w * crop_window_size + total_margin_pixels
+        chw = image_tensor.permute(2, 0, 1)
+        chw_resized = self.resize(
+            chw,
+            size=SizeDict(height=src_h, width=src_w),
+            resample=resample,
+            antialias=False,
+        )
+        chw_float = self.rescale(chw_resized.float(), scale=1.0 / 255.0)
+        chw_normalized = self.normalize(chw_float, mean=image_mean, std=image_std)
+        src = chw_normalized.permute(1, 2, 0)  # → HWC
+
+        # Now we have to split the image into crops, and track what patches came from
+        # where in `patch_idx_arr`
+        n_crops = tiling_h * tiling_w
+        crop_arr = torch.empty((n_crops, crop_size, crop_size, 3), dtype=src.dtype)
+        patch_idx_arr = torch.empty((n_crops, crop_patch_h, crop_patch_w), dtype=torch.int32)
+        on_crop = 0
+        for i in range(tiling_h):
+            # Slide over `src` by `crop_window_size` steps, but extract crops of size `crops_size`
+            # which results in overlapping crop windows
+            y0 = i * crop_window_size
+            for j in range(tiling_w):
+                x0 = j * crop_window_size
+                crop_arr[on_crop] = src[y0 : y0 + crop_size, x0 : x0 + crop_size]
+                patch_idx = torch.arange(crop_patch_w * crop_patch_h, dtype=torch.int32).reshape(
+                    crop_patch_h, crop_patch_w
+                )
+                patch_idx += on_crop * crop_patch_h * crop_patch_w
+
+                # Mask out idx that are in the overlap region
+                if i != 0:
+                    patch_idx[:left_margin, :] = -1
+                if j != 0:
+                    patch_idx[:, :left_margin] = -1
+                if i != tiling_h - 1:
+                    patch_idx[-right_margin:, :] = -1
+                if j != tiling_w - 1:
+                    patch_idx[:, -right_margin:] = -1
+                patch_idx_arr[on_crop] = patch_idx
+                on_crop += 1
+
+        # `patch_idx_arr` is ordered crop-by-crop, here we transpose `patch_idx_arr`
+        # so it is ordered left-to-right order
+        patch_idx_arr = patch_idx_arr.reshape(tiling_h, tiling_w, crop_patch_h, crop_patch_w)
+        patch_idx_arr = patch_idx_arr.permute(0, 2, 1, 3)
+        patch_idx_arr = patch_idx_arr.reshape(-1)
+
+        # Now get the parts not in the overlap region, so it should map each patch in `src`
+        # to the correct patch it should come from in `crop_arr`
+        patch_idx_arr = patch_idx_arr[patch_idx_arr >= 0].reshape(
+            src.shape[0] // image_patch_size,
+            src.shape[1] // image_patch_size,
+        )
+        return crop_arr, patch_idx_arr
+
+    def _image_to_patches_and_grids(
+        self,
+        image: np.ndarray | torch.Tensor,
+        max_crops: int,
+        overlap_margins: list[int],
+        base_image_input_size: list[int],
+        resample: PILImageResampling,
+        image_mean: list[float],
+        image_std: list[float],
+        image_patch_size: int,
+        image_pooling_w: int,
+        image_pooling_h: int,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        :return image_grids, the shape of each (low-res, high-res) image after pooling
+        :return crops, the image crops to processes with the ViT
+        :return pooled_patch_idx, for each patch_id tokens in `image_tokens`, the indices of the
+                                    patches in `crops` to pool for that token, masked with -1
+        """
+        if isinstance(base_image_input_size, int):
+            base_image_input_size = (base_image_input_size, base_image_input_size)
+
+        base_image_input_d = image_patch_size
+        pooling_w = image_pooling_w
+        pooling_h = image_pooling_h
+        crop_patch_w = base_image_input_size[1] // base_image_input_d
+        crop_patch_h = base_image_input_size[0] // base_image_input_d
+
+        crop_arr, patch_idx_arr = self._build_overlapping_crops(
+            image,
+            max_crops,
+            overlap_margins,
+            base_image_input_size,
+            resample,
+            image_mean,
+            image_std,
+            image_patch_size,
+        )
+        pooling_idx = arange_for_pooling(patch_idx_arr, pooling_h, pooling_w)
+        h, w = pooling_idx.shape[:2]
+        pooling_idx = pooling_idx.reshape([-1, pooling_h * pooling_w])
+
+        # Finally do the same for the global image
+        resized, resize_idx = self._build_resized_image(
+            image,
+            base_image_input_size,
+            resample,
+            image_mean,
+            image_std,
+            image_patch_size,
+        )
+        crop_arr = torch.cat([resized, crop_arr], 0)
+
+        resize_idx = arange_for_pooling(resize_idx, pooling_h, pooling_w)
+        resized_h, resized_w = resize_idx.shape[:2]
+        resize_idx = resize_idx.reshape([-1, pooling_h * pooling_w])
+
+        # Global image goes first, so the order of patches in previous crops gets increased
+        pooling_idx = torch.where(pooling_idx >= 0, pooling_idx + crop_patch_h * crop_patch_w, -1)
+        pooling_idx = torch.cat([resize_idx, pooling_idx])
+        image_grid = torch.tensor([[resized_h, resized_w, h, w]], dtype=torch.int64)
+
+        return image_grid, batch_pixels_to_patches(crop_arr, image_patch_size), pooling_idx
 
     def preprocess(
         self,
@@ -436,15 +419,22 @@ class Molmo2ImageProcessor(TorchvisionBackend):
 
         base_image_input_size = [size["height"], size["width"]]
 
-        resample = resample or self.resample
-        image_mean = image_mean or self.image_mean
-        image_std = image_std or self.image_std
-        do_convert_rgb = do_convert_rgb or self.do_convert_rgb
-
-        max_crops = max_crops or self.max_crops
-        overlap_margins = overlap_margins or self.overlap_margins
-        patch_size = patch_size or self.patch_size
-        pooling_size = pooling_size or self.pooling_size
+        if resample is None:
+            resample = self.resample
+        if image_mean is None:
+            image_mean = self.image_mean
+        if image_std is None:
+            image_std = self.image_std
+        if do_convert_rgb is None:
+            do_convert_rgb = self.do_convert_rgb
+        if max_crops is None:
+            max_crops = self.max_crops
+        if overlap_margins is None:
+            overlap_margins = self.overlap_margins
+        if patch_size is None:
+            patch_size = self.patch_size
+        if pooling_size is None:
+            pooling_size = self.pooling_size
 
         image_pooling_h, image_pooling_w = pooling_size
 
@@ -477,7 +467,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
             batch_num_crops = []
 
             for image in images:
-                image_grid, crops, pooled_idx = image_to_patches_and_grids(
+                image_grid, crops, pooled_idx = self._image_to_patches_and_grids(
                     image,
                     max_crops,
                     overlap_margins,

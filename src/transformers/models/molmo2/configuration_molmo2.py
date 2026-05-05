@@ -240,8 +240,6 @@ class Molmo2Config(PreTrainedConfig):
         if last_layer_needed < num_vit_layers:
             self.vit_config.num_hidden_layers = last_layer_needed
 
-        self.image_high_res_id = self.image_patch_id
-        self.use_cache = self.text_config.use_cache
         super().__post_init__(**kwargs)
 
 
