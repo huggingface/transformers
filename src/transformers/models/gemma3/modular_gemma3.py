@@ -602,6 +602,17 @@ class Gemma3MultiModalProjector(nn.Module):
         return projected_vision_outputs.type_as(vision_outputs)
 
 
+def get_block_sequence_ids_for_mask(token_type_ids: torch.Tensor, device: torch.device | None = None) -> torch.Tensor:
+    # First find where a new image block starts: 1 if image and previous not image
+    # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
+    is_image = (token_type_ids == 1).to(device=device)
+    is_previous_image = nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
+    new_image_start = is_image & ~is_previous_image
+    group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
+    block_sequence_ids = torch.where(is_image, group_ids, -1)
+    return block_sequence_ids
+
+
 class Gemma3Model(PaliGemmaModel):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
@@ -670,14 +681,9 @@ class Gemma3Model(PaliGemmaModel):
             }
 
             if token_type_ids is not None:
-                # First find where a new image block starts: 1 if image and previous not image
-                # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
-                is_image = (token_type_ids == 1).to(inputs_embeds.device)
-                is_previous_image = nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
-                new_image_start = is_image & ~is_previous_image
-                group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
-                group_ids = torch.where(is_image, group_ids, -1)
-                mask_kwargs["block_sequence_ids"] = group_ids
+                mask_kwargs["block_sequence_ids"] = get_block_sequence_ids_for_mask(
+                    token_type_ids, device=inputs_embeds.device
+                )
 
             # Create the masks
             sliding_mask_kwargs = mask_kwargs.copy()
@@ -881,14 +887,9 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         }
 
         if token_type_ids is not None:
-            # First find where a new image block starts: 1 if image and previous not image
-            # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
-            is_image = (token_type_ids == 1).to(inputs_embeds.device)
-            is_previous_image = nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
-            new_image_start = is_image & ~is_previous_image
-            group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
-            group_ids = torch.where(is_image, group_ids, -1)
-            mask_kwargs["block_sequence_ids"] = group_ids
+            mask_kwargs["block_sequence_ids"] = get_block_sequence_ids_for_mask(
+                token_type_ids, device=inputs_embeds.device
+            )
 
         return create_masks_for_generate(**mask_kwargs)
 

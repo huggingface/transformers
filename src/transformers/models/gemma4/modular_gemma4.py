@@ -1650,6 +1650,18 @@ def token_type_ids_mask_function(
     return inner_mask
 
 
+def get_block_sequence_ids_for_mask(
+    mm_token_type_ids: torch.Tensor, device: torch.device | None = None
+) -> torch.Tensor:
+    is_vision = (mm_token_type_ids == 1) | (mm_token_type_ids == 2)
+    is_prev_vision = torch.roll(is_vision, shifts=1, dims=-1)
+    is_prev_vision[..., 0] = False
+    new_vision_starts = is_vision & ~is_prev_vision
+    vision_group_ids = torch.cumsum(new_vision_starts.int(), dim=1) - 1
+    block_sequence_ids = torch.where(is_vision, vision_group_ids, -1)
+    return block_sequence_ids
+
+
 @auto_docstring(
     custom_intro="""
     The base Gemma 4 model comprising a vision backbone, an audio backbone, and a language model without a
@@ -1896,16 +1908,11 @@ class Gemma4Model(Gemma3nModel):
             # Larger Gemma 4 models use Gemma 3's bidirectional attention mask for vision inputs
             # Smaller Gemma models use a conventional casual attention mask
             if self.config.get_text_config().use_bidirectional_attention == "vision":
-                vision_group_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
+                block_sequence_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
                 if mm_token_type_ids is not None:
-                    is_vision = (mm_token_type_ids == 1) | (mm_token_type_ids == 2)
-                    is_prev_vision = torch.roll(is_vision, shifts=1, dims=-1)
-                    is_prev_vision[..., 0] = False
-                    new_vision_starts = is_vision & ~is_prev_vision
-                    vision_group_ids = torch.cumsum(new_vision_starts.int(), dim=1) - 1
-                    vision_group_ids = torch.where(is_vision, vision_group_ids, -1)
+                    block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids)
 
-                mask_kwargs["block_sequence_ids"] = vision_group_ids
+                mask_kwargs["block_sequence_ids"] = block_sequence_ids
 
             # Create the masks
             causal_mask_mapping = create_masks_for_generate(**mask_kwargs)
@@ -2078,16 +2085,11 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
         # Larger Gemma 4 models use Gemma 3's bidirectional attention mask for vision inputs
         # Smaller Gemma models use a conventional casual attention mask
         if getattr(config.get_text_config(), "use_bidirectional_attention", None) == "vision":
-            vision_group_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
+            block_sequence_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
             if mm_token_type_ids is not None:
-                is_vision = (mm_token_type_ids == 1) | (mm_token_type_ids == 2)
-                is_prev_vision = torch.roll(is_vision, shifts=1, dims=-1)
-                is_prev_vision[..., 0] = False
-                new_vision_starts = is_vision & ~is_prev_vision
-                vision_group_ids = torch.cumsum(new_vision_starts.int(), dim=1) - 1
-                vision_group_ids = torch.where(is_vision, vision_group_ids, -1)
+                block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids)
 
-            mask_kwargs["block_sequence_ids"] = vision_group_ids
+            mask_kwargs["block_sequence_ids"] = block_sequence_ids
 
         return create_masks_for_generate(**mask_kwargs)
 

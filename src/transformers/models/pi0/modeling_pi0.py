@@ -166,6 +166,7 @@ class PI0Model(PI0PreTrainedModel):
             if inputs_embeds is None:
                 inputs_embeds = self.embed_prefix(input_ids, pixel_values, pixel_attention_mask)
 
+            # PI0 always passes a prefix and we need to hardcode it to correctly build a mask
             token_type_ids = torch.zeros_like(inputs_embeds)[:, :, 0]
             past_key_values = self.vlm(
                 inputs_embeds=inputs_embeds,
