@@ -6,47 +6,45 @@ on:
       - remove_strange_block
 
 jobs:
-  upload-test-artifacts:
-    name: Upload 1030 test artifacts
-    runs-on: ubuntu-22.04
+  download:
+    runs-on:
+      group: aws-g5-4xlarge-cache
+    container:
+      image: huggingface/transformers-all-latest-gpu
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+
     steps:
-      - name: Install @actions/artifact
-        run: npm install @actions/artifact
-
-      - name: Upload 1030 separate artifacts
-        uses: actions/github-script@v7
+      - name: Download specific artifacts
+        uses: actions/download-artifact@v4
         with:
-          script: |
-            const { DefaultArtifactClient } = require('./node_modules/@actions/artifact');
-            const fs = require('fs');
+          name: ci_results_run_models_gpu
+          path: ./downloaded2
+          repository: huggingface/transformers
+          run-id: 25356138915
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
-            const client = new DefaultArtifactClient();
-
-            for (let i = 1; i <= 1030; i++) {
-              const filename = `test_artifact_file_${i}.txt`;
-              fs.writeFileSync(filename, `artifact content ${i}`);
-              await client.uploadArtifact(
-                `test_artifact_${String(i).padStart(4, '0')}`,
-                [filename],
-                '.'
-              );
-            }
-            console.log('Done uploading 1030 artifacts');
-
-  download-test-artifacts:
-    name: Download test artifacts
-    runs-on: ubuntu-22.04
-    needs: upload-test-artifacts
-    steps:
-      - name: "Download WITHOUT token"
-        uses: actions/download-artifact@v8
-        continue-on-error: true
-        with:
-          pattern: test_artifact_*
-          path: ./without_token
-          merge-multiple: true
-
-      - name: Count without token
+      - name: List downloaded files
         run: |
-          echo "=== Without token ==="
-          find ./without_token -type f 2>/dev/null | wc -l
+          echo "=== Downloaded files ==="
+          find ./downloaded2 -type f | sort || echo "No files found"
+          echo "=== Total count ==="
+          find ./downloaded2 -type f | wc -l
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        env:
+          ACTIONS_ARTIFACT_MAX_ARTIFACT_COUNT: 2000
+        with:
+          pattern: new_failures_with_bad_commit_run_models_gpu*
+          path: ./downloaded
+          merge-multiple: true
+          repository: huggingface/transformers
+          run-id: 25356138915
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: List downloaded files
+        run: |
+          echo "=== Downloaded files ==="
+          find ./downloaded -type f | sort || echo "No files found"
+          echo "=== Total count ==="
+          find ./downloaded -type f | wc -l
