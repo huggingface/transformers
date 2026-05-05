@@ -420,19 +420,18 @@ class ParakeetEncoderSubsamplingConv2D(nn.Module):
         self.num_layers = int(math.log2(config.subsampling_factor))
         self.causal_downsampling = config.causal_downsampling
 
-        # Causal downsampling: pad on the left of the time axis only. Conv2d's `padding=0` on time
-        # combined with manual `F.pad` produces left-only padding; freq axis keeps symmetric padding.
-        # NeMo's dw_striding causal mode also adds one extra zero bin on the right of the freq axis
-        # before the first conv (via _initial_freq_pad), giving a 1-larger output dim per layer.
+        # Causal downsampling: each strided Conv2d uses asymmetric padding
+        # `(left=kernel-1, right=stride-1)` on BOTH time and freq axes (matches NeMo's CausalConv2D).
+        # We apply the pad manually via F.pad, then the inner Conv2d uses padding=0.
+        #
+        # Non-causal: standard symmetric `(kernel-1)//2` on both axes via Conv2d's built-in padding.
         if self.causal_downsampling:
-            self._time_pad_left = self.kernel_size - 1
-            self._time_pad_right = 0
-            self._initial_freq_pad = 1
-            conv_padding = (0, self.padding)  # (time, freq)
+            self._pad_left = self.kernel_size - 1
+            self._pad_right = self.stride - 1
+            conv_padding = 0
         else:
-            self._time_pad_left = self.padding
-            self._time_pad_right = self.padding
-            self._initial_freq_pad = 0
+            self._pad_left = self.padding
+            self._pad_right = self.padding
             conv_padding = self.padding
 
         # define layers
@@ -459,17 +458,18 @@ class ParakeetEncoderSubsamplingConv2D(nn.Module):
             self.layers.append(nn.ReLU())
 
         # Compute output freq length by simulating the conv chain with the actual padding applied.
-        out_length = config.num_mel_bins + self._initial_freq_pad
+        out_length = config.num_mel_bins
+        total_pad = self._pad_left + self._pad_right
         for _ in range(self.num_layers):
-            out_length = (out_length + 2 * self.padding - self.kernel_size) // self.stride + 1
+            out_length = (out_length + total_pad - self.kernel_size) // self.stride + 1
         self.linear = nn.Linear(config.subsampling_conv_channels * out_length, config.hidden_size, bias=True)
 
     def _get_output_length(self, input_lengths: torch.Tensor, conv_layer: nn.Conv2d):
         if hasattr(conv_layer, "stride") and conv_layer.stride != (1, 1):
             kernel_size = conv_layer.kernel_size[0]
             stride = conv_layer.stride[0]
-            time_pad_total = self._time_pad_left + self._time_pad_right
-            output_lengths = (input_lengths + time_pad_total - kernel_size) // stride + 1
+            total_pad = self._pad_left + self._pad_right
+            output_lengths = (input_lengths + total_pad - kernel_size) // stride + 1
             return output_lengths
 
         return input_lengths
@@ -478,20 +478,16 @@ class ParakeetEncoderSubsamplingConv2D(nn.Module):
         # input_features is (B, T, F); after unsqueeze(1) it is (B, 1, T, F).
         # F.pad pads from the *last* axis outward, so the tuple is (F_l, F_r, T_l, T_r).
         hidden_states = input_features.unsqueeze(1)
-        # Causal downsampling: pre-pad freq axis on the right by one zero bin, matching NeMo's
-        # dw_striding behaviour (the cascade then yields one extra freq bin per layer vs. a
-        # plain symmetric chain).
-        if self._initial_freq_pad:
-            # Pad freq on the LEFT (low-frequency end). NeMo's dw_striding causal mode pre-pads
-            # one zero bin at the start of the freq axis before the first conv.
-            hidden_states = nn.functional.pad(hidden_states, (self._initial_freq_pad, 0, 0, 0))
         current_lengths = attention_mask.sum(-1) if attention_mask is not None else None
 
         for layer in self.layers:
-            # Causal downsampling: manually left-pad time axis before strided Conv2d (which has
-            # padding=0 in the time dimension). Freq-axis padding is already inside the conv.
+            # Causal downsampling: each strided Conv2d gets the asymmetric pad
+            # (left=kernel-1, right=stride-1) on BOTH freq and time axes — matches NeMo's CausalConv2D.
             if self.causal_downsampling and isinstance(layer, nn.Conv2d) and layer.stride != (1, 1):
-                hidden_states = nn.functional.pad(hidden_states, (0, 0, self._time_pad_left, self._time_pad_right))
+                hidden_states = nn.functional.pad(
+                    hidden_states,
+                    (self._pad_left, self._pad_right, self._pad_left, self._pad_right),
+                )
             hidden_states = layer(hidden_states)
 
             # mask the hidden states
@@ -597,7 +593,12 @@ class ParakeetPreTrainedModel(PreTrainedModel):
         stride = encoder_config.subsampling_conv_stride
         num_layers = int(math.log2(encoder_config.subsampling_factor))
 
-        all_paddings = (kernel_size - 1) // 2 * 2
+        if getattr(encoder_config, "causal_downsampling", False):
+            # NeMo's CausalConv2D pads (left=kernel-1, right=stride-1) → total = kernel-1 + stride-1.
+            all_paddings = (kernel_size - 1) + (stride - 1)
+        else:
+            # Symmetric same-padding: total = (kernel-1)//2 * 2.
+            all_paddings = (kernel_size - 1) // 2 * 2
         add_pad = all_paddings - kernel_size
         lengths = input_lengths
 
