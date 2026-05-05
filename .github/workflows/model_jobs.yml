@@ -147,6 +147,7 @@ jobs:
         run: |
           mkdir -p "/transformers/reports/${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports"
           echo "dummy" > "/transformers/reports/${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports/dummy.txt"
+          echo "dummy2" > "/transformers/reports/${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports/${matrix_folders}.txt"
           ls -la "/transformers/reports/${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports"
 
       - name: "Test suite reports artifacts: ${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports"
