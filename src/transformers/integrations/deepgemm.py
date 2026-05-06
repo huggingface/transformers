@@ -117,7 +117,9 @@ def _load_deepgemm_kernel() -> DeepGEMM:
     grouped_bf16_matmul_nt = getattr(kernel, "m_grouped_bf16_gemm_nt_contiguous", None)
     grouped_bf16_matmul_nn = getattr(kernel, "m_grouped_bf16_gemm_nn_contiguous", None)
     per_token_cast_to_fp8 = resolve_internal_import(kernel, chained_path="utils.per_token_cast_to_fp8")
-    get_mn_major_tma_aligned_packed_ue8m0_tensor = getattr(kernel, "get_mn_major_tma_aligned_packed_ue8m0_tensor", None)
+    get_mn_major_tma_aligned_packed_ue8m0_tensor = getattr(
+        kernel, "get_mn_major_tma_aligned_packed_ue8m0_tensor", None
+    )
     transform_weights_for_mega_moe = getattr(kernel, "transform_weights_for_mega_moe", None)
     get_symm_buffer_for_mega_moe = getattr(kernel, "get_symm_buffer_for_mega_moe", None)
     fp8_fp4_mega_moe = getattr(kernel, "fp8_fp4_mega_moe", None)
@@ -424,13 +426,19 @@ def deepgemm_fp8_fp4_experts_forward(
             )
         cast_kwargs = {"use_ue8m0": True, "gran_k": 32, "use_packed_ue8m0": True}
     else:
+        # FP8 weights: DeepGEMM supports two SF granularities for the N axis
+        # of B (block-128 or per-row), and only gran_k=128 for the K axis.
+        # The block_size attribute is informational; the kernel infers the
+        # actual recipe from the SF dtype + shape (`get_default_recipe`).
         if self.block_size is None:
             raise ValueError(
-                "DeepGEMM requires block-wise quantization (block_size=[128, 128]), "
-                "but got per-tensor quantization (block_size=None)."
+                "DeepGEMM requires block-wise quantized FP8 weights, but the experts have "
+                "no `block_size` set (per-tensor quantization is not supported)."
             )
-        if self.block_size[0] != 128 or self.block_size[1] != 128:
-            raise ValueError(f"DeepGEMM requires block_size=(128, 128), got {self.block_size}")
+        if self.block_size not in ((128, 128), (1, 128)):
+            raise ValueError(
+                f"DeepGEMM requires `block_size` ∈ {{(128, 128), (1, 128)}} for FP8 weights, got {self.block_size}."
+            )
         if ws_up.dtype == torch.float8_e8m0fnu:
             cast_kwargs = {"use_ue8m0": True, "gran_k": 128, "use_packed_ue8m0": True}
         else:
