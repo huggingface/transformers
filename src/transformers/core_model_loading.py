@@ -784,6 +784,26 @@ class WeightTransform:
         """
         ...
 
+    def post_transformation_cleanup(self, model: PreTrainedModel, source_names: list[str]) -> None:
+        """
+        After transforming the model's module graph, we may end up with empty modules that held the original weights,
+        we remove them.
+        """
+        for source_name in source_names:
+            mod_path, _ = source_name.rsplit(".", 1) if "." in source_name else ("", source_name)
+            try:
+                source_mod = model.get_submodule(mod_path) if mod_path else model
+            except AttributeError:
+                continue
+            if (
+                all(p is None for p in source_mod._parameters.values())
+                and all(b is None for b in source_mod._buffers.values())
+                and (m is None for m in source_mod._modules.values())
+            ):
+                parent_path, _, mod_name = mod_path.rpartition(".")
+                parent_mod = model.get_submodule(parent_path) if parent_path else model
+                parent_mod._modules.pop(mod_name, None)
+
 
 class WeightRenaming(WeightTransform):
     # Special case of WeightTransform that only renames keys without any conversion.
@@ -856,6 +876,9 @@ class WeightRenaming(WeightTransform):
         elif source_attr in source_mod._buffers:
             obj = source_mod._buffers.pop(source_attr)
             _get_submodule_or_create(model, target_mod_path).register_buffer(target_attr, obj)
+
+        # Cleanup any empty modules that may be left after moving the parameter/buffer.
+        self.post_transformation_cleanup(model, source_names)
 
 
 class PrefixChange(WeightRenaming):
@@ -1047,21 +1070,7 @@ class WeightConverter(WeightTransform):
             target_mod.register_parameter(t_attr, meta_tensor)
 
         # Remove source modules if they are empty after the transform.
-        for source_name in source_names:
-            mod_path, _, attr = source_name.rpartition(".")
-            try:
-                source_mod = model.get_submodule(mod_path) if mod_path else model
-            except AttributeError:
-                continue
-            if (
-                all(p is None for p in source_mod._parameters.values())
-                and all(b is None for b in source_mod._buffers.values())
-                and (m is None for m in source_mod._modules.values())
-            ):
-                # If the module is now empty, we can remove it from its parent to avoid keeping empty modules after conversion
-                parent_path, _, mod_name = mod_path.rpartition(".")
-                parent_mod = model.get_submodule(parent_path) if parent_path else model
-                parent_mod._modules.pop(mod_name, None)
+        self.post_transformation_cleanup(model, source_names)
 
 
 def _get_submodule_or_create(
@@ -1094,7 +1103,9 @@ def _get_submodule_or_create(
                 sparse=original_module.sparse,
             )
         else:
-            mod = cls_()
+            raise ValueError(
+                f"Cannot infer instantiation for {cls_} when creating submodule {mod_name} at path {module_path}"
+            )
         parent_mod.add_module(mod_name, mod)
     else:
         mod = parent_mod._modules[mod_name]
