@@ -208,7 +208,7 @@ def _apply_coerce(value: Any, coerce: str | None) -> Any:
         if isinstance(value, bool):
             return value
         if isinstance(value, str):
-            return value.strip().lower() in ("true", "1", "yes")
+            return value.strip().lower() in ("true", "1")
         return bool(value)
     raise ValueError(f"Unknown coerce: {coerce}")
 
