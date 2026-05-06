@@ -183,6 +183,11 @@ def _coerce_sf_for_kernel(sf: torch.Tensor) -> torch.Tensor:
         # view(int32) requires the source contiguous (4 K-bytes adjacent).
         sf = sf.contiguous().view(torch.int32)
 
+    # A/B: skip the MN-major rewrite for float SF — the kernel re-lays it out
+    # itself via `transform_sf_into_required_layout` (broadcast + pack).
+    if sf.dtype == torch.float32:
+        return sf.contiguous()
+
     if sf.dim() not in (2, 3):
         raise ValueError(f"DeepGEMM SF must be 2D or 3D, got {sf.dim()}D")
 
@@ -482,10 +487,7 @@ def deepgemm_fp8_fp4_experts_forward(
     selected_hidden_states_g = hidden_states[perm // num_top_k]
     sample_weights_g = sample_weights[perm]
 
-    # A/B test: gate psum_layout on int-SF only, to see whether the float-SF
-    # NaN on B200 correlates with the psum_layout dispatch.
-    is_int_sf = bool(cast_kwargs.get("use_packed_ue8m0")) or is_fp4_weights
-    use_psum_layout = torch.cuda.get_device_capability(device)[0] >= 10 and is_int_sf
+    use_psum_layout = torch.cuda.get_device_capability(device)[0] >= 10
     sorted_to_padded, grouped_layout, total_padded_rows = _build_deepgemm_contiguous_layout(
         expert_ids_g, self.num_experts, alignment=_DEEPGEMM_M_ALIGNMENT, use_psum_layout=use_psum_layout
     )
