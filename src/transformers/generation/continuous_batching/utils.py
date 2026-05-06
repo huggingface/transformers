@@ -11,12 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
 import queue
 from collections import OrderedDict
 from contextlib import contextmanager
 from dataclasses import dataclass
 from math import ceil, log2
-from typing import Any, TypeVar
+from typing import Any
 
 import torch
 import torch.distributed as dist
@@ -258,6 +259,12 @@ class DistributedHelper:
         # The TP-driver is the rank that owns the request queue and the scheduler decisions inside its TP group.
         self.is_tp_driver = self.tp_local_rank == 0
 
+        # Cache the local accelerator device for later use by NCCL collectives
+        if self.dist_on and torch.cuda.is_available():
+            self._broadcast_device = torch.device("cuda", int(os.environ.get("LOCAL_RANK", 0)))
+        else:
+            self._broadcast_device = None
+
         # Get DP attributes
         self.dp_rank = self.global_rank // self.tp_size
         self.dp_size = self.world_size // self.tp_size
@@ -277,5 +284,7 @@ class DistributedHelper:
         holder = [obj] if self.is_tp_driver else [None]
         # TODO: this is not optimized for intra-node transfer: we go through the CPU even though we don't need to. In
         # the future, it might be better to use CPU-only comms.
-        dist.broadcast_object_list(holder, src=self.tp_root_global_rank, group=self.tp_group)
+        dist.broadcast_object_list(
+            holder, src=self.tp_root_global_rank, group=self.tp_group, device=self._broadcast_device
+        )
         return holder[0]

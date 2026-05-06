@@ -69,9 +69,10 @@ def _config_summary(cfg: Any) -> dict[str, Any]:
 class BenchmarkResults:
     """Holds all CB benchmark runs and the shared model they execute against."""
 
-    def __init__(self, model_id: str, attn_impl: str):
+    def __init__(self, model_id: str, attn_impl: str, tp_size: int = 1):
         self.model_id = model_id
         self.attn_impl = attn_impl
+        self.tp_size = tp_size
         self.entries: list[BenchmarkEntry] = []
 
     def cleanup(self) -> None:
@@ -82,11 +83,11 @@ class BenchmarkResults:
     def _get_model(self) -> Any:
         model = None
         self.cleanup()
-        model = AutoModelForCausalLM.from_pretrained(
-            self.model_id, attn_implementation=self.attn_impl, device_map="auto"
-        )
-        model = model.eval()
-        return model
+        kwargs: dict[str, Any] = {"attn_implementation": self.attn_impl, "device_map": "auto"}
+        if self.tp_size > 1:
+            kwargs["tp_plan"] = "auto"
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, **kwargs)
+        return model.eval()
 
     def add_benchmark(
         self,
@@ -224,9 +225,10 @@ if __name__ == "__main__":
     parser.add_argument("--compare-to", type=str, default=None, help="Name of a previous run to compare against.")
     parser.add_argument("--model-id", type=str, default="meta-llama/Llama-3.1-8B-Instruct")
     parser.add_argument("--attn", type=str, default="kernels-community/flash-attn3")
+    parser.add_argument("--tp-size", type=int, default=1, help="Tensor parallel size (1 = no TP).")
     cli_args = parser.parse_args()
 
-    results = BenchmarkResults(model_id=cli_args.model_id, attn_impl=cli_args.attn)
+    results = BenchmarkResults(model_id=cli_args.model_id, attn_impl=cli_args.attn, tp_size=cli_args.tp_size)
 
     # GSM8K benchmarks (256 max new tokens)
 
@@ -294,13 +296,12 @@ if __name__ == "__main__":
         label="multi_return_seq",
     )
 
-    # Post processing and display
-
-    results.print_summary()
-
-    if cli_args.compare_to:
-        baseline = BenchmarkResults.load_most_recent(cli_args.compare_to)
-        results.compare_to(baseline=baseline)
-
-    if cli_args.name:
-        results.save(cli_args.name)
+    # Post processing and display. Only on rank 0 in TP runs to avoid duplicate output / file writes.
+    is_rank_zero = not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0
+    if is_rank_zero:
+        results.print_summary()
+        if cli_args.compare_to:
+            baseline = BenchmarkResults.load_most_recent(cli_args.compare_to)
+            results.compare_to(baseline=baseline)
+        if cli_args.name:
+            results.save(cli_args.name)
