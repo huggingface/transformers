@@ -286,6 +286,11 @@ class MllamaProcessor(ProcessorMixin):
                         f"number of provided images per batch ({n_images_in_images}). {add_message}"
                     )
 
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        # Mllama has an `image_token` but doesn't need to add placeholders because
+        # it uses cross-attention. Return the token itself an empty replacement
+        return self.image_token
+
     def post_process_image_text_to_text(
         self, generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False, **kwargs
     ):

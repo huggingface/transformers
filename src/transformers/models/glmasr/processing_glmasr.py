@@ -96,8 +96,9 @@ class GlmAsrProcessor(ProcessorMixin):
             [`BatchFeature`]: A dictionary with tokenized text (`input_ids`, `attention_mask`) and
             audio features (`input_features`, `input_features_mask`).
         """
-        # Force tensor outputs for AudioFlamingo, other types not supported
-        kwargs["return_tensors"] = "pt"
+        # Check only if passed explicitly as another value since by default we'll use `pt`
+        if "return_tensors" in kwargs and kwargs["return_tensors"] != "pt":
+            raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
         if output_labels:
             kwargs["return_mm_token_type_ids"] = True
