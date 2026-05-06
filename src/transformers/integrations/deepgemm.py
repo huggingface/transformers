@@ -311,10 +311,16 @@ def _build_deepgemm_contiguous_layout(
 def _pad_for_deepgemm(x: torch.Tensor, sorted_to_padded: torch.Tensor, total_padded_rows: int) -> torch.Tensor:
     """Pad a sorted tensor into the TMA-aligned contiguous layout.
 
-    Padding rows are left uninitialized — the kernel skips them via `grouped_layout=-1` (Hopper)
-    or via the psum offsets (Blackwell), so their values never enter the computation.
+    Padding rows are zero-initialized: on SM100 the psum_layout dispatch computes
+    every row in the per-expert aligned range (it has no per-row skip mask, only
+    cumulative offsets), so any garbage in the padding feeds straight into the
+    GEMM. For float-SF activations that's catastrophic — uninitialized float32
+    bit patterns can be huge (or NaN), blow up the FP8 dequant, and overflow.
+    With zero-initialised padding: FP8 acts → 0, float SF → 0 (dequant = 0),
+    UE8M0 SF → byte 0 (≈2^-127, dequant ≈ 0). Dot product on padding rows
+    becomes 0, harmless.
     """
-    padded = torch.empty(total_padded_rows, *x.shape[1:], device=x.device, dtype=x.dtype)
+    padded = torch.zeros(total_padded_rows, *x.shape[1:], device=x.device, dtype=x.dtype)
     padded[sorted_to_padded] = x
     return padded
 
