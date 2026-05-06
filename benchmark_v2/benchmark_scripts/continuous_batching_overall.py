@@ -9,12 +9,18 @@ import argparse
 import gc
 import json
 import time
+import types
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-import datasets
 import torch
+from lighteval.models.model_output import ModelResponse
+from lighteval.tasks.lighteval_task import LightevalTask, LightevalTaskConfig
+from lighteval.tasks.prompt_manager import PromptManager
+from lighteval.tasks.registry import Registry
+from lighteval.tasks.requests import Doc
 from tabulate import tabulate
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, ContinuousBatchingConfig, GenerationConfig
@@ -24,16 +30,100 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, ContinuousBatching
 RESULTS_DIR = Path(__file__).parent.parent / "benchmark_results/cb_overall/"
 
 
+def _fmt(val: Any, spec: str = "", missing: str = "X") -> str:
+    """Format `val` per `spec`, or return `missing` if val is None."""
+    return format(val, spec) if val is not None else missing
+
+
+def _build_gsm8k_platinum_module() -> types.ModuleType:
+    """Define the gsm8k_platinum custom task inline so lighteval's Registry can pick it up via `custom_tasks=`."""
+
+
+    def gsm8k_platinum_prompt(line, task_name=None):
+        return Doc(
+            task_name=task_name,
+            query=f"Question: {line['question']}\nAnswer:",
+            choices=[f" {line['answer']}"],
+            gold_index=0,
+        )
+
+    metrics = list(Registry().load_all_task_configs()["gsm8k"].metrics)
+
+    mod = types.ModuleType("_gsm8k_platinum_inline")
+    mod.TASKS_TABLE = [
+        LightevalTaskConfig(
+            name="gsm8k_platinum",
+            prompt_function=gsm8k_platinum_prompt,
+            hf_repo="madrylab/gsm8k-platinum",
+            hf_subset="main",
+            evaluation_splits=("test",),
+            few_shots_split="test",
+            few_shots_select="random_sampling",
+            generation_size=256,
+            stop_sequence=["Question:"],
+            metrics=metrics,
+        ),
+    ]
+    return mod
+
+
+def _build_lighteval_inputs_scorer(
+    tokenizer: AutoTokenizer,
+    *,
+    task_spec: str,
+    task_name: str,
+    use_chat_template: bool,
+    custom_tasks: Any = None,
+    primary_metric: str | None = None,
+    stop_sequences: tuple[str, ...] = (),
+) -> tuple[list[list[int]], Callable[[Any], float]]:
+    """Tokenize prompts and build a per-sample scorer for any lighteval task."""
+    r = Registry(tasks=task_spec, **({"custom_tasks": custom_tasks} if custom_tasks else {}))
+    metric = r.task_to_configs[task_name][0].metrics[0]
+    tasks_dict = r.load_tasks()
+    LightevalTask.load_datasets(tasks_dict, 1)
+    docs = next(iter(tasks_dict.values())).get_docs()
+
+    pm = PromptManager(use_chat_template=use_chat_template, tokenizer=tokenizer, system_prompt=None)
+    prompts = [pm.prepare_prompt(doc) for doc in docs]
+    inputs = tokenizer(prompts, add_special_tokens=not use_chat_template)["input_ids"]
+
+    def score(outputs) -> float:
+        scores = []
+        for doc, (_, out) in zip(docs, outputs.items()):
+            text = tokenizer.decode(out.generated_tokens, skip_special_tokens=True)
+            for s in stop_sequences:
+                text = text.split(s, 1)[0]
+            value = metric.sample_level_fn.compute(doc, ModelResponse(text=[text]))
+            # Grouped metrics return a dict keyed by sub-metric — pick the primary one.
+            scores.append(value[primary_metric] if isinstance(value, dict) else value)
+        return sum(scores) / len(scores)
+
+    return inputs, score
+
+
 # Data helpers
-def get_tokenized_gms8k(tokenizer: AutoTokenizer) -> list[list[int]]:
-    """Tokenize the GSM8K questions as chat prompts."""
-    dataset = datasets.load_dataset("openai/gsm8k", "socratic", split="test")
-    batched_inputs = []
-    for item in dataset:
-        messages = [{"role": "user", "content": item["question"]}]
-        inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True)  # type: ignore
-        batched_inputs.append(inputs if isinstance(inputs, list) else inputs["input_ids"])
-    return batched_inputs
+def get_tokenized_gms8k(tokenizer: AutoTokenizer, n_fewshot: int = 8) -> tuple[list[list[int]], Callable[[Any], float]]:
+    """GSM8K-Platinum few-shot inputs and scorer using the same lighteval extractive_match as the gsm8k task."""
+    return _build_lighteval_inputs_scorer(
+        tokenizer,
+        task_spec=f"gsm8k_platinum|{n_fewshot}",
+        task_name="gsm8k_platinum",
+        use_chat_template=False,
+        custom_tasks=_build_gsm8k_platinum_module(),
+        stop_sequences=("Question:",),
+    )
+
+
+def get_tokenized_ifeval(tokenizer: AutoTokenizer) -> tuple[list[list[int]], Callable[[Any], float]]:
+    """IFEval inputs (chat-templated, 0-shot) and scorer reporting prompt-level strict accuracy."""
+    return _build_lighteval_inputs_scorer(
+        tokenizer,
+        task_spec="ifeval|0",
+        task_name="ifeval",
+        use_chat_template=True,
+        primary_metric="prompt_level_strict_acc",
+    )
 
 
 def get_random_data(batch_size: int, num_tokens: int, vocab_size: int = 16000) -> list[list[int]]:
@@ -57,6 +147,7 @@ class BenchmarkEntry:
     num_tokens: int | None = None
     throughput_tok_per_sec: float | None = None
     peak_memory_gb: float | None = None
+    accuracy: float | None = None
     error: str | None = None
 
 
@@ -81,12 +172,10 @@ class BenchmarkResults:
         torch.cuda.reset_peak_memory_stats()
 
     def _get_model(self) -> Any:
-        model = None
         self.cleanup()
-        kwargs: dict[str, Any] = {"attn_implementation": self.attn_impl, "device_map": "auto"}
-        if self.tp_size > 1:
-            kwargs["tp_plan"] = "auto"
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, **kwargs)
+        # tp_plan and device_map are mutually exclusive — TP uses its own placement.
+        placement = {"tp_plan": "auto"} if self.tp_size > 1 else {"device_map": 0}
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, attn_implementation=self.attn_impl, **placement)
         return model.eval()
 
     def add_benchmark(
@@ -96,13 +185,12 @@ class BenchmarkResults:
         cb_config: ContinuousBatchingConfig,
         gen_config: GenerationConfig | None = None,
         label: str | None = None,
+        score_fn: Callable[[Any], float] | None = None,
     ) -> BenchmarkEntry:
         """Run one CB benchmark and record time, tokens, and peak memory."""
 
         gen_config = GenerationConfig() if gen_config is None else gen_config
         gen_config.max_new_tokens = max_new_tokens
-        # Disable EOS so every request runs to max_new_tokens — consistent benchmarking.
-        gen_config.eos_token_id = -1
 
         model = self._get_model()
 
@@ -136,9 +224,12 @@ class BenchmarkResults:
             entry.num_tokens = num_tokens
             entry.throughput_tok_per_sec = num_tokens / gen_time if gen_time > 0 else 0.0
             entry.peak_memory_gb = torch.cuda.max_memory_allocated() / (1024**3)
+            if score_fn is not None:
+                entry.accuracy = score_fn(outputs)
             print(
                 f"   {gen_time:.2f}s, {num_tokens} tokens, "
                 f"{entry.throughput_tok_per_sec:.2f} tok/s, peak {entry.peak_memory_gb:.2f} GB"
+                + (f", acc {entry.accuracy:.3f}" if entry.accuracy is not None else "")
             )
         except Exception as e:
             entry.error = str(e)
@@ -185,10 +276,11 @@ class BenchmarkResults:
                 "samples": e.num_samples,
                 "avg_in": f"{e.avg_input_tokens:.1f}",
                 "max_new": e.max_new_tokens,
-                "time (s)": f"{e.time_seconds:.2f}" if e.time_seconds is not None else "X",
-                "tokens": e.num_tokens if e.num_tokens is not None else "X",
-                "tok/s": f"{e.throughput_tok_per_sec:.2f}" if e.throughput_tok_per_sec is not None else "ERROR",
-                "mem (GB)": f"{e.peak_memory_gb:.2f}" if e.peak_memory_gb is not None else "X",
+                "time (s)": _fmt(e.time_seconds, ".2f"),
+                "tokens": _fmt(e.num_tokens, "d"),
+                "tok/s": _fmt(e.throughput_tok_per_sec, ".2f", "ERROR"),
+                "mem (GB)": _fmt(e.peak_memory_gb, ".2f"),
+                "acc": _fmt(e.accuracy, ".3f", "-"),
             }
             for e in self.entries
         ]
@@ -196,24 +288,22 @@ class BenchmarkResults:
 
     def compare_to(self, baseline: "BenchmarkResults") -> None:
         """Print a side-by-side throughput comparison against a baseline run."""
-        baseline_by_label = {e.label: e for e in baseline.entries}
-        rows = []
-        for e in self.entries:
-            base = baseline_by_label.get(e.label)
-            base_tp = base.throughput_tok_per_sec if base else None
-            cur_tp = e.throughput_tok_per_sec
-            if isinstance(base_tp, (int, float)) and isinstance(cur_tp, (int, float)) and base_tp > 0:
-                diff_str = f"{(cur_tp - base_tp) / base_tp * 100:+.1f}%"
-            else:
-                diff_str = "N/A"
-            rows.append(
-                {
-                    "label": e.label,
-                    "baseline (tok/s)": f"{base_tp:.2f}" if isinstance(base_tp, (int, float)) else "N/A",
-                    "current (tok/s)": (f"{cur_tp:.2f}" if isinstance(cur_tp, (int, float)) else (e.error or "N/A")),
-                    "diff": diff_str,
-                }
-            )
+        base_tps = {e.label: e.throughput_tok_per_sec for e in baseline.entries}
+
+        def diff(cur: float | None, base: float | None) -> str:
+            if cur is None or not base:
+                return "N/A"
+            return f"{(cur - base) / base * 100:+.1f}%"
+
+        rows = [
+            {
+                "label": e.label,
+                "baseline (tok/s)": _fmt(base_tps.get(e.label), ".2f", "N/A"),
+                "current (tok/s)": _fmt(e.throughput_tok_per_sec, ".2f", e.error or "N/A"),
+                "diff": diff(e.throughput_tok_per_sec, base_tps.get(e.label)),
+            }
+            for e in self.entries
+        ]
         print(f"\nComparison against baseline (model={baseline.model_id}):")
         print(tabulate(rows, headers="keys", tablefmt="github"))
 
@@ -230,26 +320,28 @@ if __name__ == "__main__":
 
     results = BenchmarkResults(model_id=cli_args.model_id, attn_impl=cli_args.attn, tp_size=cli_args.tp_size)
 
-    # GSM8K benchmarks (256 max new tokens)
-
+    # GSM8K benchmarks (256 max new tokens) — gsm8k_platinum dataset, 8-shot, lighteval extractive_match
     tokenizer = AutoTokenizer.from_pretrained(cli_args.model_id, padding_side="left")
-    gsm8k_data = get_tokenized_gms8k(tokenizer)
+    gsm8k_data, gsm8k_score_fn = get_tokenized_gms8k(tokenizer)
 
     ## No options
     results.add_benchmark(
         data=gsm8k_data,
         max_new_tokens=256,
         cb_config=ContinuousBatchingConfig(),
+        gen_config=GenerationConfig(eos_token_id=-1),
         label="gsm8k_default",
+        score_fn=gsm8k_score_fn,
     )
 
-    ## With sampling
+    ## With sampling. Recommended chat sampling (T=0.6, top_p=0.9), low enough that math reasoning isn't derailed
     results.add_benchmark(
         data=gsm8k_data,
         max_new_tokens=256,
         cb_config=ContinuousBatchingConfig(),
-        gen_config=GenerationConfig(do_sample=True),
+        gen_config=GenerationConfig(eos_token_id=-1, do_sample=True, temperature=0.6, top_p=0.9),
         label="gsm8k_sampling",
+        score_fn=gsm8k_score_fn,
     )
 
     ## With compile
@@ -257,7 +349,9 @@ if __name__ == "__main__":
         data=gsm8k_data,
         max_new_tokens=256,
         cb_config=ContinuousBatchingConfig(use_default_compile_configs=True),
+        gen_config=GenerationConfig(eos_token_id=-1),
         label="gsm8k_compile",
+        score_fn=gsm8k_score_fn,
     )
 
     ## No decode fast path
@@ -265,7 +359,29 @@ if __name__ == "__main__":
         data=gsm8k_data,
         max_new_tokens=256,
         cb_config=ContinuousBatchingConfig(max_blocks_per_request=0),
+        gen_config=GenerationConfig(eos_token_id=-1),
         label="gsm8k_no_fast_decode",
+        score_fn=gsm8k_score_fn,
+    )
+
+    ## Bare-bones CB config
+    results.add_benchmark(
+        data=gsm8k_data,
+        max_new_tokens=256,
+        cb_config=ContinuousBatchingConfig(max_blocks_per_request=0, use_async_batching=False, use_cuda_graph=False),
+        gen_config=GenerationConfig(eos_token_id=-1),
+        label="gsm8k_bare_bones",
+        score_fn=gsm8k_score_fn,
+    )
+
+    # IFEval: 0-shot chat prompts; uses real EOS so instruction-following metrics see the model's natural stop.
+    ifeval_data, ifeval_score_fn = get_tokenized_ifeval(tokenizer)
+    results.add_benchmark(
+        data=ifeval_data,
+        max_new_tokens=1280,
+        cb_config=ContinuousBatchingConfig(),
+        label="ifeval_default",
+        score_fn=ifeval_score_fn,
     )
 
     # Raw benchmarks (synthetic data, variable max new tokens)
@@ -276,6 +392,7 @@ if __name__ == "__main__":
             data=get_random_data(batch_size=32, num_tokens=256),
             max_new_tokens=length,
             cb_config=ContinuousBatchingConfig(use_default_compile_configs=True),
+            gen_config=GenerationConfig(eos_token_id=-1),
             label=f"rollouts_{length}",
         )
 
@@ -284,6 +401,7 @@ if __name__ == "__main__":
         data=get_random_data(batch_size=20, num_tokens=256),
         max_new_tokens=256,
         cb_config=ContinuousBatchingConfig(num_blocks=16),
+        gen_config=GenerationConfig(eos_token_id=-1),
         label="few_blocks",
     )
 
@@ -292,7 +410,7 @@ if __name__ == "__main__":
         data=get_random_data(batch_size=50, num_tokens=256),
         max_new_tokens=256,
         cb_config=ContinuousBatchingConfig(),
-        gen_config=GenerationConfig(do_sample=True, num_return_sequences=8),
+        gen_config=GenerationConfig(eos_token_id=-1, do_sample=True, num_return_sequences=8),
         label="multi_return_seq",
     )
 
