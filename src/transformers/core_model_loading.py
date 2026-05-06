@@ -1118,16 +1118,123 @@ class SkipParameters(Exception):
     pass
 
 
+def _compute_all_prefixes(model) -> list[str]:
+    """
+    Return all base-model prefix paths reachable from `model`, ordered shortest-first (BFS).
+
+    `base_model_prefix` on a class means "when I am stored as a submodule in a parent
+    model, the parent stores me under the attribute named `base_model_prefix`". A child is
+    therefore a "base model" of the current model when its `base_model_prefix` matches the
+    attribute name it is stored under.
+
+    Multiple base-model children are supported (e.g. a multi-modal model that contains
+    both `self.vision_model` and `self.text_model`).
+
+    Examples:
+
+        DetrForObjectDetection  -> ["model"]
+        DetrForSegmentation     -> ["detr", "detr.model"]
+        LlamaForCausalLM        -> ["model"]
+        CLIPModel               -> ["vision_model", "text_model"]
+    """
+    prefixes: list[str] = [getattr(model, "base_model_prefix", "")]
+    queue: list[tuple] = [(model, getattr(model, "base_model_prefix", ""))]
+
+    while queue:
+        current_model, accumulated_prefix = queue.pop(0)
+        for name, child in current_model.named_children():
+            child_prefix = getattr(child, "base_model_prefix", "")
+            if child_prefix and child_prefix == name:
+                next_accumulated = f"{accumulated_prefix}.{name}" if accumulated_prefix else name
+                prefixes.append(next_accumulated)
+                queue.append((child, next_accumulated))
+
+    return prefixes
+
+
+def _strip_model_prefix_for_save(key: str, model) -> str:
+    """
+    Recursively strip all `base_model_prefix` segments from a state-dict key so that
+    reverse conversion rules (written relative to the innermost base model) operate on
+    bare keys regardless of nesting depth.
+
+    We identify each prefix level by finding the direct child whose `base_model_prefix`
+    matches its attribute name (same logic as `_compute_all_prefixes`).
+
+    Examples for `DetrForSegmentation` (prefix chain `detr` -> `model`):
+
+        "detr.model.backbone.x"            ->  "backbone.x"
+        "detr.class_labels_classifier.x"   ->  "class_labels_classifier.x"
+        "mask_head.x"                      ->  "mask_head.x"
+    """
+    for name, child in model.named_children():
+        child_prefix = getattr(child, "base_model_prefix", "")
+        if child_prefix and child_prefix == name and key.startswith(name + "."):
+            stripped_key = key[len(name) + 1 :]
+            return _strip_model_prefix_for_save(stripped_key, child)
+    return key
+
+
+def _resolve_key_for_prefix_nesting(
+    renamed_key: str,
+    valid_prefixes: list[str],
+    meta_state_dict: dict,
+) -> str:
+    """
+    Rewrite `renamed_key` with `valid_prefixes` from `_compute_all_prefixes` (longest prefixes first) so
+    `base_model_prefix` lines up for head and base models (strip wrapper prefixes or add missing inner ones).
+
+    - Per prefix (longest first): strip leading `prefix.`; if `prefix` is dotted, also try prepending the substring
+      after its first `.`.
+    - If still unmatched: `valid_prefixes` only reflects the load target, so keys from a more wrapped checkpoint can
+      still embed `prefix.` in the middle of the path. For each prefix, restart from `renamed_key` and
+      repeatedly replace the string with everything after the first `prefix.` (discarding that segment and anything
+      before it), while the string starts with `prefix.` or contains `.{prefix}.`, until a suffix exists in
+      `meta_state_dict`.
+
+    Args:
+        renamed_key: Key after weight renamings and conversion patterns.
+        valid_prefixes: Candidate `base_model_prefix` paths for the model being loaded.
+        meta_state_dict: Reference key set (e.g. `model.state_dict()`).
+
+    Returns:
+        A matching key in `meta_state_dict`, or `renamed_key`.
+    """
+    for prefix in reversed(valid_prefixes):
+        if renamed_key.startswith(prefix + "."):
+            candidate = renamed_key[len(prefix) + 1 :]
+            if candidate in meta_state_dict:
+                return candidate
+        if "." in prefix:
+            # remove the first prefix (current model's prefix) when adding it to the key
+            add_prefix = prefix.split(".", maxsplit=1)[1]
+            candidate = f"{add_prefix}.{renamed_key}"
+            if candidate in meta_state_dict:
+                return candidate
+    # Checkpoint may wrap the target at 2+ nesting levels (outer prefixes not in valid_prefixes),
+    # so we need to check for the prefix inside the key.
+    for prefix in reversed(valid_prefixes):
+        candidate = renamed_key
+        # avoid matching parts of module names containing the prefix
+        while f".{prefix}." in candidate or candidate.startswith(f"{prefix}."):
+            candidate = candidate.split(prefix + ".", maxsplit=1)[1]
+            if candidate in meta_state_dict:
+                return candidate
+
+    return renamed_key
+
+
 def rename_source_key(
     source_key: str,
     weight_renamings: list[WeightRenaming],
     weight_converters: list[WeightConverter],
-    prefix: str | None = None,
+    valid_prefixes: list[str] | None = None,
     meta_state_dict: dict | None = None,
 ) -> tuple[str, str | None]:
     """
-    Rename a source key given all the renaming and weight conversion patterns we have. Also takes care of adding/removing
-    the base model prefix during loading if necessary.
+    Apply all renaming and conversion patterns to `source_key`, then reconcile the
+    result against the model state dict (step 3) by trying to add or strip each prefix
+    level from `valid_prefixes` until the key is found.
     """
     renamed_key = source_key
     # 1. apply all renamings in turns (if multiple match, it's the responsibility of the mappings to make sure they
@@ -1143,15 +1250,10 @@ def rename_source_key(
         if source_pattern is not None:
             break
 
-    # 3. check if we need to add or remove prefix if necessary (only during loading, not saving)
-    if prefix is not None and meta_state_dict is not None:
-        if (
-            renamed_key.startswith(prefix)
-            and meta_state_dict.get(re.sub(f"^{prefix}.", "", renamed_key, count=1)) is not None
-        ):
-            renamed_key = re.sub(f"^{prefix}.", "", renamed_key, count=1)
-        elif meta_state_dict.get(f"{prefix}.{renamed_key}") is not None:
-            renamed_key = f"{prefix}.{renamed_key}"
+    # 3. If the key is still not in the model state dict, try adding or removing each
+    # prefix level (longest first) until a match is found.  Only active during loading.
+    if valid_prefixes is not None and meta_state_dict is not None and renamed_key not in meta_state_dict:
+        renamed_key = _resolve_key_for_prefix_nesting(renamed_key, valid_prefixes, meta_state_dict)
 
     return renamed_key, source_pattern
 
@@ -1249,7 +1351,9 @@ def convert_and_load_state_dict_in_model(
     ```
 
     """
-    prefix = model.base_model_prefix
+    # All valid base_model_prefix paths for this model (e.g. ["rf_detr", "rf_detr.model"]
+    # for RfDetrForInstanceSegmentation); passed to rename_source_key to resolve keys.
+    valid_prefixes = _compute_all_prefixes(model)
     tp_plan = tp_plan or {}
     device_map = load_config.device_map or {"": "cpu"}
     hf_quantizer = load_config.hf_quantizer
@@ -1302,11 +1406,13 @@ def convert_and_load_state_dict_in_model(
     for original_key, tensor in state_dict:
         # 1. Rename the key according to all renaming pattern and optional weight converter patterns
         renamed_key, source_pattern = rename_source_key(
-            original_key, renamings, converters, prefix, meta_model_state_dict
+            original_key, renamings, converters, valid_prefixes, meta_model_state_dict
         )
         if renamed_key not in meta_model_state_dict and original_key in meta_model_state_dict:
-            # Key should probably not have been renamed but we might need the `prefix` to be added.`
-            renamed_key, source_pattern = rename_source_key(original_key, [], [], prefix, meta_model_state_dict)
+            # Key should probably not have been renamed but we might need the prefix(es) to be added.
+            renamed_key, source_pattern = rename_source_key(
+                original_key, [], [], valid_prefixes, meta_model_state_dict
+            )
 
         # 2. finally, collect the tensor into the proper converter
         if renamed_key in meta_model_state_dict:
@@ -1473,17 +1579,21 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
     pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
     conversion_mapping = {}
 
+    # Opt in via `_checkpoint_conversion_prefix_free = True` when the source checkpoint is fully flat,
+    # so that all prefixes should be stripped before saving.
+    strip_prefix = getattr(model, "_checkpoint_conversion_prefix_free", False)
+
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
-        # Rename the key according to all renaming pattern and optional weight converter patterns
-        renamed_key, source_pattern = rename_source_key(original_key, renamings, converters)
+        bare_key = _strip_model_prefix_for_save(original_key, model) if strip_prefix else original_key
+        renamed_key, source_pattern = rename_source_key(bare_key, renamings, converters)
         if source_pattern is not None:
             new_converter = deepcopy(pattern_to_converter[source_pattern])
             # each target key gets its own converter instance
             mapping = conversion_mapping.setdefault(renamed_key, new_converter)
         else:
-            mapping = conversion_mapping.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
-            source_pattern = original_key
+            mapping = conversion_mapping.setdefault(renamed_key, WeightRenaming(bare_key, renamed_key))
+            source_pattern = bare_key
 
         mapping.add_tensor(renamed_key, original_key, source_pattern, tensor)
 
