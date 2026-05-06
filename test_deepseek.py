@@ -1,18 +1,15 @@
 """End-to-end DeepGEMM EP test on a real DeepSeek checkpoint.
 
-Drives every relevant experts dispatch against `deepseek-ai/DeepSeek-V4-Flash`
-using **two model loads** total — same weights are reused across dispatches
-via `model.set_experts_implementation`:
+Drives the FP8/FP4 DeepGEMM dispatches against `deepseek-ai/DeepSeek-V4-Flash`
+with one model load shared across dispatches via `model.set_experts_implementation`:
 
-  1. Dequantized load (`FineGrainedFP8Config(dequantize=True)`,
-     `dtype=torch.bfloat16`) → bf16 weights. Cycles:
-       - `grouped_mm`  (torch grouped GEMM)
-       - `sonicmoe`    (sonicmoe kernel)
-       - `deepgemm`    (`deepgemm_bf16_experts_forward`)
-  2. Native quantized load (`dtype="auto"`) → FP8/FP4 weights kept on disk.
-     Cycles:
-       - `deepgemm`         (`deepgemm_fp8_fp4_experts_forward`)
-       - `deepgemm_megamoe` (fused Mega MoE; skipped on < SM100)
+  - `deepgemm`         → `deepgemm_fp8_fp4_experts_forward`
+  - `deepgemm_megamoe` → fused Mega MoE (skipped on < SM100)
+
+Dequantize-on-load is intentionally NOT exercised here: V4-Flash is ~671B
+parameters; dequantizing to bf16 needs ~1.3 TB across the world, which doesn't
+fit in 8× B200 (178 GB each). For the bf16 / dequantized expert dispatches
+(`grouped_mm`, `sonicmoe`, `deepgemm` bf16) use a smaller MoE checkpoint.
 
 Run on B200 with a writable HF cache on the raid mount and torchrun. First run
 downloads the checkpoint (hundreds of GB).
@@ -34,19 +31,14 @@ import sys
 import torch
 import torch.distributed as dist
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, FineGrainedFP8Config
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.distributed import DistributedConfig
 
 
 _CHECKPOINT = "deepseek-ai/DeepSeek-V4-Flash"
 _PROMPT = "DeepGEMM tests: list three properties of UE8M0 scale factors."
 
-# (label, dispatch, min_sm). All entries in a phase share one model load.
-_DEQUANTIZED_DISPATCHES = [
-    ("dequantized + grouped_mm", "grouped_mm",  9),
-    ("dequantized + sonicmoe",   "sonicmoe",    9),
-    ("dequantized + deepgemm",   "deepgemm",    9),
-]
+# (label, dispatch, min_sm). All entries share one model load.
 _QUANTIZED_DISPATCHES = [
     ("quantized + deepgemm",         "deepgemm",         9),
     ("quantized + deepgemm_megamoe", "deepgemm_megamoe", 10),
@@ -139,16 +131,6 @@ def main() -> int:
 
     results: list[tuple[str, str, str]] = []  # (label, status, detail)
 
-    _run_phase(
-        load_kwargs={
-            "quantization_config": FineGrainedFP8Config(dequantize=True),
-            "dtype": torch.bfloat16,
-        },
-        dispatches=_DEQUANTIZED_DISPATCHES,
-        cap_major=cap_major,
-        rank=rank,
-        results=results,
-    )
     _run_phase(
         load_kwargs={"dtype": "auto"},
         dispatches=_QUANTIZED_DISPATCHES,
