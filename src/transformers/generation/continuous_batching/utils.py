@@ -285,12 +285,14 @@ class DistributedHelper:
         return holder[0]
 
     def maybe_warn_nccl_graph_mixing(self) -> None:
-        """Warn if `NCCL_GRAPH_MIXING_SUPPORT=0` (set by CB's package init) didn't take effect because NCCL was
-        already initialized — i.e., CB was imported after `init_process_group`. Costs ~6% on TP runs."""
-        if self.tp_size <= 1 or os.environ.get("NCCL_GRAPH_MIXING_SUPPORT") == "0":
-            return
-        logger.warning(
-            "NCCL_GRAPH_MIXING_SUPPORT was not set to '0' before init_process_group; CB is leaving ~6%% "
-            "TP throughput on the table. Set NCCL_GRAPH_MIXING_SUPPORT=0 in the launch environment, or "
-            "import transformers.generation.continuous_batching before model.from_pretrained(tp_plan=...)."
-        )
+        """Throws a warning if TP is on and NCCL's graph mixing support was supposed to be disabled but isn't. That can
+        happen if the distributed group is created before graph mixing is disabled. Typically, if the model is
+        initialized before the ContinousBatchingConfig is created."""
+        tp_on = self.tp_size > 1
+        graph_mixing_supported = os.environ.get("NCCL_GRAPH_MIXING_SUPPORT") != "0"
+        if tp_on or graph_mixing_supported:
+            logger.warning(
+                "NCCL_GRAPH_MIXING_SUPPORT was not set to '0' before init_process_group: performance will be harmed. "
+                "Construct your `ContinuousBatchingConfig(...)` BEFORE calling `from_pretrained(tp_plan='auto')`, or "
+                "set NCCL_GRAPH_MIXING_SUPPORT=0 in the launch environment."
+            )

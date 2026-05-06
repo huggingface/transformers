@@ -532,10 +532,12 @@ class ContinuousBatchingManager:
         self._request_lock = threading.Lock()
         self.fatal_error: Exception | None = None
 
-        # Infer if this process is the driver of its own TP group and warn about NCCL
+        # Infer if this process is the driver of its own TP group
         helper = DistributedHelper(device_mesh=getattr(self.model, "_device_mesh", None))
         self.is_tp_driver = helper.is_tp_driver
-        helper.maybe_warn_nccl_graph_mixing()
+        # If TP is on, check if NCCL graph mixing is disabled (helps with performance)
+        if continuous_batching_config.disable_nccl_graph_mixing:
+            helper.maybe_warn_nccl_graph_mixing()
 
         # Generation config related arguments
         num_return_sequences = getattr(generation_config, "num_return_sequences", None)
