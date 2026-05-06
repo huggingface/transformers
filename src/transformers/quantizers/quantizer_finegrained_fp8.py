@@ -250,12 +250,14 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         # Generic fallback for plain `nn.Linear` weights with no model-specific converter.
         updated.extend(self.get_weight_conversions())
         if os.environ.get("RANK", "0") == "0":
-            scale_targets = [
-                getattr(c, "_original_target_patterns", None)
-                for c in updated
-                if isinstance(c, WeightConverter)
-                and isinstance(getattr(c, "_original_target_patterns", None), str)
-                and "_scale_inv" in c._original_target_patterns
-            ]
-            print(f"[fp8 quantizer] output_converters={len(updated)} scale_inv_targets={scale_targets}", flush=True)
+            print(f"[fp8 quantizer] output_converters={len(updated)}", flush=True)
+            for i, c in enumerate(updated):
+                if isinstance(c, WeightConverter) and any(
+                    "scale_inv" in str(p) or "scale_inv" in str(getattr(c, "_original_target_patterns", "") or "")
+                    for p in (c.source_patterns if isinstance(c.source_patterns, list) else [c.source_patterns])
+                ):
+                    print(
+                        f"  [{i}] src={c.source_patterns} target={getattr(c, '_original_target_patterns', None)}",
+                        flush=True,
+                    )
         return updated
