@@ -23,7 +23,7 @@ on:
 
 # For `push` runs: set these values directly to test without workflow_dispatch
 env:
-  source_workflow_run_id: "25200773060"
+  source_workflow_run_id: "25145719995"
   job_name: "Model CI"
   only_process_job: "true"
 
