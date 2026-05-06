@@ -746,7 +746,7 @@ class EvollaSequenceCompressorResampler(nn.Module):
 @auto_docstring
 @dataclass
 class EvollaProteinEncoderModelOutput(ModelOutput):
-    """
+    r"""
     sequence_compressor_output (`torch.FloatTensor` of shape `(batch_size, compressed_seq_len, hidden_size)`, *optional*):
         Compressed sequence representation produced by the sequence compressor module. The sequence length is
         reduced from the original input length to `compressed_seq_len` via learned compression.
