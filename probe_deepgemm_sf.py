@@ -28,18 +28,53 @@ _call_idx = [0]
 def _verbose_coerce(sf: torch.Tensor) -> torch.Tensor:
     out = _real_coerce(sf)
     _call_idx[0] += 1
+    nonfinite_in = (~torch.isfinite(sf.float())).sum().item() if sf.is_floating_point() else 0
+    nonfinite_out = (~torch.isfinite(out.float())).sum().item() if out.is_floating_point() else 0
     print(
         f"  [#{_call_idx[0]}] in:  shape={tuple(sf.shape)} "
-        f"stride={tuple(sf.stride())} dtype={sf.dtype}"
+        f"stride={tuple(sf.stride())} dtype={sf.dtype} "
+        f"min={sf.float().abs().min().item():.3e} max={sf.float().abs().max().item():.3e} "
+        f"nonfinite={nonfinite_in}"
     )
     print(
         f"        out: shape={tuple(out.shape)} "
-        f"stride={tuple(out.stride())} dtype={out.dtype}"
+        f"stride={tuple(out.stride())} dtype={out.dtype} "
+        f"nonfinite={nonfinite_out}"
     )
     return out
 
 
 di._coerce_sf_for_kernel = _verbose_coerce
+
+
+# Wrap the matmul itself: print output stats after the call so we can see
+# where NaN actually appears in the pipeline.
+_real_matmul = None
+
+
+def _verbose_matmul(*args, **kwargs):
+    global _real_matmul
+    out_tensor = args[2]  # (a_pair, b_pair, d, ...)
+    label = f"matmul (d.shape={tuple(out_tensor.shape)})"
+    _real_matmul(*args, **kwargs)
+    nf = (~torch.isfinite(out_tensor)).sum().item()
+    print(
+        f"  → {label}: nonfinite_count={nf} "
+        f"min_abs={out_tensor.abs().min().item():.3e} "
+        f"max_abs={out_tensor.abs().max().item():.3e}"
+    )
+
+
+def _patch_matmul():
+    global _real_matmul
+    deepgemm = di._load_deepgemm_kernel()
+    _real_matmul = deepgemm.grouped_fp8_fp4_matmul
+
+    # Replace the cached kernel's matmul with our wrapper.
+    object.__setattr__(deepgemm, "grouped_fp8_fp4_matmul", _verbose_matmul)
+
+
+_patch_matmul()
 
 
 def _run(name: str, fn) -> bool:
