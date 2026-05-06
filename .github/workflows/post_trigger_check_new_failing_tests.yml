@@ -124,6 +124,60 @@ jobs:
               core.setOutput(key, value);
             }
 
+            // --- Extract END_SHA from env of "Check failed tests" step ---
+            let endSha = null;
+            let inTargetStep = false;
+            let inEnvBlock = false;
+            let stepDepth = 0;
+            
+            for (const line of logText.split('\n')) {
+              const content = line.replace(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z /, '');
+            
+              if (content.includes('##[group]') ) {
+                if (content.includes('Check failed tests')) {
+                  inTargetStep = true;
+                  stepDepth = 1;
+                  continue;
+                } else if (inTargetStep) {
+                  stepDepth++;
+                }
+              }
+            
+              if (!inTargetStep) continue;
+            
+              if (content.includes('##[endgroup]')) {
+                stepDepth--;
+                if (stepDepth <= 0) break; // exited the step
+                inEnvBlock = false;
+                continue;
+              }
+            
+              if (content.trim() === 'env:') {
+                inEnvBlock = true;
+                continue;
+              }
+            
+              if (inEnvBlock) {
+                const match = content.match(/^\s+END_SHA:\s*(.+)/);
+                if (match) {
+                  endSha = match[1].trim();
+                  break;
+                }
+                // stop if we've left the env block (next non-indented line)
+                if (content.trim() && !content.startsWith('    ')) {
+                  inEnvBlock = false;
+                }
+              }
+            }
+
+            if (endSha) {
+              console.log(`END_SHA: ${endSha}`);
+              core.setOutput('END_SHA', endSha);
+            } else {
+              core.warning('Could not find END_SHA in the "Check failed tests" step env block.');
+            }
+
+
   check_new_failures:
     name: Check new failures
     needs: prepare
