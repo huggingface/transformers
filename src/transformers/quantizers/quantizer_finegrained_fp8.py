@@ -168,59 +168,76 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         return []
 
     def update_weight_conversions(self, weight_conversions):
-        """When loading with ``dequantize=True``, attach an :class:`Fp8Dequantize` op to
-        every existing :class:`WeightConverter` so that per-block scales are folded into
-        the weight *before* any later merge/concat ops collapse the per-expert structure.
+        """Adapt model-supplied :class:`WeightConverter` instances for FP8 loading.
 
-        For each model-supplied converter that has a ``.weight`` source, we:
-          1. anchor the existing weight patterns with ``$`` so they don't accidentally
-             also match the ``.weight_scale_inv`` keys (the regex is searched, so the
-             unanchored prefix would match both, sending scales to the wrong bucket);
-          2. add anchored ``*.weight_scale_inv`` sources next to each weight pattern so
-             the loader collects scale tensors alongside the weight tensors into the
-             *same* converter bucket (both keys rewrite to the same target);
-          3. prepend a fresh :class:`Fp8Dequantize` op so dequant runs first, before
-             any merge/concat collapses the per-expert structure.
+        Two paths share the same underlying problem: the model's converters merge per-expert
+        ``.weight`` keys into batched ``gate_up_proj`` / ``down_proj`` tensors, but the
+        FP8 ``.weight_scale_inv`` siblings need the same merge to populate
+        ``gate_up_proj_scale_inv`` / ``down_proj_scale_inv`` correctly. The unanchored
+        ``.weight`` source patterns also accidentally match ``.weight_scale_inv`` keys
+        (regex-search), so we anchor them first and synthesize parallel scale converters.
 
-        The generic ``weight$ + weight_scale_inv → weight`` converter from
-        :meth:`get_weight_conversions` is still appended at the end as a fallback for
-        plain ``nn.Linear`` weights with no model-specific converter.
+        - ``dequantize=True``: scales fold into the weight via :class:`Fp8Dequantize`
+          *before* merge/concat — both `.weight` and `.weight_scale_inv` go to the same
+          target bucket.
+        - ``dequantize=False`` (native quantized): scales stay as separate parameters,
+          so we synthesize a parallel ``WeightConverter`` per model converter that
+          targets ``<target>_scale_inv`` and reuses the same merge ops.
+
+        We also prepend a ``.scale → .weight_scale_inv`` rename for upstream checkpoints
+        (e.g. DeepSeek-V4-Flash) that ship per-block scales under the ``.scale`` suffix.
         """
         from ..core_model_loading import WeightConverter, WeightRenaming
         from ..integrations.finegrained_fp8 import Fp8Dequantize
 
-        # Some upstream FP8 checkpoints (e.g. DeepSeek-V4-Flash) ship per-block scales
-        # under a ``.scale`` suffix instead of HF's canonical ``.weight_scale_inv``.
-        # Apply the rename whenever this quantizer is active — needed both when keeping
-        # the quantized layout (scale_inv parameters live on the model) and when
-        # dequantizing (scales fold into the dequantized weight). Confined to this
-        # quantizer, so non-FP8 loads never see the rule.
+        # `.scale` → `.weight_scale_inv`. Confined to this quantizer, so non-FP8 loads never see it.
         scale_rename = WeightRenaming(source_patterns=r"^(.+)\.scale$", target_patterns=r"\1.weight_scale_inv")
         weight_conversions = [scale_rename] + list(weight_conversions)
-
-        if not (self.pre_quantized and self.quantization_config.dequantize):
-            return weight_conversions + self.get_weight_conversions()
+        dequantize = self.pre_quantized and self.quantization_config.dequantize
 
         updated: list = []
         for conv in weight_conversions:
-            # Only WeightConverter has ``.operations`` to extend with the dequant op;
-            # WeightRenaming (e.g. the ``scale_rename`` we prepended) just passes through.
+            # Only WeightConverter has `.operations` and `.source_patterns` to manipulate.
             if not isinstance(conv, WeightConverter):
                 updated.append(conv)
                 continue
             weight_sources = [p for p in conv.source_patterns if p.endswith(".weight")]
-            if weight_sources:
-                anchored_weight = [p + "$" for p in weight_sources]
-                scale_sources = [p[: -len(".weight")] + ".weight_scale_inv$" for p in weight_sources]
-                other = [p for p in conv.source_patterns if not p.endswith(".weight")]
-                new_sources = anchored_weight + scale_sources + other
-                new_ops = [Fp8Dequantize(self)] + list(conv.operations)
-                conv = WeightConverter(
-                    source_patterns=new_sources,
+            if not weight_sources:
+                updated.append(conv)
+                continue
+
+            anchored_weight = [p + "$" for p in weight_sources]
+            scale_sources = [p[: -len(".weight")] + ".weight_scale_inv$" for p in weight_sources]
+            other = [p for p in conv.source_patterns if not p.endswith(".weight")]
+
+            if dequantize:
+                # Both .weight and .weight_scale_inv go to the same target; Fp8Dequantize
+                # folds scales into the weight before any merge/concat downstream.
+                updated.append(WeightConverter(
+                    source_patterns=anchored_weight + scale_sources + other,
                     target_patterns=conv._original_target_patterns,
-                    operations=new_ops,
-                )
-            updated.append(conv)
-        # Generic fallback for plain ``nn.Linear`` weights with no model-specific converter.
+                    operations=[Fp8Dequantize(self)] + list(conv.operations),
+                ))
+            else:
+                # Native quantized: anchor the existing weight converter so .weight_scale_inv
+                # keys don't leak in, then synthesize a parallel converter routing the scale
+                # keys to `<target>_scale_inv` with the same merge ops.
+                updated.append(WeightConverter(
+                    source_patterns=anchored_weight + other,
+                    target_patterns=conv._original_target_patterns,
+                    operations=list(conv.operations),
+                ))
+                target = conv._original_target_patterns
+                if isinstance(target, str):
+                    scale_target = target + "_scale_inv"
+                else:
+                    scale_target = [t + "_scale_inv" for t in target]
+                updated.append(WeightConverter(
+                    source_patterns=scale_sources,
+                    target_patterns=scale_target,
+                    operations=list(conv.operations),
+                ))
+
+        # Generic fallback for plain `nn.Linear` weights with no model-specific converter.
         updated.extend(self.get_weight_conversions())
         return updated
