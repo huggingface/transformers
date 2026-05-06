@@ -33,11 +33,6 @@ on:
         required: false
         type: string
         default: ''
-      end_sha:
-        description: "END_SHA to use for git bisect (bypasses automatic computation from PREV_WORKFLOW_RUN_ID)"
-        required: false
-        type: string
-        default: ''
       only_process_job:
         description: "Skip find-commits jobs and only run the process job, fetching its artifacts from source_workflow_run_id"
         required: false
@@ -70,7 +65,26 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       n_runners: ${{ steps.set-matrix.outputs.n_runners }}
       process: ${{ steps.set-matrix.outputs.process }}
+      end_sha: ${{ steps.get-end-sha.outputs.end_sha }}
     steps:
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: end_sha_override
+          path: end_sha_override
+          github-token: ${{ github.token }}
+
+      - name: Get END_SHA from artifact
+        id: get-end-sha
+        run: |
+          if [ -f end_sha_override/end_sha.txt ]; then
+            end_sha=$(cat end_sha_override/end_sha.txt)
+            echo "end_sha=$end_sha" >> $GITHUB_OUTPUT
+            echo "Found END_SHA override: $end_sha"
+          else
+            echo "No END_SHA override found"
+          fi
+
       - uses: actions/download-artifact@v8
         continue-on-error: true
         with:
@@ -234,16 +248,16 @@ jobs:
       # (This is why we don't need to specify `workflow_id` which would be fetched automatically in the python script.)
       - name: Get `END_SHA` from previous CI runs of the same workflow
         working-directory: /transformers/utils
-        if: ${{ inputs.pr_number == '' && inputs.end_sha == '' }}
+        if: ${{ inputs.pr_number == '' && needs.setup_check_new_failures.outputs.end_sha == '' }}
         env:
           ACCESS_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
           WORKFLOW_ID: ${{ steps.get-workflow-id.outputs.workflow_id }}
         run: |
           echo "END_SHA=$(TOKEN="$ACCESS_TOKEN" python3 -c 'import os; from get_previous_daily_ci import get_last_daily_ci_run_commit; commit=get_last_daily_ci_run_commit(token=os.environ["TOKEN"], workflow_run_id=os.environ["PREV_WORKFLOW_RUN_ID"], workflow_id=os.environ["WORKFLOW_ID"]); print(commit)')" >> $GITHUB_ENV
 
-      - name: Set `END_SHA` from input
-        if: ${{ inputs.end_sha != '' }}
-        run: echo "END_SHA=${{ inputs.end_sha }}" >> $GITHUB_ENV
+      - name: Set `END_SHA` from artifact override
+        if: ${{ needs.setup_check_new_failures.outputs.end_sha != '' }}
+        run: echo "END_SHA=${{ needs.setup_check_new_failures.outputs.end_sha }}" >> $GITHUB_ENV
 
       # However, for workflow runs triggered by `issue_comment` (for pull requests), we want to check against the
       # parent commit (on `main`) of the `merge_commit` (dynamically created by GitHub). In this case, the goal is to
