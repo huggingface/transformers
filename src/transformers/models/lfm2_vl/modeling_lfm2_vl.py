@@ -88,12 +88,12 @@ class Lfm2VlPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Lfm2Vl causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Lfm2VlCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

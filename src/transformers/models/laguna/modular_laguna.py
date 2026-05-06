@@ -180,8 +180,8 @@ class LagunaRMSNorm(Qwen2MoeRMSNorm):
 
 
 class LagunaRotaryEmbedding(Gemma3RotaryEmbedding):
-    def __init__(self, config: LagunaConfig, device=None, layer_type=None):
-        super().__init__(config, device, layer_type)
+    def __init__(self, config: LagunaConfig):
+        super().__init__(config)
 
     @staticmethod
     def compute_default_rope_parameters(

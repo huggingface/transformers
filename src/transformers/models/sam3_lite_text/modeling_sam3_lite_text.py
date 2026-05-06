@@ -418,8 +418,8 @@ class Sam3LiteTextTextModel(Sam3LiteTextPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3LiteTextVisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
     fpn_hidden_states (`tuple[torch.FloatTensor]`):
