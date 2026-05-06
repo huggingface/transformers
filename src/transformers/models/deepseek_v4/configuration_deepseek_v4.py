@@ -124,7 +124,9 @@ class DeepseekV4Config(PreTrainedConfig):
         # no `base_model_tp_plan` for V4: we don't ship a pure-TP plan, only EP.
         "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.gate_up_proj_scale_inv": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj_scale_inv": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
     }
 
