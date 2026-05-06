@@ -185,19 +185,8 @@ class ContinuousBatchProcessor:
         self.do_sample = getattr(generation_config, "do_sample", True)
         self.return_logprobs = continuous_batching_config.return_logprobs
 
-        # Get an integer seed for the TP group
-        if continuous_batching_config.seed is None:
-            tp_seed_tensor = torch.randint(0, 2**32 - 1, (1,), dtype=torch.int64, device=model_device)
-        else:
-            tp_seed_tensor = torch.tensor(continuous_batching_config.seed, dtype=torch.int64, device=model_device)
-        # Broadcast the seed to all ranks from rank 0 and memoize it
-        tp_seed_tensor = self.distributed_helper.tp_broadcast_from_rank_0(tp_seed_tensor)
-        tp_seed = tp_seed_tensor.item()
-        continuous_batching_config.seed = tp_seed
-        if self.distributed_helper.global_rank == 0:
-            logger.warning(f"Found no user-specified seed in the config. Setting the config seed to: {tp_seed}.")
-        # Set the seed while accounting for DP replicas
-        torch.manual_seed(tp_seed + self.distributed_helper.dp_rank)
+        # Get an integer seed for the TP group. Also work for no TP.
+        self.distributed_helper.set_tp_seed(continuous_batching_config.seed, model_device)
 
         # Retrieve the size of the sliding window if there is one
         self.sliding_window = 1 if getattr(config, "sliding_window", None) is None else config.sliding_window

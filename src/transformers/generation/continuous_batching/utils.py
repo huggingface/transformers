@@ -296,3 +296,17 @@ class DistributedHelper:
                 "Construct your `ContinuousBatchingConfig(...)` BEFORE calling `from_pretrained(tp_plan='auto')`, or "
                 "set NCCL_GRAPH_MIXING_SUPPORT=0 in the launch environment."
             )
+
+    def set_tp_seed(self, seed: int | None, model_device: torch.device) -> None:
+        # Get an integer seed for the TP group
+        if seed is None:
+            tp_seed_tensor = torch.randint(0, 2**32 - 1, (1,), dtype=torch.int64, device=model_device)
+        else:
+            tp_seed_tensor = torch.tensor(seed, dtype=torch.int64, device=model_device)
+        # Broadcast the seed to all ranks from rank 0 and memoize it
+        tp_seed_tensor = self.tp_broadcast_from_rank_0(tp_seed_tensor)
+        tp_seed = tp_seed_tensor.item()
+        if self.global_rank == 0:
+            logger.warning(f"Found no user-specified seed in the config. Setting the config seed to: {tp_seed}.")
+        # Set the seed while accounting for DP replicas
+        torch.manual_seed(tp_seed + self.dp_rank)
