@@ -291,7 +291,7 @@ class NemotronHBlock(GradientCheckpointingLayer):
                 past_key_values=past_key_values,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                user_cache=use_cache,
+                use_cache=use_cache,
                 **kwargs,
             )
         else:
