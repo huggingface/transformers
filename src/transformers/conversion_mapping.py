@@ -114,29 +114,29 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"layer\.", target_patterns="layers."),
         ],
         "deepseek_v4": [
-            # Upstream V4-Flash checkpoint uses a flatter V3-style namespace: ``attn`` /
-            # ``ffn`` instead of ``self_attn`` / ``mlp``, ``attn_norm`` / ``ffn_norm``
-            # instead of ``input_layernorm`` / ``post_attention_layernorm``, ``hc_attn_*``
-            # / ``hc_ffn_*`` for the Hyper-Connection params (wrapped here as
-            # ``attn_hc`` / ``ffn_hc`` submodules), ``embed`` / ``head`` / bare ``norm``
-            # for the model head, ``hc_head_*`` for the final HC collapse, and indexer
-            # weights nested under ``attn.indexer.compressor.*`` upstream but flattened
+            # Upstream V4-Flash checkpoint uses a flatter V3-style namespace: `attn` /
+            # `ffn` instead of `self_attn` / `mlp`, `attn_norm` / `ffn_norm`
+            # instead of `input_layernorm` / `post_attention_layernorm`, `hc_attn_*`
+            # / `hc_ffn_*` for the Hyper-Connection params (wrapped here as
+            # `attn_hc` / `ffn_hc` submodules), `embed` / `head` / bare `norm`
+            # for the model head, `hc_head_*` for the final HC collapse, and indexer
+            # weights nested under `attn.indexer.compressor.*` upstream but flattened
             # onto the Indexer module here.
             #
-            # All targets stay in the bare base-model namespace (no ``model.`` prefix).
-            # ``convert_and_load_state_dict_in_model`` consults
+            # All targets stay in the bare base-model namespace (no `model.` prefix).
+            # `convert_and_load_state_dict_in_model` consults
             # :attr:`DeepseekV4PreTrainedModel.base_model_prefix = "model"` and adds /
-            # strips the ``model.`` prefix automatically based on whether the loader
+            # strips the `model.` prefix automatically based on whether the loader
             # target is the base model or a head model.
             #
             # Ordering matters for save round-tripping: :func:`revert_weight_conversion`
             # reverses the order *and* each transform, so a structural prefix-only rule
             # placed before a specific in-prefix rename would steal the reverse match
-            # and emit ``layers.X.attn.sinks`` instead of ``layers.X.attn.attn_sink``.
+            # and emit `layers.X.attn.sinks` instead of `layers.X.attn.attn_sink`.
             # We split into two passes: structural prefix renames first (so they apply
             # last on save / first on load), then specific in-prefix renames that
-            # operate on the already-prefixed keys. FP8 ``.scale`` → ``.weight_scale_inv``
-            # rename lives in the FP8 quantizer's ``update_weight_conversions`` (only
+            # operate on the already-prefixed keys. FP8 `.scale` → `.weight_scale_inv`
+            # rename lives in the FP8 quantizer's `update_weight_conversions` (only
             # active under FP8 dequant), so the V4 static mapping below stays free of
             # FP8-only rules.
             # ---- Pass 1: top-level + structural prefix renames ----
@@ -176,7 +176,7 @@ def _build_checkpoint_conversion_mapping():
             ),
             # ---- Pass 2: in-prefix specific renames (operate on already-prefixed keys) ----
             # These can safely run after the structural prefix renames because their
-            # source patterns include the ``layers.X.self_attn.`` / ``layers.X.mlp.``
+            # source patterns include the `layers.X.self_attn.` / `layers.X.mlp.`
             # prefix. On reverse the order flips so these undo first, restoring the
             # specific upstream names *before* the structural rules strip the prefix.
             WeightRenaming(
@@ -208,10 +208,10 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns=r"layers.\1.self_attn.compressor.position_bias",
             ),
             # Attention / compressor / indexer leaf weights: upstream uses paper notation
-            # (``wq_a`` / ``wq_b`` / ``wkv`` / ``wo_a`` / ``wo_b`` / ``wgate``); we
-            # rename to the standard transformers ``*_proj`` form. Compressor / Indexer
-            # ``wkv`` / ``wgate`` are caught by the same patterns since they sit under
-            # ``self_attn.`` after the Pass 1 prefix rewrite.
+            # (`wq_a` / `wq_b` / `wkv` / `wo_a` / `wo_b` / `wgate`); we
+            # rename to the standard transformers `*_proj` form. Compressor / Indexer
+            # `wkv` / `wgate` are caught by the same patterns since they sit under
+            # `self_attn.` after the Pass 1 prefix rewrite.
             WeightRenaming(
                 source_patterns=r"^layers\.(\d+)\.self_attn\.(.*?)\.wq_a\.",
                 target_patterns=r"layers.\1.self_attn.\2.q_a_proj.",
@@ -264,8 +264,8 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"^layers\.(\d+)\.self_attn\.q_norm\.",
                 target_patterns=r"layers.\1.self_attn.q_a_norm.",
             ),
-            # Aux-loss-free routing bias: upstream ships ``gate.bias`` (V3 convention);
-            # we register it as ``e_score_correction_bias`` (cross-model standard name).
+            # Aux-loss-free routing bias: upstream ships `gate.bias` (V3 convention);
+            # we register it as `e_score_correction_bias` (cross-model standard name).
             WeightRenaming(
                 source_patterns=r"^layers\.(\d+)\.mlp\.gate\.bias$",
                 target_patterns=r"layers.\1.mlp.gate.e_score_correction_bias",
@@ -826,10 +826,10 @@ def register_checkpoint_conversion_mapping(
     """
     Register a conversion mapping for a model type string or a class name.
 
-    Class names take priority over ``model_type`` strings during lookup (see
-    :func:`extract_weight_conversions_for_model`), making it possible to define
+    Class names take priority over `model_type` strings during lookup (see
+    `extract_weight_conversions_for_model`), making it possible to define
     task-head-specific or class-specific conversions that differ from the shared
-    ``model_type`` baseline.
+    `model_type` baseline.
     """
     global _checkpoint_conversion_mapping_cache
     if _checkpoint_conversion_mapping_cache is None:
@@ -845,11 +845,11 @@ def extract_weight_conversions_for_model(
     model: PreTrainedModel,
 ) -> list[WeightTransform] | None:
     """
-    Return the registered conversion list for ``model``, or ``None`` if none exists.
+    Return the registered conversion list for `model`, or `None` if none exists.
 
     Looks up by class name first (enables task-head-specific overrides), then
-    falls back to ``model.config.model_type``.  Transforms are returned
-    unmodified; the caller sets ``scope_prefix`` on each transform for sub-module isolation.
+    falls back to `model.config.model_type`.  Transforms are returned
+    unmodified; the caller sets `scope_prefix` on each transform for sub-module isolation.
     """
     class_name = type(model).__name__
     model_type = model.config.model_type
@@ -941,7 +941,7 @@ def get_model_conversion_mapping(
         weight_conversions.extend(get_checkpoint_conversion_mapping("legacy"))
 
     # Let the quantizer rewrite / augment the conversion pipeline. This is where the
-    # FP8 dequantizer (when ``dequantize=True``) prepends a ``Fp8Dequantize`` op to
+    # FP8 dequantizer (when `dequantize=True`) prepends a `Fp8Dequantize` op to
     # every existing converter so that per-block scales are applied *before* any
     # expert-merge / concat ops flatten the per-expert structure away.
     if hf_quantizer is not None:

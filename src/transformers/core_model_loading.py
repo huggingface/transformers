@@ -220,7 +220,7 @@ class MergeModulelist(ConversionOps):
 
 
 class SplitModulelist(ConversionOps):
-    """Inverse of :class:`MergeModulelist` using explicit split sizes per group."""
+    """Inverse of `MergeModulelist` using explicit split sizes per group."""
 
     def __init__(self, dim: int = 0):
         self.dim = dim
