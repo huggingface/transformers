@@ -243,14 +243,7 @@ def _build_deepgemm_contiguous_layout(
 
 
 def _pad_for_deepgemm(x: torch.Tensor, sorted_to_padded: torch.Tensor, total_padded_rows: int) -> torch.Tensor:
-    """Pad a sorted tensor into the TMA-aligned contiguous layout.
-
-    Padding rows are zero-initialized: on SM100 the psum_layout dispatch
-    computes every row in the per-expert aligned range (no per-row skip mask,
-    only cumulative offsets), so any garbage in the padding feeds straight into
-    the GEMM. With zeros: FP8 acts → 0, float SF → 0, UE8M0 SF → byte 0 — dot
-    product on padding rows is 0, harmless.
-    """
+    """Pad a sorted tensor into the TMA-aligned contiguous layout."""
     padded = torch.empty(total_padded_rows, *x.shape[1:], device=x.device, dtype=x.dtype)
     padded[sorted_to_padded] = x
     return padded
