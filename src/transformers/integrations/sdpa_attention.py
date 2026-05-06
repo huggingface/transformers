@@ -55,9 +55,8 @@ def use_gqa_in_sdpa(
     from torch.backends.cuda import SDPAParams, can_use_flash_attention
 
     return can_use_flash_attention(
-        params=SDPAParams(
-            query, key, value, attn_mask=attention_mask, dropout=dropout, is_causal=is_causal, enable_gqa=True
-        )
+        # Needs to stay as args, otherwise the constructor will fail
+        params=SDPAParams(query, key, value, attention_mask, dropout, is_causal, True)
     )
 
 
