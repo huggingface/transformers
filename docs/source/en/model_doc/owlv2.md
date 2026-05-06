@@ -17,8 +17,6 @@ rendered properly in your Markdown viewer.
 
 # OWLv2
 
-<div class="flex flex-wrap space-x-1">
-</div>
 
 ## Overview
 

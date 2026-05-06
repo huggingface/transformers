@@ -17,8 +17,6 @@ rendered properly in your Markdown viewer.
 
 # GPT-Sw3
 
-<div class="flex flex-wrap space-x-1">
-</div>
 
 ## Overview
 

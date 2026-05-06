@@ -15,8 +15,6 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on {release_date} and added to Hugging Face Transformers on 2025-09-18.*
 
-<div class="flex flex-wrap space-x-1">
-</div>
 
 # LFM2-VL
 

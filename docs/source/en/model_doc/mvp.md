@@ -17,8 +17,6 @@ rendered properly in your Markdown viewer.
 
 # MVP
 
-<div class="flex flex-wrap space-x-1">
-</div>
 
 ## Overview
 

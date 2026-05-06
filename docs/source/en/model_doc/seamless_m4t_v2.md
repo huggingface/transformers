@@ -13,8 +13,6 @@ specific language governing permissions and limitations under the License.
 
 # SeamlessM4T-v2
 
-<div class="flex flex-wrap space-x-1">
-</div>
 
 ## Overview
 

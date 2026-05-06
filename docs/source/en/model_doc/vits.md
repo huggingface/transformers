@@ -10,10 +10,6 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.-->
 *This model was released on 2021-06-11 and added to Hugging Face Transformers on 2023-09-01.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        </div>
-</div>
 
 # VITS
 

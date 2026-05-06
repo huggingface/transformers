@@ -12,8 +12,6 @@ rendered properly in your Markdown viewer.
 
 # EoMT
 
-<div class="flex flex-wrap space-x-1">
-</div>
 
 ## Overview
 

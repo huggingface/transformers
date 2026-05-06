@@ -17,8 +17,6 @@ rendered properly in your Markdown viewer.
 
 # Speech2Text
 
-<div class="flex flex-wrap space-x-1">
-</div>
 
 ## Overview
 

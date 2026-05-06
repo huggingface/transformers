@@ -20,10 +20,6 @@ limitations under the License.
 
 # SAM3-LiteText
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        </div>
-</div>
 
 ## Overview
 

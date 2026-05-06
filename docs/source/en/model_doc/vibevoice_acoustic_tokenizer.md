@@ -17,8 +17,6 @@ rendered properly in your Markdown viewer.
 
 # VibeVoice Acoustic Tokenizer
 
-<div class="flex flex-wrap space-x-1">
-</div>
 
 
 ## Overview

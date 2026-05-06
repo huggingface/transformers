@@ -21,8 +21,6 @@ limitations under the License.
 
 # VidEoMT
 
-<div class="flex flex-wrap space-x-1">
-</div>
 
 ## Overview
 

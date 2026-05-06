@@ -17,8 +17,6 @@ rendered properly in your Markdown viewer.
 
 # Wav2Vec2Phoneme
 
-<div class="flex flex-wrap space-x-1">
-</div>
 
 ## Overview
 

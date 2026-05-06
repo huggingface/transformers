@@ -13,8 +13,6 @@ specific language governing permissions and limitations under the License.
 
 # FastSpeech2Conformer
 
-<div class="flex flex-wrap space-x-1">
-</div>
 
 ## Overview
 

@@ -17,8 +17,6 @@ rendered properly in your Markdown viewer.
 
 # PP-OCRv5_server_rec
 
-<div class="flex flex-wrap space-x-1">
-</div>
 
 ## Overview
 

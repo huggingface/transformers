@@ -17,8 +17,6 @@ rendered properly in your Markdown viewer.
 
 # Zamba
 
-<div class="flex flex-wrap space-x-1">
-</div>
 
 [Zamba](https://huggingface.co/papers/2405.16712) ([blog post](https://www.zyphra.com/post/zamba)) is a large language model (LLM) trained by Zyphra, and made available under an Apache 2.0 license. Please see the [Zyphra Hugging Face](https://huggingface.co/collections/zyphra/) repository for model weights.
 
