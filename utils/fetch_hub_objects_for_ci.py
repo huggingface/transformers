@@ -56,6 +56,7 @@ URLS_FOR_TESTING_DATA = [
     "http://images.cocodataset.org/val2017/000000000785.jpg",
     "http://images.cocodataset.org/val2017/000000000802.jpg",
     "http://images.cocodataset.org/val2017/000000000872.jpg",
+    "http://images.cocodataset.org/val2017/000000001000.jpg",
     "http://images.cocodataset.org/val2017/000000039769.jpg",
     "http://images.cocodataset.org/val2017/000000077595.jpg",
     "http://images.cocodataset.org/val2017/000000136466.jpg",

@@ -37,12 +37,12 @@ logger = logging.get_logger(__name__)
 # drop_path, Swinv2PatchEmbeddings, Swinv2PatchMerging and Swinv2DropPath are from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/swin_transformer_v2.py.
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Swinv2 encoder's outputs, with potential hidden states and attentions.
     """
 )
+@dataclass
 # Copied from transformers.models.swin.modeling_swin.SwinEncoderOutput with Swin->Swinv2
 class Swinv2EncoderOutput(ModelOutput):
     r"""
@@ -60,12 +60,12 @@ class Swinv2EncoderOutput(ModelOutput):
     reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Swinv2 model's outputs that also contains a pooling of the last hidden states.
     """
 )
+@dataclass
 # Copied from transformers.models.swin.modeling_swin.SwinModelOutput with Swin->Swinv2
 class Swinv2ModelOutput(ModelOutput):
     r"""
@@ -86,12 +86,12 @@ class Swinv2ModelOutput(ModelOutput):
     reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Swinv2 masked image model outputs.
     """
 )
+@dataclass
 # Copied from transformers.models.swin.modeling_swin.SwinMaskedImageModelingOutput with Swin->Swinv2
 class Swinv2MaskedImageModelingOutput(ModelOutput):
     r"""
@@ -114,12 +114,12 @@ class Swinv2MaskedImageModelingOutput(ModelOutput):
     reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Swinv2 outputs for image classification.
     """
 )
+@dataclass
 # Copied from transformers.models.swin.modeling_swin.SwinImageClassifierOutput with Swin->Swinv2
 class Swinv2ImageClassifierOutput(ModelOutput):
     r"""

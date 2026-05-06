@@ -662,7 +662,6 @@ class RTDetrImageProcessorPil(DetrImageProcessorPil):
         raise NotImplementedError("Panoptic segmentation post-processing is not implemented for RT-DETR yet.")
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the RTDetrDecoder. This class adds two attributes to
@@ -671,6 +670,7 @@ class RTDetrImageProcessorPil(DetrImageProcessorPil):
     - a stacked tensor of intermediate reference points.
     """
 )
+@dataclass
 class RTDetrDecoderOutput(ModelOutput):
     r"""
     intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -700,12 +700,12 @@ class RTDetrDecoderOutput(ModelOutput):
     cross_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the RT-DETR encoder-decoder model.
     """
 )
+@dataclass
 class RTDetrModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
@@ -758,12 +758,12 @@ class RTDetrModelOutput(ModelOutput):
     denoising_meta_values: dict | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`RTDetrForObjectDetection`].
     """
 )
+@dataclass
 class RTDetrObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):

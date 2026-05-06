@@ -32,7 +32,7 @@ from transformers.models.auto.video_processing_auto import MISSING_VIDEO_PROCESS
 CHECKER_CONFIG = {
     "name": "auto_mappings",
     "label": "Generate auto mappings",
-    "file_globs": [],
+    "cache_globs": [],
     "check_args": [],
     "fix_args": ["--fix_and_overwrite"],
 }

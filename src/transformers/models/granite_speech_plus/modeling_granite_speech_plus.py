@@ -315,12 +315,12 @@ class GraniteSpeechPlusCTCEncoder(GraniteSpeechPlusPreTrainedModel):
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for LlavaNext causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class GraniteSpeechPlusCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

@@ -40,12 +40,12 @@ from .configuration_data2vec_vision import Data2VecVisionConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`Data2VecVisionModel`].
     """
 )
+@dataclass
 # Copied from transformers.models.beit.modeling_beit.BeitModelOutputWithPooling with Beit->Data2VecVision
 class Data2VecVisionModelOutputWithPooling(BaseModelOutputWithPooling):
     r"""

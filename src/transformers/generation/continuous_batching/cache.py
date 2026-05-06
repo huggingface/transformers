@@ -22,6 +22,7 @@ from ...generation.configuration_utils import ContinuousBatchingConfig
 from ...utils.generic import is_flash_attention_requested
 from ...utils.metrics import attach_tracer, traced
 from .cache_manager import BlockManager, CacheAllocator, FullAttentionCacheAllocator, SlidingAttentionCacheAllocator
+from .initialization import resolve_max_memory_percent
 from .requests import RequestState, RequestStatus, get_device_and_memory_breakdown, logger
 
 
@@ -204,7 +205,7 @@ class PagedAttentionCache:
 
         # If somehow the max memory percent is not yet resolved, resolve it conservatively
         if continuous_batching_config.max_memory_percent is None:
-            continuous_batching_config.resolve_max_memory_percent(has_logit_processors=True)
+            resolve_max_memory_percent(cb_config=continuous_batching_config, has_logit_processors=True)
 
         num_blocks, max_batch_tokens = memory_handler.infer_num_blocks_and_max_batch_tokens(
             num_blocks=continuous_batching_config.num_blocks,
@@ -222,15 +223,10 @@ class PagedAttentionCache:
             f"{self.max_batch_tokens = } {num_attention_masks = }"
         )
 
-        # If max_blocks_per_request is not set, the default value is 16 max blocks. With default block size of 256, this
-        # means a max sequence length of 4096 tokens for the fast decode path.
+        # If max_blocks_per_request is not set, initialize it to the non-zero fallback value
         max_blocks_per_request = continuous_batching_config.max_blocks_per_request
         if max_blocks_per_request is None:
-            max_blocks_per_request = 0
-            # logger.info( TODO: uncomment when we have good defaults
-            #     f"max_blocks_per_request was not set, using {max_blocks_per_request}. This means max sequence "
-            #     f"length for the decode fast path is {max_blocks_per_request * self.block_size}."
-            # )
+            max_blocks_per_request = continuous_batching_config.fallback_max_blocks_per_request
         self.max_blocks_per_request = max_blocks_per_request
 
         # Initialize the cache
