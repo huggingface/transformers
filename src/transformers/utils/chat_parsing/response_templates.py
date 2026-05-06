@@ -5,7 +5,7 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
-"""Spec loading and validation for response_template dicts."""
+"""Template loading and validation for response_template dicts."""
 
 from __future__ import annotations
 
@@ -19,18 +19,8 @@ from .content_parsers import CONTENT_PARSERS
 
 logger = logging.get_logger(__name__)
 
-
-_ALLOWED_FIELD_KEYS = {
-    "open", "open_pattern", "close", "close_pattern",
-    "content", "content_args", "repeats", "optional", "assemble", "coerce",
-}  # fmt: skip
-_ALLOWED_TOP_KEYS = {"version", "defaults", "fields", "start_anchor", "start_anchor_pattern"}
-_COERCE_OPTS = {"int", "float", "bool"}
-_EOS_RE = re.compile(r"\Z")
-
-
 @dataclass
-class Field:
+class ResponseTemplateField:
     name: str
     open_re: re.Pattern | None
     open_lit: str | None
@@ -45,23 +35,18 @@ class Field:
 
 
 @dataclass
-class Spec:
+class ResponseTemplate:
     defaults: dict
-    fields: dict[str, Field]
+    fields: dict[str, ResponseTemplateField]
     implicit: str | None = None
     start_anchor_re: re.Pattern | None = None
     start_anchor_lit: str | None = None
 
     def truncate_past_last_anchor(self, text: str, *, log_if_missing: bool = True) -> str:
-        """Right-truncate `text` to the suffix that begins immediately after
-        the last `start_anchor` match. The intent: when callers pass a chat
-        prompt (system + user + ... + assistant header) as a prefix, only
-        the bytes after the assistant header — i.e., the actual message
-        body — flow into the state machine.
-
-        Returns `text` unchanged when no anchor is configured. Returns it
-        unchanged (warning unless suppressed) when an anchor is configured
-        but not found."""
+        """When parsing responses, we can't just parse the tokens generated
+        by the model. This is because chat templates often include early parts of the message such as <start_of_turn>
+        or <think> tokens in the prefill. Therefore, we take the whole chat as input, but truncate to the start
+        of the most recent assistant message, which can include tokens from the template as well as the output."""
         if self.start_anchor_re is None:
             return text
         if self.start_anchor_lit is not None:
@@ -87,36 +72,37 @@ class Spec:
         return text[last_end:]
 
 
-def _compile_anchor(scope: str, fd: dict, lit_key: str, pat_key: str) -> tuple[re.Pattern | None, str | None]:
-    """Return (compiled, literal). `literal` is populated only when the anchor
-    was given as a literal string (not "eos" and not a regex); the streaming
-    executor uses it to compute safe-to-emit boundaries. `scope` prefixes
-    error messages — e.g. `"Field 'thinking'"` or `"response_template"`."""
-    if lit_key in fd and pat_key in fd:
+def _compile_anchor(scope: str, field: dict, lit_key: str, pat_key: str) -> tuple[re.Pattern | None, str | None]:
+    """The start and end anchors for a region can be either regexes or literal strings. Although both get compiled
+     to a regex for actual matching, we keep the literal string around too - when it's present, we can emit
+     regions much more quickly, rather than needing to keep a safety buffer as we do with regexes."""
+    if lit_key in field and pat_key in field:
         raise ValueError(f"{scope}: cannot specify both '{lit_key}' and '{pat_key}'")
-    if lit_key in fd:
-        lit = fd[lit_key]
+    if lit_key in field:
+        lit = field[lit_key]
         if lit == "eos":
-            return _EOS_RE, None
+            return re.compile(r"\Z"), None
         return re.compile(re.escape(lit), re.DOTALL), lit
-    if pat_key in fd:
+    if pat_key in field:
         try:
-            return re.compile(fd[pat_key], re.DOTALL), None
+            return re.compile(field[pat_key], re.DOTALL), None
         except re.error as e:
             raise ValueError(f"{scope}: invalid {pat_key} regex: {e}") from e
     return None, None
 
 
-def load_spec(spec: dict | Spec) -> Spec:
-    """Validate and normalize a response_template dict. Idempotent: a `Spec`
-    passed in is returned as-is."""
-    if isinstance(spec, Spec):
+def load_response_template(spec: dict | ResponseTemplate) -> ResponseTemplate:
+    _ALLOWED_FIELD_KEYS = {
+        "open", "open_pattern", "close", "close_pattern",
+        "content", "content_args", "repeats", "optional", "assemble", "coerce",
+    }
+    # Error checking / validation block
+    if isinstance(spec, ResponseTemplate):
         return spec
     if not isinstance(spec, dict):
         raise ValueError(f"response_template must be a dict, got {type(spec).__name__}")
-    unknown = set(spec) - _ALLOWED_TOP_KEYS
-    if unknown:
-        raise ValueError(f"Unknown keys in response_template: {sorted(unknown)}")
+    if unknown_template_keys := set(spec) - {"version", "defaults", "fields", "start_anchor", "start_anchor_pattern"}:
+        raise ValueError(f"Unknown keys in response_template: {sorted(unknown_template_keys)}")
     version = spec.get("version", 1)
     if version != 1:
         raise ValueError(f"Unsupported response_template version: {version}")
@@ -127,37 +113,36 @@ def load_spec(spec: dict | Spec) -> Spec:
     if not isinstance(fields_raw, dict) or not fields_raw:
         raise ValueError("response_template.fields must be a non-empty dict")
 
-    fields: dict[str, Field] = {}
+    fields: dict[str, ResponseTemplateField] = {}
     implicit_fields: list[str] = []
-    for name, fd in fields_raw.items():
-        if not isinstance(fd, dict):
+    for name, field in fields_raw.items():
+        if not isinstance(field, dict):
             raise ValueError(f"Field '{name}' must be a dict")
-        bad = set(fd) - _ALLOWED_FIELD_KEYS
-        if bad:
-            raise ValueError(f"Field '{name}': unknown keys {sorted(bad)}")
-        content = fd.get("content", "text")
+        if unknown_field_keys := set(field) - _ALLOWED_FIELD_KEYS:
+            raise ValueError(f"Field '{name}': unknown keys {sorted(unknown_field_keys)}")
+        content = field.get("content", "text")
         if content not in CONTENT_PARSERS:
             raise ValueError(
                 f"Field '{name}': unknown content parser '{content}'. Available: {sorted(CONTENT_PARSERS)}"
             )
-        coerce = fd.get("coerce")
-        if coerce is not None and coerce not in _COERCE_OPTS:
-            raise ValueError(f"Field '{name}': coerce must be one of {sorted(_COERCE_OPTS)}")
-        open_re, open_lit = _compile_anchor(f"Field '{name}'", fd, "open", "open_pattern")
-        close_re, close_lit = _compile_anchor(f"Field '{name}'", fd, "close", "close_pattern")
+        coerce = field.get("coerce")
+        if coerce is not None and coerce not in {"int", "float", "bool"}:
+            raise ValueError(f"Field '{name}': coerce must be int, float or bool.")
+        open_re, open_lit = _compile_anchor(f"Field '{name}'", field, "open", "open_pattern")
+        close_re, close_lit = _compile_anchor(f"Field '{name}'", field, "close", "close_pattern")
         if open_re is None:
             implicit_fields.append(name)
-        fields[name] = Field(
+        fields[name] = ResponseTemplateField(
             name=name,
             open_re=open_re,
             open_lit=open_lit,
             close_re=close_re,
             close_lit=close_lit,
             content=content,
-            content_args=fd.get("content_args", {}),
-            repeats=fd.get("repeats", False),
-            optional=fd.get("optional", True),
-            assemble=fd.get("assemble"),
+            content_args=field.get("content_args", {}),
+            repeats=field.get("repeats", False),
+            optional=field.get("optional", True),
+            assemble=field.get("assemble"),
             coerce=coerce,
         )
     if len(implicit_fields) > 1:
@@ -168,7 +153,7 @@ def load_spec(spec: dict | Spec) -> Spec:
     start_anchor_re, start_anchor_lit = _compile_anchor(
         "response_template", spec, "start_anchor", "start_anchor_pattern"
     )
-    return Spec(
+    return ResponseTemplate(
         defaults=dict(defaults),
         fields=fields,
         implicit=implicit_fields[0] if implicit_fields else None,
@@ -177,4 +162,4 @@ def load_spec(spec: dict | Spec) -> Spec:
     )
 
 
-__all__ = ["Field", "Spec", "load_spec"]
+__all__ = ["ResponseTemplate", "ResponseTemplateField", "load_response_template"]
