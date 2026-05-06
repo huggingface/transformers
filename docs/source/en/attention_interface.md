@@ -130,8 +130,8 @@ model = AutoModelForImageTextToText.from_pretrained(
 
 Customize or create new attention functions by adding them to the attention registry with [`AttentionInterface.register`]. Models use these functions through the `attn_implementation` argument.
 
-> [!WARNING]
-> If you register a new attention function, you likely also need to register a new attention _mask_ function. If you do not register a new attention _mask_ function, **the mask is set to `None`, i.e., completely ignored**. This could break your model in unexpected ways (e.g., by silently discarding Causal Masking).
+> [!WARNING]  
+> When you register a custom attention function, also register a matching attention _mask_ function. If the custom `attn_implementation` name is not registered in [`AttentionMaskInterface`], Transformers skips mask creation and passes `attention_mask=None` to the attention layers. If you don't register a matching attention mask function, your attention function must handle causal, padding, packing, or sliding-window constraints itself, or those constraints would be silently dropped.
 
 This example customizes the attention function to print a statement for each layer. It keeps the mask in the original implementation by registering `masking_utils.sdpa_mask` as the attention mask function.
 
