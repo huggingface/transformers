@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from copy import deepcopy
 from typing import TYPE_CHECKING
 
@@ -78,7 +79,6 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "siglip_text_model": "clip_text_model",
     "siglip2_text_model": "clip_text_model",
     "xclip_text_model": "clip_text_model",
-    "shield_gemma2": "llava",
     "paligemma": "llava",
     "aya_vision": "llava",
     "got_ocr2": "llava",
@@ -359,6 +359,7 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "colqwen2": [PrefixChange(prefix_to_remove="model", model_prefix="vlm")],
+        "shieldgemma2": [PrefixChange(prefix_to_add="model", model_prefix="model")],
         "timm_wrapper": [PrefixChange(prefix_to_add="timm_model")],
         "pi0": [
             WeightRenaming(source_patterns=r"state_proj", target_patterns="embed_action_time.state_proj"),
@@ -851,11 +852,11 @@ def extract_weight_conversions_for_model(
     unmodified; the caller sets ``scope_prefix`` on each transform for sub-module isolation.
     """
     class_name = type(model).__name__
-    model_type = getattr(model.config, "model_type", None)
+    model_type = model.config.model_type
 
     # Class name takes priority — allows ForXxx-specific overrides
     conversions = get_checkpoint_conversion_mapping(class_name)
-    if conversions is None and model_type is not None:
+    if conversions is None and model_type:
         conversions = get_checkpoint_conversion_mapping(model_type)
     return conversions
 
@@ -867,14 +868,14 @@ def get_model_conversion_mapping(
     add_legacy: bool = True,
 ) -> list[WeightTransform]:
     """
-    Collect the ordered list of weight transforms for ``model`` (used during
+    Collect the ordered list of weight transforms for `model` (used during
     loading and, when reversed, during saving).
 
-    Each ``PreTrainedModel`` sub-module is looked up by class name then
-    ``model_type``.  Root transforms are applied globally; sub-module transforms
-    have their ``scope_prefix`` set so they only match keys under that prefix.  After any
-    sub-module is processed, both its class name and ``model_type`` are marked
-    seen to prevent ``XForY`` / ``XModel`` pairs from applying the same mapping
+    Each `PreTrainedModel` sub-module is looked up by class name then
+    `model_type`.  Root transforms are applied globally; sub-module transforms
+    have their `scope_prefix` set so they only match keys under that prefix.  After any
+    sub-module is processed, both its class name and `model_type` are marked
+    seen to prevent `XForY` / `XModel` pairs from applying the same mapping
     twice via different lookup paths.
     """
     # Lazy import to avoid circular import issues
@@ -886,18 +887,21 @@ def get_model_conversion_mapping(
     if key_mapping is not None:
         weight_conversions = [WeightRenaming(source_patterns=k, target_patterns=v) for k, v in key_mapping.items()]
 
-    seen_identifiers: set[str] = set()
+    # Maps each identifier (class name or model_type) to the module paths that have
+    # already claimed it.  A later module is skipped only when one of those paths is
+    # an ancestor of the current module path — siblings are never ancestors of each
+    # other, so two sibling sub-models with the same model_type both get their own
+    # scoped transforms.  A child is an ancestor of everything nested under it, which
+    # prevents a parent's transforms from being duplicated with a scoped copy for the child.
+    seen_identifiers: defaultdict[str, list[str]] = defaultdict(list)
 
-    named_pretrained = getattr(model, "_named_pretrained_submodules", None)
-    if named_pretrained is None:
-        from .modeling_utils import PreTrainedModel
-
-        named_pretrained = [(name, m) for name, m in model.named_modules() if isinstance(m, PreTrainedModel)]
+    named_pretrained = model._named_pretrained_submodules
     for module_name, submodule in named_pretrained:
         class_name = type(submodule).__name__
-        model_type = getattr(submodule.config, "model_type", None)
+        model_type = submodule.config.model_type
 
-        if class_name in seen_identifiers:
+        # Skip if an ancestor already claimed this class (its unscoped transforms already cover this subtree).
+        if any(seen == "" or module_name.startswith(seen + ".") for seen in seen_identifiers[class_name]):
             continue
 
         # Class name takes priority — a class-specific mapping bypasses the model_type
@@ -907,7 +911,10 @@ def get_model_conversion_mapping(
         found_via_class = conversions is not None
 
         if not found_via_class:
-            if model_type and model_type in seen_identifiers:
+            # Same ancestor check as above, but via model_type for modules without a class-specific mapping.
+            if model_type and any(
+                seen == "" or module_name.startswith(seen + ".") for seen in seen_identifiers[model_type]
+            ):
                 continue
             if model_type is not None:
                 conversions = get_checkpoint_conversion_mapping(model_type)
@@ -922,13 +929,13 @@ def get_model_conversion_mapping(
                 transform.scope_prefix = module_name
         weight_conversions.extend(conversions)
 
-        seen_identifiers.add(class_name)
-        # Only block model_type when the hit was via model_type. When the hit was via
+        seen_identifiers[class_name].append(module_name)
+        # Only record model_type when the hit was via model_type. When the hit was via
         # class name, other sub-modules sharing the same model_type but without a
         # class-specific mapping (e.g. DetrModel under DetrForSegmentation) must still
         # be reachable so their base transforms are picked up and scoped.
         if not found_via_class and model_type:
-            seen_identifiers.add(model_type)
+            seen_identifiers[model_type].append(module_name)
 
     if add_legacy:
         weight_conversions.extend(get_checkpoint_conversion_mapping("legacy"))

@@ -112,7 +112,7 @@ class _IdentityOp(ConversionOps):
 
 
 class Chunk(ConversionOps):
-    """Split a tensor along ``dim`` into equally sized chunks."""
+    """Split a tensor along `dim` into equally sized chunks."""
 
     def __init__(self, dim: int = 0):
         self.dim = dim
@@ -156,8 +156,8 @@ class Concatenate(ConversionOps):
         target_pattern = self.get_target_pattern(target_patterns)
         all_tensors = []
         # Very important to keep the relative order of the source patterns here, so we iterate over them not the
-        # input directly as it's unordered! Skip patterns that prior ops in the chain (e.g. ``Fp8Dequantize``)
-        # have already consumed and dropped from ``input_dict``.
+        # input directly as it's unordered! Skip patterns that prior ops in the chain (e.g. `Fp8Dequantize`)
+        # have already consumed and dropped from `input_dict`.
         for source_pattern in source_patterns:
             if source_pattern not in input_dict:
                 continue
@@ -613,7 +613,7 @@ class WeightTransform:
         # Flag to notice if the Transform was used
         self._was_used = False
         # Optional prefix scope: when set, this transform only applies to keys starting with
-        # ``scope_prefix + "."``, stripping / re-attaching the prefix around the pattern match.
+        # `scope_prefix + "."`, stripping / re-attaching the prefix around the pattern match.
         self.scope_prefix: str | None = None
 
         # We need to process a few exceptions here when instantiating the reverse mapping (i.e. the targets become
@@ -682,11 +682,11 @@ class WeightTransform:
 
     def _scoped_match(self, source_key: str) -> tuple[str | None, str, re.Match[str]] | None:
         """
-        Apply ``scope_prefix`` stripping (if any), then match ``compiled_sources`` against the suffix.
+        Apply `scope_prefix` stripping (if any), then match `compiled_sources` against the suffix.
 
-        Returns ``(prefix_dot, key_to_match, match_object)`` when a branch matches, where ``prefix_dot`` is ``None``
-        if ``scope_prefix`` is unset, else ``f"{scope_prefix}."``. Returns ``None`` when out of scope or unmatched.
-        Does not set ``_was_used``.
+        Returns `(prefix_dot, key_to_match, match_object)` when a branch matches, where `prefix_dot` is `None`
+        if `scope_prefix` is unset, else `f"{scope_prefix}."`. Returns `None` when out of scope or unmatched.
+        Does not set `_was_used`.
         """
         prefix_dot = None
         key_to_match = source_key
@@ -1011,17 +1011,17 @@ def spawn_tp_materialize(
 
 
 def dot_natural_key(s: str):
-    """Sort key for state-dict names: split on ``"."`` and sort digits numerically
+    """Sort key for state-dict names: split on `"."` and sort digits numerically
     and strings alphabetically. We emit a tuple at each point to sort ints
     first and strings second to avoid int-string comparison failures.
     """
-    result = []
-    for p in s.split("."):
-        if p.isdigit():
-            result.append((0, int(p)))
+    parts = []
+    for part in s.split("."):
+        if part.isdigit():
+            parts.append((0, int(part)))
         else:
-            result.append((1, p))
-    return result
+            parts.append((1, part))
+    return parts
 
 
 @contextmanager
@@ -1149,14 +1149,14 @@ def rename_source_key(
     meta_state_dict: dict | None = None,
 ) -> tuple[str, str | None]:
     """
-    Rename a source key according to ``weight_transforms``, also handling the base model prefix.
+    Rename a source key according to `weight_transforms`, also handling the base model prefix.
 
-    Transforms are applied in list order, interleaving ``WeightRenaming`` and ``WeightConverter``
+    Transforms are applied in list order, interleaving `WeightRenaming` and `WeightConverter`
     instances as they appear.  The same list, reversed and with each transform individually
     inverted, is used on the save path, so relative ordering is preserved in both directions.
 
-    At most one ``WeightConverter`` fires per key; subsequent converters are skipped.
-    ``WeightRenaming`` always runs, even after a converter has already fired.
+    At most one `WeightConverter` fires per key; subsequent converters are skipped.
+    `WeightRenaming` always runs, even after a converter has already fired.
 
     Example (root rename followed by a scoped sub-model converter)::
 
@@ -1178,13 +1178,17 @@ def rename_source_key(
 
     for transform in weight_transforms:
         if isinstance(transform, WeightConverter):
+            # At most one WeightConverter may claim a key. The returned source_pattern tells
+            # the caller which converter to feed this tensor to; a second match would redirect
+            # the tensor to the wrong converter, leaving the first one incomplete.
+            # TODO: `continue` here can hide misconfigured mapping (two converters with overlapping patterns). Raise an error instead.
             if source_pattern is not None:
-                # Already matched a converter; skip subsequent converters.
                 continue
-            renamed_key, sp = transform.rename_source_key(renamed_key)
-            if sp is not None:
-                source_pattern = sp
+            renamed_key, matched_pattern = transform.rename_source_key(renamed_key)
+            if matched_pattern is not None:
+                source_pattern = matched_pattern
         else:
+            # WeightRenaming always runs. Multiple renames can safely chain before (and after) a converter fires.
             renamed_key, _ = transform.rename_source_key(renamed_key)
 
     # check if we need to add or remove prefix if necessary (only during loading, not saving)
