@@ -31,8 +31,7 @@
       - local: contributing
         title: Contribute to Transformers
       - local: modular_transformers
-<<<<<<< replace-image-tokens
-        title: Contributing a new model
+        title: Add a model with modular transformers
       - title: Multimodal models
         isExpanded: false
         sections:
@@ -40,13 +39,10 @@
           title: Multimodal processors
         - local: add_vision_processing_components
           title: Vision processing components
-=======
-        title: Add a model with modular transformers
       - local: add_vision_processing_components
         title: Add vision processing components
       - local: modeling_rules
         title: Model structure rules
->>>>>>> main
       - local: model_output_tracing
         title: Tracing model intermediate outputs
       - local: auto_docstring
