@@ -33,31 +33,31 @@ def use_gqa_in_sdpa(
     is_causal: bool,
     dropout: float = 0.0,
 ) -> bool:
-    # GQA can only be used under the following conditions
-    # 1. xpu
-    #   - torch version >= 2.8
-    # 2. cuda
-    #   - torch version >= 2.5
-    #   - attention_mask is None (otherwise dispatch falls back to the math kernel)
-    #   - the active backend is FA *and* FA can actually run these inputs (the
-    #     `enable_gqa=True` shortcut is FA-only, so EFFICIENT/CUDNN/MATH would
-    #     silently misroute or error)
-    # 3. cpu / other accelerators
-    #   - torch version >= 2.5 + no mask (existing BC behavior — CPU SDPA
-    #     honors `enable_gqa=True` natively)
+    """
+    GQA can only be used under the following conditions
+        1. XPU
+            > torch version >= 2.8
+        2. Ascend NPU, CPU, and others (BC)
+            > torch version >= 2.5
+            > attention_mask is None (otherwise it will fall back to the math kernel)
+        3. CUDA
+            > pass internal backends check within torch's `can_use_flash_attention`
+           (>)otherwise there will be a fallback to the math backend (very inefficient)
+    """
     if _is_torch_xpu_available:
         return _is_torch_greater_or_equal_than_2_8
-    if not (_is_torch_greater_or_equal_than_2_5 and attention_mask is None):
-        return False
-    if query.device.type != "cuda":
+
+    _is_torch_cuda_available = query.device.type == "cuda"
+    if not _is_torch_cuda_available and _is_torch_greater_or_equal_than_2_5 and attention_mask is None:
         return True
-    if not torch.backends.cuda.flash_sdp_enabled():
-        return False
-    try:
-        params = torch.backends.cuda.SDPAParams(query, key, value, None, dropout, is_causal, True)
-        return torch.backends.cuda.can_use_flash_attention(params)
-    except Exception:
-        return False
+
+    from torch.backends.cuda import SDPAParams, can_use_flash_attention
+
+    return can_use_flash_attention(
+        params=SDPAParams(
+            query, key, value, attn_mask=attention_mask, dropout=dropout, is_causal=is_causal, enable_gqa=True
+        )
+    )
 
 
 def sdpa_attention_forward(
@@ -76,16 +76,9 @@ def sdpa_attention_forward(
             "`sdpa` attention does not support `output_attentions=True`."
             " Please set your attention to `eager` if you want any of these features."
         )
+
     # Instead of relying on the value set in the module directly, we use the is_causal passed in kwargs if it is presented
     is_causal = is_causal if is_causal is not None else getattr(module, "is_causal", True)
-
-    sdpa_kwargs = {}
-    if hasattr(module, "num_key_value_groups"):
-        if not use_gqa_in_sdpa(attention_mask, query, key, value, bool(is_causal), dropout):
-            key = repeat_kv(key, module.num_key_value_groups)
-            value = repeat_kv(value, module.num_key_value_groups)
-        else:
-            sdpa_kwargs = {"enable_gqa": True}
 
     # SDPA's Flash Attention (and cuDNN) kernels rely on the `is_causal` flag. However, there are certain conditions:
     # - Not in decoding phase (otherwise we want full attention on the single query token)
@@ -111,6 +104,14 @@ def sdpa_attention_forward(
         if attention_mask is not None and attention_mask.dtype != torch.bool:
             # Convert to boolean type, making sdpa to force call FlashAttentionScore to improve performance.
             attention_mask = torch.logical_not(attention_mask.bool()).to(query.device)
+
+    sdpa_kwargs = {}
+    if hasattr(module, "num_key_value_groups"):
+        if not use_gqa_in_sdpa(attention_mask, query, key, value, is_causal, dropout):
+            key = repeat_kv(key, module.num_key_value_groups)
+            value = repeat_kv(value, module.num_key_value_groups)
+        else:
+            sdpa_kwargs = {"enable_gqa": True}
 
     attn_output = torch.nn.functional.scaled_dot_product_attention(
         query,
