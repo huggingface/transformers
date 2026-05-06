@@ -270,32 +270,48 @@ def _dispatch_routed_input(
     num_experts: int,
     use_psum_layout: bool,
 ) -> tuple:
-    """Sort tokens by expert id and build the M-grouped layout.
+    """Sort tokens by expert id and build the M-grouped padded layout.
 
-    EP sentinels (`top_k_index == num_experts`) are kept unclamped here so the
-    sort pushes them to the tail and `_build_deepgemm_contiguous_layout` routes
-    them past valid expert blocks.
-
-    Returns `(sorted_hidden, sorted_weights, expert_ids_g, perm,
-              sorted_to_padded, grouped_layout, total_padded_rows)`.
+    Returns `(sorted_hidden_states_g, sample_weights_g, expert_ids_g,
+              sentinel_mask, perm, sorted_to_padded, grouped_layout,
+              total_padded_rows)`.
     """
+    # S is the number of selected token-expert pairs (S = num_tokens * num_top_k)
     num_top_k = top_k_index.size(-1)
-    expert_ids_g, perm = torch.sort(top_k_index.reshape(-1))
-    sorted_hidden = hidden_states[perm // num_top_k]
-    sorted_weights = top_k_weights.reshape(-1)[perm]
+    expert_ids = top_k_index.reshape(-1)  # (S,)
+    sample_weights = top_k_weights.reshape(-1)  # (S,)
+
+    # Sort by expert for grouped processing
+    expert_ids_g, perm = torch.sort(expert_ids)
+    sorted_hidden_states_g = hidden_states[perm // num_top_k]
+    sample_weights_g = sample_weights[perm]
+
+    # Build the M-grouped padded layout (DeepGEMM contract: each expert's rows
+    # start on a `_DEEPGEMM_M_ALIGNMENT` boundary, sentinels routed past valid
+    # expert blocks).
     sorted_to_padded, grouped_layout, total_padded_rows = _build_deepgemm_contiguous_layout(
         expert_ids_g, num_experts, _DEEPGEMM_M_ALIGNMENT, use_psum_layout
     )
-    return sorted_hidden, sorted_weights, expert_ids_g, perm, sorted_to_padded, grouped_layout, total_padded_rows
+
+    # EP sentinel mask is captured before the in-place clamp; used by the post-mask in
+    # `_combine_routed_output` to zero sentinel rows before the per-token reduction. The clamp
+    # keeps any per-row gather (e.g. bias) in-bounds — bias added at sentinel positions falls
+    # in rows the kernel skips, so harmless. Safe to mutate now: the layout was built from the
+    # unclamped tensor and nothing downstream needs the sentinel info from `expert_ids_g` itself.
+    sentinel_mask = (expert_ids_g >= num_experts).unsqueeze(-1)
+    expert_ids_g.clamp_(max=num_experts - 1)
+    return (
+        sorted_hidden_states_g, sample_weights_g, expert_ids_g, sentinel_mask, perm,
+        sorted_to_padded, grouped_layout, total_padded_rows,
+    )
 
 
 def _combine_routed_output(
     out_padded: torch.Tensor,
     sorted_weights: torch.Tensor,
-    expert_ids_g: torch.Tensor,
+    sentinel_mask: torch.Tensor,
     perm: torch.Tensor,
     sorted_to_padded: torch.Tensor,
-    num_experts: int,
     num_tokens: int,
     num_top_k: int,
     hidden_dim: int,
@@ -306,7 +322,7 @@ def _combine_routed_output(
     weighted = out * sorted_weights.to(out.dtype).unsqueeze(-1)
     # Sentinel rows past the valid expert blocks may carry NaN from allocator
     # reuse (`0 * NaN = NaN`); zero them so the top-k reduction stays finite.
-    weighted.masked_fill_((expert_ids_g >= num_experts).unsqueeze(-1), 0.0)
+    weighted.masked_fill_(sentinel_mask, 0.0)
     inv_perm = torch.empty_like(perm)
     inv_perm[perm] = torch.arange(perm.size(0), device=out.device)
     # Deterministic reshape+sum (index_add_ with duplicates is non-deterministic on CUDA).
@@ -372,13 +388,10 @@ def deepgemm_bf16_experts_forward(
     num_tokens, hidden_dim = hidden_states.size(0), hidden_states.size(-1)
 
     use_psum_layout = torch.cuda.get_device_capability(device)[0] >= 10
-    sorted_hidden, sorted_weights, expert_ids_g, perm, sorted_to_padded, grouped_layout, total_padded_rows = (
-        _dispatch_routed_input(hidden_states, top_k_index, top_k_weights, self.num_experts, use_psum_layout)
-    )
-
-    if self.has_bias:
-        # Clamp now that the layout is built; bias added to sentinel rows lands in skipped positions.
-        expert_ids_g.clamp_(0, self.num_experts - 1)
+    (
+        sorted_hidden, sorted_weights, expert_ids_g, sentinel_mask, perm,
+        sorted_to_padded, grouped_layout, total_padded_rows,
+    ) = _dispatch_routed_input(hidden_states, top_k_index, top_k_weights, self.num_experts, use_psum_layout)
 
     # Up projection.
     w_up = self.gate_up_proj if self.has_gate else self.up_proj
@@ -401,10 +414,9 @@ def deepgemm_bf16_experts_forward(
     return _combine_routed_output(
         out,
         sorted_weights,
-        expert_ids_g,
+        sentinel_mask,
         perm,
         sorted_to_padded,
-        self.num_experts,
         num_tokens,
         num_top_k,
         hidden_dim,
@@ -433,9 +445,10 @@ def deepgemm_fp8_fp4_experts_forward(
     cast_kwargs = _select_fp8_cast_kwargs(w_up, ws_up, getattr(self, "block_size", None), device)
 
     use_psum_layout = torch.cuda.get_device_capability(device)[0] >= 10
-    sorted_hidden, sorted_weights, expert_ids_g, perm, sorted_to_padded, grouped_layout, total_padded_rows = (
-        _dispatch_routed_input(hidden_states, top_k_index, top_k_weights, self.num_experts, use_psum_layout)
-    )
+    (
+        sorted_hidden, sorted_weights, _expert_ids_g, sentinel_mask, perm,
+        sorted_to_padded, grouped_layout, total_padded_rows,
+    ) = _dispatch_routed_input(hidden_states, top_k_index, top_k_weights, self.num_experts, use_psum_layout)
     sf_recipe = (1, 1, cast_kwargs["gran_k"]) if cast_kwargs.get("use_packed_ue8m0") else None
 
     # Up projection.
@@ -468,10 +481,9 @@ def deepgemm_fp8_fp4_experts_forward(
     return _combine_routed_output(
         out,
         sorted_weights,
-        expert_ids_g,
+        sentinel_mask,
         perm,
         sorted_to_padded,
-        self.num_experts,
         num_tokens,
         num_top_k,
         hidden_dim,
