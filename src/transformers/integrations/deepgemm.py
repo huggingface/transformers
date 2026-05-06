@@ -482,7 +482,10 @@ def deepgemm_fp8_fp4_experts_forward(
     selected_hidden_states_g = hidden_states[perm // num_top_k]
     sample_weights_g = sample_weights[perm]
 
-    use_psum_layout = torch.cuda.get_device_capability(device)[0] >= 10
+    # A/B test: gate psum_layout on int-SF only, to see whether the float-SF
+    # NaN on B200 correlates with the psum_layout dispatch.
+    is_int_sf = bool(cast_kwargs.get("use_packed_ue8m0")) or is_fp4_weights
+    use_psum_layout = torch.cuda.get_device_capability(device)[0] >= 10 and is_int_sf
     sorted_to_padded, grouped_layout, total_padded_rows = _build_deepgemm_contiguous_layout(
         expert_ids_g, self.num_experts, alignment=_DEEPGEMM_M_ALIGNMENT, use_psum_layout=use_psum_layout
     )
