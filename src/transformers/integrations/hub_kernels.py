@@ -602,7 +602,7 @@ def make_fused_parent_class(
     child_names: list[str],
     source_names: list[str],
     kernel_layer_name: str,
-) -> tuple[type, type]:
+) -> type:
     original_init = parent_cls.__init__
     _child_names = list(child_names)
     _source_names = list(source_names)
@@ -620,7 +620,7 @@ def make_fused_parent_class(
 
     fused_cls = type(f"Fused{parent_cls.__name__}", (parent_cls,), {"__init__": fused_init})
     fused_cls.__qualname__ = f"Fused{parent_cls.__qualname__}"
-    return fused_cls, fused_module_cls
+    return fused_cls
 
 
 def infer_kernel_fusion_transforms(
@@ -679,12 +679,6 @@ def infer_kernel_fusion_transforms(
 
 
 def _try_load_kernel_class(repo_str: str, use_local: bool = False) -> type | None:
-    """
-    Load a kernel class from a repo string like "org/repo:ClassName" or "/abs/path:ClassName".
-
-    Returns the loaded class, or None if the string is malformed or loading fails.
-    The kernels library caches the result, so repeated calls are free.
-    """
     if ":" not in repo_str:
         return None
     repo_id, _, layer_name = repo_str.rpartition(":")
@@ -719,15 +713,13 @@ def register_kernel_fusions(
 
         1. Meta-instantiate the model to discover parent classes containing all target children.
 
-        2. Register a monkey patch mapping each parent class to a fused subclass whose __init__
-           wraps the target children in a FusedModuleBase with the resolved kernel_layer_name.
+        2. Register a monkey patch mapping each parent class to a fused subclass whose `__init__`
+           wraps the target children in a `FusedModuleBase` with the resolved `kernel_layer_name`.
 
         3. Load or infer conversion mapping to handle the weight transformations caused by the kernel fusion.
 
         4. Replace the tuple key with the scalar kernel_layer_name in kernel_config so the
            downstream pipeline (sanitize, create_compatible_mapping, kernelize) is unchanged.
-
-    Scalar keys are passed through untouched.
     """
 
     if not hasattr(cls, "config_class") or not hasattr(cls.config_class, "model_type"):
@@ -736,7 +728,6 @@ def register_kernel_fusions(
 
     new_mapping: dict = {}
     for layer_name, hub_repo in kernel_config.kernel_mapping.items():
-        # Pass scalar keys through unchanged.
         if not isinstance(layer_name, tuple) or not all(
             isinstance(item, tuple) and len(item) == 2 for item in layer_name
         ):
@@ -768,9 +759,7 @@ def register_kernel_fusions(
             if not all(hasattr(module, name) for name in child_names):
                 continue
             seen.add(module_cls)
-            fused_parent_cls, fused_cls = make_fused_parent_class(
-                module_cls, child_names, source_names, kernel_layer_name
-            )
+            fused_parent_cls = make_fused_parent_class(module_cls, child_names, source_names, kernel_layer_name)
             patch_mapping[module_cls.__name__] = fused_parent_cls
 
         if not patch_mapping:
@@ -784,23 +773,22 @@ def register_kernel_fusions(
         # 2. Register class-level monkey patches.
         register_patch_mapping(patch_mapping, overwrite=True)
 
-        # 3. Register weight conversion mapping.
-        # Always start with inferred transforms for the basic path renaming caused by fusion
-        # (e.g. layernorm.weight → layernorm.RMSNorm.weight, mlp.* → layernorm.MLP.*).
-        # Then append any kernel-provided custom transforms (e.g. weight concatenation).
-        # The kernels library caches the result, so the later kernelize() call is a free cache hit.
+        # 3. Infer weight renaming mapping.
         transforms = infer_kernel_fusion_transforms(list(zip(source_names, glob_patterns)))
+
+        # 4. Load weight conversion mapping from the kernel class if available.
         kernel_cls = _try_load_kernel_class(repo_str, use_local=kernel_config.use_local_kernel)
         if kernel_cls is not None and hasattr(kernel_cls, "conversion_mapping"):
             transforms = transforms + list(kernel_cls.conversion_mapping)
 
+        # 5. Load existing conversion mapping for this model type.
         existing = get_checkpoint_conversion_mapping(model_type)
         if existing is not None:
             transforms = existing + transforms
 
+        # 6. Register the combined mappings.
         register_checkpoint_conversion_mapping(model_type, transforms, overwrite=True)
 
-        # 4. Resolve tuple key -> scalar key for the downstream pipeline.
         new_mapping[kernel_layer_name] = hub_repo
 
     kernel_config.kernel_mapping = new_mapping
