@@ -200,6 +200,23 @@ jobs:
 
             core.setOutput('merge_commit_base_sha', merge_commit.parents[0].sha);
 
+      - name: Get workflow ID
+        if: ${{ inputs.pr_number == '' }}
+        id: get-workflow-id
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_WORKFLOW_RUN_ID: ${{ inputs.source_workflow_run_id }}
+          WORKFLOW_RUN_ID: ${{ github.run_id }}
+          RUN_ID: ${{ inputs.source_workflow_run_id || github.run_id }}
+          REPO: ${{ github.repository }}
+        run: |
+          workflow_id=$(gh api repos/$REPO/actions/runs/$RUN_ID --jq '.workflow_id')
+          echo "workflow_id=$workflow_id" >> $GITHUB_OUTPUT
+          echo "SOURCE_WORKFLOW_RUN_ID: $SOURCE_WORKFLOW_RUN_ID"          
+          echo "WORKFLOW_RUN_ID: $WORKFLOW_RUN_ID"
+          echo "RUN_ID: $RUN_ID"
+          echo "workflow_id: $workflow_id"
+
       # Usually, `END_SHA` should be the commit of the last previous workflow run of the **SAME** (scheduled) workflow.
       # (This is why we don't need to specify `workflow_id` which would be fetched automatically in the python script.)
       - name: Get `END_SHA` from previous CI runs of the same workflow
@@ -207,8 +224,9 @@ jobs:
         if: ${{ inputs.pr_number == '' }}
         env:
           ACCESS_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+          WORKFLOW_ID: ${{ steps.get-workflow-id.outputs.workflow_id }}
         run: |
-          echo "END_SHA=$(TOKEN="$ACCESS_TOKEN" python3 -c 'import os; from get_previous_daily_ci import get_last_daily_ci_run_commit; commit=get_last_daily_ci_run_commit(token=os.environ["TOKEN"], workflow_run_id=os.environ["PREV_WORKFLOW_RUN_ID"]); print(commit)')" >> $GITHUB_ENV
+          echo "END_SHA=$(TOKEN="$ACCESS_TOKEN" python3 -c 'import os; from get_previous_daily_ci import get_last_daily_ci_run_commit; commit=get_last_daily_ci_run_commit(token=os.environ["TOKEN"], workflow_run_id=os.environ["PREV_WORKFLOW_RUN_ID"], workflow_id=os.environ["WORKFLOW_RUN_ID"]); print(commit)')" >> $GITHUB_ENV
 
       # However, for workflow runs triggered by `issue_comment` (for pull requests), we want to check against the
       # parent commit (on `main`) of the `merge_commit` (dynamically created by GitHub). In this case, the goal is to
