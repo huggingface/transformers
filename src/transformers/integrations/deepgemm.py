@@ -494,9 +494,10 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
     on first forward. `top_k_index` is GLOBAL expert ids (`-1` marks skipped slots).
 
     Caller-managed `self` attributes:
-      - `gate_up_proj`, `gate_up_proj_scale_inv`: L1 weight + UE8M0 SF, both
-        transformed via `transform_weights_for_mega_moe(is_l1=True)`.
-      - `down_proj`, `down_proj_scale_inv`: same for L2 (`is_l1=False`).
+      - `gate_up_proj`, `gate_up_proj_scale_inv`: L1 weight + UE8M0 SF.
+      - `down_proj`, `down_proj_scale_inv`: L2 weight + UE8M0 SF.
+      Both pairs must be transformed together via
+      `transform_weights_for_mega_moe((gate_up, gate_up_sf), (down, down_sf))`.
       - `config.swiglu_limit` (optional): SwiGLU clamp; absent → unclamped.
     """
     if torch.cuda.get_device_capability(hidden_states.device)[0] < 10:

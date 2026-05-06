@@ -243,11 +243,9 @@ def test_megamoe(device: torch.device, world_size: int, rank: int) -> None:
 
     # Build raw FP4 experts on this rank's slice, then transform to the kernel's layout.
     raw = _make_fp4_experts(E_local, H, I, device)
-    gate_up_t, gate_up_sf_t = deepgemm.transform_weights_for_mega_moe(
-        raw.gate_up_proj, raw.gate_up_proj_scale_inv, is_l1=True
-    )
-    down_t, down_sf_t = deepgemm.transform_weights_for_mega_moe(
-        raw.down_proj, raw.down_proj_scale_inv, is_l1=False
+    (gate_up_t, gate_up_sf_t), (down_t, down_sf_t) = deepgemm.transform_weights_for_mega_moe(
+        (raw.gate_up_proj, raw.gate_up_proj_scale_inv),
+        (raw.down_proj, raw.down_proj_scale_inv),
     )
 
     experts = SimpleNamespace(
