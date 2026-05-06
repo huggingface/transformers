@@ -35,7 +35,6 @@ jobs:
     outputs:
       source_workflow_run_id: ${{ steps.resolve.outputs.source_workflow_run_id }}
       only_process_job: ${{ steps.resolve.outputs.only_process_job }}
-      end_sha: ${{ steps.fetch-end-sha.outputs.end_sha }}
       docker: ${{ steps.fetch-inputs.outputs.docker }}
       job: ${{ steps.fetch-inputs.outputs.job }}
       slack_report_channel: ${{ steps.fetch-inputs.outputs.slack_report_channel }}
@@ -203,6 +202,18 @@ jobs:
               core.warning('Could not find END_SHA in the "Check failed tests" step env block. END_SHA will be computed automatically.');
             }
 
+      - name: Upload END_SHA artifact
+        if: ${{ steps.fetch-end-sha.outputs.end_sha != '' }}
+        run: |
+          mkdir end_sha_override
+          echo "${{ steps.fetch-end-sha.outputs.end_sha }}" > end_sha_override/end_sha.txt
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ steps.fetch-end-sha.outputs.end_sha != '' }}
+        with:
+          name: end_sha_override
+          path: end_sha_override/end_sha.txt
+
   check_new_failures:
     name: Check new failures
     needs: prepare
@@ -217,6 +228,5 @@ jobs:
       pr_number: ${{ needs.prepare.outputs.pr_number }}
       max_num_runners: ${{ fromJSON(needs.prepare.outputs.max_num_runners) }}
       source_workflow_run_id: ${{ needs.prepare.outputs.source_workflow_run_id }}
-      end_sha: ${{ needs.prepare.outputs.end_sha }}
       only_process_job: ${{ fromJSON(needs.prepare.outputs.only_process_job) }}
     secrets: inherit
