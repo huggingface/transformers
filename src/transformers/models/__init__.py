@@ -156,6 +156,7 @@ if TYPE_CHECKING:
     from .gemma3 import *
     from .gemma3n import *
     from .gemma4 import *
+    from .gemma4_assistant import *
     from .git import *
     from .glm import *
     from .glm4 import *
@@ -179,6 +180,7 @@ if TYPE_CHECKING:
     from .gpt_sw3 import *
     from .gptj import *
     from .granite import *
+    from .granite4_vision import *
     from .granite_speech import *
     from .granite_speech_plus import *
     from .granitemoe import *

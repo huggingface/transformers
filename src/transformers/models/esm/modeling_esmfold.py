@@ -51,12 +51,12 @@ from .openfold_utils import (
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`EsmForProteinFoldingOutput`].
     """
 )
+@dataclass
 class EsmForProteinFoldingOutput(ModelOutput):
     r"""
     frames (`torch.FloatTensor`):
