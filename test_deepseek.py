@@ -80,23 +80,31 @@ def _generate_and_check(model, tok, label: str, rank: int) -> None:
     dist.barrier()
 
 
-def _run_phase(load_kwargs: dict, dispatches, cap_major: int, rank: int, failures: list) -> None:
+def _run_phase(load_kwargs: dict, dispatches, cap_major: int, rank: int, results: list) -> None:
     runnable = [(lab, d) for (lab, d, sm) in dispatches if cap_major >= sm]
     skipped = [(lab, d, sm) for (lab, d, sm) in dispatches if cap_major < sm]
     for lab, _, sm in skipped:
         _rank0_print(f"[{lab}] SKIP: needs SM{sm}0+, got SM{cap_major}0")
+        results.append((lab, "SKIP", f"needs SM{sm}0+"))
     if not runnable:
         return
 
     _rank0_print(f"\n--- loading {_CHECKPOINT} (kwargs: {sorted(load_kwargs)}) ---")
-    model = AutoModelForCausalLM.from_pretrained(
-        _CHECKPOINT,
-        tp_plan="auto",
-        distributed_config=DistributedConfig(enable_expert_parallel=True),
-        **load_kwargs,
-    )
-    model.eval()
-    tok = AutoTokenizer.from_pretrained(_CHECKPOINT)
+    try:
+        model = AutoModelForCausalLM.from_pretrained(
+            _CHECKPOINT,
+            tp_plan="auto",
+            distributed_config=DistributedConfig(enable_expert_parallel=True),
+            **load_kwargs,
+        )
+        model.eval()
+        tok = AutoTokenizer.from_pretrained(_CHECKPOINT)
+    except BaseException as exc:
+        if rank == 0:
+            print(f"[load] FAIL — {type(exc).__name__}: {exc}", flush=True)
+        for label, _ in runnable:
+            results.append((label, "FAIL", f"load: {type(exc).__name__}: {exc}"))
+        return
 
     try:
         for label, dispatch in runnable:
@@ -104,10 +112,11 @@ def _run_phase(load_kwargs: dict, dispatches, cap_major: int, rank: int, failure
             try:
                 model.set_experts_implementation(dispatch)
                 _generate_and_check(model, tok, label, rank)
+                results.append((label, "PASS", ""))
             except BaseException as exc:
                 if rank == 0:
-                    failures.append((label, exc))
                     print(f"[{label}] FAIL — {type(exc).__name__}: {exc}", flush=True)
+                results.append((label, "FAIL", f"{type(exc).__name__}: {exc}"))
     finally:
         del model, tok
         gc.collect()
@@ -128,7 +137,7 @@ def main() -> int:
     cap_major = torch.cuda.get_device_capability()[0]
     _rank0_print(f"device cap: SM{cap_major}0, world_size={world_size}")
 
-    failures: list[tuple[str, BaseException]] = []
+    results: list[tuple[str, str, str]] = []  # (label, status, detail)
 
     _run_phase(
         load_kwargs={
@@ -138,26 +147,35 @@ def main() -> int:
         dispatches=_DEQUANTIZED_DISPATCHES,
         cap_major=cap_major,
         rank=rank,
-        failures=failures,
+        results=results,
     )
     _run_phase(
         load_kwargs={"dtype": "auto"},
         dispatches=_QUANTIZED_DISPATCHES,
         cap_major=cap_major,
         rank=rank,
-        failures=failures,
+        results=results,
     )
 
     dist.barrier()
     dist.destroy_process_group()
 
     if rank == 0:
-        if failures:
-            print(f"\n=== {len(failures)} run(s) failed ===", flush=True)
-            for name, exc in failures:
-                print(f"  - {name}: {type(exc).__name__}: {exc}", flush=True)
-            return 1
-        print("\n=== all runs passed ===", flush=True)
+        passed = [r for r in results if r[1] == "PASS"]
+        failed = [r for r in results if r[1] == "FAIL"]
+        skipped = [r for r in results if r[1] == "SKIP"]
+        width = max((len(r[0]) for r in results), default=20)
+        print("\n=== summary ===", flush=True)
+        for label, status, detail in results:
+            line = f"  {label.ljust(width)}  {status}"
+            if detail:
+                line += f"  ({detail})"
+            print(line, flush=True)
+        print(
+            f"\n  totals: {len(passed)} passed, {len(failed)} failed, {len(skipped)} skipped",
+            flush=True,
+        )
+        return 1 if failed else 0
     return 0
 
 
