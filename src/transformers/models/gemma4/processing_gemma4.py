@@ -125,7 +125,7 @@ class Gemma4Processor(ProcessorMixin):
 
         # Create empty text to be replaced with placeholders
         if images and not text:
-            text = [" ".join([self.boi_token] * len(image_list)) for image_list in images]
+            text = [" ".join([self.image_token] * len(image_list)) for image_list in images]
         if audio and not text:
             text = [self.audio_token] * len(audio)
 

@@ -696,6 +696,11 @@ class ProcessorMixin(PushToHubMixin):
         audio: AudioInput | None = None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
+        """
+        Normalize and prefetch inputs before processing. Wraps text in a list for multimodal
+        processors, fetches remote images and audio if URLs are provided, and ensures audio
+        is properly batched. Returns the normalized `(images, text, videos, audio)` tuple.
+        """
         # To support BC with models in pre-MLLM era, don't wrap text in list
         if self.all_special_multimodal_tokens and text is not None:
             if isinstance(text, str):
@@ -721,6 +726,12 @@ class ProcessorMixin(PushToHubMixin):
         audio: AudioInput | None = None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
+        """
+        Validate that at least one input is provided and that no deprecated keyword arguments
+        are used. Raises ``ValueError`` otherwise.
+
+        Override when the processor needs additional validation on the input args.
+        """
         if "audios" in kwargs and audio is None:
             raise ValueError("You passed keyword argument `audios` which is deprecated. Please use `audio` instead.")
 
@@ -767,13 +778,13 @@ class ProcessorMixin(PushToHubMixin):
 
     # To be overriden by each model's processor if they need to add placeholder tokens
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
-        return ""
+        raise NotImplementedError
 
     def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
-        return ""
+        raise NotImplementedError
 
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int) -> str:
-        return ""
+        raise NotImplementedError
 
     def get_text_with_replacements(
         self,
@@ -782,6 +793,48 @@ class ProcessorMixin(PushToHubMixin):
         videos_replacements: list[str] = [],
         audio_replacements: list[str] = [],
     ) -> tuple[list[str], list[dict[str, Any]]]:
+        """
+        Replace multimodal placeholder tokens in a batch of text strings with their
+        expanded representations, and return the modified texts alongside offset metadata.
+
+        This method is the core text-side preprocessing step for multimodal inputs. It
+        scans each text in the batch for special tokens (image, video, audio) and replaces
+        them in-order with the pre-computed replacement strings produced by
+        `self.replace_image_token` / `self.replace_video_token` / `self.replace_audio_token`.
+        Replacements are consumed from each modality's list sequentially, so the i-th
+        occurrence of e.g. ``self.image_token`` is replaced by ``images_replacements[i]``.
+
+        To add a new multimodal processor with placeholder tokens, you need to define a correct
+        `self.image_token` which is the same token that is embedded in input text and also used as
+        placeholder and repeated many times. Then you need to override `self.replace_image_token`
+        to return the correct replacement string for a given image at index `i`. Same goes for all
+        other supported modalities.
+
+        Args:
+            text (`list[str]`):
+                Batch of raw text strings, each potentially containing multimodal
+                placeholder tokens. Note that it will be modified in-place and returned.
+            images_replacements (`list[str]`, *optional*, defaults to `[]`):
+                Expanded replacement strings for each image, in the order they appear
+                across the batch. Produced by `self._process_images`.
+            videos_replacements (`list[str]`, *optional*, defaults to `[]`):
+                Expanded replacement strings for each video. Produced by
+                `self._process_videos`.
+            audio_replacements (`list[str]`, *optional*, defaults to `[]`):
+                Expanded replacement strings for each audio input. Produced by
+                `self._process_audio`.
+
+        Returns:
+            `tuple[list[str], list[dict[str, Any]]]`: A tuple of:
+                - The modified `text` batch with all placeholder tokens expanded.
+                - `batch_replacement_offsets`: one entry per batch item, each being a
+                list of dicts with keys:
+                    - `"type"` (`str`): modality name — `"image"`, `"video"`, or `"audio"`
+                    - `"span"` (`tuple[int, int]`): original `(start, end)` char offsets of the placeholder token
+                    - `"new_span"` (`tuple[int, int]`): `(start, end)` offsets of placeholder in the expanded string
+                    - `"text"` (`str`): the original placeholder token string that was matched
+                    - `"replacement"` (`str`): the string it was replaced with
+        """
         # Early exit if no special tokens found, nothing to replace
         if not self.all_special_multimodal_tokens:
             return text, []
@@ -830,9 +883,24 @@ class ProcessorMixin(PushToHubMixin):
         return text, batch_replacement_offsets
 
     def create_mm_token_type_ids(self, input_ids: list) -> list[list[int]]:
-        # We have to iterate for each list separately because inputs
-        # might be non-padded lists and we can't cast numpy on that!
-        # Then cast numpy as each input for faster indexing
+        """
+        Build per-token modality type IDs for a batch of token_id sequences.
+
+        Each position is assigned an integer indicating which modality it belongs to:
+        ``0`` for regular text, ``1`` for image tokens, ``2`` for video tokens, and
+        ``3`` for audio tokens. Membership is determined by comparing against
+        ``self.image_token_ids``, ``self.video_token_ids``, and ``self.audio_token_ids``.
+
+        Args:
+            input_ids (`list[list[int]]`):
+                Batch of token ID sequences. May be unpadded (variable length), so
+                a plain Python list of lists is expected rather than a tensor or
+                uniformly-shaped array.
+
+        Returns:
+            `list[list[int]]`: A list of the same structure as ``input_ids``, where each
+            integer is the modality type ID for the corresponding token.
+        """
         mm_token_type_ids = []
         for tokenizer_input in input_ids:
             tokenizer_input = np.array(tokenizer_input)
