@@ -630,44 +630,48 @@ def infer_kernel_fusion_transforms(
     Auto-infer WeightRenaming transforms for the path changes caused by FusedModuleBase wrapping.
 
     For each fusion (source_name, glob_path) pair:
-    - The first module's weights get source_name inserted between the module path and the weight suffix.
-    - Each subsequent module's weights are relocated from their original path to under the first module.
+        - The first module's weights get source_name inserted between the module path and the weight suffix.
+        - Each subsequent module's weights are relocated from their original path to under the first module.
 
-    For example, given [("RMSNorm", "model.layers.*.post_attention_layernorm"), ("MLP", "model.layers.*.mlp")]:
-    - model.layers.0.post_attention_layernorm.weight  -> model.layers.0.post_attention_layernorm.RMSNorm.weight
-    - model.layers.0.mlp.gate_proj.weight             -> model.layers.0.post_attention_layernorm.MLP.gate_proj.weight
+    For example, given
+        [
+            ("RMSNorm", "model.layers.*.post_attention_layernorm"),
+            ("MLP", "model.layers.*.mlp")
+        ]
+    the inferred transforms would be:
+        - model.layers.0.post_attention_layernorm.weight -> model.layers.0.post_attention_layernorm.RMSNorm.weight
+        - model.layers.0.mlp.gate_proj.weight -> model.layers.0.post_attention_layernorm.MLP.gate_proj.weight
     """
 
-    def _seg_to_regex(seg: str) -> str:
+    def segment_to_regex(seg: str) -> str:
+        """
+        Convert a glob segment to a regex segment.
+        The wildcard "*" matches any non-empty sequence of characters that does not include a dot.
+        Otherwise, the segment is escaped.
+        """
         return r"[^.]+" if seg == "*" else re.escape(seg)
 
-    def _glob_to_regex(glob: str) -> str:
-        return r"\.".join(_seg_to_regex(s) for s in glob.split("."))
+    _, first_glob = patterns_with_names[0]
+    parent_path, first_child = first_glob.rsplit(".", 1)
 
-    first_source_name, first_glob = patterns_with_names[0]
-    *parent_parts, first_child = first_glob.split(".")
-    parent_regex = _glob_to_regex(".".join(parent_parts))
-    first_child_regex = _seg_to_regex(first_child)
+    # Convert parent_path to a regex pattern, capturing it as a group for reuse in the target pattern.
+    parent_regex = r"\.".join(segment_to_regex(s) for s in parent_path.split("."))
 
     transforms: list[WeightRenaming] = []
 
-    # Module 0: insert source_name between the module path and the weight suffix.
-    # Capture the full module prefix so \1 can be used in the target for variable layer indices.
-    transforms.append(
-        WeightRenaming(
-            source_patterns=rf"({parent_regex}\.{first_child_regex}\.)",
-            target_patterns=rf"\1{first_source_name}.",
-        )
-    )
+    # We must not match the moved child modules under the first child, so we add a negative lookahead.
+    child_regexs = "|".join(rf"{name}\." for name, _ in patterns_with_names)
+    moved_child_lookahead = f"(?!{child_regexs})"
 
-    # Modules i > 0: relocate weights from their original path to under the first module.
-    for source_name, glob in patterns_with_names[1:]:
-        *_, child = glob.split(".")
-        child_regex = _seg_to_regex(child)
+    for i, (source_name, glob) in enumerate(patterns_with_names):
+        child = glob.rsplit(".", 1)[1]
+        child_re = segment_to_regex(child)
+        guard = moved_child_lookahead if i == 0 else ""
         transforms.append(
             WeightRenaming(
-                source_patterns=rf"({parent_regex}\.){child_regex}\.",
-                target_patterns=rf"\1{first_child}.{source_name}.",
+                source_patterns=rf"({parent_regex}\.){child_re}\.{guard}",
+                # \1 refers to the captured parent path
+                target_patterns=rf"\1{first_child}.{source_name}\.",
             )
         )
 
