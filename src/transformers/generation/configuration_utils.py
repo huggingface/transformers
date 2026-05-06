@@ -1751,13 +1751,6 @@ class ContinuousBatchingConfig:
         if self.disable_nccl_graph_mixing:
             os.environ.setdefault("NCCL_GRAPH_MIXING_SUPPORT", "0")
 
-    @property
-    def fallback_max_blocks_per_request(self) -> int:
-        """Returns the fallback max blocks per request. If no user-hint is given and decode path is available, this is
-        the default max blocks per request. With default block size of 256, this means a max sequence length of 8192
-        tokens for the fast decode path."""
-        return 32
-
     def account_for_cb_deprecated_arguments(
         self,
         max_queue_size: int = 0,
@@ -1805,3 +1798,8 @@ class ContinuousBatchingConfig:
         if isinstance(self.use_cuda_graph, bool):
             return self.use_cuda_graph, self.use_cuda_graph
         return self.use_cuda_graph
+
+    @property
+    def fallback_max_blocks_per_request(self) -> int:
+        """Fallback if no user-hint is given and decode path is available."""
+        return 32
