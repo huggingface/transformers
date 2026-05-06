@@ -194,6 +194,15 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         scale_rename = WeightRenaming(source_patterns=r"^(.+)\.scale$", target_patterns=r"\1.weight_scale_inv")
         weight_conversions = [scale_rename] + list(weight_conversions)
         dequantize = self.pre_quantized and self.quantization_config.dequantize
+        import os
+        if os.environ.get("RANK", "0") == "0":
+            print(
+                f"[fp8 quantizer] update_weight_conversions: dequantize={dequantize} "
+                f"input_converters={len(weight_conversions)} "
+                f"weight_converters_with_weight_src="
+                f"{sum(1 for c in weight_conversions if hasattr(c, 'source_patterns') and any(str(p).endswith('.weight') for p in (c.source_patterns if isinstance(c.source_patterns, list) else [c.source_patterns])))}",
+                flush=True,
+            )
 
         updated: list = []
         for conv in weight_conversions:
@@ -240,4 +249,13 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
         # Generic fallback for plain `nn.Linear` weights with no model-specific converter.
         updated.extend(self.get_weight_conversions())
+        if os.environ.get("RANK", "0") == "0":
+            scale_targets = [
+                getattr(c, "_original_target_patterns", None)
+                for c in updated
+                if isinstance(c, WeightConverter)
+                and isinstance(getattr(c, "_original_target_patterns", None), str)
+                and "_scale_inv" in c._original_target_patterns
+            ]
+            print(f"[fp8 quantizer] output_converters={len(updated)} scale_inv_targets={scale_targets}", flush=True)
         return updated
