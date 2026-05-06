@@ -660,8 +660,8 @@ def infer_kernel_fusion_transforms(
     transforms: list[WeightRenaming] = []
 
     # We must not match the moved child modules under the first child, so we add a negative lookahead.
-    child_regexs = "|".join(rf"{name}\." for name, _ in patterns_with_names)
-    moved_child_lookahead = f"(?!{child_regexs})"
+    child_regexes = "|".join(rf"{name}\." for name, _ in patterns_with_names)
+    moved_child_lookahead = f"(?!{child_regexes})"
 
     for i, (source_name, glob) in enumerate(patterns_with_names):
         child = glob.rsplit(".", 1)[1]
