@@ -25,6 +25,7 @@ from typing import Any
 
 import torch
 from torch import nn
+from torch.distributed.tensor.device_mesh import DeviceMesh
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
@@ -41,7 +42,7 @@ from .model_runner import ModelRunner
 from .offloading_manager import OffloadingManager
 from .requests import GenerationOutput, RequestState, RequestStatus, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
-from .utils import WorkloadHints
+from .utils import WorkloadHints, DistributedHelper
 
 
 """
@@ -147,6 +148,7 @@ class ContinuousBatchProcessor:
         model_device: torch.device,
         model_dtype: torch.dtype,
         scheduler: Scheduler,
+        device_mesh: DeviceMesh | None,
     ) -> None:
         """Initialize the continuous batch processor.
 
@@ -162,6 +164,7 @@ class ContinuousBatchProcessor:
             model_device: Device for model inputs/outputs
             model_dtype: Data type for model inputs/outputs
             scheduler: The [`Scheduler`] to use
+            device_mesh: The device mesh if there is one
         """
         self.cache = cache
         self.config = config
@@ -173,10 +176,25 @@ class ContinuousBatchProcessor:
         self.model_device = model_device
         self.model_dtype = model_dtype
         self.scheduler = scheduler
+        self.distributed_helper = DistributedHelper(device_mesh=device_mesh)
 
         # Generation-related attributes
         self.do_sample = getattr(generation_config, "do_sample", True)
         self.return_logprobs = continuous_batching_config.return_logprobs
+
+        # Get an integer seed for the TP group
+        if continuous_batching_config.seed is None:
+            tp_seed_tensor = torch.randint(0, 2**32 - 1, (1,), dtype=torch.int64, device=model_device)
+        else:
+            tp_seed_tensor = torch.tensor(continuous_batching_config.seed, dtype=torch.int64, device=model_device)
+        # Broadcast the seed to all ranks from rank 0 and memoize it
+        tp_seed_tensor = self.distributed_helper.tp_broadcast_from_rank_0(tp_seed_tensor)
+        tp_seed = tp_seed_tensor.item()
+        continuous_batching_config.seed = tp_seed
+        if self.distributed_helper.global_rank == 0:
+            logger.warning(f"Found no user-specified seed in the config. Setting the config seed to: {tp_seed}.")
+        # Set the seed while accounting for DP replicas
+        torch.manual_seed(tp_seed + self.distributed_helper.dp_rank)
 
         # Retrieve the size of the sliding window if there is one
         self.sliding_window = 1 if getattr(config, "sliding_window", None) is None else config.sliding_window
@@ -774,13 +792,15 @@ class ContinuousBatchingManager:
         self.batch_processor._generation_step(self.model)
 
     def _create_batch_processor(self) -> ContinuousBatchProcessor:
+        # Retrieve the device mesh if there is one
+        device_mesh: DeviceMesh | None = getattr(self.model, "_device_mesh", None)
         # Create the PagedAttentionCache
         paged_attention_cache = PagedAttentionCache(
             self.model.config,
             self.continuous_batching_config,
             self.model.device,
             self.model.dtype,
-            tp_size=getattr(self.model, "_tp_size", None),  # Use model's actual TP setting
+            tp_size=DistributedHelper(device_mesh=device_mesh).tp_size,  # consistent with the batch processor
         )
         self._use_prefix_sharing = paged_attention_cache.use_prefix_sharing  # update the approximation
 
@@ -808,6 +828,7 @@ class ContinuousBatchingManager:
             model_device=self.model.device,
             model_dtype=self.model.dtype,
             scheduler=scheduler(paged_attention_cache),
+            device_mesh=device_mesh,
         )
         return batch_processor
 

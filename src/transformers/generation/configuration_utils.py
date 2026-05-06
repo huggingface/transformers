@@ -1719,6 +1719,9 @@ class ContinuousBatchingConfig:
     # probabilities will be returned along with the generated tokens in the generation output.
     return_logprobs: bool = False
 
+    # An optional seed for generation. If not specified, the internal seed will be set to a random value.
+    seed: int | None = None
+
     # CPU swap space in GiB for KV cache offloading. When the GPU cache is full and a request must be evicted, its KV
     # cache is copied to this pre-allocated pinned CPU buffer instead of being discarded. Default to 0.0 GiB. You can
     # also set this to None to dimension the pool using only the safety threshold, but this will error out if psutil is

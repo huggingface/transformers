@@ -163,14 +163,14 @@ class PagedAttentionCache:
                 self.layer_index_to_group_indices[layer] = (i, j)
                 self.sliding_windows[layer] = sliding_window
 
-        # Handle TP (or dont)
+        # Account for TP: each KV head is dispatched to a different GPU, so the effective number of KV heads per GPU is
+        # simply divided by the TP size (number of GPUs)
         if tp_size is not None and tp_size > 1:
             if self.num_key_value_heads % tp_size != 0:
                 raise ValueError(
                     f"Number of key value heads {self.num_key_value_heads} must be divisible by tensor parallel size {tp_size}."
                 )
-            # If the model is using tensor parallelism, we need to adjust the number of heads accordingly.
-            # self.num_key_value_heads //= tp_size # TODO: why is this commented out?
+            self.num_key_value_heads //= tp_size
 
         # Infer number of blocks and max batch tokens
         page_size = self.head_dim * self.num_key_value_heads

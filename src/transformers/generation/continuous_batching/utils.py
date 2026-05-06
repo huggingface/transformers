@@ -18,6 +18,8 @@ from math import ceil, log2
 from typing import Any
 
 import torch
+import torch.distributed as dist
+from torch.distributed.tensor.device_mesh import DeviceMesh
 
 from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import is_torch_greater_or_equal
@@ -230,3 +232,39 @@ def mem_pool_ctx(mem_pool):
             yield
     else:
         yield
+
+
+class DistributedHelper:
+    """A helper class to handle distributed-related operations. Notably, it does not crash when distributed is off."""
+
+    def __init__(self, device_mesh: DeviceMesh | None) -> None:
+        self.device_mesh = device_mesh
+
+        # Check if distributed is on
+        self.dist_on = dist.is_available() and dist.is_initialized()
+
+        # Get global attributes
+        if self.dist_on:
+            self.global_rank = dist.get_rank()
+            self.world_size = dist.get_world_size()
+        else:
+            self.global_rank = 0
+            self.world_size = 1
+
+        # Get TP attributes. If TP is on, the TP setup is stored in the device mesh
+        if self.dist_on and device_mesh is not None:
+            self.tp_size = device_mesh.size()
+            self.tp_group = device_mesh.get_group()
+        else:
+            self.tp_size = 1
+            self.tp_group = None
+
+        # Get DP attributes
+        self.dp_rank = self.global_rank // self.tp_size
+        self.dp_size = self.world_size // self.tp_size
+
+    def tp_broadcast_from_rank_0(self, value: torch.Tensor) -> torch.Tensor:
+        """Inside each TP group, broadcasts the given value from rank 0 to all other ranks."""
+        if self.tp_size > 1:
+            dist.broadcast(value, src=0, async_op=False, group=self.tp_group)
+        return value
