@@ -65,14 +65,26 @@ def _make_fp8_experts(num_experts: int, hidden_size: int, intermediate_size: int
     block_n = 1 if ue8m0_sf else 128
 
     def _alloc(e: int, n: int, k: int) -> tuple[torch.Tensor, torch.Tensor]:
-        # Random bf16 → clamp to FP8 range → cast. Values are nonsense but byte-valid.
-        w_fp32 = (torch.randn(e, n, k, device=device) * 0.1).clamp(-_FP8_MAX, _FP8_MAX)
-        w_fp8 = w_fp32.to(_FP8_DTYPE)
+        # Per-block-amax FP8 quantization (matches what real DeepSeek-V3
+        # checkpoints look like): generate random bf16 weights, compute the
+        # max-abs of each (block_n × block_k) tile as the SF, divide by 448
+        # so the quantized values use the full FP8 range, then cast to FP8.
+        # Without this, dequantized weights are tiny and the GEMM
+        # accumulation on Blackwell's float→UE8M0 conversion path can
+        # produce NaN.
+        w_fp32 = torch.randn(e, n, k, device=device) * 0.1
         sf_n = -(-n // block_n)  # ceil-div
         sf_k = -(-k // block_k)
-        sf = (torch.rand(e, sf_n, sf_k, device=device) * 0.05 + 0.001).to(torch.float32)
+        # Block amax → scale.
+        w_blocks = w_fp32.view(e, sf_n, block_n, sf_k, block_k)
+        amax = w_blocks.abs().amax(dim=(2, 4)).clamp(min=1e-4)  # (e, sf_n, sf_k)
+        sf = (amax / _FP8_MAX).to(torch.float32)
         if ue8m0_sf:
             sf = _round_to_ue8m0(sf)
+        # Quantize using the dequantized SF (so the cast actually matches).
+        sf_dequant = sf.float()
+        w_scaled = w_fp32 / sf_dequant.view(e, sf_n, 1, sf_k, 1).expand(-1, -1, block_n, -1, block_k).reshape(e, n, k)
+        w_fp8 = w_scaled.clamp(-_FP8_MAX, _FP8_MAX).to(_FP8_DTYPE)
         return w_fp8, sf
 
     gate_up, gate_up_sf = _alloc(num_experts, 2 * intermediate_size, hidden_size)
