@@ -161,26 +161,49 @@ def _load_deepgemm_kernel() -> DeepGEMM:
 def _coerce_sf_for_kernel(sf: torch.Tensor) -> torch.Tensor:
     """Normalize a scale-factor tensor for the DeepGEMM kernel boundary.
 
-    The kernel's `check_sf_layout` requires `sf.stride(-2) == 1` (MN-major).
-    Default contiguous PyTorch tensors are K-major; flip when needed.
+    `check_sf_layout` (csrc/utils/layout.hpp) imposes two constraints:
+
+      1. `sf.stride(-2) == 1`                                — MN-major.
+      2. `sf.stride(-1) == get_tma_aligned_size(mn, esize)`  — TMA-aligned.
+
+    PyTorch's default contiguous layout is K-major, so we explicitly build a
+    new tensor with the required strides via `empty_strided`. This also fixes
+    the size-1 last-dim case where `transpose+contiguous+transpose` is a no-op
+    (PyTorch reports stride(-1)=1 for size-1 dims, which fails (2)).
 
     Three SF flavors arrive at this boundary:
-      - `float32` (DeepSeek V3-style): flip layout only.
+      - `float32` (DeepSeek V3-style): rewrite layout only.
       - `int32` (already-packed UE8M0 from `per_token_cast_to_fp8(
-        use_packed_ue8m0=True)` or saved checkpoints): flip layout only.
+        use_packed_ue8m0=True)` or saved checkpoints): rewrite layout only.
       - `float8_e8m0fnu` (raw UE8M0 bytes, 1 byte per scale; e.g. on-disk
         weights): pack 4 contiguous K-bytes into `int32` (last dim shrinks
-        4×) AND flip layout. Mirrors what
-        `get_mn_major_tma_aligned_packed_ue8m0_tensor` produces from a
-        float32 SF, just starting from already-quantized bytes.
+        4×) and rewrite layout.
     """
     if sf.dtype == torch.float8_e8m0fnu:
-        # `view(int32)` requires the source contiguous (4 K-bytes adjacent).
-        # Pack first while still K-major, then flip to MN-major.
+        # view(int32) requires the source contiguous (4 K-bytes adjacent).
         sf = sf.contiguous().view(torch.int32)
-    if sf.stride(-2) != 1:
-        sf = sf.transpose(-1, -2).contiguous().transpose(-1, -2)
-    return sf
+
+    if sf.dim() not in (2, 3):
+        raise ValueError(f"DeepGEMM SF must be 2D or 3D, got {sf.dim()}D")
+
+    mn = sf.size(-2)
+    kf = sf.size(-1)
+    elem_size = sf.element_size()
+    # `get_tma_aligned_size`: align(mn, 16 / element_size).
+    align_to = 16 // elem_size
+    aligned_mn = -(-mn // align_to) * align_to  # ceil-multiple
+
+    if sf.dim() == 2:
+        target_strides = (1, aligned_mn)
+    else:  # 3D
+        target_strides = (kf * aligned_mn, 1, aligned_mn)
+
+    if tuple(sf.stride()) == target_strides:
+        return sf
+
+    out = torch.empty_strided(sf.shape, target_strides, dtype=sf.dtype, device=sf.device)
+    out.copy_(sf)
+    return out
 
 
 def deepgemm_fp8_fp4_linear(
@@ -228,10 +251,13 @@ def deepgemm_fp8_fp4_linear(
     qinput_2d, scale_2d = deepgemm.per_token_cast_to_fp8(input_2d, **cast_kwargs)
 
     output = torch.empty(qinput_2d.shape[0], weight.shape[0], device=input.device, dtype=output_dtype)
+    # Pass the recipe explicitly — see comment in `deepgemm_fp8_fp4_experts_forward`.
+    sf_recipe = (1, 1, cast_kwargs["gran_k"]) if cast_kwargs.get("use_packed_ue8m0") else None
     deepgemm.fp8_fp4_matmul(
         (qinput_2d, _coerce_sf_for_kernel(scale_2d)),
         (weight, _coerce_sf_for_kernel(weight_scale_inv)),
         output,
+        recipe=sf_recipe,
     )
     output = output.view(input.shape[:-1] + (weight.shape[0],))
     if bias is not None:
@@ -461,6 +487,12 @@ def deepgemm_fp8_fp4_experts_forward(
         expert_ids_g, self.num_experts, alignment=_DEEPGEMM_M_ALIGNMENT, use_psum_layout=use_psum_layout
     )
 
+    # The kernel infers a default recipe from the SF dtype/shape on SM100 —
+    # `(1, 1, 128)` for any int SF, regardless of the SF's actual gran_k. For
+    # FP4 weights (gran_k=32) this picks the wrong shape contract, so pass
+    # the recipe explicitly. `(1, 1, gran_k)` matches `cast_kwargs["gran_k"]`.
+    sf_recipe = (1, 1, cast_kwargs["gran_k"]) if cast_kwargs.get("use_packed_ue8m0") else None
+
     # --- Up projection per expert (DeepGEMM grouped contiguous) ---
     act_fp8, act_scales = deepgemm.per_token_cast_to_fp8(selected_hidden_states_g, **cast_kwargs)
     act_fp8 = _pad_for_deepgemm(act_fp8, sorted_to_padded, total_padded_rows)
@@ -471,6 +503,7 @@ def deepgemm_fp8_fp4_experts_forward(
         (w_up, _coerce_sf_for_kernel(ws_up)),
         proj_out,
         grouped_layout,
+        recipe=sf_recipe,
         use_psum_layout=use_psum_layout,
     )
 
@@ -488,6 +521,7 @@ def deepgemm_fp8_fp4_experts_forward(
         (self.down_proj, _coerce_sf_for_kernel(self.down_proj_scale_inv)),
         proj_out,
         grouped_layout,
+        recipe=sf_recipe,
         use_psum_layout=use_psum_layout,
     )
 
