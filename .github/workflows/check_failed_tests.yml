@@ -284,7 +284,6 @@ jobs:
           pr_number: ${{ inputs.pr_number }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git checkout ${{ github.sha }}
           python3 utils/check_bad_commit.py --start_commit "$START_SHA" --end_commit "$END_SHA" --file "ci_results_${job}/new_failures.json" --output_file "new_failures_with_bad_commit_${job}_${run_idx}.json"
 
       - name: Show results
