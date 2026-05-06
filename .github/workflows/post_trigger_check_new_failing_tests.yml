@@ -35,6 +35,7 @@ jobs:
     outputs:
       source_workflow_run_id: ${{ steps.resolve.outputs.source_workflow_run_id }}
       only_process_job: ${{ steps.resolve.outputs.only_process_job }}
+      end_sha: ${{ steps.fetch-end-sha.outputs.end_sha }}
       docker: ${{ steps.fetch-inputs.outputs.docker }}
       job: ${{ steps.fetch-inputs.outputs.job }}
       slack_report_channel: ${{ steps.fetch-inputs.outputs.slack_report_channel }}
@@ -124,46 +125,74 @@ jobs:
               core.setOutput(key, value);
             }
 
-            // --- Extract END_SHA from env of "Check failed tests" step ---
+      - name: Fetch END_SHA from source run job log
+        id: fetch-end-sha
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const sourceRunId = parseInt('${{ steps.resolve.outputs.source_workflow_run_id }}');
+            const jobName = `${{ inputs.job_name || env.job_name }}`;
+            const targetJobPrefix = `${jobName} / Check new failures / Find commits for new failing tests`;
+
+            // Find any matrix instance — they all share the same END_SHA
+            let targetJobId = null;
+            let page = 1;
+            while (true) {
+              const { data } = await github.rest.actions.listJobsForWorkflowRun({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: sourceRunId,
+                per_page: 100,
+                page: page,
+              });
+              const job = data.jobs.find(j => j.name.startsWith(targetJobPrefix));
+              if (job) {
+                targetJobId = job.id;
+                break;
+              }
+              if (data.jobs.length < 100) break;
+              page++;
+            }
+
+            if (!targetJobId) {
+              core.warning(`No "Find commits for new failing tests" job found in run ${sourceRunId}. END_SHA will be computed automatically.`);
+              return;
+            }
+
+            const logResponse = await github.rest.actions.downloadJobLogsForWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              job_id: targetJobId,
+            });
+
+            const logText = logResponse.data;
             let endSha = null;
             let inTargetStep = false;
             let inEnvBlock = false;
-            let stepDepth = 0;
-            
+
             for (const line of logText.split('\n')) {
               const content = line.replace(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z /, '');
-            
-              if (content.includes('##[group]') ) {
-                if (content.includes('check_bad_commit.py')) {
-                  inTargetStep = true;
-                  stepDepth = 1;
-                  continue;
-                } else if (inTargetStep) {
-                  stepDepth++;
-                }
-              }
-            
-              if (!inTargetStep) continue;
-            
-              if (content.includes('##[endgroup]')) {
-                stepDepth--;
-                if (stepDepth <= 0) break; // exited the step
-                inEnvBlock = false;
+
+              if (content.includes('##[group]') && content.includes('check_bad_commit.py')) {
+                inTargetStep = true;
                 continue;
               }
-            
+
+              if (!inTargetStep) continue;
+
+              if (content.includes('##[endgroup]')) break;
+
               if (content.trim() === 'env:') {
                 inEnvBlock = true;
                 continue;
               }
-            
+
               if (inEnvBlock) {
                 const match = content.match(/^\s+END_SHA:\s*(.+)/);
                 if (match) {
                   endSha = match[1].trim();
                   break;
                 }
-                // stop if we've left the env block (next non-indented line)
                 if (content.trim() && !content.startsWith('    ')) {
                   inEnvBlock = false;
                 }
@@ -172,11 +201,10 @@ jobs:
 
             if (endSha) {
               console.log(`END_SHA: ${endSha}`);
-              core.setOutput('END_SHA', endSha);
+              core.setOutput('end_sha', endSha);
             } else {
-              core.warning('Could not find END_SHA in the "Check failed tests" step env block.');
+              core.warning('Could not find END_SHA in the "Check failed tests" step env block. END_SHA will be computed automatically.');
             }
-
 
   check_new_failures:
     name: Check new failures
@@ -191,6 +219,7 @@ jobs:
       commit_sha: ${{ needs.prepare.outputs.commit_sha }}
       pr_number: ${{ needs.prepare.outputs.pr_number }}
       max_num_runners: ${{ fromJSON(needs.prepare.outputs.max_num_runners) }}
-      source_workflow_run_id: ${{ needs.prepare.outputs.source_workflow_run_id }}
+      source_run_id: ${{ needs.prepare.outputs.source_workflow_run_id }}
+      end_sha: ${{ needs.prepare.outputs.end_sha }}
       only_process_job: ${{ fromJSON(needs.prepare.outputs.only_process_job) }}
     secrets: inherit
