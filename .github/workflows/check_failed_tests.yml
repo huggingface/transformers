@@ -210,7 +210,7 @@ jobs:
           RUN_ID: ${{ inputs.source_workflow_run_id || github.run_id }}
           REPO: ${{ github.repository }}
         run: |
-          workflow_id=$(gh api repos/$REPO/actions/runs/$RUN_ID --jq '.workflow_id')
+          workflow_id=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/$REPO/actions/runs/$RUN_ID" | python3 -c "import sys, json; print(json.load(sys.stdin)['workflow_id'])")
           echo "workflow_id=$workflow_id" >> $GITHUB_OUTPUT
           echo "SOURCE_WORKFLOW_RUN_ID: $SOURCE_WORKFLOW_RUN_ID"          
           echo "WORKFLOW_RUN_ID: $WORKFLOW_RUN_ID"
