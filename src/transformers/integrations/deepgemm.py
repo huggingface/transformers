@@ -183,6 +183,22 @@ def _coerce_sf_for_kernel(sf: torch.Tensor) -> torch.Tensor:
         # view(int32) requires the source contiguous (4 K-bytes adjacent).
         sf = sf.contiguous().view(torch.int32)
 
+    # On SM100 the kernel's `pack_fp32_into_ue8m0` only repacks bytes — it
+    # reads bits [30:23] (biased exponent) of each fp32 and writes them as
+    # UE8M0 *but* its inner shifts (>> 15, >> 7, << 1) leak mantissa bits
+    # into adjacent byte slots. The kernel therefore requires inputs whose
+    # mantissa is already zero (i.e. each value an exact power of 2).
+    # `amax / 448` floats produced by per-token / per-block quantizers do
+    # not satisfy that, so round up to the nearest UE8M0 power-of-2 here.
+    # On SM90 the dispatch consumes raw fp32 SFs without going through this
+    # pack, so the rounding would only lose precision — skip it there.
+    if sf.dtype == torch.float32 and torch.cuda.get_device_capability(sf.device)[0] >= 10:
+        sf = (
+            (sf.view(torch.int32) + ((1 << 23) - 1))
+            .bitwise_and_(~((1 << 23) - 1))
+            .view(torch.float)
+        )
+
     if sf.dim() not in (2, 3):
         raise ValueError(f"DeepGEMM SF must be 2D or 3D, got {sf.dim()}D")
 
