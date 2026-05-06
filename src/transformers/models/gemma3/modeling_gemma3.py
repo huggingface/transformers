@@ -53,12 +53,12 @@ from .configuration_gemma3 import Gemma3Config, Gemma3TextConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Gemma3 outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class Gemma3ModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     image_hidden_states (`torch.FloatTensor`, *optional*):

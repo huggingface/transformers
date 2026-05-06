@@ -59,12 +59,12 @@ class MoonshineStreamingProcessorKwargs(ProcessingKwargs, total=False):
 class MoonshineStreamingProcessor(Wav2Vec2Processor): ...
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Extends [~modeling_outputs.BaseModelOutput] to include the output attention mask since sequence length is not preserved in the model's forward.
     """
 )
+@dataclass
 class MoonshineStreamingEncoderModelOutput(BaseModelOutput):
     attention_mask: torch.Tensor | None = None
 

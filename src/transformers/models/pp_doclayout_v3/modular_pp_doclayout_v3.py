@@ -1240,8 +1240,8 @@ class PPDocLayoutV3HybridEncoderOutput(BaseModelOutput):
     mask_feat: torch.FloatTensor = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class PPDocLayoutV3ForObjectDetectionOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):

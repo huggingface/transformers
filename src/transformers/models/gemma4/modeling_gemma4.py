@@ -64,12 +64,12 @@ if is_accelerate_available():
     from accelerate.hooks import add_hook_to_module
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Gemma4 outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class Gemma4ModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):

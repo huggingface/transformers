@@ -1018,7 +1018,6 @@ class LwDetrPreTrainedModel(PreTrainedModel):
             init.constant_(module.bbox_embed.layers[-1].bias, 0)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the LwDetrDecoder. This class adds two attributes to
@@ -1027,6 +1026,7 @@ class LwDetrPreTrainedModel(PreTrainedModel):
     - a stacked tensor of intermediate reference points.
     """
 )
+@dataclass
 class LwDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     r"""
     cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):

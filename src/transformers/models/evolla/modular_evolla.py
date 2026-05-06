@@ -304,8 +304,8 @@ class EvollaSequenceCompressorResampler(nn.Module):
         return self.norm(transformed_feature)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class EvollaProteinEncoderModelOutput(ModelOutput):
     sequence_compressor_output: torch.FloatTensor | None = None
     last_hidden_state: torch.FloatTensor | None = None

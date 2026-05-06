@@ -43,12 +43,12 @@ from .configuration_paligemma import PaliGemmaConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Paligemma outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class PaligemmaModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     image_hidden_states (`torch.FloatTensor`, *optional*):
