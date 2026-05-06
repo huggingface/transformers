@@ -27,10 +27,11 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 def use_gqa_in_sdpa(
     attention_mask: torch.Tensor | None,
-    query: torch.Tensor,
     key: torch.Tensor,
-    value: torch.Tensor,
-    is_causal: bool,
+    # Additional kwargs for cuda backend, kept optional for BC
+    query: torch.Tensor | None = None,
+    value: torch.Tensor | None = None,
+    is_causal: bool | None = None,
     dropout: float = 0.0,
 ) -> bool:
     """
@@ -107,7 +108,9 @@ def sdpa_attention_forward(
 
     sdpa_kwargs = {}
     if hasattr(module, "num_key_value_groups"):
-        if not use_gqa_in_sdpa(attention_mask, query, key, value, is_causal, dropout):
+        if not use_gqa_in_sdpa(
+            attention_mask, query=query, key=key, value=value, is_causal=is_causal, dropout=dropout
+        ):
             key = repeat_kv(key, module.num_key_value_groups)
             value = repeat_kv(value, module.num_key_value_groups)
         else:
