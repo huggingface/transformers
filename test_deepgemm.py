@@ -28,6 +28,7 @@ import torch.nn.functional as F
 
 from transformers.integrations.deepgemm import (
     _load_deepgemm_kernel,
+    deepgemm_bf16_experts_forward,
     deepgemm_fp8_fp4_experts_forward,
     deepgemm_fp8_fp4_megamoe_experts_forward,
 )
@@ -109,6 +110,24 @@ def _make_fp8_experts(num_experts: int, hidden_size: int, intermediate_size: int
     )
 
 
+def _make_bf16_experts(num_experts: int, hidden_size: int, intermediate_size: int, device: torch.device) -> SimpleNamespace:
+    """Synthetic BF16 experts (no quantization, no SF) — exercises the
+    `deepgemm_bf16_experts_forward` path that calls the bf16 grouped GEMM."""
+    gate_up = torch.randn(num_experts, 2 * intermediate_size, hidden_size, dtype=torch.bfloat16, device=device) * 0.1
+    down = torch.randn(num_experts, hidden_size, intermediate_size, dtype=torch.bfloat16, device=device) * 0.1
+    return SimpleNamespace(
+        num_experts=num_experts,
+        has_gate=True,
+        has_bias=False,
+        is_transposed=False,
+        config=SimpleNamespace(hidden_act="silu"),
+        gate_up_proj=gate_up,
+        down_proj=down,
+        _apply_gate=lambda x: F.silu(x.chunk(2, -1)[0]) * x.chunk(2, -1)[1],
+        act_fn=F.silu,
+    )
+
+
 def _make_fp4_experts(num_experts: int, hidden_size: int, intermediate_size: int, device: torch.device) -> SimpleNamespace:
     """Synthetic FP4 experts (`int8`-packed e2m1, K dim halved; UE8M0 SF, gran_k=32)."""
 
@@ -152,6 +171,19 @@ def _check_output(out: torch.Tensor, expected_shape: tuple[int, ...], label: str
 
 
 # ── Tests ────────────────────────────────────────────────────────────────────────
+
+
+def test_bf16(device: torch.device) -> None:
+    label = "BF16 experts (no quant)"
+    if torch.cuda.get_device_capability(device)[0] < 9:
+        print(f"[{label}] SKIP: needs SM90+ (Hopper)")
+        return
+    T, H, I, E, K = 256, 1024, 512, 16, 4
+    experts = _make_bf16_experts(E, H, I, device)
+    hidden = torch.randn(T, H, dtype=torch.bfloat16, device=device) * 0.1
+    idx, w = _random_routing(T, K, E, device)
+    out = deepgemm_bf16_experts_forward(experts, hidden, idx, w.to(torch.bfloat16))
+    _check_output(out, (T, H), label)
 
 
 def test_dsv3_fp8(device: torch.device) -> None:
@@ -263,7 +295,7 @@ def main() -> None:
     # Single-GPU paths run on rank 0 only (ranks > 0 only participate in Mega MoE).
     failures: list[tuple[str, BaseException]] = []
     if rank == 0:
-        for fn in (test_dsv3_fp8, test_dsv4_fp8, test_dsv4_fp4):
+        for fn in (test_bf16, test_dsv3_fp8, test_dsv4_fp8, test_dsv4_fp4):
             try:
                 fn(device)
             except BaseException as exc:
