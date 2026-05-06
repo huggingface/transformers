@@ -1,17 +1,24 @@
-"""Minimal isolated test of DeepGEMM's `get_mn_major_tma_aligned_packed_ue8m0_tensor`.
+"""Pinpoint the DSv3-on-B200 NaN.
 
-The full GEMM produces NaN on B200 with float32 SFs but is finite on H100.
-Earlier I speculated the bug was in `transpose_and_pack_fp32_into_ue8m0` (the
-JIT helper that converts float SF → packed UE8M0 int32 on SM100). This script
-tests *only* that conversion against a byte-exact Python reference, with no
-GEMM in the loop. Outcome:
+DeepGEMM's `pack_fp32_into_ue8m0` doesn't convert fp32 to UE8M0 — it expects
+the fp32 input to *already* be UE8M0-rounded (each value an exact power of 2,
+mantissa bits all zero) and just repacks the exponent bytes. The kernel's
+inner shifts (`>> 23`, `>> 15`, `>> 7`, `<< 1`) only cleanly extract the
+biased exponent for the first lane; the rest leak mantissa bits into adjacent
+byte slots when the mantissa isn't zero.
 
-  - bytes match on both archs   → conversion is fine, NaN is from the GEMM.
-  - bytes diverge on B200       → confirmed conversion bug.
+This script verifies that on raw arbitrary fp32 SFs (kernel output diverges
+from a "biased-exponent only" reference) but matches byte-for-byte once the
+input is rounded to powers of 2 via `ceil_to_ue8m0`.
 
-To run:
-  H100:  python repro_nan_dsv3_b200.py
-  B200:  CUDA_HOME=$HOME/cuda-12.9 python repro_nan_dsv3_b200.py
+Implication: on SM100 the kernel's `(FP32, x, gran_k)` → packed-int path
+silently corrupts SFs unless the caller pre-rounds them. SM90 sidesteps this
+because its FP8 path consumes raw fp32 SFs directly without going through
+`pack_fp32_into_ue8m0`.
+
+Run on H100 and B200; both should print:
+  raw   → DIVERGES (kernel needs UE8M0-rounded inputs).
+  ue8m0 → MATCHES.
 """
 
 from __future__ import annotations
@@ -23,10 +30,19 @@ import torch
 from transformers.integrations.deepgemm import _load_deepgemm_kernel
 
 
-def python_pack(sf_fp32: torch.Tensor) -> torch.Tensor:
-    """Reference: extract biased exponent (bits [30:23]) of each float32 as a
-    uint8, then pack 4 K-consecutive bytes into one int32 (LE, byte 0 = lowest
-    K). Output shape: same as input but last dim shrunk 4×; layout: K-major.
+def ceil_to_ue8m0(x: torch.Tensor) -> torch.Tensor:
+    """Round each positive float up to the nearest power of 2 representable as
+    UE8M0 (mantissa zeroed out). Mirrors upstream's `deep_gemm.utils.math`.
+    """
+    return (
+        (x.view(torch.int32) + ((1 << 23) - 1)).bitwise_and_(~((1 << 23) - 1)).view(torch.float)
+    )
+
+
+def python_pack_exponent_only(sf_fp32: torch.Tensor) -> torch.Tensor:
+    """Reference assuming UE8M0 input: extract biased exponent (bits [30:23])
+    of each float as a uint8, then pack 4 K-consecutive bytes into one int32
+    LE. This *only* matches the kernel when the input has zero mantissa.
     """
     byte = (sf_fp32.contiguous().view(torch.int32) >> 23).to(torch.uint8)
     *batch, mn, k = byte.shape
@@ -35,19 +51,16 @@ def python_pack(sf_fp32: torch.Tensor) -> torch.Tensor:
     return g[..., 0] | (g[..., 1] << 8) | (g[..., 2] << 16) | (g[..., 3] << 24)
 
 
-def compare(name: str, kernel_out: torch.Tensor, py_out: torch.Tensor) -> bool:
-    # Compare byte-by-byte, ignoring TMA-alignment padding the kernel may add.
-    *_, mn, kf = py_out.shape
-    # Slice kernel output to the same shape (it can be wider in mn due to TMA align).
-    if kernel_out.shape != py_out.shape:
-        kernel_out = kernel_out[..., :mn, :kf].contiguous()
-    py_bytes = py_out.contiguous().view(torch.uint8).flatten()
-    k_bytes = kernel_out.contiguous().view(torch.uint8).flatten()
-    n = min(py_bytes.numel(), k_bytes.numel())
-    diff = (py_bytes[:n] != k_bytes[:n]).sum().item()
-    print(f"  [{name}] kernel={tuple(kernel_out.shape)} stride={tuple(kernel_out.stride())} "
-          f"py={tuple(py_out.shape)}  diff_bytes={diff}/{n}")
-    return diff == 0
+def compare(label: str, kernel_out: torch.Tensor, ref_out: torch.Tensor) -> int:
+    if kernel_out.shape != ref_out.shape:
+        kernel_out = kernel_out[..., : ref_out.size(-2), : ref_out.size(-1)].contiguous()
+    py_b = ref_out.contiguous().view(torch.uint8).flatten()
+    k_b = kernel_out.contiguous().view(torch.uint8).flatten()
+    n = min(py_b.numel(), k_b.numel())
+    diff = (py_b[:n] != k_b[:n]).sum().item()
+    status = "MATCH" if diff == 0 else "DIVERGE"
+    print(f"  [{label}]  diff_bytes={diff}/{n}  ({status})")
+    return diff
 
 
 def main() -> int:
@@ -61,27 +74,43 @@ def main() -> int:
     dg = _load_deepgemm_kernel()
     torch.manual_seed(0)
 
-    cases = [
-        ("act SF (per-token)",  (512, 8)),         # 2D, contig
-        ("weight SF (grouped)", (4, 1024, 8)),     # 3D, per-row N
-        ("weight SF (block)",   (4, 8, 8)),        # 3D, block-quant — needs broadcast in real path
-    ]
+    # One representative SF tensor — what the integration would feed for
+    # block-quantized weight SFs in DSv3 inference.
+    sf_raw = (torch.rand(4, 8, 8, device=device) * 0.05 + 0.001).to(torch.float32)
+    sf_ue8m0 = ceil_to_ue8m0(sf_raw)
 
-    all_ok = True
-    for name, shape in cases:
-        sf = (torch.rand(*shape, device=device) * 0.05 + 0.001).to(torch.float32)
-        kernel_out = dg.get_mn_major_tma_aligned_packed_ue8m0_tensor(sf)
-        py_out = python_pack(sf)
-        if not compare(name, kernel_out, py_out):
-            all_ok = False
+    print("\nfp32 SF → kernel pack vs python `extract biased exponent and pack 4` reference:\n")
 
-    if all_ok:
-        print("\nResult: kernel pack matches Python reference byte-for-byte.")
-        print("        → bug is NOT in `transpose_and_pack_fp32_into_ue8m0`.")
-        return 0
-    print("\nResult: kernel pack diverges from Python reference.")
-    print("        → confirmed bug in `transpose_and_pack_fp32_into_ue8m0`.")
-    return 1
+    diff_raw = compare(
+        "raw fp32 SF (mantissa != 0)",
+        dg.get_mn_major_tma_aligned_packed_ue8m0_tensor(sf_raw),
+        python_pack_exponent_only(sf_raw),
+    )
+    diff_ue8m0 = compare(
+        "ceil_to_ue8m0 fp32 SF (mantissa == 0)",
+        dg.get_mn_major_tma_aligned_packed_ue8m0_tensor(sf_ue8m0),
+        python_pack_exponent_only(sf_ue8m0),
+    )
+
+    print()
+    print("Conclusion:")
+    print(
+        f"  raw:    {'DIVERGES' if diff_raw else 'MATCHES'}  "
+        "(kernel reads mantissa bits when not zero)"
+    )
+    print(
+        f"  ue8m0:  {'DIVERGES' if diff_ue8m0 else 'MATCHES'}  "
+        "(kernel cleanly repacks exponent bytes)"
+    )
+
+    if diff_ue8m0 != 0:
+        print("\nUnexpected: pack diverges even with UE8M0-rounded input — that is a real kernel bug.")
+        return 1
+    if diff_raw == 0:
+        print("\nUnexpected: kernel matches without UE8M0 rounding — investigate.")
+        return 1
+    print("\nFix: in our integration, round float SFs via ceil_to_ue8m0 before passing.")
+    return 0
 
 
 if __name__ == "__main__":
