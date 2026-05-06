@@ -219,7 +219,7 @@ jobs:
       commit_sha: ${{ needs.prepare.outputs.commit_sha }}
       pr_number: ${{ needs.prepare.outputs.pr_number }}
       max_num_runners: ${{ fromJSON(needs.prepare.outputs.max_num_runners) }}
-      source_run_id: ${{ needs.prepare.outputs.source_workflow_run_id }}
+      source_workflow_run_id: ${{ needs.prepare.outputs.source_workflow_run_id }}
       end_sha: ${{ needs.prepare.outputs.end_sha }}
       only_process_job: ${{ fromJSON(needs.prepare.outputs.only_process_job) }}
     secrets: inherit
