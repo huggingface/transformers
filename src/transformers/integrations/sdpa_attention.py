@@ -43,14 +43,14 @@ def use_gqa_in_sdpa(
             > attention_mask is None (otherwise it will fall back to the math kernel)
         3. CUDA
             > pass internal backends check within torch's `can_use_flash_attention`
-           (>)otherwise there will be a fallback to the math backend (very inefficient)
+            > otherwise there will be a fallback to the math backend (very inefficient)
     """
     if _is_torch_xpu_available:
         return _is_torch_greater_or_equal_than_2_8
 
     _is_torch_cuda_available = query.device.type == "cuda"
-    if not _is_torch_cuda_available and _is_torch_greater_or_equal_than_2_5 and attention_mask is None:
-        return True
+    if not _is_torch_cuda_available:
+        return _is_torch_greater_or_equal_than_2_5 and attention_mask is None
 
     from torch.backends.cuda import SDPAParams, can_use_flash_attention
 
