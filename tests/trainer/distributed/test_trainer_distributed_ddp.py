@@ -34,10 +34,21 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_bf16_available_on_device, is_torch_fp16_available_on_device
 
-from .test_trainer_distributed import CONFIGS_DIR, SCRIPTS_DIR, TrainerDistributedCommon
+from .test_trainer_distributed import CONFIGS_DIR, SCRIPTS_DIR, TRAIN_SCRIPT, TrainerDistributedCommon
 
 
 DDP_CONFIG_FILE = os.path.join(CONFIGS_DIR, "ddp.yaml")
+AXOLOTL_PRETRAINED_CAUSAL_MODELS = (
+    ("llama", "axolotl-ai-co/tiny-llama-50m", 0.03),
+    ("mistral", "axolotl-ai-co/tiny-mistral-25m", 0.06),
+    ("mixtral", "axolotl-ai-co/tiny-mixtral-30m", 0.10),
+    ("qwen2", "axolotl-ai-co/tiny-qwen2-129m", 0.04),
+    ("qwen3", "axolotl-ai-co/tiny-qwen3-129m", 0.04),
+    ("phi", "axolotl-ai-co/tiny-phi-64m", 0.04),
+    ("falcon", "axolotl-ai-co/tiny-falcon-42m", 0.02),
+    ("gemma2", "axolotl-ai-co/tiny-gemma2-137m", 0.29),
+)
+GRADIENT_ACCUMULATION_PARAMS = (1, 4)
 
 dtypes = []
 if is_torch_bf16_available_on_device(torch_device):
@@ -47,6 +58,12 @@ if is_torch_fp16_available_on_device(torch_device):
 
 pure_dtype_params = ["fp32"] + dtypes
 mixed_precision_params = list(dtypes)
+basic_model_params = [(model_name, dtype) for _, model_name, _ in AXOLOTL_PRETRAINED_CAUSAL_MODELS for dtype in pure_dtype_params]
+loss_decrease_params = [
+    (model_name, expected_loss, gradient_accumulation_steps)
+    for _, model_name, expected_loss in AXOLOTL_PRETRAINED_CAUSAL_MODELS
+    for gradient_accumulation_steps in GRADIENT_ACCUMULATION_PARAMS
+]
 
 
 def _parameterized_custom_name_func(func, param_num, param):
@@ -279,9 +296,9 @@ class TestTrainerDistributedDDPCommon(DDPCommandsMixin, TrainerDistributedCommon
     train.py script. Mirrors the test structure used in FSDP and DeepSpeed.
     """
 
-    @parameterized.expand(pure_dtype_params, name_func=_parameterized_custom_name_func)
-    def test_training(self, dtype):
-        self.check_training(dtype, config_file=DDP_CONFIG_FILE)
+    @parameterized.expand(basic_model_params, name_func=_parameterized_custom_name_func)
+    def test_training(self, model_name, dtype):
+        self.check_training(dtype, model_name=model_name, config_file=DDP_CONFIG_FILE)
 
     @parameterized.expand(mixed_precision_params, name_func=_parameterized_custom_name_func)
     def test_training_mixed_precision(self, dtype):
@@ -295,3 +312,45 @@ class TestTrainerDistributedDDPCommon(DDPCommandsMixin, TrainerDistributedCommon
 
     def test_eval(self):
         self.check_eval(config_file=DDP_CONFIG_FILE)
+
+    @parameterized.expand(loss_decrease_params, name_func=_parameterized_custom_name_func)
+    def test_training_loss_decreases(self, model_name, expected_loss, gradient_accumulation_steps):
+        output_dir = self.get_auto_remove_tmp_dir()
+        loss_output_file = os.path.join(output_dir, "losses.json")
+        script_args = [
+            "--output_dir",
+            output_dir,
+            "--max_steps",
+            "16",
+            "--logging_steps",
+            "1",
+            "--per_device_train_batch_size",
+            "4",
+            "--gradient_accumulation_steps",
+            str(gradient_accumulation_steps),
+            "--learning_rate",
+            "5e-4",
+            "--save_strategy",
+            "no",
+            "--model_name",
+            model_name,
+            "--model_dtype",
+            "fp32",
+            "--seed",
+            "42",
+            "--loss_output_file",
+            loss_output_file,
+        ]
+        execute_subprocess_async(
+            self.get_accelerate_cmd(TRAIN_SCRIPT, DDP_CONFIG_FILE, script_args=script_args),
+            env=self.get_env(),
+        )
+
+        with open(loss_output_file) as f:
+            losses = json.load(f)
+        self.assertGreater(
+            losses[0],
+            losses[-1],
+            f"Observed DDP logged losses did not decrease from first to last: {losses}",
+        )
+        self.assertAlmostEqual(losses[-1], expected_loss, delta=0.12)

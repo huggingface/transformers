@@ -548,7 +548,7 @@ class TestTrainerDistributedFSDPCommon(
         launch_args = list(TRAIN_LAUNCH_ARGS) + ["--fsdp_state_dict_type", "SHARDED_STATE_DICT"]
         cp_script_args = [
             "--model_name",
-            "hf-internal-testing/tiny-random-LlamaForCausalLM",
+            "axolotl-ai-co/tiny-llama-50m",
             "--max_steps",
             "10",
             "--per_device_train_batch_size",

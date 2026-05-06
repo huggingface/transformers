@@ -111,10 +111,12 @@ class TrainerDistributedCommon(ABC):
     # -------------------------------------------------------------------
     # Reusable test scenarios — called from subclass test methods
     # -------------------------------------------------------------------
-    def check_training(self, dtype="bf16", **cmd_kwargs):
+    def check_training(self, dtype="bf16", model_name=None, **cmd_kwargs):
         """Verify that training completes with the model loaded in *dtype* (no mixed precision)."""
         output_dir = self.get_auto_remove_tmp_dir()
         args = self._get_default_script_args(output_dir) + ["--model_dtype", dtype]
+        if model_name is not None:
+            args += ["--model_name", model_name]
         execute_subprocess_async(
             self.get_accelerate_cmd(TRAIN_SCRIPT, script_args=args, **cmd_kwargs),
             env=self.get_env(),
