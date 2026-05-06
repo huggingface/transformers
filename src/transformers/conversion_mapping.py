@@ -314,10 +314,8 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
         ],
         "molmo2": [
-            # text backbone: `transformer.*` -> `language_model.*` (exclude vit's `image_vit.transformer.`)
-            WeightRenaming(source_patterns=r"(?<!image_vit\.)transformer\.", target_patterns="language_model."),
-            WeightRenaming(source_patterns=r"language_model\.ln_f\.", target_patterns="language_model.norm."),
-            # vision ViT: `vision_backbone.image_vit.transformer.resblocks.N.*` -> `...encoder.layers.N.*`
+            WeightRenaming(source_patterns=r"(?<!image_vit\.)transformer\.(?!ln_f\.)", target_patterns="language_model."),
+            WeightRenaming(source_patterns=r"(?<!image_vit\.)transformer\.ln_f\.", target_patterns="language_model.norm."),
             WeightRenaming(
                 source_patterns=r"vision_backbone\.image_vit\.transformer\.resblocks\.",
                 target_patterns="vision_backbone.image_vit.encoder.layers.",
@@ -330,7 +328,6 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"\.feed_forward\.w2", target_patterns=".mlp.fc2"),
             WeightRenaming(source_patterns=r"\.attention_norm", target_patterns=".layer_norm1"),
             WeightRenaming(source_patterns=r"\.ffn_norm", target_patterns=".layer_norm2"),
-            # image pooling 2d: wq/wk/wv/wo -> q_proj/k_proj/v_proj/out_proj
             WeightRenaming(source_patterns=r"image_pooling_2d\.wq", target_patterns="image_pooling_2d.q_proj"),
             WeightRenaming(source_patterns=r"image_pooling_2d\.wk", target_patterns="image_pooling_2d.k_proj"),
             WeightRenaming(source_patterns=r"image_pooling_2d\.wv", target_patterns="image_pooling_2d.v_proj"),

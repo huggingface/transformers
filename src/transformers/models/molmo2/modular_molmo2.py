@@ -29,7 +29,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_masks_for_generate
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -246,6 +246,8 @@ class Molmo2VisionEncoder(nn.Module):
 class Molmo2VisionModel(PreTrainedModel):
     config_class = Molmo2VitConfig
     _no_split_modules = ["Molmo2VisionEncoderLayer"]
+    _supports_sdpa = True
+    _supports_flash_attn = True
 
     def _init_weights(self, module):
         if isinstance(module, Molmo2VisionModel):
@@ -1420,6 +1422,30 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
+
+    def get_image_features(
+        self,
+        pixel_values: torch.Tensor | None = None,
+        **kwargs,
+    ) -> BaseModelOutputWithPooling:
+        if pixel_values.dim() == 4:
+            B, T, N, D = pixel_values.shape
+            pixel_values = pixel_values.view(B * T, N, D)
+        all_hidden_states = self.model.vision_backbone.image_vit(pixel_values)
+        last_hidden_state = all_hidden_states[-1]
+        return BaseModelOutputWithPooling(
+            last_hidden_state=last_hidden_state,
+            pooler_output=last_hidden_state.mean(dim=1),
+            hidden_states=tuple(all_hidden_states),
+        )
+
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.Tensor | None = None,
+        video_token_pooling: torch.Tensor | None = None,
+        **kwargs,
+    ) -> torch.Tensor:
+        return self.model.vision_backbone.image_vit(pixel_values_videos)[-1]
 
     def prepare_inputs_for_generation(
         self,

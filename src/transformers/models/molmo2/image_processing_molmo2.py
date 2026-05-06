@@ -14,24 +14,19 @@
 
 """Image processor class for Molmo2"""
 
+import math
 import numpy as np
 import torch
 import torch.nn.functional as F
 
 from ...image_processing_backends import TorchvisionBackend
-from ...image_processing_utils import BatchFeature, get_size_dict
-from ...image_transforms import convert_to_rgb, to_channel_dimension_format
+from ...image_processing_utils import BatchFeature
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
-    ChannelDimension,
     ImageInput,
     PILImageResampling,
     SizeDict,
-    infer_channel_dimension_format,
-    make_flat_list_of_images,
-    to_numpy_array,
-    valid_images,
 )
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, logging
@@ -174,16 +169,15 @@ class Molmo2ImageProcessor(TorchvisionBackend):
 
     def _build_resized_image(
         self,
-        image: np.ndarray | torch.Tensor,
+        image_chw: torch.Tensor,
         base_image_input_size: list[int],
         resample: PILImageResampling,
         image_mean: list[float],
         image_std: list[float],
         image_patch_size: int,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        chw = torch.as_tensor(image).permute(2, 0, 1)
         chw_resized = self.resize(
-            chw,
+            image_chw,
             size=SizeDict(height=base_image_input_size[0], width=base_image_input_size[1]),
             resample=resample,
             antialias=False,
@@ -198,7 +192,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
 
     def _build_overlapping_crops(
         self,
-        image: np.ndarray | torch.Tensor,
+        image_chw: torch.Tensor,
         max_crops: int,
         overlap_margins: list[int],
         base_image_input_size: list[int],
@@ -213,8 +207,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         :return patch_idx: [overlap_patch_h, overlap_patch_w] For each patch in the resized image
                             the crops were extracted from, what patch in `crop_arr` it corresponds to
         """
-        image_tensor = torch.as_tensor(image)
-        original_image_h, original_image_w = image_tensor.shape[:2]
+        _, original_image_h, original_image_w = image_chw.shape
         crop_size = base_image_input_size[0]
         if base_image_input_size[0] != base_image_input_size[1]:
             raise ValueError(f"Expected square base_image_input_size, got {base_image_input_size}")
@@ -239,9 +232,8 @@ class Molmo2ImageProcessor(TorchvisionBackend):
 
         src_h = tiling_h * crop_window_size + total_margin_pixels
         src_w = tiling_w * crop_window_size + total_margin_pixels
-        chw = image_tensor.permute(2, 0, 1)
         chw_resized = self.resize(
-            chw,
+            image_chw,
             size=SizeDict(height=src_h, width=src_w),
             resample=resample,
             antialias=False,
@@ -296,7 +288,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
 
     def _image_to_patches_and_grids(
         self,
-        image: np.ndarray | torch.Tensor,
+        image_chw: torch.Tensor,
         max_crops: int,
         overlap_margins: list[int],
         base_image_input_size: list[int],
@@ -323,7 +315,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         crop_patch_h = base_image_input_size[0] // base_image_input_d
 
         crop_arr, patch_idx_arr = self._build_overlapping_crops(
-            image,
+            image_chw,
             max_crops,
             overlap_margins,
             base_image_input_size,
@@ -338,7 +330,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
 
         # Finally do the same for the global image
         resized, resize_idx = self._build_resized_image(
-            image,
+            image_chw,
             base_image_input_size,
             resample,
             image_mean,
@@ -358,151 +350,121 @@ class Molmo2ImageProcessor(TorchvisionBackend):
 
         return image_grid, batch_pixels_to_patches(crop_arr, image_patch_size), pooling_idx
 
+    @auto_docstring
     def preprocess(
         self,
         images: ImageInput,
-        size: dict[str, int] | None = None,
-        resample: PILImageResampling | None = None,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        do_convert_rgb: bool | None = None,
-        max_crops: int | None = None,
-        overlap_margins: list[int] | None = None,
-        patch_size: int | None = None,
-        pooling_size: list[int] | None = None,
+        **kwargs: Unpack[Molmo2ImagesKwargs],
+    ) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
+
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        resample: PILImageResampling,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: list[float],
+        image_std: list[float],
+        do_convert_rgb: bool,
+        max_crops: int,
+        overlap_margins: list[int],
+        patch_size: int,
+        pooling_size: list[int],
         return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
-        """
-        Args:
-            images (`ImageInput`):
-                Image to preprocess.
-            size (`dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the image after resizing.
-            resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
-                Resampling filter to use when resizing the image. This can be one of the enum `PILImageResampling`. Only
-                has an effect if `do_resize` is set to `True`.
-            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
-                `True`.
-            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-                Whether to convert the image to RGB.
-            max_crops (`int`, *optional*, defaults to `self.max_crops`):
-                Maximum number of crops to use per image.
-            overlap_margins (`list[int]`, *optional*, defaults to `self.overlap_margins`):
-                Overlap margins to use.
-            patch_size (`int`, *optional*, defaults to `self.patch_size`):
-                The spatial patch size of the vision encoder.
-            pooling_size (`list[int]`, *optional*, defaults to `self.pooling_size`):
-                The pooling size of the vision adapter.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
-                - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
-
-        Returns:
-            A `BatchFeature` containing the following keys:
-                - `pixel_values`: The preprocessed images.
-                - `image_token_pooling`: The indices of the patches in `crops` to pool for each token in `image_tokens`.
-                - `image_grids`: The image grids.
-                - `image_num_crops`: The number of crops for each image.
-        """
-        if size is not None:
-            size = get_size_dict(size, default_to_square=True)
-        else:
-            size = self.size if isinstance(self.size, dict) else {"height": self.size.height, "width": self.size.width}
-
-        base_image_input_size = [size["height"], size["width"]]
-
-        if resample is None:
-            resample = self.resample
-        if image_mean is None:
-            image_mean = self.image_mean
-        if image_std is None:
-            image_std = self.image_std
-        if do_convert_rgb is None:
-            do_convert_rgb = self.do_convert_rgb
-        if max_crops is None:
-            max_crops = self.max_crops
-        if overlap_margins is None:
-            overlap_margins = self.overlap_margins
-        if patch_size is None:
-            patch_size = self.patch_size
-        if pooling_size is None:
-            pooling_size = self.pooling_size
-
+        base_image_input_size = [size.height, size.width]
         image_pooling_h, image_pooling_w = pooling_size
 
-        if images is not None:
-            images = self.fetch_images(images)
-            images = make_flat_list_of_images(images)
+        batch_grids = []
+        batch_crops = []
+        batch_pooled_patches_idx = []
+        batch_num_crops = []
 
-        if images is not None and not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
+        for image in images:
+            image_grid, crops, pooled_idx = self._image_to_patches_and_grids(
+                image,
+                max_crops,
+                overlap_margins,
+                base_image_input_size,
+                resample,
+                image_mean,
+                image_std,
+                patch_size,
+                image_pooling_w,
+                image_pooling_h,
             )
+            batch_grids.append(image_grid)
+            batch_crops.append(crops)
+            batch_pooled_patches_idx.append(pooled_idx)
+            batch_num_crops.append(crops.shape[0])
 
-        if do_convert_rgb:
-            images = [convert_to_rgb(image) for image in images]
+        return BatchFeature(
+            data={
+                "pixel_values": torch.cat(batch_crops, 0),
+                "image_token_pooling": torch.cat(batch_pooled_patches_idx, 0),
+                "image_grids": torch.cat(batch_grids, 0),
+                "image_num_crops": torch.tensor(batch_num_crops, dtype=torch.int64),
+            },
+            tensor_type=return_tensors,
+        )
 
-        # All transformations expect numpy arrays in HWC format.
-        images = [to_numpy_array(image) for image in images]
-        # Ensure HWC layout; torch tensors and some numpy arrays arrive as CHW.
-        images = [
-            to_channel_dimension_format(image, ChannelDimension.LAST, infer_channel_dimension_format(image))
-            for image in images
-        ]
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> int:
+        """
+        Returns the number of IMAGE_PATCH_TOKEN tokens inserted into the sequence for an image of
+        the given size. Used by vLLM to compute the number of placeholders without running the full
+        image processor.
 
-        data = {}
-        if images is not None:
-            batch_grids = []
-            batch_crops = []
-            batch_pooled_patches_idx = []
-            batch_num_crops = []
+        Args:
+            height (`int`): Image height in pixels.
+            width (`int`): Image width in pixels.
+            images_kwargs (`dict`, *optional*): Overrides for processor defaults (e.g. `max_crops`, `patch_size`).
 
-            for image in images:
-                image_grid, crops, pooled_idx = self._image_to_patches_and_grids(
-                    image,
-                    max_crops,
-                    overlap_margins,
-                    base_image_input_size,
-                    resample,
-                    image_mean,
-                    image_std,
-                    patch_size,
-                    image_pooling_w,
-                    image_pooling_h,
-                )
-                batch_grids.append(image_grid)
-                batch_crops.append(crops)
-                batch_pooled_patches_idx.append(pooled_idx)
-                batch_num_crops.append(crops.shape[0])
+        Returns:
+            `int`: Total number of patch tokens (low-res + high-res, before special tokens).
+        """
+        if images_kwargs is None:
+            images_kwargs = {}
+        max_crops = images_kwargs.get("max_crops", self.max_crops)
+        overlap_margins = images_kwargs.get("overlap_margins", self.overlap_margins)
+        patch_size = images_kwargs.get("patch_size", self.patch_size)
+        pooling_size = images_kwargs.get("pooling_size", self.pooling_size)
+        size = images_kwargs.get("size", self.size)
 
-            pixel_values = torch.cat(batch_crops, 0)
-            image_token_pooling = torch.cat(batch_pooled_patches_idx, 0)
-            image_grids = torch.cat(batch_grids, 0)
-            image_num_crops = torch.tensor(batch_num_crops, dtype=torch.int64)
+        base_h = size["height"] if isinstance(size, dict) else size.height
+        base_w = size["width"] if isinstance(size, dict) else size.width
+        left_margin, right_margin = overlap_margins
+        pooling_h, pooling_w = pooling_size
 
-            if return_tensors is None:
-                pixel_values = pixel_values.numpy()
-                image_token_pooling = image_token_pooling.numpy()
-                image_grids = image_grids.numpy()
-                image_num_crops = image_num_crops.numpy()
+        total_margin_pixels = patch_size * (left_margin + right_margin)
+        crop_patches = base_h // patch_size
+        crop_window_patches = crop_patches - (left_margin + right_margin)
+        crop_window_size = crop_window_patches * patch_size
 
-            data.update(
-                pixel_values=pixel_values,
-                image_token_pooling=image_token_pooling,
-                image_grids=image_grids,
-                image_num_crops=image_num_crops,
-            )
+        effective_h = height - total_margin_pixels
+        effective_w = width - total_margin_pixels
+        tiling_w, tiling_h = get_optimal_tiled_canvas(
+            original_image_size=(effective_h, effective_w),
+            target_tile_size=(crop_window_size, crop_window_size),
+            min_image_tiles=1,
+            max_image_tiles=max_crops,
+        )
 
-        return BatchFeature(data, tensor_type=return_tensors)
+        high_res_h = (tiling_h * crop_window_patches + left_margin + right_margin)
+        high_res_w = (tiling_w * crop_window_patches + left_margin + right_margin)
+        h = math.ceil(high_res_h / pooling_h)
+        w = math.ceil(high_res_w / pooling_w)
+
+        crop_patch_h = base_h // patch_size
+        crop_patch_w = base_w // patch_size
+        resized_h = math.ceil(crop_patch_h / pooling_h)
+        resized_w = math.ceil(crop_patch_w / pooling_w)
+
+        return resized_h * resized_w + h * w
 
 
 __all__ = ["Molmo2ImageProcessor"]
