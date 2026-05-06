@@ -42,7 +42,7 @@ from .model_runner import ModelRunner
 from .offloading_manager import OffloadingManager
 from .requests import GenerationOutput, RequestState, RequestStatus, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
-from .utils import WorkloadHints, DistributedHelper
+from .utils import DistributedHelper, WorkloadHints, drain_queue
 
 
 """
@@ -142,7 +142,8 @@ class ContinuousBatchProcessor:
         generation_config: GenerationConfig,
         continuous_batching_config: ContinuousBatchingConfig,
         logit_processor: ContinuousBatchingLogitsProcessorList,
-        input_queue: queue.Queue,
+        input_queue: queue.Queue | None,
+        cancel_queue: queue.Queue | None,
         output_router: OutputRouter,
         stop_event: threading.Event,
         model_device: torch.device,
@@ -158,7 +159,8 @@ class ContinuousBatchProcessor:
             generation_config: The generation configuration
             continuous_batching_config: The continuous batching configuration
             logit_processor: The [`ContinuousBatchingLogitsProcessorList`] object used to process the logits.
-            input_queue: Queue for incoming requests
+            input_queue: Queue for incoming requests. Is None if this process is not a TP driver.
+            cancel_queue: Queue for cancellation request_ids. Is None if this process is not a TP driver.
             output_router: An [`OutputRouter`] object that routes outputs to handlers or the output queue.
             stop_event: Event to signal processing should stop
             model_device: Device for model inputs/outputs
@@ -171,6 +173,7 @@ class ContinuousBatchProcessor:
         self.cb_config = continuous_batching_config
         self.logit_processor = logit_processor
         self.input_queue = input_queue
+        self.cancel_queue = cancel_queue
         self.output_router = output_router
         self.stop_event = stop_event
         self.model_device = model_device
@@ -266,22 +269,32 @@ class ContinuousBatchProcessor:
 
     @traced
     def _get_new_requests(self) -> None:
-        """Pull new requests from the input queue and add to waiting list."""
-        while not self.input_queue.empty():
+        """Pull new requests and cancellations from the queues and apply them to the scheduler. If the process is a TP
+        driver, the input_queue and cancel_queue are not None and the process will drain them. Otherwise, the process
+        will wait for the TP driver to send a payload containing the new requests and cancellations."""
+        # Only drains queues if this process is a TP driver
+        if self.input_queue is not None and self.cancel_queue is not None:
+            new_states = drain_queue(self.input_queue)
+            cancellations = drain_queue(self.cancel_queue)
+            payload = (new_states, cancellations)
+        # Otherwise, the payload is None
+        else:
+            payload = None
+
+        # Broadcast within the TP group. No-op when tp_size == 1, returns the driver's payload unchanged.
+        payload = self.distributed_helper.tp_broadcast_object(payload)
+        new_states, cancellations = payload
+
+        # All ranks apply the same updates in the same order.
+        for state in new_states:
             try:
-                state = self.input_queue.get_nowait()
-                if state is None:  # Sentinel value
-                    continue
                 self.logit_processor.check_kwargs(state.logit_processor_kwargs)
                 self.scheduler.add_waiting_request(state)
-
-            except queue.Empty:
-                break
             except Exception as e:
                 logger.error(f"Error processing new request: {e}", exc_info=True)
-                state: RequestState = locals().get("state")
-                if state is not None:
-                    self._handle_request_error(e, state)
+                self._handle_request_error(e, state)
+        for request_id in cancellations:
+            self.scheduler.set_request_cancellation(request_id)
 
     @traced
     def _handle_request_error(self, error: Exception, state: RequestState) -> None:
@@ -509,6 +522,7 @@ class ContinuousBatchingManager:
         self.warmed_up = False  # Set to True after warmup is completed. Useful for persistent managers.
 
         self.input_queue = queue.Queue(maxsize=continuous_batching_config.max_queue_size)
+        self.cancel_queue: queue.Queue[str] = queue.Queue()
         self._has_new_requests = threading.Event()
         self.output_router = OutputRouter()
         self.stop_event = threading.Event()
@@ -517,6 +531,9 @@ class ContinuousBatchingManager:
         self._request_counter = 0
         self._request_lock = threading.Lock()
         self.fatal_error: Exception | None = None
+
+        # The boolean indicates if this process is the driver of its own TP group
+        self.is_tp_driver = DistributedHelper(device_mesh=getattr(self.model, "_device_mesh", None)).is_tp_driver
 
         # Generation config related arguments
         num_return_sequences = getattr(generation_config, "num_return_sequences", None)
@@ -655,6 +672,10 @@ class ContinuousBatchingManager:
                 request_id = f"req_{self._request_counter}"
                 self._request_counter += 1
 
+        # If this process is not a TP driver, it does not enqueue new requests from this entry point
+        if not self.is_tp_driver:
+            return request_id
+
         max_new_tokens = self.generation_config.max_new_tokens if max_new_tokens is None else max_new_tokens
         eos_token_id = self.generation_config.eos_token_id if eos_token_id is None else eos_token_id
 
@@ -710,13 +731,11 @@ class ContinuousBatchingManager:
         return request_ids
 
     def cancel_request(self, request_id: str) -> None:
-        """Cancel a request by its ID.
-
-        Args:
-            request_id: The ID of the request to cancel
-        """
-        if self.batch_processor is not None:
-            self.batch_processor.scheduler.set_request_cancellation(request_id)
+        """Cancel a request by its ID. If this called from a process that is not a TP driver, it's a no-op: only TP
+        driver processes interact with the manager."""
+        if self.is_tp_driver:
+            self.cancel_queue.put(request_id)
+            self._has_new_requests.set()
 
     # TODO:handle benchmarking properly when updating / fixing the requeue logic
     def get_result(self, request_id: str | None = None, timeout: float | None = None) -> GenerationOutput | None:
@@ -822,7 +841,8 @@ class ContinuousBatchingManager:
             generation_config=self.generation_config,
             continuous_batching_config=self.continuous_batching_config,
             logit_processor=self.logit_processor,
-            input_queue=self.input_queue,
+            input_queue=self.input_queue if self.is_tp_driver else None,
+            cancel_queue=self.cancel_queue if self.is_tp_driver else None,
             output_router=self.output_router,
             stop_event=self.stop_event,
             model_device=self.model.device,
