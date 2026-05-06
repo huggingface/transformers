@@ -43,6 +43,8 @@ from orbax.checkpoint import args as obc_args
 from orbax.checkpoint import type_handlers
 
 from transformers import (
+    Gemma4AssistantConfig,
+    Gemma4AssistantForCausalLM,
     Gemma4AudioConfig,
     Gemma4AudioFeatureExtractor,
     Gemma4Config,
@@ -133,9 +135,34 @@ _VARIANT_GEMMA_4_E4B = "gemma-4-e4b"
 _VARIANT_GEMMA_4_26B_A4B = "gemma-4-26b-a4b"
 _VARIANT_GEMMA_4_31B = "gemma-4-31b"
 
+_TRANSFORMER_PRE_PROJ_MTP = "transformer/pre_proj"
+_TRANSFORMER_POST_PROJ_MTP = "transformer/post_proj"
+_TRANSFORMER_NORM_MTP = "transformer/norm"
+
+_VARIANT_GEMMA_4_E2B_ASSISTANT = "gemma-4-e2b-assistant"
+_VARIANT_GEMMA_4_E4B_ASSISTANT = "gemma-4-e4b-assistant"
+_VARIANT_GEMMA_4_26B_A4B_ASSISTANT = "gemma-4-26b-a4b-assistant"
+_VARIANT_GEMMA_4_31B_ASSISTANT = "gemma-4-31b-assistant"
+
+_ASSISTANT_VARIANTS = {
+    _VARIANT_GEMMA_4_E2B_ASSISTANT,
+    _VARIANT_GEMMA_4_E4B_ASSISTANT,
+    _VARIANT_GEMMA_4_26B_A4B_ASSISTANT,
+    _VARIANT_GEMMA_4_31B_ASSISTANT,
+}
+
 _LARGE_MODEL_VARIANTS = {
     _VARIANT_GEMMA_4_31B,
     _VARIANT_GEMMA_4_26B_A4B,
+}
+
+_ASSISTANT_MODEL_COMMON_TEXT_CONFIG_KWARGS = {
+    "vocab_size_per_layer_input": 0,
+    "hidden_size_per_layer_input": 0,
+    "enable_moe_block": False,
+    "attention_k_eq_v": False,
+    "use_double_wide_mlp": False,
+    "num_global_key_value_heads": None,
 }
 
 _ON_DEVICE_VISION_CONFIG = Gemma4VisionConfig(
@@ -183,7 +210,73 @@ _DEFAULT_LAYER_TYPES = ["sliding_attention"] * 5 + ["full_attention"]
 _GEMMA_4_E2B_LAYER_TYPES = ["sliding_attention"] * 4 + ["full_attention"]
 
 
-_VARIANTS: Mapping[str, Gemma4Config] = {
+_VARIANTS: Mapping[str, Gemma4Config | Gemma4AssistantConfig] = {
+    _VARIANT_GEMMA_4_E2B_ASSISTANT: Gemma4AssistantConfig(
+        backbone_hidden_size=1536,
+        use_ordered_embeddings=True,
+        text_config=Gemma4TextConfig(
+            hidden_size=256,
+            intermediate_size=2048,
+            num_attention_heads=4,
+            num_key_value_heads=1,
+            num_kv_shared_layers=4,
+            head_dim=256,
+            global_head_dim=512,
+            num_hidden_layers=4,
+            layer_types=["sliding_attention"] * 3 + ["full_attention"],
+            **_ASSISTANT_MODEL_COMMON_TEXT_CONFIG_KWARGS,
+        ),
+    ),
+    _VARIANT_GEMMA_4_E4B_ASSISTANT: Gemma4AssistantConfig(
+        backbone_hidden_size=2560,
+        use_ordered_embeddings=True,
+        text_config=Gemma4TextConfig(
+            hidden_size=256,
+            intermediate_size=2048,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            num_kv_shared_layers=4,
+            head_dim=256,
+            global_head_dim=512,
+            num_hidden_layers=4,
+            layer_types=["sliding_attention"] * 3 + ["full_attention"],
+            **_ASSISTANT_MODEL_COMMON_TEXT_CONFIG_KWARGS,
+        ),
+    ),
+    _VARIANT_GEMMA_4_31B_ASSISTANT: Gemma4AssistantConfig(
+        backbone_hidden_size=5376,
+        text_config=Gemma4TextConfig(
+            hidden_size=1024,
+            hidden_size_per_layer_input=0,
+            intermediate_size=8192,
+            num_hidden_layers=4,
+            layer_types=["sliding_attention"] * 3 + ["full_attention"],
+            num_attention_heads=32,
+            num_key_value_heads=16,
+            num_global_key_value_heads=4,
+            attention_k_eq_v=True,
+            num_kv_shared_layers=4,
+            sliding_window=1024,
+            vocab_size_per_layer_input=0,
+        ),
+    ),
+    _VARIANT_GEMMA_4_26B_A4B_ASSISTANT: Gemma4AssistantConfig(
+        backbone_hidden_size=2816,
+        text_config=Gemma4TextConfig(
+            hidden_size=1024,
+            hidden_size_per_layer_input=0,
+            intermediate_size=8192,
+            num_hidden_layers=4,
+            layer_types=["sliding_attention"] * 3 + ["full_attention"],
+            num_attention_heads=16,
+            num_key_value_heads=8,
+            num_global_key_value_heads=2,
+            attention_k_eq_v=True,
+            num_kv_shared_layers=4,
+            sliding_window=1024,
+            vocab_size_per_layer_input=0,
+        ),
+    ),
     _VARIANT_GEMMA_4_E2B: Gemma4Config(
         text_config=Gemma4TextConfig(
             hidden_size=1536,
@@ -702,7 +795,7 @@ def convert_vision_encoder_weights(
 
 
 def convert_transformer_weights(
-    config: Gemma4TextConfig,
+    config: Gemma4TextConfig | Gemma4AssistantConfig,
     path: str,
     param: str,
     weights: np.ndarray,
@@ -720,7 +813,7 @@ def convert_transformer_weights(
         # Extract layer number from path like "transformer/layer_0/attn/q_einsum"
         layer_str = path.split("/")[1]  # "layer_0"
         layer_idx = int(layer_str.replace("layer_", ""))  # 0
-        is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx > 0
+        is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx >= 0
         base_path = f"layers.{layer_idx}"
 
         # Determine head_dim from actual checkpoint weight dimensions
@@ -777,10 +870,10 @@ def convert_transformer_weights(
             )
         elif path.endswith("attn/query_norm"):
             converted_paths.append(f"{base_path}.self_attn.q_norm.weight")
-            converted_weights.append(matrix)
+            converted_weights.append(matrix.squeeze())
         elif path.endswith("attn/key_norm") and not is_kv_shared_layer:
             converted_paths.append(f"{base_path}.self_attn.k_norm.weight")
-            converted_weights.append(matrix)
+            converted_weights.append(matrix.squeeze())
         elif path.endswith("mlp/gating_einsum"):
             converted_paths.extend([f"{base_path}.mlp.gate_proj.weight", f"{base_path}.mlp.up_proj.weight"])
             gate_proj_weight, up_proj_weight = matrix
@@ -824,7 +917,7 @@ def convert_transformer_weights(
 
         for i, matrix in enumerate(weights):
             layer_idx = _SLIDING_WINDOW_PATTERN * i + attention_type_index
-            is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx > 0
+            is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx >= 0
             base_path = f"layers.{layer_idx}"
             head_dim = (
                 config.global_head_dim
@@ -871,10 +964,10 @@ def convert_transformer_weights(
                 )
             elif path.endswith("attn/query_norm"):
                 converted_paths.append(f"{base_path}.self_attn.q_norm.weight")
-                converted_weights.append(matrix)
+                converted_weights.append(matrix.squeeze())
             elif path.endswith("attn/key_norm") and not is_kv_shared_layer:
                 converted_paths.append(f"{base_path}.self_attn.k_norm.weight")
-                converted_weights.append(matrix)
+                converted_weights.append(matrix.squeeze())
             elif path.endswith("mlp/gating_einsum"):
                 # NOTE: The JAX implementations changes the type of the primary `mlp` for MOE models and adds a new
                 # `mlp2` that operates _before_ `mlp`. In Hugging Face Transformers we keep the type of `mlp` constant
@@ -965,8 +1058,14 @@ def convert_transformer_weights(
                 else:
                     converted_paths.append(f"{base_path}.pre_feedforward_layernorm.weight")
                 converted_weights.append(matrix)
+    elif path == _TRANSFORMER_NORM_MTP:
+        converted_paths.append("final_norm.weight")
+        converted_weights.append(weights)
     elif path == _TRANSFORMER_EMBEDDER:
-        if param == "input_embedding":
+        if param == "input_embedding_ordered" and getattr(config, "use_ordered_embeddings", False):
+            converted_paths.append("embed_tokens.weight")
+            converted_weights.append(weights)
+        elif param == "input_embedding" and not getattr(config, "use_ordered_embeddings", False):
             converted_paths.append("embed_tokens.weight")
             converted_weights.append(weights)
         elif param == "per_layer_embeddings":
@@ -975,7 +1074,6 @@ def convert_transformer_weights(
             vocab_size, num_layers, hidden_dim = weights.shape
             converted_weights.append(weights.reshape(vocab_size, num_layers * hidden_dim))
     elif path.startswith(_TRANSFORMER_EMBEDDER):
-        # TODO: ryanmullins - support multimodal norms and projections
         if path.endswith("per_layer_model_projection"):
             converted_paths.append("per_layer_model_projection.weight")
             converted_weights.append(
@@ -1032,14 +1130,19 @@ def _restore_checkpoint(checkpoint_path: str) -> dict:
     return checkpointer.restore(checkpoint_path, args=restore)
 
 
-def convert(checkpoint_path: str, config: Gemma4Config) -> dict[str, torch.Tensor]:
+def convert(checkpoint_path: str, config: Gemma4Config | Gemma4AssistantConfig) -> dict[str, torch.Tensor]:
     """Loads Orbax checkpoint from `input_path` and converts it to HF tree."""
     ckpt = _restore_checkpoint(checkpoint_path)
     hf_tree: dict[str, torch.Tensor] = {}
 
+    if _VARIANT.value in _ASSISTANT_VARIANTS:
+        flags.FLAGS.text_only = True
+
     text_path_prefix = "model"
     if not _TEXT_ONLY.value:
         text_path_prefix += ".language_model"
+
+    text_config = config.get_text_config()
 
     def update_tree(path: str, weights: np.ndarray, target_dtype: torch.dtype) -> None:
         # Convert directly to float32 in a single step to avoid an extra intermediate copy.
@@ -1067,15 +1170,26 @@ def convert(checkpoint_path: str, config: Gemma4Config) -> dict[str, torch.Tenso
         path_tuple = path_tuple[:-1]
         path = "/".join(path_tuple) if len(path_tuple) > 1 else path_tuple[0]
 
+        # Gemma4MultimodalEmbedder weights
         if path.endswith("audio_input_projection") and not _TEXT_ONLY.value:
             update_tree("model.embed_audio.embedding_projection.weight", value.transpose(), config.audio_config.dtype)
         elif path.endswith("mm_input_projection") and not _TEXT_ONLY.value:
             update_tree(
                 "model.embed_vision.embedding_projection.weight", value.transpose(), config.vision_config.dtype
             )
+        # Gemma4AssistantForCausalLM weights
+        elif param == "centroids":
+            update_tree("masked_embedding.centroids.weight", value, text_config.dtype)
+        elif param == "token_ordering":
+            update_tree("masked_embedding.token_ordering", value, torch.long)
+        elif path == _TRANSFORMER_PRE_PROJ_MTP:
+            update_tree("pre_projection.weight", value.transpose(), text_config.dtype)
+        elif path == _TRANSFORMER_POST_PROJ_MTP:
+            update_tree("post_projection.weight", value.transpose(), text_config.dtype)
+        # Subordinate model (e.g., language_model, vision_tower, audio_tower) weights
         elif path.startswith(_TRANSFORMER_PARAMETER):
-            for hf_path, weights in convert_transformer_weights(config.text_config, path, param, value):
-                update_tree(f"{text_path_prefix}.{hf_path}", weights, config.text_config.dtype)
+            for hf_path, weights in convert_transformer_weights(text_config, path, param, value):
+                update_tree(f"{text_path_prefix}.{hf_path}", weights, text_config.dtype)
         elif path.startswith(_VISION_ENCODER_PARAMETER) and not _TEXT_ONLY.value:
             for hf_path, weights in convert_vision_encoder_weights(config.vision_config, path, param, value):
                 update_tree(f"model.vision_tower.{hf_path}", weights, config.vision_config.dtype)
@@ -1095,10 +1209,17 @@ def main(*args):
     variant = _VARIANT.value
 
     config = _VARIANTS[variant]
-    config.text_config.dtype = getattr(torch, _TEXT_DTYPE.value)
-    config.vision_config.dtype = getattr(torch, _VISION_DTYPE.value)
-    if (audio_config := config.audio_config) is not None:
-        audio_config.dtype = getattr(torch, _AUDIO_DTYPE.value)
+    is_drafter = variant in _ASSISTANT_VARIANTS
+
+    logging.info("Converting Gemma 4 variant: %s", variant)
+
+    config.get_text_config().dtype = getattr(torch, _TEXT_DTYPE.value)
+
+    if not is_drafter:
+        config.vision_config.dtype = getattr(torch, _VISION_DTYPE.value)
+
+        if (audio_config := config.audio_config) is not None:
+            audio_config.dtype = getattr(torch, _AUDIO_DTYPE.value)
 
     if _INCLUDE_CHAT_TEMPLATE.value:
         # Chat template is included for instruction tuned models, which treat
@@ -1111,29 +1232,32 @@ def main(*args):
         _TEXT_DTYPE.value,
         _VISION_DTYPE.value,
     )
+
     state_tree = convert(_CHECKPOINT_PATH.value, config)
     logging.info("Converted Gemma 4 (%s) state tree from Orbax to Hugging Face.", variant)
 
     with accelerate.init_empty_weights():
-        if _TEXT_ONLY.value:
+        if is_drafter:
+            model = Gemma4AssistantForCausalLM(config=config)
+        elif _TEXT_ONLY.value:
             config = config.text_config
             model = Gemma4ForCausalLM(config=config)
         else:
             model = Gemma4ForConditionalGeneration(config=config)
 
-    model.load_state_dict(state_tree, assign=True)
-    logging.info(
-        "Loaded Gemma 4 (%s) in Hugging Face Transformers as a %s instance.",
-        variant,
-        type(model).__name__,
-    )
-    model.save_pretrained(output_path, state_dict=state_tree, safe_serialization=True)
-    logging.info(
-        "Saved Gemma 4 (%s) to SafeTensors in %s using %s",
-        variant,
-        output_path,
-        type(model).__name__,
-    )
+        model.load_state_dict(state_tree, assign=True)
+        logging.info(
+            "Loaded Gemma 4 (%s) in Hugging Face Transformers as a %s instance.",
+            variant,
+            type(model).__name__,
+        )
+        model.save_pretrained(output_path, state_dict=state_tree, safe_serialization=True)
+        logging.info(
+            "Saved Gemma 4 (%s) to SafeTensors in %s using %s",
+            variant,
+            output_path,
+            type(model).__name__,
+        )
     del model
     del state_tree
 

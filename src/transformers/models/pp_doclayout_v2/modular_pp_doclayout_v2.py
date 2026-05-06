@@ -802,12 +802,12 @@ class PPDocLayoutV2ForObjectDetectionOutput(ModelOutput):
     denoising_meta_values: dict | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the PP-DocLayoutV2 encoder-decoder model.
     """
 )
+@dataclass
 class PPDocLayoutV2ModelOutput(RTDetrModelOutput):
     pass
 

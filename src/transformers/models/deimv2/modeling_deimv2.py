@@ -42,7 +42,6 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_deimv2 import Deimv2Config
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the Deimv2Decoder. This class adds two attributes to
@@ -51,6 +50,7 @@ from .configuration_deimv2 import Deimv2Config
     - a stacked tensor of intermediate reference points.
     """
 )
+@dataclass
 class Deimv2DecoderOutput(ModelOutput):
     r"""
     intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -80,12 +80,12 @@ class Deimv2DecoderOutput(ModelOutput):
     cross_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the RT-DETR encoder-decoder model.
     """
 )
+@dataclass
 class Deimv2ModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
@@ -1923,12 +1923,12 @@ class Deimv2Model(Deimv2PreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`Deimv2ForObjectDetection`].
     """
 )
+@dataclass
 class Deimv2ObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):

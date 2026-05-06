@@ -393,7 +393,8 @@ def grouped_mm_experts_forward(
     # Compute offsets for grouped_mm
     # using histc instead of bincount to avoid cuda graph issues
     # With deterministic algorithms, CPU only supports float input, CUDA only supports int input.
-    histc_input = expert_ids_g.float() if device.type == "cpu" else expert_ids_g.int()
+    # torch.histc() does not support integer dtypes on CPU and MPS.
+    histc_input = expert_ids_g.float() if device.type in ("cpu", "mps") else expert_ids_g.int()
     tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1)
     offsets = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
 

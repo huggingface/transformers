@@ -1535,8 +1535,8 @@ class EdgeTamVideoPerceiverResampler(nn.Module):
         return latents_2d, positional_encoding_2d
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the EdgeTamVideo model's output.")
+@dataclass
 class EdgeTamVideoImageSegmentationOutput(ModelOutput):
     r"""
     iou_scores (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks)`):
@@ -1576,8 +1576,8 @@ class EdgeTamVideoImageSegmentationOutput(ModelOutput):
     object_pointer: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the Sam2 model's output.")
+@dataclass
 class EdgeTamVideoSegmentationOutput(ModelOutput):
     r"""
     object_ids (`list[int]`, *optional*):
