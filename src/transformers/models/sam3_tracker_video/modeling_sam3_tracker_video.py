@@ -1135,8 +1135,8 @@ class Sam3TrackerVideoMemoryEncoder(nn.Module):
         return vision_features, vision_pos_enc
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the vision encoder's outputs.")
+@dataclass
 class Sam3TrackerVideoVisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, height, width, hidden_size)`):

@@ -902,8 +902,8 @@ class PPDocLayoutV2ReadingOrder(PPDocLayoutV2PreTrainedModel):
         return read_order_logits
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class PPDocLayoutV2ForObjectDetectionOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):

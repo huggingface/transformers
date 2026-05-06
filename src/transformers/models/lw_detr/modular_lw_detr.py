@@ -873,7 +873,6 @@ def refine_bboxes(reference_points, deltas):
     return new_reference_points
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the LwDetrDecoder. This class adds two attributes to
@@ -882,6 +881,7 @@ def refine_bboxes(reference_points, deltas):
     - a stacked tensor of intermediate reference points.
     """
 )
+@dataclass
 class LwDetrDecoderOutput(DeformableDetrDecoderOutput):
     pass
 

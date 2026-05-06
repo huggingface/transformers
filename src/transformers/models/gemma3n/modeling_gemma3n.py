@@ -66,12 +66,12 @@ class Gemma3nAudioEncoderModelOutput(BaseModelOutputWithPooling):
     audio_mel_mask: torch.BoolTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Gemma3n outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class Gemma3nModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):

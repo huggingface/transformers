@@ -129,8 +129,8 @@ class RetrievAugLMMarginOutput(ModelOutput):
     generator_cross_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class RetrievAugLMOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):

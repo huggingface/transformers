@@ -33,12 +33,12 @@ from .configuration_luke import LukeConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the LUKE model.
     """
 )
+@dataclass
 class BaseLukeModelOutputWithPooling(BaseModelOutputWithPooling):
     r"""
     pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
@@ -56,12 +56,12 @@ class BaseLukeModelOutputWithPooling(BaseModelOutputWithPooling):
     entity_hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for model's outputs, with potential hidden states and attentions.
     """
 )
+@dataclass
 class BaseLukeModelOutput(BaseModelOutput):
     r"""
     entity_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, entity_length, hidden_size)`):

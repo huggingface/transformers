@@ -138,13 +138,13 @@ class Deimv2ModelOutput(ModelOutput):
     denoising_meta_values: dict | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type for DEIMv2 encoder modules (HybridEncoder and LiteEncoder).
     Attentions are only available for HybridEncoder variants with AIFI layers.
     """
 )
+@dataclass
 class Deimv2EncoderOutput(ModelOutput):
     r"""
     feature_maps (`list[torch.FloatTensor]`):

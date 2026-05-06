@@ -432,8 +432,8 @@ class Sam3LiteTextVisionEncoderOutput(BaseModelOutputWithPooling):
     fpn_position_encoding: tuple[torch.FloatTensor, ...] = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3LiteTextGeometryEncoderOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_prompts, hidden_size)`):
@@ -446,8 +446,8 @@ class Sam3LiteTextGeometryEncoderOutput(ModelOutput):
     attention_mask: torch.BoolTensor | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3LiteTextDETREncoderOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -472,8 +472,8 @@ class Sam3LiteTextDETREncoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3LiteTextDETRDecoderOutput(ModelOutput):
     r"""
     intermediate_hidden_states (`torch.FloatTensor` of shape `(num_layers, batch_size, num_queries, hidden_size)`):
@@ -495,8 +495,8 @@ class Sam3LiteTextDETRDecoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3LiteTextMaskDecoderOutput(ModelOutput):
     r"""
     pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height, width)`):
@@ -512,8 +512,8 @@ class Sam3LiteTextMaskDecoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3LiteTextImageSegmentationOutput(ModelOutput):
     r"""
     pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height, width)`):
