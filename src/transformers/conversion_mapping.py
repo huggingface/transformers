@@ -63,7 +63,6 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "rt_detr_v2": "rt_detr",
     "pp_doclayout_v2": "rt_detr",
     "pp_doclayout_v3": "rt_detr",
-    "qwen2_5_vl": "qwen2_vl",
     "sam3_tracker_video": "sam3_tracker",
     "altclip_vision_model": "clip_vision_model",
     "chinese_clip_vision_model": "clip_vision_model",
@@ -103,8 +102,8 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "LlavaOnevisionModel": "LlavaModel",
     "FuyuModel": "LlavaModel",
     "MllamaModel": "LlavaModel",
-    "Qwen2_5_VLModel": "Qwen2VLModel",
     "MaskFormerDetrDecoder": "DetrModel",
+    "Qwen2_5_VLForConditionalGeneration": "Qwen2VLForConditionalGeneration",
 }
 
 
@@ -351,8 +350,7 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns="model.language_model",
             ),
         ],
-        "Qwen2VLModel": [],
-        "qwen2_vl": [
+        "Qwen2VLForConditionalGeneration": [
             WeightRenaming(source_patterns=r"^visual", target_patterns="model.visual"),
             WeightRenaming(
                 source_patterns=r"^model(?!\.(language_model|visual))", target_patterns="model.language_model"
@@ -878,8 +876,6 @@ def get_model_conversion_mapping(
     seen to prevent `XForY` / `XModel` pairs from applying the same mapping
     twice via different lookup paths.
     """
-    # Lazy import to avoid circular import issues
-
     # note: this function is used in PEFT, so changing the API requires coordination
     weight_conversions = []
 

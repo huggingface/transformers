@@ -468,7 +468,8 @@ def accelerate_disk_offload(
 
         # Update the weight names according to the `weight_mapping`
         weight_renaming_map = {
-            rename_source_key(k, transforms, model.base_model_prefix, meta_state_dict)[0]: k for k in weight_map
+            rename_source_key(k, transforms, prefix=model.base_model_prefix, meta_state_dict=meta_state_dict)[0]: k
+            for k in weight_map
         }
 
         # Prepare the index using existing safetensors files
