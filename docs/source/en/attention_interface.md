@@ -133,7 +133,7 @@ Customize or create new attention functions by adding them to the attention regi
 > [!WARNING]
 > If you register a new attention function, you likely also need to register a new attention _mask_ function. If you do not register a new attention _mask_ function, **the mask is set to `None`, i.e., completely ignored**. This could break your model in unexpected ways (e.g., by silently discarding Causal Masking).
 
-This example customizes the attention function to print a statement for each layer (and keeps whatever mask is used in the original implementation, by registering [`masking_utils.sdpa_mask`] as attention mask function):
+This example customizes the attention function to print a statement for each layer. It keeps the mask in the original implementation by registering `masking_utils.sdpa_mask` as the attention mask function.
 
 ```python
 import torch
