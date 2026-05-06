@@ -46,6 +46,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_attribute
 from ...utils.generic import TransformersKwargs, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...video_utils import VideoInput, make_batched_videos
@@ -1074,6 +1075,10 @@ class Qwen3OmniMoeThinkerTextModel(Qwen3VLMoeTextModel):
         self.rotary_emb = Qwen3OmniMoeThinkerTextRotaryEmbedding(config)
 
 
+@deprecate_attribute(
+    "rope_deltas", version="v5.20", additional_message="Please use `model.base_model.rope_deltas` instead."
+)
+@auto_docstring
 @dataclass
 class Qwen3OmniMoeThinkerCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
     r"""
