@@ -48,7 +48,7 @@ def use_gqa_in_sdpa(
     if _is_torch_xpu_available:
         return _is_torch_greater_or_equal_than_2_8
 
-    _is_torch_cuda_available = query.device.type == "cuda"
+    _is_torch_cuda_available = key.device.type == "cuda"
     if not _is_torch_cuda_available:
         return _is_torch_greater_or_equal_than_2_5 and attention_mask is None
 
