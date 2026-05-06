@@ -5,10 +5,7 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
-"""Region executor: a stream-first state machine that turns text into a
-message dict according to a response_template spec.
-
-The executor advances a single pointer through a growing buffer. At any point
+"""Response parsing walks a single pointer through a growing buffer. At any point
 there is a "current region" -- either the implicit/sink field (if the spec
 defined one), or an explicit field whose open pattern just matched -- and a
 watchlist of regex patterns whose match would end or redirect it. On each
@@ -26,7 +23,7 @@ import re
 from typing import Any
 
 from .content_parsers import process_field
-from .spec import Field, Spec, load_spec
+from .response_templates import ResponseTemplateField, ResponseTemplate, load_response_template
 
 
 # When a delimiter is specified as a regex, we can't reason exactly about how
@@ -35,7 +32,7 @@ from .spec import Field, Spec, load_spec
 _REGEX_STREAM_LOOKBACK = 64
 
 
-def parse_response(text: str, response_template: dict | Spec, *, prefix: str | None = None) -> dict:
+def parse_response(text: str, response_template: dict | ResponseTemplate, *, prefix: str | None = None) -> dict:
     """Whole-string parse: returns the assembled message dict.
 
     `prefix` is silently consumed up front to advance state without
@@ -44,7 +41,7 @@ def parse_response(text: str, response_template: dict | Spec, *, prefix: str | N
     suffix beginning past the last anchor — supporting the "pass the whole
     rendered conversation as one string" shape.
     """
-    spec_obj = load_spec(response_template)
+    spec_obj = load_response_template(response_template)
     if prefix is None and spec_obj.start_anchor_re is not None:
         text = spec_obj.truncate_past_last_anchor(text, log_if_missing=False)
     stream = ResponseEventStream(spec_obj, prefix=prefix)
@@ -95,8 +92,8 @@ class ResponseEventStream:
     `parse_response(response, ..., prefix=prefix)`.
     """
 
-    def __init__(self, response_template: dict | Spec, prefix: str | None = None):
-        self._spec = load_spec(response_template)
+    def __init__(self, response_template: dict | ResponseTemplate, prefix: str | None = None):
+        self._spec = load_response_template(response_template)
         self._buffer: str = ""
         self._pos: int = 0
         self._output: dict[str, Any] = dict(self._spec.defaults)
@@ -230,14 +227,14 @@ class ResponseEventStream:
 
     # --- watchlist helpers ---
 
-    def _watchlist(self) -> list[tuple[str, Field]]:
+    def _watchlist(self) -> list[tuple[str, ResponseTemplateField]]:
         """Patterns we care about right now: the close of the currently-open
         explicit region, or -- if we're in the implicit/null region -- every
         explicit open plus the implicit's own close (if any)."""
         if self._current is not None and self._current != self._implicit_name:
             fld = self._spec.fields[self._current]
             return [("close", fld)] if fld.close_re is not None else []
-        watch: list[tuple[str, Field]] = []
+        watch: list[tuple[str, ResponseTemplateField]] = []
         for fld in self._spec.fields.values():
             if fld.open_re is not None:
                 watch.append(("open", fld))
@@ -247,10 +244,10 @@ class ResponseEventStream:
                 watch.append(("close", impl))
         return watch
 
-    def _best_match(self, watch: list[tuple[str, Field]]) -> tuple[str, Field, re.Match] | None:
+    def _best_match(self, watch: list[tuple[str, ResponseTemplateField]]) -> tuple[str, ResponseTemplateField, re.Match] | None:
         """Earliest-starting (longest on ties, opens before closes) match."""
         best_key: tuple | None = None
-        best: tuple[str, Field, re.Match] | None = None
+        best: tuple[str, ResponseTemplateField, re.Match] | None = None
         for kind, fld in watch:
             regex = fld.open_re if kind == "open" else fld.close_re
             m = regex.search(self._buffer, self._pos)
@@ -261,7 +258,7 @@ class ResponseEventStream:
                 best_key, best = key, (kind, fld, m)
         return best
 
-    def _max_hold(self, watch: list[tuple[str, Field]]) -> int:
+    def _max_hold(self, watch: list[tuple[str, ResponseTemplateField]]) -> int:
         hold = 0
         for kind, fld in watch:
             literal = fld.open_lit if kind == "open" else fld.close_lit
@@ -288,7 +285,7 @@ class ResponseEventStream:
         if fld.content in ("text", "raw") and not self._prefill_mode:
             events.append({"type": "region_chunk", "field": self._current, "text": text})
 
-    def _open_explicit(self, events: list[dict], fld: Field, m: re.Match) -> None:
+    def _open_explicit(self, events: list[dict], fld: ResponseTemplateField, m: re.Match) -> None:
         self._current = fld.name
         self._captures = {k: v for k, v in m.groupdict().items() if v is not None}
         self._body = ""
@@ -328,7 +325,7 @@ def _is_empty(v: Any) -> bool:
     return v is None or (isinstance(v, (list, dict, str)) and not v)
 
 
-def _should_defer(fld: Field, m: re.Match, buf_len: int, is_open: bool) -> bool:
+def _should_defer(fld: ResponseTemplateField, m: re.Match, buf_len: int, is_open: bool) -> bool:
     """Whether a match that already succeeded should nonetheless be deferred
     until more input (or EOS) arrives. A match is "ambiguous at the edge" when
     it ends at the current buffer end and either (a) it was zero-width (`$`-alt
