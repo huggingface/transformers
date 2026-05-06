@@ -134,7 +134,7 @@ jobs:
               const content = line.replace(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z /, '');
             
               if (content.includes('##[group]') ) {
-                if (content.includes('Check failed tests')) {
+                if (content.includes('check_bad_commit.py')) {
                   inTargetStep = true;
                   stepDepth = 1;
                   continue;
