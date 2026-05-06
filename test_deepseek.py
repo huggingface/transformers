@@ -7,11 +7,10 @@ Drives both DeepGEMM dispatches against `deepseek-ai/DeepSeek-V4-Flash`
   2. `experts_implementation="deepgemm_megamoe"` — fused EP + L1 + SwiGLU + L2
                                                    (SM100+ only).
 
-Run on B200 with the local HF cache and torchrun. `HF_HUB_OFFLINE=1` keeps
-loading off the network so a cache populated by another user (read-only for us)
-still works.
+Run on B200 with a writable HF cache on the raid mount and torchrun. First run
+downloads the checkpoint (hundreds of GB).
 
-    HF_HUB_OFFLINE=1 HF_HOME=/raid/arthur \\
+    HF_HOME=/raid/ilyas \\
     CUDA_HOME=$HOME/cuda-12.9 \\
     torchrun --nproc_per_node=8 test_deepseek.py
 
@@ -56,7 +55,7 @@ def _run_one(dispatch: str, rank: int) -> None:
         tp_plan="auto",
         distributed_config=DistributedConfig(enable_expert_parallel=True),
         experts_implementation=dispatch,
-        torch_dtype=torch.bfloat16,
+        dtype=torch.bfloat16,
     )
     model.eval()
     tok = AutoTokenizer.from_pretrained(_CHECKPOINT)
