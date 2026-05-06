@@ -138,7 +138,7 @@ Pick the row that matches the model's processor + task head. Emit exactly these 
 | Tokenizer + `ForSeq2SeqLM` / `ForConditionalGeneration` | `"translate English to French: Hello, how are you?"` (or task-appropriate) | `tokenizer.decode(outputs[0], skip_special_tokens=True)` |
 | Tokenizer + `ForSequenceClassification` | `"I love this movie!"` | `model.config.id2label[outputs.logits.argmax(-1).item()]` |
 | Tokenizer + `ForTokenClassification` / `ForQuestionAnswering` | task-appropriate literal | `outputs.logits.shape` |
-| ImageProcessor + `ForImageClassification` | `Image.open(requests.get("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg", stream=True).raw)` | `model.config.id2label[outputs.logits.argmax(-1).item()]` |
+| ImageProcessor + `ForImageClassification` | `Image.open(BytesIO(httpx.get("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg").content))` | `model.config.id2label[outputs.logits.argmax(-1).item()]` |
 | ImageProcessor + other vision heads | same image load | `outputs.last_hidden_state.shape` or task-appropriate |
 | FeatureExtractor + `ForCTC` / `ForSpeechSeq2Seq` | `load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")[0]["audio"]` | `processor.batch_decode(outputs.logits.argmax(-1))[0]` for CTC, `processor.batch_decode(outputs, skip_special_tokens=True)[0]` for seq2seq |
 | Processor (multimodal image+text) | `[{"role": "user", "content": [{"type": "image", "url": "..."}, {"type": "text", "text": "What is in this image?"}]}]` with `processor.apply_chat_template(..., add_generation_prompt=True, tokenize=True, return_tensors="pt")` | `processor.decode(outputs[0], skip_special_tokens=True)` |
@@ -151,6 +151,14 @@ Apply to every code block in the doc — Quickstart, `## Usage examples`, and `#
 
 - Never set `dtype` or `torch_dtype`. `from_pretrained` and `pipeline` set it automatically. Strip it out
 - Always pass `device_map="auto"` to model `from_pretrained` calls. This is what makes the code work unchanged on single GPU, multi-GPU, MPS, and CPU. In any block, not just the Quickstart
+- For image loading from a URL, use `httpx` + `BytesIO` (never `requests`):
+  ```py
+  import httpx
+  from io import BytesIO
+
+  with httpx.stream("GET", url) as response:
+      image = Image.open(BytesIO(response.read()))
+  ```
 - Always chain `.to(model.device)` on prepared inputs:
   ```py
   inputs = tokenizer("...", return_tensors="pt").to(model.device)
