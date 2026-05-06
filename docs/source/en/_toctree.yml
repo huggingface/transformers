@@ -33,9 +33,14 @@
       - local: modeling_rules
         title: Model structure rules
       - local: modular_transformers
-        title: Contributing a new model to Transformers
-      - local: add_vision_processing_components
-        title: Add vision processing components
+        title: Contributing a new model
+      - title: Multimodal models
+        isExpanded: false
+        sections:
+        - local: multimodal_processing
+          title: Multimodal processors
+        - local: add_vision_processing_components
+          title: Vision processing components
       - local: model_output_tracing
         title: Tracing model intermediate outputs
       - local: auto_docstring
