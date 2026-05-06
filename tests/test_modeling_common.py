@@ -3361,6 +3361,8 @@ class ModelTesterMixin:
                         return outputs.decoder_hidden_states[-1]
                     elif "logits_per_image" in outputs:
                         return outputs.logits_per_image
+                    elif "logits_per_video" in outputs:
+                        return outputs.logits_per_video
                     else:
                         return outputs.logits
 

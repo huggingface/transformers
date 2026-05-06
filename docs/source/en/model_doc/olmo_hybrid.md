@@ -31,13 +31,14 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="text-generation",
     model="allenai/OLMo-Hybrid-7B",
+    device=0,
 )
 
 result = pipe("Plants create energy through a process known as")
@@ -46,9 +47,9 @@ print(result)
 
 </hfoption>
 <hfoption id="AutoModel">
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "allenai/Olmo-Hybrid-7B"

@@ -41,13 +41,12 @@ The example below demonstrates how to chat with the model with [`Pipeline`] or t
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="text-generation",
     model="google/gemma-2-9b",
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 
@@ -58,13 +57,12 @@ pipe("Explain quantum computing simply. ", max_new_tokens=50)
 <hfoption id="AutoModel">
 
 ```python
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b")
 model = AutoModelForCausalLM.from_pretrained(
     "google/gemma-2-9b",
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -74,7 +72,6 @@ input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 outputs = model.generate(**input_ids, max_new_tokens=32, cache_implementation="static")
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-
 ```
 
 </hfoption>
@@ -85,14 +82,13 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to int4.
 
 ```python
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
 
 quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-27b")
 model = AutoModelForCausalLM.from_pretrained(
     "google/gemma-2-27b",
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -108,6 +104,8 @@ Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/bl
 
 ```python
 from transformers.utils.attention_visualizer import AttentionMaskVisualizer
+
+
 visualizer = AttentionMaskVisualizer("google/gemma-2b")
 visualizer("You are an assistant. Make sure you print me")
 ```

@@ -39,14 +39,13 @@ The example below demonstrates how to transcribe speech into text with [`Pipelin
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="automatic-speech-recognition",
     model="UsefulSensors/moonshine-streaming-tiny",
-    dtype=torch.float16,
     device=0
 )
 pipe("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
@@ -55,15 +54,15 @@ pipe("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 from datasets import load_dataset
+
 from transformers import AutoProcessor, MoonshineStreamingForConditionalGeneration
+
 
 processor = AutoProcessor.from_pretrained("UsefulSensors/moonshine-streaming-tiny")
 model = MoonshineStreamingForConditionalGeneration.from_pretrained(
     "UsefulSensors/moonshine-streaming-tiny",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -71,7 +70,7 @@ model = MoonshineStreamingForConditionalGeneration.from_pretrained(
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 audio_sample = ds[0]["audio"]
 
-inputs = processor(audio_sample["array"], return_tensors="pt")
+inputs = processor(audio_sample["array"], return_tensors="pt").to(model.device)
 inputs = inputs.to(model.device)
 
 generated_ids = model.generate(**inputs, max_new_tokens=100)

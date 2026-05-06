@@ -56,6 +56,7 @@ A notable feature of VibeVoice ASR is its ability to transcribe multi-speaker co
 ```python
 from transformers import AutoProcessor, VibeVoiceAsrForConditionalGeneration
 
+
 model_id = "microsoft/VibeVoice-ASR-HF"
 processor = AutoProcessor.from_pretrained(model_id)
 model = VibeVoiceAsrForConditionalGeneration.from_pretrained(model_id, device_map="auto")
@@ -123,6 +124,7 @@ Below we transcribe an audio where the speaker (with a German accent) talks abou
 ```python
 from transformers import AutoProcessor, VibeVoiceAsrForConditionalGeneration
 
+
 model_id = "microsoft/VibeVoice-ASR-HF"
 processor = AutoProcessor.from_pretrained(model_id)
 model = VibeVoiceAsrForConditionalGeneration.from_pretrained(model_id, device_map="auto")
@@ -160,6 +162,7 @@ Batch inference is possible by passing a list of audio and, if provided, a list 
 ```python
 from transformers import AutoProcessor, VibeVoiceAsrForConditionalGeneration
 
+
 model_id = "microsoft/VibeVoice-ASR-HF"
 audio = [
     "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/realtime_model/vibevoice_tts_german.wav",
@@ -188,6 +191,7 @@ However, if chunks of 60 seconds are too large for your device, the `acoustic_to
 ```python
 from transformers import AutoProcessor, VibeVoiceAsrForConditionalGeneration
 
+
 acoustic_tokenizer_chunk_size = 64000    # default is 1440000 (60s @ 24kHz)
 model_id = "microsoft/VibeVoice-ASR-HF"
 audio = [
@@ -212,6 +216,7 @@ print(transcription)
 VibeVoice ASR also accepts chat template inputs (`apply_transcription_request` is actually a wrapper for `apply_chat_template` for convenience):
 ```python
 from transformers import AutoProcessor, VibeVoiceAsrForConditionalGeneration
+
 
 model_id = "microsoft/VibeVoice-ASR-HF"
 processor = AutoProcessor.from_pretrained(model_id)
@@ -261,6 +266,7 @@ VibeVoice ASR can be trained with the loss outputted by the model.
 
 ```python
 from transformers import AutoProcessor, VibeVoiceAsrForConditionalGeneration
+
 
 model_id = "microsoft/VibeVoice-ASR-HF"
 processor = AutoProcessor.from_pretrained(model_id)
@@ -312,8 +318,11 @@ loss.backward()
 The model can be compiled for faster inference/training.
 ```python
 import time
+
 import torch
+
 from transformers import AutoProcessor, VibeVoiceAsrForConditionalGeneration
+
 
 model_id = "microsoft/VibeVoice-ASR-HF"
 
@@ -322,7 +331,7 @@ num_runs = 20
 
 # Load processor + model
 processor = AutoProcessor.from_pretrained(model_id)
-model = VibeVoiceAsrForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16,).to("cuda")
+model = VibeVoiceAsrForConditionalGeneration.from_pretrained(model_id, device_map="cuda")
 
 # Prepare static inputs
 chat_template = [
@@ -397,6 +406,7 @@ The model can be used as a pipeline, but you will have to define your own method
 
 ```python
 from transformers import pipeline
+
 
 model_id = "microsoft/VibeVoice-ASR-HF"
 pipe = pipeline("any-to-any", model=model_id, device_map="auto")

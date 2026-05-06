@@ -47,8 +47,9 @@ This model was contributed by [Nithin Rao Koluguri](https://huggingface.co/nithi
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 from transformers import pipeline
+
 
 pipe = pipeline("automatic-speech-recognition", model="nvidia/parakeet-ctc-1.1b")
 out = pipe("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3")
@@ -58,15 +59,14 @@ print(out)
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-from transformers import AutoModelForCTC, AutoProcessor
-from datasets import load_dataset, Audio
-import torch
+```python
+from datasets import Audio, load_dataset
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+from transformers import AutoModelForCTC, AutoProcessor
+
 
 processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-1.1b")
-model = AutoModelForCTC.from_pretrained("nvidia/parakeet-ctc-1.1b", dtype="auto", device_map=device)
+model = AutoModelForCTC.from_pretrained("nvidia/parakeet-ctc-1.1b", device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -86,14 +86,14 @@ print(processor.batch_decode(outputs))
 Parakeet supports full-graph compilation with CUDA graphs! This optimization is most effective when you know the maximum audio length you want to transcribe. The key idea is using static input shapes to avoid recompilation. For example, if you know your audio will be under 30 seconds, you can use the processor to pad all inputs to 30 seconds, preparing consistent input features and attention masks. See the example below!
 
 ```python
-from transformers import AutoModelForCTC, AutoProcessor
-from datasets import load_dataset, Audio
 import torch
+from datasets import Audio, load_dataset
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+from transformers import AutoModelForCTC, AutoProcessor
+
 
 processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-1.1b")
-model = AutoModelForCTC.from_pretrained("nvidia/parakeet-ctc-1.1b", dtype="auto", device_map=device)
+model = AutoModelForCTC.from_pretrained("nvidia/parakeet-ctc-1.1b", device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -114,7 +114,7 @@ class TimerContext:
         self.name = name
         self.start_event = None
         self.end_event = None
-        
+
     def __enter__(self):
         # Use CUDA events for more accurate GPU timing
         self.start_event = torch.cuda.Event(enable_timing=True)
@@ -130,7 +130,7 @@ class TimerContext:
 
 
 inputs = processor(speech_samples[0], **processor_kwargs)
-inputs.to(device, dtype=model.dtype)
+inputs.to(model.device, dtype=model.dtype)
 print("\n" + "="*50)
 print("First generation - compiling...")
 # Generate with the compiled model
@@ -139,7 +139,7 @@ with TimerContext("First generation"):
 print(processor.batch_decode(outputs))
 
 inputs = processor(speech_samples[1], **processor_kwargs)
-inputs.to(device, dtype=model.dtype)
+inputs.to(model.device, dtype=model.dtype)
 print("\n" + "="*50)
 print("Second generation - recording CUDA graphs...")
 with TimerContext("Second generation"):
@@ -147,7 +147,7 @@ with TimerContext("Second generation"):
 print(processor.batch_decode(outputs))
 
 inputs = processor(speech_samples[2], **processor_kwargs)
-inputs.to(device, dtype=model.dtype)
+inputs.to(model.device, dtype=model.dtype)
 print("\n" + "="*50)
 print("Third generation - fast !!!")
 with TimerContext("Third generation"):
@@ -155,7 +155,7 @@ with TimerContext("Third generation"):
 print(processor.batch_decode(outputs))
 
 inputs = processor(speech_samples[3], **processor_kwargs)
-inputs.to(device, dtype=model.dtype)
+inputs.to(model.device, dtype=model.dtype)
 print("\n" + "="*50)
 print("Fourth generation - still fast !!!")
 with TimerContext("Fourth generation"):
@@ -166,14 +166,13 @@ print(processor.batch_decode(outputs))
 ### Training
 
 ```python
-from transformers import AutoModelForCTC, AutoProcessor
-from datasets import load_dataset, Audio
-import torch
+from datasets import Audio, load_dataset
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+from transformers import AutoModelForCTC, AutoProcessor
+
 
 processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-1.1b")
-model = AutoModelForCTC.from_pretrained("nvidia/parakeet-ctc-1.1b", dtype="auto", device_map=device)
+model = AutoModelForCTC.from_pretrained("nvidia/parakeet-ctc-1.1b", device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -182,7 +181,7 @@ text_samples = [el for el in ds["text"][:5]]
 
 # passing `text` to the processor will prepare inputs' `labels` key
 inputs = processor(audio=speech_samples, text=text_samples, sampling_rate=processor.feature_extractor.sampling_rate)
-inputs.to(device, dtype=model.dtype)
+inputs.to(model.device, dtype=model.dtype)
 
 outputs = model(**inputs)
 outputs.loss.backward()

@@ -36,14 +36,13 @@ The example below demonstrates how to predict the `<mask>` token with [`Pipeline
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="fill-mask",
     model="FacebookAI/roberta-base",
-    dtype=torch.float16,
     device=0
 )
 pipeline("Plants create <mask> through a process known as photosynthesis.")
@@ -52,16 +51,17 @@ pipeline("Plants create <mask> through a process known as photosynthesis.")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForMaskedLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "FacebookAI/roberta-base",
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "FacebookAI/roberta-base",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
