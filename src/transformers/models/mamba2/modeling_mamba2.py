@@ -691,8 +691,8 @@ class Mamba2PreTrainedModel(PreTrainedModel):
     Class for the MAMBA2 model outputs.
     """
 )
-# Copied from transformers.models.mamba.modeling_mamba.MambaOutput with MAMBA->MAMBA2,Mamba->Mamba2
 @dataclass
+# Copied from transformers.models.mamba.modeling_mamba.MambaOutput with MAMBA->MAMBA2,Mamba->Mamba2
 class Mamba2Output(ModelOutput):
     r"""
     cache_params (`Cache`):
@@ -712,8 +712,8 @@ class Mamba2Output(ModelOutput):
     Base class for causal language model (or autoregressive) outputs.
     """
 )
-# Copied from transformers.models.mamba.modeling_mamba.MambaCausalLMOutput with Mamba->Mamba2
 @dataclass
+# Copied from transformers.models.mamba.modeling_mamba.MambaCausalLMOutput with Mamba->Mamba2
 class Mamba2CausalLMOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

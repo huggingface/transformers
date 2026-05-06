@@ -522,8 +522,8 @@ class MegatronBertPreTrainedModel(PreTrainedModel):
     Output type of [`MegatronBertForPreTraining`].
     """
 )
-# Copied from transformers.models.bert.modeling_bert.BertForPreTrainingOutput with Bert->MegatronBert
 @dataclass
+# Copied from transformers.models.bert.modeling_bert.BertForPreTrainingOutput with Bert->MegatronBert
 class MegatronBertForPreTrainingOutput(ModelOutput):
     r"""
     loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):

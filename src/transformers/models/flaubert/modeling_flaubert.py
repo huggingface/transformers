@@ -235,8 +235,8 @@ class FlaubertPredLayer(nn.Module):
     Base class for outputs of question answering models using a [`~modeling_utils.FlaubertSQuADHead`].
     """
 )
-# Copied from transformers.models.xlm.modeling_xlm.XLMSquadHeadOutput with XLM->Flaubert
 @dataclass
+# Copied from transformers.models.xlm.modeling_xlm.XLMSquadHeadOutput with XLM->Flaubert
 class FlaubertSquadHeadOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):
@@ -1359,8 +1359,8 @@ class FlaubertForQuestionAnsweringSimple(FlaubertPreTrainedModel):
     Base class for outputs of question answering models using a `SquadHead`.
     """
 )
-# Copied from transformer.models.xlm.modeling_xlm.XLMForQuestionAnsweringOutput with XLM->Flaubert
 @dataclass
+# Copied from transformer.models.xlm.modeling_xlm.XLMForQuestionAnsweringOutput with XLM->Flaubert
 class FlaubertForQuestionAnsweringOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):

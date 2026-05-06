@@ -58,8 +58,8 @@ logger = logging.get_logger(__name__)
     Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
     """
 )
-# Copied from transformers.models.clip.modeling_clip.CLIPVisionModelOutput with CLIP->Git
 @dataclass
+# Copied from transformers.models.clip.modeling_clip.CLIPVisionModelOutput with CLIP->Git
 class GitVisionModelOutput(ModelOutput):
     r"""
     image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):

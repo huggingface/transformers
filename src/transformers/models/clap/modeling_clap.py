@@ -112,8 +112,8 @@ def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     Base class for text model's outputs that also contains a pooling of the last hidden states.
     """
 )
-# Copied from transformers.models.clip.modeling_clip.CLIPTextModelOutput with CLIP->Clap
 @dataclass
+# Copied from transformers.models.clip.modeling_clip.CLIPTextModelOutput with CLIP->Clap
 class ClapTextModelOutput(ModelOutput):
     r"""
     text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):

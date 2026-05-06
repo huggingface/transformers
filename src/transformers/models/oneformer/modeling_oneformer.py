@@ -765,8 +765,8 @@ class OneFormerTransformerDecoderOutput(BaseModelOutput):
     the mask features and the multiscale features.
     """
 )
-# Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerPixelDecoderOutput with Mask2->One
 @dataclass
+# Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerPixelDecoderOutput with Mask2->One
 class OneFormerPixelDecoderOutput(ModelOutput):
     r"""
     multi_scale_features (`tuple(torch.FloatTensor)`):

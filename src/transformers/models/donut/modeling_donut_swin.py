@@ -39,8 +39,8 @@ logger = logging.get_logger(__name__)
     DonutSwin encoder's outputs, with potential hidden states and attentions.
     """
 )
-# Copied from transformers.models.swin.modeling_swin.SwinEncoderOutput with Swin->DonutSwin
 @dataclass
+# Copied from transformers.models.swin.modeling_swin.SwinEncoderOutput with Swin->DonutSwin
 class DonutSwinEncoderOutput(ModelOutput):
     r"""
     reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
@@ -62,8 +62,8 @@ class DonutSwinEncoderOutput(ModelOutput):
     DonutSwin model's outputs that also contains a pooling of the last hidden states.
     """
 )
-# Copied from transformers.models.swin.modeling_swin.SwinModelOutput with Swin->DonutSwin
 @dataclass
+# Copied from transformers.models.swin.modeling_swin.SwinModelOutput with Swin->DonutSwin
 class DonutSwinModelOutput(ModelOutput):
     r"""
     pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*, returned when `add_pooling_layer=True` is passed):
@@ -88,8 +88,8 @@ class DonutSwinModelOutput(ModelOutput):
     DonutSwin outputs for image classification.
     """
 )
-# Copied from transformers.models.swin.modeling_swin.SwinImageClassifierOutput with Swin->DonutSwin
 @dataclass
+# Copied from transformers.models.swin.modeling_swin.SwinImageClassifierOutput with Swin->DonutSwin
 class DonutSwinImageClassifierOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

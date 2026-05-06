@@ -1078,8 +1078,8 @@ class LEDPreTrainedModel(PreTrainedModel):
     Base class for LEDEncoder's outputs, with potential hidden states, local and global attentions.
     """
 )
-# Copied from transformers.models.longformer.modeling_longformer.LongformerBaseModelOutput with Longformer->LEDEncoder
 @dataclass
+# Copied from transformers.models.longformer.modeling_longformer.LongformerBaseModelOutput with Longformer->LEDEncoder
 class LEDEncoderBaseModelOutput(ModelOutput):
     r"""
     attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
