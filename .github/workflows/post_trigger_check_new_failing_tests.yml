@@ -193,9 +193,6 @@ jobs:
                   endSha = match[1].trim();
                   break;
                 }
-                if (content.trim() && !content.startsWith('    ')) {
-                  inEnvBlock = false;
-                }
               }
             }
 
