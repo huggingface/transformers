@@ -251,7 +251,7 @@ def _pad_for_deepgemm(x: torch.Tensor, sorted_to_padded: torch.Tensor, total_pad
     the GEMM. With zeros: FP8 acts → 0, float SF → 0, UE8M0 SF → byte 0 — dot
     product on padding rows is 0, harmless.
     """
-    padded = torch.zeros(total_padded_rows, *x.shape[1:], device=x.device, dtype=x.dtype)
+    padded = torch.empty(total_padded_rows, *x.shape[1:], device=x.device, dtype=x.dtype)
     padded[sorted_to_padded] = x
     return padded
 
