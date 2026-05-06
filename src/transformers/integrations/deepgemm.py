@@ -183,11 +183,6 @@ def _coerce_sf_for_kernel(sf: torch.Tensor) -> torch.Tensor:
         # view(int32) requires the source contiguous (4 K-bytes adjacent).
         sf = sf.contiguous().view(torch.int32)
 
-    # A/B: skip the MN-major rewrite for float SF — the kernel re-lays it out
-    # itself via `transform_sf_into_required_layout` (broadcast + pack).
-    if sf.dtype == torch.float32:
-        return sf.contiguous()
-
     if sf.dim() not in (2, 3):
         raise ValueError(f"DeepGEMM SF must be 2D or 3D, got {sf.dim()}D")
 
