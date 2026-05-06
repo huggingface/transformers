@@ -39,8 +39,6 @@
           title: Multimodal processors
         - local: add_vision_processing_components
           title: Vision processing components
-      - local: add_vision_processing_components
-        title: Add vision processing components
       - local: modeling_rules
         title: Model structure rules
       - local: model_output_tracing
