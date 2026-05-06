@@ -449,9 +449,23 @@ def deepgemm_fp8_fp4_experts_forward(
     act_fp8 = _pad_for_deepgemm(act_fp8, sorted_to_padded, total_padded_rows)
     act_scales = _pad_for_deepgemm(act_scales, sorted_to_padded, total_padded_rows)
     proj_out = torch.empty(total_padded_rows, w_up.shape[1], device=device, dtype=torch.bfloat16)
+    a_sf = _coerce_sf_for_kernel(act_scales)
+    b_sf = _coerce_sf_for_kernel(ws_up)
+    import os as _os
+    if _os.environ.get("RANK", "0") == "0" and not getattr(self, "_dg_shape_logged", False):
+        print(
+            f"[deepgemm.fp8_fp4] recipe={sf_recipe} use_psum={use_psum_layout}\n"
+            f"  a_fp8.shape={tuple(act_fp8.shape)} dtype={act_fp8.dtype}\n"
+            f"  a_sf.shape={tuple(a_sf.shape)} stride={tuple(a_sf.stride())} dtype={a_sf.dtype}\n"
+            f"  b.shape={tuple(w_up.shape)} dtype={w_up.dtype}\n"
+            f"  b_sf.shape={tuple(b_sf.shape)} stride={tuple(b_sf.stride())} dtype={b_sf.dtype}\n"
+            f"  raw ws_up.shape={tuple(ws_up.shape)} dtype={ws_up.dtype}",
+            flush=True,
+        )
+        self._dg_shape_logged = True
     deepgemm.grouped_fp8_fp4_matmul(
-        (act_fp8, _coerce_sf_for_kernel(act_scales)),
-        (w_up, _coerce_sf_for_kernel(ws_up)),
+        (act_fp8, a_sf),
+        (w_up, b_sf),
         proj_out,
         grouped_layout,
         recipe=sf_recipe,
