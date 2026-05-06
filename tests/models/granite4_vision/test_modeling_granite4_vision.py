@@ -41,6 +41,7 @@ from ...vlm_tester import VLMModelTest, VLMModelTester
 if is_torch_available():
     import torch
 
+
 class Granite4VisionModelTester(VLMModelTester):
     base_model_class = Granite4VisionModel
     config_class = Granite4VisionConfig
