@@ -245,10 +245,10 @@ def test_megamoe(device: torch.device, world_size: int, rank: int) -> None:
     raw = _make_fp4_experts(E_local, H, I, device)
     # Mega MoE requires SFs already packed as int32 UE8M0 (it transposes them for UTCCP).
     gate_up_sf_packed = deepgemm.transform_sf_into_required_layout(
-        raw.gate_up_proj_scale_inv, 2 * I, H, recipe=(1, 32), num_groups=E_local
+        raw.gate_up_proj_scale_inv.float(), 2 * I, H, recipe=(1, 32), num_groups=E_local
     )
     down_sf_packed = deepgemm.transform_sf_into_required_layout(
-        raw.down_proj_scale_inv, H, I, recipe=(1, 32), num_groups=E_local
+        raw.down_proj_scale_inv.float(), H, I, recipe=(1, 32), num_groups=E_local
     )
     (gate_up_t, gate_up_sf_t), (down_t, down_sf_t) = deepgemm.transform_weights_for_mega_moe(
         (raw.gate_up_proj, gate_up_sf_packed),
