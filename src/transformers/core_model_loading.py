@@ -778,6 +778,9 @@ class WeightTransform:
     def transform_model(self, model: PreTrainedModel, layer_name: str) -> None:
         """
         Analogous to `convert` but restructures `model`'s module graph rather than operating on tensor data.
+
+        Must be idempotent, i.e. if called multiple times on the same `model` and `layer_name`, only the first call
+        should have an effect.
         """
         ...
 
@@ -831,6 +834,16 @@ class WeightRenaming(WeightTransform):
 
         source_mod_path, _, source_attr = source_name.rpartition(".")
         target_mod_path, _, target_attr = layer_name.rpartition(".")
+
+        # Idempotency guard: if the target already holds the parameter/buffer, the
+        # model is already in the correct shape (e.g. from monkey-patching before
+        # from_pretrained). Nothing to move.
+        try:
+            target_mod = model.get_submodule(target_mod_path) if target_mod_path else model
+            if target_attr in target_mod._parameters or target_attr in target_mod._buffers:
+                return
+        except AttributeError:
+            pass
 
         try:
             source_mod = model.get_submodule(source_mod_path) if source_mod_path else model
@@ -978,6 +991,16 @@ class WeightConverter(WeightTransform):
         source_names = list(self.layer_targets.get(layer_name, []))
         if not source_names:
             return
+
+        # Idempotency guard: if the first target parameter already exists, the model is
+        # already in the correct shape. Nothing to convert.
+        t_mod_path, _, t_attr = layer_name.rpartition(".")
+        try:
+            t_mod = model.get_submodule(t_mod_path) if t_mod_path else model
+            if t_attr in t_mod._parameters or t_attr in t_mod._buffers:
+                return
+        except AttributeError:
+            pass
 
         collected_tensors = self.materialize_tensors()
 
