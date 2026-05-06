@@ -99,6 +99,15 @@ class PeAudioPreTrainedModel(PeAudioVideoPreTrainedModel):
 )
 @dataclass
 class PeAudioEncoderOutput(BaseModelOutputWithPooling):
+    r"""
+    codec_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        Features extracted from the codec encoder, used as intermediate representations before the main encoder
+        processing.
+    output_mask (`tuple(torch.FloatTensor)`, *optional*):
+        Tuple of `torch.FloatTensor` masks corresponding to the encoder outputs, used to avoid performing attention
+        on padded regions.
+    """
+
     codec_features: torch.FloatTensor | None = None
     output_mask: tuple[torch.FloatTensor] | None = None
 
