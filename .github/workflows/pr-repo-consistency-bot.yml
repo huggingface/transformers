@@ -265,7 +265,6 @@ jobs:
     if: always()
     permissions:
       pull-requests: write
-      contents: write
     steps:
       - name: Download modified files
         if: needs.run-repo-consistency-checks.outputs.changes_detected == 'true'
@@ -273,13 +272,26 @@ jobs:
         with:
           name: modified-files
 
+      - name: Extract fork repo name
+        id: fork_info
+        run: echo "repo=$(echo '${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}' | cut -d'/' -f2)" >> $GITHUB_OUTPUT
+
+      - name: Generate bot token
+        id: generate_token
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3  # v1
+        with:
+          app-id: ${{ secrets.HF_BOT_STYLE_APP_ID }}
+          private-key: ${{ secrets.HF_BOT_STYLE_SECRET_PEM }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+
       - name: Push changes to fork using git
         if: needs.run-repo-consistency-checks.outputs.changes_detected == 'true'
         env:
           PR_HEAD_REF: ${{ needs.get-pr-info.outputs.PR_HEAD_REF }}
           PR_HEAD_SHA: ${{ needs.check-timestamps.outputs.VERIFIED_PR_HEAD_SHA }}
           PR_HEAD_REPO_FULL_NAME: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
-          GITHUB_TOKEN: ${{ secrets.HF_STYLE_BOT_ACTION }}
+          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
         run: |
           # Initialize a fresh git repository for pushing
           mkdir push-repo
@@ -322,7 +334,7 @@ jobs:
           if [ -n "$(git status --porcelain)" ]; then
             git add .
             git commit -m "Apply repo consistency fixes"
-            git push origin HEAD:${PR_HEAD_REF}
+            git -c lfs.locksverify=false push origin HEAD:${PR_HEAD_REF}
             echo "✅ Changes pushed successfully"
           else
             echo "No changes to commit"
