@@ -136,5 +136,6 @@ class PPOCRV6SmallRecForTextRecognition(PPOCRV5ServerRecForTextRecognition):
 __all__ = [
     "PPOCRV6SmallRecForTextRecognition",
     "PPOCRV6SmallRecConfig",
+    "PPOCRV6SmallRecModel",
     "PPOCRV6SmallRecEncoderWithSVTR",
 ]

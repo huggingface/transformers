@@ -268,7 +268,7 @@ class PPLCNetV4DepthwiseSeparableConvLayer(nn.Module):
                 in_channels=in_channels, out_channels=in_channels * 2, kernel_size=1, stride=1, activation=None
             )
         )
-        self.channel_mixer.append(ACT2FN[config.hidden_act])
+        self.channel_mixer.append(ACT2FN["gelu"])
         self.channel_mixer.append(
             PPLCNetV4ConvLayer(
                 in_channels=in_channels * 2, out_channels=out_channels, kernel_size=1, stride=1, activation=None

@@ -69,7 +69,7 @@ class PPLCNetV4Config(PPLCNetConfig):
     stem_channels: list[int] | tuple[int, ...] = (3, 48, 96)
     stem_strides: Sequence[int | list[int] | tuple[int, ...]] = (2, 1, 1, 2, 1)
     stem_type: str = "large"
-    hidden_act: str = "gelu"
+    hidden_act: str = "relu"
     use_learnable_affine_block: bool = False
 
     divisor = AttributeError()
@@ -88,7 +88,7 @@ class PPLCNetV4Config(PPLCNetConfig):
                 [[3, 96, 96, 1, False], [3, 96, 96, 1, False]],
                 # Stage 3 (blocks4)
                 [
-                    [3, 96, 192, (2, 1), False],
+                    [3, 96, 192, [2, 1], False],
                     [3, 192, 192, 1, True],
                     [3, 192, 192, 1, False],
                     [3, 192, 192, 1, True],
@@ -98,7 +98,7 @@ class PPLCNetV4Config(PPLCNetConfig):
                 ],
                 # Stage 4 (blocks5)
                 [
-                    [3, 192, 384, (2, 1), False],
+                    [3, 192, 384, [2, 1], False],
                     [3, 384, 384, 1, True],
                     [3, 384, 384, 1, False],
                 ],
@@ -215,7 +215,7 @@ class PPLCNetV4DepthwiseSeparableConvLayer(nn.Module):
                 in_channels=in_channels, out_channels=in_channels * 2, kernel_size=1, stride=1, activation=None
             )
         )
-        self.channel_mixer.append(ACT2FN[config.hidden_act])
+        self.channel_mixer.append(ACT2FN["gelu"])
         self.channel_mixer.append(
             PPLCNetV4ConvLayer(
                 in_channels=in_channels * 2, out_channels=out_channels, kernel_size=1, stride=1, activation=None

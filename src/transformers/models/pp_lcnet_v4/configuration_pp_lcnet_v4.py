@@ -64,7 +64,7 @@ class PPLCNetV4Config(BackboneConfigMixin, PreTrainedConfig):
     block_configs: list | None = None
     stem_channels: list[int] | tuple[int, ...] = (3, 48, 96)
     reduction: int = 4
-    hidden_act: str = "gelu"
+    hidden_act: str = "relu"
     _out_features: list[str] | None = None
     _out_indices: list[int] | None = None
 
@@ -84,7 +84,7 @@ class PPLCNetV4Config(BackboneConfigMixin, PreTrainedConfig):
                 [[3, 96, 96, 1, False], [3, 96, 96, 1, False]],
                 # Stage 3 (blocks4)
                 [
-                    [3, 96, 192, (2, 1), False],
+                    [3, 96, 192, [2, 1], False],
                     [3, 192, 192, 1, True],
                     [3, 192, 192, 1, False],
                     [3, 192, 192, 1, True],
@@ -94,7 +94,7 @@ class PPLCNetV4Config(BackboneConfigMixin, PreTrainedConfig):
                 ],
                 # Stage 4 (blocks5)
                 [
-                    [3, 192, 384, (2, 1), False],
+                    [3, 192, 384, [2, 1], False],
                     [3, 384, 384, 1, True],
                     [3, 384, 384, 1, False],
                 ],
