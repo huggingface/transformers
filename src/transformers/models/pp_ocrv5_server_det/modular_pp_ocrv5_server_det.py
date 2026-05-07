@@ -429,14 +429,6 @@ class PPOCRV5ServerDetImageProcessor(TorchvisionBackend):
         resize_height = max(int(round(resize_height / 32) * 32), 32)
         resize_width = max(int(round(resize_width / 32) * 32), 32)
 
-        if resize_height == height and resize_width == width:
-            return SizeDict(height=resize_height, width=resize_width), torch.tensor(
-                [height, width], dtype=torch.float32, device=image.device
-            )
-
-        if resize_width <= 0 or resize_height <= 0:
-            return None, (None, None)
-
         return SizeDict(height=resize_height, width=resize_width), torch.tensor(
             [height, width], dtype=torch.float32, device=image.device
         )

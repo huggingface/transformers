@@ -22,7 +22,6 @@ from ...image_utils import (
     IMAGENET_STANDARD_STD,
     PILImageResampling,
     SizeDict,
-    pil_torch_interpolation_mapping,
 )
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, is_torchvision_available, logging
@@ -148,21 +147,6 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         Returns:
             `torch.Tensor`: The resized video.
         """
-        if resample is not None:
-            if isinstance(resample, (PILImageResampling, int)):
-                interpolation = pil_torch_interpolation_mapping[resample]
-            else:
-                interpolation = resample
-        else:
-            interpolation = tvF.InterpolationMode.BILINEAR
-        if interpolation == tvF.InterpolationMode.LANCZOS:
-            logger.warning_once(
-                "You have used fast image processor with LANCZOS resample which not yet supported for torch.Tensor. "
-                "BICUBIC resample will be used as an alternative. Please fall back to image processor if you "
-                "want full consistency with the original model."
-            )
-            interpolation = tvF.InterpolationMode.BICUBIC
-
         if size.longest_edge:
             # Resize the image so that the shortest edge or the longest edge is of the given size
             # while maintaining the aspect ratio of the original image.
@@ -175,12 +159,14 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         else:
             raise ValueError(f"Size must contain 'height' and 'width' keys, or 'longest_edge' key. Got {size}.")
 
-        video = tvF.resize(video, new_size, interpolation=interpolation, antialias=antialias)
+        video = super().resize(
+            video, SizeDict(height=new_size[0], width=new_size[1]), resample=resample, antialias=antialias
+        )
 
         # Resize again to match image processor when `do_image_splitting=False`. Frames have to be squared to `max_image_size`
-        # NOTE: videos are always processoed without image splitting
-        max_size = self.max_image_size["longest_edge"], self.max_image_size["longest_edge"]
-        video = tvF.resize(video, max_size, interpolation=interpolation, antialias=antialias)
+        # NOTE: videos are always processed without image splitting
+        max_size = SizeDict(height=self.max_image_size["longest_edge"], width=self.max_image_size["longest_edge"])
+        video = super().resize(video, max_size, resample=resample, antialias=antialias)
         return video
 
     def pad(

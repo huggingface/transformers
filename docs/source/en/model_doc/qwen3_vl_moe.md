@@ -31,13 +31,12 @@ Model usage
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py
-import torch
-from transformers import Qwen3VLMoeForConditionalGeneration, AutoProcessor
+```python
+from transformers import AutoProcessor, Qwen3VLMoeForConditionalGeneration
+
 
 model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
     "Qwen/Qwen3-VL-Moe",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -84,6 +83,10 @@ print(output_text)
 ## Qwen3VLMoeConfig
 
 [[autodoc]] Qwen3VLMoeConfig
+
+## Qwen3VLMoeVisionConfig
+
+[[autodoc]] Qwen3VLMoeVisionConfig
 
 ## Qwen3VLMoeTextConfig
 

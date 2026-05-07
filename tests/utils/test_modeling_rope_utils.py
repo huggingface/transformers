@@ -36,8 +36,11 @@ class RopeTest(unittest.TestCase):
         # The base config is always valid (default RoPE)
         config.validate_rope()
 
-        # If we explicitly set the other RoPE types, then validation should fail
+        # If we explicitly set the other (non-default) RoPE types with only rope_theta,
+        # validation should fail because required keys are missing (e.g. factor, short_factor)
         for rope_type in all_rope_types:
+            if rope_type == "default":
+                continue  # "default" is always valid with just rope_theta
             # proportional is same as default wrt to expected keys
             if rope_type == "proportional":
                 continue
@@ -55,6 +58,8 @@ class RopeTest(unittest.TestCase):
             "long_factor": ["longrope"],
         }
         for rope_type in all_rope_types:
+            if rope_type == "default":
+                continue  # "default" only warns about unrecognised keys, never raises KeyError
             # proportional is same as default wrt to expected keys
             if rope_type == "proportional":
                 continue

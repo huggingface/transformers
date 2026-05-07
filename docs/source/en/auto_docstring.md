@@ -14,24 +14,36 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Documenting a model
+# Auto-generating docstrings
 
-The `@auto_docstring` decorator in Transformers generates consistent docstrings for model classes and their methods. It reduces boilerplate by automatically including standard argument descriptions while also allowing overrides to add new or custom arguments. [Contributing a new model](./modular_transformers) is easier because you don't need to manually add the standard docstrings, and only focus on documenting new arguments.
-
-This guide describes how to use the `@auto_docstring` decorator and how it works.
+The `@auto_docstring` decorator generates consistent docstrings for model classes and methods. It pulls in standard argument descriptions automatically, so you only write documentation for new or custom arguments. When [adding a new model](./modular_transformers), skip the boilerplate and focus on what's new.
 
 ## @auto_docstring
 
-Start by importing the decorator in the modeling file (`modular_model.py` or `modeling_model.py`).
+Import the decorator in your `modular_model.py` file (or `modeling_model.py` for older models).
 
 ```python
 from ...utils import auto_docstring
 ```
 
-Select whether you'd like to apply `@auto_docstring` to a class or function below to see how to use it.
+If your model inherits from another library model in a modular file, `@auto_docstring` is already applied in the parent. `make fix-repo` copies it into the generated `modeling_model.py` file for you. Only apply the decorator explicitly to customize its behavior (standalone models, custom intros, or overridden arguments).
 
-<hfoptions id="type">
-<hfoption id="model classes">
+> [!WARNING]
+> When overriding any decorator in a modular file, include **all** decorators from the parent function or class. If you only override some, the rest won't appear in the generated modeling file.
+
+The decorator accepts the following optional arguments:
+
+| argument | description |
+|---|---|
+| `custom_intro` | A description of the class or method, inserted before the Args section. Required for classes that don't end with a [recognized suffix](#how-it-works) like `ForCausalLM` or `ForTokenClassification`. |
+| `custom_args` | Docstring text for specific parameters. Useful when the same custom arguments appear in several places in the modeling file. |
+| `checkpoint` | A model checkpoint identifier (`"org/my-model"`) used to generate usage examples. Overrides the checkpoint auto-inferred from the config class. Typically set on config classes. |
+
+## Usage
+
+How `@auto_docstring` works depends on what you're decorating. Model classes pull parameter docs from `__init__`, config classes pull from class-level annotations, processor classes auto-generate intros from their components, and methods like `forward` get return types and usage examples.
+
+### Model classes
 
 Place `@auto_docstring` directly above the class definition. The decorator derives parameter descriptions from the `__init__` method's signature and docstring.
 
@@ -56,7 +68,7 @@ class MyAwesomeModel(PreTrainedModel):
     # ... other methods
 ```
 
-Arguments can also be passed directly to `@auto_docstring` for more control. Use the `custom_intro` parameter to describe the argument and the `custom_args` parameter to describe the arguments.
+Pass `custom_intro` and `custom_args` for more control. Custom arguments can go in `custom_args` or in the `__init__` docstring. Use `custom_args` when the same arguments repeat across several methods.
 
 ```python
 @auto_docstring(
@@ -74,25 +86,7 @@ class MySpecialModel(PreTrainedModel):
         # ...
 ```
 
-You can also choose to only use `custom_intro` and define the custom arguments directly in the class.
-
-```python
-@auto_docstring(
-    custom_intro="""This model performs specific synergistic operations.
-    It builds upon the standard Transformer architecture with unique modifications.""",
-)
-class MySpecialModel(PreTrainedModel):
-    def __init__(self, config: ConfigType, custom_parameter: "type" = "default_value", internal_helper_arg=None):
-        r"""
-        custom_parameter (`type`, *optional*, defaults to `default_value`):
-            A concise description for custom_parameter if not defined or overriding the description in `auto_docstring.py`.
-        internal_helper_arg (`type`, *optional*, defaults to `default_value`):
-            A concise description for internal_helper_arg if not defined or overriding the description in `auto_docstring.py`.
-        """
-        # ...
-```
-
-You should also use the `@auto_docstring` decorator for classes that inherit from [`~utils.ModelOutput`].
+Also apply `@auto_docstring` to classes that inherit from [`~utils.ModelOutput`].
 
 ```python
 @dataclass
@@ -109,8 +103,8 @@ class MyModelOutput(ImageClassifierOutput):
         A custom output field specific to this model.
     """
 
-    # Standard fields like hidden_states, logits, attentions etc. can be automatically documented if the description is the same as the standard arguments.
-    # However, given that the loss docstring is often different per model, you should document it in the docstring above.
+    # Standard fields (hidden_states, logits, attentions, etc.) are documented automatically when
+    # the description matches the standard text. Loss typically varies per model, so document it above.
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
@@ -119,10 +113,11 @@ class MyModelOutput(ImageClassifierOutput):
     custom_field: Optional[torch.FloatTensor] = None
 ```
 
-</hfoption>
-<hfoption id="config classes">
+### Config classes
 
-Place `@auto_docstring` directly above a `PreTrainedConfig` subclass, alongside `@strict` from `huggingface_hub.dataclasses`. Config parameters are declared as **class-level annotations** (not as `__init__` arguments) — the `@strict` dataclass pattern used throughout Transformers. The class docstring documents model-specific parameters and optionally a usage example.
+Place `@auto_docstring` directly above a [`PreTrainedConfig`] subclass, alongside the `@strict` decorator. `@strict` adds runtime type validation and turns the class into a validated dataclass. Config parameters are *class-level annotations* (not `__init__` arguments), and `@auto_docstring` reads them from the class body to generate docs.
+
+[`ConfigArgs`] provides standard parameters like `vocab_size`, `hidden_size`, and `num_hidden_layers`, so they don't need a description unless the behavior differs. [`PreTrainedConfig`] base parameters are excluded automatically. The `checkpoint` argument generates the usage example.
 
 ```python
 from huggingface_hub.dataclasses import strict
@@ -158,12 +153,11 @@ class MyModelConfig(PreTrainedConfig):
     another_param: str = "gelu"
 ```
 
-Standard parameters like `vocab_size`, `hidden_size`, and `num_hidden_layers` are sourced from `ConfigArgs` and don't need a description unless the behavior differs. `PreTrainedConfig` base parameters are automatically excluded. The `checkpoint` argument is used to generate the usage example.
+### Processor classes
 
-</hfoption>
-<hfoption id="processor classes">
+Multimodal processors ([`ProcessorMixin`] subclasses, `processing_*.py`) always use the bare `@auto_docstring`. The class intro is auto-generated. Document only `__init__` parameters not already covered by [`ProcessorArgs`] (`image_processor`, `tokenizer`, `chat_template`, and others).
 
-**Multimodal processors** (`ProcessorMixin` subclasses, `processing_*.py`) always use bare `@auto_docstring`. The class intro is auto-generated. Only document `__init__` parameters not already covered by `ProcessorArgs` (`image_processor`, `tokenizer`, `chat_template`, etc.) — omit the docstring entirely if all parameters are standard. Decorate `__call__` with `@auto_docstring` as well; its body docstring contains only a `Returns:` section plus any extra model-specific call arguments. `return_tensors` is automatically appended.
+If every parameter is standard, omit the docstring. Decorate `__call__` with `@auto_docstring` too. Its body docstring holds only a `Returns:` section plus any extra model-specific call arguments. `return_tensors` is appended automatically.
 
 ```python
 from ...processing_utils import ProcessorMixin, ProcessingKwargs, Unpack
@@ -194,11 +188,11 @@ class MyModelProcessor(ProcessorMixin):
         # ...
 ```
 
----
+#### Image and video processors
 
-**Image and video processors** (`BaseImageProcessor` subclasses, `image_processing_*.py`) follow one of two patterns.
+Image and video processors (`BaseImageProcessor` subclasses, `image_processing_*.py`) follow one of two patterns.
 
-If the processor has model-specific parameters, define a `XxxImageProcessorKwargs(ImagesKwargs, total=False)` TypedDict with a docstring for those parameters, set `valid_kwargs` on the class, and use bare `@auto_docstring`. The `__init__` has no docstring.
+If the processor has model-specific parameters, define a `XxxImageProcessorKwargs(ImagesKwargs, total=False)` TypedDict with a docstring for those parameters, set `valid_kwargs` on the class, and use the bare `@auto_docstring`. The `__init__` has no docstring.
 
 ```python
 class MyModelImageProcessorKwargs(ImagesKwargs, total=False):
@@ -228,23 +222,25 @@ class MyModelImageProcessor(TorchvisionBackend):
     size = {"height": 224, "width": 224}
 ```
 
-When overriding `preprocess`, decorate it with `@auto_docstring` and document only arguments not in `ImageProcessorArgs`. Standard arguments and `return_tensors` are included automatically.
+When overriding `preprocess`, decorate it with `@auto_docstring` and document only arguments not in [`ImageProcessorArgs`]. Standard arguments and `return_tensors` are included automatically.
 
-</hfoption>
-<hfoption id="functions">
+### Functions
 
-Place `@auto_docstring` directly above the method definition. The decorator derives parameter descriptions from the function signature.
+Place `@auto_docstring` directly above the function definition. The decorator derives parameter descriptions from the function signature.
+
+The decorator generates return-value text from the [`ModelOutput`] class docstring.
 
 ```python
+class MyModel(PreTrainedModel):
+    # ...
     @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         new_custom_argument: Optional[torch.Tensor] = None,
-        arg_documented_in_args_doc: Optional[torch.Tensor] = None,
         # ... other arguments
-    ) -> Union[Tuple, ModelOutput]: # The description of the return value will automatically be generated from the ModelOutput class docstring.
+    ) -> Union[Tuple, ModelOutput]:
         r"""
         new_custom_argument (`torch.Tensor`, *optional*):
             Description of this new custom argument and its expected shape or type.
@@ -252,9 +248,7 @@ Place `@auto_docstring` directly above the method definition. The decorator deri
         # ...
 ```
 
-Arguments can also be passed directly to `@auto_docstring` for more control. Use the `custom_intro` parameter to describe the argument and the `custom_args` parameter to describe the arguments.
-
-The `Returns` and `Examples` parts of the docstring can also be manually specified.
+Pass `custom_intro` and `custom_args` for more control. Use `custom_args` to define shared argument docs once when the same parameters appear in several methods.
 
 ```python
 MODEL_COMMON_CUSTOM_ARGS = r"""
@@ -262,59 +256,48 @@ MODEL_COMMON_CUSTOM_ARGS = r"""
         Description of common_arg_1
     common_arg_2 (`torch.Tensor`, *optional*, defaults to `default_value`):
         Description of common_arg_2
-    ...
 """
 
 class MyModel(PreTrainedModel):
     # ...
     @auto_docstring(
-        custom_intro="""
-        This is a custom introduction for the function.
-        """
+        custom_intro="""This is a custom introduction for the function.""",
         custom_args=MODEL_COMMON_CUSTOM_ARGS
     )
-    def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        common_arg_1: Optional[torch.Tensor] = None,
-        common_arg_2: Optional[torch.Tensor] = None,
-        #...
-        function_specific_argument: Optional[torch.Tensor] = None,
-        # ... other arguments
-    ) -> torch.Tensor:
-        r"""
-        function_specific_argument (`torch.Tensor`, *optional*):
-            Description of an argument specific to this function
+    def forward(self, input_ids=None, common_arg_1=None, common_arg_2=None) -> ModelOutput:
+        r"""method-specific args go here"""
+        # ...
+```
 
+Write `Returns` and `Examples` sections manually in the docstring to override the auto-generated versions.
+
+```python
+    def forward(self, input_ids=None) -> torch.Tensor:
+        r"""
         Returns:
-            `torch.Tensor`: For a function returning a generic type, a custom "Returns" section can be specified.
+            `torch.Tensor`: A custom Returns section for non-ModelOutput return types.
 
         Example:
 
-        (To override the default example with a custom one or to add an example for a model class that does not have a pipeline)
-
         ```python
-        ...
+        >>> model = MyModel.from_pretrained("org/my-model")
+        >>> output = model(input_ids)
         ```
         """
         # ...
 ```
 
-</hfoption>
-</hfoptions>
+### Documenting arguments
 
-## Documenting arguments
+Follow these rules when documenting different argument types.
 
-There are some rules for documenting different types of arguments and they're listed below.
+- `auto_docstring.py` defines standard arguments (`input_ids`, `attention_mask`, `pixel_values`, etc.) and includes them automatically. Don't redefine them locally unless the argument behaves differently in your model.
 
-- Standard arguments (`input_ids`, `attention_mask`, `pixel_values`, etc.) are defined and retrieved from `auto_docstring.py`. It is the single source of truth for standard arguments and should not be redefined locally if an argument's description and shape is the same as an argument in `auto_docstring.py`.
+    If a standard argument behaves differently in your model, override it locally in a `r""" """` block. The local definition takes priority. The `labels` argument, for instance, is commonly customized per model and often needs an override.
 
-    If a standard argument behaves differently in your model, then you can override it locally in a `r""" """` block. This local definition has a higher priority. For example, the `labels` argument is often customized per model and typically requires overriding.
+- Standard config arguments (`vocab_size`, `hidden_size`, `num_hidden_layers`, etc.) follow the same principle but come from [`ConfigArgs`]. Standard processor arguments (`image_processor`, `tokenizer`, `do_resize`, `return_tensors`, etc.) come from [`ProcessorArgs`] and [`ImageProcessorArgs`]. Only document a parameter if it is model-specific or behaves differently from the standard description.
 
-- Standard **config** arguments (`vocab_size`, `hidden_size`, `num_hidden_layers`, etc.) follow the same principle but are sourced from `ConfigArgs`. Standard **processor** arguments (`image_processor`, `tokenizer`, `do_resize`, `return_tensors`, etc.) are sourced from `ProcessorArgs` and `ImageProcessorArgs`. Only document a parameter if it is model-specific or behaves differently from the standard description.
-
-- New or custom arguments should be documented within an `r""" """` block after the signature if it is a function, in the `__init__` method's docstring if it is a model or processor class, in the **class body docstring** if it is a config class, or in the `XxxImageProcessorKwargs` TypedDict body if it is an image processor.
+- Document new or custom arguments in an `r""" """` block. Place them after the signature for functions, in the `__init__` docstring for model or processor classes, in the class body docstring for config classes, or in the `XxxImageProcessorKwargs` TypedDict body for image processors.
 
     ```py
     argument_name (`type`, *optional*, defaults to `X`):
@@ -326,90 +309,75 @@ There are some rules for documenting different types of arguments and they're li
   * Include `type` in backticks.
   * Add *optional* if the argument is not required or has a default value.
   * Add "defaults to X" if it has a default value. You don't need to add "defaults to `None`" if the default value is `None`.
+  * Pass the same block into `custom_args` when the same arguments repeat across several methods (see the [Functions example above](#functions)).
 
-    These arguments can also be passed to `@auto_docstring` as a `custom_args` argument. It is used to define the docstring block for new arguments once if they are repeated in multiple places in the modeling file.
-
-    ```py
-    class MyModel(PreTrainedModel):
-    # ...
-    @auto_docstring(
-        custom_intro="""
-        This is a custom introduction for the function.
-        """
-        custom_args=r"""
-        common_arg_1 (`torch.Tensor`, *optional*, defaults to `default_value`):
-            Description of common_arg_1
-        """
-    )
-    ```
+- The decorator extracts types from function signatures automatically. If a parameter has a type annotation, you don't need to repeat the type in the docstring format string. When both are present, the signature type takes precedence. The docstring type acts as a fallback for unannotated parameters.
 
 ## Checking the docstrings
 
-Transformers includes a utility script to validate the docstrings when you open a Pull Request which triggers CI (continuous integration) checks. The script checks for the following criteria.
+A utility script validates docstrings when you open a pull request. CI runs the script and checks the following.
 
-* Ensures `@auto_docstring` is applied to relevant mode classes and public methods.
-* Ensures arguments are complete and consistent. It checks that documented arguments exist in the signature and verifies whether the types and default values in the docstring match the signature. Arguments that aren't known standard arguments or if they lack a local description are flagged.
-* Reminds you to complete placeholders like `<fill_type>` and `<fill_docstring>`.
-* Ensures docstrings are formatted according to the expected docstring style.
+> [!TIP]
+> If you see an `[ERROR]` in the output, add the parameter's description to the docstring or the appropriate Args class in `auto_docstring.py`.
 
-You can run this check locally - before committing - by running the following command.
+* Checks that `@auto_docstring` is applied to relevant model classes and public methods.
+* Validates argument completeness and consistency: documented arguments must exist in the signature, and types and default values must match. Unknown arguments without a local description are flagged.
+* Flags incomplete placeholders like `<fill_type>` and `<fill_docstring>`.
+* Verifies docstrings follow the expected formatting style.
+
+Run the check locally before committing.
 
 ```bash
 make fix-repo
 ```
 
-`make fix-repo` runs several other checks as well. If you don't need those checks, run the command below to only perform docstring and auto-docstring checks.
+`make fix-repo` runs several other checks too. To run only the docstring and auto-docstring checks, use the command below.
 
 ```bash
-python utils/check_docstrings.py # to only check files included in the diff without fixing them
-# python utils/check_docstrings.py --fix_and_overwrite # to fix and overwrite the files in the diff
-# python utils/check_docstrings.py --fix_and_overwrite --check_all # to fix and overwrite all files
+# to only check files included in the diff without fixing them
+python utils/check_docstrings.py
+# to fix and overwrite the files in the diff
+# python utils/check_docstrings.py --fix_and_overwrite
+# to fix and overwrite all files
+# python utils/check_docstrings.py --fix_and_overwrite --check_all
 ```
 
-## modular_model.py files
+## Quick-reference checklist
 
-When working with modular files (`modular_model.py`), follow the guidelines below for applying `@auto_docstring`.
-
-- For standalone models in modular files, apply `@auto_docstring` like you would in a `modeling_model.py` file.
-- For models that inherit from other library models, `@auto_docstring` is automatically carried over to the generated modeling file. You don't need to add `@auto_docstring` in your modular file.
-
-    If you need to modify the `@auto_docstring` behavior, apply the customized decorator in your modular file. Make sure to **include all other decorators** that are present in the original function or class.
-
-> [!WARNING]
-> When overriding any decorator in a modular file, you must include **all** decorators that were applied to that function or class in the parent model. If you only override some decorators, the others won't be included in the generated modeling file.
+| Do | Don't |
+|---|---|
+| Apply `@auto_docstring` to model, config, and processor classes and their primary methods (`forward`, `__call__`, `preprocess`). | Add `@auto_docstring` to inherited models in modular files because it carries over automatically. |
+| Document only new or model-specific arguments. | Redefine standard arguments (`input_ids`, `attention_mask`, `vocab_size`, etc.) that behave the same as their default descriptions. |
+| Put config parameters in the class body docstring as class-level annotations. | Put config parameters in `__init__`. |
+| Put image processor parameters in a `XxxImageProcessorKwargs` TypedDict. | Put image processor parameters in `__init__`. |
+| Run `python utils/check_docstrings.py --fix_and_overwrite` before committing. | Ignore `[ERROR]` output because it means a parameter is undocumented. |
 
 ## How it works
 
-The `@auto_docstring` decorator automatically generates docstrings by:
+The `@auto_docstring` decorator generates docstrings through the following steps.
 
-1. Inspecting the signature (arguments, types, defaults) of the decorated class' `__init__` method or the decorated function. For config classes, parameters are collected from class-level annotations up the MRO, stopping before `PreTrainedConfig`, so base-class fields are automatically excluded.
-2. Retrieving predefined docstrings for common arguments from `auto_docstring.py`: [`ModelArgs`] (model inputs), [`ImageProcessorArgs`] (image preprocessing), [`ProcessorArgs`] (multimodal processor components), and [`ConfigArgs`] (config hyperparameters).
-3. Adding argument descriptions in one of two ways as shown below.
+1. The decorator inspects the signature to read arguments, types, and defaults from the decorated class's `__init__` or the decorated function. For config classes, it walks class-level annotations up the inheritance chain and stops before [`PreTrainedConfig`], excluding base class fields.
 
-    | method | description | usage |
-    |---|---|---|
-    | `r""" """` | add custom docstring content directly to a method signature or within the `__init__` docstring | document new arguments or override standard descriptions |
-    | `custom_args` | add custom docstrings for specific arguments directly in `@auto_docstring` | define docstring for new arguments once if they're repeated in multiple places in the modeling file |
+    It automatically filters out parameters like `self`, `kwargs`, `args`, `deprecated_arguments`, and `_`-prefixed names. A few private parameters are renamed to their public equivalents (`_out_features` → `out_features` for backbone models).
 
-4. Adding class and function descriptions. For model classes with standard naming patterns like `ModelForCausalLM`, or if the class belongs to a pipeline, `@auto_docstring` automatically generates the appropriate description. For multimodal processor classes, the intro is auto-generated describing which components (tokenizer, image processor, etc.) it wraps. `@auto_docstring` also accepts `custom_intro` to override or supply a description.
+2. Common argument descriptions come from `auto_docstring.py`: [`ModelArgs`] (model inputs), [`ModelOutputArgs`] (output fields like `hidden_states`), [`ImageProcessorArgs`] (image preprocessing), [`ProcessorArgs`] (multimodal processor components), and [`ConfigArgs`] (config hyperparameters).
 
-5. Using a templating system to allow predefined docstrings to include dynamic information from Transformers' [auto_modules](https://github.com/huggingface/transformers/tree/main/src/transformers/models/auto) such as `{{processor_class}}` and `{{config_class}}`.
+3. Each parameter's description follows this priority chain:
 
-6. Finding appropriate usage examples based on the model's task or pipeline compatibility. It extracts checkpoint information form the model's configuration class to provide concrete examples with real model identifiers.
+    - A manual docstring (`r""" """` block or `custom_args`) takes priority.
+    - The predefined source dict ([`ModelArgs`], [`ConfigArgs`], [`ImageProcessorArgs`], [`ProcessorArgs`], [`ModelOutputArgs`]) is the fallback.
+    - If neither source has a description, the parameter is flagged with `[ERROR]` in the build output.
 
-7. Adding return values to the docstring. For methods like `forward`, the decorator automatically generates the `Returns` field in the docstring based on the method's return type annotation.
+4. For model classes with standard names like `ModelForCausalLM`, or classes that map to a pipeline, `@auto_docstring` generates the intro. For multimodal processors, the intro lists which components (tokenizer, image processor, and so on) the class wraps. See [ClassDocstring](https://github.com/huggingface/transformers/blob/main/src/transformers/utils/auto_docstring.py#L2437) for the full list.
 
-    For example, if a method returns a [`~transformers.utils.ModelOutput`] subclass, `@auto_docstring` extracts the field descriptions from the class' docstring to create a comprehensive return value description. You can also manually specify a custom `Returns` field in a functions docstring.
+    If the class name isn't in `ClassDocstring`, set `custom_intro`.
 
-8. Unrolling kwargs typed with the unpack operator. For specific methods (defined in `UNROLL_KWARGS_METHODS`) or classes (defined in `UNROLL_KWARGS_CLASSES`), the decorator processes `**kwargs` parameters that are typed with `Unpack[KwargsTypedDict]`. It extracts the documentations from the `TypedDict` and adds each parameter to the function's docstring.
+5. Predefined docstrings can reference dynamic values from Transformers' [auto_modules](https://github.com/huggingface/transformers/tree/main/src/transformers/models/auto), such as `{processor_class}`, `{image_processor_class}`, and `{config_class}`. The placeholders resolve automatically.
 
-    Currently only supported for [`ImagesKwargs`].
+6. The decorator picks usage examples based on the model's task or pipeline compatibility. It reads checkpoint metadata from the configuration class so examples use real model IDs. The `checkpoint` argument overrides the checkpoint inferred from the config class's docstring. Set `checkpoint` on config classes, or when checkpoint inference fails. If you see an error like `"Config not found for <model_name>"`, add an entry to `HARDCODED_CONFIG_FOR_MODELS` in `auto_docstring.py`.
 
-## Best practices
+7. For methods like `forward`, the decorator writes the `Returns` section from the method's return type. When the return type is a [`~transformers.utils.ModelOutput`] subclass, `@auto_docstring` pulls field descriptions from that class's docstring. A custom `Returns` block in the function's docstring takes precedence.
 
-Follow the best practices below to help maintain consistent and informative documentation for Transformers!
+8. For methods in `UNROLL_KWARGS_METHODS` and classes in `UNROLL_KWARGS_CLASSES`, the decorator expands `**kwargs` typed with `Unpack[KwargsTypedDict]`. Each key from the `TypedDict` becomes a documented parameter.
 
-* Use `@auto_docstring` for [`PreTrainedModel`] subclasses and their primary methods (`forward`, `get_text_features`, etc.), for [`PreTrainedConfig`] subclasses (alongside `@strict`), and for processor classes ([`ProcessorMixin`] and [`BaseImageProcessor`] subclasses) and their primary methods (`__call__`, `preprocess`).
-* Do not redefine standard arguments unless their behavior differs in your model.
-* For config classes, document parameters in the class body docstring (class-level annotations, not `__init__`). For image processors, document custom parameters in a `XxxImageProcessorKwargs` TypedDict rather than in `__init__`.
-* Run `check_docstrings` locally and iteratively.
+    The same expansion applies to `__call__` and `preprocess` methods on [`BaseImageProcessor`] and [`ProcessorMixin`] subclasses. Generic base types (`TextKwargs`, `ImagesKwargs`, `VideosKwargs`, `AudioKwargs`) are skipped. Only model-specific subclasses are unrolled.

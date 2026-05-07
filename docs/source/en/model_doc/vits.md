@@ -31,16 +31,16 @@ The example below demonstrates how to generate text based on an image with [`Pip
 <hfoption id="Pipeline">
 
 ```python
-import torch
-from transformers import pipeline, set_seed
 from scipy.io.wavfile import write
+
+from transformers import pipeline, set_seed
+
 
 set_seed(555)
 
 pipe = pipeline(
     task="text-to-speech",
     model="facebook/mms-tts-eng",
-    dtype=torch.float16,
     device=0
 )
 
@@ -58,13 +58,15 @@ write("hello.wav", sampling_rate, audio_data.squeeze())
 <hfoption id="AutoModel">
 
 ```python
-import torch
 import scipy
+import torch
 from IPython.display import Audio
+
 from transformers import AutoTokenizer, VitsModel, set_seed
 
+
 tokenizer = AutoTokenizer.from_pretrained("facebook/mms-tts-eng")
-model = VitsModel.from_pretrained("facebook/mms-tts-eng", device_map="auto", dtype=torch.float16)
+model = VitsModel.from_pretrained("facebook/mms-tts-eng", device_map="auto")
 inputs = tokenizer("Hello, my dog is cute", return_tensors="pt").to(model.device)
 
 set_seed(555)
@@ -112,7 +114,7 @@ Audio(waveform, rate=model.config.sampling_rate)
    import subprocess
 
    tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-kor")
-   model = VitsModel.from_pretrained("facebook/mms-tts-kor")
+   model = VitsModel.from_pretrained("facebook/mms-tts-kor", device_map="auto")
 
    def uromanize(input_string, uroman_path):
        """Convert non-Roman strings to Roman using the `uroman` perl package."""
@@ -133,7 +135,7 @@ Audio(waveform, rate=model.config.sampling_rate)
    text = "이봐 무슨 일이야"
    uromanized_text = uromanize(text, uroman_path=os.environ["UROMAN"])
 
-   inputs = tokenizer(text=uromanized_text, return_tensors="pt")
+   inputs = tokenizer(text=uromanized_text, return_tensors="pt").to(model.device)
 
    set_seed(555)  # make deterministic
    with torch.no_grad():

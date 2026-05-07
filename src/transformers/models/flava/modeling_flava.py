@@ -48,7 +48,6 @@ LOGIT_SCALE_CLAMP_MAX = 4.6052
 FlavaPossibleConfigs = FlavaTextConfig | FlavaImageConfig | FlavaMultimodalConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output from FlavaModel containing embeddings and outputs from individual encoders.
@@ -58,6 +57,7 @@ FlavaPossibleConfigs = FlavaTextConfig | FlavaImageConfig | FlavaMultimodalConfi
     `text_projection` layers on `image_embeddings` and `text_embeddings` respectively.
     """
 )
+@dataclass
 class FlavaModelOutput(ModelOutput):
     r"""
     image_embeddings (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when `pixel_values` are present):
@@ -88,12 +88,12 @@ class FlavaModelOutput(ModelOutput):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class representing pretraining losses from FLAVA model
     """
 )
+@dataclass
 class FlavaLosses(ModelOutput):
     r"""
     mim (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `mim_labels` and `pixel_values` are present, `input_ids_masked` is absent and `mim_weight` > 0.):
@@ -128,7 +128,6 @@ class FlavaLosses(ModelOutput):
         return all_none
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output from FlavaForPreTraining containing embeddings, and outputs from individual encoders.
@@ -138,6 +137,7 @@ class FlavaLosses(ModelOutput):
     `text_projection` layers on `image_embeddings` and `text_embeddings` respectively.
     """
 )
+@dataclass
 class FlavaForPreTrainingOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor`, *optional*, returned when `return_loss` is True):
@@ -445,22 +445,11 @@ class FlavaSelfAttention(nn.Module):
         attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor]:
-        batch_size, seq_length, _ = hidden_states.shape
-        query_layer = (
-            self.query(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        key_layer = (
-            self.key(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        value_layer = (
-            self.value(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
+        query_layer = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_layer = self.key(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_layer = self.value(hidden_states).view(hidden_shape).transpose(1, 2)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))

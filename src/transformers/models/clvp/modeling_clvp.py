@@ -60,10 +60,10 @@ def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
 
 
-# Copied from transformers.models.clip.modeling_clip.clip_loss with clip->clvp, image_loss->speech_loss
-def clvp_loss(similarity: torch.Tensor) -> torch.Tensor:
+# Copied from transformers.models.clip.modeling_clip.image_text_contrastive_loss with image->speech
+def speech_text_contrastive_loss(similarity: torch.Tensor) -> torch.Tensor:
     caption_loss = contrastive_loss(similarity)
-    speech_loss = contrastive_loss(similarity.t())
+    speech_loss = contrastive_loss(similarity.T)
     return (caption_loss + speech_loss) / 2.0
 
 
@@ -147,13 +147,13 @@ def _pad_extra_bos_eos_tokens(
     return modified_input_ids, attention_mask
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for CLVP encoder's outputs that contains a pooling of the last hidden states as well as a projection
     output (a linear layer on top of the pooled output).
     """
 )
+@dataclass
 class ClvpEncoderOutput(ModelOutput):
     r"""
     embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when model is initialized with `with_projection=True`):
@@ -171,8 +171,8 @@ class ClvpEncoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class ClvpOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
@@ -1544,7 +1544,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
 
         loss = None
         if return_loss:
-            loss = clvp_loss(logits_per_text)
+            loss = speech_text_contrastive_loss(logits_per_text)
 
         return ClvpOutput(
             loss=loss,

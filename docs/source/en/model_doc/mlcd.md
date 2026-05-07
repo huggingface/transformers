@@ -50,16 +50,18 @@ Result:
 ```python
 import requests
 from PIL import Image
+
 from transformers import AutoProcessor, MLCDVisionModel
 
+
 # Load model and processor
-model = MLCDVisionModel.from_pretrained("DeepGlint-AI/mlcd-vit-bigG-patch14-448")
+model = MLCDVisionModel.from_pretrained("DeepGlint-AI/mlcd-vit-bigG-patch14-448", device_map="auto")
 processor = AutoProcessor.from_pretrained("DeepGlint-AI/mlcd-vit-bigG-patch14-448")
 
 # Process single image
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
-inputs = processor(images=image, return_tensors="pt")
+inputs = processor(images=image, return_tensors="pt").to(model.device)
 
 # Generate outputs
 with torch.no_grad():

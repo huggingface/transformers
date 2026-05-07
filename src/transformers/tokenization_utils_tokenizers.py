@@ -1037,7 +1037,24 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             else self.clean_up_tokenization_spaces
         )
         if clean_up_tokenization_spaces:
-            text = self.clean_up_tokenization(text)
+            # Skip cleanup for BPE tokenizers — the cleanup was designed for
+            # WordPiece tokenizers and is destructive for BPE (it strips
+            # legitimate spaces before punctuation).
+            if (
+                type(self.backend_tokenizer.model).__name__ == "BPE"
+                and not self.clean_up_tokenization_spaces_for_bpe_even_though_it_will_corrupt_output
+            ):
+                logger.warning_once(
+                    "Ignoring clean_up_tokenization_spaces=True for BPE tokenizer"
+                    f" {self.__class__.__name__}. The clean_up_tokenization post-processing"
+                    " step is designed for WordPiece tokenizers and is destructive for BPE"
+                    " (it strips spaces before punctuation). Set"
+                    " clean_up_tokenization_spaces=False to suppress this warning, or set"
+                    " clean_up_tokenization_spaces_for_bpe_even_though_it_will_corrupt_output=True to"
+                    " force cleanup anyway."
+                )
+            else:
+                text = self.clean_up_tokenization(text)
 
         return text
 
@@ -1277,20 +1294,26 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 >> Tags including `base_model:.*mistralai`
         """
         import re
+        from functools import lru_cache
 
         from huggingface_hub import model_info
         from packaging import version
 
         from transformers.utils.hub import cached_file
 
+        @lru_cache(maxsize=128)
         def is_base_mistral(model_id: str) -> bool:
-            model = model_info(model_id)
+            try:
+                model = model_info(model_id)
+            except Exception:
+                # Never block tokenizer init on a Hub error — assume non-Mistral.
+                return False
             if model.tags is not None:
                 if re.search("base_model:.*mistralai", "".join(model.tags)):
                     return True
             return False
 
-        if is_offline_mode():
+        if local_files_only or is_offline_mode():
             is_local = True
 
         if pretrained_model_name_or_path is not None and (
@@ -1318,7 +1341,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 # Detect if we can skip the mistral fix by
                 #   a) having a non-mistral tokenizer
                 #   b) fixed version of transformers
-                if transformers_version and version.parse(transformers_version) <= version.parse("4.57.2"):
+                if transformers_version and version.parse(transformers_version) < version.parse("5.0.0"):
                     if (
                         is_local
                         and transformers_model_type is not None
@@ -1332,7 +1355,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                         ]
                     ):
                         return tokenizer
-                elif transformers_version and version.parse(transformers_version) > version.parse("4.57.3"):
+                elif transformers_version and version.parse(transformers_version) >= version.parse("5.0.0"):
                     return tokenizer
 
                 mistral_config_detected = True
@@ -1360,11 +1383,11 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                         ),
                         behavior="isolated",
                     )
-                    current_pretokenizer = tokenizer.backend_tokenizer.pre_tokenizer
+                    current_pretokenizer = tokenizer.pre_tokenizer
                     # Check if it's already a Sequence
                     if isinstance(current_pretokenizer, tokenizers.pre_tokenizers.Sequence):
                         # Replace the first element (the Split pattern)
-                        tokenizer.backend_tokenizer.pre_tokenizer[0] = split_pretokenizer
+                        tokenizer.pre_tokenizer[0] = split_pretokenizer
                     else:
                         # Replace Metaspace with ByteLevel when adding Split, as Metaspace(split=False) doesn't
                         # work correctly with the Split pre-tokenizer and causes spaces to be lost during encoding
@@ -1374,7 +1397,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                             )
 
                         # Not a Sequence, so create one with Split + current pretokenizer
-                        tokenizer.backend_tokenizer.pre_tokenizer = tokenizers.pre_tokenizers.Sequence(
+                        tokenizer.pre_tokenizer = tokenizers.pre_tokenizers.Sequence(
                             [
                                 split_pretokenizer,
                                 current_pretokenizer,

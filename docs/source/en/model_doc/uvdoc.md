@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-02-06 and added to Hugging Face Transformers on 2026-03-19.*
+*This model was released on 2023-02-06 and added to Hugging Face Transformers on 2026-03-21.*
 
 # UVDoc
 
@@ -34,10 +34,12 @@ The example below demonstrates how to rectify a document image with UVDoc using 
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModel
+
 
 model_path = "PaddlePaddle/UVDoc_safetensors"
 model = AutoModel.from_pretrained(

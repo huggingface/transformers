@@ -300,7 +300,7 @@ class NomicBertModelIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_slice = Expectations(
             {
-                ("cuda", None): torch.tensor(
+                (None, None): torch.tensor(
                     [
                         [
                             [1.7039e00, -4.5610e00, 1.5236e00],
@@ -339,7 +339,7 @@ class NomicBertModelIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_slice = Expectations(
             {
-                ("cuda", None): torch.tensor(
+                (None, None): torch.tensor(
                     [
                         [
                             [ 1.2961, -1.1757,  1.2094],
@@ -352,7 +352,7 @@ class NomicBertModelIntegrationTest(unittest.TestCase):
                             [-0.4336, -0.8528, -0.2509],
                         ]
                     ]
-                )
+                ),
             }
         ).get_expectation()
         # fmt: on

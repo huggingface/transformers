@@ -712,6 +712,8 @@ class Trainer:
             ddp_kwargs["bucket_cap_mb"] = self.args.ddp_bucket_cap_mb
         if self.args.ddp_broadcast_buffers is not None:
             ddp_kwargs["broadcast_buffers"] = self.args.ddp_broadcast_buffers
+        if self.args.ddp_static_graph is not None:
+            ddp_kwargs["static_graph"] = self.args.ddp_static_graph
 
         args["kwargs_handlers"] = [DistributedDataParallelKwargs(**ddp_kwargs)]
 
@@ -764,8 +766,9 @@ class Trainer:
                 )
             else:
                 self.args.gradient_accumulation_steps = grad_acc_kwargs["num_steps"]
-        else:
-            grad_acc_kwargs["num_steps"] = self.args.gradient_accumulation_steps
+
+        # The Trainer handles GAS itself, so GAS=1 in Accelerate to avoid any double-division
+        grad_acc_kwargs["num_steps"] = 1
 
         # Just making sure that gradient_state have the correct values passed.
         # We don't rely on `accumulate` from accelerate to set sync_gradients in gradient_state.
@@ -2414,8 +2417,12 @@ class Trainer:
                 return model
             return smp.DistributedModel(model, backward_passes_per_step=self.args.gradient_accumulation_steps)
 
-        # Multi-gpu training, 8bit models does not support DP
-        if self.args.n_gpu > 1 and not getattr(model, "is_loaded_in_8bit", False):
+        # Multi-gpu training, quantized models do not support DP
+        if (
+            self.args.n_gpu > 1
+            and not getattr(model, "is_loaded_in_8bit", False)
+            and not getattr(model, "is_loaded_in_4bit", False)
+        ):
             model = nn.DataParallel(model)
 
         # Note: in torch.distributed mode, there's no point in wrapping the model

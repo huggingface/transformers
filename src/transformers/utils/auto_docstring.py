@@ -77,6 +77,7 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "donut": "DonutSwinConfig",
     "esmfold": "EsmConfig",
     "parakeet": "ParakeetCTCConfig",
+    "privacy-filter": "OpenAIPrivacyFilterConfig",
     "lasr": "LasrCTCConfig",
     "wav2vec2-with-lm": "Wav2Vec2Config",
 }
@@ -2819,7 +2820,7 @@ def get_placeholders_dict(placeholders: set[str], model_name: str) -> Mapping[st
                 # In case a library is not installed, we don't want to fail the docstring generation
                 place_holder_value = None
             if place_holder_value is not None:
-                if isinstance(place_holder_value, (list, tuple)):
+                if isinstance(place_holder_value, list | tuple):
                     place_holder_value = (
                         place_holder_value[-1] if place_holder_value[-1] is not None else place_holder_value[0]
                     )
@@ -2852,7 +2853,7 @@ def format_args_docstring(docstring: str, model_name: str) -> str:
 
 
 def get_args_doc_from_source(args_classes: object | list[object]) -> dict:
-    if isinstance(args_classes, (list, tuple)):
+    if isinstance(args_classes, list | tuple):
         return _merge_args_dicts(tuple(args_classes))
     return args_classes.__dict__
 
@@ -3577,6 +3578,11 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
     for kwarg_param in kwargs_parameters:
         # If kwargs not typed, skip
         if kwarg_param.annotation == inspect.Parameter.empty:
+            continue
+
+        if not hasattr(kwarg_param.annotation, "__args__") or not hasattr(
+            kwarg_param.annotation.__args__[0], "__name__"
+        ):
             continue
 
         if kwarg_param.annotation.__args__[0].__name__ not in BASIC_KWARGS_TYPES:

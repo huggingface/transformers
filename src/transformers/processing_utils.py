@@ -576,6 +576,14 @@ class ProcessorMixin(PushToHubMixin):
     This is a mixin used to provide saving/loading functionality for all processor classes.
     """
 
+    # Dynamically set sub-processor attributes. Not every processor has all of these;
+    # they are populated via setattr in __init__ based on each subclass's `attributes`.
+    tokenizer: Any
+    feature_extractor: Any
+    image_processor: Any
+    video_processor: Any
+    chat_template: str | dict[str, str] | None
+
     # Names need to be attr_class for attr in attributes
     _auto_class = None
     valid_processor_kwargs = ProcessingKwargs
@@ -1804,12 +1812,17 @@ class ProcessorMixin(PushToHubMixin):
             for conversation in conversations:
                 images, videos = [], []
                 for message in conversation:
-                    visuals = [content for content in message["content"] if content["type"] in ["image", "video"]]
+                    content = message.get("content") or []
+                    if isinstance(content, str):
+                        continue
+                    visuals = [
+                        content_block for content_block in content if content_block["type"] in ["image", "video"]
+                    ]
                     audio_fnames = [
-                        content[key]
-                        for content in message["content"]
+                        content_block[key]
+                        for content_block in content
                         for key in ["audio", "url", "path"]
-                        if key in content and content["type"] == "audio"
+                        if key in content_block and content_block["type"] == "audio"
                     ]
                     image_fnames = [
                         vision_info[key]

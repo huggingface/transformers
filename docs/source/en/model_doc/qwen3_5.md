@@ -42,6 +42,10 @@ TODO
 
 [[autodoc]] Qwen3_5Config
 
+## Qwen3_5VisionConfig
+
+[[autodoc]] Qwen3_5VisionConfig
+
 ## Qwen3_5TextConfig
 
 [[autodoc]] Qwen3_5TextConfig
