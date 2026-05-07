@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import inspect
+import weakref
 from collections.abc import Callable
 from functools import lru_cache, wraps
 
@@ -243,17 +244,51 @@ def compile_compatible_method_lru_cache(*lru_args, **lru_kwargs):
     """
     LRU cache decorator from standard functools library, but with a workaround to disable
     caching when torchdynamo is compiling. Expected to work with class methods.
+
+    For methods (first parameter is ``self`` or ``cls``), the cache is stored per-instance
+    so that deleting the instance allows garbage collection of all cached tensors.
+    For standalone functions, a shared class-level cache is used as before.
     """
 
     def decorator(func):
-        func_with_cache = lru_cache(*lru_args, **lru_kwargs)(func)
+        params = list(inspect.signature(func).parameters)
+        is_method = params and params[0] in ("self", "cls")
+
+        if not is_method:
+            # Standalone function: shared cache (original behavior)
+            func_with_cache = lru_cache(*lru_args, **lru_kwargs)(func)
+
+            @wraps(func)
+            def wrapper(*args, **kwargs):
+                if is_torchdynamo_compiling():
+                    return func(*args, **kwargs)
+                return func_with_cache(*args, **kwargs)
+
+            return wrapper
+
+        # Method: per-instance cache to avoid preventing GC of the instance
+        cache_attr = f"_lru_cache_{func.__name__}"
 
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(self, *args, **kwargs):
             if is_torchdynamo_compiling():
-                return func(*args, **kwargs)
-            else:
-                return func_with_cache(*args, **kwargs)
+                return func(self, *args, **kwargs)
+            instance_cache = getattr(self, cache_attr, None)
+            if instance_cache is None:
+                # Bind func to this instance and wrap with lru_cache
+                self_ref = weakref.ref(self)
+
+                @lru_cache(*lru_args, **lru_kwargs)
+                def cached_func(*args, **kwargs):
+                    return func(self_ref(), *args, **kwargs)
+
+                try:
+                    setattr(self, cache_attr, cached_func)
+                except AttributeError:
+                    # Frozen dataclass or __slots__ without the attr — fall back to uncached
+                    return func(self, *args, **kwargs)
+                instance_cache = cached_func
+            return instance_cache(*args, **kwargs)
 
         return wrapper
 
