@@ -21,13 +21,22 @@ import tempfile
 import types
 from unittest.mock import MagicMock, patch
 
+import torch
+import torch.nn as nn
+
 from transformers import AutoModelForCausalLM, AutoTokenizer, KernelConfig
+from transformers.conversion_mapping import get_checkpoint_conversion_mapping
+from transformers.core_model_loading import Concatenate, WeightConverter, WeightRenaming, rename_source_key
 from transformers.integrations.hub_kernels import (
     _HUB_KERNEL_MAPPING,
     _KERNEL_MODULE_MAPPING,
+    FusedModuleBase,
+    infer_kernel_fusion_transforms,
     is_kernel,
     lazy_load_kernel,
     load_and_register_attn_kernel,
+    make_fused_parent_class,
+    register_kernel_fusions,
 )
 from transformers.masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -206,6 +215,54 @@ class TestHubKernels(TestCasePlus):
         self.assertTrue(output in EXPECTED_OUTPUT)
 
         del model
+
+    def _kernel_fusion_tuple_matches_baseline(self, with_transformations: bool):
+        model_id = "michaelbenayoun/qwen3-tiny-4kv-heads-4layers-random"
+
+        if with_transformations:
+            kernel_config = KernelConfig(
+                {
+                    (
+                        ("RMSNorm", "model.layers.*.post_attention_layernorm"),
+                        ("MLP", "model.layers.*.mlp"),
+                    ): "michaelbenayoun/dummy-rmsnorm-mlp-with-transformations:RMSNormMLP",
+                }
+            )
+        else:
+            kernel_config = KernelConfig(
+                {
+                    (
+                        ("RMSNorm", "model.layers.*.post_attention_layernorm"),
+                        ("MLP", "model.layers.*.mlp"),
+                    ): "michaelbenayoun/dummy-rmsnorm-mlp:RMSNormMLP",
+                }
+            )
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer("Hello, how are you?", return_tensors="pt")
+
+        baseline = AutoModelForCausalLM.from_pretrained(model_id, device_map=torch_device)
+        baseline.eval()
+        inputs = {k: v.to(torch_device) for k, v in inputs.items()}
+        with torch.no_grad():
+            baseline_out = baseline(**inputs).logits
+        del baseline
+
+        fused = AutoModelForCausalLM.from_pretrained(
+            model_id, use_kernels=True, kernel_config=kernel_config, device_map=torch_device
+        )
+        fused.eval()
+        with torch.no_grad():
+            fused_out = fused(**inputs).logits
+        del fused
+
+        torch.testing.assert_close(baseline_out, fused_out, atol=1e-4, rtol=1e-4)
+
+    def test_kernel_fusion_tuple_matches_baseline_without_transformations(self):
+        self._kernel_fusion_tuple_matches_baseline(with_transformations=False)
+
+    def test_kernel_fusion_tuple_matches_baseline_with_transformations(self):
+        self._kernel_fusion_tuple_matches_baseline(with_transformations=True)
 
     def test_faulty_kernel_mapping_layer_name(self):
         kernel_config = KernelConfig(kernel_mapping={"RMSNorm1": "kernels-community/layer_norm:LlamaRMSNorm"})
@@ -536,3 +593,132 @@ class TestKernelMappingDeviceFiltering(TestCasePlus):
 
         result_mapping = kernel_config.kernel_mapping
         self.assertIn("RMSNorm", result_mapping, "RMSNorm should be in mapping")
+
+
+class TestKernelFusions(TestCasePlus):
+    _MODEL_TYPE = "kernel_fusion_test_model"
+
+    def tearDown(self):
+        import transformers.conversion_mapping as _cm
+
+        if _cm._checkpoint_conversion_mapping_cache is not None:
+            _cm._checkpoint_conversion_mapping_cache.pop(self._MODEL_TYPE, None)
+
+    def _make_layer_and_model(self):
+        class Norm(nn.Module):
+            kernel_layer_name = "RMSNorm"
+
+            def __init__(self):
+                super().__init__()
+                self.weight = nn.Parameter(torch.ones(4))
+
+        class MLP(nn.Module):
+            kernel_layer_name = "MLP"
+
+            def __init__(self):
+                super().__init__()
+                self.gate_proj = nn.Linear(4, 8, bias=False)
+                self.up_proj = nn.Linear(4, 8, bias=False)
+                self.down_proj = nn.Linear(8, 4, bias=False)
+
+        class Layer(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.post_attention_layernorm = Norm()
+                self.mlp = MLP()
+
+        class Config:
+            model_type = self._MODEL_TYPE
+
+        class Model(nn.Module):
+            config_class = Config
+
+            def __init__(self, config=None):
+                super().__init__()
+                self.layers = nn.ModuleList([Layer(), Layer()])
+
+        return Layer, Model, Config
+
+    def test_infer_kernel_fusion_transforms(self):
+        transforms = infer_kernel_fusion_transforms(
+            [
+                ("RMSNorm", "model.layers.*.post_attention_layernorm"),
+                ("MLP", "model.layers.*.mlp"),
+            ]
+        )
+
+        first_key = "model.layers.0.post_attention_layernorm.weight"
+        self.assertEqual(
+            rename_source_key(first_key, transforms, [])[0],
+            "model.layers.0.post_attention_layernorm.RMSNorm.weight",
+        )
+
+        second_key = "model.layers.2.mlp.gate_proj.weight"
+        self.assertEqual(
+            rename_source_key(second_key, transforms, [])[0],
+            "model.layers.2.post_attention_layernorm.MLP.gate_proj.weight",
+        )
+
+    def test_make_fused_parent_class(self):
+        Layer, _, _ = self._make_layer_and_model()
+        FusedLayer = make_fused_parent_class(
+            Layer,
+            child_names=["post_attention_layernorm", "mlp"],
+            source_names=["RMSNorm", "MLP"],
+            kernel_layer_name="RMSNormMLP",
+        )
+        layer = FusedLayer()
+
+        self.assertIsInstance(layer.post_attention_layernorm, FusedModuleBase)
+        self.assertIsInstance(layer.mlp, nn.Identity)
+        self.assertIn("RMSNorm", layer.post_attention_layernorm._modules)
+        self.assertIn("MLP", layer.post_attention_layernorm._modules)
+
+    def test_register_kernel_fusions_replaces_tuple_key(self):
+        _, Model, Config = self._make_layer_and_model()
+        kernel_config = KernelConfig(
+            {
+                (
+                    ("RMSNorm", "layers.*.post_attention_layernorm"),
+                    ("MLP", "layers.*.mlp"),
+                ): "dummy/fake-kernel:RMSNormMLP"
+            }
+        )
+
+        with (
+            patch("transformers.integrations.hub_kernels._try_load_kernel_class", return_value=None),
+            patch("transformers.integrations.hub_kernels.register_patch_mapping"),
+        ):
+            register_kernel_fusions(Model, Config(), kernel_config)
+
+        self.assertIn("RMSNormMLP", kernel_config.kernel_mapping)
+        self.assertFalse(any(isinstance(k, tuple) for k in kernel_config.kernel_mapping))
+
+    def test_register_kernel_fusions_merges_kernel_conversion_mapping(self):
+        """WeightRenaming from structure + WeightConverter from kernel.conversion_mapping are both registered."""
+        _, Model, Config = self._make_layer_and_model()
+
+        class FakeKernel:
+            conversion_mapping = [
+                WeightConverter(["MLP.gate_proj", "MLP.up_proj"], "MLP.gate_up_proj", [Concatenate(dim=0)])
+            ]
+
+        kernel_config = KernelConfig(
+            {
+                (
+                    ("RMSNorm", "layers.*.post_attention_layernorm"),
+                    ("MLP", "layers.*.mlp"),
+                ): "dummy/fake-kernel:RMSNormMLP"
+            }
+        )
+
+        with (
+            patch("transformers.integrations.hub_kernels._try_load_kernel_class", return_value=FakeKernel),
+            patch("transformers.integrations.hub_kernels.register_patch_mapping"),
+        ):
+            register_kernel_fusions(Model, Config(), kernel_config)
+
+        mapping = get_checkpoint_conversion_mapping(self._MODEL_TYPE)
+        self.assertIsNotNone(mapping)
+        self.assertTrue(any(isinstance(t, WeightRenaming) for t in mapping))
+        self.assertTrue(any(isinstance(t, WeightConverter) for t in mapping))

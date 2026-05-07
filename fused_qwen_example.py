@@ -24,7 +24,7 @@ print("=" * 60)
 print("Loading fused model...")
 
 kernel_repo_id = "michaelbenayoun/dummy-rmsnorm-mlp:RMSNormMLP"
-kernel_repo_id = "michaelbenayoun/dummy-rmsnorm-mlp-with-transformations:RMSNormMLP"
+#kernel_repo_id = "michaelbenayoun/dummy-rmsnorm-mlp-with-transformations:RMSNormMLP"
 kernel_config = KernelConfig(
     {
         (
