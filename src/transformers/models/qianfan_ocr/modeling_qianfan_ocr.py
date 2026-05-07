@@ -506,12 +506,12 @@ class QianfanOCRPreTrainedModel(PreTrainedModel):
     config_class = QianfanOCRConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for QianfanOCR outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class QianfanOCRModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     image_hidden_states (`torch.FloatTensor`, *optional*):
@@ -702,12 +702,12 @@ class QianfanOCRModel(QianfanOCRPreTrainedModel):
         return vision_features
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for QianfanOCR causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class QianfanOCRCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

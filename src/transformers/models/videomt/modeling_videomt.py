@@ -345,7 +345,6 @@ class VideomtLayerScale(nn.Module):
         return hidden_state * self.lambda1
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`VideomtForUniversalSegmentationOutput`].
@@ -356,6 +355,7 @@ class VideomtLayerScale(nn.Module):
     [`~VideomtVideoProcessor`] for details regarding usage.
     """
 )
+@dataclass
 class VideomtForUniversalSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.Tensor`, *optional*):

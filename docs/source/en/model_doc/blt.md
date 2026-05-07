@@ -60,8 +60,8 @@ The model can be loaded via:
 <hfoption id="AutoModel">
 
 ```python
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b-hf")
 model = AutoModelForCausalLM.from_pretrained(

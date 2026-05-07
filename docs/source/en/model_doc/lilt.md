@@ -47,7 +47,8 @@ The script will result in `config.json` and `pytorch_model.bin` files being stor
 ```python
 from transformers import LiltModel
 
-model = LiltModel.from_pretrained("path_to_your_files")
+
+model = LiltModel.from_pretrained("path_to_your_files", device_map="auto")
 model.push_to_hub("name_of_repo_on_the_hub")
 ```
 

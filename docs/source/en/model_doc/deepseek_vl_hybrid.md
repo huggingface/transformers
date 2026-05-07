@@ -36,15 +36,14 @@ The example below demonstrates how to generate text based on an image with [`Pip
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="image-text-to-text",
     model="deepseek-community/deepseek-vl-7b-chat",
     device=0,
-    dtype=torch.float16
 )
 
 messages = [
@@ -67,13 +66,12 @@ pipe(text=messages, max_new_tokens=20, return_full_text=False)
 
 <hfoption id="AutoModel">
 
-```py
-import torch
-from transformers import DeepseekVLHybridForConditionalGeneration, AutoProcessor
+```python
+from transformers import AutoProcessor, DeepseekVLHybridForConditionalGeneration
+
 
 model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
     "deepseek-community/deepseek-vl-7b-chat",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -124,8 +122,8 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
 
 ```python
-import torch
-from transformers import TorchAoConfig, DeepseekVLHybridForConditionalGeneration, AutoProcessor
+from transformers import DeepseekVLHybridForConditionalGeneration, TorchAoConfig
+
 
 quantization_config = TorchAoConfig(
     "int4_weight_only",
@@ -134,7 +132,6 @@ quantization_config = TorchAoConfig(
 
 model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
     "deepseek-community/deepseek-vl-7b-chat",
-    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )
@@ -150,7 +147,6 @@ model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
 
     model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
         "deepseek-community/deepseek-vl-7b-chat",
-        dtype=torch.float16,
         device_map="auto",
         attn_implementation="sdpa"
     )

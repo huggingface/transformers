@@ -37,13 +37,12 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`A
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="text-generation",
     model="CohereForAI/c4ai-command-r-v01",
-    dtype=torch.float16,
     device=0
 )
 pipeline("Plants create energy through a process known as")
@@ -53,11 +52,11 @@ pipeline("Plants create energy through a process known as")
 <hfoption id="AutoModel">
 
 ```python
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01")
-model = AutoModelForCausalLM.from_pretrained("CohereForAI/c4ai-command-r-v01", dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+model = AutoModelForCausalLM.from_pretrained("CohereForAI/c4ai-command-r-v01", device_map="auto", attn_implementation="sdpa")
 
 # format message with the Command-R chat template
 messages = [{"role": "user", "content": "How do plants make energy?"}]
@@ -88,12 +87,12 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the weights to 4-bits.
 
 ```python
-import torch
-from transformers import BitsAndBytesConfig, AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
 
 bnb_config = BitsAndBytesConfig(load_in_4bit=True)
 tokenizer = AutoTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01")
-model = AutoModelForCausalLM.from_pretrained("CohereForAI/c4ai-command-r-v01", dtype=torch.float16, device_map="auto", quantization_config=bnb_config, attn_implementation="sdpa")
+model = AutoModelForCausalLM.from_pretrained("CohereForAI/c4ai-command-r-v01", device_map="auto", quantization_config=bnb_config, attn_implementation="sdpa")
 
 # format message with the Command-R chat template
 messages = [{"role": "user", "content": "How do plants make energy?"}]
@@ -110,8 +109,9 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
 
-```py
+```python
 from transformers.utils.attention_visualizer import AttentionMaskVisualizer
+
 
 visualizer = AttentionMaskVisualizer("CohereForAI/c4ai-command-r-v01")
 visualizer("Plants create energy through a process known as")
