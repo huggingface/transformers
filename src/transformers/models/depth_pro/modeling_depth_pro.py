@@ -30,12 +30,12 @@ from .configuration_depth_pro import DepthProConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for DepthPro's outputs.
     """
 )
+@dataclass
 class DepthProOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, n_patches_per_batch, sequence_length, hidden_size)`):
@@ -50,12 +50,12 @@ class DepthProOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for DepthProForDepthEstimation's output.
     """
 )
+@dataclass
 class DepthProDepthEstimatorOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

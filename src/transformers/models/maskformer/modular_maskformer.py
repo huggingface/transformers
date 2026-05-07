@@ -167,7 +167,6 @@ class DetrDecoderOutput(DetrDecoderOutput):
     pass
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     MaskFormer's pixel level module output. It returns both the last and (optionally) the hidden states from the
@@ -178,6 +177,7 @@ class DetrDecoderOutput(DetrDecoderOutput):
     as **pixel embeddings**
     """
 )
+@dataclass
 class MaskFormerPixelLevelModuleOutput(ModelOutput):
     r"""
     encoder_last_hidden_state (`torch.FloatTensor` of shape`(batch_size, num_channels, height, width)`):
@@ -200,13 +200,13 @@ class MaskFormerPixelLevelModuleOutput(ModelOutput):
     decoder_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     MaskFormer's pixel decoder module output, practically a Feature Pyramid Network. It returns the last hidden state
     and (optionally) the hidden states.
     """
 )
+@dataclass
 class MaskFormerPixelDecoderOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -218,12 +218,12 @@ class MaskFormerPixelDecoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`MaskFormerModel`]. This class returns all the needed hidden states to compute the logits.
     """
 )
+@dataclass
 class MaskFormerModelOutput(ModelOutput):
     r"""
     encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -259,7 +259,6 @@ class MaskFormerModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`MaskFormerForInstanceSegmentation`].
@@ -270,6 +269,7 @@ class MaskFormerModelOutput(ModelOutput):
     [`~MaskFormerImageProcessor] for details regarding usage.
     """
 )
+@dataclass
 class MaskFormerForInstanceSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.Tensor`, *optional*):
