@@ -1466,6 +1466,204 @@ class ParakeetForRNNT(ParakeetPreTrainedModel, ParakeetRNNTGenerationMixin):
             decoder_cache=decoder_cache,
         )
 
+    def get_initial_streaming_state(
+        self,
+        batch_size: int = 1,
+        target_lang: str | None = None,
+        prompt_id: int | None = None,
+        dtype: torch.dtype = torch.float32,
+        device: torch.device | str | None = None,
+    ) -> dict:
+        """
+        Returns the streaming state dict to seed `streaming_step`.
+
+        Holds:
+        - encoder cache (`cache_last_channel`, `cache_last_time`, `cache_last_channel_len`)
+        - decoder LSTM `(h, c)` state from BEFORE processing `last_token` (`dec_h`, `dec_c`)
+        - decoder output `g` for the most recent committed token (`last_dec_g`) — reused on
+          blank predictions so the LSTM is not re-stepped
+        - last committed (non-blank) token (`last_token`: `(B, 1)` LongTensor, seeded with blank)
+        - resolved language prompt index (`prompt_id`) for prompt-conditioned models
+
+        The state mirrors NeMo's `(last_label, hidden, hidden_prime)` triple in
+        `_greedy_decode_blank_as_pad_loop_frames`.
+
+        Args:
+            batch_size: Number of audio streams to decode in parallel.
+            target_lang / prompt_id: For prompt-conditioned multilingual checkpoints
+                (`config.num_prompts > 0`). Pass either; ignored otherwise.
+        """
+        enc_state = self.encoder.get_initial_cache_state(batch_size=batch_size, dtype=dtype, device=device)
+        n_layers = self.config.num_decoder_layers
+        d = self.config.decoder_hidden_size
+        resolved_pid = None
+        if self.num_prompts > 0:
+            resolved_pid = self._resolve_prompt_id(target_lang, prompt_id)
+        return {
+            "cache_last_channel": enc_state["cache_last_channel"],
+            "cache_last_time": enc_state["cache_last_time"],
+            "cache_last_channel_len": enc_state["cache_last_channel_len"],
+            # Decoder LSTM state from BEFORE last_token. None means "freshly initialized".
+            "dec_h": None,
+            "dec_c": None,
+            # Cached decoder output `g` (after projector); reused on blank predictions.
+            # Lazily allocated on the first non-blank emission.
+            "last_dec_g": None,
+            "last_token": torch.full(
+                (batch_size, 1), self.config.blank_token_id, dtype=torch.long, device=device
+            ),
+            "prompt_id": resolved_pid,
+        }
+
+    def _decoder_pred_step(self, last_token, dec_h, dec_c):
+        """
+        Run a single LSTM + projector step manually so we can decide AFTER the joint+argmax
+        whether to commit the resulting state. Mirrors NeMo's `RNNTDecoder.predict`.
+
+        Args:
+            last_token: `(B, 1)` LongTensor input.
+            dec_h, dec_c: optional `(num_layers, B, hidden)` LSTM states from BEFORE last_token.
+                          `None` means "no prior state" (initial).
+
+        Returns:
+            (g, new_h, new_c) where `g` is `(B, 1, decoder_hidden_size)` and `new_h/new_c` are
+            the post-`last_token` LSTM states.
+        """
+        emb = self.decoder.embedding(last_token)
+        if dec_h is None:
+            lstm_output, (new_h, new_c) = self.decoder.lstm(emb)
+        else:
+            lstm_output, (new_h, new_c) = self.decoder.lstm(emb, (dec_h, dec_c))
+        g = self.decoder.decoder_projector(lstm_output)
+        return g, new_h, new_c
+
+    @torch.no_grad()
+    def streaming_step(
+        self,
+        inputs: dict,
+        drop_extra_pre_encoded: int,
+        state: dict,
+        att_context_size: list | None = None,
+    ) -> list[list[int]]:
+        """
+        Process one audio chunk and emit non-blank tokens, threading encoder + decoder state.
+
+        Mirrors NeMo's `_greedy_decode_blank_as_pad_loop_frames`: encoder runs cache-aware on
+        the chunk, optional prompt is injected per-chunk, then a per-frame inner loop emits up
+        to `max_symbols_per_step` non-blank tokens before advancing. The decoder LSTM is run
+        only when the prediction would advance state (non-blank emission); on blank predictions
+        we reuse `last_dec_g` so the state is not corrupted by re-stepping the same token.
+
+        Args:
+            inputs: dict with `input_features` and `attention_mask` for this chunk
+                    (typically yielded by `ParakeetCacheAwareStreamingBuffer`).
+            drop_extra_pre_encoded: number of pre-encoded mel frames to drop after subsampling
+                    (0 for the first chunk, otherwise from the buffer).
+            state: dict from `get_initial_streaming_state`. Mutated in place.
+            att_context_size: optional override of `[left, right]` attention window.
+
+        Returns:
+            list of length `batch_size`, each a list of token IDs (excluding blanks) emitted
+            during this chunk.
+        """
+        encoder_outputs = self.encoder(
+            input_features=inputs["input_features"],
+            attention_mask=inputs.get("attention_mask"),
+            cache_last_channel=state["cache_last_channel"],
+            cache_last_time=state["cache_last_time"],
+            cache_last_channel_len=state["cache_last_channel_len"],
+            att_context_size=att_context_size,
+            use_cache=True,
+            drop_extra_pre_encoded=drop_extra_pre_encoded,
+            output_attention_mask=True,
+        )
+        state["cache_last_channel"] = encoder_outputs.cache_last_channel
+        state["cache_last_time"] = encoder_outputs.cache_last_time
+        state["cache_last_channel_len"] = encoder_outputs.cache_last_channel_len
+
+        encoded = encoder_outputs.last_hidden_state  # (B, T_chunk, enc_hidden)
+
+        if self.num_prompts > 0:
+            B, T_chunk, _ = encoded.shape
+            prompt = encoded.new_zeros(B, T_chunk, self.num_prompts)
+            prompt[:, :, state["prompt_id"]] = 1.0
+            encoded = self.prompt_kernel(torch.cat([encoded, prompt], dim=-1))
+
+        pooled = self.encoder_projector(encoded)  # (B, T_chunk, joint_hidden)
+        chunk_attn = encoder_outputs.attention_mask
+        if chunk_attn is not None:
+            chunk_attn = chunk_attn.bool()
+
+        batch_size, time_steps, _ = pooled.shape
+        blank_id = self.config.blank_token_id
+        last_token = state["last_token"]
+        dec_h = state["dec_h"]
+        dec_c = state["dec_c"]
+        last_dec_g = state["last_dec_g"]
+        emitted: list[list[int]] = [[] for _ in range(batch_size)]
+
+        for time_idx in range(time_steps):
+            f = pooled[:, time_idx : time_idx + 1, :]  # (B, 1, D)
+            if chunk_attn is not None:
+                frame_invalid = ~chunk_attn[:, time_idx]
+            else:
+                frame_invalid = torch.zeros(batch_size, dtype=torch.bool, device=pooled.device)
+
+            symbols_added = 0
+            advance_now = frame_invalid.clone()
+            while not advance_now.all() and symbols_added < self.max_symbols_per_step:
+                # Run LSTM with last_token + (dec_h, dec_c). Compute lookahead WITHOUT
+                # committing the new state until we see whether the prediction is non-blank.
+                g, new_h, new_c = self._decoder_pred_step(last_token, dec_h, dec_c)
+                logits = self.joint(
+                    encoder_hidden_states=f[:, :, None, :],
+                    decoder_hidden_states=g[:, None, :, :],
+                ).squeeze(2).squeeze(1)
+                tokens = logits.argmax(-1)  # (B,)
+
+                is_blank = tokens == blank_id
+                effective_blank = is_blank | advance_now
+
+                # Per-element commit: only update last_token / state for non-blank emissions.
+                # For blank predictions, last_token, dec_h, dec_c remain unchanged so the next
+                # iter's pred_step recomputes the same g (or we'd just break out of the loop).
+                if not effective_blank.all():
+                    # Build a (B, 1) gather mask for which elements should update.
+                    update = (~effective_blank).view(-1, 1, 1)  # for state shape
+                    update_h = update.permute(2, 0, 1)  # (1, B, 1) for (L, B, H) state shape
+                    if dec_h is None:
+                        # No prior state means this is the very first emission for at least
+                        # one batch element. Initialize with new state where committed,
+                        # zeros elsewhere.
+                        committed_h = torch.where(update_h, new_h, torch.zeros_like(new_h))
+                        committed_c = torch.where(update_h, new_c, torch.zeros_like(new_c))
+                    else:
+                        committed_h = torch.where(update_h, new_h, dec_h)
+                        committed_c = torch.where(update_h, new_c, dec_c)
+                    dec_h, dec_c = committed_h, committed_c
+
+                    # Emit + update last_token for non-blank items.
+                    for b in range(batch_size):
+                        if not effective_blank[b]:
+                            emitted[b].append(int(tokens[b].item()))
+                            last_token[b, 0] = tokens[b]
+
+                    # Cache the latest g (used as fallback if last_token stays unchanged on
+                    # subsequent blank predictions). Per-element commit on g too:
+                    if last_dec_g is None:
+                        last_dec_g = torch.where(update.expand_as(g), g, torch.zeros_like(g))
+                    else:
+                        last_dec_g = torch.where(update.expand_as(g), g, last_dec_g)
+
+                advance_now = advance_now | is_blank
+                symbols_added += 1
+
+        state["last_token"] = last_token
+        state["dec_h"] = dec_h
+        state["dec_c"] = dec_c
+        state["last_dec_g"] = last_dec_g
+        return emitted
+
 
 class ParakeetCacheAwareStreamingBuffer:
     """
