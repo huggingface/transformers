@@ -139,6 +139,7 @@ jobs:
           pattern: setup_values*
           path: setup_values
           merge-multiple: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Prepare some setup values
         run: |
@@ -269,6 +270,7 @@ jobs:
           pattern: new_failures_with_bad_commit_${{ inputs.job }}*
           path: /transformers/new_failures_with_bad_commit_${{ inputs.job }}
           merge-multiple: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check files
         working-directory: /transformers

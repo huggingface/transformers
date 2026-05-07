@@ -138,6 +138,10 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
     pretraining_tp = AttributeError()
     rope_interleave = AttributeError()
     indexer_types: list[str] | None = None
+    attribute_map = {
+        "num_local_experts": "n_routed_experts",
+        "head_dim": "qk_rope_head_dim",
+    }
 
     def __post_init__(self, **kwargs):
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim

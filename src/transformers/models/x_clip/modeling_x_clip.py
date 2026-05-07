@@ -39,8 +39,8 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_x_clip import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfig
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class XCLIPOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
