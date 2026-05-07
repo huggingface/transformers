@@ -4575,7 +4575,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             for name, fn in getattr(module, "_hidden_kernels", {}).items():
                 if name not in dict(module.named_children()):
                     if isinstance(fn, torch.nn.Module):
-                        module._modules[name] = fn
+                        module.register_module(name, fn)
                     else:
                         logger.warning_once(
                             f"Skipping kernel registration for '{name}': not an nn.Module. "
@@ -4584,8 +4584,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         def detach_hidden_kernels(module):
             for name in getattr(module, "_hidden_kernels", {}):
-                if name in module._modules:
-                    del module._modules[name]
+                if hasattr(module, name):
+                    delattr(module, name)
 
         try:
             self.apply(attach_hidden_kernels)
