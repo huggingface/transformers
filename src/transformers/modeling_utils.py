@@ -1394,6 +1394,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Maybe initialize the weights and tie the keys
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
+        # Cache the list of (name, submodule) pairs where the submodule is a PreTrainedModel.
+        # This pattern is used in several places across the codebase; computing it once avoids
+        # repeated traversal of the full module tree.
+        self._named_pretrained_submodules: list[tuple[str, PreTrainedModel]] = [
+            (name, module) for name, module in self.named_modules() if isinstance(module, PreTrainedModel)
+        ]
 
     @property
     def tp_plan(self) -> dict[str, str]:
@@ -2371,7 +2377,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)):
             if getattr(module, "weight", None) is not None:
-                init.normal_(module.weight, mean=0.0, std=std)
+                init.normal_(module.weight.float(), mean=0.0, std=std)
             if module.bias is not None:
                 init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):

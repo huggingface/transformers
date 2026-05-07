@@ -37,12 +37,12 @@ from .configuration_vit_mae import ViTMAEConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for ViTMAEModel's outputs, with potential hidden states and attentions.
     """
 )
+@dataclass
 class ViTMAEModelOutput(ModelOutput):
     r"""
     mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -58,12 +58,12 @@ class ViTMAEModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for ViTMAEDecoder's outputs, with potential hidden states and attentions.
     """
 )
+@dataclass
 class ViTMAEDecoderOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, patch_size ** 2 * num_channels)`):
@@ -75,12 +75,12 @@ class ViTMAEDecoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for ViTMAEForPreTraining's outputs, with potential hidden states and attentions.
     """
 )
+@dataclass
 class ViTMAEForPreTrainingOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`):

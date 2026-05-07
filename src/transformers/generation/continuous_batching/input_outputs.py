@@ -194,8 +194,9 @@ class ContinuousBatchingIOs:
         # Last output token is never changed and set to 0 for async carry on purpose
         self.output_ids.zero_()
         self.total_seqlen_q = 0
+        self.total_seqlen_k: dict[str, int] = dict.fromkeys(self.cumulative_seqlens_k.keys(), 0)
         self.max_seqlen_q = 0
-        self.max_seqlen_k = dict.fromkeys(self.cumulative_seqlens_k.keys(), 0)
+        self.max_seqlen_k: dict[str, int] = dict.fromkeys(self.cumulative_seqlens_k.keys(), 0)
 
         # If the attention mask is needed, it is allocated separately
         if attn_mask_is_needed(self.config):
@@ -240,8 +241,9 @@ class ContinuousBatchingIOs:
         other.use_block_table = self.use_block_table
         # Transfer scalar attributes
         other.total_seqlen_q = self.total_seqlen_q
+        other.total_seqlen_k = dict(self.total_seqlen_k)
         other.max_seqlen_q = self.max_seqlen_q
-        other.max_seqlen_k = dict(self.max_seqlen_k.items())
+        other.max_seqlen_k = dict(self.max_seqlen_k)
         # Transfer static tensors
         maybe_stream = torch.cuda.stream(stream) if stream is not None else nullcontext()
         with maybe_stream:
@@ -283,6 +285,7 @@ class ContinuousBatchingIOs:
         # Reset the attributes that are either tensors or dict of tensors
         for layer_type in self.cumulative_seqlens_k:
             self.max_seqlen_k[layer_type] = 0
+            self.total_seqlen_k[layer_type] = 0
             if self.attention_mask is not None:
                 self.attention_mask[layer_type][:, :, :q_len, : q_len + kv_len].fill_(
                     torch.finfo(self.model_dtype).min
@@ -441,6 +444,7 @@ class ContinuousBatchingIOs:
         # Those kwargs are either dict of tensors or tensors, so we need to handle both cases
         for layer_type, layer_type_seqlens_k in cumulative_seqlens_k.items():
             self.cumulative_seqlens_k[layer_type][: len(layer_type_seqlens_k)] = to_tensor(layer_type_seqlens_k)
+            self.total_seqlen_k[layer_type] = layer_type_seqlens_k[-1]
             if self.attention_mask is not None:
                 build_attention_mask(
                     attention_mask=self.attention_mask[layer_type],
@@ -516,10 +520,10 @@ class ContinuousBatchingIOs:
         for layer_type, seqlens_k in self.cumulative_seqlens_k.items():
             kwargs.cu_seq_lens_k[layer_type] = seqlens_k[: batch_size + 1]
             if use_padding:
-                kwargs.cu_seq_lens_k[layer_type][self.true_batch_size + 1 :] = seqlens_k[self.true_batch_size]
+                kwargs.cu_seq_lens_k[layer_type][self.true_batch_size + 1 :] = self.total_seqlen_k[layer_type]
             kwargs.max_seqlen_k[layer_type] = 1 if self.use_block_table else self.max_seqlen_k[layer_type]
             if self.attention_mask is not None:
-                k_len = kv_size if use_padding else seqlens_k[batch_size]
+                k_len = kv_size if use_padding else self.total_seqlen_k[layer_type]
                 kwargs.attention_mask[layer_type] = self.attention_mask[layer_type][..., :q_size, :k_len]
 
         # If there is only one layer type, we remove the dicts around some attributes to avoid unnecessary overhead
@@ -802,7 +806,11 @@ class ContinuousBatchingAsyncIOs:
         # Transfer the outputs to the host
         io_pair.transfer_outputs_d2h(self.d2h_stream)
         self.d2h_stream.record_event(io_pair.d2h_over)
-        # Switch IO pair
+        # Swap IO pair
+        self.swap_io_pairs()
+
+    def swap_io_pairs(self) -> None:
+        """Switch to the other IO pair so the next batch reads from / writes into a fresh set of static buffers."""
         self.current_pair = 1 - self.current_pair
 
     # This method is called after the switch and not during the first batch

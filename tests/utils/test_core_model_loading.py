@@ -19,7 +19,11 @@ import torch
 import torch.nn as nn
 
 from transformers import PretrainedConfig
-from transformers.conversion_mapping import get_checkpoint_conversion_mapping, register_checkpoint_conversion_mapping
+from transformers.conversion_mapping import (
+    get_checkpoint_conversion_mapping,
+    get_model_conversion_mapping,
+    register_checkpoint_conversion_mapping,
+)
 from transformers.core_model_loading import (
     Chunk,
     Concatenate,
@@ -147,14 +151,14 @@ class TestWeightGlobMatching(unittest.TestCase):
         ]
 
         self.assertEqual(
-            rename_source_key("foo.block_sparse_moe.experts.3.w1.weight", renamings, [])[0],
+            rename_source_key("foo.block_sparse_moe.experts.3.w1.weight", renamings)[0],
             "foo.mlp.experts.gate_up_proj",
         )
         self.assertEqual(
-            rename_source_key("foo.block_sparse_moe.experts.3.w2.weight", renamings, [])[0],
+            rename_source_key("foo.block_sparse_moe.experts.3.w2.weight", renamings)[0],
             "foo.mlp.experts.down_proj",
         )
-        self.assertEqual(rename_source_key("model.language_model.lm_head.weight", renamings, [])[0], "language_model")
+        self.assertEqual(rename_source_key("model.language_model.lm_head.weight", renamings)[0], "language_model")
 
     def test_sub_key_no_match_returns_original(self):
         renamings = [
@@ -162,7 +166,7 @@ class TestWeightGlobMatching(unittest.TestCase):
         ]
 
         key = "unrelated.key"
-        renamed_key, _ = rename_source_key(key, renamings, [])
+        renamed_key, _ = rename_source_key(key, renamings)
         self.assertEqual(renamed_key, key)
 
 
@@ -217,6 +221,10 @@ class DummyRoot(nn.Module):
         self.model = DummyTopModel(add_extra_moe)
         if with_mlp:
             self.mlp = DummyMLP()
+        self.config = PretrainedConfig()
+        # Mirror what PreTrainedModel.post_init() does so that
+        # get_model_conversion_mapping() can be called on DummyRoot.
+        self._named_pretrained_submodules = [("", self)]
 
 
 class TestConvertAndLoadStateDict(unittest.TestCase):
@@ -406,7 +414,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
     def test_qkv_chunk_rope_permute_with_fp8_quantization(self):
         if is_triton_available():
-            from transformers.integrations.finegrained_fp8 import Fp8Dequantize
+            from transformers.integrations.finegrained_fp8 import Fp8Dequantize, Fp8Quantize
         else:
             self.skipTest("Fine-grained FP8 integration tests require Triton to be installed.")
         n_heads = 2
@@ -472,6 +480,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
                     self, "quantization_config", SimpleNamespace(weight_block_size=bs)
                 ),
                 "param_needs_quantization": lambda self, _model, param_name: param_name.endswith("q_proj.weight"),
+                "get_quantize_ops": lambda self: Fp8Quantize(self),
                 "pre_quantized": False,
             },
         )
@@ -479,11 +488,11 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
         weight_mapping = [
             WeightConverter(
-                "model.layers.*.self_attn.qkv_proj.weight",
+                "self_attn.qkv_proj.weight",
                 [
-                    "model.layers.*.self_attn.q_proj.weight",
-                    "model.layers.*.self_attn.k_proj.weight",
-                    "model.layers.*.self_attn.v_proj.weight",
+                    "self_attn.q_proj.weight",
+                    "self_attn.k_proj.weight",
+                    "self_attn.v_proj.weight",
                 ],
                 operations=[Chunk(dim=0), PermuteForRope()],
             )
@@ -525,6 +534,141 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             context={"quantization_config": quantizer.quantization_config},
         )
         torch.testing.assert_close(dequantized_q, expected_q, rtol=1e-2, atol=1e-2)
+
+    def test_scoped_renaming_does_not_leak_to_sibling_or_parent(self):
+        """scope_prefix gates a WeightRenaming to keys under one submodel only —
+        neither the sibling submodel nor the parent's own keys must be affected.
+
+        This mirrors the real use-case: a composite model (e.g. vision-language) has
+        two top-level submodels and a root-level weight, each with an ``old_q`` key.
+        The rename is registered only for ``vision_model``; the sibling
+        ``language_model.old_q`` and the root-level ``old_q`` must remain unmatched.
+        """
+
+        class _Submodel(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.q = DummyParamModule((1, 2))
+
+        class _CompositeModel(nn.Module):
+            base_model_prefix = ""
+
+            def __init__(self):
+                super().__init__()
+                self.vision_model = _Submodel()
+                self.language_model = _Submodel()
+                self.q = DummyParamModule((1, 2))  # root-level weight with the same name
+
+        model = _CompositeModel()
+        model.config = PretrainedConfig()
+
+        vision_val = torch.tensor([[1.0, 2.0]])
+        checkpoint = {
+            "vision_model.old_q.weight": vision_val.clone(),
+            "language_model.old_q.weight": torch.tensor([[9.0, 9.0]]),
+            "old_q.weight": torch.tensor([[7.0, 7.0]]),  # root-level, must not be renamed
+        }
+
+        scoped_rename = WeightRenaming("^old_q", "q")
+        scoped_rename.scope_prefix = "vision_model"
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            checkpoint,
+            LoadStateDictConfig(weight_mapping=[scoped_rename]),
+            tp_plan=None,
+        )
+
+        # Sibling and parent keys must be unmatched.
+        self.assertEqual(loading_info.unexpected_keys, {"language_model.old_q.weight", "old_q.weight"})
+        self.assertEqual(loading_info.missing_keys, {"language_model.q.weight", "q.weight"})
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        torch.testing.assert_close(model.vision_model.q.weight, vision_val)
+        torch.testing.assert_close(model.language_model.q.weight, torch.zeros(1, 2))
+        torch.testing.assert_close(model.q.weight, torch.zeros(1, 2))
+
+    def test_interleaved_renaming_and_converter_round_trip(self):
+        """A WeightRenaming preceding a WeightConverter must also fire on the save path
+        even after the converter has already set source_pattern.
+
+        Loading (checkpoint key → model key):
+          1. WeightRenaming  (source "^decoder", target "encoder"):
+             "decoder.attn.qkv_proj.weight"          → "encoder.attn.qkv_proj.weight"
+          2. WeightConverter (source "^attn.qkv_proj.weight", targets "attn.{q,k,v}_proj.weight", scope "encoder"):
+             strips "encoder.", matches source, unpacks QKV, re-attaches "encoder."
+             "encoder.attn.qkv_proj.weight"          → "encoder.attn.{q,k,v}_proj.weight"
+
+        Saving (model key → checkpoint key, transforms applied in reverse):
+          1. rev(WeightConverter) (source "attn.{q,k,v}_proj.weight", target "^attn.qkv_proj.weight", scope "encoder"):
+             strips "encoder.", matches source, repacks QKV, re-attaches "encoder."
+             "encoder.attn.{q,k,v}_proj.weight"      → "encoder.attn.qkv_proj.weight"
+          2. rev(WeightRenaming) (source "^encoder", target "decoder"):
+             "encoder.attn.qkv_proj.weight"          → "decoder.attn.qkv_proj.weight"
+        """
+
+        class _Attn(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.q_proj = DummyParamModule((2, 4))
+                self.k_proj = DummyParamModule((2, 4))
+                self.v_proj = DummyParamModule((2, 4))
+
+        class _Encoder(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.attn = _Attn()
+
+        class _InterleavedModel(nn.Module):
+            base_model_prefix = ""
+
+            def __init__(self):
+                super().__init__()
+                self.encoder = _Encoder()
+
+        qkv = torch.arange(24, dtype=torch.float32).reshape(6, 4)
+        model = _InterleavedModel()
+        model.config = PretrainedConfig()
+
+        # Checkpoint uses a "decoder" prefix and stores QKV packed together.
+        checkpoint = {"decoder.attn.qkv_proj.weight": qkv.clone()}
+
+        qkv_converter = WeightConverter(
+            "^attn.qkv_proj.weight",
+            ["attn.q_proj.weight", "attn.k_proj.weight", "attn.v_proj.weight"],
+            operations=[Chunk(dim=0)],
+        )
+        # scope_prefix mirrors what get_model_conversion_mapping sets for a submodel
+        qkv_converter.scope_prefix = "encoder"
+
+        weight_mapping = [
+            WeightRenaming("^decoder", "encoder"),  # step 1: fix prefix
+            qkv_converter,  # step 2: unpack QKV (fires after rename, scoped to encoder)
+        ]
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            checkpoint,
+            LoadStateDictConfig(weight_mapping=weight_mapping),
+            tp_plan=None,
+        )
+
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        q, k, v = torch.chunk(qkv, 3, dim=0)
+        torch.testing.assert_close(model.encoder.attn.q_proj.weight, q)
+        torch.testing.assert_close(model.encoder.attn.k_proj.weight, k)
+        torch.testing.assert_close(model.encoder.attn.v_proj.weight, v)
+
+        # Round-trip: saving must reconstruct the original "decoder.*" checkpoint.
+        # This relies on rev(WeightRenaming) firing after rev(WeightConverter) has set
+        # source_pattern — if it were skipped the prefix would remain "encoder".
+        saved = revert_weight_conversion(model, model.state_dict())
+        self.assertTrue(compare_state_dicts(saved, checkpoint))
 
     def test_ernie4_5_vl_moe_conversion(self):
         model = DummyRoot(add_extra_moe=True)
@@ -1019,6 +1163,105 @@ class TestConversionMapping(unittest.TestCase):
         self.assertEqual(set(model_state_dict.keys()), set(saved_state_dict.keys()))
         for k, v in saved_state_dict.items():
             self.assertTrue((v == model_state_dict[k]).all())
+
+    def test_class_name_wins_over_model_type(self):
+        """Class-name registry entry takes priority over model_type for the same model."""
+        register_checkpoint_conversion_mapping("_TstCls", [WeightRenaming(r"^cls_key", "cls_renamed")], overwrite=True)
+        register_checkpoint_conversion_mapping(
+            "_tst_mtype", [WeightRenaming(r"^type_key", "type_renamed")], overwrite=True
+        )
+
+        def make_mock(class_name):
+            m = type(class_name, (), {})()
+            m.config = SimpleNamespace(model_type="_tst_mtype")
+            m._named_pretrained_submodules = [("", m)]
+            return m
+
+        # A module whose class name has a registry entry → class entry wins.
+        transforms = get_model_conversion_mapping(make_mock("_TstCls"), add_legacy=False)
+        patterns = [t.source_patterns for t in transforms]
+        self.assertIn(["^cls_key"], patterns)
+        self.assertNotIn(["^type_key"], patterns)
+
+        # A module with no class entry falls through to the model_type entry.
+        transforms = get_model_conversion_mapping(make_mock("_TstOther"), add_legacy=False)
+        patterns = [t.source_patterns for t in transforms]
+        self.assertIn(["^type_key"], patterns)
+        self.assertNotIn(["^cls_key"], patterns)
+
+    def test_sibling_submodels_same_model_type_both_get_transforms(self):
+        """Two sibling sub-models sharing a model_type must each get their own scoped transforms.
+
+        Old flat-set deduplication would mark the model_type seen after the first
+        sibling and silently skip the second one.  The ancestor-based check must
+        allow both because neither sibling is an ancestor of the other.
+        """
+        register_checkpoint_conversion_mapping(
+            "_tst_shared_type", [WeightRenaming(r"^w", "renamed_w")], overwrite=True
+        )
+
+        def make_root_with_siblings(cls_a, cls_b):
+            """Root model with two children of different classes but the same model_type."""
+            child_a = type(cls_a, (), {})()
+            child_a.config = SimpleNamespace(model_type="_tst_shared_type")
+
+            child_b = type(cls_b, (), {})()
+            child_b.config = SimpleNamespace(model_type="_tst_shared_type")
+
+            root = type("_TstRoot", (), {})()
+            root.config = SimpleNamespace(model_type="_tst_root_only")
+            root._named_pretrained_submodules = [("encoder", child_a), ("decoder", child_b)]
+            return root
+
+        transforms = get_model_conversion_mapping(
+            make_root_with_siblings("_TstEncCls", "_TstDecCls"), add_legacy=False
+        )
+        scope_prefixes = [t.scope_prefix for t in transforms]
+
+        # Both siblings must be represented with their own scoped transforms.
+        self.assertIn("encoder", scope_prefixes)
+        self.assertIn("decoder", scope_prefixes)
+
+    def test_sibling_submodels_same_class_both_get_transforms(self):
+        """Two sibling sub-models of the *same* class must each get their own scoped transforms."""
+        register_checkpoint_conversion_mapping("_TstSharedCls", [WeightRenaming(r"^w", "renamed_w")], overwrite=True)
+
+        child_a = type("_TstSharedCls", (), {})()
+        child_a.config = SimpleNamespace(model_type="_tst_shared_cls_mtype")
+
+        child_b = type("_TstSharedCls", (), {})()
+        child_b.config = SimpleNamespace(model_type="_tst_shared_cls_mtype")
+
+        root = type("_TstRootSharedCls", (), {})()
+        root.config = SimpleNamespace(model_type="_tst_root_only2")
+        root._named_pretrained_submodules = [("encoder", child_a), ("decoder", child_b)]
+
+        transforms = get_model_conversion_mapping(root, add_legacy=False)
+        scope_prefixes = [t.scope_prefix for t in transforms]
+
+        self.assertIn("encoder", scope_prefixes)
+        self.assertIn("decoder", scope_prefixes)
+
+    def test_child_with_same_model_type_as_root_is_skipped(self):
+        """When the root model claims a model_type unscoped, a nested child with the
+        same model_type must NOT produce a second (incorrectly scoped) copy of those
+        transforms — the root's unscoped transforms already cover all keys."""
+        register_checkpoint_conversion_mapping(
+            "_tst_root_child_shared", [WeightRenaming(r"^w", "renamed_w")], overwrite=True
+        )
+
+        child = type("_TstChildSame", (), {})()
+        child.config = SimpleNamespace(model_type="_tst_root_child_shared")
+
+        root = type("_TstRootSame", (), {})()
+        root.config = SimpleNamespace(model_type="_tst_root_child_shared")
+        # Root ("") appears before child ("submodel") — mirrors DFS order.
+        root._named_pretrained_submodules = [("", root), ("submodel", child)]
+
+        transforms = get_model_conversion_mapping(root, add_legacy=False)
+        # Only one unscoped transform (from the root); child must be suppressed.
+        self.assertEqual(len(transforms), 1)
+        self.assertIsNone(transforms[0].scope_prefix)
 
 
 if __name__ == "__main__":
