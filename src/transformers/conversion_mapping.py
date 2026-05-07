@@ -560,6 +560,68 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.fc2"),
             WeightRenaming(r"encoder.encoder.(\d+).layers", r"encoder.aifi.\1.layers"),
         ],
+        "RfDetrModel": [
+            # RfDetrConvEncoder — backbone checkpoint layout + projector stages
+            WeightRenaming(r"backbone.0.encoder.encoder", r"backbone.backbone"),
+            WeightRenaming(r"backbone.0.projector", r"backbone.projector"),
+            WeightRenaming(r"projector.stages.0.0.cv1.conv", r"projector.projector_layer.conv1.conv"),
+            WeightRenaming(r"projector.stages.0.0.cv1.bn", r"projector.projector_layer.conv1.norm"),
+            WeightRenaming(r"projector.stages.0.0.cv2.conv", r"projector.projector_layer.conv2.conv"),
+            WeightRenaming(r"projector.stages.0.0.cv2.bn", r"projector.projector_layer.conv2.norm"),
+            WeightRenaming(r"projector.stages.0.1", r"projector.layer_norm"),
+            WeightRenaming(
+                r"projector.stages.0.0.m.(\d+).cv1.conv", r"projector.projector_layer.bottlenecks.\1.conv1.conv"
+            ),
+            WeightRenaming(
+                r"projector.stages.0.0.m.(\d+).cv1.bn", r"projector.projector_layer.bottlenecks.\1.conv1.norm"
+            ),
+            WeightRenaming(
+                r"projector.stages.0.0.m.(\d+).cv2.conv", r"projector.projector_layer.bottlenecks.\1.conv2.conv"
+            ),
+            WeightRenaming(
+                r"projector.stages.0.0.m.(\d+).cv2.bn", r"projector.projector_layer.bottlenecks.\1.conv2.norm"
+            ),
+            # RfDetrDecoder
+            WeightRenaming(r"transformer.decoder", r"decoder"),
+            WeightRenaming(r"decoder.layers.(\d+).norm1", r"decoder.layers.\1.self_attn_layer_norm"),
+            WeightRenaming(r"decoder.layers.(\d+).norm2", r"decoder.layers.\1.cross_attn_layer_norm"),
+            WeightRenaming(r"decoder.layers.(\d+).linear1", r"decoder.layers.\1.mlp.fc1"),
+            WeightRenaming(r"decoder.layers.(\d+).linear2", r"decoder.layers.\1.mlp.fc2"),
+            WeightRenaming(r"decoder.layers.(\d+).norm3", r"decoder.layers.\1.layer_norm"),
+            WeightRenaming(r"decoder.norm", r"decoder.layernorm"),
+            WeightRenaming(r"^transformer\.enc_output_norm", r"enc_output_norm"),
+            WeightRenaming(r"^transformer\.enc_output", r"enc_output"),
+            WeightRenaming(r"transformer.enc_out_class_embed", r"enc_out_class_embed"),
+            WeightRenaming(r"transformer.enc_out_bbox_embed", r"enc_out_bbox_embed"),
+            WeightRenaming(r"refpoint_embed\.weight", r"reference_point_embed.weight"),
+            # RfDetrAttention
+            WeightRenaming(r"self_attn.out_proj", r"self_attn.o_proj"),
+            WeightConverter(
+                source_patterns=r"self_attn.in_proj_bias",
+                target_patterns=[r"self_attn.q_proj.bias", r"self_attn.k_proj.bias", r"self_attn.v_proj.bias"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=r"self_attn.in_proj_weight",
+                target_patterns=[r"self_attn.q_proj.weight", r"self_attn.k_proj.weight", r"self_attn.v_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+        ],
+        "RfDetrForObjectDetection": [
+            WeightRenaming(source_patterns="^", target_patterns="model."),
+        ],
+        "RfDetrForInstanceSegmentation": [
+            WeightRenaming(source_patterns="^(?!segmentation_head)", target_patterns="model."),
+            WeightRenaming(r"segmentation_head\.query_features_block\.layers\.0", r"query_features_block.mlp.fc1"),
+            WeightRenaming(r"segmentation_head\.query_features_block\.layers\.2", r"query_features_block.mlp.fc2"),
+            WeightRenaming(r"segmentation_head\.query_features_block\.norm_in", r"query_features_block.norm"),
+            WeightRenaming(r"segmentation_head\.blocks\.(\d+)\.norm", r"blocks.\1.layernorm"),
+            WeightRenaming(r"segmentation_head\.blocks\.(\d+)\.dwconv", r"blocks.\1.depthwise_conv"),
+            WeightRenaming(r"segmentation_head\.blocks\.(\d+)\.pwconv1", r"blocks.\1.pointwise_conv"),
+            WeightRenaming(r"segmentation_head\.spatial_features_proj", r"spatial_features_proj"),
+            WeightRenaming(r"segmentation_head\.query_features_proj", r"query_features_proj"),
+            WeightRenaming(r"segmentation_head\.bias", r"segmentation_bias"),
+        ],
         "ConditionalDetrModel": [
             WeightRenaming("backbone.conv_encoder", "backbone"),
             WeightRenaming("self_attn.out_proj", "self_attn.o_proj"),

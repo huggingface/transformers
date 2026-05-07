@@ -28,7 +28,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
@@ -51,6 +51,9 @@ from ..vitdet.modeling_vitdet import (
     VitDetMlp,
     VitDetPreTrainedModel,
 )
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="AnnaZhang/lwdetr_small_60e_coco")
@@ -144,6 +147,8 @@ class LwDetrConfig(PreTrainedConfig):
     disable_custom_kernels (`bool`, *optional*, defaults to `True`):
         Disable the use of custom CUDA and CPU kernels. This option is necessary for the ONNX export, as custom
         kernels are not supported by PyTorch ONNX export.
+    class_loss_coefficient (`float`, *optional*, defaults to 1):
+        Relative weight of the classification loss in the Hungarian matching cost.
 
     Examples:
 
@@ -183,19 +188,26 @@ class LwDetrConfig(PreTrainedConfig):
     group_detr: int = 13
     init_std: float = 0.02
     disable_custom_kernels: bool = True
-    class_cost: int = 2
-    bbox_cost: int = 5
-    giou_cost: int = 2
-    mask_loss_coefficient: int = 1
-    dice_loss_coefficient: int = 1
-    bbox_loss_coefficient: int = 5
-    giou_loss_coefficient: int = 2
+    class_cost: int | float = 2
+    bbox_cost: int | float = 5
+    giou_cost: int | float = 2
+    class_loss_coefficient: int | float = 1
+    dice_loss_coefficient: int | float = 1
+    bbox_loss_coefficient: int | float = 5
+    giou_loss_coefficient: int | float = 2
     eos_coefficient: float = 0.1
     focal_alpha: float = 0.25
     auxiliary_loss: bool = True
     d_model: int = 256
 
     def __post_init__(self, **kwargs):
+        if "mask_loss_coefficient" in kwargs:
+            logger.warning_once(
+                "The parameter `mask_loss_coefficient` was renamed to `class_loss_coefficient` in LW-DETR. "
+                "Please use `class_loss_coefficient` instead. `mask_loss_coefficient` will be removed in a future version."
+            )
+            self.class_loss_coefficient = kwargs.pop("mask_loss_coefficient")
+
         self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=self.backbone_config,
             default_config_type="lw_detr_vit",
@@ -522,6 +534,7 @@ class LwDetrC2FLayer(nn.Module):
         hidden_states = self.conv1(hidden_states)
         all_hidden_states = list(hidden_states.split(self.hidden_channels, 1))
         hidden_states = all_hidden_states[-1]
+        hidden_states = hidden_states.contiguous()
 
         for bottleneck in self.bottlenecks:
             hidden_states = bottleneck(hidden_states)
