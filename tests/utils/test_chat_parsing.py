@@ -17,7 +17,7 @@ import unittest
 
 from transformers import AutoTokenizer
 from transformers.testing_utils import require_jmespath
-from transformers.utils.chat_parsing import ResponseEventStream, parse_response
+from transformers.utils.chat_parsing import ResponseParser, parse_response
 
 
 cohere_template = {
@@ -654,7 +654,7 @@ class ResponseEventStreamTest(unittest.TestCase):
             expected = parse_response(text, tmpl)
             for step in (1, 2, 3, 5, 7, 13, 31):
                 with self.subTest(fixture=name, step=step):
-                    streamer = ResponseEventStream(tmpl)
+                    streamer = ResponseParser(tmpl)
                     for chunk in _chunk_fixed(text, step):
                         streamer.feed(chunk)
                     message, _ = streamer.finalize()
@@ -669,7 +669,7 @@ class ResponseEventStreamTest(unittest.TestCase):
             expected = parse_response(text, tmpl)
             for trial in range(30):
                 with self.subTest(fixture=name, trial=trial):
-                    streamer = ResponseEventStream(tmpl)
+                    streamer = ResponseParser(tmpl)
                     for chunk in _chunk_random(text, rng):
                         streamer.feed(chunk)
                     message, _ = streamer.finalize()
@@ -685,7 +685,7 @@ class ResponseEventStreamTest(unittest.TestCase):
         for name, tmpl, text in _STREAMING_FIXTURES:
             for trial in range(10):
                 with self.subTest(fixture=name, trial=trial):
-                    streamer = ResponseEventStream(tmpl)
+                    streamer = ResponseParser(tmpl)
                     all_events: list[dict] = []
                     for chunk in _chunk_random(text, rng):
                         all_events.extend(streamer.feed(chunk))
@@ -724,7 +724,7 @@ class ResponseEventStreamTest(unittest.TestCase):
         regions emit no chunks and report the full parsed value only on close."""
         # Single representative case with a long text region and a JSON region.
         text = _STREAMING_FIXTURES[0][2]  # cohere fixture
-        streamer = ResponseEventStream(cohere_template)
+        streamer = ResponseParser(cohere_template)
         events: list[dict] = []
         for ch in text:  # 1-byte chunks hit the most anchor boundaries
             events.extend(streamer.feed(ch))
@@ -751,7 +751,7 @@ class ResponseEventStreamTest(unittest.TestCase):
     def test_open_event_carries_named_captures(self):
         """Named groups in open_pattern must land in region_open's `meta`."""
         text = "<|channel|>analysis<|message|>think<|end|><|channel|>commentary to=functions.foo<|message|>{}<|call|>"
-        streamer = ResponseEventStream(gpt_oss_template)
+        streamer = ResponseParser(gpt_oss_template)
         events: list[dict] = []
         for ch in text:
             events.extend(streamer.feed(ch))
@@ -763,7 +763,7 @@ class ResponseEventStreamTest(unittest.TestCase):
         self.assertEqual(tool_opens[0]["meta"], {"name": "foo"})
 
     def test_feed_after_finalize_raises(self):
-        streamer = ResponseEventStream(smollm_template)
+        streamer = ResponseParser(smollm_template)
         streamer.feed("<think>x</think>")
         streamer.finalize()
         with self.assertRaises(RuntimeError):
@@ -772,7 +772,7 @@ class ResponseEventStreamTest(unittest.TestCase):
             streamer.finalize()
 
     def test_empty_input_streams_cleanly(self):
-        streamer = ResponseEventStream(smollm_template)
+        streamer = ResponseParser(smollm_template)
         self.assertEqual(streamer.feed(""), [])
         result, final_events = streamer.finalize()
         # Only the default fields should remain; nothing else is required.
@@ -801,7 +801,7 @@ class PrefixAndTruncationTest(unittest.TestCase):
             "<|im_start|>assistant\n<think>\n"
         )
         generated = "Let me think...</think>"
-        stream = ResponseEventStream(qwen3_template_with_anchor, prefix=prompt)
+        stream = ResponseParser(qwen3_template_with_anchor, prefix=prompt)
         # The stream surfaces a synthetic open so the caller knows the state.
         self.assertEqual(
             stream.initial_event,
@@ -826,7 +826,7 @@ class PrefixAndTruncationTest(unittest.TestCase):
             "<|im_start|>user\nFollowup<|im_end|>\n"
             "<|im_start|>assistant\n<think>\n"
         )
-        stream = ResponseEventStream(qwen3_template_with_anchor, prefix=prompt)
+        stream = ResponseParser(qwen3_template_with_anchor, prefix=prompt)
         # We landed inside `thinking` (from the LAST assistant turn's `<think>\n`),
         # not in some earlier-turn artifact.
         self.assertIsNotNone(stream.initial_event)
@@ -840,7 +840,7 @@ class PrefixAndTruncationTest(unittest.TestCase):
         """With no `start_anchor` in the spec, the prefix is processed verbatim
         (silently). Useful when the caller has already pre-cut the prefix."""
         prompt = "<think>\n"
-        stream = ResponseEventStream(qwen3_template, prefix=prompt)  # no anchor
+        stream = ResponseParser(qwen3_template, prefix=prompt)  # no anchor
         self.assertEqual(
             stream.initial_event,
             {"type": "region_open", "field": "thinking", "meta": {}},
@@ -853,7 +853,7 @@ class PrefixAndTruncationTest(unittest.TestCase):
         """Spec has start_anchor but the prefix doesn't contain it: parser
         falls back to processing the entire prefix (with a logged warning)."""
         prompt = "<think>\n"  # no <|im_start|>assistant\n
-        stream = ResponseEventStream(qwen3_template_with_anchor, prefix=prompt)
+        stream = ResponseParser(qwen3_template_with_anchor, prefix=prompt)
         # Even without truncation, the prefix opens `thinking` silently.
         self.assertEqual(
             stream.initial_event,
@@ -885,7 +885,7 @@ class PrefixAndTruncationTest(unittest.TestCase):
             # Streaming forms.
             for step in (1, 3, 7, 31):
                 with self.subTest(fixture=name, step=step):
-                    stream = ResponseEventStream(tmpl_with_anchor, prefix=prompt)
+                    stream = ResponseParser(tmpl_with_anchor, prefix=prompt)
                     for chunk in _chunk_fixed(gen_text, step):
                         stream.feed(chunk)
                     message, _ = stream.finalize()
@@ -904,7 +904,7 @@ class PrefixAndTruncationTest(unittest.TestCase):
             },
         }
         prefix = "noise[BEGIN]<tag>silently consumed</tag>"
-        stream = ResponseEventStream(spec, prefix=prefix)
+        stream = ResponseParser(spec, prefix=prefix)
         # Closed-and-discarded inside prefix → no initial_event.
         self.assertIsNone(stream.initial_event)
         stream.feed("real generated body")
@@ -918,7 +918,7 @@ class PrefixAndTruncationTest(unittest.TestCase):
         the match; the synthetic `initial_event` is None (no region opened
         within the prefix yet) and the open fires from `feed()`."""
         prefix = "<|im_start|>assistant\n<thi"  # incomplete `<think>`
-        stream = ResponseEventStream(qwen3_template_with_anchor, prefix=prefix)
+        stream = ResponseParser(qwen3_template_with_anchor, prefix=prefix)
         self.assertIsNone(stream.initial_event)
         events = stream.feed("nk>real body</think>")
         types = [e["type"] for e in events]

@@ -3416,7 +3416,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         *,
         prefix: str | list[int] | np.ndarray | torch.Tensor | None = None,
     ):
-        """Return a stateful [`~utils.chat_parsing.ResponseEventStream`] for incrementally
+        """Return a stateful [`~utils.chat_parsing.ResponseParser`] for incrementally
         parsing a streamed response. Uses the tokenizer's `response_template` attribute unless
         overridden.
 
@@ -3425,7 +3425,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         chunks fed via `stream.feed()` are then classified correctly even when the chat
         template emitted assistant-turn content (e.g., `<think>\\n`) that the model
         continues from."""
-        from .utils.chat_parsing import ResponseEventStream
+        from .utils.chat_parsing import ResponseParser
 
         tmpl = response_template if response_template is not None else getattr(self, "response_template", None)
         if tmpl is None:
@@ -3435,7 +3435,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         prefix_str: str | None = None
         if prefix is not None:
             prefix_str = prefix if isinstance(prefix, str) else self.decode(prefix)
-        return ResponseEventStream(tmpl, prefix=prefix_str)
+        return ResponseParser(tmpl, prefix=prefix_str)
 
 
 def get_fast_tokenizer_file(tokenization_files: list[str]) -> str:

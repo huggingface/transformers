@@ -28,41 +28,37 @@ from .response_templates import ResponseTemplateField, ResponseTemplate, load_re
 
 # When a delimiter is specified as a regex, we can't reason exactly about how
 # many trailing bytes might still complete a match, so we conservatively hold
-# back a fixed window. 64 chars covers every delimiter regex currently in use.
+# back a fixed window. Might make this a property of the templates later.
 _REGEX_STREAM_LOOKBACK = 64
 
 
 def parse_response(text: str, response_template: dict | ResponseTemplate, *, prefix: str | None = None) -> dict:
-    """Whole-string parse: returns the assembled message dict.
-
-    `prefix` is silently consumed up front to advance state without
-    populating output (see `ResponseEventStream`). When `prefix` is omitted
-    and the spec defines `start_anchor`, `text` is auto-truncated to the
-    suffix beginning past the last anchor — supporting the "pass the whole
-    rendered conversation as one string" shape.
+    """A convenience function for response parsing when you don't want streaming. Takes a whole output + text
+    and parses it without streaming any events, then returns the parsed message.
     """
-    spec_obj = load_response_template(response_template)
-    if prefix is None and spec_obj.start_anchor_re is not None:
-        text = spec_obj.truncate_past_last_anchor(text, log_if_missing=False)
-    stream = ResponseEventStream(spec_obj, prefix=prefix)
+    response_template = load_response_template(response_template)
+    stream = ResponseParser(response_template, prefix=prefix)
     stream.feed(text)
     message, _events = stream.finalize()
     return message
 
 
-class ResponseEventStream:
-    """Incremental parser over a `response_template` spec.
+class ResponseParser:
+    """This class implements a streaming parser with a `response_template`. If you don't need streaming and
+    just want to parse a complete message, use the `parse_response` function above. Streaming parsing emits
+    events indicating when regions (message fields) are opened and closed, with the model writing to the region
+    that is currently open.
 
     Usage:
-        streamer = ResponseEventStream(response_template, prefix=chat_prompt)
-        if streamer.initial_event:
-            handle(streamer.initial_event)
+        parser = ResponseParser(response_template, prefix=chat_prompt)
+        if parser.initial_event:
+            handle(parser.initial_event)
         for chunk in model_text_stream:
-            for event in streamer.feed(chunk):
+            for event in parser.feed(chunk):
                 handle(event)
-        message, final_events = streamer.finalize()
+        message, final_events = parser.finalize()
         for event in final_events:
-            handle(event)  # region_close for any EOS-bounded region, then stream_end
+            handle(event)
 
     Event types (all dicts):
       - {"type": "region_open",  "field": name, "meta": {<named captures>}}
@@ -70,26 +66,9 @@ class ResponseEventStream:
       - {"type": "region_close", "field": name, "value": <parsed+assembled value>}
       - {"type": "stream_end"}
 
-    `prefix` is the chat-prompt context that came before generation (e.g.,
-    a rendered chat template ending in `<|im_start|>assistant\\n<think>\\n`).
-    When passed, the parser right-truncates it to past the spec's
-    `start_anchor` (so system / user / earlier-assistant turns are dropped
-    up front) and silently runs the remainder through the state machine
-    so it lands in the right initial region. No events fire and no body
-    content from the prefix lands in the output dict; the only observable
-    side effect is `self.initial_event`, a synthetic `region_open` that
-    reports the post-prefix state when it's an explicit region.
-
-    `feed()` itself does not look for `start_anchor`. If your spec has one
-    and you have prefix bytes to discard, pass them via `prefix=` rather
-    than feeding them as part of the stream. The whole-string
-    `parse_response()` is the only entry point that auto-truncates a glued
-    prompt+response — the streaming path expects pre-cut input.
-
-    Correctness invariant (property-tested): for any chunking of a
-    response-only input (i.e., what `feed()` sees after `prefix=` is
-    consumed), finalize() returns the same dict as
-    `parse_response(response, ..., prefix=prefix)`.
+    ResponseParser requires the chat `prefix` (i.e. the chat history, the prefill before the current generation).
+    This is because chat templates or assistant prefills can sometimes write part of the message, and if we
+    only see the model output, and not the template, then we can't reliably parse the message in those cases.
     """
 
     def __init__(self, response_template: dict | ResponseTemplate, prefix: str | None = None):
@@ -113,16 +92,10 @@ class ResponseEventStream:
             self._consume_prefix(prefix)
 
     def _consume_prefix(self, prefix: str) -> None:
-        """Right-truncate prefix past the last `start_anchor` and silently
-        run the remainder through the state machine. After this call:
+        """Loads the prefix (the chat prefill sent to the model), right-truncates it to the start of the
+        assistant message (as determined by start_anchor) and then runs the remainder through the parser.
 
-        - `_buffer` retains any held-back trailing bytes (e.g., a partial
-          delimiter prefix at the very end), so a subsequent `feed()` can
-          complete the match across the prefix/generation boundary.
-        - `_current` / `_captures` / `_opened` / `_body` reflect the
-          state implied by the prefix.
-        - `initial_event` is a synthetic `region_open` if we landed inside
-          an explicit region; `None` otherwise.
+        Think of this as the "get the parser up to speed on the story so far" method.
         """
         truncated = self._spec.truncate_past_last_anchor(prefix)
         if not truncated:
@@ -141,8 +114,10 @@ class ResponseEventStream:
             }
 
     def feed(self, text: str) -> list[dict]:
+        """Feeds more text/tokens from the model output into the tokenizer, and returns any events that result
+        (regions entered or left). This is the method you want to call after each generation step."""
         if self._finalized:
-            raise RuntimeError("ResponseEventStream already finalized")
+            raise RuntimeError("ResponseParser already finalized")
         if text:
             self._buffer += text
         events: list[dict] = []
@@ -151,10 +126,15 @@ class ResponseEventStream:
 
     def finalize(self) -> tuple[dict, list[dict]]:
         """Close the stream and return the final message dict together with
-        any events emitted during finalization (region_close events for
-        EOS-bounded regions, followed by a single stream_end)."""
+        any finalization events. This is necessary because some regions may only
+        end at the end of the sequence, so you won't see the event telling you they're
+        ready until the sequence is finalized."""
+
+        def _is_empty(v: Any) -> bool:
+            return v is None or (isinstance(v, (list, dict, str)) and not v)
+
         if self._finalized:
-            raise RuntimeError("ResponseEventStream already finalized")
+            raise RuntimeError("ResponseParser already finalized")
         events: list[dict] = []
         self._process(events, eos=True)
         missing = [n for n, f in self._spec.fields.items() if not f.optional and n not in self._output]
@@ -166,7 +146,7 @@ class ResponseEventStream:
         events.append({"type": "stream_end"})
         return self._output, events
 
-    # --- state machine ---
+    # Matt: The private methods below cover the internals of the class and are mostly agent-written.
 
     def _process(self, events: list[dict], eos: bool) -> None:
         while True:
@@ -225,8 +205,6 @@ class ResponseEventStream:
                 self._pos = safe_end
             break
 
-    # --- watchlist helpers ---
-
     def _watchlist(self) -> list[tuple[str, ResponseTemplateField]]:
         """Patterns we care about right now: the close of the currently-open
         explicit region, or -- if we're in the implicit/null region -- every
@@ -264,8 +242,6 @@ class ResponseEventStream:
             literal = fld.open_lit if kind == "open" else fld.close_lit
             hold = max(hold, _pattern_hold(self._buffer, self._pos, literal))
         return hold
-
-    # --- region lifecycle ---
 
     def _accumulate(self, events: list[dict], text: str) -> None:
         """Route `text` into the currently active region. When the current
@@ -319,10 +295,6 @@ class ResponseEventStream:
         self._captures = {}
         self._body = ""
         self._opened = False
-
-
-def _is_empty(v: Any) -> bool:
-    return v is None or (isinstance(v, (list, dict, str)) and not v)
 
 
 def _should_defer(fld: ResponseTemplateField, m: re.Match, buf_len: int, is_open: bool) -> bool:
