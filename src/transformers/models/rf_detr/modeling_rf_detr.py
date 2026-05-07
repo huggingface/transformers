@@ -1194,7 +1194,6 @@ class RfDetrModelOutput(ModelOutput):
     backbone_features: list[torch.Tensor] = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the RfDetrDecoder. This class adds two attributes to
@@ -1203,6 +1202,7 @@ class RfDetrModelOutput(ModelOutput):
     - a stacked tensor of intermediate reference points.
     """
 )
+@dataclass
 class RfDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     r"""
     cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
@@ -1663,12 +1663,12 @@ class RfDetrModel(RfDetrPreTrainedModel):
         return object_query_undetach, topk_coords_logits, topk_coords_logits_undetach
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`RfDetrForObjectDetection`].
     """
 )
+@dataclass
 class RfDetrObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
