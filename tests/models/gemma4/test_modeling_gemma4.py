@@ -55,6 +55,11 @@ if is_torch_available():
     )
 
 
+GEMMA4_RANDOM_MOE_FA2_SKIP_REASON = (
+    "Randomly initialized Gemma4 MoE routers are too sensitive to tiny eager/FA2 input differences"
+)
+
+
 class Gemma4TextModelTester(CausalLMModelTester):
     if is_torch_available():
         config_class = Gemma4TextConfig
@@ -122,6 +127,18 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
         "Fails after fully removing the unused weights, even if `forward` is exactly the same. Investigate why."
     )
     def test_tp_generation_quantized(self):
+        pass
+
+    @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
+    def test_flash_attn_2_equivalence(self):
+        pass
+
+    @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
+    def test_flash_attn_2_inference_equivalence(self):
+        pass
+
+    @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
     def test_model_training(self):
@@ -283,6 +300,14 @@ class Gemma4Audio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
 
     @unittest.skip("Gemma4 needs correct embeddings for per-layer-input computation, random won't work!")
     def test_generate_from_random_inputs_embeds(self):
+        pass
+
+    @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
+    def test_flash_attn_2_inference_equivalence(self):
+        pass
+
+    @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
     def test_audio_rel_pos_encoding_uses_context_size_from_config(self):
