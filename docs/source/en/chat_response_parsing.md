@@ -164,7 +164,7 @@ For a call like `to=functions.get_weather ... {"location":"SF"}`, this produces
 
 ## Streaming
 
-`tokenizer.response_event_stream()` returns a [`~utils.chat_parsing.ResponseEventStream`] — a stateful parser you
+`tokenizer.response_event_stream()` returns a [`~utils.chat_parsing.ResponseParser`] — a stateful parser you
 feed text incrementally as the model generates:
 
 ```python
