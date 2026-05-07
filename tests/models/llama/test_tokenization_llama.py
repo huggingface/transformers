@@ -5,6 +5,7 @@ from transformers import AutoTokenizer
 from transformers.models.llama.tokenization_llama import LlamaTokenizer
 from transformers.testing_utils import (
     require_tokenizers,
+    slow,
 )
 
 
@@ -51,3 +52,23 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokens = tokenizer.encode(text, add_special_tokens=False)
         decoded = tokenizer.decode(tokens, skip_special_tokens=True)
         self.assertEqual(decoded, text)
+
+    @slow
+    def test_llama3_bpe_skips_clean_up_tokenization_spaces(self):
+        # Llama 3 ships with `clean_up_tokenization_spaces=True` in its config, but as a
+        # BPE tokenizer it must skip the cleanup — otherwise legitimate spaces around
+        # punctuation get stripped (e.g. "x != y" -> "x!= y"). Regression test for #44915.
+        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B")
+        # Precondition: the shipped config sets the flag, which is what triggers the bug.
+        self.assertTrue(tokenizer.clean_up_tokenization_spaces)
+
+        cases = [("x != y", "x!= y"), ("! ! !", "!!!"), ("a , b", "a, b")]
+        for text, _ in cases:
+            ids = tokenizer.encode(text, add_special_tokens=False)
+            self.assertEqual(tokenizer.decode(ids), text)
+
+        # Escape hatch: the override flag reintroduces the destructive cleanup.
+        tokenizer.clean_up_tokenization_spaces_for_bpe_even_though_it_will_corrupt_output = True
+        for text, corrupted in cases:
+            ids = tokenizer.encode(text, add_special_tokens=False)
+            self.assertEqual(tokenizer.decode(ids), corrupted)

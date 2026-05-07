@@ -24,6 +24,7 @@ from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring
 from ...utils.generic import TransformersKwargs, merge_with_config_defaults
@@ -39,116 +40,25 @@ from ..sam3.modeling_sam3 import Sam3Model, Sam3PreTrainedModel
 from ..siglip.modeling_siglip import SiglipAttention, SiglipEncoderLayer, SiglipMLP
 
 
-@auto_docstring(checkpoint="facebook/sam3_lite_text")
-@strict
-class Sam3LiteTextViTConfig(PreTrainedConfig):
-    r"""
-    rope_theta (`float`, *optional*, defaults to 10000.0):
-        Base frequency for RoPE.
-    window_size (`int`, *optional*, defaults to 24):
-        Window size for windowed attention.
-    global_attn_indexes (`list[int]`, *optional*, defaults to `[7, 15, 23, 31]`):
-        Indexes of layers with global attention.
-    pretrain_image_size (`int`, *optional*, defaults to 336):
-        Pretrained model image size for position embedding initialization.
-    hidden_dropout (`float`, *optional*, defaults to 0.0):
-        Dropout probability for hidden states.
-    """
-
-    base_config_key = "backbone_config"
-    model_type = "sam3_vit_model"
-
-    hidden_size: int = 1024
-    intermediate_size: int = 4736
-    num_hidden_layers: int = 32
-    num_attention_heads: int = 16
-    num_channels: int = 3
-    image_size: int | list[int] | tuple[int, int] = 1008
-    patch_size: int | list[int] | tuple[int, int] = 14
-    hidden_act: str = "gelu"
-    layer_norm_eps: float = 1e-6
-    attention_dropout: float | int = 0.0
-    rope_theta: float = 10000.0
-    window_size: int = 24
-    global_attn_indexes: list[int] | None = None
-    layer_scale_init_value: float | None = None
-    pretrain_image_size: int | list[int] | tuple[int, int] = 336
-    hidden_dropout: float | int = 0.0
-    initializer_range: float = 0.02
-
-    def __post_init__(self, **kwargs):
-        super().__post_init__(**kwargs)
-        if self.global_attn_indexes is None:
-            self.global_attn_indexes = [7, 15, 23, 31]
-
-
-@auto_docstring(checkpoint="facebook/sam3_lite_text")
-@strict
-class Sam3LiteTextVisionConfig(PreTrainedConfig):
-    r"""
-    fpn_hidden_size (`int`, *optional*, defaults to 256):
-        The hidden dimension of the FPN.
-    backbone_feature_sizes (`List[List[int]]`, *optional*, defaults to `[[288, 288], [144, 144], [72, 72]]`):
-        The spatial sizes (height, width) of the feature maps from the backbone at different scales.
-    scale_factors (`list[float]`, *optional*, defaults to `[4.0, 2.0, 1.0, 0.5]`):
-        Scale factors for FPN multi-scale features. List of scaling factors for each FPN level.
-    """
-
-    base_config_key = "vision_config"
-    model_type = "sam3_vision_model"
-    sub_configs = {"backbone_config": AutoConfig}
-
-    backbone_config: dict | PreTrainedConfig | None = None
-    fpn_hidden_size: int = 256
-    backbone_feature_sizes: list | None = None
-    scale_factors: list[float] | None = None
-    hidden_act: str = "gelu"
-    layer_norm_eps: float = 1e-6
-    initializer_range: float = 0.02
-
-    def __post_init__(self, **kwargs):
-        self.scale_factors = [4.0, 2.0, 1.0, 0.5] if self.scale_factors is None else self.scale_factors
-        if self.backbone_feature_sizes is None:
-            self.backbone_feature_sizes = [[288, 288], [144, 144], [72, 72]]
-
-        if isinstance(self.backbone_config, dict):
-            self.backbone_config["model_type"] = self.backbone_config.get("model_type", "sam3_vit_model")
-            self.backbone_config = CONFIG_MAPPING[self.backbone_config["model_type"]](**self.backbone_config)
-        elif self.backbone_config is None:
-            self.backbone_config = CONFIG_MAPPING["sam3_vit_model"]()
-
-        super().__post_init__(**kwargs)
-
-    @property
-    def image_size(self):
-        """Image size for the vision encoder."""
-        return self.backbone_config.image_size
-
-    @image_size.setter
-    def image_size(self, value):
-        """Set the image size and propagate to backbone."""
-        self.backbone_config.image_size = value
-
-
-@auto_docstring(checkpoint="facebook/sam3_lite_text")
+@auto_docstring(checkpoint="yonigozlan/sam3-litetext-s0")
 @strict
 class Sam3LiteTextGeometryEncoderConfig(Sam3GeometryEncoderConfig):
     pass
 
 
-@auto_docstring(checkpoint="facebook/sam3_lite_text")
+@auto_docstring(checkpoint="yonigozlan/sam3-litetext-s0")
 @strict
 class Sam3LiteTextDETREncoderConfig(Sam3DETREncoderConfig):
     pass
 
 
-@auto_docstring(checkpoint="facebook/sam3_lite_text")
+@auto_docstring(checkpoint="yonigozlan/sam3-litetext-s0")
 @strict
 class Sam3LiteTextDETRDecoderConfig(Sam3DETRDecoderConfig):
     pass
 
 
-@auto_docstring(checkpoint="facebook/sam3_lite_text")
+@auto_docstring(checkpoint="yonigozlan/sam3-litetext-s0")
 @strict
 class Sam3LiteTextMaskDecoderConfig(Sam3MaskDecoderConfig):
     pass
@@ -184,7 +94,7 @@ class Sam3LiteTextTextConfig(PreTrainedConfig):
     repmixer_kernel_size: int = 11
 
 
-@auto_docstring(checkpoint="facebook/sam3_lite_text")
+@auto_docstring(checkpoint="yonigozlan/sam3-litetext-s0")
 @strict
 class Sam3LiteTextConfig(PreTrainedConfig):
     r"""
@@ -444,7 +354,7 @@ class Sam3LiteTextPreTrainedModel(Sam3PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
+        PreTrainedModel._init_weights(module)
         if isinstance(module, Sam3LiteTextTextPositionEmbedding):
             init.normal_(module.position_embedding, std=module.position_embedding.shape[-1] ** -0.5)
         elif isinstance(module, Sam3LiteTextTextModel):

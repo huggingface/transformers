@@ -52,13 +52,14 @@ The original code can be found [here](https://github.com/facebookresearch/sam2/t
 SAM2 can be used for automatic mask generation to segment all objects in an image using the `mask-generation` pipeline:
 
 ```python
->>> from transformers import pipeline
+from transformers import pipeline
 
->>> generator = pipeline("mask-generation", model="facebook/sam2.1-hiera-large", device=0)
->>> image_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/truck.jpg"
->>> outputs = generator(image_url, points_per_batch=64)
 
->>> len(outputs["masks"])  # Number of masks generated
+generator = pipeline("mask-generation", model="facebook/sam2.1-hiera-large", device=0)
+image_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/truck.jpg"
+outputs = generator(image_url, points_per_batch=64)
+
+len(outputs["masks"])  # Number of masks generated
 39
 ```
 
@@ -69,32 +70,30 @@ SAM2 can be used for automatic mask generation to segment all objects in an imag
 You can segment objects by providing a single point click on the object you want to segment:
 
 ```python
->>> from transformers import Sam2Processor, Sam2Model
-from accelerate import Accelerator
->>> import torch
->>> from PIL import Image
->>> import requests
+from transformers import Sam2Processor, Sam2Model
+import torch
+from PIL import Image
+import requests
 
->>> device = Accelerator().device
 
->>> model = Sam2Model.from_pretrained("facebook/sam2.1-hiera-large").to(device)
->>> processor = Sam2Processor.from_pretrained("facebook/sam2.1-hiera-large")
+model = Sam2Model.from_pretrained("facebook/sam2.1-hiera-large", device_map="auto")
+processor = Sam2Processor.from_pretrained("facebook/sam2.1-hiera-large")
 
->>> image_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/truck.jpg"
->>> raw_image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
+image_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/truck.jpg"
+raw_image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
 
->>> input_points = [[[[500, 375]]]]  # Single point click, 4 dimensions (image_dim, object_dim, point_per_object_dim, coordinates)
->>> input_labels = [[[1]]]  # 1 for positive click, 0 for negative click, 3 dimensions (image_dim, object_dim, point_label)
+input_points = [[[[500, 375]]]]  # Single point click, 4 dimensions (image_dim, object_dim, point_per_object_dim, coordinates)
+input_labels = [[[1]]]  # 1 for positive click, 0 for negative click, 3 dimensions (image_dim, object_dim, point_label)
 
->>> inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(model.device)
+inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(model.device)
 
->>> with torch.no_grad():
-...     outputs = model(**inputs)
+with torch.no_grad():
+    outputs = model(**inputs)
 
->>> masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]
+masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]
 
->>> # The model outputs multiple mask predictions ranked by quality score
->>> print(f"Generated {masks.shape[1]} masks with shape {masks.shape}")
+# The model outputs multiple mask predictions ranked by quality score
+print(f"Generated {masks.shape[1]} masks with shape {masks.shape}")
 Generated 3 masks with shape torch.Size(1, 3, 1500, 2250)
 ```
 
@@ -103,16 +102,16 @@ Generated 3 masks with shape torch.Size(1, 3, 1500, 2250)
 You can provide multiple points to refine the segmentation:
 
 ```python
->>> # Add both positive and negative points to refine the mask
->>> input_points = [[[[500, 375], [1125, 625]]]]  # Multiple points for refinement
->>> input_labels = [[[1, 1]]]  # Both positive clicks
+# Add both positive and negative points to refine the mask
+input_points = [[[[500, 375], [1125, 625]]]]  # Multiple points for refinement
+input_labels = [[[1, 1]]]  # Both positive clicks
 
->>> inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
+inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(model.device)
 
->>> with torch.no_grad():
-...     outputs = model(**inputs)
+with torch.no_grad():
+    outputs = model(**inputs)
 
->>> masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]
+masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]
 ```
 
 #### Bounding Box Input
@@ -120,15 +119,15 @@ You can provide multiple points to refine the segmentation:
 SAM2 also supports bounding box inputs for segmentation:
 
 ```python
->>> # Define bounding box as [x_min, y_min, x_max, y_max]
->>> input_boxes = [[[75, 275, 1725, 850]]]
+# Define bounding box as [x_min, y_min, x_max, y_max]
+input_boxes = [[[75, 275, 1725, 850]]]
 
->>> inputs = processor(images=raw_image, input_boxes=input_boxes, return_tensors="pt").to(device)
+inputs = processor(images=raw_image, input_boxes=input_boxes, return_tensors="pt").to(model.device)
 
->>> with torch.no_grad():
-...     outputs = model(**inputs)
+with torch.no_grad():
+    outputs = model(**inputs)
 
->>> masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]
+masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]
 ```
 
 #### Multiple Objects Segmentation
@@ -136,18 +135,18 @@ SAM2 also supports bounding box inputs for segmentation:
 You can segment multiple objects simultaneously:
 
 ```python
->>> # Define points for two different objects
->>> input_points = [[[[500, 375]], [[650, 750]]]]  # Points for two objects in same image
->>> input_labels = [[[1], [1]]]  # Positive clicks for both objects
+# Define points for two different objects
+input_points = [[[[500, 375]], [[650, 750]]]]  # Points for two objects in same image
+input_labels = [[[1], [1]]]  # Positive clicks for both objects
 
->>> inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
+inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(model.device)
 
->>> with torch.no_grad():
-...     outputs = model(**inputs, multimask_output=False)
+with torch.no_grad():
+    outputs = model(**inputs, multimask_output=False)
 
->>> # Each object gets its own mask
->>> masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]
->>> print(f"Generated masks for {masks.shape[0]} objects")
+# Each object gets its own mask
+masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]
+print(f"Generated masks for {masks.shape[0]} objects")
 Generated masks for 2 objects
 ```
 
@@ -158,36 +157,34 @@ Generated masks for 2 objects
 Process multiple images simultaneously for improved efficiency:
 
 ```python
->>> from transformers import Sam2Processor, Sam2Model
-from accelerate import Accelerator
->>> import torch
->>> from PIL import Image
->>> import requests
+from transformers import Sam2Processor, Sam2Model
+import torch
+from PIL import Image
+import requests
 
->>> device = Accelerator().device
 
->>> model = Sam2Model.from_pretrained("facebook/sam2.1-hiera-large").to(device)
->>> processor = Sam2Processor.from_pretrained("facebook/sam2.1-hiera-large")
+model = Sam2Model.from_pretrained("facebook/sam2.1-hiera-large", device_map="auto")
+processor = Sam2Processor.from_pretrained("facebook/sam2.1-hiera-large")
 
->>> # Load multiple images
->>> image_urls = [
-...     "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/truck.jpg",
-...     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dog-sam.png"
-... ]
->>> raw_images = [Image.open(requests.get(url, stream=True).raw).convert("RGB") for url in image_urls]
+# Load multiple images
+image_urls = [
+    "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/truck.jpg",
+    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dog-sam.png"
+]
+raw_images = [Image.open(requests.get(url, stream=True).raw).convert("RGB") for url in image_urls]
 
->>> # Single point per image
->>> input_points = [[[[500, 375]]], [[[770, 200]]]]  # One point for each image
->>> input_labels = [[[1]], [[1]]]  # Positive clicks for both images
+# Single point per image
+input_points = [[[[500, 375]]], [[[770, 200]]]]  # One point for each image
+input_labels = [[[1]], [[1]]]  # Positive clicks for both images
 
->>> inputs = processor(images=raw_images, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(model.device)
+inputs = processor(images=raw_images, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(model.device)
 
->>> with torch.no_grad():
-...     outputs = model(**inputs, multimask_output=False)
+with torch.no_grad():
+    outputs = model(**inputs, multimask_output=False)
 
->>> # Post-process masks for each image
->>> all_masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])
->>> print(f"Processed {len(all_masks)} images, each with {all_masks[0].shape[0]} objects")
+# Post-process masks for each image
+all_masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])
+print(f"Processed {len(all_masks)} images, each with {all_masks[0].shape[0]} objects")
 Processed 2 images, each with 1 objects
 ```
 
@@ -196,22 +193,22 @@ Processed 2 images, each with 1 objects
 Segment multiple objects within each image using batch inference:
 
 ```python
->>> # Multiple objects per image - different numbers of objects per image
->>> input_points = [
-...     [[[500, 375]], [[650, 750]]],  # Truck image: 2 objects
-...     [[[770, 200]]]  # Dog image: 1 object
-... ]
->>> input_labels = [
-...     [[1], [1]],  # Truck image: positive clicks for both objects
-...     [[1]]  # Dog image: positive click for the object
-... ]
+# Multiple objects per image - different numbers of objects per image
+input_points = [
+    [[[500, 375]], [[650, 750]]],  # Truck image: 2 objects
+    [[[770, 200]]]  # Dog image: 1 object
+]
+input_labels = [
+    [[1], [1]],  # Truck image: positive clicks for both objects
+    [[1]]  # Dog image: positive click for the object
+]
 
->>> inputs = processor(images=raw_images, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
+inputs = processor(images=raw_images, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(model.device)
 
->>> with torch.no_grad():
-...     outputs = model(**inputs, multimask_output=False)
+with torch.no_grad():
+    outputs = model(**inputs, multimask_output=False)
 
->>> all_masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])
+all_masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])
 ```
 
 #### Batched Images with Batched Objects and Multiple Points
@@ -219,27 +216,27 @@ Segment multiple objects within each image using batch inference:
 Handle complex batch scenarios with multiple points per object:
 
 ```python
->>> # Add groceries image for more complex example
->>> groceries_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/groceries.jpg"
->>> groceries_image = Image.open(requests.get(groceries_url, stream=True).raw).convert("RGB")
->>> raw_images = [raw_images[0], groceries_image]  # Use truck and groceries images
+# Add groceries image for more complex example
+groceries_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/groceries.jpg"
+groceries_image = Image.open(requests.get(groceries_url, stream=True).raw).convert("RGB")
+raw_images = [raw_images[0], groceries_image]  # Use truck and groceries images
 
->>> # Complex batching: multiple images, multiple objects, multiple points per object
->>> input_points = [
-...     [[[500, 375]], [[650, 750]]],  # Truck image: 2 objects with 1 point each
-...     [[[400, 300]], [[630, 300], [550, 300]]]  # Groceries image: obj1 has 1 point, obj2 has 2 points
-... ]
->>> input_labels = [
-...     [[1], [1]],  # Truck image: positive clicks
-...     [[1], [1, 1]]  # Groceries image: positive clicks for refinement
-... ]
+# Complex batching: multiple images, multiple objects, multiple points per object
+input_points = [
+    [[[500, 375]], [[650, 750]]],  # Truck image: 2 objects with 1 point each
+    [[[400, 300]], [[630, 300], [550, 300]]]  # Groceries image: obj1 has 1 point, obj2 has 2 points
+]
+input_labels = [
+    [[1], [1]],  # Truck image: positive clicks
+    [[1], [1, 1]]  # Groceries image: positive clicks for refinement
+]
 
->>> inputs = processor(images=raw_images, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
+inputs = processor(images=raw_images, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(model.device)
 
->>> with torch.no_grad():
-...     outputs = model(**inputs, multimask_output=False)
+with torch.no_grad():
+    outputs = model(**inputs, multimask_output=False)
 
->>> all_masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])
+all_masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])
 ```
 
 #### Batched Bounding Boxes
@@ -247,22 +244,22 @@ Handle complex batch scenarios with multiple points per object:
 Process multiple images with bounding box inputs:
 
 ```python
->>> # Multiple bounding boxes per image (using truck and groceries images)
->>> input_boxes = [
-...     [[75, 275, 1725, 850], [425, 600, 700, 875], [1375, 550, 1650, 800], [1240, 675, 1400, 750]],  # Truck image: 4 boxes
-...     [[450, 170, 520, 350], [350, 190, 450, 350], [500, 170, 580, 350], [580, 170, 640, 350]]  # Groceries image: 4 boxes
-... ]
+# Multiple bounding boxes per image (using truck and groceries images)
+input_boxes = [
+    [[75, 275, 1725, 850], [425, 600, 700, 875], [1375, 550, 1650, 800], [1240, 675, 1400, 750]],  # Truck image: 4 boxes
+    [[450, 170, 520, 350], [350, 190, 450, 350], [500, 170, 580, 350], [580, 170, 640, 350]]  # Groceries image: 4 boxes
+]
 
->>> # Update images for this example
->>> raw_images = [raw_images[0], groceries_image]  # truck and groceries
+# Update images for this example
+raw_images = [raw_images[0], groceries_image]  # truck and groceries
 
->>> inputs = processor(images=raw_images, input_boxes=input_boxes, return_tensors="pt").to(device)
+inputs = processor(images=raw_images, input_boxes=input_boxes, return_tensors="pt").to(model.device)
 
->>> with torch.no_grad():
-...     outputs = model(**inputs, multimask_output=False)
+with torch.no_grad():
+    outputs = model(**inputs, multimask_output=False)
 
->>> all_masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])
->>> print(f"Processed {len(input_boxes)} images with {len(input_boxes[0])} and {len(input_boxes[1])} boxes respectively")
+all_masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])
+print(f"Processed {len(input_boxes)} images with {len(input_boxes[0])} and {len(input_boxes[1])} boxes respectively")
 Processed 2 images with 4 and 4 boxes respectively
 ```
 
@@ -271,34 +268,34 @@ Processed 2 images with 4 and 4 boxes respectively
 SAM2 can use masks from previous predictions as input to refine segmentation:
 
 ```python
->>> # Get initial segmentation
->>> input_points = [[[[500, 375]]]]
->>> input_labels = [[[1]]]
->>> inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
+# Get initial segmentation
+input_points = [[[[500, 375]]]]
+input_labels = [[[1]]]
+inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(model.device)
 
->>> with torch.no_grad():
-...     outputs = model(**inputs)
+with torch.no_grad():
+    outputs = model(**inputs)
 
->>> # Use the best mask as input for refinement
->>> mask_input = outputs.pred_masks[:, :, torch.argmax(outputs.iou_scores.squeeze())]
+# Use the best mask as input for refinement
+mask_input = outputs.pred_masks[:, :, torch.argmax(outputs.iou_scores.squeeze())]
 
->>> # Add additional points with the mask input
->>> new_input_points = [[[[500, 375], [450, 300]]]]
->>> new_input_labels = [[[1, 1]]]
->>> inputs = processor(
-...     input_points=new_input_points,
-...     input_labels=new_input_labels,
-...     original_sizes=inputs["original_sizes"],
-...     return_tensors="pt",
-... ).to(device)
+# Add additional points with the mask input
+new_input_points = [[[[500, 375], [450, 300]]]]
+new_input_labels = [[[1, 1]]]
+inputs = processor(
+    input_points=new_input_points,
+    input_labels=new_input_labels,
+    original_sizes=inputs["original_sizes"],
+    return_tensors="pt",
+).to(model.device)
 
->>> with torch.no_grad():
-...     refined_outputs = model(
-...         **inputs,
-...         input_masks=mask_input,
-...         image_embeddings=outputs.image_embeddings,
-...         multimask_output=False,
-...     )
+with torch.no_grad():
+    refined_outputs = model(
+        **inputs,
+        input_masks=mask_input,
+        image_embeddings=outputs.image_embeddings,
+        multimask_output=False,
+    )
 ```
 
 <!-- TODO replace with sam2 resources -->

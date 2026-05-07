@@ -67,6 +67,15 @@ class Qwen3MoeConfig(PreTrainedConfig):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
+    # Expert-only EP plan: only shards MoE experts, not attention.
+    # Attention is left unsharded — FSDP2 handles attention weight distribution.
+    # This allows EP to scale beyond num_kv_heads (not constrained by 4 for Qwen3-30B).
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),

@@ -648,12 +648,12 @@ class PPDocLayoutV3DecoderOutput(RTDetrDecoderOutput):
     decoder_out_masks: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the PP-DocLayoutV3 model.
     """
 )
+@dataclass
 class PPDocLayoutV3ModelOutput(RTDetrModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
@@ -1229,8 +1229,8 @@ class PPDocLayoutV3Model(RTDetrModel):
         )
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class PPDocLayoutV3HybridEncoderOutput(BaseModelOutput):
     r"""
     mask_feat (`torch.FloatTensor` of shape `(batch_size, config.num_queries, 200, 200)`):
@@ -1240,8 +1240,8 @@ class PPDocLayoutV3HybridEncoderOutput(BaseModelOutput):
     mask_feat: torch.FloatTensor = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class PPDocLayoutV3ForObjectDetectionOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):

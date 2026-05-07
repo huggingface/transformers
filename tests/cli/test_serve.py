@@ -27,6 +27,7 @@ import httpx
 
 from transformers.cli.serve import Serve
 from transformers.cli.serving.chat_completion import ChatCompletionHandler
+from transformers.cli.serving.completion import CompletionHandler
 from transformers.cli.serving.model_manager import ModelManager, TimedModel
 from transformers.cli.serving.response import ResponseHandler, compute_usage
 from transformers.cli.serving.server import build_server
@@ -429,6 +430,36 @@ class TestValidation(unittest.TestCase):
         self.assertTrue(any("audio" in msg for msg in cm.output))
 
 
+class TestResolveModel(unittest.TestCase):
+    def _make_handler(self, force_model=None):
+        mm = MagicMock()
+        mm.force_model = force_model
+        mm.process_model_name.side_effect = ModelManager.process_model_name
+        mm.load_model_and_processor.return_value = (MagicMock(), MagicMock())
+        return ChatCompletionHandler(model_manager=mm, generation_state=GenerationState())
+
+    def test_force_model_overrides_when_model_omitted(self):
+        handler = self._make_handler(force_model="org/pinned")
+        body = {}
+        model_id, _, _ = handler._resolve_model(body)
+        self.assertEqual(model_id, "org/pinned@main")
+        self.assertEqual(body["model"], "org/pinned")
+
+    def test_force_model_allows_matching_request(self):
+        handler = self._make_handler(force_model="org/pinned")
+        body = {"model": "org/pinned"}
+        model_id, _, _ = handler._resolve_model(body)
+        self.assertEqual(model_id, "org/pinned@main")
+
+    def test_force_model_rejects_mismatched_request(self):
+        handler = self._make_handler(force_model="org/pinned")
+        with self.assertRaises(HTTPException) as ctx:
+            handler._resolve_model({"model": "other/model"})
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertIn("org/pinned", ctx.exception.detail)
+        self.assertIn("other/model", ctx.exception.detail)
+
+
 class TestModelManager(unittest.TestCase):
     def test_process_model_name_adds_main(self):
         self.assertEqual(ModelManager.process_model_name("org/model"), "org/model@main")
@@ -516,9 +547,17 @@ class TestAppRoutes(unittest.TestCase):
             {"id": "test/model", "owned_by": "test", "object": "model", "created": 0}
         ]
         cls.chat_handler = MagicMock(spec=ChatCompletionHandler)
+        cls.completion_handler = MagicMock(spec=CompletionHandler)
         cls.response_handler = MagicMock(spec=ResponseHandler)
         cls.transcription_handler = MagicMock(spec=TranscriptionHandler)
-        cls.app = build_server(cls.model_manager, cls.chat_handler, cls.response_handler, cls.transcription_handler)
+        cls.app = build_server(
+            cls.model_manager,
+            cls.chat_handler,
+            cls.completion_handler,
+            cls.response_handler,
+            cls.transcription_handler,
+            generation_state=GenerationState(),
+        )
         cls.transport = httpx.ASGITransport(app=cls.app)
 
     async def _request(self, method: str, path: str, **kwargs) -> httpx.Response:
@@ -744,6 +783,194 @@ class TestChatCompletion(unittest.TestCase):
             max_tokens=10,
         )
         self.assertIsNotNone(resp.choices[0].message.content)
+
+
+@slow
+@require_serve
+class TestCompletion(unittest.TestCase):
+    """Integration tests for /v1/completions with a real model.
+
+    Covers sequential and continuous-batching generation, both streaming and
+    non-streaming, plus finish_reason, usage, stop strings, suffix, and
+    cancellation behaviour.
+    """
+
+    MODEL = "Qwen/Qwen2.5-0.5B"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.serve, port = _start_serve()
+        cls.base_url = f"http://localhost:{port}"
+        cls.client = OpenAI(base_url=f"{cls.base_url}/v1", api_key="unused")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.serve.kill_server()
+
+    # ----- non-streaming -----
+
+    def test_non_streaming(self):
+        from openai.types import Completion as OpenAICompletion
+
+        result = self.client.completions.create(
+            model=self.MODEL,
+            prompt="The capital of France is",
+            max_tokens=5,
+        )
+
+        self.assertIsInstance(result, OpenAICompletion)
+        self.assertEqual(result.object, "text_completion")
+        self.assertIsInstance(result.choices[0].text, str)
+        self.assertTrue(len(result.choices[0].text) > 0)
+        self.assertIn(result.choices[0].finish_reason, ("stop", "length"))
+
+    def test_non_streaming_usage(self):
+        result = self.client.completions.create(
+            model=self.MODEL,
+            prompt="The capital of France is",
+            max_tokens=5,
+        )
+        self.assertIsNotNone(result.usage)
+        self.assertGreater(result.usage.prompt_tokens, 0)
+        self.assertGreater(result.usage.completion_tokens, 0)
+        self.assertEqual(result.usage.total_tokens, result.usage.prompt_tokens + result.usage.completion_tokens)
+
+    def test_finish_reason_length(self):
+        result = self.client.completions.create(model=self.MODEL, prompt="Hello", max_tokens=1)
+        self.assertEqual(result.choices[0].finish_reason, "length")
+
+    def test_finish_reason_stop(self):
+        result = self.client.completions.create(model=self.MODEL, prompt="Hello", max_tokens=1024)
+        self.assertEqual(result.choices[0].finish_reason, "stop")
+
+    def test_stop_strings(self):
+        result = self.client.completions.create(
+            model=self.MODEL,
+            prompt="one two three four",
+            max_tokens=20,
+            stop=["six"],
+        )
+        self.assertNotIn("seven", result.choices[0].text)
+
+    def test_suffix(self):
+        """suffix should be appended to generated text."""
+        suffix = " [END]"
+        result = self.client.completions.create(
+            model=self.MODEL,
+            prompt="The capital of France is",
+            max_tokens=5,
+            suffix=suffix,
+        )
+        self.assertTrue(result.choices[0].text.endswith(suffix))
+
+    # ----- streaming -----
+
+    def test_streaming(self):
+        chunks = list(
+            self.client.completions.create(
+                model=self.MODEL,
+                prompt="The capital of France is",
+                max_tokens=5,
+                stream=True,
+            )
+        )
+        texts = [c.choices[0].text for c in chunks]
+        self.assertTrue(any(t != "" for t in texts))
+        self.assertIn(chunks[-1].choices[0].finish_reason, ("stop", "length"))
+
+    def test_streaming_usage(self):
+        chunks = list(
+            self.client.completions.create(
+                model=self.MODEL,
+                prompt="The capital of France is",
+                max_tokens=5,
+                stream=True,
+            )
+        )
+        last = chunks[-1]
+        self.assertIsNotNone(last.usage)
+        self.assertGreater(last.usage.prompt_tokens, 0)
+        self.assertGreater(last.usage.completion_tokens, 0)
+        self.assertEqual(last.usage.total_tokens, last.usage.prompt_tokens + last.usage.completion_tokens)
+
+    def test_streaming_finish_reason_length(self):
+        chunks = list(self.client.completions.create(model=self.MODEL, prompt="Hello", max_tokens=1, stream=True))
+        self.assertEqual(chunks[-1].choices[0].finish_reason, "length")
+
+    def test_streaming_suffix(self):
+        """suffix should be emitted as a final text chunk before finish_reason."""
+        suffix = " [END]"
+        chunks = list(
+            self.client.completions.create(
+                model=self.MODEL,
+                prompt="The capital of France is",
+                max_tokens=5,
+                suffix=suffix,
+                stream=True,
+            )
+        )
+        all_text = "".join(c.choices[0].text for c in chunks)
+        self.assertTrue(all_text.endswith(suffix))
+
+    def test_request_cancellation(self):
+        """Closing a stream early doesn't crash and the server stays healthy."""
+        with httpx.stream(
+            "POST",
+            f"{self.base_url}/v1/completions",
+            json={"model": self.MODEL, "prompt": "Count slowly:", "max_tokens": 500, "stream": True},
+            timeout=30,
+        ) as resp:
+            self.assertEqual(resp.status_code, 200)
+            chunks_read = 0
+            for _ in resp.iter_lines():
+                chunks_read += 1
+                if chunks_read >= 3:
+                    break
+
+        result = self.client.completions.create(model=self.MODEL, prompt="Hello", max_tokens=5)
+        self.assertIsNotNone(result.choices[0].text)
+
+    # ----- continuous batching -----
+
+    @require_torch_accelerator
+    def test_cb_streaming(self):
+        """Streaming completion with CB produces text."""
+        serve, port = _start_serve(
+            force_model=self.MODEL,
+            device="cuda:0",
+            continuous_batching=True,
+            attn_implementation="sdpa",
+        )
+        try:
+            client = OpenAI(base_url=f"http://localhost:{port}/v1", api_key="unused")
+            chunks = list(
+                client.completions.create(
+                    model=self.MODEL, prompt="The capital of France is", max_tokens=10, stream=True
+                )
+            )
+            texts = [c.choices[0].text for c in chunks]
+            self.assertTrue(any(t != "" for t in texts))
+            self.assertIn(chunks[-1].choices[0].finish_reason, ("stop", "length"))
+        finally:
+            serve.kill_server()
+
+    @require_torch_accelerator
+    def test_cb_non_streaming(self):
+        """Non-streaming completion with CB returns a full response."""
+        serve, port = _start_serve(
+            force_model=self.MODEL,
+            device="cuda:0",
+            continuous_batching=True,
+            attn_implementation="sdpa",
+        )
+        try:
+            client = OpenAI(base_url=f"http://localhost:{port}/v1", api_key="unused")
+            result = client.completions.create(model=self.MODEL, prompt="The capital of France is", max_tokens=10)
+            self.assertIsInstance(result.choices[0].text, str)
+            self.assertTrue(len(result.choices[0].text) > 0)
+            self.assertIn(result.choices[0].finish_reason, ("stop", "length"))
+        finally:
+            serve.kill_server()
 
 
 @require_serve
@@ -1595,6 +1822,67 @@ class TestToolCallUnit(unittest.TestCase):
         processor.parse_response = lambda t, s: recursive_parse(t, s)
         calls = parse_tool_calls(processor, text, _TOOL_CALL_FALLBACKS["qwen"]["schema"])
         self.assertEqual(len(calls), 2)
+
+
+class TestCBWorkerDeadServerIntegration(unittest.TestCase):
+    """End-to-end FastAPI behavior when the CB worker has died.
+
+    Asserts the wiring from a ``CBWorkerDeadError`` raised in a request handler
+    (or a dead CB worker observed by ``/health``) to a 503 response carrying the cause —
+    the contract orchestrators rely on to recycle the pod.
+    """
+
+    def _build_app(self, generation_state, chat_handler=None):
+        from transformers.cli.serving.server import build_server
+
+        return build_server(
+            model_manager=MagicMock(),
+            chat_handler=chat_handler or MagicMock(),
+            completion_handler=MagicMock(),
+            response_handler=MagicMock(),
+            transcription_handler=MagicMock(),
+            generation_state=generation_state,
+        )
+
+    def test_health_returns_503_when_cb_dead(self):
+        from fastapi.testclient import TestClient
+
+        from transformers.cli.serving.utils import CBGenerateManager
+
+        state = GenerationState(continuous_batching=True)
+        # Manager whose underlying CB has a fatal_error set -> is_alive() returns False.
+        mgr = CBGenerateManager()
+        mgr._cb = MagicMock()
+        mgr._cb.fatal_error = RuntimeError("CUDA illegal memory access")
+        state._cb_manager = mgr
+
+        resp = TestClient(self._build_app(state)).get("/health")
+
+        self.assertEqual(resp.status_code, 503)
+        self.assertEqual(resp.json(), {"status": "unhealthy", "reason": "cb_worker_dead"})
+
+    def test_chat_endpoint_returns_503_with_cause(self):
+        """A CBWorkerDeadError raised from the chat route maps to 503 with the cause in the body."""
+        from fastapi.testclient import TestClient
+
+        from transformers.cli.serving.utils import CBWorkerDeadError
+
+        chat_handler = MagicMock()
+
+        async def handle_request(_body, _request_id):
+            raise CBWorkerDeadError("CB worker is dead and cannot accept request: CUDA illegal memory access")
+
+        chat_handler.handle_request = handle_request
+
+        client = TestClient(self._build_app(GenerationState(continuous_batching=True), chat_handler=chat_handler))
+        resp = client.post(
+            "/v1/chat/completions",
+            json={"model": "x", "messages": [{"role": "user", "content": "hi"}]},
+        )
+
+        self.assertEqual(resp.status_code, 503)
+        # Body carries the original cause so the client knows why the server is broken.
+        self.assertIn("CUDA illegal memory access", resp.json()["error"])
 
 
 class _TestToolCallBase:
