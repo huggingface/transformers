@@ -2991,6 +2991,16 @@ class GenerationMixin(ContinuousMixin):
 
         # Gather the top K scores from _all_ beams.
         if do_sample:
+            # PyTorch's CUDA multinomial is limited to 2^24 categories. With large num_beams
+            # and large vocab_size their product can exceed this limit, causing a RuntimeError.
+            _multinomial_limit = 2**24
+            if num_beams * vocab_size > _multinomial_limit:
+                raise ValueError(
+                    f"Beam-search sampling requires torch.multinomial over {num_beams * vocab_size:,} candidates "
+                    f"(num_beams={num_beams} × vocab_size={vocab_size:,}), but PyTorch's CUDA multinomial is "
+                    f"limited to {_multinomial_limit:,} categories. "
+                    f"Reduce num_beams to at most {_multinomial_limit // vocab_size} for this model's vocab size."
+                )
             topk_indices = torch.multinomial(
                 nn.functional.softmax(accumulated_log_probs, dim=-1), num_samples=beams_to_keep
             )
