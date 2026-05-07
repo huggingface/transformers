@@ -27,8 +27,8 @@ from ...utils import ModelOutput, auto_docstring
 from .configuration_dac import DacConfig
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class DacOutput(ModelOutput):
     r"""
     loss (`torch.Tensor`):
@@ -50,8 +50,8 @@ class DacOutput(ModelOutput):
     projected_latents: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class DacEncoderOutput(ModelOutput):
     r"""
     loss (`torch.Tensor`):

@@ -48,7 +48,6 @@ LOGIT_SCALE_CLAMP_MAX = 4.6052
 FlavaPossibleConfigs = FlavaTextConfig | FlavaImageConfig | FlavaMultimodalConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output from FlavaModel containing embeddings and outputs from individual encoders.
@@ -58,6 +57,7 @@ FlavaPossibleConfigs = FlavaTextConfig | FlavaImageConfig | FlavaMultimodalConfi
     `text_projection` layers on `image_embeddings` and `text_embeddings` respectively.
     """
 )
+@dataclass
 class FlavaModelOutput(ModelOutput):
     r"""
     image_embeddings (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when `pixel_values` are present):
@@ -128,7 +128,6 @@ class FlavaLosses(ModelOutput):
         return all_none
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output from FlavaForPreTraining containing embeddings, and outputs from individual encoders.
@@ -138,6 +137,7 @@ class FlavaLosses(ModelOutput):
     `text_projection` layers on `image_embeddings` and `text_embeddings` respectively.
     """
 )
+@dataclass
 class FlavaForPreTrainingOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor`, *optional*, returned when `return_loss` is True):

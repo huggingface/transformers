@@ -47,13 +47,13 @@ from .configuration_dinov3_vit import DINOv3ViTConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`DINOv3ViTBackbone`], extending [`BackboneOutput`] with optional CLS tokens from
     each selected feature stage (used when `config.return_class_token=True`).
     """
 )
+@dataclass
 class DINOv3ViTBackboneOutput(BackboneOutput):
     r"""
     cls_tokens (`tuple(torch.FloatTensor)`, *optional*):

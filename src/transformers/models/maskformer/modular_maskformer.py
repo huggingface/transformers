@@ -167,7 +167,6 @@ class DetrDecoderOutput(DetrDecoderOutput):
     pass
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     MaskFormer's pixel level module output. It returns both the last and (optionally) the hidden states from the
@@ -178,6 +177,7 @@ class DetrDecoderOutput(DetrDecoderOutput):
     as **pixel embeddings**
     """
 )
+@dataclass
 class MaskFormerPixelLevelModuleOutput(ModelOutput):
     r"""
     encoder_last_hidden_state (`torch.FloatTensor` of shape`(batch_size, num_channels, height, width)`):
@@ -259,7 +259,6 @@ class MaskFormerModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`MaskFormerForInstanceSegmentation`].
@@ -270,6 +269,7 @@ class MaskFormerModelOutput(ModelOutput):
     [`~MaskFormerImageProcessor] for details regarding usage.
     """
 )
+@dataclass
 class MaskFormerForInstanceSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.Tensor`, *optional*):

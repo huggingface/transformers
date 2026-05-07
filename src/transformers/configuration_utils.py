@@ -459,12 +459,13 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         vocab_size = getattr(text_config, "vocab_size", None)
         if vocab_size is not None:
             # Check for all special tokens, e..g. pad_token_id, image_token_id, audio_token_id
-            for value in text_config:
-                if value.endswith("_token_id") and isinstance(value, int) and not 0 <= value < vocab_size:
+            for name in text_config:
+                value = getattr(text_config, name)
+                if name.endswith("_token_id") and isinstance(value, int) and not 0 <= value < vocab_size:
                     # Can't be an exception until we can load configs that fail validation: several configs on the Hub
                     # store invalid special tokens, e.g. `pad_token_id=-1`
                     logger.warning_once(
-                        f"Model config: {value} must be `None` or an integer within the vocabulary (between 0 "
+                        f"Model config: {name} must be `None` or an integer within the vocabulary (between 0 "
                         f"and {vocab_size - 1}), got {value}. This may result in unexpected behavior."
                     )
 

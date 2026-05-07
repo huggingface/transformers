@@ -28,8 +28,8 @@ from ..auto.modeling_auto import AutoModel
 from .configuration_gemma4_assistant import Gemma4AssistantConfig
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Gemma4AssistantOutput(BaseModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):

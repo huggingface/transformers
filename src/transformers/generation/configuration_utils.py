@@ -1739,11 +1739,6 @@ class ContinuousBatchingConfig:
     # are kept but warnings are logged for unsupported/unknown ones.
     drop_unsupported_processors: bool = True
 
-    @property
-    def fallback_max_blocks_per_request(self) -> int:
-        """A good default for the size of the block table for the decode path"""
-        return 32
-
     def account_for_cb_deprecated_arguments(
         self,
         max_queue_size: int = 0,
@@ -1783,144 +1778,16 @@ class ContinuousBatchingConfig:
                 "through the continuous_batching_config: " + ", ".join(kwargs_to_warn)
             )
 
-    def decide_use_cuda_graphs(self, compile_config: CompileConfig | None, is_attn_mask_needed: bool) -> None:
-        """Decides whether or not to use cuda graphs for continuous batching. If the user specified this in the config
-        or if they specified a parameter related to cuda graphs, they are turned on. Otherwise, we use a heuristic
-        based on the attention implementation: we turn on cuda graphs if and only if no attention mask is needed.
-
-        This function modifies the `use_cuda_graph` attribute of the config in place, to a tuple of booleans.
-        """
-        # If cuda is not available, we cannot use cuda graphs
-        import torch
-
-        if not torch.cuda.is_available():
-            intended_use_cuda_graph = any(self.get_cuda_graph_booleans())
-            if intended_use_cuda_graph:  # throw a warning only if the user intended to use cuda graphs
-                logger.warning(f"{self.use_cuda_graph = } but {torch.cuda.is_available() = }: turning off cuda graphs")
-            self.use_cuda_graph = (False, False)
-
-        # Else if use_cuda_graph is specified, we follow the user's choice and make sure it is a tuple of booleans
-        elif self.use_cuda_graph is not None:
-            if isinstance(self.use_cuda_graph, bool):
-                self.use_cuda_graph = (self.use_cuda_graph, self.use_cuda_graph)
-
-        # Else if the user specified a parameter related to cuda graphs, we activate cuda graphs
-        elif self.q_padding_interval_size or self.kv_padding_interval_size or self.max_cached_graphs:
-            self.use_cuda_graph = (True, True)
-
-        # Else if a compile config was found, turn off cuda graphs if the compile config already uses them
-        elif compile_config is not None:
-            options = torch._inductor.list_mode_options().get(compile_config.mode, compile_config.options)
-            compile_uses_cudagraphs = options.get("triton.cudagraphs", False)
-            if compile_uses_cudagraphs:
-                logger.warning(
-                    f"Compile config {compile_config.mode = } uses cudagraphs, which usually does not work well with "
-                    "continuous batching. We recommend using mode 'default' or 'max-autotune-no-cudagraphs' instead."
-                )
-            use_cuda_graph = not compile_uses_cudagraphs  # TODO: should this also match the dynamic shapes?
-            self.use_cuda_graph = (use_cuda_graph, use_cuda_graph)
-
-        # Otherwise we have a default heuristic based on the attention implementation:
-        # attention implementations where an attention mask is needed suffer a lot more from the padding associated
-        # with cuda graphs, so default is to turn cuda graphs off for those implementations
-        else:
-            use_cuda_graph = not is_attn_mask_needed
-            self.use_cuda_graph = (use_cuda_graph, use_cuda_graph)
-            logger.warning(
-                f"No behavior specified for use_cuda_graph, defaulting to {self.use_cuda_graph = } because "
-                f"{is_attn_mask_needed = }. If you want to save memory, turn off cuda graphs, but they tend to improve "
-                "performances by a lot."
-            )
-
-    def get_cuda_graph_booleans(self) -> tuple[bool, bool]:
-        """Returns the cuda graph booleans for the varlen and decode paths."""
+    @property
+    def cuda_graph_booleans(self) -> tuple[bool, bool]:
+        """The cuda graph booleans for the varlen and decode paths."""
         if self.use_cuda_graph is None:
             return False, False
         if isinstance(self.use_cuda_graph, bool):
             return self.use_cuda_graph, self.use_cuda_graph
         return self.use_cuda_graph
 
-    def decide_use_async_batching(self, is_attn_mask_needed: bool) -> bool:
-        """Returns whether or not to use asynchronous batching for continuous batching. If the user specified this in
-        the config, we follow their choice. Otherwise, we turn on asynchronous batching if and only if CUDA graphs are
-        turned on and no attention mask is needed.
-
-        This function modifies the `use_async_batching` attribute of the config in place.
-        """
-        # If the user specifies to use async or not, no need to decide ourselves
-        if self.use_async_batching is None:
-            use_cuda_graphs = any(self.get_cuda_graph_booleans())
-            self.use_async_batching = use_cuda_graphs and not is_attn_mask_needed
-            logger.info(
-                f"No behavior specified for use_async_batching, choosing {self.use_async_batching = } because "
-                f"{use_cuda_graphs = } and {not is_attn_mask_needed = }. If you want to save memory, you can "
-                "disable asynchronous batching but it will degrade performance."
-            )
-        return self.use_async_batching
-
-    def resolve_max_memory_percent(self, has_logit_processors: bool) -> None:
-        """Resolves `max_memory_percent` when unset: 0.9 without logit processors, 0.8 with them. Active processors
-        materialize `[N, V]` intermediates (e.g. top-p sort, softmax) that get captured into the CUDA graph pool, so
-        the cache has to cede some budget to that pool."""
-        if self.max_memory_percent is None:
-            self.max_memory_percent = 0.8 if has_logit_processors else 0.9
-
-    def resolve_sentinel_values(self) -> None:
-        """For some parameters (padding intervals and max cached graphs), the default is a sentinel value of 0: that
-        way, if the user specifies a value for those parameters, we know they want it used, ie. we turn on cuda graphs.
-        But in the case the user does not specify those values, we still need them to resolve to a non-zero value.
-        This function takes care of that."""
-        # Interval sizes are in tokens for both Q and KV
-        if self.q_padding_interval_size == 0:
-            self.q_padding_interval_size = 64
-        if self.kv_padding_interval_size == 0:
-            self.kv_padding_interval_size = 64 * 256  # 64 blocks of 256 tokens ie. 16384 tokens
-        if self.max_cached_graphs == 0:
-            self.max_cached_graphs = 32
-
-    def resolve_compile_configs(
-        self, fallback_compile_config: CompileConfig | None, is_flash_attn: bool, decode_fast_path_available: bool
-    ) -> None:
-        """Resolve if the compile configs for varlen and decode paths, modifying these attributes in place if needed.
-        Default config use full compile over regional compile, because the throughput is significantly higher (~15%)"""
-        logger_ = logging.get_logger("ContinuousBatchingLogger")
-
-        # For each config, priority is: explicit config, default config, fallback config, None
-        if self.varlen_compile_config is None:
-            if self.use_default_compile_configs:
-                # We don't use compile with flash varlen, because max_seqlen_k is volatile and introduces recompilations
-                if is_flash_attn:
-                    varlen_config = None
-                else:
-                    varlen_config = CompileConfig(mode="max-autotune-no-cudagraphs", fullgraph=True, dynamic=True)
-            elif fallback_compile_config is not None:
-                varlen_config = fallback_compile_config
-            else:
-                varlen_config = None
-        else:
-            varlen_config = self.varlen_compile_config
-
-        if self.decode_compile_config is None:
-            if self.use_default_compile_configs:
-                # Paged attention is wrapped in @torch.compiler.disable so we can't use fullgraph
-                decode_config = CompileConfig(mode="max-autotune-no-cudagraphs", fullgraph=False, dynamic=False)
-            elif fallback_compile_config is not None:
-                decode_config = fallback_compile_config
-            else:
-                decode_config = None
-        else:
-            decode_config = self.decode_compile_config
-
-        # For decode, we throw a warning if the fast decode path is not available and a compile config was found
-        if not decode_fast_path_available and self.decode_compile_config is not None:
-            decode_config = None
-            logger_.warning("A decode_compile_config was set but fast decode path is not available. Ignoring it.")
-
-        # Log what will be compiled
-        if varlen_config is not None:
-            logger_.info(f"Varlen path will be compiled with {varlen_config.to_dict()}")
-        if decode_config is not None:
-            logger_.info(f"Decode path will be compiled with {decode_config.to_dict()}")
-        # Modify in place
-        self.varlen_compile_config = varlen_config
-        self.decode_compile_config = decode_config
+    @property
+    def fallback_max_blocks_per_request(self) -> int:
+        """Returns the max blocks per request."""
+        return 32

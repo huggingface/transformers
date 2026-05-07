@@ -143,8 +143,8 @@ class BlipImageTextMatchingModelOutput(ModelOutput):
     question_embeds: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class BlipOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
