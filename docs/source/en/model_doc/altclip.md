@@ -35,18 +35,19 @@ The examples below demonstrates how to calculate similarity scores between an im
 <hfoption id="AutoModel">
 
 ```python
-import torch
 import requests
 from PIL import Image
+
 from transformers import AltCLIPModel, AltCLIPProcessor
 
-model = AltCLIPModel.from_pretrained("BAAI/AltCLIP", dtype=torch.bfloat16)
+
+model = AltCLIPModel.from_pretrained("BAAI/AltCLIP", device_map="auto")
 processor = AltCLIPProcessor.from_pretrained("BAAI/AltCLIP")
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 
-inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True)
+inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True).to(model.device)
 
 outputs = model(**inputs)
 logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
@@ -66,15 +67,16 @@ The example below uses [torchao](../quantization/torchao) to only quantize the w
 
 ```python
 # !pip install torchao
-import torch
 import requests
 from PIL import Image
+
 from transformers import AltCLIPModel, AltCLIPProcessor, TorchAoConfig
+
 
 model = AltCLIPModel.from_pretrained(
     "BAAI/AltCLIP",
     quantization_config=TorchAoConfig("int4_weight_only", group_size=128),
-    dtype=torch.bfloat16,
+    device_map="auto",
 )
 
 processor = AltCLIPProcessor.from_pretrained("BAAI/AltCLIP")
@@ -82,7 +84,7 @@ processor = AltCLIPProcessor.from_pretrained("BAAI/AltCLIP")
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 
-inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True)
+inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True).to(model.device)
 
 outputs = model(**inputs)
 logits_per_image = outputs.logits_per_image  # this is the image-text similarity score

@@ -36,13 +36,12 @@ The example below demonstrates how to predict the `<mask>` token with [`Pipeline
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="fill-mask",
     model="facebook/xlm-roberta-xl",
-    dtype=torch.float16,
     device=0
 )
 pipeline("Bonjour, je suis un modèle <mask>.")
@@ -53,14 +52,15 @@ pipeline("Bonjour, je suis un modèle <mask>.")
 
 ```python
 import torch
+
 from transformers import AutoModelForMaskedLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "FacebookAI/xlm-mlm-en-2048",
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "FacebookAI/xlm-mlm-en-2048",
-    dtype=torch.float16,
     device_map="auto",
 )
 inputs = tokenizer("Hello, I'm a <mask> model.", return_tensors="pt").to(model.device)

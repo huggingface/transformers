@@ -42,8 +42,8 @@ if is_flash_attn_available():
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class MimiOutput(ModelOutput):
     r"""
     audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
@@ -168,8 +168,8 @@ class MimiConv1dPaddingCache:
         return current_cache
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class MimiEncoderOutput(ModelOutput):
     r"""
     audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
@@ -191,8 +191,8 @@ class MimiEncoderOutput(ModelOutput):
     padding_cache: MimiConv1dPaddingCache | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class MimiDecoderOutput(ModelOutput):
     r"""
     audio_values (`torch.FloatTensor`  of shape `(batch_size, segment_length)`, *optional*):

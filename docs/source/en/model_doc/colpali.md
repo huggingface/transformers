@@ -46,7 +46,6 @@ model_name = "vidore/colpali-v1.3-hf"
 
 model = ColPaliForRetrieval.from_pretrained(
     model_name,
-    dtype=torch.bfloat16,
     device_map="auto",  # "cpu", "cuda", "xpu", or "mps" for Apple Silicon
 )
 processor = ColPaliProcessor.from_pretrained(model_name)
