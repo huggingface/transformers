@@ -572,7 +572,7 @@ class MultiModalData:
         raise AttributeError(f"{self.__class__.__name__} has no attribute {key}")
 
 
-@functools.lru_cache
+@functools.lru_cache(maxsize=8)
 def _merge_typed_dict(preprocessor_typed_dict: type, modality_typed_dict: type) -> type:
     return TypedDict(
         "merged_typed_dict",
