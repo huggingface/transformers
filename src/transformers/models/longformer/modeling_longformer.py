@@ -31,12 +31,12 @@ from .configuration_longformer import LongformerConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Longformer's outputs, with potential hidden states, local and global attentions.
     """
 )
+@dataclass
 class LongformerBaseModelOutput(ModelOutput):
     r"""
     attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
@@ -69,12 +69,12 @@ class LongformerBaseModelOutput(ModelOutput):
     global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Longformer's outputs that also contains a pooling of the last hidden states.
     """
 )
+@dataclass
 class LongformerBaseModelOutputWithPooling(ModelOutput):
     r"""
     pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
@@ -112,12 +112,12 @@ class LongformerBaseModelOutputWithPooling(ModelOutput):
     global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for masked language models outputs.
     """
 )
+@dataclass
 class LongformerMaskedLMOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -155,12 +155,12 @@ class LongformerMaskedLMOutput(ModelOutput):
     global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of question answering Longformer models.
     """
 )
+@dataclass
 class LongformerQuestionAnsweringModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -197,12 +197,12 @@ class LongformerQuestionAnsweringModelOutput(ModelOutput):
     global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of sentence classification models.
     """
 )
+@dataclass
 class LongformerSequenceClassifierOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -240,12 +240,12 @@ class LongformerSequenceClassifierOutput(ModelOutput):
     global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of multiple choice Longformer models.
     """
 )
+@dataclass
 class LongformerMultipleChoiceModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape *(1,)*, *optional*, returned when `labels` is provided):
@@ -285,12 +285,12 @@ class LongformerMultipleChoiceModelOutput(ModelOutput):
     global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of token classification models.
     """
 )
+@dataclass
 class LongformerTokenClassifierOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

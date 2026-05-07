@@ -213,6 +213,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("gpt_oss", "GptOssModel"),
         ("gptj", "GPTJModel"),
         ("granite", "GraniteModel"),
+        ("granite4_vision", "Granite4VisionModel"),
         ("granite_speech", "GraniteSpeechForConditionalGeneration"),
         ("granitemoe", "GraniteMoeModel"),
         ("granitemoehybrid", "GraniteMoeHybridModel"),
@@ -395,6 +396,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("regnet", "RegNetModel"),
         ("rembert", "RemBertModel"),
         ("resnet", "ResNetModel"),
+        ("rf_detr", "RfDetrModel"),
         ("roberta", "RobertaModel"),
         ("roberta-prelayernorm", "RobertaPreLayerNormModel"),
         ("roc_bert", "RoCBertModel"),
@@ -664,6 +666,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("gemma3n", "Gemma3nForConditionalGeneration"),
         ("gemma3n_text", "Gemma3nForCausalLM"),
         ("gemma4", "Gemma4ForConditionalGeneration"),
+        ("gemma4_assistant", "Gemma4AssistantForCausalLM"),
         ("gemma4_text", "Gemma4ForCausalLM"),
         ("git", "GitForCausalLM"),
         ("glm", "GlmForCausalLM"),
@@ -940,6 +943,7 @@ MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING_NAMES = OrderedDict(
         # Model for Instance Segmentation mapping
         # MaskFormerForInstanceSegmentation can be removed from this mapping in v5
         ("maskformer", "MaskFormerForInstanceSegmentation"),
+        ("rf_detr", "RfDetrForInstanceSegmentation"),
     ]
 )
 
@@ -998,6 +1002,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("glm4v_moe", "Glm4vMoeForConditionalGeneration"),
         ("glm_ocr", "GlmOcrForConditionalGeneration"),
         ("got_ocr2", "GotOcr2ForConditionalGeneration"),
+        ("granite4_vision", "Granite4VisionForConditionalGeneration"),
         ("idefics", "IdeficsForVisionText2Text"),
         ("idefics2", "Idefics2ForConditionalGeneration"),
         ("idefics3", "Idefics3ForConditionalGeneration"),
@@ -1132,6 +1137,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
         ("pp_doclayout_v3", "PPDocLayoutV3ForObjectDetection"),
         ("pp_ocrv5_mobile_det", "PPOCRV5MobileDetForObjectDetection"),
         ("pp_ocrv5_server_det", "PPOCRV5ServerDetForObjectDetection"),
+        ("rf_detr", "RfDetrForObjectDetection"),
         ("rt_detr", "RTDetrForObjectDetection"),
         ("rt_detr_v2", "RTDetrV2ForObjectDetection"),
         ("table-transformer", "TableTransformerForObjectDetection"),
@@ -1747,6 +1753,7 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("pp_lcnet_v3", "PPLCNetV3Backbone"),
         ("pvt_v2", "PvtV2Backbone"),
         ("resnet", "ResNetBackbone"),
+        ("rf_detr_dinov2", "RfDetrDinov2Backbone"),
         ("rt_detr_resnet", "RTDetrResNetBackbone"),
         ("swin", "SwinBackbone"),
         ("swinv2", "Swinv2Backbone"),

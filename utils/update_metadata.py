@@ -46,7 +46,7 @@ CHECKER_CONFIG = {
     "label": "Model metadata",
     # Approximate: imports the transformers module and inspects pipeline/auto mappings
     # at runtime. Does not iterate over files matching these globs directly.
-    "file_globs": ["src/transformers/models/**/*.py", "docs/**/*.md"],
+    "cache_globs": ["src/transformers/models/**/*.py", "docs/**/*.md"],
     "check_args": ["--check-only"],
     # No safe local "fix" mode: running without `--check-only` pushes to the
     # `huggingface/transformers-metadata` Hub dataset (requires an auth token).
