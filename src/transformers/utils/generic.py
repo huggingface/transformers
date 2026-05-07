@@ -54,7 +54,16 @@ _registered_model_output_types: set[type[Any]] = set()
 
 
 def _register_model_output_pytree_node(output_type: type[ModelOutput]) -> None:
-    if not _is_torch_available or output_type in _registered_model_output_types:
+    if not _is_torch_available:
+        return
+    import torch
+
+    # AMD CI runs PyTorch 2.8.0+rocm which does not support tracing `set.__contains__`
+    # through TorchDynamo. Skip registration during compilation since the pytree node
+    # is already registered from the preceding eager run.
+    if torch.compiler.is_compiling():
+        return
+    if output_type in _registered_model_output_types:
         return
 
     import torch.utils._pytree as torch_pytree
@@ -283,6 +292,19 @@ def is_flash_attention_requested(
         return re.match(r".*flash.*" + str(version), checked_attention_implementation) is not None
     # Otherwise, just check "flash" is in the attention implementation
     return "flash" in checked_attention_implementation
+
+
+def split_attention_implementation(implementation: str | None) -> tuple[bool, str | None]:
+    """
+    Split the optional `paged|` prefix from an attention implementation string.
+
+    Note that `None` means using the default attention implementation, which is either torch's native `sdpa` or `eager` (if `sdpa` is not implemented for that model).
+    """
+    if implementation is None:
+        return False, None
+
+    is_paged = implementation.startswith("paged|")
+    return is_paged, implementation.removeprefix("paged|")
 
 
 def to_py_obj(obj):

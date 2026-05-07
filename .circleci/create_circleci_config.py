@@ -147,7 +147,7 @@ class CircleCIJob:
         env = COMMON_ENV_VARIABLES.copy()
         # fmt: off
         # not critical
-        env.update({"HF_TOKEN": "".join(["h", "f", "_", "H", "o", "d", "V", "u", "M", "q", "b", "R", "m", "t", "b", "z", "F", "Q", "O", "Q", "A", "J", "G", "D", "l", "V", "Q", "r", "R", "N", "w", "D", "M", "V", "C", "s", "d"])})
+        env.update({"HF_TOKEN": "".join(["h", "f", "_", "q", "h", "b", "O", "C", "G", "N", "Y", "x", "D", "K", "C", "P", "J", "n", "q", "m", "O", "q", "g", "q", "s", "f", "q", "S", "v", "f", "s", "j", "q", "w", "j", "C", "T"])})
         # fmt: on
 
         # Do not run tests decorated by @is_flaky on pull requests

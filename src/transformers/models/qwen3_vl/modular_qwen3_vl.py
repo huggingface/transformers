@@ -68,8 +68,8 @@ from ..qwen3.modeling_qwen3 import (
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
     r"""
     deepstack_features (`List[torch.FloatTensor]`, *optional*):
@@ -91,7 +91,7 @@ class Qwen3VLVisionConfig(PreTrainedConfig):
         Indexed of layers for deepstack embeddings.
     """
 
-    model_type = "qwen3_vl"
+    model_type = "qwen3_vl_vision"
     base_config_key = "vision_config"
 
     depth: int = 27
@@ -1322,6 +1322,7 @@ class Qwen3VLProcessor(Qwen2VLProcessor):
 __all__ = [
     "Qwen3VLConfig",
     "Qwen3VLTextConfig",
+    "Qwen3VLVisionConfig",
     "Qwen3VLVisionModel",
     "Qwen3VLForConditionalGeneration",
     "Qwen3VLModel",

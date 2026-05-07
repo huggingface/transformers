@@ -42,12 +42,12 @@ from .configuration_granite_speech import GraniteSpeechConfig, GraniteSpeechEnco
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for LlavaNext causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class GraniteSpeechCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -327,6 +327,8 @@ class GraniteSpeechCTCEncoder(GraniteSpeechPreTrainedModel):
     """
 )
 class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, GenerationMixin):
+    _supports_attention_backend = True
+
     def __init__(self, config: GraniteSpeechConfig):
         super().__init__(config)
         # NOTE: It doesn't matter when we initialize from config, but we should be careful
