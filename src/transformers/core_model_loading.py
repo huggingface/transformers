@@ -1049,7 +1049,7 @@ class WeightConverter(WeightTransform):
             except AttributeError:
                 pass
 
-        # Remove source parameters/buffers
+        # Remove source parameters
         for source_name in source_names:
             mod_path, _, attr = source_name.rpartition(".")
             try:
