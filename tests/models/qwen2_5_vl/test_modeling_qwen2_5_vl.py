@@ -14,7 +14,9 @@
 """Testing suite for the PyTorch Qwen2.5-VL model."""
 
 import copy
+import sys
 import tempfile
+import time
 import unittest
 
 import pytest
@@ -473,8 +475,45 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         pass
 
 
+def _qwen_ci_log(label):
+    """Diagnostic checkpoint logger used to investigate AMD CI hangs in this integration class.
+    Prints a timestamped line with current GPU allocator state, flushed immediately so we
+    can see exactly which step a hang is stuck on if the job is cancelled at the 6h limit."""
+    ts = time.strftime("%H:%M:%S")
+    if torch.cuda.is_available():
+        alloc = torch.cuda.memory_allocated() / 1024**3
+        reserved = torch.cuda.memory_reserved() / 1024**3
+        max_alloc = torch.cuda.max_memory_allocated() / 1024**3
+        msg = (
+            f"[QWEN2_5_VL-CI {ts}] {label} | alloc={alloc:.2f}GB reserved={reserved:.2f}GB "
+            f"max_alloc={max_alloc:.2f}GB frag_proxy={reserved - alloc:.2f}GB"
+        )
+    else:
+        msg = f"[QWEN2_5_VL-CI {ts}] {label} | no GPU"
+    print(msg, flush=True)
+    sys.stdout.flush()
+
+
 @require_torch
 class Qwen2_5_VLIntegrationTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        _qwen_ci_log("setUpClass: about to load shared 7B model (dtype=auto, device_map=auto)")
+        t0 = time.monotonic()
+        cls.shared_model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+            "Qwen/Qwen2.5-VL-7B-Instruct", dtype="auto", device_map="auto"
+        )
+        _qwen_ci_log(f"setUpClass: shared model loaded in {time.monotonic() - t0:.1f}s")
+
+    @classmethod
+    def tearDownClass(cls):
+        _qwen_ci_log("tearDownClass: releasing shared model")
+        cls.shared_model = None
+        cleanup(torch_device, gc_collect=True)
+        _qwen_ci_log("tearDownClass: cleanup done")
+        super().tearDownClass()
+
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct")
         self.processor.tokenizer.padding_side = "left"
@@ -491,15 +530,17 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         self.image = load_image(img_url).convert("RGB")
 
         cleanup(torch_device, gc_collect=True)
+        _qwen_ci_log(f"{self._testMethodName}: setUp done")
 
     def tearDown(self):
+        _qwen_ci_log(f"{self._testMethodName}: tearDown begin")
         cleanup(torch_device, gc_collect=True)
+        _qwen_ci_log(f"{self._testMethodName}: tearDown done")
 
     @slow
     def test_small_model_integration_test(self):
-        model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2.5-VL-7B-Instruct", dtype="auto", device_map="auto"
-        )
+        _qwen_ci_log(f"{self._testMethodName}: using shared model")
+        model = self.shared_model
 
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text], images=[self.image], return_tensors="pt")
@@ -524,7 +565,10 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         # verify generation
         inputs = inputs.to(torch_device)
 
+        _qwen_ci_log(f"{self._testMethodName}: before generate")
+        t0 = time.monotonic()
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        _qwen_ci_log(f"{self._testMethodName}: generate done in {time.monotonic() - t0:.1f}s")
         EXPECTED_DECODED_TEXT = "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in"
 
         self.assertEqual(
@@ -534,16 +578,18 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch(self):
-        model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2.5-VL-7B-Instruct", dtype="auto", device_map="auto"
-        )
+        _qwen_ci_log(f"{self._testMethodName}: using shared model")
+        model = self.shared_model
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text, text], images=[self.image, self.image], return_tensors="pt").to(
             torch_device
         )
 
         # it should not matter whether two images are the same size or not
+        _qwen_ci_log(f"{self._testMethodName}: before generate")
+        t0 = time.monotonic()
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        _qwen_ci_log(f"{self._testMethodName}: generate done in {time.monotonic() - t0:.1f}s")
 
         expected_decoded_texts = [
             "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in",
@@ -557,13 +603,15 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_expand(self):
-        model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2.5-VL-7B-Instruct", dtype="auto", device_map="auto"
-        )
+        _qwen_ci_log(f"{self._testMethodName}: using shared model")
+        model = self.shared_model
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text], images=[self.image], return_tensors="pt").to(torch_device)
 
+        _qwen_ci_log(f"{self._testMethodName}: before generate")
+        t0 = time.monotonic()
         output = model.generate(**inputs, max_new_tokens=30, num_return_sequences=3)
+        _qwen_ci_log(f"{self._testMethodName}: generate done in {time.monotonic() - t0:.1f}s")
 
         EXPECTED_DECODED_TEXT = [
             'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
@@ -578,9 +626,8 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch_wo_image(self):
-        model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2.5-VL-7B-Instruct", dtype="auto", device_map="auto"
-        )
+        _qwen_ci_log(f"{self._testMethodName}: using shared model")
+        model = self.shared_model
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         messages2 = [
             {"role": "system", "content": "You are a helpful assistant."},
@@ -592,7 +639,10 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         )
 
         # it should not matter whether two images are the same size or not
+        _qwen_ci_log(f"{self._testMethodName}: before generate")
+        t0 = time.monotonic()
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        _qwen_ci_log(f"{self._testMethodName}: generate done in {time.monotonic() - t0:.1f}s")
 
         expected_decoded_texts = Expectations(
             {
@@ -618,9 +668,8 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch_different_resolutions(self):
-        model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2.5-VL-7B-Instruct", dtype="auto", device_map="auto"
-        )
+        _qwen_ci_log(f"{self._testMethodName}: using shared model")
+        model = self.shared_model
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         text2 = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         image2 = self.image.resize((224, 224))
@@ -632,7 +681,10 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         # it should not matter whether two images are the same size or not
+        _qwen_ci_log(f"{self._testMethodName}: before generate")
+        t0 = time.monotonic()
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        _qwen_ci_log(f"{self._testMethodName}: generate done in {time.monotonic() - t0:.1f}s")
 
         expected_decoded_texts = Expectations(
             {
@@ -668,19 +720,25 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_flashatt2(self):
+        _qwen_ci_log(f"{self._testMethodName}: before from_pretrained (flash_attention_2)")
+        t0 = time.monotonic()
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2.5-VL-7B-Instruct",
             dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             device_map="auto",
         )
+        _qwen_ci_log(f"{self._testMethodName}: from_pretrained done in {time.monotonic() - t0:.1f}s")
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text, text], images=[self.image, self.image], return_tensors="pt").to(
             torch_device
         )
 
         # it should not matter whether two images are the same size or not
+        _qwen_ci_log(f"{self._testMethodName}: before generate")
+        t0 = time.monotonic()
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        _qwen_ci_log(f"{self._testMethodName}: generate done in {time.monotonic() - t0:.1f}s")
 
         expected_decoded_text = "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in"
 
@@ -694,12 +752,15 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_wo_image_flashatt2(self):
+        _qwen_ci_log(f"{self._testMethodName}: before from_pretrained (flash_attention_2)")
+        t0 = time.monotonic()
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2.5-VL-7B-Instruct",
             dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             device_map="auto",
         )
+        _qwen_ci_log(f"{self._testMethodName}: from_pretrained done in {time.monotonic() - t0:.1f}s")
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         messages2 = [
             {"role": "system", "content": "You are a helpful assistant."},
@@ -711,7 +772,10 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         )
 
         # it should not matter whether two images are the same size or not
+        _qwen_ci_log(f"{self._testMethodName}: before generate")
+        t0 = time.monotonic()
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        _qwen_ci_log(f"{self._testMethodName}: generate done in {time.monotonic() - t0:.1f}s")
 
         # FIXME: The second decoded text in the CUDA expectation seems to be incorrect, it used to be the second text
         # on the ROCm expectation that was the correct one. Either model changed or code is buggy.
@@ -735,9 +799,8 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_with_video(self):
-        model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2.5-VL-7B-Instruct", dtype="auto", device_map="auto"
-        )
+        _qwen_ci_log(f"{self._testMethodName}: using shared model")
+        model = self.shared_model
 
         video_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
         messages = [
@@ -758,7 +821,10 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
             num_frames=10,
         ).to(torch_device)
 
+        _qwen_ci_log(f"{self._testMethodName}: before generate")
+        t0 = time.monotonic()
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        _qwen_ci_log(f"{self._testMethodName}: generate done in {time.monotonic() - t0:.1f}s")
         expected_decoded_texts = Expectations(
             {
                 (None, None): [

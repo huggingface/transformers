@@ -14,7 +14,9 @@
 # limitations under the License.
 """Testing suite for the PyTorch Qwen2.5-Omni model."""
 
+import sys
 import tempfile
+import time
 import unittest
 from io import BytesIO
 from urllib.request import urlopen
@@ -594,8 +596,45 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(
             self.assertTrue(torch.equal(position_ids, expected_position_ids))
 
 
+def _qwen_ci_log(label):
+    """Diagnostic checkpoint logger used to investigate AMD CI hangs in this integration class.
+    Prints a timestamped line with current GPU allocator state, flushed immediately so we
+    can see exactly which step a hang is stuck on if the job is cancelled at the 6h limit."""
+    ts = time.strftime("%H:%M:%S")
+    if torch.cuda.is_available():
+        alloc = torch.cuda.memory_allocated() / 1024**3
+        reserved = torch.cuda.memory_reserved() / 1024**3
+        max_alloc = torch.cuda.max_memory_allocated() / 1024**3
+        msg = (
+            f"[QWEN2_5_OMNI-CI {ts}] {label} | alloc={alloc:.2f}GB reserved={reserved:.2f}GB "
+            f"max_alloc={max_alloc:.2f}GB frag_proxy={reserved - alloc:.2f}GB"
+        )
+    else:
+        msg = f"[QWEN2_5_OMNI-CI {ts}] {label} | no GPU"
+    print(msg, flush=True)
+    sys.stdout.flush()
+
+
 @require_torch
 class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        _qwen_ci_log("setUpClass: about to load shared 7B model (dtype=bfloat16, device_map=auto)")
+        t0 = time.monotonic()
+        cls.shared_model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
+            "Qwen/Qwen2.5-Omni-7B", dtype=torch.bfloat16, device_map="auto"
+        )
+        _qwen_ci_log(f"setUpClass: shared model loaded in {time.monotonic() - t0:.1f}s")
+
+    @classmethod
+    def tearDownClass(cls):
+        _qwen_ci_log("tearDownClass: releasing shared model")
+        cls.shared_model = None
+        cleanup(torch_device, gc_collect=True)
+        _qwen_ci_log("tearDownClass: cleanup done")
+        super().tearDownClass()
+
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
         self.audio_url = (
@@ -625,13 +664,14 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         self.raw_image = Image.open(requests.get(self.image_url, stream=True).raw)
 
     def tearDown(self):
+        _qwen_ci_log(f"{self._testMethodName}: tearDown begin")
         cleanup(torch_device, gc_collect=True)
+        _qwen_ci_log(f"{self._testMethodName}: tearDown done")
 
     @slow
     def test_small_model_integration_test(self):
-        model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2.5-Omni-7B", dtype=torch.bfloat16, device_map="auto"
-        )
+        _qwen_ci_log(f"{self._testMethodName}: using shared model")
+        model = self.shared_model
 
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(
@@ -678,9 +718,12 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         # verify generation
         inputs = inputs.to(torch_device)
 
+        _qwen_ci_log(f"{self._testMethodName}: before generate")
+        t0 = time.monotonic()
         output = model.generate(
             **inputs, thinker_temperature=0, thinker_do_sample=False, return_audio=False, thinker_max_new_tokens=20
         )
+        _qwen_ci_log(f"{self._testMethodName}: generate done in {time.monotonic() - t0:.1f}s")
 
         EXPECTED_DECODED_TEXT = Expectations({
             ("xpu", None): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
@@ -693,9 +736,8 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch(self):
-        model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2.5-Omni-7B", dtype=torch.bfloat16, device_map="auto"
-        )
+        _qwen_ci_log(f"{self._testMethodName}: using shared model")
+        model = self.shared_model
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(
             text=[text] * 2,
@@ -705,9 +747,12 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
             padding=True,
         ).to(torch_device, dtype=torch.bfloat16)
 
+        _qwen_ci_log(f"{self._testMethodName}: before generate")
+        t0 = time.monotonic()
         output = model.generate(
             **inputs, thinker_temperature=0, thinker_do_sample=False, return_audio=False, thinker_max_new_tokens=20
         )
+        _qwen_ci_log(f"{self._testMethodName}: generate done in {time.monotonic() - t0:.1f}s")
 
         EXPECTED_DECODED_TEXTS = Expectations(
             {
@@ -735,9 +780,8 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_multiturn(self):
-        model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2.5-Omni-7B", dtype=torch.bfloat16, device_map="auto"
-        )
+        _qwen_ci_log(f"{self._testMethodName}: using shared model")
+        model = self.shared_model
 
         messages = [
             self.messages[0],
@@ -768,9 +812,12 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
             padding=True,
         ).to(torch_device, dtype=torch.bfloat16)
 
+        _qwen_ci_log(f"{self._testMethodName}: before generate")
+        t0 = time.monotonic()
         output = model.generate(
             **inputs, thinker_temperature=0, thinker_do_sample=False, return_audio=False, thinker_max_new_tokens=20
         )
+        _qwen_ci_log(f"{self._testMethodName}: generate done in {time.monotonic() - t0:.1f}s")
 
         EXPECTED_DECODED_TEXT = "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.\nuser\nHow about this one?\nassistant\nThe sound is a cough."
 
@@ -781,9 +828,8 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_w_audio(self):
-        model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2.5-Omni-7B", dtype=torch.bfloat16, device_map="auto"
-        )
+        _qwen_ci_log(f"{self._testMethodName}: using shared model")
+        model = self.shared_model
         audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/guess_age_gender.wav"
 
         messages = [
@@ -808,6 +854,8 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
             torch_device, dtype=torch.bfloat16
         )
 
+        _qwen_ci_log(f"{self._testMethodName}: before generate")
+        t0 = time.monotonic()
         output = model.generate(
             **inputs,
             thinker_temperature=0,
@@ -815,6 +863,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
             thinker_max_new_tokens=20,
             talker_max_new_tokens=10,
         )
+        _qwen_ci_log(f"{self._testMethodName}: generate done in {time.monotonic() - t0:.1f}s")
 
         EXPECTED_DECODED_TEXTS = Expectations(
             {
@@ -834,12 +883,15 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_flashatt2(self):
+        _qwen_ci_log(f"{self._testMethodName}: before from_pretrained (flash_attention_2)")
+        t0 = time.monotonic()
         model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2.5-Omni-7B",
             dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             device_map="auto",
         )
+        _qwen_ci_log(f"{self._testMethodName}: from_pretrained done in {time.monotonic() - t0:.1f}s")
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(
             text=[text, text],
@@ -849,7 +901,10 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
             padding=True,
         ).to(torch_device)
 
+        _qwen_ci_log(f"{self._testMethodName}: before generate")
+        t0 = time.monotonic()
         output = model.generate(**inputs, thinker_temperature=0, thinker_do_sample=False, return_audio=False)
+        _qwen_ci_log(f"{self._testMethodName}: generate done in {time.monotonic() - t0:.1f}s")
 
         EXPECTED_DECODED_TEXT = Expectations({
             ("cuda", None): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.",
