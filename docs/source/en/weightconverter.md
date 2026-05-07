@@ -174,14 +174,14 @@ WeightConverter(
 
 A `WeightConverter` is also reversible: `reverse_transform()` swaps source ↔ target and replaces each operation with its `reverse_op`, so a registered conversion mapping is bidirectional by construction (loading uses the list as-is, saving uses it reversed).
 
-### Interleaving renames and converters
+### Ordering renames and converters
+
+List `WeightRenaming` entries before `WeightConverter` entries, and keep their leaves disjoint: renames normalise the keys converters consume, but never target a leaf a converter produces. The save path relies on this to invert the mapping in two phases (reverse converters, then reverse renames).
 
 The transform list is walked in order, once per checkpoint key. For each key:
 
 - Every `WeightRenaming` that matches fires; multiple renames can chain.
 - The first `WeightConverter` that matches **claims** the key. Subsequent converters are skipped — this guarantees the tensor is routed to a single converter for the merge/split step, and is the reason two converters with overlapping intent would be a misconfiguration.
-
-The typical pattern is therefore: one or more `WeightRenaming`s that put the key into the canonical form, followed by exactly one `WeightConverter` that performs the real transformation.
 
 ```python
 weight_mapping = [
@@ -514,7 +514,7 @@ These worst-case scenarios are uncommon. The actual memory peak tends to stay cl
 
 ## Reversibility
 
-The system supports saving models with the inverse transformations, enabling round-trip save/load:
+The system supports saving models with the inverse transformations, enabling round-trip save/load. Saving runs in two phases: reversed converters first (each tensor matches at most one), then reversed renames, per the ordering rule above.
 
 ```python
 def revert_weight_conversion(model, state_dict):

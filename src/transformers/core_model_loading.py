@@ -1542,33 +1542,40 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
     # Important: we need to revert the order here, so that potential conversions from submodels are performed first
     weight_conversions = weight_conversions[::-1]
 
-    # Reverse all Transform to correctly match keys
-    reverse_weight_conversion = [conversion.reverse_transform() for conversion in weight_conversions]
-    # If we are still here, we need to create the (reverse) conversion mapping from scratch
-    converters = [entry for entry in reverse_weight_conversion if isinstance(entry, WeightConverter)]
-    pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
-    conversion_mapping = {}
+    # Two-phase save: first reverse converters, then reverse renamings. Relies on the rule that
+    # WeightRenamings never operate on WeightConverter outputs (see WeightTransform docstring).
+    inverted_transforms = [transform.reverse_transform() for transform in weight_conversions]
+    inverted_converters = [transform for transform in inverted_transforms if isinstance(transform, WeightConverter)]
+    inverted_renamings = [transform for transform in inverted_transforms if not isinstance(transform, WeightConverter)]
+    converter_by_pattern = {
+        pattern: converter for converter in inverted_converters for pattern in converter.source_patterns
+    }
 
+    conversion_mapping: dict[str, WeightTransform] = {}
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
-        renamed_key, source_pattern = rename_source_key(original_key, reverse_weight_conversion)
+        # `converter_key`: key after phase-1 (converter namespace, used as layer_name by convert()).
+        # `checkpoint_key`: key after phase-2 (final saved name, layer_name for plain renamings).
+        converter_key, matched_pattern = rename_source_key(original_key, inverted_converters)
+        checkpoint_key, _ = rename_source_key(converter_key, inverted_renamings)
 
-        if source_pattern is not None:
-            new_converter = deepcopy(pattern_to_converter[source_pattern])
-            # each target key gets its own converter instance
-            mapping = conversion_mapping.setdefault(renamed_key, new_converter)
+        if matched_pattern is not None:
+            # Bucket under converter_key so all sibling inputs land in the same converter instance.
+            mapping = conversion_mapping.setdefault(converter_key, deepcopy(converter_by_pattern[matched_pattern]))
         else:
-            mapping = conversion_mapping.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
-            source_pattern = original_key
+            mapping = conversion_mapping.setdefault(checkpoint_key, WeightRenaming(original_key, checkpoint_key))
+            matched_pattern = original_key
 
-        mapping.add_tensor(renamed_key, original_key, source_pattern, tensor)
+        mapping.add_tensor(checkpoint_key, original_key, matched_pattern, tensor)
 
     new_state_dict = {}
-    for first_param_name, reversed_converter in conversion_mapping.items():
-        # Apply the reverse converter
-        realized_value = reversed_converter.convert(first_param_name, model=model, config=model.config)
-        for target_name, param in realized_value.items():
+    for layer_name, mapping in conversion_mapping.items():
+        realized = mapping.convert(layer_name, model=model, config=model.config)
+        for target_name, param in realized.items():
             param = param[0] if isinstance(param, list) else param
+            if isinstance(mapping, WeightConverter):
+                # Bring converter outputs from converter namespace into checkpoint namespace.
+                target_name, _ = rename_source_key(target_name, inverted_renamings)
             new_state_dict[target_name] = param
 
     return new_state_dict

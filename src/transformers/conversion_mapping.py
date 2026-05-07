@@ -283,15 +283,15 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightConverter(
                 source_patterns=[
-                    r"mlp\.experts\..*\.w1\.weight",
-                    r"mlp\.experts\..*\.w3\.weight",
+                    "mlp.experts.*.w1.weight",
+                    "mlp.experts.*.w3.weight",
                 ],
-                target_patterns=r"mlp.experts.gate_up_proj",
+                target_patterns="mlp.experts.gate_up_proj",
                 operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
             ),
             WeightConverter(
-                source_patterns=r"mlp\.experts\..*\.w2\.weight",
-                target_patterns=r"mlp.experts.down_proj",
+                source_patterns="mlp.experts.*.w2.weight",
+                target_patterns="mlp.experts.down_proj",
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
@@ -652,6 +652,9 @@ def _build_checkpoint_conversion_mapping():
         "jina_embeddings_v3": [
             WeightRenaming(source_patterns="emb_ln", target_patterns="embeddings.LayerNorm"),
             WeightRenaming(source_patterns="encoder.layers", target_patterns="layers"),
+            WeightRenaming(source_patterns="mixer.out_proj", target_patterns="self_attn.o_proj"),
+            WeightRenaming(source_patterns="norm1", target_patterns="post_attention_layernorm"),
+            WeightRenaming(source_patterns="norm2", target_patterns="post_mlp_layernorm"),
             WeightConverter(
                 source_patterns="mixer.Wqkv",
                 target_patterns=[
@@ -661,9 +664,6 @@ def _build_checkpoint_conversion_mapping():
                 ],
                 operations=[Chunk(dim=0)],
             ),
-            WeightRenaming(source_patterns="mixer.out_proj", target_patterns="self_attn.o_proj"),
-            WeightRenaming(source_patterns="norm1", target_patterns="post_attention_layernorm"),
-            WeightRenaming(source_patterns="norm2", target_patterns="post_mlp_layernorm"),
         ],
         "cohere_asr": [
             WeightRenaming(r"encoder\.pre_encode\.conv\.", r"encoder.subsampling.layers."),
@@ -703,16 +703,6 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"\.ls1", r"\.lambda_1"),
             WeightRenaming(r"\.ls2", r"\.lambda_2"),
             WeightRenaming(r"(layers\.\d+)\.attn\.proj\.", r"\1.attention.projection_layer."),
-            WeightConverter(
-                source_patterns=["attn.qkv.weight"],
-                target_patterns=["attention.q_proj.weight", "attention.k_proj.weight", "attention.v_proj.weight"],
-                operations=[Chunk(dim=0)],
-            ),
-            WeightConverter(
-                source_patterns=["attn.qkv.bias"],
-                target_patterns=["attention.q_proj.bias", "attention.k_proj.bias", "attention.v_proj.bias"],
-                operations=[Chunk(dim=0)],
-            ),
             WeightRenaming(r"\.norm1\.", r"\.layernorm_before\."),
             WeightRenaming(r"\.norm2\.", r"\.layernorm_after\."),
             WeightRenaming(r"\.embeddings\.class_embedding", r"\.embeddings\.cls_token"),
@@ -723,6 +713,16 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"^mlp1\.0\.", r"model\.multi_modal_projector\.layer_norm\."),
             WeightRenaming(r"^mlp1\.1\.", r"model\.multi_modal_projector\.linear_1\."),
             WeightRenaming(r"^mlp1\.3\.", r"model\.multi_modal_projector\.linear_2\."),
+            WeightConverter(
+                source_patterns=["attn.qkv.weight"],
+                target_patterns=["attention.q_proj.weight", "attention.k_proj.weight", "attention.v_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=["attn.qkv.bias"],
+                target_patterns=["attention.q_proj.bias", "attention.k_proj.bias", "attention.v_proj.bias"],
+                operations=[Chunk(dim=0)],
+            ),
         ],
         "legacy": [
             WeightRenaming(
