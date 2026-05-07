@@ -17,6 +17,7 @@ Processing saving/loading class for common processors.
 
 import bisect
 import copy
+import functools
 import inspect
 import json
 import os
@@ -569,6 +570,15 @@ class MultiModalData:
         if hasattr(self, key):
             return getattr(self, key)
         raise AttributeError(f"{self.__class__.__name__} has no attribute {key}")
+
+
+@functools.lru_cache(maxsize=8)
+def _merge_typed_dict(preprocessor_typed_dict: type, modality_typed_dict: type) -> type:
+    return TypedDict(
+        "merged_typed_dict",
+        {**preprocessor_typed_dict.__annotations__, **modality_typed_dict.__annotations__},
+        total=False,
+    )
 
 
 class ProcessorMixin(PushToHubMixin):
@@ -1369,11 +1379,7 @@ class ProcessorMixin(PushToHubMixin):
                 if preprocessor is None or getattr(preprocessor, "valid_kwargs", None) is None:
                     continue
                 preprocessor_typed_dict_obj = getattr(preprocessor, "valid_kwargs")
-                typed_dict_obj = TypedDict(
-                    "merged_typed_dict",
-                    {**preprocessor_typed_dict_obj.__annotations__, **typed_dict_obj.__annotations__},
-                    total=False,
-                )
+                typed_dict_obj = _merge_typed_dict(preprocessor_typed_dict_obj, typed_dict_obj)
             validate_typed_dict(typed_dict_obj, output_kwargs[key])
         return output_kwargs
 
