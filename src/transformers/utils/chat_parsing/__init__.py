@@ -8,7 +8,7 @@
 """Response parsing: convert model-emitted text into the assistant-message
 dict used by chat templates, driven by a declarative `response_template` spec."""
 
-from .response_parser import ResponseEventStream, parse_response
+from .response_parser import ResponseParser, parse_response
 
 
-__all__ = ["ResponseEventStream", "parse_response"]
+__all__ = ["ResponseParser", "parse_response"]
