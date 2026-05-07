@@ -1202,7 +1202,12 @@ class Gemma4TextScaledWordEmbedding(Gemma3TextScaledWordEmbedding):
 
 
 class Gemma4PreTrainedModel(Gemma3nPreTrainedModel):
-    _no_split_modules = ["Gemma4TextDecoderLayer", "Gemma4VisionEncoderLayer", "Gemma4AudioLayer"]
+    _no_split_modules = [
+        "Gemma4TextDecoderLayer",
+        "Gemma4VisionEncoderLayer",
+        "Gemma4VisionPatchEmbedder",
+        "Gemma4AudioLayer",
+    ]
     input_modalities = ("image", "text", "video", "audio")
     _can_record_outputs = None  # override
 
@@ -1966,9 +1971,21 @@ class Gemma4Model(Gemma3nModel):
         # Replace image id with PAD if the image token if OOV, to avoid index-errors
         llm_input_ids = None
         if inputs_embeds is None:
-            llm_input_ids = input_ids.clone()
+            inputs_device = self.get_input_embeddings().weight.device
+            multimodal_mask = multimodal_mask.to(inputs_device)
+            llm_input_ids = input_ids.to(inputs_device).clone()
             llm_input_ids[multimodal_mask] = self.config.text_config.pad_token_id
             inputs_embeds = self.get_input_embeddings()(llm_input_ids)
+        else:
+            multimodal_mask = multimodal_mask.to(inputs_embeds.device)
+
+        target_device = inputs_embeds.device
+        if attention_mask is not None and not isinstance(attention_mask, dict):
+            attention_mask = attention_mask.to(target_device)
+        if mm_token_type_ids is not None:
+            mm_token_type_ids = mm_token_type_ids.to(target_device)
+        if position_ids is not None:
+            position_ids = position_ids.to(target_device)
 
         if self.config.get_text_config().hidden_size_per_layer_input:
             pad_embedding = self.language_model.embed_tokens.weight[self.config.text_config.pad_token_id, :]
@@ -2107,6 +2124,7 @@ class Gemma4Model(Gemma3nModel):
 
         audio_outputs = self.audio_tower(input_features, input_features_mask, return_dict=True, **kwargs)
         audio_outputs.pooler_output = self.embed_audio(inputs_embeds=audio_outputs.last_hidden_state)
+        audio_outputs.attention_mask = audio_outputs.attention_mask.to(audio_outputs.pooler_output.device)
 
         return audio_outputs
 
