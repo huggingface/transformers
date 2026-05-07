@@ -24,7 +24,7 @@ from ...activations import ACT2FN, gelu
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
 from .configuration_longformer import LongformerConfig
 
 
@@ -1400,6 +1400,7 @@ class LongformerModel(LongformerPreTrainedModel):
             attention_mask = global_attention_mask + 1
         return attention_mask
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1411,7 +1412,6 @@ class LongformerModel(LongformerPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | LongformerBaseModelOutputWithPooling:
         r"""
@@ -1466,7 +1466,6 @@ class LongformerModel(LongformerPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -1514,13 +1513,9 @@ class LongformerModel(LongformerPreTrainedModel):
             padding_len=padding_len,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
-
-        if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return LongformerBaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -1553,6 +1548,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1565,7 +1561,6 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
         labels: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | LongformerMaskedLMOutput:
         r"""
@@ -1611,8 +1606,6 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
         ['healthy', 'skinny', 'thin', 'good', 'vegetarian']
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         outputs = self.longformer(
             input_ids,
             attention_mask=attention_mask,
@@ -1622,7 +1615,6 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output)
@@ -1633,10 +1625,6 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
 
             labels = labels.to(prediction_scores.device)
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
-
-        if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
         return LongformerMaskedLMOutput(
             loss=masked_lm_loss,
@@ -1665,6 +1653,7 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1677,7 +1666,6 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
         labels: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | LongformerSequenceClassifierOutput:
         r"""
@@ -1696,8 +1684,6 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         if global_attention_mask is None:
             logger.warning_once("Initializing global attention on CLS token...")
             global_attention_mask = torch.zeros_like(input_ids)
@@ -1713,7 +1699,6 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
         sequence_output = outputs[0]
         logits = self.classifier(sequence_output)
@@ -1742,10 +1727,6 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return LongformerSequenceClassifierOutput(
             loss=loss,
@@ -1787,6 +1768,7 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1800,7 +1782,6 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
         end_positions: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | LongformerQuestionAnsweringModelOutput:
         r"""
@@ -1842,8 +1823,6 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
         ...     tokenizer.convert_tokens_to_ids(answer_tokens)
         ... )  # remove space prepending space token
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         if global_attention_mask is None:
             if input_ids is None:
                 logger.warning(
@@ -1863,7 +1842,6 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
         sequence_output = outputs[0]
@@ -1890,10 +1868,6 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
 
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[2:]
-            return ((total_loss,) + output) if total_loss is not None else output
-
         return LongformerQuestionAnsweringModelOutput(
             loss=total_loss,
             start_logits=start_logits,
@@ -1917,6 +1891,7 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1929,7 +1904,6 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
         labels: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | LongformerTokenClassifierOutput:
         r"""
@@ -1946,8 +1920,6 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         outputs = self.longformer(
             input_ids,
             attention_mask=attention_mask,
@@ -1957,7 +1929,6 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
         sequence_output = outputs[0]
@@ -1971,10 +1942,6 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
 
             labels = labels.to(logits.device)
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return LongformerTokenClassifierOutput(
             loss=loss,
@@ -1997,6 +1964,7 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -2009,7 +1977,6 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | LongformerMultipleChoiceModelOutput:
         r"""
@@ -2053,7 +2020,6 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
             model's internal embedding lookup matrix.
         """
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # set global attention on question tokens
         if global_attention_mask is None and input_ids is not None:
@@ -2091,7 +2057,6 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
             inputs_embeds=flat_inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
         pooled_output = outputs[1]
 
@@ -2105,10 +2070,6 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
 
             labels = labels.to(reshaped_logits.device)
             loss = loss_fct(reshaped_logits, labels)
-
-        if not return_dict:
-            output = (reshaped_logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return LongformerMultipleChoiceModelOutput(
             loss=loss,

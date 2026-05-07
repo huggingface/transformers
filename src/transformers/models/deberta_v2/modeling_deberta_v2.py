@@ -31,7 +31,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, can_return_tuple, logging
 from .configuration_deberta_v2 import DebertaV2Config
 
 
@@ -718,6 +718,7 @@ class DebertaV2Model(DebertaV2PreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embeddings.word_embeddings = new_embeddings
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -728,14 +729,12 @@ class DebertaV2Model(DebertaV2PreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutput:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -767,7 +766,6 @@ class DebertaV2Model(DebertaV2PreTrainedModel):
             attention_mask,
             output_hidden_states=True,
             output_attentions=output_attentions,
-            return_dict=return_dict,
         )
         encoded_layers = encoder_outputs[1]
 
@@ -790,9 +788,6 @@ class DebertaV2Model(DebertaV2PreTrainedModel):
                 encoded_layers.append(query_states)
 
         sequence_output = encoded_layers[-1]
-
-        if not return_dict:
-            return (sequence_output,) + encoder_outputs[(1 if output_hidden_states else 2) :]
 
         return BaseModelOutput(
             last_hidden_state=sequence_output,
@@ -921,6 +916,7 @@ class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
             self.lm_predictions.lm_head.dense = new_embeddings
             self.lm_predictions.lm_head.bias = new_embeddings.bias
 
+    @can_return_tuple
     @auto_docstring
     # Copied from transformers.models.deberta.modeling_deberta.DebertaForMaskedLM.forward with Deberta->DebertaV2
     def forward(
@@ -933,7 +929,6 @@ class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
         labels: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | MaskedLMOutput:
         r"""
@@ -942,9 +937,6 @@ class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
-
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         outputs = self.deberta(
             input_ids,
             attention_mask=attention_mask,
@@ -953,7 +945,6 @@ class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
         sequence_output = outputs[0]
@@ -966,10 +957,6 @@ class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()  # -100 index = padding token
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
-
-        if not return_dict:
-            output = (prediction_scores,) + outputs[1:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
         return MaskedLMOutput(
             loss=masked_lm_loss,
@@ -1033,6 +1020,7 @@ class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.deberta.set_input_embeddings(new_embeddings)
 
+    @can_return_tuple
     @auto_docstring
     # Copied from transformers.models.deberta.modeling_deberta.DebertaForSequenceClassification.forward with Deberta->DebertaV2
     def forward(
@@ -1045,7 +1033,6 @@ class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
         labels: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | SequenceClassifierOutput:
         r"""
@@ -1054,8 +1041,6 @@ class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         outputs = self.deberta(
             input_ids,
             token_type_ids=token_type_ids,
@@ -1064,7 +1049,6 @@ class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
         encoder_layer = outputs[0]
@@ -1107,9 +1091,6 @@ class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
@@ -1130,6 +1111,7 @@ class DebertaV2ForTokenClassification(DebertaV2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1141,15 +1123,12 @@ class DebertaV2ForTokenClassification(DebertaV2PreTrainedModel):
         labels: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | TokenClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         outputs = self.deberta(
             input_ids,
             attention_mask=attention_mask,
@@ -1158,7 +1137,6 @@ class DebertaV2ForTokenClassification(DebertaV2PreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
         sequence_output = outputs[0]
@@ -1170,10 +1148,6 @@ class DebertaV2ForTokenClassification(DebertaV2PreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
@@ -1192,6 +1166,7 @@ class DebertaV2ForQuestionAnswering(DebertaV2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     # Copied from transformers.models.deberta.modeling_deberta.DebertaForQuestionAnswering.forward with Deberta->DebertaV2
     def forward(
@@ -1205,11 +1180,8 @@ class DebertaV2ForQuestionAnswering(DebertaV2PreTrainedModel):
         end_positions: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | QuestionAnsweringModelOutput:
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         outputs = self.deberta(
             input_ids,
             attention_mask=attention_mask,
@@ -1218,7 +1190,6 @@ class DebertaV2ForQuestionAnswering(DebertaV2PreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
         sequence_output = outputs[0]
@@ -1244,10 +1215,6 @@ class DebertaV2ForQuestionAnswering(DebertaV2PreTrainedModel):
             start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
-
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[1:]
-            return ((total_loss,) + output) if total_loss is not None else output
 
         return QuestionAnsweringModelOutput(
             loss=total_loss,
@@ -1283,6 +1250,7 @@ class DebertaV2ForMultipleChoice(DebertaV2PreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.deberta.set_input_embeddings(new_embeddings)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1294,7 +1262,6 @@ class DebertaV2ForMultipleChoice(DebertaV2PreTrainedModel):
         labels: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | MultipleChoiceModelOutput:
         r"""
@@ -1303,7 +1270,6 @@ class DebertaV2ForMultipleChoice(DebertaV2PreTrainedModel):
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         flat_input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
@@ -1324,7 +1290,6 @@ class DebertaV2ForMultipleChoice(DebertaV2PreTrainedModel):
             inputs_embeds=flat_inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
         encoder_layer = outputs[0]
@@ -1337,10 +1302,6 @@ class DebertaV2ForMultipleChoice(DebertaV2PreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(reshaped_logits, labels)
-
-        if not return_dict:
-            output = (reshaped_logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
             loss=loss,

@@ -27,7 +27,7 @@ from ...modeling_outputs import (
     XVectorOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, is_peft_available
+from ...utils import auto_docstring, can_return_tuple, is_peft_available
 from .configuration_wav2vec2_bert import Wav2Vec2BertConfig
 
 
@@ -991,6 +991,7 @@ class Wav2Vec2BertModel(Wav2Vec2BertPreTrainedModel):
 
         return hidden_states
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1084,6 +1085,7 @@ class Wav2Vec2BertForCTC(Wav2Vec2BertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1191,6 +1193,7 @@ class Wav2Vec2BertForSequenceClassification(Wav2Vec2BertPreTrainedModel):
         for param in self.wav2vec2_bert.parameters():
             param.requires_grad = False
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1282,6 +1285,7 @@ class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2BertPreTrainedModel):
         for param in self.wav2vec2_bert.parameters():
             param.requires_grad = False
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1441,6 +1445,7 @@ class Wav2Vec2BertForXVector(Wav2Vec2BertPreTrainedModel):
 
         return input_lengths
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
