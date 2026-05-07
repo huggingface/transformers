@@ -334,7 +334,7 @@ jobs:
           if [ -n "$(git status --porcelain)" ]; then
             git add .
             git commit -m "Apply repo consistency fixes"
-            git -c lfs.locksverify=false push origin HEAD:${PR_HEAD_REF}
+            git push origin HEAD:${PR_HEAD_REF}
             echo "✅ Changes pushed successfully"
           else
             echo "No changes to commit"
