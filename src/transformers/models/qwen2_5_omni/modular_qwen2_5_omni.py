@@ -69,22 +69,22 @@ logger = logging.get_logger(__name__)
 
 
 def chunk_and_pad_features(
-    input_features: torch.Tensor, feature_lens: torch.Tensor, n_window: int, *, kwargs: dict | None = None
+    input_features: torch.Tensor, feature_lens: torch.Tensor, n_window: int, kwargs: dict | None = None
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Split audio features into fixed-size chunks and pad to uniform length, or pop precomputed pair from ``kwargs``.
+    """Split audio features into fixed-size chunks and pad to uniform length, or pop precomputed pair from `kwargs`.
 
-    Each audio sample is split into chunks of ``n_window * 2`` frames (the last
+    Each audio sample is split into chunks of `n_window * 2` frames (the last
     chunk may be shorter), then all chunks are right-padded to the longest chunk.
 
     Args:
-        input_features: ``(feature_dim, total_frames)`` concatenated audio features.
-        feature_lens: ``(batch_size,)`` per-sample frame counts.
+        input_features: `(feature_dim, total_frames)` concatenated audio features.
+        feature_lens: `(batch_size,)` per-sample frame counts.
         n_window: half the target chunk size in frames.
-        kwargs: optional caller kwargs — if it contains both ``"padded_feature"`` and ``"chunk_lengths"`` they are popped and returned.
+        kwargs: optional caller kwargs — if it contains both `"padded_feature"` and `"chunk_lengths"` they are popped and returned.
 
     Returns:
-        ``padded_feature``: ``(num_chunks, feature_dim, max_chunk_len)`` padded chunks.
-        ``chunk_lengths``: ``(num_chunks,)`` actual length of each chunk before padding.
+        `padded_feature`: `(num_chunks, feature_dim, max_chunk_len)` padded chunks.
+        `chunk_lengths`: `(num_chunks,)` actual length of each chunk before padding.
     """
     if kwargs is not None:
         padded_feature = kwargs.pop("padded_feature", None)
@@ -103,18 +103,18 @@ def chunk_and_pad_features(
     return padded_feature, chunk_lengths
 
 
-def get_audio_cu_seqlens(chunk_lengths: torch.Tensor, *, kwargs: dict | None = None) -> torch.Tensor:
-    """Compute cumulative sequence lengths for audio attention, or pop ``"cu_seqlens"`` from ``kwargs`` if precomputed.
+def get_audio_cu_seqlens(chunk_lengths: torch.Tensor, kwargs: dict | None = None) -> torch.Tensor:
+    """Compute cumulative sequence lengths for audio attention, or pop `"cu_seqlens"` from `kwargs` if precomputed.
 
     Applies one stride-2 convolution length reduction, then returns cumulative
     boundaries for flash-attention-style sequence packing.
 
     Args:
-        chunk_lengths: ``(num_chunks,)`` pre-CNN chunk lengths.
-        kwargs: optional caller kwargs — if it contains ``"cu_seqlens"`` it is popped and returned.
+        chunk_lengths: `(num_chunks,)` pre-CNN chunk lengths.
+        kwargs: optional caller kwargs — if it contains `"cu_seqlens"` it is popped and returned.
 
     Returns:
-        ``(num_chunks + 1,)`` int32 cumulative sequence boundaries.
+        `(num_chunks + 1,)` int32 cumulative sequence boundaries.
     """
     if kwargs is not None and (cu_seqlens := kwargs.pop("cu_seqlens", None)) is not None:
         return cu_seqlens
@@ -122,15 +122,15 @@ def get_audio_cu_seqlens(chunk_lengths: torch.Tensor, *, kwargs: dict | None = N
     return F.pad(after_conv1.cumsum(0), (1, 0), value=0).to(torch.int32)
 
 
-def get_valid_indices(chunk_lengths: torch.Tensor, *, kwargs: dict | None = None) -> torch.Tensor:
-    """Compute flat indices of valid (non-padding) positions after one stride-2 conv, or pop ``"valid_indices"`` from ``kwargs`` if precomputed.
+def get_valid_indices(chunk_lengths: torch.Tensor, kwargs: dict | None = None) -> torch.Tensor:
+    """Compute flat indices of valid (non-padding) positions after one stride-2 conv, or pop `"valid_indices"` from `kwargs` if precomputed.
 
     Args:
-        chunk_lengths: ``(num_chunks,)`` pre-CNN chunk lengths.
-        kwargs: optional caller kwargs — if it contains ``"valid_indices"`` it is popped and returned.
+        chunk_lengths: `(num_chunks,)` pre-CNN chunk lengths.
+        kwargs: optional caller kwargs — if it contains `"valid_indices"` it is popped and returned.
 
     Returns:
-        ``(total_valid,)`` flat indices into the ``(num_chunks * max_len_after_conv)`` grid.
+        `(total_valid,)` flat indices into the `(num_chunks * max_len_after_conv)` grid.
     """
     if kwargs is not None and (valid_indices := kwargs.pop("valid_indices", None)) is not None:
         return valid_indices
@@ -140,15 +140,15 @@ def get_valid_indices(chunk_lengths: torch.Tensor, *, kwargs: dict | None = None
     return mask.flatten().nonzero().squeeze(-1)
 
 
-def get_pool_indices(feature_lens: torch.Tensor, *, kwargs: dict | None = None) -> torch.Tensor:
-    """Compute indices for post-encoder stride-2 average pooling, or pop ``"pool_indices"`` from ``kwargs`` if precomputed.
+def get_pool_indices(feature_lens: torch.Tensor, kwargs: dict | None = None) -> torch.Tensor:
+    """Compute indices for post-encoder stride-2 average pooling, or pop `"pool_indices"` from `kwargs` if precomputed.
 
     Args:
-        feature_lens: ``(batch_size,)`` mel spectrogram lengths.
-        kwargs: optional caller kwargs — if it contains ``"pool_indices"`` it is popped and returned.
+        feature_lens: `(batch_size,)` mel spectrogram lengths.
+        kwargs: optional caller kwargs — if it contains `"pool_indices"` it is popped and returned.
 
     Returns:
-        ``(total_pooled,)`` flat index of first element of each stride-2 pair.
+        `(total_pooled,)` flat index of first element of each stride-2 pair.
     """
     if kwargs is not None and (pool_indices := kwargs.pop("pool_indices", None)) is not None:
         return pool_indices

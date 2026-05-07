@@ -115,22 +115,22 @@ def _get_feat_extract_output_lengths(input_lengths):
 
 
 def chunk_and_pad_features(
-    input_features: torch.Tensor, feature_lens: torch.Tensor, n_window: int, *, kwargs: dict | None = None
+    input_features: torch.Tensor, feature_lens: torch.Tensor, n_window: int, kwargs: dict | None = None
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Split audio features into fixed-size chunks and pad to uniform length, or pop precomputed pair from ``kwargs``.
+    """Split audio features into fixed-size chunks and pad to uniform length, or pop precomputed pair from `kwargs`.
 
-    Each audio sample is split into chunks of ``n_window * 2`` frames (the last
+    Each audio sample is split into chunks of `n_window * 2` frames (the last
     chunk may be shorter), then all chunks are right-padded to the longest chunk.
 
     Args:
-        input_features: ``(feature_dim, total_frames)`` concatenated audio features.
-        feature_lens: ``(batch_size,)`` per-sample frame counts.
+        input_features: `(feature_dim, total_frames)` concatenated audio features.
+        feature_lens: `(batch_size,)` per-sample frame counts.
         n_window: half the target chunk size in frames.
-        kwargs: optional caller kwargs — if it contains both ``"padded_feature"`` and ``"chunk_lengths"`` they are popped and returned.
+        kwargs: optional caller kwargs — if it contains both `"padded_feature"` and `"chunk_lengths"` they are popped and returned.
 
     Returns:
-        ``padded_feature``: ``(num_chunks, feature_dim, max_chunk_len)`` padded chunks.
-        ``chunk_lengths``: ``(num_chunks,)`` actual length of each chunk before padding.
+        `padded_feature`: `(num_chunks, feature_dim, max_chunk_len)` padded chunks.
+        `chunk_lengths`: `(num_chunks,)` actual length of each chunk before padding.
     """
     if kwargs is not None:
         padded_feature = kwargs.pop("padded_feature", None)
@@ -149,15 +149,15 @@ def chunk_and_pad_features(
     return padded_feature, chunk_lengths
 
 
-def get_valid_indices(chunk_lengths: torch.Tensor, *, kwargs: dict | None = None) -> torch.Tensor:
-    """Compute flat indices of valid (non-padding) positions after CNN extraction, or pop ``"valid_indices"`` from ``kwargs`` if precomputed.
+def get_valid_indices(chunk_lengths: torch.Tensor, kwargs: dict | None = None) -> torch.Tensor:
+    """Compute flat indices of valid (non-padding) positions after CNN extraction, or pop `"valid_indices"` from `kwargs` if precomputed.
 
     Args:
-        chunk_lengths: ``(num_chunks,)`` pre-CNN chunk lengths.
-        kwargs: optional caller kwargs — if it contains ``"valid_indices"`` it is popped and returned.
+        chunk_lengths: `(num_chunks,)` pre-CNN chunk lengths.
+        kwargs: optional caller kwargs — if it contains `"valid_indices"` it is popped and returned.
 
     Returns:
-        ``(total_valid,)`` flat indices into the ``(num_chunks * max_len_after_cnn)`` grid.
+        `(total_valid,)` flat indices into the `(num_chunks * max_len_after_cnn)` grid.
     """
     if kwargs is not None and (valid_indices := kwargs.pop("valid_indices", None)) is not None:
         return valid_indices
@@ -172,23 +172,22 @@ def get_audio_cu_seqlens(
     feature_lens: torch.Tensor,
     n_window_infer: int,
     n_window: int,
-    *,
     kwargs: dict | None = None,
 ) -> torch.Tensor:
-    """Compute cumulative sequence lengths for audio attention windowing, or pop ``"cu_seqlens"`` from ``kwargs`` if precomputed.
+    """Compute cumulative sequence lengths for audio attention windowing, or pop `"cu_seqlens"` from `kwargs` if precomputed.
 
     Splits each sample's post-CNN features into inference windows and returns
     cumulative boundaries for flash-attention-style sequence packing.
 
     Args:
-        chunk_lengths: ``(num_chunks,)`` pre-CNN chunk lengths.
-        feature_lens: ``(batch_size,)`` per-sample frame counts.
+        chunk_lengths: `(num_chunks,)` pre-CNN chunk lengths.
+        feature_lens: `(batch_size,)` per-sample frame counts.
         n_window_infer: inference window size (in raw frames).
         n_window: half the chunk size (in raw frames).
-        kwargs: optional caller kwargs — if it contains ``"cu_seqlens"`` it is popped and returned.
+        kwargs: optional caller kwargs — if it contains `"cu_seqlens"` it is popped and returned.
 
     Returns:
-        ``(num_windows + 1,)`` int32 cumulative sequence boundaries.
+        `(num_windows + 1,)` int32 cumulative sequence boundaries.
     """
     if kwargs is not None and (cu_seqlens := kwargs.pop("cu_seqlens", None)) is not None:
         return cu_seqlens

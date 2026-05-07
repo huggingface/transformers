@@ -794,13 +794,13 @@ class TransformersKwargs(TypedDict, total=False):
     Keyword arguments to be passed to the forward pass of a `PreTrainedModel`.
 
     Attributes:
-        num_items_in_batch (`Optional[torch.Tensor]`, *optional*):
+        num_items_in_batch (`torch.Tensor`, *optional*):
             Number of items in the batch. It is recommended to pass it when you are doing gradient accumulation.
-        output_hidden_states (`Optional[bool]`, *optional*):
+        output_hidden_states (`bool`, *optional*):
             Most of the models support outputting all hidden states computed during the forward pass.
-        output_attentions (`Optional[bool]`, *optional*):
+        output_attentions (`bool`, *optional*):
             Turn this on to return the intermediary attention scores.
-        output_router_logits (`Optional[bool]`, *optional*):
+        output_router_logits (`bool`, *optional*):
             For MoE models, this allows returning the router logits to compute the loss.
         cu_seq_lens_q (`torch.LongTensor`, *optional*)
             Gets cumulative sequence length for query state.
@@ -814,6 +814,40 @@ class TransformersKwargs(TypedDict, total=False):
             Indices of positions of each input sequence tokens.
         is_causal (`bool`, *optional*)
             Can be set to False to enable bi-directional attention, i.e. use decoder Attention modules as encoders.
+        audio_chunk_lengths (`torch.Tensor`, *optional*):
+            Precomputed per-chunk lengths matching `audio_padded_feature`.
+        audio_cu_seqlens (`torch.Tensor`, *optional*):
+            Precomputed audio packed-attention cumulative sequence boundaries.
+        audio_padded_feature (`torch.Tensor`, *optional*):
+            Precomputed chunked and right-padded mel features.
+        audio_pool_indices (`torch.Tensor`, *optional*):
+            Precomputed indices for the post-encoder stride-2 average pooling.
+        audio_valid_indices (`torch.Tensor`, *optional*):
+            Precomputed flat indices of valid (non-padding) post-CNN positions.
+        image_bilinear_indices (`torch.Tensor`, *optional*):
+            Precomputed image position-embedding interpolation corner indices.
+        image_bilinear_weights (`torch.Tensor`, *optional*):
+            Precomputed image position-embedding interpolation weights.
+        image_cu_seqlens (`torch.Tensor`, *optional*):
+            Precomputed image packed-attention cumulative sequence boundaries.
+        image_cu_window_seqlens (`torch.Tensor`, *optional*):
+            Precomputed image cumulative window-attention boundaries.
+        image_position_ids (`torch.Tensor`, *optional*):
+            Precomputed image rotary `(row, col)` position ids.
+        image_window_index (`torch.Tensor`, *optional*):
+            Precomputed image window-attention reorder indices.
+        video_bilinear_indices (`torch.Tensor`, *optional*):
+            Precomputed video position-embedding interpolation corner indices.
+        video_bilinear_weights (`torch.Tensor`, *optional*):
+            Precomputed video position-embedding interpolation weights.
+        video_cu_seqlens (`torch.Tensor`, *optional*):
+            Precomputed video packed-attention cumulative sequence boundaries.
+        video_cu_window_seqlens (`torch.Tensor`, *optional*):
+            Precomputed video cumulative window-attention boundaries.
+        video_position_ids (`torch.Tensor`, *optional*):
+            Precomputed video rotary `(row, col)` position ids.
+        video_window_index (`torch.Tensor`, *optional*):
+            Precomputed video window-attention reorder indices.
     """
 
     num_items_in_batch: torch.Tensor | None
@@ -826,6 +860,24 @@ class TransformersKwargs(TypedDict, total=False):
     max_length_k: int | None
     position_ids: torch.LongTensor | None
     is_causal: bool | None
+    # Modality-prefixed precomputed tensors (see docstring above).
+    audio_chunk_lengths: torch.Tensor | None
+    audio_cu_seqlens: torch.Tensor | None
+    audio_padded_feature: torch.Tensor | None
+    audio_pool_indices: torch.Tensor | None
+    audio_valid_indices: torch.Tensor | None
+    image_bilinear_indices: torch.Tensor | None
+    image_bilinear_weights: torch.Tensor | None
+    image_cu_seqlens: torch.Tensor | None
+    image_cu_window_seqlens: torch.Tensor | None
+    image_position_ids: torch.Tensor | None
+    image_window_index: torch.Tensor | None
+    video_bilinear_indices: torch.Tensor | None
+    video_bilinear_weights: torch.Tensor | None
+    video_cu_seqlens: torch.Tensor | None
+    video_cu_window_seqlens: torch.Tensor | None
+    video_position_ids: torch.Tensor | None
+    video_window_index: torch.Tensor | None
 
 
 def is_timm_config_dict(config_dict: dict[str, Any]) -> bool:
@@ -910,23 +962,23 @@ _KNOWN_MODALITIES = ("image", "video", "audio")
 
 def accepts_precomputed_kwargs(modality: str):
     """
-    Decorator for ``get_<modality>_features`` methods that:
+    Decorator for `get_<modality>_features` methods that:
       - strips the modality prefix from incoming kwargs whose stripped name isn't an existing
-        parameter (e.g. ``image_cu_seqlens`` → ``cu_seqlens``, forwarded via ``**kwargs``);
-      - drops kwargs prefixed with another known modality (e.g. ``video_*`` passed to an
-        image method), so an outer ``forward()`` can blindly forward ``**kwargs`` to each
+        parameter (e.g. `image_cu_seqlens` → `cu_seqlens`, forwarded via `**kwargs`);
+      - drops kwargs prefixed with another known modality (e.g. `video_*` passed to an
+        image method), so an outer `forward()` can blindly forward `**kwargs` to each
         modality method without leaking the wrong tensors into the wrong encoder;
       - leaves everything else untouched (including kwargs that match a named parameter).
 
-    Used so multimodal models can accept arbitrary precomputed tensors (``image_cu_seqlens``,
-    ``video_position_ids``, …) without enumerating each one in every signature.
+    Used so multimodal models can accept arbitrary precomputed tensors (`image_cu_seqlens`,
+    `video_position_ids`, …) without enumerating each one in every signature.
 
-    Apply this decorator **only once per modality**, on the innermost base model's
-    ``get_<modality>_features`` (i.e. on ``Model.get_image_features``, not on the outer
-    ``ForConditionalGeneration.get_image_features`` wrapper). Stacking it at multiple layers
-    causes premature prefix-stripping: the outer layer rewrites ``image_foo`` → ``foo`` based
+    NOTE: Apply this decorator **only once per modality**, on the innermost base model's
+    `get_<modality>_features` (i.e. on `Model.get_image_features`, not on the outer
+    `ForConditionalGeneration.get_image_features` wrapper). Stacking it at multiple layers
+    causes premature prefix-stripping: the outer layer rewrites `image_foo` → `foo` based
     on its own (narrower) signature, hiding kwargs that the inner method declares as named
-    parameters. Outer wrappers should just forward ``**kwargs`` through.
+    parameters. Outer wrappers should just forward `**kwargs` through.
     """
     prefix = f"{modality}_"
     other_prefixes = tuple(f"{m}_" for m in _KNOWN_MODALITIES if m != modality)

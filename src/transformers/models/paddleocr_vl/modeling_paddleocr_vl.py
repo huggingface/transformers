@@ -827,8 +827,8 @@ class PaddleOCRVisionEncoder(nn.Module):
     def forward(
         self,
         inputs_embeds: torch.FloatTensor,
-        grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
+        grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
@@ -836,10 +836,10 @@ class PaddleOCRVisionEncoder(nn.Module):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
-        grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             The attention_mask used in forward function shape [batch_size X sequence_length] if not None.
+        grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
         """
         # Use merge_size=1: PaddleOCR merges patches in the projector (after the encoder),
         # unlike Qwen which merges inside the encoder, so rotary positions here are simple (row, col).
@@ -895,8 +895,8 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
+        grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         """
