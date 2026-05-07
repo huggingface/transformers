@@ -49,24 +49,25 @@ The original code can be found [here](https://github.com/OpenGVLab/InternVL).
 Here is how you can use the `image-text-to-text` pipeline to perform inference with the `InternVL3` models in just a few lines of code:
 
 ```python
->>> from transformers import pipeline
+from transformers import pipeline
 
->>> messages = [
-...     {
-...         "role": "user",
-...         "content": [
-...             {
-...                 "type": "image",
-...                 "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg",
-...             },
-...             {"type": "text", "text": "Describe this image."},
-...         ],
-...     },
-... ]
 
->>> pipe = pipeline("image-text-to-text", model="OpenGVLab/InternVL3-1B-hf")
->>> outputs = pipe(text=messages, max_new_tokens=50, return_full_text=False)
->>> outputs[0]["generated_text"]
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "image",
+                "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg",
+            },
+            {"type": "text", "text": "Describe this image."},
+        ],
+    },
+]
+
+pipe = pipeline("image-text-to-text", model="OpenGVLab/InternVL3-1B-hf")
+outputs = pipe(text=messages, max_new_tokens=50, return_full_text=False)
+outputs[0]["generated_text"]
 'The image showcases a vibrant scene of nature, featuring several flowers and a bee. \n\n1. **Foreground Flowers**: \n   - The primary focus is on a large, pink cosmos flower with a prominent yellow center. The petals are soft and slightly r'
 ```
 
@@ -78,29 +79,30 @@ This example demonstrates how to perform inference on a single image with the In
 > Note that the model has been trained with a specific prompt format for chatting. Use `processor.apply_chat_template(my_conversation_dict)` to correctly format your prompts.
 
 ```python
->>> from transformers import AutoProcessor, AutoModelForImageTextToText
->>> import torch
 
->>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
->>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", dtype=torch.bfloat16)
+from transformers import AutoModelForImageTextToText, AutoProcessor
 
->>> messages = [
-...     {
-...         "role": "user",
-...         "content": [
-...             {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
-...             {"type": "text", "text": "Please describe the image explicitly."},
-...         ],
-...     }
-... ]
 
->>> inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
+processor = AutoProcessor.from_pretrained(model_checkpoint)
+model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto")
 
->>> generate_ids = model.generate(**inputs, max_new_tokens=50)
->>> decoded_output = processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+            {"type": "text", "text": "Please describe the image explicitly."},
+        ],
+    }
+]
 
->>> decoded_output
+inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device)
+
+generate_ids = model.generate(**inputs, max_new_tokens=50)
+decoded_output = processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+
+decoded_output
 'The image shows two cats lying on a pink blanket. The cat on the left is a tabby with a mix of brown, black, and white fur, and it appears to be sleeping with its head resting on the blanket. The cat on the'
 ```
 
@@ -109,28 +111,29 @@ This example demonstrates how to perform inference on a single image with the In
 This example shows how to generate text using the InternVL model without providing any image input.
 
 ```python
->>> from transformers import AutoProcessor, AutoModelForImageTextToText
->>> import torch
 
->>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
->>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", dtype=torch.bfloat16)
+from transformers import AutoModelForImageTextToText, AutoProcessor
 
->>> messages = [
-...     {
-...         "role": "user",
-...         "content": [
-...             {"type": "text", "text": "Write a haiku"},
-...         ],
-...     }
-... ]
 
->>> inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(torch_device, dtype=torch.bfloat16)
+model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
+processor = AutoProcessor.from_pretrained(model_checkpoint)
+model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto")
 
->>> generate_ids = model.generate(**inputs, max_new_tokens=50)
->>> decoded_output = processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "Write a haiku"},
+        ],
+    }
+]
 
->>> print(decoded_output)
+inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device)
+
+generate_ids = model.generate(**inputs, max_new_tokens=50)
+decoded_output = processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+
+print(decoded_output)
 "Whispers of dawn,\nSilent whispers of the night,\nNew day's light begins."
 ```
 
@@ -139,41 +142,42 @@ This example shows how to generate text using the InternVL model without providi
 InternVL models also support batched image and text inputs.
 
 ```python
->>> from transformers import AutoProcessor, AutoModelForImageTextToText
->>> import torch
 
->>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
->>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", dtype=torch.bfloat16)
-
->>> messages = [
-...     [
-...         {
-...             "role": "user",
-...             "content": [
-...                 {"type": "image", "url": "https://llava-vl.github.io/static/images/view.jpg"},
-...                 {"type": "text", "text": "Write a haiku for this image"},
-...             ],
-...         },
-...     ],
-...     [
-...         {
-...             "role": "user",
-...             "content": [
-...                 {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
-...                 {"type": "text", "text": "Describe this image"},
-...             ],
-...         },
-...     ],
-... ]
+from transformers import AutoModelForImageTextToText, AutoProcessor
 
 
->>> inputs = processor.apply_chat_template(messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
+processor = AutoProcessor.from_pretrained(model_checkpoint)
+model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto")
 
->>> output = model.generate(**inputs, max_new_tokens=25)
+messages = [
+    [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image", "url": "https://llava-vl.github.io/static/images/view.jpg"},
+                {"type": "text", "text": "Write a haiku for this image"},
+            ],
+        },
+    ],
+    [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                {"type": "text", "text": "Describe this image"},
+            ],
+        },
+    ],
+]
 
->>> decoded_outputs = processor.batch_decode(output, skip_special_tokens=True)
->>> decoded_outputs
+
+inputs = processor.apply_chat_template(messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device)
+
+output = model.generate(**inputs, max_new_tokens=25)
+
+decoded_outputs = processor.batch_decode(output, skip_special_tokens=True)
+decoded_outputs
 ["user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature's peace.",
  'user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese archway, known as a "Chinese Gate" or "Chinese Gate of']
 ```
@@ -183,41 +187,41 @@ InternVL models also support batched image and text inputs.
 This implementation of the InternVL models supports batched text-images inputs with different number of images for each text.
 
 ```python
->>> from transformers import AutoProcessor, AutoModelForImageTextToText
->>> import torch
+from transformers import AutoProcessor, AutoModelForImageTextToText
+import torch
 
->>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
->>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", dtype=torch.bfloat16)
+model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
+processor = AutoProcessor.from_pretrained(model_checkpoint)
+model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto")
 
->>> messages = [
-...     [
-...         {
-...             "role": "user",
-...             "content": [
-...                 {"type": "image", "url": "https://llava-vl.github.io/static/images/view.jpg"},
-...                 {"type": "text", "text": "Write a haiku for this image"},
-...             ],
-...         },
-...     ],
-...     [
-...         {
-...             "role": "user",
-...             "content": [
-...                 {"type": "image", "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"},
-...                 {"type": "image", "url": "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"},
-...                 {"type": "text", "text": "These images depict two different landmarks. Can you identify them?"},
-...             ],
-...         },
-...     ],
->>> ]
+messages = [
+    [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image", "url": "https://llava-vl.github.io/static/images/view.jpg"},
+                {"type": "text", "text": "Write a haiku for this image"},
+            ],
+        },
+    ],
+    [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image", "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"},
+                {"type": "image", "url": "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"},
+                {"type": "text", "text": "These images depict two different landmarks. Can you identify them?"},
+            ],
+        },
+    ],
+]
 
->>> inputs = processor.apply_chat_template(messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+inputs = processor.apply_chat_template(messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device)
 
->>> output = model.generate(**inputs, max_new_tokens=25)
+output = model.generate(**inputs, max_new_tokens=25)
 
->>> decoded_outputs = processor.batch_decode(output, skip_special_tokens=True)
->>> decoded_outputs
+decoded_outputs = processor.batch_decode(output, skip_special_tokens=True)
+decoded_outputs
 ["user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature's peace.",
  'user\n\n\nThese images depict two different landmarks. Can you identify them?\nassistant\nYes, these images depict the Statue of Liberty and the Golden Gate Bridge.']
 ```
@@ -227,38 +231,39 @@ This implementation of the InternVL models supports batched text-images inputs w
 InternVL models can also handle video inputs. Here is an example of how to perform inference on a video input using chat templates.
 
 ```python
->>> from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndBytesConfig
+from transformers import AutoModelForImageTextToText, AutoProcessor, BitsAndBytesConfig
 
->>> model_checkpoint = "OpenGVLab/InternVL3-8B-hf"
->>> quantization_config = BitsAndBytesConfig(load_in_4bit=True)
->>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, quantization_config=quantization_config)
 
->>> messages = [
-...     {
-...         "role": "user",
-...         "content": [
-...             {
-...                 "type": "video",
-...                 "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
-...             },
-...             {"type": "text", "text": "What type of shot is the man performing?"},
-...         ],
-...     }
->>> ]
->>> inputs = processor.apply_chat_template(
-...     messages,
-...     return_tensors="pt",
-...     add_generation_prompt=True,
-...     tokenize=True,
-...     return_dict=True,
-...     num_frames=8,
->>> ).to(model.device, dtype=torch.float16)
+model_checkpoint = "OpenGVLab/InternVL3-8B-hf"
+quantization_config = BitsAndBytesConfig(load_in_4bit=True)
+processor = AutoProcessor.from_pretrained(model_checkpoint)
+model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, quantization_config=quantization_config, device_map="auto")
 
->>> output = model.generate(**inputs, max_new_tokens=25)
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "video",
+                "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
+            },
+            {"type": "text", "text": "What type of shot is the man performing?"},
+        ],
+    }
+]
+inputs = processor.apply_chat_template(
+    messages,
+    return_tensors="pt",
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    num_frames=8,
+).to(model.device)
 
->>> decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
->>> decoded_output
+output = model.generate(**inputs, max_new_tokens=25)
+
+decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+decoded_output
 'The man is performing a forehand shot.'
 ```
 
@@ -267,56 +272,56 @@ InternVL models can also handle video inputs. Here is an example of how to perfo
 This example showcases how to handle a batch of chat conversations with interleaved image and video inputs using chat template.
 
 ```python
->>> from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndBytesConfig
->>> import torch
+from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndBytesConfig
+import torch
 
->>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
->>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", dtype=torch.bfloat16)
+model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
+processor = AutoProcessor.from_pretrained(model_checkpoint)
+model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto")
 
->>> messages = [
-...     [
-...         {
-...             "role": "user",
-...             "content": [
-...                 {"type": "image", "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"},
-...                 {"type": "image", "url": "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"},
-...                 {"type": "text", "text": "These images depict two different landmarks. Can you identify them?"},
-...             ],
-...         },
-...     ],
-...     [
-...         {
-...             "role": "user",
-...             "content": [
-...                 {"type": "video", "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"},
-...                 {"type": "text", "text": "What type of shot is the man performing?"},
-...             ],
-...         },
-...     ],
-...     [
-...         {
-...             "role": "user",
-...             "content": [
-...                 {"type": "image", "url": "https://llava-vl.github.io/static/images/view.jpg"},
-...                 {"type": "text", "text": "Write a haiku for this image"},
-...             ],
-...         },
-...     ],
->>> ]
->>> inputs = processor.apply_chat_template(
-...     messages,
-...     padding=True,
-...     add_generation_prompt=True,
-...     tokenize=True,
-...     return_dict=True,
-...     return_tensors="pt",
->>> ).to(model.device, dtype=torch.bfloat16)
+messages = [
+    [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image", "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"},
+                {"type": "image", "url": "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"},
+                {"type": "text", "text": "These images depict two different landmarks. Can you identify them?"},
+            ],
+        },
+    ],
+    [
+        {
+            "role": "user",
+            "content": [
+                {"type": "video", "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"},
+                {"type": "text", "text": "What type of shot is the man performing?"},
+            ],
+        },
+    ],
+    [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image", "url": "https://llava-vl.github.io/static/images/view.jpg"},
+                {"type": "text", "text": "Write a haiku for this image"},
+            ],
+        },
+    ],
+]
+inputs = processor.apply_chat_template(
+    messages,
+    padding=True,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+).to(model.device)
 
->>> outputs = model.generate(**inputs, max_new_tokens=25)
+outputs = model.generate(**inputs, max_new_tokens=25)
 
->>> decoded_outputs = processor.batch_decode(outputs, skip_special_tokens=True)
->>> decoded_outputs
+decoded_outputs = processor.batch_decode(outputs, skip_special_tokens=True)
+decoded_outputs
 ['user\n\n\nThese images depict two different landmarks. Can you identify them?\nassistant\nThe images depict the Statue of Liberty and the Golden Gate Bridge.',
  'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nA forehand shot',
  "user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature's peace."]

@@ -41,18 +41,20 @@ The example below demonstrates how to perform optical character recognition (OCR
 <hfoption id="AutoModel">
 
 ```python
-from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 import requests
 from PIL import Image
 
+from transformers import TrOCRProcessor, VisionEncoderDecoderModel
+
+
 processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-handwritten")
-model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten")
+model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten", device_map="auto")
 
 # load image from the IAM dataset
 url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg"
 image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
-pixel_values = processor(image, return_tensors="pt").pixel_values
+pixel_values = processor(image, return_tensors="pt").to(model.device).pixel_values
 generated_ids = model.generate(pixel_values)
 
 generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
@@ -82,13 +84,13 @@ processor = TrOCRProcessor.from_pretrained("microsoft/trocr-large-handwritten")
 model = VisionEncoderDecoderModel.from_pretrained(
     "microsoft/trocr-large-handwritten",
     quantization_config=quantization_config
-)
+ device_map="auto")
 
 # load image from the IAM dataset
 url = "[https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg](https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg)"
 image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
-pixel_values = processor(image, return_tensors="pt").pixel_values
+pixel_values = processor(image, return_tensors="pt").to(model.device).pixel_values
 generated_ids = model.generate(pixel_values)
 
 generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]

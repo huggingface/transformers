@@ -427,9 +427,6 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
     def test_flash_attn_4_from_config(self):
         self.flash_attn_from_config(attn_implementation="flash_attention_4", test_fwd_in_train=False)
 
-    def test_reverse_loading_mapping(self):
-        super().test_reverse_loading_mapping(skip_base_model=True)
-
 
 @slow
 @require_torch_accelerator

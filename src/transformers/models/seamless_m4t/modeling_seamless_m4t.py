@@ -76,13 +76,13 @@ SEAMLESS_M4T_COMMON_CUSTOM_ARGS = r"""
 """
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class defining the generated outputs from [`SeamlessM4TModel`], [`SeamlessM4TForTextToText`],
     [`SeamlessM4TForTextToSpeech`], [`SeamlessM4TForSpeechToSpeech`] and [`SeamlessM4TForTextToSpeech`].
     """
 )
+@dataclass
 class SeamlessM4TGenerationOutput(ModelOutput):
     r"""
     waveform (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):

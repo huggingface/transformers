@@ -49,11 +49,11 @@ Hugging Face models use SDPA by default; however, this model’s visual backbone
 
 If you want to use a different attention implementation in the language decoder, make sure to set it explicitly, for example:
 
-`model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", attn_implementation={"text_config": "flash_attention_2"})`
+`model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", attn_implementation={"text_config": "flash_attention_2"}, device_map="auto")`
 
 Setting it for the entire model, e.g.
 
-`model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", attn_implementation="flash_attention_2")`
+`model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", attn_implementation="flash_attention_2", device_map="auto")`
 
 will result in an error.
 
@@ -73,10 +73,12 @@ Each **checkpoint** is trained with a specific prompt format, depending on the u
 
 ```python
 import torch
+
 from transformers import AutoProcessor, FastVlmForConditionalGeneration
 
+
 # Load the model in half-precision
-model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", dtype=torch.bfloat16, device_map="auto")
+model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", device_map="auto")
 processor = AutoProcessor.from_pretrained("KamilaMila/FastVLM-0.5B")
 
 conversation = [
@@ -108,10 +110,12 @@ FastVLM also supports batched inference. Here is how you can do it:
 
 ```python
 import torch
+
 from transformers import AutoProcessor, FastVlmForConditionalGeneration
 
+
 # Load the model in half-precision
-model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", dtype=torch.bfloat16, device_map="auto")
+model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", device_map="auto")
 processor = AutoProcessor.from_pretrained("KamilaMila/FastVLM-0.5B")
 
 

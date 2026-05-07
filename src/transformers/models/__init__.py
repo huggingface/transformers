@@ -93,9 +93,11 @@ if TYPE_CHECKING:
     from .decision_transformer import *
     from .deepseek_v2 import *
     from .deepseek_v3 import *
+    from .deepseek_v4 import *
     from .deepseek_vl import *
     from .deepseek_vl_hybrid import *
     from .deformable_detr import *
+    from .deimv2 import *
     from .deit import *
     from .deprecated import *
     from .depth_anything import *
@@ -133,6 +135,7 @@ if TYPE_CHECKING:
     from .esm import *
     from .evolla import *
     from .exaone4 import *
+    from .exaone4_5 import *
     from .exaone_moe import *
     from .falcon import *
     from .falcon_h1 import *
@@ -153,6 +156,7 @@ if TYPE_CHECKING:
     from .gemma3 import *
     from .gemma3n import *
     from .gemma4 import *
+    from .gemma4_assistant import *
     from .git import *
     from .glm import *
     from .glm4 import *
@@ -176,7 +180,9 @@ if TYPE_CHECKING:
     from .gpt_sw3 import *
     from .gptj import *
     from .granite import *
+    from .granite4_vision import *
     from .granite_speech import *
+    from .granite_speech_plus import *
     from .granitemoe import *
     from .granitemoehybrid import *
     from .granitemoeshared import *
@@ -210,6 +216,7 @@ if TYPE_CHECKING:
     from .kosmos2 import *
     from .kosmos2_5 import *
     from .kyutai_speech_to_text import *
+    from .laguna import *
     from .lasr import *
     from .layoutlm import *
     from .layoutlmv2 import *
@@ -248,6 +255,7 @@ if TYPE_CHECKING:
     from .metaclip_2 import *
     from .mgp_str import *
     from .mimi import *
+    from .minicpmv4_6 import *
     from .minimax import *
     from .minimax_m2 import *
     from .ministral import *
@@ -359,6 +367,7 @@ if TYPE_CHECKING:
     from .regnet import *
     from .rembert import *
     from .resnet import *
+    from .rf_detr import *
     from .roberta import *
     from .roberta_prelayernorm import *
     from .roc_bert import *

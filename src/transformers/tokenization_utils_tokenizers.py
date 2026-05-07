@@ -736,9 +736,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
     def _align_metaspace_for_added_tokens(self) -> None:
         # Mirror `SpmConverter.pre_tokenizer` for non-legacy spm tokenizers: switch a
         # standalone Metaspace pre_tokenizer from prepend_scheme="always" to "first"
-        # so chunks following a user-added token are not given a spurious "▁" prefix
-        # (issue #28218). Sequence pipelines (eg. WhitespaceSplit + Metaspace) rely on
-        # "always" semantics for whitespace handling and are intentionally skipped.
+        # so chunks following a user-added token are not given a spurious "▁" prefix.
+        # Sequence pipelines (eg. WhitespaceSplit + Metaspace) rely on "always"
+        # semantics for whitespace handling and are intentionally skipped.
         pre_tokenizer = self._tokenizer.pre_tokenizer
         if isinstance(pre_tokenizer, pre_tokenizers_fast.Metaspace) and pre_tokenizer.prepend_scheme == "always":
             self._tokenizer.pre_tokenizer = pre_tokenizers_fast.Metaspace(
@@ -1055,7 +1055,24 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             else self.clean_up_tokenization_spaces
         )
         if clean_up_tokenization_spaces:
-            text = self.clean_up_tokenization(text)
+            # Skip cleanup for BPE tokenizers — the cleanup was designed for
+            # WordPiece tokenizers and is destructive for BPE (it strips
+            # legitimate spaces before punctuation).
+            if (
+                type(self.backend_tokenizer.model).__name__ == "BPE"
+                and not self.clean_up_tokenization_spaces_for_bpe_even_though_it_will_corrupt_output
+            ):
+                logger.warning_once(
+                    "Ignoring clean_up_tokenization_spaces=True for BPE tokenizer"
+                    f" {self.__class__.__name__}. The clean_up_tokenization post-processing"
+                    " step is designed for WordPiece tokenizers and is destructive for BPE"
+                    " (it strips spaces before punctuation). Set"
+                    " clean_up_tokenization_spaces=False to suppress this warning, or set"
+                    " clean_up_tokenization_spaces_for_bpe_even_though_it_will_corrupt_output=True to"
+                    " force cleanup anyway."
+                )
+            else:
+                text = self.clean_up_tokenization(text)
 
         return text
 

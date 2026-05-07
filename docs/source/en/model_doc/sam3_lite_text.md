@@ -55,8 +55,10 @@ SAM3-LiteText is a drop-in replacement for SAM3 with a lightweight text encoder.
 from io import BytesIO
 
 import httpx
-from transformers import AutoModel, AutoProcessor
 from PIL import Image
+
+from transformers import AutoModel, AutoProcessor
+
 
 model = AutoModel.from_pretrained("yonigozlan/sam3-litetext-s0", device_map="auto")
 processor = AutoProcessor.from_pretrained("yonigozlan/sam3-litetext-s0")
