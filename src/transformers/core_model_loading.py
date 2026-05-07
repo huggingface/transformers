@@ -798,7 +798,7 @@ class WeightTransform:
             if (
                 all(p is None for p in source_mod._parameters.values())
                 and all(b is None for b in source_mod._buffers.values())
-                and (m is None for m in source_mod._modules.values())
+                and all(m is None for m in source_mod._modules.values())
             ):
                 parent_path, _, mod_name = mod_path.rpartition(".")
                 parent_mod = model.get_submodule(parent_path) if parent_path else model
@@ -872,7 +872,9 @@ class WeightRenaming(WeightTransform):
 
         if source_attr in source_mod._parameters:
             obj = source_mod._parameters.pop(source_attr)
-            _get_submodule_or_create(model, target_mod_path).register_parameter(target_attr, obj)
+            _get_submodule_or_create(
+                model, target_mod_path, original_module=source_mod, future_weight=obj
+            ).register_parameter(target_attr, obj)
         elif source_attr in source_mod._buffers:
             obj = source_mod._buffers.pop(source_attr)
             _get_submodule_or_create(model, target_mod_path).register_buffer(target_attr, obj)
