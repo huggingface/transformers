@@ -968,11 +968,17 @@ class Qwen2_5OmniVisionAttention(nn.Module):
             indices = torch.arange(seq_len_attn, device=cu_seqlens.device)
             seg_ids = torch.searchsorted(cu_seqlens, indices, right=True) - 1
             same_segment = seg_ids.unsqueeze(0) == seg_ids.unsqueeze(1)
-            attention_mask = torch.where(
-                same_segment,
-                torch.zeros(1, device=query_states.device, dtype=query_states.dtype),
-                torch.full((1,), torch.finfo(query_states.dtype).min, device=query_states.device, dtype=query_states.dtype),
-            ).unsqueeze(0).unsqueeze(0)
+            attention_mask = (
+                torch.where(
+                    same_segment,
+                    torch.zeros(1, device=query_states.device, dtype=query_states.dtype),
+                    torch.full(
+                        (1,), torch.finfo(query_states.dtype).min, device=query_states.device, dtype=query_states.dtype
+                    ),
+                )
+                .unsqueeze(0)
+                .unsqueeze(0)
+            )
 
             attn_output, _ = attention_interface(
                 self,
