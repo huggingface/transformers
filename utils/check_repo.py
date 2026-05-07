@@ -56,7 +56,7 @@ CHECKER_CONFIG = {
     "label": "Repository structure",
     # Approximate: the checker also introspects the live transformers module at runtime
     # (e.g. dir(transformers.models), CONFIG_MAPPING_NAMES) and walks tests/ broadly.
-    "file_globs": [
+    "cache_globs": [
         "src/transformers/models/**/*.py",
         "src/transformers/models/auto/*.py",
         "src/transformers/**/__init__.py",
@@ -283,6 +283,8 @@ IGNORE_NON_TESTED = (
         "Gemma4VisionModel",  # Building part of a bigger model, tested implicitly
         "Gemma4AudioModel",  # Building part of a bigger model, tested implicitly
         "Sam3LiteTextTextModel",  # Building part of a bigger model, tested implicitly through Sam3LiteTextModel
+        "Exaone4_5_VisionModel",  # Building part of a bigger model
+        "Granite4VisionTextModel",  # Building part of bigger (tested) model. Tested implicitly through Granite4VisionModel.
     ]
 )
 
@@ -305,6 +307,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/sam3_tracker_video/test_modeling_sam3_tracker_video.py",
     "models/sam3_video/test_modeling_sam3_video.py",
     "models/edgetam_video/test_modeling_edgetam_video.py",
+    "models/gemma4_assistant/test_modeling_gemma4_assistant.py",
 ]
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
@@ -509,6 +512,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Ernie4_5_VL_MoeModel",  # BC Alias
     "Ernie4_5_VL_MoeTextModel",  # BC Alias
     "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
+    "Granite4VisionTextModel",  # Building part of bigger (tested) model.
 ]
 
 
