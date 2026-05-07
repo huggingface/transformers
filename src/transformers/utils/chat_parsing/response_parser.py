@@ -25,13 +25,6 @@ from typing import Any
 from .content_parsers import process_field
 from .response_templates import ResponseTemplateField, ResponseTemplate, load_response_template
 
-
-# When a delimiter is specified as a regex, we can't reason exactly about how
-# many trailing bytes might still complete a match, so we conservatively hold
-# back a fixed window. Might make this a property of the templates later.
-_REGEX_STREAM_LOOKBACK = 64
-
-
 def parse_response(text: str, response_template: dict | ResponseTemplate, *, prefix: str | None = None) -> dict:
     """A convenience function for response parsing when you don't want streaming. Takes a whole output + text
     and parses it without streaming any events, then returns the parsed message.
@@ -60,11 +53,7 @@ class ResponseParser:
         for event in final_events:
             handle(event)
 
-    Event types (all dicts):
-      - {"type": "region_open",  "field": name, "meta": {<named captures>}}
-      - {"type": "region_chunk", "field": name, "text": <committed text>}  # only for text/raw
-      - {"type": "region_close", "field": name, "value": <parsed+assembled value>}
-      - {"type": "stream_end"}
+    Events can be either "region_open", "region_chunk", "region_close", or "stream_end".
 
     ResponseParser requires the chat `prefix` (i.e. the chat history, the prefill before the current generation).
     This is because chat templates or assistant prefills can sometimes write part of the message, and if we
@@ -324,4 +313,4 @@ def _pattern_hold(buffer: str, start: int, literal: str | None) -> int:
             if buffer.endswith(literal[:k]):
                 return k
         return 0
-    return min(avail, _REGEX_STREAM_LOOKBACK)
+    return min(avail, 64)  # 64 chosen as a safe default for now, but later we might consider making this configurable
