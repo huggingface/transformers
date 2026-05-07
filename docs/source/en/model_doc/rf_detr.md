@@ -23,10 +23,11 @@ rendered properly in your Markdown viewer.
 
 # RF-DETR
 
-[RF-DETR](https://huggingface.co/papers/2407.17140) proposes a Receptive Field Detection Transformer (DETR) architecture
-designed to compete with and surpass the dominant YOLO series for real-time object detection. It achieves a new
-state-of-the-art balance between speed (latency) and accuracy (mAP) by combining recent transformer advances with
-efficient design choices.
+[RF-DETR](https://huggingface.co/papers/2511.09554) is a light-weight specialist Detection Transformer (DETR) from
+Roboflow that uses weight-sharing Neural Architecture Search (NAS) to discover accuracy-latency Pareto curves on any
+target dataset. It modernizes LW-DETR by initializing the encoder with a pre-trained DINOv2 backbone, and revisits the
+tunable knobs of NAS to improve the transferability of DETRs to diverse target domains, surpassing prior
+state-of-the-art real-time methods on COCO and Roboflow100-VL.
 
 The RF-DETR architecture is characterized by its simple and efficient structure: a DINOv2 Backbone, a Projector, and a
 shallow DETR Decoder.

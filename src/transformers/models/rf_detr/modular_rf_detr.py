@@ -159,10 +159,10 @@ class RfDetrConfig(LwDetrConfig):
     ```python
     >>> from transformers import RfDetrConfig, RfDetrModel
 
-    >>> # Initializing a LW-DETR stevenbucaille/RfDetr_small_60e_coco style configuration
+    >>> # Initializing a RF-DETR stevenbucaille/rf-detr-base style configuration
     >>> configuration = RfDetrConfig()
 
-    >>> # Initializing a model (with random weights) from the stevenbucaille/RfDetr_small_60e_coco style configuration
+    >>> # Initializing a model (with random weights) from the stevenbucaille/rf-detr-base style configuration
     >>> model = RfDetrModel(configuration)
 
     >>> # Accessing the model configuration
@@ -667,8 +667,8 @@ class RfDetrModel(LwDetrModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("stevenbucaille/rfdetr_small_60e_coco")
-        >>> model = RfDetrModel.from_pretrained("stevenbucaille/rfdetr_small_60e_coco")
+        >>> image_processor = AutoImageProcessor.from_pretrained("stevenbucaille/rf-detr-base")
+        >>> model = RfDetrModel.from_pretrained("stevenbucaille/rf-detr-base")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
