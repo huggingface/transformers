@@ -1398,6 +1398,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Maybe initialize the weights and tie the keys
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
+        # Cache the list of (name, submodule) pairs where the submodule is a PreTrainedModel.
+        # This pattern is used in several places across the codebase; computing it once avoids
+        # repeated traversal of the full module tree.
+        self._named_pretrained_submodules: list[tuple[str, PreTrainedModel]] = [
+            (name, module) for name, module in self.named_modules() if isinstance(module, PreTrainedModel)
+        ]
 
     @property
     def tp_plan(self) -> dict[str, str]:
@@ -4584,11 +4590,20 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         def attach_hidden_kernels(module):
             for name, fn in getattr(module, "_hidden_kernels", {}).items():
                 if name not in dict(module.named_children()):
+                    if not isinstance(fn, nn.Module):
+                        raise ValueError(
+                            f"Attempted to register a kernel for {name}, but it was not a `torch.nn.Module`. "
+                            "This means the underlying function needs to be decorated with `@use_kernel_func_from_hub`. "
+                            "Please submit and issue to the transformers repo: `https://github.com/huggingface/transformers/issues`."
+                        )
                     module.register_module(name, fn)
 
         def detach_hidden_kernels(module):
             for name in getattr(module, "_hidden_kernels", {}):
-                delattr(module, name)
+                # Skip deregistering if it failed to properly register,
+                # i.e. `ValueError` will be raised afterwards
+                if hasattr(module, name):
+                    delattr(module, name)
 
         try:
             self.apply(attach_hidden_kernels)
