@@ -20,7 +20,7 @@ import tempfile
 import unittest
 
 from tokenizers import Tokenizer, decoders, pre_tokenizers, trainers
-from tokenizers.models import BPE, WordLevel
+from tokenizers.models import BPE, Unigram, WordLevel
 
 from transformers import AutoTokenizer, PreTrainedTokenizerFast
 from transformers.testing_utils import require_tokenizers
@@ -216,6 +216,33 @@ class PreTrainedTokenizationFastTest(unittest.TestCase):
 
             tokenizer = AutoTokenizer.from_pretrained(temp_dir, use_fast=True)
             self.assertIsInstance(tokenizer, PreTrainedTokenizerFast)
+
+    def test_added_token_does_not_get_metaspace_prefix(self):
+        # Issue #28218: when a non-special token is added to a SentencePiece-style fast
+        # tokenizer, the chunk that follows the added token must not be given a
+        # spurious "▁" prefix from the Metaspace pre_tokenizer.
+        vocab = [
+            ("<unk>", 0.0),
+            ("▁", -10.0),
+            ("gym", 0.0),
+            ("▁gym", 0.0),
+            ("▁Hi", 0.0),
+            ("▁world", 0.0),
+        ]
+        backend = Tokenizer(Unigram(vocab=vocab, unk_id=0))
+        backend.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
+        fast = PreTrainedTokenizerFast(tokenizer_object=backend, unk_token="<unk>")
+        self.assertEqual(fast._tokenizer.pre_tokenizer.prepend_scheme, "always")
+
+        fast.add_tokens(["abcd"])
+
+        self.assertEqual(fast._tokenizer.pre_tokenizer.prepend_scheme, "first")
+        self.assertEqual(fast.tokenize("abcdgym"), ["abcd", "gym"])
+        self.assertEqual(fast.tokenize("abcd gym"), ["abcd", "▁gym"])
+        self.assertEqual(
+            fast.tokenize("Hi abcdgym world"),
+            ["▁Hi", "▁", "abcd", "gym", "▁world"],
+        )
 
 
 @require_tokenizers
