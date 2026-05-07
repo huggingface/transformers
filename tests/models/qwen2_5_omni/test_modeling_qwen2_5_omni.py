@@ -617,23 +617,37 @@ def _qwen_ci_log(label):
 
 @require_torch
 class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
+    # Lazy-loaded shared 7B model. We avoid loading in setUpClass because that runs even when
+    # @slow tests are skipped (e.g. on CircleCI with no GPU), and trying to load a 7B model
+    # there crashes the worker. The first @slow test that accesses `self.shared_model`
+    # triggers the load; subsequent tests in the class reuse the same instance.
+    _shared_model_cache = None
+
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        _qwen_ci_log("setUpClass: about to load shared 7B model (dtype=bfloat16, device_map=auto)")
-        t0 = time.monotonic()
-        cls.shared_model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2.5-Omni-7B", dtype=torch.bfloat16, device_map="auto"
-        )
-        _qwen_ci_log(f"setUpClass: shared model loaded in {time.monotonic() - t0:.1f}s")
+        cls._shared_model_cache = None
+        _qwen_ci_log("setUpClass: shared model will be lazy-loaded on first @slow test")
 
     @classmethod
     def tearDownClass(cls):
         _qwen_ci_log("tearDownClass: releasing shared model")
-        cls.shared_model = None
+        cls._shared_model_cache = None
         cleanup(torch_device, gc_collect=True)
         _qwen_ci_log("tearDownClass: cleanup done")
         super().tearDownClass()
+
+    @property
+    def shared_model(self):
+        cls = type(self)
+        if cls._shared_model_cache is None:
+            _qwen_ci_log("shared_model: lazy-loading 7B model (dtype=bfloat16, device_map=auto)")
+            t0 = time.monotonic()
+            cls._shared_model_cache = Qwen2_5OmniForConditionalGeneration.from_pretrained(
+                "Qwen/Qwen2.5-Omni-7B", dtype=torch.bfloat16, device_map="auto"
+            )
+            _qwen_ci_log(f"shared_model: loaded in {time.monotonic() - t0:.1f}s")
+        return cls._shared_model_cache
 
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
