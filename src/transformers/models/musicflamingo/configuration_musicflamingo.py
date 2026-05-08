@@ -74,10 +74,12 @@ class MusicFlamingoConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
-            self.audio_config["model_type"] = self.audio_config.get("model_type", "musicflamingo_encoder")
+            if self.audio_config["model_type"] in [None, "musicflamingo_encoder"]:
+                self.audio_config["model_type"] = "audioflamingo3_encoder"
+
             self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
         elif self.audio_config is None:
-            self.audio_config = CONFIG_MAPPING["musicflamingo_encoder"]()
+            self.audio_config = CONFIG_MAPPING["audioflamingo3_encoder"]()
 
         if isinstance(self.text_config, dict):
             self.text_config["model_type"] = self.text_config.get("model_type", "qwen2")
@@ -85,12 +87,11 @@ class MusicFlamingoConfig(PreTrainedConfig):
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["qwen2"]()
 
-        super().__post_init__(**kwargs)
-
         if self.rope_parameters is None:
             self.rope_parameters = {"rope_type": "default", "rope_theta": 1200, "partial_rotary_factor": 0.2}
         self.max_position_embeddings = self.rope_parameters["rope_theta"]
         self.head_dim = self.audio_config.hidden_size
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["MusicFlamingoConfig"]

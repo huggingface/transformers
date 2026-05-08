@@ -17,9 +17,6 @@ rendered properly in your Markdown viewer.
 
 # Reformer
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -142,7 +139,7 @@ easily be trained on sequences as long as 64000 tokens.
 For training, the [`ReformerModelWithLMHead`] should be used as follows:
 
 ```python
-input_ids = tokenizer.encode("This is a sentence from the training data", return_tensors="pt")
+input_ids = tokenizer.encode("This is a sentence from the training data", return_tensors="pt").to(model.device)
 loss = model(input_ids, labels=input_ids)[0]
 ```
 

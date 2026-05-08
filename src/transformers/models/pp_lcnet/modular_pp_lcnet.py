@@ -500,7 +500,8 @@ class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
         Examples:
 
         ```python
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
         >>> from transformers import AutoModelForImageClassification, AutoImageProcessor
 
@@ -509,7 +510,8 @@ class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
         >>> image_processor = AutoImageProcessor.from_pretrained(model_path)
 
         >>> url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)

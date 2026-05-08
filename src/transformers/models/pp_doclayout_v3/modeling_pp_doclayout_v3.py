@@ -333,12 +333,12 @@ class PPDocLayoutV3DecoderOutput(ModelOutput):
     decoder_out_masks: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the PP-DocLayoutV3 model.
     """
 )
+@dataclass
 class PPDocLayoutV3ModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
@@ -1668,10 +1668,12 @@ class PPDocLayoutV3Model(PPDocLayoutV3PreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, PPDocLayoutV2Model
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("PekingU/PPDocLayoutV2_r50vd")
         >>> model = PPDocLayoutV2Model.from_pretrained("PekingU/PPDocLayoutV2_r50vd")
@@ -1860,8 +1862,8 @@ class PPDocLayoutV3Model(PPDocLayoutV3PreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class PPDocLayoutV3HybridEncoderOutput(BaseModelOutput):
     r"""
     mask_feat (`torch.FloatTensor` of shape `(batch_size, config.num_queries, 200, 200)`):
@@ -1871,8 +1873,8 @@ class PPDocLayoutV3HybridEncoderOutput(BaseModelOutput):
     mask_feat: torch.FloatTensor = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class PPDocLayoutV3ForObjectDetectionOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):
@@ -1984,11 +1986,13 @@ class PPDocLayoutV3ForObjectDetection(PPDocLayoutV3PreTrainedModel):
         ```python
         >>> from transformers import AutoModelForObjectDetection, AutoImageProcessor
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> import torch
 
         >>> url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> model_path = "PaddlePaddle/PP-DocLayoutV3_safetensors"
         >>> image_processor = AutoImageProcessor.from_pretrained(model_path)

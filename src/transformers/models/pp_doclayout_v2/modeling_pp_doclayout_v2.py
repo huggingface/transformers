@@ -902,8 +902,8 @@ class PPDocLayoutV2ReadingOrder(PPDocLayoutV2PreTrainedModel):
         return read_order_logits
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class PPDocLayoutV2ForObjectDetectionOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):
@@ -966,12 +966,12 @@ class PPDocLayoutV2ForObjectDetectionOutput(ModelOutput):
     denoising_meta_values: dict | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the PP-DocLayoutV2 encoder-decoder model.
     """
 )
+@dataclass
 class PPDocLayoutV2ModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
@@ -1043,7 +1043,6 @@ class PPDocLayoutV2MLPPredictionHead(nn.Module):
         return x
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the PPDocLayoutV2Decoder. This class adds two attributes to
@@ -1052,6 +1051,7 @@ class PPDocLayoutV2MLPPredictionHead(nn.Module):
     - a stacked tensor of intermediate reference points.
     """
 )
+@dataclass
 class PPDocLayoutV2DecoderOutput(ModelOutput):
     r"""
     intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -2122,10 +2122,12 @@ class PPDocLayoutV2Model(PPDocLayoutV2PreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, PPDocLayoutV2Model
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("PekingU/PPDocLayoutV2_r50vd")
         >>> model = PPDocLayoutV2Model.from_pretrained("PekingU/PPDocLayoutV2_r50vd")
@@ -2356,11 +2358,13 @@ class PPDocLayoutV2ForObjectDetection(PPDocLayoutV2PreTrainedModel):
         ```python
         >>> from transformers import AutoModelForObjectDetection, AutoImageProcessor
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> import torch
 
         >>> url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> model_path = "PaddlePaddle/PP-DocLayoutV2_safetensors"
         >>> image_processor = AutoImageProcessor.from_pretrained(model_path)
