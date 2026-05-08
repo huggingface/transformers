@@ -18,14 +18,17 @@ rendered properly in your Markdown viewer.
 
 It is increasingly common for chat models to generate structured outputs, rather than just a single reply string. For example,
 a [reasoning model](https://huggingface.co/reasoning-course) might emit a chain of thought containing its reasoning trace,
-while a [tool calling](./chat_extras) model might emit function names and arguments to be called.
+while a [tool calling](./chat_extras) model might emit function names and arguments.
 
 In all of these cases, though, the model simply emits a chain of tokens. We need some system to turn those tokens into
 a structured response dict. That system is **response parsing**. It is controlled by a **response template**: a
-small declarative spec that describes how the model's output is laid out. The response template is the parsing
-counterpart of [`chat_template`](./chat_templating) — same role on the tokenizer, opposite direction.
+small declarative spec that describes how the model's output is laid out. Just as the [`chat_template`](./chat_templating) turns
+structured messages into tokens ready to input into the model, response templates turn generated tokens back into
+structured dicts. These two systems form the "glue" layer that allows a universal API to be used with models
+that have very different internal chat formats.
 
-Calling the parser is simple — you pass the generated text to [`~PreTrainedTokenizerBase.parse_response`]:
+Just like chat templates, response templates are attached to the tokenizer. The main entry point is the
+[`~PreTrainedTokenizerBase.parse_response`] method:
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -38,20 +41,44 @@ messages = [{"role": "user", "content": "Summarize the end of the Cold War, very
 input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt").to(model.device)
 outputs = model.generate(input_ids, max_new_tokens=1024)[0, input_ids.shape[1]:]
 out_text = tokenizer.decode(outputs)
-print(tokenizer.parse_response(out_text))
+print(tokenizer.parse_response(out_text, prefix=input_ids))
 # → {"role": "assistant", "thinking": "...", "content": "..."}
 ```
 
-If the tokenizer has no response template set, `parse_response` raises. Not every tokenizer ships one yet — support
-is being added model by model.
+Note that we need to pass the `prefix` (the prompt tokens) as well. This is because many chat templates start
+messages or open thinking blocks before letting the model begin its response. Without the prefix, message parsing
+becomes ambiguous. If the tokenizer has no response template set, `parse_response` will raise an error. We're working on adding
+templates to more models as quickly as we can!
 
-## Writing a response template
+## Streaming response parsing
 
-The spec describes the **input stream**, left-to-right: a flat list of fields, where each field declares what opens
-its region in the stream, what closes it, and what kind of content lives inside. The output dict falls out as a
-byproduct.
+In the above example, we parse the model response all at once after generation has finished. Often, though, we may
+want to parse partial messages as they are generated, especially in user-facing apps where we don't just want to
+display a static page for a minute or two until the model is finished.
 
-Take SmolLM. Its output looks like:
+When you want streaming parsing, call `tokenizer.get_response_parser()`, which returns a [`~utils.chat_parsing.ResponseParser`].
+This is a stateful parser that you can feed text into as the model generates it:
+
+```python
+parser = tokenizer.get_response_parser()
+for chunk in text_streamer:
+    for event in streamer.feed(chunk):
+        handle(event)
+message, final_events = streamer.finalize()
+for event in final_events:
+    handle(event)  # close events for any EOS-bounded region, then stream_end
+```
+
+The invariant that matters: for any chunking of the response, the streamed `finalize()` output equals
+`tokenizer.parse_response(response)`. If your template defines a `start_anchor` and you have prefix bytes
+to discard, pass them via `tokenizer.response_event_stream(prefix=...)` — `feed()` itself does not look
+for the anchor, so feeding `prompt + response` chunks without `prefix=` will treat the prompt as response.
+Only `parse_response(prompt + response)` auto-truncates; the streaming path expects pre-cut input.
+
+## Advanced: Writing a response template
+
+The best way to understand how to write a response template is to pick a concrete example. Here's what a raw
+reply from `SmolLM` might look like:
 
 ```txt
 <think>
@@ -61,7 +88,19 @@ Some chain of thought...
 <tool_call>{"name": "greet_user", "arguments": {"greeting": "Hi!"}}</tool_call>
 ```
 
-The spec that parses this:
+When we parse this output in the standard message dict format, it should look like this:
+
+```json
+{
+    "role": "assistant",
+    "thinking": "Some chain of thought...",
+    "tool_calls": [
+        {"type": "function", "function": {"name": "greet_user", "arguments": {"greeting": "Hi!"}}}
+    ]
+}
+```
+
+And here's the template that parses it. Don't be intimidated - a lot of it is fairly self-explanatory!
 
 ```python
 {
@@ -83,47 +122,68 @@ The spec that parses this:
 }
 ```
 
-Three fields, each describing one region of the stream. The `content` field has no `open` — that makes it the
-**implicit / leftover** field that picks up any text not claimed by another region.
+Essentially, the template defines **fields** and **delimiters**. Each field corresponds to a key in the
+output dict. Fields also include information for parsing the text inside their delimiters. There's one subtlety: The
+`content` field has no `open`, because in SmolLM (and several other models), it's not marked by a special token. Instead,
+`content` is stored in the space after the other regions, but before the end of the sequence. In our template, we
+represent this as an **implicit / leftover** field that picks up any text not claimed by another region.
 
-You attach the spec to a tokenizer the same way you attach a chat template:
+As with chat templates, response templates are stored as tokenizer attributes and saved with the tokenizer. Unlike
+chat templates, we save them inside `tokenizer_config.json` and not as a separate file, because their format fits
+naturally in JSON, unlike a chat template Jinja script.
 
 ```python
-tokenizer.response_template = spec
-tokenizer.save_pretrained(...)  # persisted to tokenizer_config.json
+tokenizer.response_template = template
+tokenizer.save_pretrained(...)  # Written as a key in tokenizer_config.json
 ```
 
-## Field keys
+## Advanced: Field API Reference
 
-Each field supports:
+Each field supports several keys. First, there are the keys that define how the field should be captured:
 
-| Key             | Type             | Purpose |
-|-----------------|------------------|---------|
-| `open`          | str              | Literal string that opens this region. |
+| Key             | Type             | Purpose                                                                                     |
+|-----------------|------------------|---------------------------------------------------------------------------------------------|
+| `open`          | str              | Literal string that opens this region.                                                      |
 | `open_pattern`  | str (regex)      | Regex alternative to `open`; named groups become capture variables available to `assemble`. |
-| `close`         | str              | Literal string that closes this region. `"eos"` means end-of-stream. |
-| `close_pattern` | str (regex)      | Regex alternative to `close`. |
-| `content`       | str              | Name of the content parser (see below). Defaults to `"text"`. |
-| `content_args`  | dict             | Parser-specific arguments. |
-| `repeats`       | bool             | If true, the field is a list and each match appends. Default `false`. |
-| `optional`      | bool             | If false and the region never matches, parsing raises. Default `true`. |
-| `assemble`      | dict/list/string | Output template (see **Assemble**). Defaults to returning the parsed content directly. |
-| `coerce`        | str              | `"int"`, `"float"`, or `"bool"` — applied to the final value. |
+| `close`         | str              | Literal string that closes this region. `"eos"` means end-of-stream.                        |
+| `close_pattern` | str (regex)      | Regex alternative to `close`.                                                               |
+| `repeats`       | bool             | If true, the field is a list and each match appends. Default `false`.                       |
+| `optional`      | bool             | If false and the region never matches, we raise an error. Default `true`.                   |
 
-Use **either** `open` or `open_pattern`, not both. Same for `close`/`close_pattern`.
+A field should have **either** `open` or `open_pattern`, but not both, and the same is true for `close` and `close_pattern`.
 
 A field with **neither** `open` nor `open_pattern` is the **implicit** field: it's active whenever no explicit
-region is open, so it captures leftover text. At most one field can be implicit.
+region is open, so it captures leftover text. At most one field can be implicit. This is most often used when `content`
+does not have special token tags, it's just written as plaintext after the other fields.
 
-If a region opens but its `close` is never seen — e.g., generation was truncated mid-response, or the model
-omitted the closing delimiter — the parser auto-closes the region at end-of-input and commits the buffered
-body. You don't need to spell out `close_pattern: r"(?:</tag>|$)"` to handle truncation; plain
-`close: "</tag>"` already does the right thing.
+In addition to opening and closing delimiters, you can also specify `repeats`, which indicates that the field is a list
+and the delimiters can match multiple times. This is most common for parallel tool calling, when a model emits
+multiple tool calls simultaneously.
 
-## Content parsers
+Finally, you can specify `optional: false` for fields that must be present. If parsing finishes and an optional field
+was never opened, we raise an error instead of silently omitting the field.
 
-The parser decides how the region body is interpreted. The registry is closed — schemas can select and configure
-parsers, but can't ship their own code:
+The end of generation will close and finalize any open regions, even if their closing delimiter was not seen.
+
+### Parsing the content of a field
+
+Next, there are the keys that define how the content of the field is parsed after it's captured:
+
+| Key             | Type             | Purpose                                                                                     |
+|-----------------|------------------|---------------------------------------------------------------------------------------------|
+| `content`       | str              | Name of the content parser (see below). Defaults to `"text"`.                               |
+| `content_args`  | dict             | Parser-specific arguments.                                                                  |
+| `assemble`      | dict/list/string | Output template (see **Assemble**). Defaults to returning the parsed content directly.      |
+| `coerce`        | str              | `"int"`, `"float"`, or `"bool"`. Sets the return type for simple values                     |
+
+Let's go through these keys in order. The first (and most important) key is `content`. This indicates the content type
+of the field, which determines the parser that will be used to convert the raw text captured in the field to the final output.
+`content_args` are used to configure the parser, and allow us to support various format quirks without needing custom code.
+
+The available parsers are:
+
+(TODO Matt: Might merge `text` and `raw`, as well as merging `json` and `json-lax`, and just moving the details
+into `content_args`.)
 
 | Parser       | Produces      | Useful `content_args`                                                              |
 |--------------|---------------|-------------------------------------------------------------------------------------|
@@ -134,13 +194,15 @@ parsers, but can't ship their own code:
 | `xml-inline` | dict          | `tag_pattern` (regex w/ named groups `key`/`value`), `value_parser`                 |
 | `kv-lines`   | dict          | `line_sep`, `kv_sep`, `value_parser`                                                |
 
-`json-lax` is the escape hatch for models that emit JSON with quirks — unquoted keys, custom string delimiters
-like Gemma's `<|"|>…<|"|>`. You configure it with parameters rather than writing a new parser.
+`json-lax` is the escape hatch for models that emit JSON with cute quirks that completely break the standard parser,
+like unquoted keys or weird custom string delimiters. The model authors who are responsible for this being necessary
+know who they are and should feel an appropriate amount of shame.
 
-## Assemble
+### Assemble
 
-By default, a region's parsed content becomes the field's value directly. Sometimes you want to reshape it — for
-example, a tool call where the function name comes from the delimiter and the arguments come from the body.
+For most models, the `assemble` key is unnecessary, which is fortunate because it's definitely the most complex and messy
+part of this entire operation. It's used when the information we want is scattered inside the target field, possibly even
+in the delimiters, and has to be captured separately before being reshaped into the final output. 
 
 `assemble` is a template: a dict/list/string where `{content}` is replaced by the parsed body and `{name}` (or any
 other named group from `open_pattern`/`close_pattern`) is replaced by the captured text. Here's how GPT-OSS
@@ -161,62 +223,3 @@ handles tool calls whose function name is embedded in the channel header:
 
 For a call like `to=functions.get_weather ... {"location":"SF"}`, this produces
 `{"type": "function", "function": {"name": "get_weather", "arguments": {"location": "SF"}}}`.
-
-## Streaming
-
-`tokenizer.response_event_stream()` returns a [`~utils.chat_parsing.ResponseParser`] — a stateful parser you
-feed text incrementally as the model generates:
-
-```python
-streamer = tokenizer.response_event_stream()
-for chunk in text_streamer:
-    for event in streamer.feed(chunk):
-        handle(event)
-message, final_events = streamer.finalize()
-for event in final_events:
-    handle(event)  # close events for any EOS-bounded region, then stream_end
-```
-
-The invariant that matters: for any chunking of the response, the streamed `finalize()` output equals
-`tokenizer.parse_response(response)`. If your template defines a `start_anchor` and you have prefix bytes
-to discard, pass them via `tokenizer.response_event_stream(prefix=...)` — `feed()` itself does not look
-for the anchor, so feeding `prompt + response` chunks without `prefix=` will treat the prompt as response.
-Only `parse_response(prompt + response)` auto-truncates; the streaming path expects pre-cut input.
-
-## Example: re-expressing real formats
-
-All of the formats currently tested in this repo — Cohere, ERNIE, GPT-OSS, SmolLM, Qwen3, Gemma 4 — fit in 15–25
-lines of spec each. As a concrete case, here's Gemma 4, which emits tool call arguments with unquoted keys and
-custom string delimiters (`<|"|>…<|"|>`):
-
-```python
-{
-    "defaults": {"role": "assistant"},
-    "fields": {
-        "thinking": {"open": "<|channel>thought\n", "close": "<channel|>", "content": "text"},
-        "tool_calls": {
-            "open_pattern": r"<\|tool_call>call:(?P<name>\w+)",
-            "close": "<tool_call|>",
-            "repeats": True,
-            "content": "json-lax",
-            "content_args": {
-                "unquoted_keys": True,
-                "string_delims": [['<|"|>', '<|"|>']],
-            },
-            "assemble": {
-                "type": "function",
-                "function": {"name": "{name}", "arguments": "{content}"},
-            },
-        },
-    },
-}
-```
-
-No model-specific Python — Gemma's format is fully expressed by configuring `json-lax`.
-
-## Legacy `response_schema`
-
-An earlier, nested-JSON-schema-shaped parser lives under `tokenizer.response_schema`. It is still honored by
-`parse_response` for tokenizers that have it set, but new models should ship `response_template` instead — the
-template-driven parser streams, handles format quirks without custom parsers, and is significantly shorter in
-practice. The legacy path is expected to be deprecated and removed in a future release.
