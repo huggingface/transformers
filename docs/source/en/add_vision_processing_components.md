@@ -159,8 +159,75 @@ After the mapping is generated, verify the model type appears in the relevant ma
 - `IMAGE_PROCESSOR_MAPPING_NAMES` for [`AutoImageProcessor`]
 - `VIDEO_PROCESSOR_MAPPING_NAMES` for [`AutoVideoProcessor`]
 
+## Testing
+
+Add tests for each vision processing component in the model test directory.
+
+### Image processor tests
+
+Image processor tests usually live in `tests/models/<model_name>/test_image_processing_<model_name>.py` and inherit from [`ImageProcessingTestMixin`].
+
+The image processing mixin finds the image processor classes from `IMAGE_PROCESSOR_MAPPING_NAMES`. Expose model-specific defaults through `image_processor_dict`. Add a tester object only when you need reusable dummy inputs or helper methods for focused tests.
+
+```py
+from transformers.testing_utils import require_torch, require_vision
+from ...test_image_processing_common import ImageProcessingTestMixin
+
+@require_torch
+@require_vision
+class MyModelImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    @property
+    def image_processor_dict(self):
+        return {"size": {"shortest_edge": 224}, "do_resize": True}
+```
+
+Add focused tests for behavior the mixin can't infer, such as custom resizing rules or model-specific kwargs.
+
+### Video processor tests
+
+Video processor tests usually live in `tests/models/<model_name>/test_video_processing_<model_name>.py` and inherit from [`VideoProcessingTestMixin`]. Set `fast_video_processing_class`, define `video_processor_dict`, and override `input_name` if the model uses a key other than `pixel_values_videos`.
+
+```py
+from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_torchvision_available
+from ...test_video_processing_common import VideoProcessingTestMixin
+
+@require_torch
+@require_vision
+class MyModelVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
+    fast_video_processing_class = MyModelVideoProcessor if is_torchvision_available() else None
+    input_name = "pixel_values_videos"
+
+    @property
+    def video_processor_dict(self):
+        return {"size": {"shortest_edge": 224}, "num_frames": 16}
+```
+
+Add focused video tests for frame sampling, metadata handling, decoded video inputs, list-of-frame inputs, and output shapes. If your processor renames `pixel_values_videos`, assert the renamed key is returned.
+
+If the model also has a [`ProcessorMixin`] that wraps the image or video processor, add `tests/models/<model_name>/test_processing_<model_name>.py` and inherit from [`ProcessorTesterMixin`]. Set `processor_class` and override `_setup_<component>()` class methods for components that can't be constructed without arguments. Use `_setup_test_attributes()` to expose placeholder tokens used by the common processor tests.
+
+```py
+from ...test_processing_common import ProcessorTesterMixin
+
+class MyModelProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = MyModelProcessor
+
+    @classmethod
+    def _setup_image_processor(cls):
+        return cls._get_component_class_from_processor("image_processor")(size={"shortest_edge": 224})
+
+    @classmethod
+    def _setup_video_processor(cls):
+        return cls._get_component_class_from_processor("video_processor")(num_frames=2)
+
+    @classmethod
+    def _setup_test_attributes(cls, processor):
+        cls.image_token = getattr(processor, "image_token", "")
+        cls.video_token = getattr(processor, "video_token", "")
+```
+
 ## Next steps
 
 - Read the [Auto-generating docstrings](./auto_docstring) guide to auto-generate consistent docstrings with `@auto_docstring`.
-- Read the [Writing model tests](./testing#preprocessing-component-tests) guide to test image and video processors.
 - Read the [Image processors](./image_processors) and [Video processors](./video_processors) guides for user-facing preprocessing behavior.

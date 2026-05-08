@@ -62,8 +62,42 @@ Map the new class to the model config so [`AutoFeatureExtractor`] can load it. A
 
 - `FEATURE_EXTRACTOR_MAPPING_NAMES` for [`AutoFeatureExtractor`]
 
+## Testing
+
+Add tests for each audio processing component in the model test directory. Feature extractor tests usually live in `tests/models/<model_name>/test_feature_extraction_<model_name>.py`.
+
+For feature extractors that inherit from [`SequenceFeatureExtractor`], inherit from [`SequenceFeatureExtractionTestMixin`]. The mixin covers save and load behavior, padding, truncation, tensor conversion, and common feature extractor properties. Provide a tester object with `prepare_feat_extract_dict()` and `prepare_inputs_for_common()` so the mixin can instantiate the feature extractor and build short dummy audio inputs.
+
+```py
+from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
+
+class MyModelFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
+    feature_extraction_class = MyModelFeatureExtractor
+
+    def setUp(self):
+        self.feat_extract_tester = MyModelFeatureExtractionTester(self)
+```
+
+Add focused tests for model-specific behavior that the mixin doesn't know about. For audio feature extractors, that usually means checking the feature shape returned by `__call__`, validating that an incorrect `sampling_rate` raises an error, and checking any custom normalization or feature computation.
+
+If the model also has a [`ProcessorMixin`] that wraps the feature extractor, add `tests/models/<model_name>/test_processing_<model_name>.py` and inherit from [`ProcessorTesterMixin`]. Set `processor_class` and override `_setup_<component>()` class methods for components that can't be constructed without arguments. Use `_setup_test_attributes()` to expose placeholder tokens used by the common processor tests.
+
+```py
+from ...test_processing_common import ProcessorTesterMixin
+
+class MyModelProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = MyModelProcessor
+
+    @classmethod
+    def _setup_feature_extractor(cls):
+        return cls._get_component_class_from_processor("feature_extractor")(sampling_rate=16000)
+
+    @classmethod
+    def _setup_test_attributes(cls, processor):
+        cls.audio_token = getattr(processor, "audio_token", "")
+```
+
 ## Next steps
 
 - Read the [Auto-generating docstrings](./auto_docstring) guide to auto-generate consistent docstrings with `@auto_docstring`.
-- Read the [Writing model tests](./testing#preprocessing-component-tests) guide to test feature extractors and model processors.
-- - Read the [Feature extractors](./feature_extractors) guide for user-facing preprocessing behavior.
+- Read the [Feature extractors](./feature_extractors) guide for user-facing preprocessing behavior.
