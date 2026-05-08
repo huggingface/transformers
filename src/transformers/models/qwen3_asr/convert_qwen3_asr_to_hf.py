@@ -53,7 +53,6 @@ python src/transformers/models/qwen3_asr/convert_qwen3_asr_to_hf.py \
 import argparse
 import json
 import logging
-import re
 import shutil
 import tempfile
 from pathlib import Path
@@ -80,38 +79,27 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 # fmt: off
 STATE_DICT_MAPPING_ASR = {
-    r"^thinker\.audio_tower\.": r"model.audio_tower.",
-    r"^thinker\.lm_head\.": r"lm_head.",
-    r"^thinker\.model\.": r"model.language_model.",
+    "thinker.model.": "model.language_model.",
+    "thinker.lm_head.": "lm_head.",
+    "thinker.": "model.",
 }
 
 STATE_DICT_MAPPING_FORCED_ALIGNER = {
-    r"^thinker\.audio_tower\.": r"model.audio_tower.",
-    r"^thinker\.lm_head\.": r"classifier.",
-    r"^thinker\.model\.": r"model.language_model.",
+    "thinker.model.": "model.language_model.",
+    "thinker.lm_head.": "classifier.",
+    "thinker.": "model.",
 }
 # fmt: on
 
 
-def map_old_key_to_new(old_key: str, mapping: dict[str, str]) -> str:
-    """Map checkpoint keys to transformers model keys."""
-    new_key = old_key
-    for pattern, replacement in mapping.items():
-        new_key, n = re.subn(pattern, replacement, new_key)
-        if n > 0:
-            break
-    return new_key
-
-
 def convert_state_dict(original_state_dict: dict[str, Any], mapping: dict[str, str]) -> dict[str, Any]:
     """Convert checkpoint state dict to transformers format."""
-    new_state_dict = {}
-    for old_key, tensor in original_state_dict.items():
-        new_key = map_old_key_to_new(old_key, mapping)
-        new_state_dict[new_key] = tensor
-        if old_key != new_key:
-            logger.debug(f"Converted: {old_key} -> {new_key}")
-    return new_state_dict
+    converted = {}
+    for k, v in original_state_dict.items():
+        for old_prefix, new_prefix in mapping.items():
+            k = k.replace(old_prefix, new_prefix)
+        converted[k] = v
+    return converted
 
 
 def detect_model_type(src_root: Path) -> str:
