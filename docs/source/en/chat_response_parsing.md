@@ -69,6 +69,10 @@ for event in final_events:
     handle(event)
 ```
 
+The parser will emit **events** as text is fed in, which indicate which region is currently being parsed. When
+the region is complete, it will be emitted in a separate event with the fully parsed content. At the end of generation,
+the `finalize()` method flushes any remaining text and emits any final events, as well as the complete message dict.
+
 ## Advanced: Writing a response template
 
 The best way to understand how to write a response template is to pick a concrete example. Here's what a raw
