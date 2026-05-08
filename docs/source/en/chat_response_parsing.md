@@ -61,19 +61,13 @@ This is a stateful parser that you can feed text into as the model generates it:
 
 ```python
 parser = tokenizer.get_response_parser()
-for chunk in text_streamer:
-    for event in streamer.feed(chunk):
+for chunk in model_output:
+    for event in parser.feed(chunk):
         handle(event)
-message, final_events = streamer.finalize()
+message, final_events = parser.finalize()
 for event in final_events:
-    handle(event)  # close events for any EOS-bounded region, then stream_end
+    handle(event)
 ```
-
-The invariant that matters: for any chunking of the response, the streamed `finalize()` output equals
-`tokenizer.parse_response(response)`. If your template defines a `start_anchor` and you have prefix bytes
-to discard, pass them via `tokenizer.response_event_stream(prefix=...)` — `feed()` itself does not look
-for the anchor, so feeding `prompt + response` chunks without `prefix=` will treat the prompt as response.
-Only `parse_response(prompt + response)` auto-truncates; the streaming path expects pre-cut input.
 
 ## Advanced: Writing a response template
 

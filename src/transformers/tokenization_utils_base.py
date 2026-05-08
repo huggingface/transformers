@@ -3409,7 +3409,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 response = self.decode(response)
             return parse_one(response)
 
-    def response_event_stream(
+    def get_response_parser(
         self,
         response_template: dict | None = None,
         *,
