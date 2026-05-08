@@ -198,6 +198,7 @@ if TYPE_CHECKING:
     from .hunyuan_v1_dense import *
     from .hunyuan_v1_moe import *
     from .hy_v3 import *
+    from .hyperclovax import *
     from .ibert import *
     from .idefics import *
     from .idefics2 import *
@@ -367,6 +368,7 @@ if TYPE_CHECKING:
     from .regnet import *
     from .rembert import *
     from .resnet import *
+    from .rf_detr import *
     from .roberta import *
     from .roberta_prelayernorm import *
     from .roc_bert import *
