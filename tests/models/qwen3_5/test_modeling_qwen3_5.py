@@ -193,6 +193,7 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
             logits_padfree = res_padfree.logits[0]
 
             torch.testing.assert_close(logits_padded, logits_padfree, atol=1e-5, rtol=1e-5)
+            
     def test_linear_attention_multi_token_cached_forward_matches_single_token(self):
         """
         Qwen3.5's gated-delta-net layers must produce the same output for a token regardless of
