@@ -407,7 +407,7 @@ class Deimv2DINOv3ConvEncoder(nn.Module):
 
         outputs = []
         for i, (semantic_feature, detail_feature) in enumerate(zip(semantic_features, detail_features)):
-            fused = torch.cat([semantic_feature, detail_feature], dim=1)
+            fused = torch.cat([semantic_feature.to(detail_feature.device), detail_feature], dim=1)
             outputs.append(self.fusion_proj[i](fused))
 
         return outputs
@@ -486,7 +486,7 @@ class Deimv2DecoderLayer(DFineDecoderLayer):
 
 
 class Deimv2PreTrainedModel(DFinePreTrainedModel):
-    _no_split_modules = [r"Deimv2HybridEncoder", r"Deimv2LiteEncoder", r"Deimv2DecoderLayer"]
+    _no_split_modules = [r"Deimv2HybridEncoder", r"Deimv2LiteEncoder", r"Deimv2DecoderLayer", r"HGNetV2BasicLayer"]
 
     @torch.no_grad()
     def _init_weights(self, module):
