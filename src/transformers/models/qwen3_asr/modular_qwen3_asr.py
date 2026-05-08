@@ -163,16 +163,7 @@ class Qwen3ASRAttention(WhisperAttention):
 
 class Qwen3ASREncoderLayer(WhisperEncoderLayer):
     def __init__(self, config: Qwen3ASREncoderConfig):
-        super().__init__(
-            config=config,
-            self_attention=Qwen3ASRAttention(config),
-            d_model=config.d_model,
-            nhead=config.encoder_attention_heads,
-            dim_feedforward=config.encoder_ffn_dim,
-            dropout=config.dropout,
-            activation=config.activation_function,
-            attention_bias=config.attention_bias,
-        )
+        super().__init__(config=config)
         self.self_attn = Qwen3ASRAttention(config=config)
 
 
