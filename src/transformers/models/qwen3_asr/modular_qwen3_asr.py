@@ -103,13 +103,7 @@ class Qwen3ASRConfig(PreTrainedConfig):
             self.audio_config["model_type"] = self.audio_config.get("model_type", "qwen3_asr_audio_encoder")
             self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
         elif self.audio_config is None:
-            self.audio_config = CONFIG_MAPPING["qwen3_asr_audio_encoder"](
-                encoder_layers=24,
-                encoder_attention_heads=16,
-                encoder_ffn_dim=4096,
-                d_model=1024,
-                output_dim=2048,
-            )
+            self.audio_config = CONFIG_MAPPING["qwen3_asr_audio_encoder"]()
 
         if isinstance(self.text_config, dict):
             self.text_config["model_type"] = self.text_config.get("model_type", "qwen3")
@@ -166,16 +160,7 @@ class Qwen3ASRAttention(WhisperAttention):
 
 class Qwen3ASREncoderLayer(WhisperEncoderLayer):
     def __init__(self, config: Qwen3ASREncoderConfig):
-        super().__init__(
-            config=config,
-            self_attention=Qwen3ASRAttention(config),
-            d_model=config.d_model,
-            nhead=config.encoder_attention_heads,
-            dim_feedforward=config.encoder_ffn_dim,
-            dropout=config.dropout,
-            activation=config.activation_function,
-            attention_bias=config.attention_bias,
-        )
+        super().__init__(config=config)
         self.self_attn = Qwen3ASRAttention(config=config)
 
 
