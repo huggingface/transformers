@@ -34,7 +34,11 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
+from ...modeling_layers import (
+    GenericForSequenceClassification,
+    GenericForTokenClassification,
+    GradientCheckpointingLayer,
+)
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -1782,6 +1786,10 @@ class Qwen3_5ForSequenceClassification(GenericForSequenceClassification, Qwen3_5
     config: Qwen3_5TextConfig
 
 
+class Qwen3_5ForTokenClassification(GenericForTokenClassification, Qwen3_5PreTrainedModel):
+    config: Qwen3_5TextConfig
+
+
 @auto_docstring(
     custom_intro="""
     Base class for Qwen3_5 causal language model (or autoregressive) outputs.
@@ -2189,6 +2197,7 @@ __all__ = [
     "Qwen3_5Model",
     "Qwen3_5ForCausalLM",
     "Qwen3_5ForSequenceClassification",
+    "Qwen3_5ForTokenClassification",
     "Qwen3_5ForConditionalGeneration",
     "Qwen3_5PreTrainedModel",
 ]

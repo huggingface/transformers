@@ -74,6 +74,11 @@ TODO
 [[autodoc]] Qwen3_5ForSequenceClassification
     - forward
 
+## Qwen3_5ForTokenClassification
+
+[[autodoc]] Qwen3_5ForTokenClassification
+    - forward
+
 ## Qwen3_5ForConditionalGeneration
 
 [[autodoc]] Qwen3_5ForConditionalGeneration
