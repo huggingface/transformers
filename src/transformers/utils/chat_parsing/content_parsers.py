@@ -5,13 +5,12 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
-"""Content pipeline: body string → parsed value → assembled → coerced.
+"""Content pipeline: body string → parsed value → assembled.
 
-Three stages compose into `process_field(body, fld, captures)`:
+Two stages compose into `process_field(body, fld, captures)`:
   1. `parse_content` dispatches through the closed `CONTENT_PARSERS` registry.
   2. `_apply_assemble` optionally wraps the parsed value in a template
      (using `{name}` placeholders filled from open-pattern captures).
-  3. `_apply_coerce` optionally casts the result to int/float/bool.
 
 The registry is closed — schemas select parsers by name but cannot ship code."""
 
@@ -26,8 +25,16 @@ def _text(text: str, args: dict) -> str:
     return text.strip() if args.get("strip", True) else text
 
 
-def _raw(text: str, args: dict) -> str:
-    return text
+def _int(text: str, args: dict) -> int:
+    return int(_text(text, args))
+
+
+def _float(text: str, args: dict) -> float:
+    return float(_text(text, args))
+
+
+def _bool(text: str, args: dict) -> bool:
+    return _text(text, args).lower() in ("true", "1")
 
 
 def _jmespath(value: Any, transform: str | None) -> Any:
@@ -45,23 +52,13 @@ def _jmespath(value: Any, transform: str | None) -> Any:
     return jmespath.search(transform, value)
 
 
-def _json(text: str, args: dict) -> Any:
-    try:
-        value = json.loads(text)
-    except json.JSONDecodeError as e:
-        if args.get("allow_non_json"):
-            return text.strip()
-        raise ValueError(f"json parser could not parse region as JSON.\nContent: {text!r}\nError: {e}") from e
-    return _jmespath(value, args.get("transform"))
-
-
 # Sentinel characters for lax-JSON string pre-extraction — ASCII control chars
 # that should never appear in real LLM output.
 _LAX_OPEN, _LAX_CLOSE = "\x01", "\x02"
 
 
-def _json_lax(text: str, args: dict) -> Any:
-    """JSON with optional dialect knobs for LLM-emitted quirks.
+def _json(text: str, args: dict) -> Any:
+    """JSON parser with optional dialect knobs for LLM-emitted quirks.
 
     `args`:
       - `unquoted_keys` (bool): quote bare-identifier keys before parsing.
@@ -70,12 +67,15 @@ def _json_lax(text: str, args: dict) -> Any:
       - `transform` (str): jmespath applied after parsing.
       - `allow_non_json` (bool): return stripped text if parsing fails.
     """
-    if _LAX_OPEN in text or _LAX_CLOSE in text:
-        raise ValueError("json-lax: input contains reserved sentinel characters (\\x01/\\x02); cannot parse safely.")
+    string_delims = args.get("string_delims") or []
+    unquoted_keys = args.get("unquoted_keys", False)
+
+    if string_delims and (_LAX_OPEN in text or _LAX_CLOSE in text):
+        raise ValueError("json: input contains reserved sentinel characters (\\x01/\\x02); cannot parse safely.")
 
     working = text
     captured: list[str] = []
-    for open_d, close_d in args.get("string_delims") or []:
+    for open_d, close_d in string_delims:
         pattern = re.escape(open_d) + r"(.*?)" + re.escape(close_d)
 
         def _capture(m: re.Match) -> str:
@@ -84,7 +84,7 @@ def _json_lax(text: str, args: dict) -> Any:
 
         working = re.sub(pattern, _capture, working, flags=re.DOTALL)
 
-    if args.get("unquoted_keys"):
+    if unquoted_keys:
         working = re.sub(r"(?<=[{,])(\w+):", r'"\1":', working)
 
     for i, s in enumerate(captured):
@@ -95,8 +95,10 @@ def _json_lax(text: str, args: dict) -> Any:
     except json.JSONDecodeError as e:
         if args.get("allow_non_json"):
             return text.strip()
+        if working == text:
+            raise ValueError(f"json parser could not parse region as JSON.\nContent: {text!r}\nError: {e}") from e
         raise ValueError(
-            f"json-lax: could not parse after dialect transforms.\n"
+            f"json: could not parse after dialect transforms.\n"
             f"Original: {text!r}\nTransformed: {working!r}\nError: {e}"
         ) from e
     return _jmespath(value, args.get("transform"))
@@ -156,12 +158,18 @@ def _kv_lines(text: str, args: dict) -> dict:
 
 CONTENT_PARSERS = {
     "text": _text,
-    "raw": _raw,
+    "int": _int,
+    "float": _float,
+    "bool": _bool,
     "json": _json,
-    "json-lax": _json_lax,
     "xml-inline": _xml_inline,
     "kv-lines": _kv_lines,
 }
+
+# Parsers whose output is the verbatim body text (modulo whitespace) — these
+# can stream `region_chunk` events as bytes arrive. Structured parsers
+# (`json`, `xml-inline`, `kv-lines`) only meaningful values on close.
+STREAMABLE_PARSERS = frozenset({"text", "int", "float", "bool"})
 
 
 def parse_content(text: str, name: str, args: dict) -> Any:
@@ -197,30 +205,13 @@ def _apply_assemble(assemble: Any, captures: dict, content: Any) -> Any:
     return _PLACEHOLDER.sub(lambda m: str(_lookup(m.group(1))), assemble)
 
 
-def _apply_coerce(value: Any, coerce: str | None) -> Any:
-    if coerce is None:
-        return value
-    if coerce == "int":
-        return int(value)
-    if coerce == "float":
-        return float(value)
-    if coerce == "bool":
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, str):
-            return value.strip().lower() in ("true", "1")
-        return bool(value)
-    raise ValueError(f"Unknown coerce: {coerce}")
-
-
 def process_field(body: str, fld, captures: dict) -> Any:
-    """Run `body` through the field's content parser, assembler, and coercer.
+    """Run `body` through the field's content parser and assembler.
 
     `fld` is a `spec.Field`; typed via duck-typing to avoid a cyclic import."""
     value = parse_content(body, fld.content, fld.content_args)
     value = _apply_assemble(fld.assemble, captures, value)
-    value = _apply_coerce(value, fld.coerce)
     return value
 
 
-__all__ = ["CONTENT_PARSERS", "parse_content", "process_field"]
+__all__ = ["CONTENT_PARSERS", "STREAMABLE_PARSERS", "parse_content", "process_field"]

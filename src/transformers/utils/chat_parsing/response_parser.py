@@ -22,7 +22,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from .content_parsers import process_field
+from .content_parsers import STREAMABLE_PARSERS, process_field
 from .response_templates import ResponseTemplate, ResponseTemplateField, load_response_template
 
 
@@ -251,7 +251,7 @@ class ResponseParser:
                 events.append({"type": "region_open", "field": self._current, "meta": dict(self._captures)})
             self._opened = True
         self._body += text
-        if fld.content in ("text", "raw") and not self._prefill_mode:
+        if fld.content in STREAMABLE_PARSERS and not self._prefill_mode:
             events.append({"type": "region_chunk", "field": self._current, "text": text})
 
     def _open_explicit(self, events: list[dict], fld: ResponseTemplateField, m: re.Match) -> None:

@@ -149,7 +149,7 @@ gemma4_template = {
             "open_pattern": r"<\|tool_call>call:(?P<name>\w+)",
             "close": "<tool_call|>",
             "repeats": True,
-            "content": "json-lax",
+            "content": "json",
             "content_args": {
                 "unquoted_keys": True,
                 "string_delims": [['<|"|>', '<|"|>']],
@@ -525,15 +525,14 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             parse_response("no response here", template_spec)
         self.assertIn("content", str(cm.exception))
 
-    def test_coerce_int(self):
+    def test_int_content_parser(self):
         template_spec = {
             "defaults": {"role": "assistant"},
             "fields": {
                 "count": {
                     "open": "<n>",
                     "close": "</n>",
-                    "content": "text",
-                    "coerce": "int",
+                    "content": "int",
                 },
             },
         }
@@ -680,7 +679,7 @@ class ResponseEventStreamTest(unittest.TestCase):
         well-formed: region_open precedes its matching region_close for the
         same field; region_chunk only appears between open and close; the
         final event stream ends with stream_end; and the concatenation of all
-        region_chunk payloads for a text/raw field equals the final value."""
+        region_chunk payloads for a streamable text-like field equals the final value."""
         rng = random.Random(0xBEEF)
         for name, tmpl, text in _STREAMING_FIXTURES:
             for trial in range(10):
@@ -719,7 +718,7 @@ class ResponseEventStreamTest(unittest.TestCase):
         self.assertIsNone(open_field, "region left open at stream_end")
 
     def test_region_chunks_reconstruct_text_regions(self):
-        """For text/raw regions, concatenating the region_chunk texts should
+        """For streamable text-like regions, concatenating the region_chunk texts should
         reconstruct the final value reported in region_close. JSON-family
         regions emit no chunks and report the full parsed value only on close."""
         # Single representative case with a long text region and a JSON region.
