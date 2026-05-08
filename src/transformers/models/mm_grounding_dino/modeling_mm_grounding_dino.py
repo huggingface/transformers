@@ -2371,6 +2371,11 @@ class MMGroundingDinoForObjectDetection(MMGroundingDinoPreTrainedModel):
         "model.decoder.bbox_embed": "bbox_embed",
         "model.decoder.class_embed": "class_embed",
     }
+    _keys_to_ignore_on_load_unexpected = [
+        r".*attention\.self\.relative_position_index",
+        r".*attention\.relative_position_bias\.relative_position_index",
+    ]
+    _keys_to_ignore_on_load_missing = [r".*swin.layernorm.*"]
 
     def __init__(self, config: MMGroundingDinoConfig):
         super().__init__(config)
