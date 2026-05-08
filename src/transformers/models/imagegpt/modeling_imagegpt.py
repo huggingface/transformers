@@ -515,7 +515,6 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
             encoder_attention_mask=encoder_attention_mask,
             embedding_output=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
-            cache_position=cache_position,
             past_key_values=past_key_values,
         )
 
@@ -577,7 +576,6 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         encoder_attention_mask,
         embedding_output,
         encoder_hidden_states,
-        cache_position,
         past_key_values,
     ):
         if getattr(self.config, "is_decoder", False):
@@ -585,7 +583,6 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
                 config=self.config,
                 input_embeds=embedding_output,
                 attention_mask=attention_mask,
-                cache_position=cache_position,
                 past_key_values=past_key_values,
             )
         else:
