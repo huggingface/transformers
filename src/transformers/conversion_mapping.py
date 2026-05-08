@@ -126,6 +126,17 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("intermediate.dense", "mlp.fc1"),
             WeightRenaming("output.dense", "mlp.fc2"),
         ],
+        "ViTMSNForImageClassification": [
+            WeightRenaming(r"^encoder\.", "vit.encoder."),
+        ],
+        "ViTMAEForPreTraining": [
+            WeightRenaming("attention.query", "q_proj"),
+            WeightRenaming("attention.key", "k_proj"),
+            WeightRenaming("attention.value", "v_proj"),
+            WeightRenaming("attention.output.dense", "attention.o_proj"),
+            WeightRenaming("intermediate.dense", "mlp.fc1"),
+            WeightRenaming("output.dense", "mlp.fc2"),
+        ],
         "BeitBackbone": [
             WeightRenaming(r"^fpn1\.0\.", "fpn.fpn1.conv_transpose1."),
             WeightRenaming(r"^fpn1\.1\.", "fpn.fpn1.normalization."),
