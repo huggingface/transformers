@@ -15,10 +15,6 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2024-01-04 and added to Hugging Face Transformers on 2025-08-01.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-           </div>
-</div>
 
 # MM Grounding DINO
 

@@ -15,10 +15,6 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2020-04-10 and added to Hugging Face Transformers on 2021-01-05.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-           </div>
-</div>
 
 # LED
 

@@ -17,9 +17,6 @@ rendered properly in your Markdown viewer.
 
 # BERTweet
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-    </div>
 
 ## BERTweet
 
