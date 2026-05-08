@@ -30,7 +30,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...masking_utils import create_bidirectional_mask, create_causal_mask
+from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedConfig, PreTrainedModel
@@ -1018,30 +1018,26 @@ class IdeficsModel(IdeficsPreTrainedModel):
 
         image_hidden_states = image_hidden_states.view(batch_size, num_images * image_seq_len, image_hidden_size)
 
-        # Hack to use the model in full language modeling mode
-        # image_attention_mask = torch.zeros(batch_size, seq_length, 1, dtype=torch.long, device=image_hidden_states.device)
-        # Make image_attention_mask compatible with hidden states
-        image_attention_mask = create_bidirectional_mask(
-            config=self.config,
-            input_embeds=image_hidden_states,
-            attention_mask=image_attention_mask[..., 0],
-            # Force mask creation
-            and_mask_function=lambda *args: torch.tensor(True, dtype=torch.bool),
-        ).transpose(-1, -2)
+        # Mask is in 3D (incompatible with our mask API --> manual expansion)
+        # image_attention_mask:    [batch_size,    text_seq_length,       num_images          ]
+        #                       -> [batch_size, 1, text_seq_length, num_images * image_seq_len]
+        image_attention_mask = (
+            image_attention_mask[..., None]
+            .expand(-1, -1, -1, image_seq_len)
+            .reshape(*image_attention_mask.shape[:2], -1)
+        )
+        image_attention_mask = torch.where(
+            image_attention_mask[:, None, :, :].bool(),
+            torch.tensor(0.0, device=device, dtype=image_hidden_states.dtype),
+            torch.finfo(image_hidden_states.dtype).min,
+        )
 
-        # cross_attention_gate:
         # For any tokens attending to no images, the hidden_states coming out of the cross-attention should be zeroed-out.
-        # `image_attention_mask` has shape [bsz, 1, num_images, hidden_size] with elements equal to either True (eager 0.0) or False (eager -inf).
-        # If any of the elements are True (eager 0.0), then the token is attending to at least one image and the gate value is 1. Otherwise the gate value is 0.
+        # If any of the elements are 0.0, then the token is attending to at least one image and the gate value is 1. Otherwise the gate value is 0.
         # `cross_attention_gate` has shape [bsz, seq_len] with elements equal to either 0.0 or 1.0.
-        if image_attention_mask.dtype == torch.bool:
-            cross_attention_gate = (
-                torch.any(image_attention_mask, dim=-1).to(dtype=self.dtype, device=device).squeeze(dim=1)
-            )
-        else:
-            cross_attention_gate = (
-                torch.any(image_attention_mask == 0.0, dim=-1).to(dtype=self.dtype, device=device).squeeze(dim=1)
-            )
+        cross_attention_gate = (
+            (image_attention_mask == 0.0).any(dim=-1).to(dtype=self.dtype, device=device).squeeze(dim=1)
+        )
 
         # embed positions
         if attention_mask is None:
