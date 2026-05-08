@@ -2235,6 +2235,7 @@ class Gemma4Model(Gemma4PreTrainedModel):
         llm_input_ids = None
         if inputs_embeds is None:
             llm_input_ids = input_ids.clone()
+            llm_input_ids[multimodal_mask] = self.config.text_config.pad_token_id
             inputs_embeds = self.get_input_embeddings()(llm_input_ids)
 
         if self.config.get_text_config().hidden_size_per_layer_input:
