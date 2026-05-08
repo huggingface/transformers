@@ -329,7 +329,9 @@ class Granite4VisionWindowQFormerDownsampler(nn.Module):
         downsampled_windowed = self._windowed_raster(downsampled, downsampled_side, self.query_side)
 
         query_embeds = self.query.to(downsampled_windowed.device) + downsampled_windowed
-        encoder_embeds = self.dropout(windowed_image_features + self.image_positions.to(windowed_image_features.device))
+        encoder_embeds = self.dropout(
+            windowed_image_features + self.image_positions.to(windowed_image_features.device)
+        )
         out_windowed = self.qformer(
             query_embeds=query_embeds,
             encoder_hidden_states=encoder_embeds,
@@ -357,7 +359,7 @@ class Granite4VisionTextDecoderLayer(GraniteDecoderLayer):
 
 
 class Granite4VisionPreTrainedModel(LlavaNextPreTrainedModel):
-    _no_split_modules = ["Granite4VisionTextDecoderLayer"]
+    _no_split_modules = ["Granite4VisionTextDecoderLayer", "Granite4VisionWindowQFormerDownsampler"]
     _can_record_outputs = {
         "hidden_states": Granite4VisionTextDecoderLayer,
         "attentions": Granite4VisionTextAttention,
