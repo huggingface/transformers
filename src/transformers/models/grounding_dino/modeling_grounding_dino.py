@@ -35,6 +35,43 @@ from .configuration_grounding_dino import GroundingDinoConfig
 logger = logging.get_logger(__name__)
 
 
+# Copied from transformers.models.conditional_detr.modeling_conditional_detr.encode_sinusoidal_position_embedding
+def encode_sinusoidal_position_embedding(
+    pos_tensor: torch.Tensor,
+    num_pos_feats: int = 128,
+    temperature: int = 10000,
+) -> torch.Tensor:
+    """Sinusoidal position embeddings from normalized anchor coordinates.
+
+    Each coordinate in `pos_tensor` is independently encoded with ``num_pos_feats``
+    interleaved sin/cos components; per-coordinate embeddings are concatenated.
+    Handles 2-D ``(x, y)`` and N-D ``(x, y, w, h)`` inputs. For 2-D+ inputs the
+    x and y embeddings are swapped to follow the DETR ``[pos_y, pos_x, ...]`` convention.
+
+    Args:
+        pos_tensor: Normalized coordinates in ``[0, 1]``, shape ``(..., n_coords)``.
+        num_pos_feats: Embedding dimension per coordinate.
+        temperature: Base for the frequency decay.
+
+    Returns:
+        Tensor of shape ``(..., n_coords * num_pos_feats)``, same dtype as input.
+    """
+    scale = 2 * math.pi
+    dim_t = torch.arange(num_pos_feats, dtype=torch.float32, device=pos_tensor.device)
+    dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats)
+
+    coords = pos_tensor.unbind(-1)  # list of (...,) tensors
+    embeddings = [coord[..., None] * scale / dim_t for coord in coords]  # each (..., num_pos_feats)
+    embeddings = [
+        torch.stack((e[..., 0::2].sin(), e[..., 1::2].cos()), dim=-1).flatten(-2) for e in embeddings
+    ]  # each (..., num_pos_feats)
+
+    if len(embeddings) >= 2:
+        embeddings[0], embeddings[1] = embeddings[1], embeddings[0]
+
+    return torch.cat(embeddings, dim=-1).to(pos_tensor.dtype)
+
+
 @use_kernel_forward_from_hub("MultiScaleDeformableAttention")
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.MultiScaleDeformableAttention
 class MultiScaleDeformableAttention(nn.Module):
@@ -823,32 +860,26 @@ class GroundingDinoBiMultiHeadAttention(nn.Module):
         return (vision_attn_output, vision_attn_weights), (text_attn_output, text_attn_weights)
 
 
-# Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->GroundingDino
+# Copied from transformers.models.swin.modular_swin.SwinDropPath with SwinDropPath->GroundingDinoDropPath
 class GroundingDinoDropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
+    """Stochastic depth (DropPath) per sample, for residual blocks.
 
-    def __init__(self, drop_prob: float | None = None) -> None:
+    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
+    <https://arxiv.org/abs/1603.09382>`_.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor = torch.floor(random_tensor + keep_prob)
+        return hidden_states.div(keep_prob) * random_tensor
 
     def extra_repr(self) -> str:
         return f"p={self.drop_prob}"
@@ -1001,43 +1032,6 @@ class GroundingDinoDeformableLayer(nn.Module):
         return hidden_states, attn_weights
 
 
-# Based on https://github.com/IDEA-Research/GroundingDINO/blob/2b62f419c292ca9c518daae55512fabc3fead4a4/groundingdino/models/GroundingDINO/utils.py#L24
-def get_sine_pos_embed(
-    pos_tensor: torch.Tensor, num_pos_feats: int = 128, temperature: int = 10000, exchange_xy: bool = True
-) -> Tensor:
-    """
-    Generate sine position embeddings from a position tensor.
-
-    Args:
-        pos_tensor (torch.Tensor):
-            Tensor containing positions. Shape: [..., n].
-        num_pos_feats (`int`, *optional*, defaults to 128):
-            Projected shape for each float in the tensor.
-        temperature (`int`, *optional*, defaults to 10000):
-            Temperature in the sine/cosine function.
-        exchange_xy (`bool`, *optional*, defaults to `True`):
-            Exchange pos x and pos y. For example, input tensor is [x,y], the results will be [pos(y), pos(x)].
-
-    Returns:
-        position_embeddings (torch.Tensor): shape: [..., n * hidden_size].
-    """
-    scale = 2 * math.pi
-    dim_t = torch.arange(num_pos_feats, dtype=torch.float32, device=pos_tensor.device)
-    dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats)
-
-    def sine_func(x: torch.Tensor):
-        sin_x = x * scale / dim_t
-        sin_x = torch.stack((sin_x[..., 0::2].sin(), sin_x[..., 1::2].cos()), dim=3).flatten(2)
-        return sin_x
-
-    pos_tensor = pos_tensor.split([1] * pos_tensor.shape[-1], dim=-1)
-    position_embeddings = [sine_func(x) for x in pos_tensor]
-    if exchange_xy:
-        position_embeddings[0], position_embeddings[1] = position_embeddings[1], position_embeddings[0]
-    position_embeddings = torch.cat(position_embeddings, dim=-1)
-    return position_embeddings
-
-
 class GroundingDinoEncoderLayer(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
@@ -1060,12 +1054,12 @@ class GroundingDinoEncoderLayer(nn.Module):
             text_position_embedding = text_position_embedding.float()
             text_position_embedding = text_position_embedding.unsqueeze(0).unsqueeze(-1)
             text_position_embedding = text_position_embedding.repeat(batch_size, 1, 1)
-            text_position_embedding = get_sine_pos_embed(
-                text_position_embedding, num_pos_feats=self.d_model, exchange_xy=False
+            text_position_embedding = encode_sinusoidal_position_embedding(
+                text_position_embedding, num_pos_feats=self.d_model
             )
         if text_position_ids is not None:
-            text_position_embedding = get_sine_pos_embed(
-                text_position_ids[..., None], num_pos_feats=self.d_model, exchange_xy=False
+            text_position_embedding = encode_sinusoidal_position_embedding(
+                text_position_ids[..., None], num_pos_feats=self.d_model
             )
 
         return text_position_embedding
@@ -1710,7 +1704,9 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
                 reference_points_input = reference_points[:, :, None] * valid_ratios[:, None]
             else:
                 raise ValueError("Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
-            query_pos = get_sine_pos_embed(reference_points_input[:, :, 0, :], num_pos_feats=self.config.d_model // 2)
+            query_pos = encode_sinusoidal_position_embedding(
+                reference_points_input[:, :, 0, :], num_pos_feats=self.config.d_model // 2
+            )
             query_pos = self.reference_points_head(query_pos)
 
             # In original implementation they apply layer norm before outputting intermediate hidden states
@@ -2397,6 +2393,11 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         r"bbox_embed.(?![0])\d+": "bbox_embed.0",
         "model.decoder.bbox_embed": "bbox_embed",
     }
+    _keys_to_ignore_on_load_unexpected = [
+        r".*attention\.self\.relative_position_index",
+        r".*attention\.relative_position_bias\.relative_position_index",
+    ]
+    _keys_to_ignore_on_load_missing = [r".*swin.layernorm.*"]
 
     def __init__(self, config: GroundingDinoConfig):
         super().__init__(config)
