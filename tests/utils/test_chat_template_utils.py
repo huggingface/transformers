@@ -18,7 +18,67 @@ from typing import Literal
 from transformers.utils import DocstringParsingException, TypeHintParsingException, get_json_schema
 
 
-class JsonSchemaGeneratorTest(unittest.TestCase):
+class ChatTemplateUtilsTest(unittest.TestCase):
+    def test_render_jinja_template_continue_final_message(self):
+        from transformers.utils.chat_template_utils import render_jinja_template
+
+        chat_template = (
+            "{% for message in messages %}"
+            "{{ '<|im_start|>' + message['role'] + '\\n' }}"
+            "{% if message['reasoning_content'] is defined %}"
+            "{{ 'Thought: ' + message['reasoning_content'] + '\\n' }}"
+            "{% endif %}"
+            "{{ message['content'] + '<|im_end|>\\n' }}"
+            "{% endfor %}"
+        )
+        messages = [
+            {"role": "user", "content": "Hello!"},
+            {
+                "role": "assistant",
+                "reasoning_content": "The user said hello. I should respond.",
+                "content": "Hi there!",
+            },
+        ]
+
+        # Test continue_final_message=True (defaults to "content")
+        rendered, _ = render_jinja_template(
+            conversations=[messages], chat_template=chat_template, continue_final_message=True
+        )
+        self.assertTrue(rendered[0].endswith("Hi there!"))
+        self.assertNotIn("<|im_end|>", rendered[0].split("assistant\n")[-1])
+
+        # Test continue_final_message="reasoning_content"
+        # This also verifies that everything after reasoning_content (like content and <|im_end|>) is stripped
+        rendered, _ = render_jinja_template(
+            conversations=[messages], chat_template=chat_template, continue_final_message="reasoning_content"
+        )
+        self.assertTrue(rendered[0].endswith("Thought: The user said hello. I should respond."))
+        self.assertNotIn("Hi there!", rendered[0])
+        # We only check the assistant part of the message to avoid matching the user message's end token
+        self.assertNotIn("<|im_end|>", rendered[0].split("assistant\n")[-1])
+
+    def test_render_jinja_template_continue_errors(self):
+        from transformers.utils.chat_template_utils import render_jinja_template
+
+        chat_template = "{% for message in messages %}{{ message['content'] + '<|im_end|>\\n' }}{% endfor %}"
+        messages = [{"role": "user", "content": "Hello!"}]
+
+        # Error: field not in template (but in message)
+        with self.assertRaisesRegex(ValueError, "not an accepted field in the chat_template"):
+            render_jinja_template(
+                conversations=[messages],
+                chat_template=chat_template,
+                continue_final_message="role",
+            )
+
+        # Error: field not in message
+        with self.assertRaisesRegex(ValueError, 'final message has no "reasoning_content" to continue'):
+            render_jinja_template(
+                conversations=[messages],
+                chat_template="{{ messages[0].reasoning_content }}",
+                continue_final_message="reasoning_content",
+            )
+
     def test_simple_function(self):
         def fn(x: int):
             """
