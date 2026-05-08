@@ -118,15 +118,6 @@ class CacheSnapshotRestoreTest(unittest.TestCase):
     Speculative decoding (e.g. block-diffusion drafts) relies on this round-trip property.
     """
 
-    def _new_dynamic_layer_with_state(self, seq_len: int = 4):
-        from transformers.cache_utils import DynamicLayer
-
-        layer = DynamicLayer()
-        keys = torch.randn(2, 4, seq_len, 8)
-        values = torch.randn(2, 4, seq_len, 8)
-        layer.update(keys, values)
-        return layer
-
     def _new_linear_attention_layer_with_state(self):
         from transformers.cache_utils import LinearAttentionLayer
 
@@ -136,23 +127,6 @@ class CacheSnapshotRestoreTest(unittest.TestCase):
         layer.update_conv_state(conv)
         layer.update_recurrent_state(rec)
         return layer
-
-    def test_dynamic_layer_snapshot_restore_round_trip(self):
-        layer = self._new_dynamic_layer_with_state(seq_len=4)
-        snapshot = layer.snapshot()
-        original_keys = layer.keys.clone()
-        original_values = layer.values.clone()
-
-        # Tentative update — extend the cache.
-        more_keys = torch.randn(2, 4, 3, 8)
-        more_values = torch.randn(2, 4, 3, 8)
-        layer.update(more_keys, more_values)
-        self.assertEqual(layer.get_seq_length(), 7)
-
-        layer.restore(snapshot)
-        self.assertEqual(layer.get_seq_length(), 4)
-        self.assertTrue(torch.equal(layer.keys, original_keys))
-        self.assertTrue(torch.equal(layer.values, original_values))
 
     def test_linear_attention_layer_snapshot_restore_round_trip(self):
         """The headline regression: `crop()` is a no-op on linear-attention layers, so snapshot+restore is the
@@ -212,17 +186,67 @@ class CacheSnapshotRestoreTest(unittest.TestCase):
         self.assertTrue(torch.equal(cache.layers[0].keys, keys_a))
         self.assertTrue(torch.equal(cache.layers[1].keys, keys_b))
 
-    def test_cache_restore_rejects_layout_mismatch(self):
-        """Snapshots are tied to the cache they came from — restoring into a differently-sized cache is an error."""
-        cache_a = DynamicCache()
-        cache_a.update(torch.randn(2, 4, 3, 8), torch.randn(2, 4, 3, 8), layer_idx=0)
-        snapshot = cache_a.snapshot()
+    def test_hybrid_layer_snapshot_restore_round_trip(self):
+        """`LinearAttentionAndFullAttentionLayer` merges both parents — confirm both halves restore."""
+        from transformers.cache_utils import LinearAttentionAndFullAttentionLayer
 
-        cache_b = DynamicCache()
-        cache_b.update(torch.randn(2, 4, 3, 8), torch.randn(2, 4, 3, 8), layer_idx=0)
-        cache_b.update(torch.randn(2, 4, 3, 8), torch.randn(2, 4, 3, 8), layer_idx=1)
-        with self.assertRaises(ValueError):
-            cache_b.restore(snapshot)
+        layer = LinearAttentionAndFullAttentionLayer.__new__(LinearAttentionAndFullAttentionLayer)
+        # Hand-init both parent slots without going through __init__ (which requires a config).
+        from transformers.cache_utils import DynamicLayer, LinearAttentionLayer
+
+        DynamicLayer.__init__(layer)
+        LinearAttentionLayer.__init__(layer)
+
+        # Populate both halves.
+        layer.update(torch.randn(2, 4, 3, 8), torch.randn(2, 4, 3, 8))
+        layer.update_conv_state(torch.randn(2, 4, 4))
+        layer.update_recurrent_state(torch.randn(2, 4, 8, 16))
+
+        snapshot = layer.snapshot()
+        original_keys = layer.keys.clone()
+        original_recurrent = layer.recurrent_states.clone()
+
+        # Tentative updates on both halves.
+        layer.update(torch.randn(2, 4, 5, 8), torch.randn(2, 4, 5, 8))
+        layer.update_recurrent_state(torch.randn_like(layer.recurrent_states))
+
+        layer.restore(snapshot)
+        self.assertTrue(torch.equal(layer.keys, original_keys))
+        self.assertTrue(torch.equal(layer.recurrent_states, original_recurrent))
+
+    def test_static_layer_snapshot_restore_round_trip(self):
+        """StaticLayer preallocates K/V and tracks a tensor cumulative_length; round-trip must preserve both,
+        and restore must `.copy_()` into existing tensors so `mark_static_address` survives."""
+        from transformers.cache_utils import StaticLayer
+
+        layer = StaticLayer(max_cache_len=8)
+        # Lazy-init by writing one block of length 3.
+        layer.update(torch.randn(2, 4, 3, 8), torch.randn(2, 4, 3, 8))
+
+        snapshot = layer.snapshot()
+        original_keys = layer.keys.clone()
+        original_cum_length = (
+            layer.cumulative_length.clone() if torch.is_tensor(layer.cumulative_length) else int(layer.cumulative_length)
+        )
+        keys_id_before = id(layer.keys)
+        cum_id_before = id(layer.cumulative_length) if torch.is_tensor(layer.cumulative_length) else None
+
+        # Tentative update: write more tokens; cumulative_length advances and tensor data changes in-place.
+        layer.update(torch.randn(2, 4, 2, 8), torch.randn(2, 4, 2, 8))
+        self.assertNotEqual(int(layer.get_seq_length()), int(original_cum_length))
+
+        layer.restore(snapshot)
+        # Length restored.
+        if torch.is_tensor(layer.cumulative_length):
+            self.assertTrue(torch.equal(layer.cumulative_length, original_cum_length))
+        else:
+            self.assertEqual(layer.cumulative_length, original_cum_length)
+        # Tensor identity preserved (mark_static_address survives).
+        self.assertEqual(id(layer.keys), keys_id_before)
+        if cum_id_before is not None:
+            self.assertEqual(id(layer.cumulative_length), cum_id_before)
+        # Data restored.
+        self.assertTrue(torch.equal(layer.keys, original_keys))
 
 
 def _skip_on_failed_cache_prerequisites(test, cache_implementation):

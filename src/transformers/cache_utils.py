@@ -412,6 +412,56 @@ class StaticLayer(CacheLayerMixin):
         """Return the maximum cache shape of the cache"""
         return self.max_cache_len
 
+    def snapshot(self) -> dict:
+        """
+        Return an opaque snapshot of this layer's state for use with `restore()`.
+
+        Static caches preallocate `keys`/`values` and update them in-place, with `mark_static_address`
+        applied so they can be captured by cudagraphs. Both the K/V tensors and `cumulative_length` (also a
+        static-address tensor) are copied so the snapshot is independent of subsequent in-place updates.
+        """
+        return {
+            "is_initialized": self.is_initialized,
+            "keys": self.keys.clone() if self.is_initialized and self.keys is not None else None,
+            "values": self.values.clone() if self.is_initialized and self.values is not None else None,
+            "cumulative_length": (
+                self.cumulative_length.clone() if torch.is_tensor(self.cumulative_length) else int(self.cumulative_length)
+            ),
+        }
+
+    def restore(self, snapshot: dict) -> None:
+        """Restore this layer to the state captured by a previous `snapshot()` call.
+
+        Uses `.copy_()` into the existing `keys` / `values` / `cumulative_length` tensors so the static
+        addresses set by `mark_static_address` survive the rollback. Falls back to clone-assign for the rare
+        case where the layer was uninitialized at snapshot time but was re-initialized between calls.
+        """
+        was_initialized = self.is_initialized
+        self.is_initialized = bool(snapshot["is_initialized"])
+
+        if snapshot["keys"] is None:
+            self.keys = None
+        elif was_initialized and self.keys is not None and self.keys.shape == snapshot["keys"].shape:
+            self.keys.copy_(snapshot["keys"])
+        else:
+            self.keys = snapshot["keys"].clone()
+
+        if snapshot["values"] is None:
+            self.values = None
+        elif was_initialized and self.values is not None and self.values.shape == snapshot["values"].shape:
+            self.values.copy_(snapshot["values"])
+        else:
+            self.values = snapshot["values"].clone()
+
+        snap_len = snapshot["cumulative_length"]
+        if torch.is_tensor(self.cumulative_length) and torch.is_tensor(snap_len):
+            self.cumulative_length.copy_(snap_len)
+        elif torch.is_tensor(snap_len):
+            self.cumulative_length = snap_len.clone()
+        else:
+            # Pre-init: cumulative_length is the freshly-constructed tensor on CPU; just reset.
+            self.cumulative_length = torch.tensor([int(snap_len)], dtype=int)
+
 
 class StaticSlidingWindowLayer(StaticLayer):
     """
@@ -538,6 +588,15 @@ class StaticSlidingWindowLayer(StaticLayer):
     def reset(self):
         super().reset()
         self.cumulative_length_int = 0
+
+    def snapshot(self) -> dict:
+        snap = super().snapshot()
+        snap["cumulative_length_int"] = self.cumulative_length_int
+        return snap
+
+    def restore(self, snapshot: dict) -> None:
+        super().restore(snapshot)
+        self.cumulative_length_int = int(snapshot["cumulative_length_int"])
 
 
 class QuantizedLayer(DynamicLayer):
