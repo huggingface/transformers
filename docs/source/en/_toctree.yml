@@ -185,6 +185,8 @@
       title: Hyperparameter search
     - local: trainer_recipes
       title: Trainer features
+    - local: mup
+      title: μP (Maximal Update Parametrization)
     title: Customization
   - local: peft
     title: Parameter-efficient fine-tuning

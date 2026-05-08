@@ -185,6 +185,13 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             the feed forward layer is not chunked. A chunk size of n means that the feed forward layer processes `n` <
             sequence_length embeddings at a time. For more information on feed forward chunking, see [How does Feed
             Forward Chunking work?](../glossary.html#feed-forward-chunking).
+        mup (`bool`, *optional*, defaults to `False`):
+            Whether to use Maximal Update Parametrization (μP). When `True`, [`PreTrainedModel`] rewrites the output
+            projection and the attention scale, and rescales hidden weight initialization, so that optimal
+            hyperparameters tuned at width `mup_base_width` transfer to the current width. See
+            [`~integrations.mup`] and the [Tensor Programs V paper](https://hf.co/papers/2203.03466).
+        mup_base_width (`int`, *optional*):
+            Hidden size of the base/proxy model that hyperparameters were tuned on. Required when `mup=True`.
 
         > Parameters for fine-tuning tasks
 
@@ -234,6 +241,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     dtype: Union[str, "torch.dtype"] | None = None
     chunk_size_feed_forward: int = 0
     is_encoder_decoder: bool = False
+    mup: bool = False
+    mup_base_width: int | None = None
 
     # Fine-tuning task arguments
     id2label: dict[int, str] | dict[str, str] | None = None

@@ -137,6 +137,11 @@ _import_structure = {
         "replace_with_mxfp4_linear",
         "swizzle_mxfp4",
     ],
+    "mup": [
+        "MuReadout",
+        "build_mup_param_groups",
+        "coord_check",
+    ],
     "neftune": [
         "activate_neftune",
         "deactivate_neftune",
@@ -282,6 +287,7 @@ if TYPE_CHECKING:
         grouped_mm_experts_forward,
         use_experts_implementation,
     )
+    from .mup import MuReadout, build_mup_param_groups, coord_check
     from .mxfp4 import (
         Mxfp4GptOssExperts,
         dequantize,

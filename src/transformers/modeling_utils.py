@@ -17,6 +17,7 @@ import copy
 import functools
 import inspect
 import json
+import math
 import os
 import re
 import sys
@@ -1391,6 +1392,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if no_split := getattr(module, "_no_split_modules", None):
                 self._no_split_modules.update(no_split)
 
+        # Apply Maximal Update Parametrization (μP) architectural changes before tying
+        # weights and initializing them, so that the new modules participate normally.
+        if self.config.mup:
+            self._mup_rewrite_architecture()
+
         # Maybe initialize the weights and tie the keys
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
@@ -1400,6 +1406,33 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self._named_pretrained_submodules: list[tuple[str, PreTrainedModel]] = [
             (name, module) for name, module in self.named_modules() if isinstance(module, PreTrainedModel)
         ]
+
+    def _mup_rewrite_architecture(self):
+        """
+        Apply the architectural changes required by Maximal Update Parametrization (μP), in place. This method is
+        idempotent: it can be called multiple times (e.g. on nested submodels) and only the first call mutates
+        the model.
+
+        Concretely, it replaces the model's output projection with a [`~integrations.MuReadout`] of the same
+        shape, and rewrites the attention scale from `1/sqrt(d_head)` to `1/d_head` on every attention module that
+        follows the standard convention of exposing `module.scaling` and `module.head_dim`. The hidden-weight
+        initialization rescale is applied separately, in [`_initialize_weights`].
+        """
+        from .integrations.mup import MuReadout
+
+        width_mult = self.config.hidden_size / self.config.mup_base_width
+        out = self.get_output_embeddings()
+        if isinstance(out, nn.Linear) and not isinstance(out, MuReadout):
+            new = MuReadout(out.in_features, out.out_features, bias=out.bias is not None, width_mult=width_mult)
+            new.to(device=out.weight.device, dtype=out.weight.dtype)
+            self.set_output_embeddings(new)
+
+        for module in self.modules():
+            if getattr(module, "_mup_scaling_patched", False):
+                continue
+            if hasattr(module, "scaling") and hasattr(module, "head_dim"):
+                module.scaling = module.scaling / (module.head_dim**0.5)
+                module._mup_scaling_patched = True
 
     @property
     def tp_plan(self) -> dict[str, str]:
@@ -2439,6 +2472,20 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return
 
         self._init_weights(module)
+        # Rescale hidden weights by 1/sqrt(width_mult) under μP. The `_is_hf_initialized` guard on the weight
+        # ensures we skip weights that were already loaded from a state dict — same mechanism as the standard
+        # init helpers in `transformers.initialization`.
+        if self.config.mup:
+            from .integrations.mup import MuReadout
+            from .pytorch_utils import Conv1D
+
+            if (
+                isinstance(module, (nn.Linear, Conv1D))
+                and not isinstance(module, MuReadout)
+                and not getattr(module.weight, "_is_hf_initialized", False)
+            ):
+                width_mult = self.config.hidden_size / self.config.mup_base_width
+                module.weight.data.mul_(1.0 / math.sqrt(width_mult))
         module._is_hf_initialized = True
 
     @torch.no_grad()
