@@ -2075,6 +2075,9 @@ class Gemma4MultimodalEmbedder(nn.Module):
 def get_block_sequence_ids_for_mask(
     mm_token_type_ids: torch.Tensor, device: torch.device | None = None
 ) -> torch.Tensor:
+    if device is not None:
+        mm_token_type_ids = mm_token_type_ids.to(device)
+
     is_vision = (mm_token_type_ids == 1) | (mm_token_type_ids == 2)
     is_prev_vision = torch.roll(is_vision, shifts=1, dims=-1)
     is_prev_vision[..., 0] = False
@@ -2231,21 +2234,8 @@ class Gemma4Model(Gemma4PreTrainedModel):
         # Replace image id with PAD if the image token if OOV, to avoid index-errors
         llm_input_ids = None
         if inputs_embeds is None:
-            inputs_device = self.get_input_embeddings().weight.device
-            multimodal_mask = multimodal_mask.to(inputs_device)
-            llm_input_ids = input_ids.to(inputs_device).clone()
-            llm_input_ids[multimodal_mask] = self.config.text_config.pad_token_id
+            llm_input_ids = input_ids.clone()
             inputs_embeds = self.get_input_embeddings()(llm_input_ids)
-        else:
-            multimodal_mask = multimodal_mask.to(inputs_embeds.device)
-
-        target_device = inputs_embeds.device
-        if attention_mask is not None and not isinstance(attention_mask, dict):
-            attention_mask = attention_mask.to(target_device)
-        if mm_token_type_ids is not None:
-            mm_token_type_ids = mm_token_type_ids.to(target_device)
-        if position_ids is not None:
-            position_ids = position_ids.to(target_device)
 
         if self.config.get_text_config().hidden_size_per_layer_input:
             pad_embedding = self.language_model.embed_tokens.weight[self.config.text_config.pad_token_id, :]
@@ -2296,7 +2286,7 @@ class Gemma4Model(Gemma4PreTrainedModel):
         if input_features is not None and input_features_mask is not None:
             audio_output = self.get_audio_features(input_features, input_features_mask, return_dict=True)
             audio_features = audio_output.pooler_output
-            audio_mask_from_encoder = audio_output.attention_mask  # True = valid
+            audio_mask_from_encoder = audio_output.attention_mask.to(audio_features.device)  # True = valid
 
             # Strip padding tokens: only keep real (non-padding) audio soft tokens.
             # audio_mask_from_encoder is True for valid positions, False for padding tokens.
@@ -2335,7 +2325,9 @@ class Gemma4Model(Gemma4PreTrainedModel):
             if self.config.get_text_config().use_bidirectional_attention == "vision":
                 block_sequence_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
                 if mm_token_type_ids is not None:
-                    block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids)
+                    block_sequence_ids = get_block_sequence_ids_for_mask(
+                        mm_token_type_ids, device=inputs_embeds.device
+                    )
 
                 mask_kwargs["block_sequence_ids"] = block_sequence_ids
 
@@ -2391,7 +2383,6 @@ class Gemma4Model(Gemma4PreTrainedModel):
 
         audio_outputs = self.audio_tower(input_features, input_features_mask, return_dict=True, **kwargs)
         audio_outputs.pooler_output = self.embed_audio(inputs_embeds=audio_outputs.last_hidden_state)
-        audio_outputs.attention_mask = audio_outputs.attention_mask.to(audio_outputs.pooler_output.device)
 
         return audio_outputs
 
@@ -2603,7 +2594,7 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
         if getattr(config.get_text_config(), "use_bidirectional_attention", None) == "vision":
             block_sequence_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
             if mm_token_type_ids is not None:
-                block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids)
+                block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids, device=inputs_embeds.device)
 
             mask_kwargs["block_sequence_ids"] = block_sequence_ids
 
