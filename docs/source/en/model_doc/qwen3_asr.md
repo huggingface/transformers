@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 Qwen3 ASR is an automatic speech recognition model from Alibaba's Qwen team that combines a Whisper-style audio encoder with a Qwen3 language model decoder for speech-to-text transcription. The model supports automatic language detection and multilingual transcription.
 
-A forced aligner model is also included. It can be used the timestamp a provided transcript and its audio. It uses the same audio encoder model with a classification head that predicts a word's length. This model can be used with the transcript from any ASR model (see the example below with Parakeet CTC).
+A forced aligner model is also included. It can be used to timestamp a provided transcript and its audio. It uses the same audio encoder model with a classification head that predicts a word's length. This model can be used with the transcript from any ASR model (see the example below with Parakeet CTC).
 
 Available checkpoints:
 - [bezzam/Qwen3-ASR-1.7B](https://huggingface.co/bezzam/Qwen3-ASR-1.7B)
