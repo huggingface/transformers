@@ -81,7 +81,7 @@ _RESPONSE_TEMPLATE = {
             "open_pattern": r"<\|tool_call>call:(?P<name>\w+)",
             "close": "<tool_call|>",
             "repeats": True,
-            "content": "json-lax",
+            "content": "json",
             "content_args": {
                 "unquoted_keys": True,
                 "string_delims": [['<|"|>', '<|"|>']],
