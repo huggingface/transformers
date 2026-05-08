@@ -42,7 +42,6 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_deformable_detr import DeformableDetrConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the DEFORMABLE_DETR decoder. This class adds one attribute to BaseModelOutputWithCrossAttentions,
@@ -50,6 +49,7 @@ from .configuration_deformable_detr import DeformableDetrConfig
     gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
     """
 )
+@dataclass
 class DeformableDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     r"""
     cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
@@ -68,12 +68,12 @@ class DeformableDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     intermediate_reference_points: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the Deformable DETR encoder-decoder model.
     """
 )
+@dataclass
 class DeformableDetrModelOutput(ModelOutput):
     r"""
     init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
@@ -106,12 +106,12 @@ class DeformableDetrModelOutput(ModelOutput):
     enc_outputs_coord_logits: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`DeformableDetrForObjectDetection`].
     """
 )
+@dataclass
 class DeformableDetrObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
@@ -1328,10 +1328,12 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, DeformableDetrModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
         >>> model = DeformableDetrModel.from_pretrained("SenseTime/deformable-detr")
@@ -1592,10 +1594,12 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, DeformableDetrForObjectDetection
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io imoprt BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
         >>> model = DeformableDetrForObjectDetection.from_pretrained("SenseTime/deformable-detr")

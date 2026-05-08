@@ -510,7 +510,6 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
             init.copy_(module.n_points_scale, torch.tensor(n_points_scale, dtype=torch.float32))
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the RTDetrV2Decoder. This class adds two attributes to
@@ -519,6 +518,7 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
     - a stacked tensor of intermediate reference points.
     """
 )
+@dataclass
 class RTDetrV2DecoderOutput(ModelOutput):
     r"""
     intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -664,12 +664,12 @@ class RTDetrV2Decoder(RTDetrV2PreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the RT-DETR encoder-decoder model.
     """
 )
+@dataclass
 class RTDetrV2ModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
@@ -1472,10 +1472,12 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, RTDetrV2Model
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("PekingU/RTDetrV2_r50vd")
         >>> model = RTDetrV2Model.from_pretrained("PekingU/RTDetrV2_r50vd")
@@ -1663,12 +1665,12 @@ class RTDetrV2MLPPredictionHead(nn.Module):
         return x
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`RTDetrV2ForObjectDetection`].
     """
 )
+@dataclass
 class RTDetrV2ObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
@@ -1806,11 +1808,13 @@ class RTDetrV2ForObjectDetection(RTDetrV2PreTrainedModel):
         ```python
         >>> from transformers import RTDetrV2ImageProcessor, RTDetrV2ForObjectDetection
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> import torch
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = RTDetrV2ImageProcessor.from_pretrained("PekingU/RTDetrV2_r50vd")
         >>> model = RTDetrV2ForObjectDetection.from_pretrained("PekingU/RTDetrV2_r50vd")

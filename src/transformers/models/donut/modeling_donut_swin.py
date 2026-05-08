@@ -34,12 +34,12 @@ from .configuration_donut_swin import DonutSwinConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     DonutSwin encoder's outputs, with potential hidden states and attentions.
     """
 )
+@dataclass
 # Copied from transformers.models.swin.modeling_swin.SwinEncoderOutput with Swin->DonutSwin
 class DonutSwinEncoderOutput(ModelOutput):
     r"""
@@ -57,12 +57,12 @@ class DonutSwinEncoderOutput(ModelOutput):
     reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     DonutSwin model's outputs that also contains a pooling of the last hidden states.
     """
 )
+@dataclass
 # Copied from transformers.models.swin.modeling_swin.SwinModelOutput with Swin->DonutSwin
 class DonutSwinModelOutput(ModelOutput):
     r"""
@@ -83,12 +83,12 @@ class DonutSwinModelOutput(ModelOutput):
     reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     DonutSwin outputs for image classification.
     """
 )
+@dataclass
 # Copied from transformers.models.swin.modeling_swin.SwinImageClassifierOutput with Swin->DonutSwin
 class DonutSwinImageClassifierOutput(ModelOutput):
     r"""

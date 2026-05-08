@@ -42,8 +42,8 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_aimv2 import Aimv2Config, Aimv2TextConfig, Aimv2VisionConfig
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Aimv2Output(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):

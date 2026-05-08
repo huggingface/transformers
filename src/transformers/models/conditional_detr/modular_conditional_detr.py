@@ -874,10 +874,12 @@ class ConditionalDetrModel(DetrModel):
         ```python
         >>> from transformers import AutoImageProcessor, AutoModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/conditional-detr-resnet-50")
         >>> model = AutoModel.from_pretrained("microsoft/conditional-detr-resnet-50")
@@ -1015,10 +1017,12 @@ class ConditionalDetrForObjectDetection(DetrForObjectDetection):
         ```python
         >>> from transformers import AutoImageProcessor, AutoModelForObjectDetection
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/conditional-detr-resnet-50")
         >>> model = AutoModelForObjectDetection.from_pretrained("microsoft/conditional-detr-resnet-50")

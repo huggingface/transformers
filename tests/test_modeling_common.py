@@ -3125,11 +3125,12 @@ class ModelTesterMixin:
                 with tempfile.TemporaryDirectory() as tmp_dir:
                     model = model_class(config)
                     model.save_pretrained(tmp_dir)
+                    config.get_text_config().vocab_size = 10
                     # Fails when we don't set ignore_mismatched_sizes=True
                     with self.assertRaises(RuntimeError):
                         new_model = AutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
                     with self.assertRaises(RuntimeError):
-                        new_model_without_prefix = AutoModel.from_pretrained(tmp_dir, vocab_size=10)
+                        new_model_without_prefix = AutoModel.from_pretrained(tmp_dir, config=config)
 
                     logger = logging.get_logger("transformers.modeling_utils")
 
@@ -3145,7 +3146,7 @@ class ModelTesterMixin:
 
                     with CaptureLogger(logger) as cl:
                         new_model_without_prefix = AutoModel.from_pretrained(
-                            tmp_dir, vocab_size=10, ignore_mismatched_sizes=True
+                            tmp_dir, config=config, ignore_mismatched_sizes=True
                         )
                     self.assertIn("Reinit due to size mismatch", cl.out)
                     input_ids = ids_tensor((2, 8), 10)
@@ -3368,6 +3369,8 @@ class ModelTesterMixin:
                         return outputs.decoder_hidden_states[-1]
                     elif "logits_per_image" in outputs:
                         return outputs.logits_per_image
+                    elif "logits_per_video" in outputs:
+                        return outputs.logits_per_video
                     else:
                         return outputs.logits
 
@@ -4811,7 +4814,20 @@ class ModelTesterMixin:
                     # mess up the prefixes only if the loaded checkpoints were doing so as well)
                     if isinstance(conversion, PrefixChange):
                         continue
-                    for source_pattern in conversion.source_patterns:
+
+                    # Skip if the conversion is scoped to a sub-model, as the conversion is already tested on the sub-model.
+                    # Also, it might be the case that the original/weights model did not include the sub-model (e.g. LlavaForConditionalGeneration)
+                    if conversion.scope_prefix is not None:
+                        continue
+
+                    # Single pass over serialized_keys: the compiled regex already tests all
+                    # pattern branches at once, so one call per key is enough.
+                    matched_groups: set[str] = set()
+                    for key in serialized_keys:
+                        if (match := conversion._scoped_match(key)) is not None:
+                            matched_groups.add(match[2].lastgroup)  # "g0", "g1", ...
+
+                    for pattern_index, source_pattern in enumerate(conversion.source_patterns):
                         # Some patterns are written for gen-model only and won't be applied on base model
                         if "lm_head" in source_pattern and model_class not in [
                             *get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES),
@@ -4829,22 +4845,8 @@ class ModelTesterMixin:
                             if any(re.search(target_pattern_reversed, k) for k in model.all_tied_weights_keys.keys()):
                                 continue
 
-                            # Skip rules whose target doesn't appear in this model class (e.g. class-specific head rules),
-                            # but assert the rule still matches at least one class
-                            if not any(re.search(target_pattern_reversed, k) for k in model_keys):
-                                self.assertTrue(
-                                    any(
-                                        any(re.search(target_pattern_reversed, k) for k in keys)
-                                        for keys in all_classes_model_keys.values()
-                                    ),
-                                    f"`{target_pattern_reversed}` in `{conversion}` does not match any "
-                                    "model class — the rule may be dead code or incorrectly written.",
-                                )
-                                continue
-
-                        num_matches = sum(re.search(source_pattern, key) is not None for key in serialized_keys)
                         self.assertTrue(
-                            num_matches > 0,
+                            f"g{pattern_index}" in matched_groups,
                             f"`{source_pattern}` in `{conversion}` did not match any of the source keys. "
                             "This indicates whether that the pattern is not properly written, or that it could not be reversed correctly",
                         )

@@ -167,7 +167,7 @@ def convert_config(original_config: dict, max_position_embeddings: int = 262144,
         "original_max_position_embeddings": original_config["yarn"]["original_max_position_embeddings"],
         "beta_fast": float(original_config["yarn"]["beta"]),
         "beta_slow": float(original_config["yarn"]["alpha"]),
-        "mscale_all_dim": 1.0 if is_vision else 0.0,
+        "mscale_all_dim": 1.0 if not original_config["yarn"]["apply_scale"] else 0.0,
         "mscale": 1.0,
         "llama_4_scaling_beta": original_config.get("llama_4_scaling", {}).get("beta", 0),
     }

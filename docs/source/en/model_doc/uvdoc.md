@@ -17,9 +17,6 @@ rendered properly in your Markdown viewer.
 
 # UVDoc
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -34,10 +31,12 @@ The example below demonstrates how to rectify a document image with UVDoc using 
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModel
+
 
 model_path = "PaddlePaddle/UVDoc_safetensors"
 model = AutoModel.from_pretrained(

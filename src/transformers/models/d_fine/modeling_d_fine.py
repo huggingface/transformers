@@ -40,7 +40,6 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_d_fine import DFineConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the DFineDecoder. This class adds two attributes to
@@ -49,6 +48,7 @@ from .configuration_d_fine import DFineConfig
     - a stacked tensor of intermediate reference points.
     """
 )
+@dataclass
 class DFineDecoderOutput(ModelOutput):
     r"""
     intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -917,6 +917,7 @@ class DFinePreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         # initialize linear layer bias value according to a given probability value.
         if isinstance(module, (DFineForObjectDetection, DFineDecoder)):
             if module.class_embed is not None:
@@ -962,15 +963,6 @@ class DFinePreTrainedModel(PreTrainedModel):
             init.xavier_uniform_(module.enc_score_head.weight)
             init.constant_(module.enc_score_head.bias, bias)
 
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-            if getattr(module, "running_mean", None) is not None:
-                init.zeros_(module.running_mean)
-                init.ones_(module.running_var)
-                init.zeros_(module.num_batches_tracked)
-
         if isinstance(module, DFineGate):
             bias = float(-math.log((1 - 0.5) / 0.5))
             init.constant_(module.gate.bias, bias)
@@ -979,10 +971,6 @@ class DFinePreTrainedModel(PreTrainedModel):
         if isinstance(module, DFineLQE):
             init.constant_(module.reg_conf.layers[-1].bias, 0)
             init.constant_(module.reg_conf.layers[-1].weight, 0)
-
-        if isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
 
         if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
             init.xavier_uniform_(module.weight_embedding.weight)
@@ -1301,12 +1289,12 @@ class DFineDecoder(DFinePreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the RT-DETR encoder-decoder model.
     """
 )
+@dataclass
 class DFineModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
@@ -1686,10 +1674,12 @@ class DFineModel(DFinePreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, DFineModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("PekingU/DFine_r50vd")
         >>> model = DFineModel.from_pretrained("PekingU/DFine_r50vd")
@@ -1858,12 +1848,12 @@ class DFineModel(DFinePreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`DFineForObjectDetection`].
     """
 )
+@dataclass
 class DFineObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):

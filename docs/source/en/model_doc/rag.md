@@ -19,7 +19,6 @@ rendered properly in your Markdown viewer.
 
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
-    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
     <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
   </div>
 </div>
@@ -38,9 +37,9 @@ The examples below demonstrates how to generate text with [`AutoModel`].
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py
-import torch
-from transformers import RagTokenizer, RagRetriever, RagSequenceForGeneration
+```python
+from transformers import RagRetriever, RagSequenceForGeneration, RagTokenizer
+
 
 tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
 retriever = RagRetriever.from_pretrained(
@@ -50,10 +49,9 @@ retriever = RagRetriever.from_pretrained(
 model = RagSequenceForGeneration.from_pretrained(
     "facebook/rag-token-nq",
     retriever=retriever,
-    dtype="auto",
     attn_implementation="flash_attention_2",
-)
-input_dict = tokenizer.prepare_seq2seq_batch("How many people live in Paris?", return_tensors="pt")
+ device_map="auto")
+input_dict = tokenizer.prepare_seq2seq_batch("How many people live in Paris?", return_tensors="pt").to(model.device)
 generated = model.generate(input_ids=input_dict["input_ids"])
 print(tokenizer.batch_decode(generated, skip_special_tokens=True)[0])
 ```
@@ -64,9 +62,11 @@ print(tokenizer.batch_decode(generated, skip_special_tokens=True)[0])
 Quantization reduces memory by storing weights in lower precision. See the [Quantization](../quantization/overview) overview for supported backends.
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the weights to 4-bits.
 
-```py
+```python
 import torch
-from transformers import BitsAndBytesConfig, RagTokenizer, RagRetriever, RagSequenceForGeneration
+
+from transformers import BitsAndBytesConfig, RagRetriever, RagSequenceForGeneration, RagTokenizer
+
 
 bnb = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16)
 
@@ -81,7 +81,7 @@ model = RagSequenceForGeneration.from_pretrained(
     quantization_config=bnb,   # quantizes generator weights
     device_map="auto",
 )
-input_dict = tokenizer.prepare_seq2seq_batch("How many people live in Paris?", return_tensors="pt")
+input_dict = tokenizer.prepare_seq2seq_batch("How many people live in Paris?", return_tensors="pt").to(model.device)
 generated = model.generate(input_ids=input_dict["input_ids"])
 print(tokenizer.batch_decode(generated, skip_special_tokens=True)[0])
 ```

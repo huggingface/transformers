@@ -17,9 +17,6 @@ rendered properly in your Markdown viewer.
 
 # HerBERT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -48,20 +45,21 @@ This model was contributed by [rmroczkowski](https://huggingface.co/rmroczkowski
 ## Usage example
 
 ```python
->>> from transformers import HerbertTokenizer, RobertaModel
+from transformers import HerbertTokenizer, RobertaModel
 
->>> tokenizer = HerbertTokenizer.from_pretrained("allegro/herbert-klej-cased-tokenizer-v1")
->>> model = RobertaModel.from_pretrained("allegro/herbert-klej-cased-v1")
 
->>> encoded_input = tokenizer.encode("Kto ma lepszą sztukę, ma lepszy rząd – to jasne.", return_tensors="pt")
->>> outputs = model(encoded_input)
+tokenizer = HerbertTokenizer.from_pretrained("allegro/herbert-klej-cased-tokenizer-v1")
+model = RobertaModel.from_pretrained("allegro/herbert-klej-cased-v1", device_map="auto")
 
->>> # HerBERT can also be loaded using AutoTokenizer and AutoModel:
->>> import torch
->>> from transformers import AutoModel, AutoTokenizer
+encoded_input = tokenizer.encode("Kto ma lepszą sztukę, ma lepszy rząd – to jasne.", return_tensors="pt").to(model.device)
+outputs = model(encoded_input)
 
->>> tokenizer = AutoTokenizer.from_pretrained("allegro/herbert-klej-cased-tokenizer-v1")
->>> model = AutoModel.from_pretrained("allegro/herbert-klej-cased-v1")
+# HerBERT can also be loaded using AutoTokenizer and AutoModel:
+from transformers import AutoModel, AutoTokenizer
+
+
+tokenizer = AutoTokenizer.from_pretrained("allegro/herbert-klej-cased-tokenizer-v1")
+model = AutoModel.from_pretrained("allegro/herbert-klej-cased-v1", device_map="auto")
 ```
 
 <Tip>

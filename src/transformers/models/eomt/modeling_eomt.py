@@ -48,7 +48,6 @@ if is_accelerate_available():
     from accelerate.utils import reduce
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`EomtForUniversalSegmentationOutput`].
@@ -59,6 +58,7 @@ if is_accelerate_available():
     [`~EomtImageProcessor] for details regarding usage.
     """
 )
+@dataclass
 class EomtForUniversalSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.Tensor`, *optional*):

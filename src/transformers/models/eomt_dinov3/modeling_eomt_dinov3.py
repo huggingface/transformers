@@ -1018,7 +1018,6 @@ class EomtDinov3Loss(nn.Module):
         return num_masks
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`EomtDinov3ForUniversalSegmentationOutput`].
@@ -1029,6 +1028,7 @@ class EomtDinov3Loss(nn.Module):
     [`~EomtDinov3ImageProcessor] for details regarding usage.
     """
 )
+@dataclass
 class EomtDinov3ForUniversalSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.Tensor`, *optional*):

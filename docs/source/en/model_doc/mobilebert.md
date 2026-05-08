@@ -15,11 +15,6 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2020-04-06 and added to Hugging Face Transformers on 2020-11-16.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
 
 # MobileBERT
 
@@ -34,14 +29,13 @@ The example below demonstrates how to predict the `[MASK]` token with [`Pipeline
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="fill-mask",
     model="google/mobilebert-uncased",
-    dtype=torch.float16,
     device=0
 )
 pipeline("The capital of France is [MASK].")
@@ -50,16 +44,17 @@ pipeline("The capital of France is [MASK].")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForMaskedLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "google/mobilebert-uncased",
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "google/mobilebert-uncased",
-    dtype=torch.float16,
     device_map="auto",
 )
 inputs = tokenizer("The capital of France is [MASK].", return_tensors="pt").to(model.device)

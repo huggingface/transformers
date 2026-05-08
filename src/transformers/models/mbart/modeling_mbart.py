@@ -824,7 +824,7 @@ class MBartModel(MBartPreTrainedModel):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # different to other models, MBart automatically creates decoder_input_ids from
         # input_ids if no decoder_input_ids are provided

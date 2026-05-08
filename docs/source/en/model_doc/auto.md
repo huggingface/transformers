@@ -24,7 +24,7 @@ Instantiating one of [`AutoConfig`], [`AutoModel`], and
 [`AutoTokenizer`] will directly create a class of the relevant architecture. For instance
 
 ```python
-model = AutoModel.from_pretrained("google-bert/bert-base-cased")
+model = AutoModel.from_pretrained("google-bert/bert-base-cased", device_map="auto")
 ```
 
 will create a model that is an instance of [`BertModel`].
@@ -39,6 +39,7 @@ classes like this:
 
 ```python
 from transformers import AutoConfig, AutoModel
+
 
 AutoConfig.register("new-model", NewModelConfig)
 AutoModel.register(NewModelConfig, NewModel)

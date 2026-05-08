@@ -107,12 +107,12 @@ def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, labels)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for text model's outputs that also contains a pooling of the last hidden states.
     """
 )
+@dataclass
 # Copied from transformers.models.clip.modeling_clip.CLIPTextModelOutput with CLIP->Clap
 class ClapTextModelOutput(ModelOutput):
     r"""
@@ -126,12 +126,12 @@ class ClapTextModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     ClapAudio model output to mimic the output of the original implementation.
     """
 )
+@dataclass
 class ClapAudioModelOutput(ModelOutput):
     r"""
     audio_embeds (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
@@ -144,8 +144,8 @@ class ClapAudioModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 # Copied from transformers.models.clip.modeling_clip.CLIPOutput with CLIP->Clap, vision->audio, Vision->Audio, image->audio
 class ClapOutput(ModelOutput):
     r"""

@@ -31,7 +31,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
+from ...utils import TransformersKwargs, auto_docstring, torch_int
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..resnet.modeling_resnet import ResNetConvLayer
@@ -40,15 +40,12 @@ from ..vit.modeling_vit import ViTAttention, ViTEmbeddings, ViTLayer, ViTMLP, Vi
 from .configuration_beit import BeitConfig
 
 
-logger = logging.get_logger(__name__)
-
-
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`BeitModel`].
     """
 )
+@dataclass
 class BeitModelOutputWithPooling(BaseModelOutputWithPooling):
     r"""
     pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):

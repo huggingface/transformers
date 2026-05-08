@@ -45,12 +45,12 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_beit import BeitConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`BeitModel`].
     """
 )
+@dataclass
 class BeitModelOutputWithPooling(BaseModelOutputWithPooling):
     r"""
     pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
