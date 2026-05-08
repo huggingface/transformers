@@ -104,13 +104,7 @@ class Qwen3ASRConfig(PreTrainedConfig):
             self.audio_config["model_type"] = self.audio_config.get("model_type", "qwen3_asr_audio_encoder")
             self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
         elif self.audio_config is None:
-            self.audio_config = CONFIG_MAPPING["qwen3_asr_audio_encoder"](
-                encoder_layers=24,
-                encoder_attention_heads=16,
-                encoder_ffn_dim=4096,
-                d_model=1024,
-                output_dim=2048,
-            )
+            self.audio_config = CONFIG_MAPPING["qwen3_asr_audio_encoder"]()
 
         if isinstance(self.text_config, dict):
             self.text_config["model_type"] = self.text_config.get("model_type", "qwen3")
