@@ -86,6 +86,7 @@ class BeitModelTester:
         mask_ratio=0.5,
         use_relative_position_bias=False,
         use_shared_relative_position_bias=False,
+        add_fpn=True,
     ):
         self.parent = parent
         self.vocab_size = vocab_size
@@ -108,7 +109,7 @@ class BeitModelTester:
         self.out_indices = out_indices
         self.out_features = out_features
         self.num_labels = num_labels
-
+        self.add_fpn = add_fpn
         # in BeiT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
         self.seq_length = num_patches + 1
@@ -151,6 +152,7 @@ class BeitModelTester:
             attn_implementation=self.attn_implementation,
             use_relative_position_bias=self.use_relative_position_bias,
             use_shared_relative_position_bias=self.use_shared_relative_position_bias,
+            add_fpn=self.add_fpn,
         )
 
     def create_and_check_model(self, config, pixel_values, labels, pixel_labels):
@@ -161,6 +163,7 @@ class BeitModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_backbone(self, config, pixel_values, labels, pixel_labels):
+        config.add_fpn = False
         model = BeitBackbone(config=config)
         model.to(torch_device)
         model.eval()
@@ -565,4 +568,4 @@ class BeitBackboneTest(unittest.TestCase, BackboneTesterMixin):
     config_class = BeitConfig
 
     def setUp(self):
-        self.model_tester = BeitModelTester(self)
+        self.model_tester = BeitModelTester(self, add_fpn=False)

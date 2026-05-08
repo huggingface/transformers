@@ -50,11 +50,13 @@ class VivitTubeletEmbeddings(nn.Module):
         tubelet_size = config.tubelet_size
         image_size = config.image_size
         image_size = image_size if isinstance(image_size, Iterable) else (image_size, image_size)
+
         self.num_patches = (
             (config.num_frames // tubelet_size[0])
-            * (image_size[1] // tubelet_size[1])
-            * (image_size[2] // tubelet_size[2])
+            * (image_size[0] // tubelet_size[1])
+            * (image_size[1] // tubelet_size[2])
         )
+        self.image_size = image_size
         self.projection = nn.Conv3d(
             config.num_channels, config.hidden_size, kernel_size=tubelet_size, stride=tubelet_size
         )
