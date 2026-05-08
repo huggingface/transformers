@@ -20,6 +20,7 @@ from typing import Union
 
 import numpy as np
 
+from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import (
     MultiModalData,
@@ -30,10 +31,6 @@ from ...processing_utils import (
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available, logging, requires_backends
 from ...utils.import_utils import requires
-
-
-if is_torch_available():
-    from ...image_processing_utils import BatchFeature
 
 
 logger = logging.get_logger(__name__)
@@ -542,14 +539,11 @@ class FuyuProcessor(ProcessorMixin):
         self.batch_size = len(batch_images)
 
         # --- Use self.tokenizer to get the ids of special tokens to insert into image ids ---
-
-        tensor_batch_images = batch_images
-
         # --- Use self.image_processor again to obtain the full token ids and batch inputs ---
         all_encodings = []
 
         for prompt, scale_factor, image_unpadded_height, image_unpadded_width, tensor_batch_image in zip(
-            prompts, scale_factors, image_unpadded_heights, image_unpadded_widths, tensor_batch_images
+            prompts, scale_factors, image_unpadded_heights, image_unpadded_widths, batch_images
         ):
             sample_encoding = self.get_sample_encoding(
                 prompts=[prompt],
