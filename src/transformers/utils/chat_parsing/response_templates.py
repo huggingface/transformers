@@ -32,7 +32,6 @@ class ResponseTemplateField:
     repeats: bool
     optional: bool
     assemble: Any
-    coerce: str | None
 
 
 @dataclass
@@ -103,7 +102,6 @@ def load_response_template(spec: dict | ResponseTemplate) -> ResponseTemplate:
         "repeats",
         "optional",
         "assemble",
-        "coerce",
     }
     # Error checking / validation block
     if isinstance(spec, ResponseTemplate):
@@ -134,9 +132,6 @@ def load_response_template(spec: dict | ResponseTemplate) -> ResponseTemplate:
             raise ValueError(
                 f"Field '{name}': unknown content parser '{content}'. Available: {sorted(CONTENT_PARSERS)}"
             )
-        coerce = field.get("coerce")
-        if coerce is not None and coerce not in {"int", "float", "bool"}:
-            raise ValueError(f"Field '{name}': coerce must be int, float or bool.")
         open_re, open_lit = _compile_anchor(f"Field '{name}'", field, "open", "open_pattern")
         close_re, close_lit = _compile_anchor(f"Field '{name}'", field, "close", "close_pattern")
         if open_re is None:
@@ -152,7 +147,6 @@ def load_response_template(spec: dict | ResponseTemplate) -> ResponseTemplate:
             repeats=field.get("repeats", False),
             optional=field.get("optional", True),
             assemble=field.get("assemble"),
-            coerce=coerce,
         )
     if len(implicit_fields) > 1:
         raise ValueError(

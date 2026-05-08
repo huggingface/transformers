@@ -172,7 +172,6 @@ Next, there are the keys that define how the content of the field is parsed afte
 | `content`       | str              | Name of the content parser (see below). Defaults to `"text"`.                               |
 | `content_args`  | dict             | Parser-specific arguments.                                                                  |
 | `assemble`      | dict/list/string | Output template (see **Assemble**). Defaults to returning the parsed content directly.      |
-| `coerce`        | str              | `"int"`, `"float"`, or `"bool"`. Sets the return type for simple values                     |
 
 Let's go through these keys in order. The first (and most important) key is `content`. This indicates the content type
 of the field, which determines the parser that will be used to convert the raw text captured in the field to the final output.
@@ -180,21 +179,19 @@ of the field, which determines the parser that will be used to convert the raw t
 
 The available parsers are:
 
-(TODO Matt: Might merge `text` and `raw`, as well as merging `json` and `json-lax`, and just moving the details
-into `content_args`.)
+| Parser       | Produces      | Useful `content_args`                                                                          |
+|--------------|---------------|------------------------------------------------------------------------------------------------|
+| `text`       | string        | `strip` (default `true`) — set `false` for verbatim capture                                    |
+| `int`        | int           | `strip` (default `true`)                                                                       |
+| `float`      | float         | `strip` (default `true`)                                                                       |
+| `bool`       | bool          | `strip` (default `true`); accepts `"true"`/`"1"` (case-insensitive) as true                    |
+| `json`       | any           | `transform` (jmespath), `allow_non_json`, `unquoted_keys`, `string_delims: [[open, close],...]`|
+| `xml-inline` | dict          | `tag_pattern` (regex w/ named groups `key`/`value`), `value_parser`                            |
+| `kv-lines`   | dict          | `line_sep`, `kv_sep`, `value_parser`                                                           |
 
-| Parser       | Produces      | Useful `content_args`                                                              |
-|--------------|---------------|-------------------------------------------------------------------------------------|
-| `text`       | string        | `strip` (default `true`)                                                            |
-| `raw`        | string        | (identity)                                                                          |
-| `json`       | any           | `transform` (jmespath), `allow_non_json`                                            |
-| `json-lax`   | any           | `unquoted_keys`, `string_delims: [[open, close], ...]`, plus all `json` args        |
-| `xml-inline` | dict          | `tag_pattern` (regex w/ named groups `key`/`value`), `value_parser`                 |
-| `kv-lines`   | dict          | `line_sep`, `kv_sep`, `value_parser`                                                |
-
-`json-lax` is the escape hatch for models that emit JSON with cute quirks that completely break the standard parser,
-like unquoted keys or weird custom string delimiters. The model authors who are responsible for this being necessary
-know who they are and should feel an appropriate amount of shame.
+The `json` parser also accepts dialect arguments (`unquoted_keys`, `string_delims`) for models that emit JSON with cute
+quirks that completely break the standard parser. The model
+authors who are responsible for this being necessary know who they are and should feel an appropriate amount of shame.
 
 ### Assemble
 
