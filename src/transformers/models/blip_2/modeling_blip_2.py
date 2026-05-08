@@ -939,20 +939,26 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         )
 
         # `Blip2QFormerModel` is kept as fp32
+        original_dtype = query_embeds.dtype
         query_embeds = query_embeds.to(self.layernorm.weight.dtype)
         embedding_output = self.layernorm(query_embeds)
         embedding_output = self.dropout(embedding_output)
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=embedding_output.to(self.dtype),
+            input_embeds=embedding_output.to(original_dtype),
             attention_mask=attention_mask,
         )
+
+        # Qformer and latent query tokens are kept in fp32. We cast `encoder_hidden_states` if not fp32 already
+        if encoder_hidden_states is not None:
+            if encoder_hidden_states.dtype != query_embeds.dtype:
+                encoder_hidden_states = encoder_hidden_states.to(query_embeds.dtype)
 
         if encoder_attention_mask is not None:
             encoder_attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=embedding_output.to(self.dtype),
+                input_embeds=embedding_output.to(original_dtype),
                 attention_mask=encoder_attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
             )
