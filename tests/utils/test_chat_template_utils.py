@@ -611,3 +611,147 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             },
         }
         self.assertEqual(schema["function"], expected_schema)
+
+
+class ChatTemplateRenderTest(unittest.TestCase):
+    def setUp(self):
+        self.chat_template = (
+            "{% for message in messages %}"
+            "{{ '<|im_start|>' + message['role'] + '\\n' }}"
+            "{% if message['reasoning_content'] is defined %}"
+            "{{ 'Thought: ' + message['reasoning_content'] + '\\n' }}"
+            "{% endif %}"
+            "{{ message['content'] + '<|im_end|>\\n' }}"
+            "{% endfor %}"
+            "{% if add_generation_prompt %}"
+            "{{ '<|im_start|>assistant\\n' }}"
+            "{% endif %}"
+        )
+        self.messages = [
+            {"role": "user", "content": "Hello!"},
+            {"role": "assistant", "reasoning_content": "The user said hello. I should respond.", "content": "Hi there!"},
+        ]
+
+    def test_render_jinja_template_continue_final_message_true(self):
+        from transformers.utils.chat_template_utils import render_jinja_template
+
+        rendered, _ = render_jinja_template(
+            conversations=[self.messages],
+            chat_template=self.chat_template,
+            continue_final_message=True,
+        )
+        rendered = rendered[0]
+        self.assertIn("<|im_start|>assistant\nThought: The user said hello. I should respond.\nHi there!", rendered)
+        self.assertNotIn("<|im_end|>", rendered.split("assistant\n")[-1])
+
+    def test_render_jinja_template_continue_final_message_str(self):
+        from transformers.utils.chat_template_utils import render_jinja_template
+
+        messages_prefill_reasoning = [
+            {"role": "user", "content": "Hello!"},
+            {"role": "assistant", "reasoning_content": "The user said hello. ", "content": ""},
+        ]
+        rendered, _ = render_jinja_template(
+            conversations=[messages_prefill_reasoning],
+            chat_template=self.chat_template,
+            continue_final_message="reasoning_content",
+        )
+        rendered = rendered[0]
+        self.assertIn("Thought: The user said hello. ", rendered)
+        self.assertNotIn("Hi there!", rendered)
+        self.assertNotIn("<|im_end|>", rendered.split("assistant\n")[-1])
+
+    def test_render_jinja_template_error_field_not_in_template(self):
+        from transformers.utils.chat_template_utils import render_jinja_template
+
+        with self.assertRaisesRegex(ValueError, "not an accepted field in the chat_template"):
+            render_jinja_template(
+                conversations=[self.messages],
+                chat_template="{{ messages[0]['content'] }}",
+                continue_final_message="reasoning_content",
+            )
+
+    def test_render_jinja_template_error_field_not_in_message(self):
+        from transformers.utils.chat_template_utils import render_jinja_template
+
+        with self.assertRaisesRegex(ValueError, "final message has no \"other_field\" to continue"):
+            render_jinja_template(
+                conversations=[self.messages],
+                chat_template=self.chat_template,
+                continue_final_message="other_field",
+            )
+
+    def test_render_jinja_template_qwen_chatml_with_think(self):
+        from transformers.utils.chat_template_utils import render_jinja_template
+
+        qwen_template = (
+            "{% for message in messages %}"
+            "{{ '<|im_start|>' + message.role + '\\n' }}"
+            "{% if message.reasoning_content is defined %}"
+            "{{ '<think>\\n' + message.reasoning_content + '\\n</think>\\n' }}"
+            "{% endif %}"
+            "{{ message.content + '<|im_end|>\\n' }}"
+            "{% endfor %}"
+        )
+        messages = [{"role": "user", "content": "Hi"}, {"role": "assistant", "reasoning_content": "Thinking about hi", "content": "Hello!"}]
+
+        # Prefill reasoning
+        rendered, _ = render_jinja_template(
+            conversations=[messages],
+            chat_template=qwen_template,
+            continue_final_message="reasoning_content",
+        )
+        rendered = rendered[0]
+        self.assertIn("<|im_start|>assistant\n<think>\nThinking about hi", rendered)
+        self.assertNotIn("</think>", rendered)
+        self.assertNotIn("Hello!", rendered)
+
+    def test_render_jinja_template_harmony(self):
+        from transformers.utils.chat_template_utils import render_jinja_template
+
+        harmony_template = (
+            "{% for message in messages %}"
+            "{{ '<|start|>' + message.role + '<|message|>' }}"
+            "{% if message.thinking is defined %}"
+            "{{ '<|channel|>analysis<|message|>' + message.thinking + '<|end|>' }}"
+            "{% endif %}"
+            "{{ '<|channel|>final<|message|>' + message.content + '<|end|>' }}"
+            "{% endfor %}"
+        )
+        messages = [{"role": "user", "content": "Hi"}, {"role": "assistant", "thinking": "Let's say hi back", "content": "Hi!"}]
+
+        # Prefill thinking (analysis channel)
+        rendered, _ = render_jinja_template(
+            conversations=[messages],
+            chat_template=harmony_template,
+            continue_final_message="thinking",
+        )
+        rendered = rendered[0]
+        self.assertIn("<|start|>assistant<|message|><|channel|>analysis<|message|>Let's say hi back", rendered)
+        self.assertNotIn("<|end|>", rendered.split("assistant")[-1])
+        self.assertNotIn("final", rendered.split("assistant")[-1])
+
+    def test_render_jinja_template_gemma4(self):
+        from transformers.utils.chat_template_utils import render_jinja_template
+
+        gemma4_template = (
+            "{% for message in messages %}"
+            "{{ '<|turn>' + message.role + '\\n' }}"
+            "{% if message.thinking is defined %}"
+            "{{ '<|channel>thought\\n' + message.thinking + '\\n<channel|>\\n' }}"
+            "{% endif %}"
+            "{{ message.content + '<turn|>\\n' }}"
+            "{% endfor %}"
+        )
+        messages = [{"role": "user", "content": "Hi"}, {"role": "assistant", "thinking": "Thinking...", "content": "Hi!"}]
+
+        # Prefill thinking
+        rendered, _ = render_jinja_template(
+            conversations=[messages],
+            chat_template=gemma4_template,
+            continue_final_message="thinking",
+        )
+        rendered = rendered[0]
+        self.assertIn("<|turn>assistant\n<|channel>thought\nThinking...", rendered)
+        self.assertNotIn("<channel|>", rendered)
+        self.assertNotIn("Hi!", rendered)
