@@ -34,12 +34,17 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
+from ...modeling_layers import (
+    GenericForSequenceClassification,
+    GenericForTokenClassification,
+    GradientCheckpointingLayer,
+)
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
     ModelOutput,
+    SequenceClassifierOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -1200,12 +1205,12 @@ class Qwen3_5VisionModel(Qwen3_5PreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Llava outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class Qwen3_5ModelOutputWithPast(ModelOutput):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -1414,7 +1419,7 @@ class Qwen3_5Model(Qwen3_5PreTrainedModel):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Difference from Qwen2VL/Qwen2.5VL's get_rope_index:
-        - Since Qwen3.5 use timestamps to seperate videos, like <t1> <vision_start> <frame1> <vision_end> <t2> <vision_start> <frame2> <vision_end>, the video_grid_thw should also be split too.
+        - Since Qwen3.5 use timestamps to separate videos, like <t1> <vision_start> <frame1> <vision_end> <t2> <vision_start> <frame2> <vision_end>, the video_grid_thw should also be split too.
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1437,7 +1442,7 @@ class Qwen3_5Model(Qwen3_5PreTrainedModel):
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
 
-        # Separate video grid thw into multiple grids because timestamps are used to seperate videos.
+        # Separate video grid thw into multiple grids because timestamps are used to separate videos.
         if video_grid_thw is not None:
             video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
             video_grid_thw[:, 0] = 1
@@ -1785,16 +1790,16 @@ class Qwen3_5ForCausalLM(Qwen3_5PreTrainedModel, GenerationMixin):
         )
 
 
-class Qwen3_5ForSequenceClassification(GenericForSequenceClassification, Qwen3_5PreTrainedModel):
-    config: Qwen3_5TextConfig
+class Qwen3_5ForTokenClassification(GenericForTokenClassification, Qwen3_5PreTrainedModel):
+    config: Qwen3_5Config
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Qwen3_5 causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Qwen3_5CausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -2190,12 +2195,49 @@ class Qwen3_5ForConditionalGeneration(Qwen3_5PreTrainedModel, GenerationMixin):
         return input_ids, model_kwargs
 
 
+class Qwen3_5TextForSequenceClassification(GenericForSequenceClassification, Qwen3_5PreTrainedModel):
+    config: Qwen3_5TextConfig
+    input_modalities = ("text",)
+
+
+class Qwen3_5ForSequenceClassification(GenericForSequenceClassification, Qwen3_5PreTrainedModel):
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> SequenceClassifierOutputWithPast:
+        return super().forward(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            mm_token_type_ids=mm_token_type_ids,
+            **kwargs,
+        )
+
+
 __all__ = [
     "Qwen3_5VisionModel",
     "Qwen3_5TextModel",
     "Qwen3_5Model",
     "Qwen3_5ForCausalLM",
+    "Qwen3_5TextForSequenceClassification",
     "Qwen3_5ForSequenceClassification",
+    "Qwen3_5ForTokenClassification",
     "Qwen3_5ForConditionalGeneration",
     "Qwen3_5PreTrainedModel",
 ]

@@ -46,8 +46,8 @@ def hard_softmax(logits: torch.Tensor, dim: int):
     return ret
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class BaseModelOutputWithVisualIndicatorFeatures(BaseModelOutputWithPooling):
     r"""
     visual_indicator_features (`torch.FloatTensor` of shape `(batch_size, visual_indicator_size)`):

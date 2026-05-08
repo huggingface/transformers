@@ -347,7 +347,7 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
                 "in your DeepSpeed config or convert your checkpoint to the expected format first."
             )
 
-    from ..core_model_loading import WeightConverter, WeightRenaming, dot_natural_key, rename_source_key
+    from ..core_model_loading import WeightConverter, dot_natural_key, rename_source_key
 
     # Preserve metadata from the original state dict
     metadata = getattr(state_dict, "_metadata", None)
@@ -360,14 +360,15 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
     for key, param in model.state_dict().items():
         model_state_dict[key] = torch.empty(param.shape, dtype=param.dtype, device="meta")
 
-    renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
     converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
 
     # Fast path: if we only have simple renamings and no converters, we can skip the expensive collection logic
     if len(converters) == 0:
         new_state_dict = {}
         for original_key, tensor in state_dict.items():
-            renamed_key, _ = rename_source_key(original_key, renamings, [], prefix, model_state_dict)
+            renamed_key, _ = rename_source_key(
+                original_key, weight_mapping, prefix=prefix, meta_state_dict=model_state_dict
+            )
             if renamed_key in model_state_dict:
                 new_state_dict[renamed_key] = tensor
         # Attach metadata to the new state dict
@@ -386,7 +387,9 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
     sorted_keys = sorted(state_dict.keys(), key=lambda k: dot_natural_key(k))
     for original_key in sorted_keys:
         tensor = state_dict.pop(original_key)
-        renamed_key, source_pattern = rename_source_key(original_key, renamings, converters, prefix, model_state_dict)
+        renamed_key, source_pattern = rename_source_key(
+            original_key, weight_mapping, prefix=prefix, meta_state_dict=model_state_dict
+        )
 
         # Only process if the renamed key is in the model's state dict
         if renamed_key in model_state_dict:
