@@ -50,9 +50,6 @@ from ..auto import AutoModel
 from .configuration_gemma3 import Gemma3Config, Gemma3TextConfig
 
 
-logger = logging.get_logger(__name__)
-
-
 @auto_docstring(
     custom_intro="""
     Base class for Gemma3 outputs, with hidden states and attentions.
