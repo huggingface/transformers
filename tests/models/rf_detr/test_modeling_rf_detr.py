@@ -494,7 +494,7 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 ("cuda", (8, 0)): 21.911297,
-                ("xpu", None): 21.834640502929688,
+                ("xpu", None): 21.834641,
             }
         )
         expected_loss = torch.tensor(expectations.get_expectation()).to(torch_device)
