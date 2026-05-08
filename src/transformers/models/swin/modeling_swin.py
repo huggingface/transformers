@@ -1075,6 +1075,8 @@ class SwinForImageClassification(SwinPreTrainedModel):
     """
 )
 class SwinBackbone(BackboneMixin, SwinPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [r"swin.layernorm.*"]
+
     def __init__(self, config: SwinConfig):
         super().__init__(config)
 

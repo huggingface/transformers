@@ -2393,6 +2393,11 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         r"bbox_embed.(?![0])\d+": "bbox_embed.0",
         "model.decoder.bbox_embed": "bbox_embed",
     }
+    _keys_to_ignore_on_load_unexpected = [
+        r".*attention\.self\.relative_position_index",
+        r".*attention\.relative_position_bias\.relative_position_index",
+    ]
+    _keys_to_ignore_on_load_missing = [r".*swin.layernorm.*"]
 
     def __init__(self, config: GroundingDinoConfig):
         super().__init__(config)

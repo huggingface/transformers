@@ -131,7 +131,14 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"^fpn1\.1\.", "fpn.fpn1.normalization."),
             WeightRenaming(r"^fpn1\.3\.", "fpn.fpn1.conv_transpose2."),
             WeightRenaming(r"^fpn2\.0\.", "fpn.fpn2."),
-            WeightRenaming(r"^encoder\.", "beit."),
+            WeightRenaming(r"^encoder\.layer\.", "beit.encoder.layer."),
+            WeightRenaming(r"^embeddings\.", "beit.embeddings."),
+            WeightRenaming("attention.query", "q_proj"),
+            WeightRenaming("attention.key", "k_proj"),
+            WeightRenaming("attention.value", "v_proj"),
+            WeightRenaming("attention.output.dense", "attention.o_proj"),
+            WeightRenaming("intermediate.dense", "mlp.fc1"),
+            WeightRenaming("output.dense", "mlp.fc2"),
         ],
         "BeitForSemanticSegmentation": [
             WeightRenaming(r"(?<!psp_modules\.[0-9]\.1\.)bn\.", "normalization."),
@@ -183,6 +190,10 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("attention.output.dense", "attention.o_proj"),
             WeightRenaming("intermediate.dense", "mlp.fc1"),
             WeightRenaming("output.dense", "mlp.fc2"),
+        ],
+        "SwinBackbone": [
+            WeightRenaming(r"^encoder\.", "swin.encoder."),
+            WeightRenaming(r"^embeddings\.", "swin.embeddings."),
         ],
         "altclip": [
             WeightRenaming(source_patterns=r"layer\.", target_patterns="layers."),
