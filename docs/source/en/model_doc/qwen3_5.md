@@ -69,19 +69,24 @@ TODO
 [[autodoc]] Qwen3_5ForCausalLM
     - forward
 
+## Qwen3_5ForConditionalGeneration
+
+[[autodoc]] Qwen3_5ForConditionalGeneration
+    - forward
+
 ## Qwen3_5ForSequenceClassification
 
 [[autodoc]] Qwen3_5ForSequenceClassification
     - forward
 
+## Qwen3_5TextForSequenceClassification
+
+[[autodoc]] Qwen3_5TextForSequenceClassification
+    - forward
+
 ## Qwen3_5ForTokenClassification
 
 [[autodoc]] Qwen3_5ForTokenClassification
-    - forward
-
-## Qwen3_5ForConditionalGeneration
-
-[[autodoc]] Qwen3_5ForConditionalGeneration
     - forward
 
 ## Qwen3_5Tokenizer

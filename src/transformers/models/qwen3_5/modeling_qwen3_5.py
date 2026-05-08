@@ -44,6 +44,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
     ModelOutput,
+    SequenceClassifierOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -1782,12 +1783,8 @@ class Qwen3_5ForCausalLM(Qwen3_5PreTrainedModel, GenerationMixin):
         )
 
 
-class Qwen3_5ForSequenceClassification(GenericForSequenceClassification, Qwen3_5PreTrainedModel):
-    config: Qwen3_5TextConfig
-
-
 class Qwen3_5ForTokenClassification(GenericForTokenClassification, Qwen3_5PreTrainedModel):
-    config: Qwen3_5TextConfig
+    config: Qwen3_5Config
 
 
 @auto_docstring(
@@ -2191,11 +2188,47 @@ class Qwen3_5ForConditionalGeneration(Qwen3_5PreTrainedModel, GenerationMixin):
         return input_ids, model_kwargs
 
 
+class Qwen3_5TextForSequenceClassification(GenericForSequenceClassification, Qwen3_5PreTrainedModel):
+    config: Qwen3_5TextConfig
+    input_modalities = ("text",)
+
+
+class Qwen3_5ForSequenceClassification(GenericForSequenceClassification, Qwen3_5PreTrainedModel):
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> SequenceClassifierOutputWithPast:
+        return super().forward(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            mm_token_type_ids=mm_token_type_ids,
+            **kwargs,
+        )
+
+
 __all__ = [
     "Qwen3_5VisionModel",
     "Qwen3_5TextModel",
     "Qwen3_5Model",
     "Qwen3_5ForCausalLM",
+    "Qwen3_5TextForSequenceClassification",
     "Qwen3_5ForSequenceClassification",
     "Qwen3_5ForTokenClassification",
     "Qwen3_5ForConditionalGeneration",

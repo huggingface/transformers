@@ -50,6 +50,7 @@ if is_torch_available():
         Qwen3_5ForTokenClassification,
         Qwen3_5Model,
         Qwen3_5TextConfig,
+        Qwen3_5TextForSequenceClassification,
         Qwen3_5TextModel,
     )
 
@@ -58,8 +59,7 @@ class Qwen3_5TextModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Qwen3_5TextModel
         causal_lm_class = Qwen3_5ForCausalLM
-        sequence_classification_class = Qwen3_5ForSequenceClassification
-        token_classification_class = Qwen3_5ForTokenClassification
+        sequence_classification_class = Qwen3_5TextForSequenceClassification
 
     def __init__(self, parent):
         super().__init__(parent=parent)
@@ -338,6 +338,8 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         (
             Qwen3_5Model,
             Qwen3_5ForConditionalGeneration,
+            Qwen3_5ForSequenceClassification,
+            Qwen3_5ForTokenClassification,
         )
         if is_torch_available()
         else ()
