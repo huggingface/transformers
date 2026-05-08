@@ -47,6 +47,7 @@ if is_torch_available():
         Qwen3_5ForCausalLM,
         Qwen3_5ForConditionalGeneration,
         Qwen3_5ForSequenceClassification,
+        Qwen3_5ForTokenClassification,
         Qwen3_5Model,
         Qwen3_5TextConfig,
         Qwen3_5TextForSequenceClassification,
@@ -338,6 +339,7 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
             Qwen3_5Model,
             Qwen3_5ForConditionalGeneration,
             Qwen3_5ForSequenceClassification,
+            Qwen3_5ForTokenClassification,
         )
         if is_torch_available()
         else ()

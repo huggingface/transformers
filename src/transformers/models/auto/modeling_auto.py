@@ -1556,6 +1556,8 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("qwen2", "Qwen2ForTokenClassification"),
         ("qwen2_moe", "Qwen2MoeForTokenClassification"),
         ("qwen3", "Qwen3ForTokenClassification"),
+        ("qwen3_5", "Qwen3_5ForTokenClassification"),
+        ("qwen3_5_text", "Qwen3_5ForTokenClassification"),
         ("qwen3_moe", "Qwen3MoeForTokenClassification"),
         ("qwen3_next", "Qwen3NextForTokenClassification"),
         ("rembert", "RemBertForTokenClassification"),
