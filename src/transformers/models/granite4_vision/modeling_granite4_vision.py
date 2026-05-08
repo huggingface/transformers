@@ -197,10 +197,8 @@ class Granite4VisionWindowQFormerDownsampler(nn.Module):
         downsampled_side = num_windows * self.query_side
         downsampled_windowed = self._windowed_raster(downsampled, downsampled_side, self.query_side)
 
-        query_embeds = self.query.to(downsampled_windowed.device) + downsampled_windowed
-        encoder_embeds = self.dropout(
-            windowed_image_features + self.image_positions.to(windowed_image_features.device)
-        )
+        query_embeds = self.query + downsampled_windowed
+        encoder_embeds = self.dropout(windowed_image_features + self.image_positions)
         out_windowed = self.qformer(
             query_embeds=query_embeds,
             encoder_hidden_states=encoder_embeds,
