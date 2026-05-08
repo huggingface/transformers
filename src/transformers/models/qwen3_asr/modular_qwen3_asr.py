@@ -28,8 +28,8 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
-from ..qwen2_5_omni.configuration_qwen2_5_omni import Qwen2_5OmniAudioEncoderConfig
 from ..qwen2_audio.modeling_qwen2_audio import Qwen2AudioPreTrainedModel
+from ..qwen3_omni_moe.configuration_qwen3_omni_moe import Qwen3OmniMoeAudioEncoderConfig
 from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeAudioEncoder,
     SinusoidsPositionEmbedding,
@@ -40,7 +40,7 @@ from ..whisper.modeling_whisper import WhisperAttention, WhisperEncoderLayer
 
 @auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B")
 @strict
-class Qwen3ASREncoderConfig(Qwen2_5OmniAudioEncoderConfig):
+class Qwen3ASREncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
     r"""
     max_source_positions (`int`, *optional*, defaults to 1500):
         The maximum sequence length that this model might ever be used with.
@@ -57,15 +57,12 @@ class Qwen3ASREncoderConfig(Qwen2_5OmniAudioEncoderConfig):
     """
 
     model_type = "qwen3_asr_audio_encoder"
-
-    n_window: int = 50
-    n_window_infer: int = 800
-    downsample_hidden_size: int = 480
     encoder_layers: int = 24
     encoder_attention_heads: int = 16
     encoder_ffn_dim: int = 4096
     d_model: int = 1024
     attention_bias: bool = True
+    conv_chunksize = AttributeError()
 
 
 @auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B")
