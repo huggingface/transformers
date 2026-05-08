@@ -4580,11 +4580,20 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         def attach_hidden_kernels(module):
             for name, fn in getattr(module, "_hidden_kernels", {}).items():
                 if name not in dict(module.named_children()):
+                    if not isinstance(fn, nn.Module):
+                        raise ValueError(
+                            f"Attempted to register a kernel for {name}, but it was not a `torch.nn.Module`. "
+                            "This means the underlying function needs to be decorated with `@use_kernel_func_from_hub`. "
+                            "Please submit and issue to the transformers repo: `https://github.com/huggingface/transformers/issues`."
+                        )
                     module.register_module(name, fn)
 
         def detach_hidden_kernels(module):
             for name in getattr(module, "_hidden_kernels", {}):
-                delattr(module, name)
+                # Skip deregistering if it failed to properly register,
+                # i.e. `ValueError` will be raised afterwards
+                if hasattr(module, name):
+                    delattr(module, name)
 
         try:
             self.apply(attach_hidden_kernels)
