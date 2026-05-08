@@ -92,12 +92,12 @@ class HieraModelOutput(ModelOutput):
     reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Hiera image classification outputs.
     """
 )
+@dataclass
 class HieraForImageClassificationOutput(ImageClassifierOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, `optional`):

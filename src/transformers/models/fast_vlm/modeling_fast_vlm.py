@@ -72,12 +72,12 @@ class FastVlmPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for FastVlm outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class FastVlmModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):

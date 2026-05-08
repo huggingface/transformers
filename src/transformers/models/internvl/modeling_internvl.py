@@ -162,12 +162,12 @@ class InternVLVisionAttention(nn.Module):
         return output, attn_weights
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`InternVLVisionModel`].
     """
 )
+@dataclass
 class InternVLVisionModelOutputWithPooling(BaseModelOutputWithPooling):
     r"""
     pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
@@ -500,12 +500,12 @@ class InternVLMultiModalProjector(nn.Module):
         return hidden_states
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for InternVL outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class InternVLModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):

@@ -69,7 +69,6 @@ class Mask2FormerPixelDecoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the Transformer decoder. This class adds two attributes to
@@ -77,6 +76,7 @@ class Mask2FormerPixelDecoderOutput(ModelOutput):
     i.e. the output of each decoder layer, each of them gone through a layernorm.
     """
 )
+@dataclass
 class Mask2FormerMaskedAttentionDecoderOutput(BaseModelOutputWithCrossAttentions):
     r"""
     hidden_states (`tuple(torch.FloatTensor)`, *optional*):
@@ -101,7 +101,6 @@ class Mask2FormerMaskedAttentionDecoderOutput(BaseModelOutputWithCrossAttentions
     intermediate_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Mask2Former's pixel level module output. It returns the output of the encoder (optional) and all hidden states
@@ -112,6 +111,7 @@ class Mask2FormerMaskedAttentionDecoderOutput(BaseModelOutputWithCrossAttentions
     feature maps produced using **multi-scaling strategy** defined in the paper.
     """
 )
+@dataclass
 class Mask2FormerPixelLevelModuleOutput(ModelOutput):
     r"""
     encoder_last_hidden_state (`torch.FloatTensor`):
@@ -182,7 +182,6 @@ class Mask2FormerModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`Mask2FormerForUniversalSegmentationOutput`].
@@ -193,6 +192,7 @@ class Mask2FormerModelOutput(ModelOutput):
     [`~Mask2FormerImageProcessor] for details regarding usage.
     """
 )
+@dataclass
 class Mask2FormerForUniversalSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.Tensor`, *optional*):

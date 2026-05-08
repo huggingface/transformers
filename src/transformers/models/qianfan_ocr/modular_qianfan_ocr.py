@@ -239,12 +239,12 @@ class QianfanOCRPreTrainedModel(InternVLPreTrainedModel):
     input_modalities = ("image", "text")
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for QianfanOCR outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class QianfanOCRModelOutputWithPast(InternVLModelOutputWithPast):
     r"""
     image_hidden_states (`torch.FloatTensor`, *optional*):
