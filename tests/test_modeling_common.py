@@ -4772,11 +4772,6 @@ class ModelTesterMixin:
         config_to_set.mlp_only_layers = [0]  # same but for qwens
         config_to_set.num_dense_layers = 1  # lfm2_moe
 
-        # Precompute state dict keys for every model class to detect dead conversion
-        # rules: a rule skipped for the current class must still apply to at least one.
-        all_classes_model_keys = {
-            cls: list(cls(copy.deepcopy(config)).state_dict().keys()) for cls in self.all_model_classes
-        }
         for model_class in self.all_model_classes:
             if skip_base_model and "For" not in model_class.__name__:
                 continue
