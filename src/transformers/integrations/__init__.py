@@ -128,6 +128,11 @@ _import_structure = {
         "grouped_mm_experts_forward",
         "use_experts_implementation",
     ],
+    "mup": [
+        "MuReadout",
+        "build_mup_param_groups",
+        "coord_check",
+    ],
     "mxfp4": [
         "Mxfp4GptOssExperts",
         "convert_moe_packed_tensors",
@@ -136,11 +141,6 @@ _import_structure = {
         "quantize_to_mxfp4",
         "replace_with_mxfp4_linear",
         "swizzle_mxfp4",
-    ],
-    "mup": [
-        "MuReadout",
-        "build_mup_param_groups",
-        "coord_check",
     ],
     "neftune": [
         "activate_neftune",
