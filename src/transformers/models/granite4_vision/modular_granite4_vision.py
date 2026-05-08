@@ -357,7 +357,7 @@ class Granite4VisionTextDecoderLayer(GraniteDecoderLayer):
 
 
 class Granite4VisionPreTrainedModel(LlavaNextPreTrainedModel):
-    _no_split_modules = ["Granite4VisionTextDecoderLayer"]
+    _no_split_modules = ["Granite4VisionTextDecoderLayer", "Granite4VisionWindowQFormerDownsampler"]
     _can_record_outputs = {
         "hidden_states": Granite4VisionTextDecoderLayer,
         "attentions": Granite4VisionTextAttention,
