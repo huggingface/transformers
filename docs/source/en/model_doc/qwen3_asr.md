@@ -35,8 +35,8 @@ Available checkpoints:
 - [bezzam/Qwen3-ForcedAligner-0.6B](https://huggingface.co/bezzam/Qwen3-ForcedAligner-0.6B)
 
 The following languages are supported:
-- `Qwen3-ASR-1.7B` and `Qwen3-ASR-0.6B`: Chinese (zh), English (en), Cantonese (yue), Arabic (ar), German (de), French (fr), Spanish (es), Portuguese (pt), Indonesian (id), Italian (it), Korean (ko), Russian (ru), Thai (th), Vietnamese (vi), Japanese (ja), Turkish (tr), Hindi (hi), Malay (ms), Dutch (nl), Swedish (sv), Danish (da), Finnish (fi), Polish (pl), Czech (cs), Filipino (fil), Persian (fa), Greek (el), Hungarian (hu), Macedonian (mk), Romanian (ro)
-- `Qwen3-ForcedAligner-0.6B`: Chinese, English, Cantonese, French, German, Italian, Japanese, Korean, Portuguese, Russian, Spanish
+- `Qwen3-ASR-1.7B` and `Qwen3-ASR-0.6B`: Chinese (zh), English (en), Cantonese (yue), Arabic (ar), German (de), French (fr), Spanish (es), Portuguese (pt), Indonesian (id), Italian (it), Korean (ko), Russian (ru), Thai (th), Vietnamese (vi), Japanese (ja), Turkish (tr), Hindi (hi), Malay (ms), Dutch (nl), Swedish (sv), Danish (da), Finnish (fi), Polish (pl), Czech (cs), Filipino (fil), Persian (fa), Greek (el), Hungarian (hu), Macedonian (mk), Romanian (ro).
+- `Qwen3-ForcedAligner-0.6B`: Chinese (zh), English (en), Cantonese (yue), French (fr), German (de), Italian (it), Japanese (ja), Korean (ko), Portuguese (pt), Russian (ru), Spanish (es).
 
 See the original repository at [QwenLM/Qwen3-ASR](https://github.com/QwenLM/Qwen3-ASR) and the [report](https://huggingface.co/papers/2601.21337) for more details.
 
@@ -46,14 +46,14 @@ This model was contributed by [Eric Bezzam](https://huggingface.co/bezzam) and [
 
 ### Simple transcription
 
-The simplest way to transcribe audio is with `apply_transcription_request`, which handles the chat template formatting for you.
+The simplest way to transcribe audio is with `apply_transcription_request`, which handles the chat template formatting for you, namely it is a convenience wrapper for `apply_chat_template` (see [Chat template](#chat-template) below).
 
 ```python
-from transformers import AutoProcessor, Qwen3ASRForConditionalGeneration
+from transformers import AutoProcessor, AutoModelForMultimodalLM
 
 model_id = "bezzam/Qwen3-ASR-1.7B"
 processor = AutoProcessor.from_pretrained(model_id)
-model = Qwen3ASRForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto")
 print(f"Model loaded on {model.device} with dtype {model.dtype}")
 
 inputs = processor.apply_transcription_request(
@@ -87,11 +87,11 @@ Transcription: Mr. Quilter is the apostle of the middle classes, and we are glad
 You can provide a language hint to guide the model.
 
 ```python
-from transformers import AutoProcessor, Qwen3ASRForConditionalGeneration
+from transformers import AutoProcessor, AutoModelForMultimodalLM
 
 model_id = "bezzam/Qwen3-ASR-1.7B"
 processor = AutoProcessor.from_pretrained(model_id)
-model = Qwen3ASRForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto")
 
 # Without language hint (auto-detect)
 inputs = processor.apply_transcription_request(
@@ -116,7 +116,7 @@ print(f"With hint:   {processor.decode(generated_ids, return_format='transcripti
 Batch inference is possible by passing a list of audios and, if provided, a list of languages.
 
 ```python
-from transformers import AutoProcessor, Qwen3ASRForConditionalGeneration
+from transformers import AutoProcessor, AutoModelForMultimodalLM
 
 model_id = "bezzam/Qwen3-ASR-1.7B"
 audio = [
@@ -125,10 +125,10 @@ audio = [
 ]
 
 processor = AutoProcessor.from_pretrained(model_id)
-model = Qwen3ASRForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto")
 
 inputs = processor.apply_transcription_request(
-    audio, language=["English", "Chinese"],
+    audio, language=[None, "Chinese"],
 ).to(model.device, model.dtype)
 
 output_ids = model.generate(**inputs, max_new_tokens=256)
@@ -141,7 +141,7 @@ for i, text in enumerate(transcriptions):
 
 ### Chat template
 
-Qwen3 ASR also accepts chat template inputs (`apply_transcription_request` is a convenience wrapper for `apply_chat_template`):
+Qwen3 ASR also accepts chat template inputs. The `apply_transcription_request` usage [above](#simple-transcription) is a convenience wrapper for `apply_chat_template`.
 
 ```python
 from transformers import AutoProcessor, Qwen3ASRForConditionalGeneration
@@ -231,27 +231,27 @@ loss.backward()
 
 Use `Qwen3ASRForForcedAlignment` to obtain word-level timestamps from a transcript. First transcribe with the ASR model, then align with the forced aligner.
 
-The following languages are supported: Chinese, English, Cantonese, French, German, Italian, Japanese, Korean, Portuguese, Russian, Spanish.
+The following languages are supported: Chinese (zh), English (en), Cantonese (yue), French (fr), German (de), Italian (it), Japanese (ja), Korean (ko), Portuguese (pt), Russian (ru), Spanish (es).
 
 Japanese requires the `nagisa` library, while Korean requires the `soynlp` library:
 ```
 pip install nagisa soynlp
 ```
 
-#### English
+#### With Qwen3 ASR
 
 ```python
 import torch
-from transformers import AutoProcessor, Qwen3ASRForConditionalGeneration, Qwen3ASRForForcedAlignment
+from transformers import AutoProcessor, AutoModelForMultimodalLM, AutoModelForForcedAlignment
 
 asr_model_id = "bezzam/Qwen3-ASR-0.6B"
 aligner_model_id = "bezzam/Qwen3-ForcedAligner-0.6B"
 
 asr_processor = AutoProcessor.from_pretrained(asr_model_id)
-asr_model = Qwen3ASRForConditionalGeneration.from_pretrained(asr_model_id, device_map="auto")
+asr_model = AutoModelForMultimodalLM.from_pretrained(asr_model_id, device_map="auto")
 
 aligner_processor = AutoProcessor.from_pretrained(aligner_model_id)
-aligner_model = Qwen3ASRForForcedAlignment.from_pretrained(
+aligner_model = AutoModelForForcedAlignment.from_pretrained(
     aligner_model_id, torch_dtype=torch.bfloat16, device_map="auto"
 )
 
@@ -298,131 +298,15 @@ apostle                   1.520      2.080
 """
 ```
 
-#### Chinese
-
-For Chinese text, each character is aligned individually.
-
-```python
-import torch
-from transformers import AutoProcessor, Qwen3ASRForConditionalGeneration, Qwen3ASRForForcedAlignment
-
-asr_model_id = "bezzam/Qwen3-ASR-0.6B"
-aligner_model_id = "bezzam/Qwen3-ForcedAligner-0.6B"
-
-asr_processor = AutoProcessor.from_pretrained(asr_model_id)
-asr_model = Qwen3ASRForConditionalGeneration.from_pretrained(asr_model_id, device_map="auto")
-
-aligner_processor = AutoProcessor.from_pretrained(aligner_model_id)
-aligner_model = Qwen3ASRForForcedAlignment.from_pretrained(
-    aligner_model_id, torch_dtype=torch.bfloat16, device_map="auto"
-)
-
-audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-ASR-Repo/asr_zh.wav"
-
-# Step 1: Transcribe with language hint
-inputs = asr_processor.apply_transcription_request(
-    audio=audio_url, language="Chinese",
-).to(asr_model.device, asr_model.dtype)
-output_ids = asr_model.generate(**inputs, max_new_tokens=256)
-generated_ids = output_ids[:, inputs["input_ids"].shape[1]:]
-parsed = asr_processor.decode(generated_ids, return_format="parsed")[0]
-transcript = parsed["transcription"]
-
-# Step 2–4: Align and decode
-aligner_inputs, word_lists = aligner_processor.prepare_forced_aligner_inputs(
-    audio=audio_url, transcript=transcript, language="Chinese",
-)
-aligner_inputs = aligner_inputs.to(aligner_model.device, aligner_model.dtype)
-
-with torch.inference_mode():
-    outputs = aligner_model(**aligner_inputs)
-
-timestamps = aligner_processor.decode_forced_alignment(
-    logits=outputs.logits,
-    input_ids=aligner_inputs["input_ids"],
-    word_lists=word_lists,
-    timestamp_token_id=aligner_model.config.timestamp_token_id,
-)[0]
-
-for item in timestamps:
-    print(f"{item['text']:<4} {item['start_time']:>8.3f}s → {item['end_time']:>8.3f}s")
-
-"""
-Char        Start (s)    End (s)
---------------------------------
-甚               0.400      0.720
-至               0.720      0.960
-出               0.960      1.120
-现               1.120      1.520
-...
-"""
-```
-
 #### With another ASR model
 
-The forced aligner is model-agnostic, meaning the transcripts from any ASR system can be provided. Below is an example using [NVIDIA Parakeet CTC](https://huggingface.co/nvidia/parakeet-ctc-1.1b) for transcription.
+The forced aligner is model-agnostic, meaning the transcripts from any ASR system can be provided. Below is a batch inference example using [NVIDIA Parakeet CTC](https://huggingface.co/nvidia/parakeet-ctc-1.1b) for transcription.
 
-**Single sample:**
-
-```python
-import torch
-from datasets import Audio, load_dataset
-from transformers import AutoModelForCTC, AutoProcessor, Qwen3ASRForForcedAlignment
-
-# Load Parakeet CTC for transcription
-parakeet_processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-1.1b")
-parakeet_model = AutoModelForCTC.from_pretrained(
-    "nvidia/parakeet-ctc-1.1b", torch_dtype="auto", device_map="cuda",
-)
-
-# Load Qwen3 Forced Aligner for timestamping
-aligner_model_id = "bezzam/Qwen3-ForcedAligner-0.6B"
-aligner_processor = AutoProcessor.from_pretrained(aligner_model_id)
-aligner_model = Qwen3ASRForForcedAlignment.from_pretrained(
-    aligner_model_id, torch_dtype=torch.bfloat16, device_map="cuda",
-)
-
-# Load audio
-ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-ds = ds.cast_column("audio", Audio(sampling_rate=parakeet_processor.feature_extractor.sampling_rate))
-audio_array = ds[0]["audio"]["array"]
-sr = ds[0]["audio"]["sampling_rate"]
-
-# Step 1: Transcribe with Parakeet
-inputs = parakeet_processor(audio_array, sampling_rate=sr, return_tensors="pt").to(
-    parakeet_model.device, dtype=parakeet_model.dtype
-)
-with torch.inference_mode():
-    outputs = parakeet_model.generate(**inputs)
-transcript = parakeet_processor.decode(outputs)[0]
-print(f"Transcript: {transcript}")
-
-# Step 2: Align with Qwen3 Forced Aligner (expects 16kHz audio)
-aligner_inputs, word_lists = aligner_processor.prepare_forced_aligner_inputs(
-    audio=audio_array, transcript=transcript, language="English",
-)
-aligner_inputs = aligner_inputs.to(aligner_model.device, aligner_model.dtype)
-
-with torch.inference_mode():
-    aligner_outputs = aligner_model(**aligner_inputs)
-
-timestamps = aligner_processor.decode_forced_alignment(
-    logits=aligner_outputs.logits,
-    input_ids=aligner_inputs["input_ids"],
-    word_lists=word_lists,
-    timestamp_token_id=aligner_model.config.timestamp_token_id,
-)[0]
-
-for item in timestamps:
-    print(f"{item['text']:<20} {item['start_time']:>8.3f}s → {item['end_time']:>8.3f}s")
-```
-
-**Batch:**
 
 ```python
 import torch
 from datasets import Audio, load_dataset
-from transformers import AutoModelForCTC, AutoProcessor, Qwen3ASRForForcedAlignment
+from transformers import AutoModelForCTC, AutoProcessor, AutoModelForForcedAlignment
 
 parakeet_processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-1.1b")
 parakeet_model = AutoModelForCTC.from_pretrained(
@@ -431,7 +315,7 @@ parakeet_model = AutoModelForCTC.from_pretrained(
 
 aligner_model_id = "bezzam/Qwen3-ForcedAligner-0.6B"
 aligner_processor = AutoProcessor.from_pretrained(aligner_model_id)
-aligner_model = Qwen3ASRForForcedAlignment.from_pretrained(
+aligner_model = AutoModelForForcedAlignment.from_pretrained(
     aligner_model_id, torch_dtype=torch.bfloat16, device_map="cuda",
 )
 
@@ -476,109 +360,76 @@ for i, (transcript, timestamps) in enumerate(zip(transcripts, batch_timestamps))
 
 Both the ASR and forced aligner models support `torch.compile` for faster inference. The forced aligner is an especially good fit for compilation because it runs a single forward pass (no autoregressive decoding). This makes it ideal for **bulk audio timestamping**: transcribe with any ASR model, then batch-align with the compiled forced aligner for maximum throughput.
 
-#### Compiling the forced aligner
+#### Forced aligner
+
+On an A100, we observed a speed-up of ~2.5 for a batch size of 4 ([script](https://gist.github.com/ebezzam/3e0551708631784aeb684e0e838299f3#file-benchmark_compile_forced_alignment-py)).
 
 ```python
-import time
 import torch
-from transformers import AutoProcessor, Qwen3ASRForForcedAlignment
+from transformers import AutoProcessor, AutoModelForForcedAlignment
 
 model_id = "bezzam/Qwen3-ForcedAligner-0.6B"
-num_warmup, num_runs = 5, 20
+num_warmup = 5
+batch_size = 4
 
 processor = AutoProcessor.from_pretrained(model_id)
-model = Qwen3ASRForForcedAlignment.from_pretrained(model_id, torch_dtype=torch.bfloat16).to("cuda")
+model = AutoModelForForcedAlignment.from_pretrained(model_id, torch_dtype=torch.bfloat16).to("cuda")
 
 # Prepare a batch of 4 samples
 audio_url = "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
 transcript = "Mr. Quilter is the apostle of the middle classes."
 
 aligner_inputs, word_lists = processor.prepare_forced_aligner_inputs(
-    audio=[audio_url] * 4,
-    transcript=[transcript] * 4,
-    language=["English"] * 4,
+    audio=[audio_url] * batch_size,
+    transcript=[transcript] * batch_size,
+    language=["English"] * batch_size,
 )
 aligner_inputs = aligner_inputs.to("cuda", torch.bfloat16)
 
-# Without compile
+# Warm-up and apply model
+model.forward = torch.compile(model.forward)
 with torch.no_grad():
     for _ in range(num_warmup):
         _ = model(**aligner_inputs)
-torch.cuda.synchronize()
-start = time.time()
 with torch.no_grad():
-    for _ in range(num_runs):
-        _ = model(**aligner_inputs)
-torch.cuda.synchronize()
-no_compile_time = (time.time() - start) / num_runs
-print(f"Without compile: {no_compile_time:.4f}s")
-
-# With compile
-model = torch.compile(model)
-with torch.no_grad():
-    for _ in range(num_warmup):
-        _ = model(**aligner_inputs)
-torch.cuda.synchronize()
-start = time.time()
-with torch.no_grad():
-    for _ in range(num_runs):
-        _ = model(**aligner_inputs)
-torch.cuda.synchronize()
-compile_time = (time.time() - start) / num_runs
-print(f"With compile:    {compile_time:.4f}s")
-print(f"Speedup: {no_compile_time / compile_time:.2f}x")
-# ~2.5x speedup observed on A100
+    _ = model(**aligner_inputs)
 ```
 
-#### Compiling the ASR model (generate)
+#### ASR model (generate)
 
 For autoregressive transcription, `torch.compile` accelerates the per-token forward passes inside `generate`.
 
+On an A100, we observed a speed-up of 2.37 for a batch size of 4 ([script](https://gist.github.com/ebezzam/3e0551708631784aeb684e0e838299f3#file-benchmark_compile_generate-py)).
+
 ```python
-import time
 import torch
-from transformers import AutoProcessor, Qwen3ASRForConditionalGeneration
+from transformers import AutoProcessor, AutoModelForMultimodalLM
 
 model_id = "bezzam/Qwen3-ASR-1.7B"
-num_warmup, num_runs = 3, 10
+num_warmup = 3
 max_new_tokens = 256
 
 processor = AutoProcessor.from_pretrained(model_id)
-model = Qwen3ASRForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to("cuda").eval()
+model = AutoModelForMultimodalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16).to("cuda").eval()
 
 audio_url = "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
 inputs = processor.apply_transcription_request(
     audio=[audio_url] * 4,  # batch of 4
 ).to("cuda", torch.bfloat16)
 
-# Without compile
+# Compile and warmup
+model.forward = torch.compile(model.forward)
 with torch.inference_mode():
     for _ in range(num_warmup):
         _ = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
 torch.cuda.synchronize()
-start = time.time()
-with torch.inference_mode():
-    for _ in range(num_runs):
-        output_ids = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-torch.cuda.synchronize()
-no_compile_time = (time.time() - start) / num_runs
-print(f"Without compile: {no_compile_time:.4f}s")
 
-# With compile
-model = torch.compile(model)
+# Apply model
 with torch.inference_mode():
-    for _ in range(num_warmup):
-        _ = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-torch.cuda.synchronize()
-start = time.time()
-with torch.inference_mode():
-    for _ in range(num_runs):
-        output_ids = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-torch.cuda.synchronize()
-compile_time = (time.time() - start) / num_runs
-print(f"With compile:    {compile_time:.4f}s")
-print(f"Speedup: {no_compile_time / compile_time:.2f}x")
-# ~2.5x speedup observed on A100
+    output_ids = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
+generated_ids = output_ids[:, inputs["input_ids"].shape[1] :]
+text_compiled = processor.decode(generated_ids, return_format="transcription_only")[0]
+print(f"Output:  {text_compiled}")
 ```
 
 ### Pipeline usage
