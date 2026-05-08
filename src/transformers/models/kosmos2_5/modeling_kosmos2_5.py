@@ -703,7 +703,7 @@ class Kosmos2_5TextSinusoidalPositionalEmbedding(nn.Module):
                 )
 
         # expand embeddings if needed
-        max_pos = self.padding_idx + 1 + seq_len + past_key_values_length
+        max_pos = int(position_ids.max().item()) + 1
         if max_pos > self.weights.size(0):
             self.make_weights(max_pos + self.offset, self.embedding_dim, self.padding_idx)
 
