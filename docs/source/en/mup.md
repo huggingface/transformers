@@ -67,14 +67,13 @@ The two empirical contracts of μP can be checked end-to-end with [`examples/pyt
 **Coordinate check.** Per-module mean of `|activation|` should be approximately width-invariant under μP and fan out under standard parametrization (SP, the default training regime that μP replaces).
 
 ```bash
-python examples/pytorch/mup_demo.py --mode coord --widths 64 128 256 512
+python examples/pytorch/mup_demo.py --mode coord
 ```
 
 **Learning-rate transfer.** The loss-vs-learning-rate curves at width `mup_base_width` should overlap the curves at wider widths under μP, and shift under SP. This is what makes the optimal learning rate transfer.
 
 ```bash
-python examples/pytorch/mup_demo.py --mode lr-transfer \
-    --widths 64 128 256 --lrs 1e-4 3e-4 1e-3 3e-3 1e-2 1e-1
+python examples/pytorch/mup_demo.py --mode lr-transfer
 ```
 
 ## Coordinate check from Python

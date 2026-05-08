@@ -21,9 +21,8 @@ Reproduce the two empirical contracts of μP on a tiny Llama:
   is what makes hyperparameters tuned at the base width transferable to wider models (μTransfer).
 
 Usage:
-    python examples/pytorch/mup_demo.py --mode coord --widths 64 128 256 512
-    python examples/pytorch/mup_demo.py --mode lr-transfer --widths 64 128 256 \\
-        --lrs 1e-4 3e-4 1e-3 3e-3 1e-2 1e-1
+    python examples/pytorch/mup_demo.py --mode coord
+    python examples/pytorch/mup_demo.py --mode lr-transfer
 """
 
 import argparse
