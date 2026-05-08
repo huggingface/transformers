@@ -937,13 +937,13 @@ class PrefixAndTruncationTest(unittest.TestCase):
         from_ids = tokenizer.parse_response("hi</think>", prefix=prefix_ids)
         self.assertEqual(from_str, from_ids)
 
-    def test_tokenizer_response_event_stream_with_prefix(self):
-        """`tokenizer.response_event_stream(prefix=...)` returns a stream that
+    def test_tokenizer_get_response_parser_with_prefix(self):
+        """`tokenizer.get_response_parser(prefix=...)` returns a stream that
         is already in the right initial state."""
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         tokenizer.response_template = qwen3_template_with_anchor
         prefix = "<|im_start|>assistant\n<think>\n"
-        stream = tokenizer.response_event_stream(prefix=prefix)
+        stream = tokenizer.get_response_parser(prefix=prefix)
         self.assertIsNotNone(stream.initial_event)
         self.assertEqual(stream.initial_event["field"], "thinking")
         stream.feed("body</think>")
