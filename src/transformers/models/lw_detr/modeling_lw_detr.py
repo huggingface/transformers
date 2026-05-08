@@ -38,7 +38,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_lw_detr import LwDetrConfig, LwDetrViTConfig
 
 
@@ -79,81 +79,56 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-class LwDetrViTSelfAttention(nn.Module):
+class LwDetrViTAttention(nn.Module):
+    """LwDetr ViT attention with k_proj bias=False and dropout from config.dropout_prob."""
+
     def __init__(self, config: LwDetrViTConfig):
         super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError(
-                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
-                f"heads {config.num_attention_heads}."
-            )
-
         self.config = config
         self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.dropout_prob = config.dropout_prob
-        self.scaling = self.attention_head_size**-0.5
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.attention_dropout = config.dropout_prob
+        self.scaling = self.head_dim**-0.5
         self.is_causal = False
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=False)
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
         self.num_key_value_groups = 1
 
     def forward(
         self,
         hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        batch_size = hidden_states.shape[0]
-        new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        key_layer = self.key(hidden_states).view(*new_shape).transpose(1, 2)
-        value_layer = self.value(hidden_states).view(*new_shape).transpose(1, 2)
-        query_layer = self.query(hidden_states).view(*new_shape).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
 
-        context_layer, attention_probs = attention_interface(
+        attn_output, attn_weights = attention_interface(
             self,
-            query_layer,
-            key_layer,
-            value_layer,
-            None,
-            is_causal=self.is_causal,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            dropout=0.0 if not self.training else self.dropout_prob,
             **kwargs,
         )
 
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.reshape(new_context_layer_shape)
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
 
-        return context_layer, attention_probs
-
-
-class LwDetrViTAttention(nn.Module):
-    def __init__(self, config: LwDetrViTConfig):
-        """
-        Args:
-            config (`LwDetrViTConfig`):
-                Model configuration.
-        """
-        super().__init__()
-        self.attention = LwDetrViTSelfAttention(config)
-        self.output = nn.Linear(config.hidden_size, config.hidden_size)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        self_attn_output, _ = self.attention(hidden_states, **kwargs)
-        output = self.output(self_attn_output)
-        return output
+        return attn_output, attn_weights
 
 
 class LwDetrViTMlp(nn.Module):
@@ -207,7 +182,7 @@ class LwDetrViTLayer(GradientCheckpointingLayer):
                 batch_size // self.num_windows, self.num_windows * seq_len, channels
             )
 
-        attention_output = self.attention(hidden_states_norm, **kwargs)
+        attention_output, _ = self.attention(hidden_states_norm, **kwargs)
         attention_output = attention_output * self.gamma_1
 
         if not self.window:
@@ -326,7 +301,7 @@ class LwDetrViTPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": LwDetrViTLayer,
-        "attentions": LwDetrViTSelfAttention,
+        "attentions": LwDetrViTAttention,
     }
 
     @torch.no_grad()
@@ -342,8 +317,8 @@ class LwDetrViTPreTrainedModel(PreTrainedModel):
         elif isinstance(module, LwDetrViTEmbeddings):
             init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
         if isinstance(module, LwDetrViTLayer):
-            nn.init.constant_(module.gamma_1, self.config.cae_init_values)
-            nn.init.constant_(module.gamma_2, self.config.cae_init_values)
+            init.constant_(module.gamma_1, self.config.cae_init_values)
+            init.constant_(module.gamma_2, self.config.cae_init_values)
 
 
 class LwDetrViTEncoder(LwDetrViTPreTrainedModel):
@@ -647,6 +622,8 @@ class LwDetrConvEncoder(nn.Module):
 
 
 class LwDetrAttention(nn.Module):
+    """LW-DETR self-attention with group-DETR training technique."""
+
     def __init__(self, config: LwDetrConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -970,6 +947,7 @@ class LwDetrPreTrainedModel(PreTrainedModel):
     config: LwDetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     _no_split_modules = [
         r"LwDetrConvEncoder",
         r"LwDetrDecoderLayer",
@@ -1046,43 +1024,40 @@ class LwDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     intermediate_reference_points: torch.FloatTensor | None = None
 
 
-# function to generate sine positional embedding for 4d coordinates
-def gen_sine_position_embeddings(pos_tensor, hidden_size=256):
-    """
-    This function computes position embeddings using sine and cosine functions from the input positional tensor,
-    which has a shape of (batch_size, num_queries, 4).
-    The last dimension of `pos_tensor` represents the following coordinates:
-    - 0: x-coord
-    - 1: y-coord
-    - 2: width
-    - 3: height
+def encode_sinusoidal_position_embedding(
+    pos_tensor: torch.Tensor,
+    num_pos_feats: int = 128,
+    temperature: int = 10000,
+) -> torch.Tensor:
+    """Sinusoidal position embeddings from normalized anchor coordinates.
 
-    The output shape is (batch_size, num_queries, 512), where final dim (hidden_size*2 = 512) is the total embedding dimension
-    achieved by concatenating the sine and cosine values for each coordinate.
+    Each coordinate in `pos_tensor` is independently encoded with ``num_pos_feats``
+    interleaved sin/cos components; per-coordinate embeddings are concatenated.
+    Handles 2-D ``(x, y)`` and N-D ``(x, y, w, h)`` inputs. For 2-D+ inputs the
+    x and y embeddings are swapped to follow the DETR ``[pos_y, pos_x, ...]`` convention.
+
+    Args:
+        pos_tensor: Normalized coordinates in ``[0, 1]``, shape ``(..., n_coords)``.
+        num_pos_feats: Embedding dimension per coordinate.
+        temperature: Base for the frequency decay.
+
+    Returns:
+        Tensor of shape ``(..., n_coords * num_pos_feats)``, same dtype as input.
     """
     scale = 2 * math.pi
-    dim = hidden_size // 2
-    dim_t = torch.arange(dim, dtype=torch.float32, device=pos_tensor.device)
-    dim_t = 10000 ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / dim)
-    x_embed = pos_tensor[:, :, 0] * scale
-    y_embed = pos_tensor[:, :, 1] * scale
-    pos_x = x_embed[:, :, None] / dim_t
-    pos_y = y_embed[:, :, None] / dim_t
-    pos_x = torch.stack((pos_x[:, :, 0::2].sin(), pos_x[:, :, 1::2].cos()), dim=3).flatten(2)
-    pos_y = torch.stack((pos_y[:, :, 0::2].sin(), pos_y[:, :, 1::2].cos()), dim=3).flatten(2)
-    if pos_tensor.size(-1) == 4:
-        w_embed = pos_tensor[:, :, 2] * scale
-        pos_w = w_embed[:, :, None] / dim_t
-        pos_w = torch.stack((pos_w[:, :, 0::2].sin(), pos_w[:, :, 1::2].cos()), dim=3).flatten(2)
+    dim_t = torch.arange(num_pos_feats, dtype=torch.float32, device=pos_tensor.device)
+    dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats)
 
-        h_embed = pos_tensor[:, :, 3] * scale
-        pos_h = h_embed[:, :, None] / dim_t
-        pos_h = torch.stack((pos_h[:, :, 0::2].sin(), pos_h[:, :, 1::2].cos()), dim=3).flatten(2)
+    coords = pos_tensor.unbind(-1)  # list of (...,) tensors
+    embeddings = [coord[..., None] * scale / dim_t for coord in coords]  # each (..., num_pos_feats)
+    embeddings = [
+        torch.stack((e[..., 0::2].sin(), e[..., 1::2].cos()), dim=-1).flatten(-2) for e in embeddings
+    ]  # each (..., num_pos_feats)
 
-        pos = torch.cat((pos_y, pos_x, pos_w, pos_h), dim=2)
-    else:
-        raise ValueError(f"Unknown pos_tensor shape(-1):{pos_tensor.size(-1)}")
-    return pos.to(pos_tensor.dtype)
+    if len(embeddings) >= 2:
+        embeddings[0], embeddings[1] = embeddings[1], embeddings[0]
+
+    return torch.cat(embeddings, dim=-1).to(pos_tensor.dtype)
 
 
 class LwDetrDecoder(LwDetrPreTrainedModel):
@@ -1098,6 +1073,12 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
     Args:
         config: LwDetrConfig
     """
+
+    _can_record_outputs = {
+        "hidden_states": LwDetrDecoderLayer,
+        "attentions": OutputRecorder(LwDetrAttention, layer_name="self_attn", index=1),
+        "cross_attentions": OutputRecorder(LwDetrMultiscaleDeformableAttention, layer_name="cross_attn", index=1),
+    }
 
     def __init__(self, config: LwDetrConfig):
         super().__init__(config)
@@ -1119,7 +1100,9 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
         reference_points_inputs = obj_center[:, :, None] * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
 
         # batch_size, num_queries, d_model * 2
-        query_sine_embed = gen_sine_position_embeddings(reference_points_inputs[:, :, 0, :], self.config.d_model)
+        query_sine_embed = encode_sinusoidal_position_embedding(
+            reference_points_inputs[:, :, 0, :], num_pos_feats=self.config.d_model // 2
+        )
 
         # batch_size, num_queries, d_model
         query_pos = self.ref_point_head(query_sine_embed)

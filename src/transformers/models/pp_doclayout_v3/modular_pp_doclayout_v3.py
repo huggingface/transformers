@@ -709,7 +709,7 @@ class PPDocLayoutV3ScaleHead(nn.Module):
         self.layers = nn.ModuleList()
         for k in range(head_length):
             in_c = in_channels if k == 0 else feature_channels
-            self.layers.append(PPDocLayoutV3ConvLayer(in_c, feature_channels, 3, 1, "silu"))
+            self.layers.append(PPDocLayoutV3ConvLayer(in_c, feature_channels, 3, 1, activation="silu"))
             if fpn_stride != base_stride:
                 self.layers.append(nn.Upsample(scale_factor=2, mode="bilinear", align_corners=align_corners))
 
@@ -753,7 +753,7 @@ class PPDocLayoutV3MaskFeatFPN(nn.Module):
                     align_corners=align_corners,
                 )
             )
-        self.output_conv = PPDocLayoutV3ConvLayer(feature_channels, out_channels, 3, 1, "silu")
+        self.output_conv = PPDocLayoutV3ConvLayer(feature_channels, out_channels, 3, 1, activation="silu")
 
     def forward(self, inputs):
         x = [inputs[i] for i in self.reorder_index]
@@ -773,7 +773,7 @@ class PPDocLayoutV3MaskFeatFPN(nn.Module):
 class PPDocLayoutV3EncoderMaskOutput(nn.Module):
     def __init__(self, in_channels, num_prototypes):
         super().__init__()
-        self.base_conv = PPDocLayoutV3ConvLayer(in_channels, in_channels, 3, 1, "silu")
+        self.base_conv = PPDocLayoutV3ConvLayer(in_channels, in_channels, 3, 1, activation="silu")
         self.conv = nn.Conv2d(in_channels, num_prototypes, kernel_size=1)
 
     def forward(self, x):
@@ -800,7 +800,9 @@ class PPDocLayoutV3HybridEncoder(RTDetrHybridEncoder):
             feature_channels=mask_feature_channels[0],
             out_channels=mask_feature_channels[1],
         )
-        self.encoder_mask_lateral = PPDocLayoutV3ConvLayer(config.x4_feat_dim, mask_feature_channels[1], 3, 1, "silu")
+        self.encoder_mask_lateral = PPDocLayoutV3ConvLayer(
+            config.x4_feat_dim, mask_feature_channels[1], 3, 1, activation="silu"
+        )
         self.encoder_mask_output = PPDocLayoutV3EncoderMaskOutput(
             in_channels=mask_feature_channels[1], num_prototypes=config.num_prototypes
         )

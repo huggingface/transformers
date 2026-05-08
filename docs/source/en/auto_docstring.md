@@ -89,12 +89,12 @@ class MySpecialModel(PreTrainedModel):
 Also apply `@auto_docstring` to classes that inherit from [`~utils.ModelOutput`].
 
 ```python
-@dataclass
 @auto_docstring(
     custom_intro="""
     Custom model outputs with additional fields.
     """
 )
+@dataclass
 class MyModelOutput(ImageClassifierOutput):
     r"""
     loss (`torch.FloatTensor`, *optional*):

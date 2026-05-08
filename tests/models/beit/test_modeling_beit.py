@@ -84,6 +84,9 @@ class BeitModelTester:
         out_features=["stage1", "stage2", "stage3", "stage4"],
         attn_implementation="eager",
         mask_ratio=0.5,
+        use_relative_position_bias=False,
+        use_shared_relative_position_bias=False,
+        add_fpn=True,
     ):
         self.parent = parent
         self.vocab_size = vocab_size
@@ -106,13 +109,15 @@ class BeitModelTester:
         self.out_indices = out_indices
         self.out_features = out_features
         self.num_labels = num_labels
-
+        self.add_fpn = add_fpn
         # in BeiT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
         self.seq_length = num_patches + 1
         self.mask_length = self.seq_length - 1
         self.num_masks = int(mask_ratio * self.seq_length)
         self.attn_implementation = attn_implementation
+        self.use_relative_position_bias = use_relative_position_bias
+        self.use_shared_relative_position_bias = use_shared_relative_position_bias
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -145,6 +150,9 @@ class BeitModelTester:
             out_indices=self.out_indices,
             out_features=self.out_features,
             attn_implementation=self.attn_implementation,
+            use_relative_position_bias=self.use_relative_position_bias,
+            use_shared_relative_position_bias=self.use_shared_relative_position_bias,
+            add_fpn=self.add_fpn,
         )
 
     def create_and_check_model(self, config, pixel_values, labels, pixel_labels):
@@ -155,6 +163,7 @@ class BeitModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_backbone(self, config, pixel_values, labels, pixel_labels):
+        config.add_fpn = False
         model = BeitBackbone(config=config)
         model.to(torch_device)
         model.eval()
@@ -368,6 +377,17 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             loss = model(**inputs).loss
             loss.backward()
 
+    def test_reverse_loading_mapping(self):
+        # Enable both per-layer and shared relative position bias so that every
+        # mapping rule has at least one matching key in the model state dict.
+        self.model_tester.use_relative_position_bias = True
+        self.model_tester.use_shared_relative_position_bias = True
+        try:
+            super().test_reverse_loading_mapping()
+        finally:
+            self.model_tester.use_relative_position_bias = False
+            self.model_tester.use_shared_relative_position_bias = False
+
     @slow
     def test_model_from_pretrained(self):
         model_name = "microsoft/beit-base-patch16-224"
@@ -548,4 +568,4 @@ class BeitBackboneTest(unittest.TestCase, BackboneTesterMixin):
     config_class = BeitConfig
 
     def setUp(self):
-        self.model_tester = BeitModelTester(self)
+        self.model_tester = BeitModelTester(self, add_fpn=False)

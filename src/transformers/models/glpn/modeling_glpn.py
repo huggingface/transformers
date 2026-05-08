@@ -28,38 +28,7 @@ from .configuration_glpn import GLPNConfig
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-# Copied from transformers.models.segformer.modeling_segformer.SegformerDropPath
-class GLPNDropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: float | None = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
-
-
-# Copied from transformers.models.segformer.modeling_segformer.SegformerOverlapPatchEmbeddings
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.segformer.modeling_segformer.SegformerOverlapPatchEmbeddings
 class GLPNOverlapPatchEmbeddings(nn.Module):
     """Construct the overlapping patch embeddings."""
 
@@ -85,7 +54,7 @@ class GLPNOverlapPatchEmbeddings(nn.Module):
         return embeddings, height, width
 
 
-# Copied from transformers.models.segformer.modeling_segformer.SegformerEfficientSelfAttention
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.segformer.modeling_segformer.SegformerEfficientSelfAttention
 class GLPNEfficientSelfAttention(nn.Module):
     """SegFormer's efficient self-attention mechanism. Employs the sequence reduction process introduced in the [PvT
     paper](https://huggingface.co/papers/2102.12122)."""
@@ -165,7 +134,7 @@ class GLPNEfficientSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.segformer.modeling_segformer.SegformerSelfOutput
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.segformer.modeling_segformer.SegformerSelfOutput
 class GLPNSelfOutput(nn.Module):
     def __init__(self, config, hidden_size):
         super().__init__()
@@ -178,7 +147,7 @@ class GLPNSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.segformer.modeling_segformer.SegformerAttention with Segformer->GLPN
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.segformer.modeling_segformer.SegformerAttention with Segformer->GLPN
 class GLPNAttention(nn.Module):
     def __init__(self, config, hidden_size, num_attention_heads, sequence_reduction_ratio):
         super().__init__()
@@ -198,28 +167,29 @@ class GLPNAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.segformer.modeling_segformer.SegformerDWConv
-class GLPNDWConv(nn.Module):
+# Copied from transformers.models.segformer.modeling_segformer.SegformerDepthWiseConv with Segformer->GLPN
+class GLPNDepthWiseConv(nn.Module):
+    """Depthwise convolution used in the Mix-FFN to implicitly encode positional information."""
+
     def __init__(self, dim=768):
         super().__init__()
-        self.dwconv = nn.Conv2d(dim, dim, 3, 1, 1, bias=True, groups=dim)
+        self.dwconv = nn.Conv2d(dim, dim, 3, 1, 1, groups=dim)
 
     def forward(self, hidden_states, height, width):
         batch_size, seq_len, num_channels = hidden_states.shape
         hidden_states = hidden_states.transpose(1, 2).view(batch_size, num_channels, height, width)
         hidden_states = self.dwconv(hidden_states)
         hidden_states = hidden_states.flatten(2).transpose(1, 2)
-
         return hidden_states
 
 
-# Copied from transformers.models.segformer.modeling_segformer.SegformerMixFFN with Segformer->GLPN
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.segformer.modeling_segformer.SegformerMixFFN with Segformer->GLPN
 class GLPNMixFFN(nn.Module):
     def __init__(self, config, in_features, hidden_features=None, out_features=None):
         super().__init__()
         out_features = out_features or in_features
         self.dense1 = nn.Linear(in_features, hidden_features)
-        self.dwconv = GLPNDWConv(hidden_features)
+        self.dwconv = GLPNDepthWiseConv(hidden_features)
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
@@ -237,7 +207,32 @@ class GLPNMixFFN(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.segformer.modeling_segformer.SegformerLayer with Segformer->GLPN
+# Copied from transformers.models.swin.modular_swin.SwinDropPath with SwinDropPath->GlpnDropPath
+class GlpnDropPath(nn.Module):
+    """Stochastic depth (DropPath) per sample, for residual blocks.
+
+    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
+    <https://arxiv.org/abs/1603.09382>`_.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor = torch.floor(random_tensor + keep_prob)
+        return hidden_states.div(keep_prob) * random_tensor
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
+
+
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.segformer.modeling_segformer.SegformerLayer with Segformer->GLPN
 class GLPNLayer(nn.Module):
     """This corresponds to the Block class in the original implementation."""
 
@@ -250,7 +245,7 @@ class GLPNLayer(nn.Module):
             num_attention_heads=num_attention_heads,
             sequence_reduction_ratio=sequence_reduction_ratio,
         )
-        self.drop_path = GLPNDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.drop_path = GlpnDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.layer_norm_2 = nn.LayerNorm(hidden_size)
         mlp_hidden_size = int(hidden_size * mlp_ratio)
         self.mlp = GLPNMixFFN(config, in_features=hidden_size, hidden_features=mlp_hidden_size)
@@ -380,7 +375,7 @@ class GLPNPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class GLPNModel(GLPNPreTrainedModel):
-    # Copied from transformers.models.segformer.modeling_segformer.SegformerModel.__init__ with Segformer->GLPN
+    # Todo - Refactor as part of vision refactor. Copied from transformers.models.segformer.modeling_segformer.SegformerModel.__init__ with Segformer->GLPN
     def __init__(self, config):
         super().__init__(config)
         self.config = config
@@ -392,7 +387,7 @@ class GLPNModel(GLPNPreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    # Copied from transformers.models.segformer.modeling_segformer.SegformerModel.forward
+    # Todo - Refactor as part of vision refactor. Copied from transformers.models.segformer.modeling_segformer.SegformerModel.forward
     def forward(
         self,
         pixel_values: torch.FloatTensor,

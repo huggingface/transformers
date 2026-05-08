@@ -70,7 +70,6 @@ class GitVisionModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-# Copied from transformers.models.gemma3.modeling_gemma3.token_type_ids_mask_function
 def token_type_ids_mask_function(group_ids: torch.Tensor) -> Callable:
     """
     This function adds the correct offsets to the `q_idx` and `kv_idx` as the torch API can only accept lengths,

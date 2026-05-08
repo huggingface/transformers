@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch ViTMAE model."""
 
+import copy
 import math
 import tempfile
 import unittest
@@ -42,7 +43,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import ViTMAEForPreTraining, ViTMAEModel
+    from transformers import PreTrainedModel, ViTMAEForPreTraining, ViTMAEModel, set_seed
 
 
 if is_vision_available():
@@ -184,6 +185,142 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = ViTMAEModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ViTMAEConfig, has_text_modality=False, hidden_size=32)
+
+    def flash_attn_inference_equivalence(
+        self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
+    ) -> None:
+        r"""
+        Same as `ModelTesterMixin.flash_attn_inference_equivalence`, but resets RNG before each loaded
+        model's eager/kernel forward pair so random masking in ViTMAE matches between backends.
+        """
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        _has_run_at_least_one_model = False
+
+        for model_class in self.all_model_classes:
+            if not model_class._supports_attention_backend and not attn_implementation.startswith("flash_attention"):
+                continue
+
+            set_seed(42)
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            config = self._prepare_config_headdim(config, 16)
+
+            if getattr(config, "sliding_window", None):
+                config.sliding_window = 2
+
+            model = model_class(config)
+            if not all(
+                submodel._supports_flash_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
+            ):
+                continue
+
+            _has_run_at_least_one_model = True
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                main_input = inputs_dict[model.main_input_name]
+                if isinstance(main_input, torch.Tensor):
+                    main_input = main_input[:1]
+                    if torch.is_floating_point(main_input):
+                        main_input = main_input.to(torch.bfloat16)
+                first_inputs = {model.main_input_name: main_input, "output_hidden_states": True}
+                if model.main_input_name != "input_ids" and "input_ids" in inputs_dict:
+                    first_inputs["input_ids"] = inputs_dict["input_ids"][:1]
+                if model.main_input_name != "pixel_values" and "pixel_values" in inputs_dict:
+                    if "image_grid_thw" in inputs_dict:
+                        continue
+                    first_inputs["pixel_values"] = inputs_dict["pixel_values"][:1].to(torch.bfloat16)
+                if "image_sizes" in inputs_dict:
+                    first_inputs["image_sizes"] = inputs_dict["image_sizes"][:1]
+                if model.config.is_encoder_decoder:
+                    decoder_input_ids = inputs_dict.get("decoder_input_ids", first_inputs.get("input_ids"))
+                    if decoder_input_ids is not None:
+                        first_inputs["decoder_input_ids"] = decoder_input_ids[:1]
+
+                dummy_attention_mask = inputs_dict.get("attention_mask", None)
+                if dummy_attention_mask is not None:
+                    dummy_attention_mask = dummy_attention_mask[:1]
+                    if padding_side == "left":
+                        dummy_attention_mask[:, 1:] = 1
+                        dummy_attention_mask[:, 0] = 0
+                    else:
+                        dummy_attention_mask[:, :-1] = 1
+                        dummy_attention_mask[:, -1] = 0
+
+                second_inputs = copy.deepcopy(first_inputs)
+                if dummy_attention_mask is not None:
+                    second_inputs["attention_mask"] = dummy_attention_mask
+                    if model.config.is_encoder_decoder:
+                        second_inputs["decoder_attention_mask"] = dummy_attention_mask
+
+                first_inputs = self._prepare_for_class(first_inputs, model_class)
+                first_inputs = {
+                    k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in first_inputs.items()
+                }
+                second_inputs = self._prepare_for_class(second_inputs, model_class)
+                second_inputs = {
+                    k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in second_inputs.items()
+                }
+
+                model = model_class.from_pretrained(
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation="eager", device_map=torch_device
+                )
+
+                set_seed(12345)
+
+                outputs = model(**first_inputs)
+                logits_1_eager = (
+                    outputs.hidden_states[-1]
+                    if "hidden_states" in outputs
+                    else outputs.logits_per_image
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+                outputs = model(**second_inputs)
+                logits_2_eager = (
+                    outputs.hidden_states[-1]
+                    if "hidden_states" in outputs
+                    else outputs.logits_per_image
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+
+                del model
+                model = model_class.from_pretrained(
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation=attn_implementation, device_map=torch_device
+                )
+
+                set_seed(12345)
+
+                outputs = model(**first_inputs)
+                logits_1_fa = (
+                    outputs.hidden_states[-1]
+                    if "hidden_states" in outputs
+                    else outputs.logits_per_image
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+                outputs = model(**second_inputs)
+                logits_2_fa = (
+                    outputs.hidden_states[-1]
+                    if "hidden_states" in outputs
+                    else outputs.logits_per_image
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+
+                torch.testing.assert_close(logits_1_eager, logits_1_fa, atol=atol, rtol=rtol)
+                if padding_side == "left":
+                    torch.testing.assert_close(logits_2_eager[1:], logits_2_fa[1:], atol=atol, rtol=rtol)
+                else:
+                    torch.testing.assert_close(logits_2_eager[:-1], logits_2_fa[:-1], atol=atol, rtol=rtol)
+
+        if not _has_run_at_least_one_model:
+            self.skipTest(
+                f"Model architecture does not support {attn_implementation}, or setting its attention dynamically"
+            )
 
     def test_config(self):
         self.config_tester.run_common_tests()

@@ -30,10 +30,10 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoConfig
+from ..conditional_detr.modeling_conditional_detr import encode_sinusoidal_position_embedding
 from ..convnext.modeling_convnext import ConvNextLayerNorm
-from ..dab_detr.modeling_dab_detr import gen_sine_position_embeddings
 from ..deformable_detr.modeling_deformable_detr import (
     DeformableDetrDecoderOutput,
     DeformableDetrForObjectDetection,
@@ -43,7 +43,7 @@ from ..deformable_detr.modeling_deformable_detr import (
 )
 from ..llama.modeling_llama import eager_attention_forward
 from ..rt_detr.modeling_rt_detr import RTDetrConvNormLayer
-from ..vit.modeling_vit import ViTAttention, ViTSelfAttention
+from ..vit.modeling_vit import ViTAttention
 from ..vitdet.configuration_vitdet import VitDetConfig
 from ..vitdet.modeling_vitdet import (
     VitDetBackbone,
@@ -233,67 +233,14 @@ class LwDetrConfig(PreTrainedConfig):
                 raise ValueError(f"Unsupported scale factor: {scale}")
 
 
-class LwDetrViTSelfAttention(ViTSelfAttention):
-    def __init__(self, config: LwDetrViTConfig):
-        super().__init__(config)
-        del self.key
-        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=False)
-        self.num_key_value_groups = 1
-        self.dropout_prob = config.dropout_prob
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        batch_size = hidden_states.shape[0]
-        new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
-
-        key_layer = self.key(hidden_states).view(*new_shape).transpose(1, 2)
-        value_layer = self.value(hidden_states).view(*new_shape).transpose(1, 2)
-        query_layer = self.query(hidden_states).view(*new_shape).transpose(1, 2)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        context_layer, attention_probs = attention_interface(
-            self,
-            query_layer,
-            key_layer,
-            value_layer,
-            None,
-            is_causal=self.is_causal,
-            scaling=self.scaling,
-            dropout=0.0 if not self.training else self.dropout_prob,
-            **kwargs,
-        )
-
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.reshape(new_context_layer_shape)
-
-        return context_layer, attention_probs
-
-
 class LwDetrViTAttention(ViTAttention):
-    def __init__(self, config: LwDetrViTConfig):
-        """
-        Args:
-            config (`LwDetrViTConfig`):
-                Model configuration.
-        """
-        super().__init__(config)
-        self.attention = LwDetrViTSelfAttention(config)
-        self.output = nn.Linear(config.hidden_size, config.hidden_size)
+    """LwDetr ViT attention with k_proj bias=False and dropout from config.dropout_prob."""
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        self_attn_output, _ = self.attention(hidden_states, **kwargs)
-        output = self.output(self_attn_output)
-        return output
+    def __init__(self, config: LwDetrViTConfig):
+        super().__init__()
+        self.attention_dropout = config.dropout_prob
+        self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
+        self.num_key_value_groups = 1
 
 
 class LwDetrViTMlp(VitDetMlp):
@@ -333,7 +280,7 @@ class LwDetrViTLayer(GradientCheckpointingLayer):
                 batch_size // self.num_windows, self.num_windows * seq_len, channels
             )
 
-        attention_output = self.attention(hidden_states_norm, **kwargs)
+        attention_output, _ = self.attention(hidden_states_norm, **kwargs)
         attention_output = attention_output * self.gamma_1
 
         if not self.window:
@@ -366,11 +313,11 @@ class LwDetrViTPreTrainedModel(VitDetPreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": LwDetrViTLayer,
-        "attentions": LwDetrViTSelfAttention,
+        "attentions": LwDetrViTAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module) -> None:
-        """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
@@ -381,8 +328,8 @@ class LwDetrViTPreTrainedModel(VitDetPreTrainedModel):
         elif isinstance(module, LwDetrViTEmbeddings):
             init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
         if isinstance(module, LwDetrViTLayer):
-            nn.init.constant_(module.gamma_1, self.config.cae_init_values)
-            nn.init.constant_(module.gamma_2, self.config.cae_init_values)
+            init.constant_(module.gamma_1, self.config.cae_init_values)
+            init.constant_(module.gamma_2, self.config.cae_init_values)
 
 
 class LwDetrViTEncoder(LwDetrViTPreTrainedModel):
@@ -640,6 +587,8 @@ class LwDetrConvEncoder(nn.Module):
 
 
 class LwDetrAttention(nn.Module):
+    """LW-DETR self-attention with group-DETR training technique."""
+
     def __init__(self, config: LwDetrConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -713,31 +662,7 @@ class LwDetrAttention(nn.Module):
 
 
 class LwDetrMultiscaleDeformableAttention(DeformableDetrMultiscaleDeformableAttention):
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        position_embeddings: torch.Tensor | None = None,
-        reference_points=None,
-        spatial_shapes=None,
-        spatial_shapes_list=None,
-        level_start_index=None,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        return super().forward(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            position_embeddings=position_embeddings,
-            reference_points=reference_points,
-            spatial_shapes=spatial_shapes,
-            spatial_shapes_list=spatial_shapes_list,
-            level_start_index=level_start_index,
-            **kwargs,
-        )
+    pass
 
 
 class LwDetrMLP(nn.Module):
@@ -829,6 +754,7 @@ class LwDetrPreTrainedModel(PreTrainedModel):
     config: LwDetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     _no_split_modules = [
         r"LwDetrConvEncoder",
         r"LwDetrDecoderLayer",
@@ -913,6 +839,12 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
         config: LwDetrConfig
     """
 
+    _can_record_outputs = {
+        "hidden_states": LwDetrDecoderLayer,
+        "attentions": OutputRecorder(LwDetrAttention, layer_name="self_attn", index=1),
+        "cross_attentions": OutputRecorder(LwDetrMultiscaleDeformableAttention, layer_name="cross_attn", index=1),
+    }
+
     def __init__(self, config: LwDetrConfig):
         super().__init__(config)
         self.dropout = config.dropout
@@ -933,7 +865,9 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
         reference_points_inputs = obj_center[:, :, None] * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
 
         # batch_size, num_queries, d_model * 2
-        query_sine_embed = gen_sine_position_embeddings(reference_points_inputs[:, :, 0, :], self.config.d_model)
+        query_sine_embed = encode_sinusoidal_position_embedding(
+            reference_points_inputs[:, :, 0, :], num_pos_feats=self.config.d_model // 2
+        )
 
         # batch_size, num_queries, d_model
         query_pos = self.ref_point_head(query_sine_embed)
@@ -1028,7 +962,7 @@ class LwDetrModelOutput(ModelOutput):
 )
 class LwDetrModel(DeformableDetrModel):
     def __init__(self, config: LwDetrConfig):
-        LwDetrPreTrainedModel.__init__(config)
+        PreTrainedModel.__init__(self, config)
 
         # Create backbone + positional encoding
         self.backbone = LwDetrConvEncoder(config)
