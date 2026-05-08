@@ -109,6 +109,122 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
 
 
+@require_torch
+class CacheSnapshotRestoreTest(unittest.TestCase):
+    """Coverage for the per-layer / per-cache snapshot+restore primitive.
+
+    Snapshot+restore is the supported way to undo a tentative forward pass on layer types where `crop()` is
+    lossy or undefined — most importantly linear-attention layers, whose `crop()` is a documented no-op.
+    Speculative decoding (e.g. block-diffusion drafts) relies on this round-trip property.
+    """
+
+    def _new_dynamic_layer_with_state(self, seq_len: int = 4):
+        from transformers.cache_utils import DynamicLayer
+
+        layer = DynamicLayer()
+        keys = torch.randn(2, 4, seq_len, 8)
+        values = torch.randn(2, 4, seq_len, 8)
+        layer.update(keys, values)
+        return layer
+
+    def _new_linear_attention_layer_with_state(self):
+        from transformers.cache_utils import LinearAttentionLayer
+
+        layer = LinearAttentionLayer()
+        conv = torch.randn(2, 4, 4)
+        rec = torch.randn(2, 4, 8, 16)
+        layer.update_conv_state(conv)
+        layer.update_recurrent_state(rec)
+        return layer
+
+    def test_dynamic_layer_snapshot_restore_round_trip(self):
+        layer = self._new_dynamic_layer_with_state(seq_len=4)
+        snapshot = layer.snapshot()
+        original_keys = layer.keys.clone()
+        original_values = layer.values.clone()
+
+        # Tentative update — extend the cache.
+        more_keys = torch.randn(2, 4, 3, 8)
+        more_values = torch.randn(2, 4, 3, 8)
+        layer.update(more_keys, more_values)
+        self.assertEqual(layer.get_seq_length(), 7)
+
+        layer.restore(snapshot)
+        self.assertEqual(layer.get_seq_length(), 4)
+        self.assertTrue(torch.equal(layer.keys, original_keys))
+        self.assertTrue(torch.equal(layer.values, original_values))
+
+    def test_linear_attention_layer_snapshot_restore_round_trip(self):
+        """The headline regression: `crop()` is a no-op on linear-attention layers, so snapshot+restore is the
+        only way to undo a tentative forward."""
+        layer = self._new_linear_attention_layer_with_state()
+        snapshot = layer.snapshot()
+        original_conv = layer.conv_states.clone()
+        original_recurrent = layer.recurrent_states.clone()
+
+        # Tentative update — overwrite recurrent state in-place.
+        new_recurrent = torch.randn_like(layer.recurrent_states)
+        layer.update_recurrent_state(new_recurrent)
+        self.assertFalse(torch.equal(layer.recurrent_states, original_recurrent))
+
+        layer.restore(snapshot)
+        self.assertTrue(torch.equal(layer.conv_states, original_conv))
+        self.assertTrue(torch.equal(layer.recurrent_states, original_recurrent))
+
+    def test_linear_attention_layer_restore_preserves_static_address(self):
+        """Static-address tensors (e.g. for cudagraphs) must survive a restore — restore should `.copy_()`
+        into the existing tensor when shapes match, not reassign."""
+        layer = self._new_linear_attention_layer_with_state()
+        snapshot = layer.snapshot()
+        rec_id = id(layer.recurrent_states)
+        conv_id = id(layer.conv_states)
+
+        new_recurrent = torch.randn_like(layer.recurrent_states)
+        layer.update_recurrent_state(new_recurrent)
+
+        layer.restore(snapshot)
+        self.assertEqual(id(layer.recurrent_states), rec_id)
+        self.assertEqual(id(layer.conv_states), conv_id)
+
+    def test_dynamic_cache_snapshot_restore_round_trip(self):
+        """Aggregate snapshot/restore at the Cache level — speculative decoding API surface."""
+        cache = DynamicCache()
+        keys_a = torch.randn(2, 4, 3, 8)
+        values_a = torch.randn(2, 4, 3, 8)
+        keys_b = torch.randn(2, 4, 3, 8)
+        values_b = torch.randn(2, 4, 3, 8)
+        cache.update(keys_a, values_a, layer_idx=0)
+        cache.update(keys_b, values_b, layer_idx=1)
+
+        snapshot = cache.snapshot()
+        self.assertIsInstance(snapshot, list)
+        self.assertEqual(len(snapshot), 2)
+
+        # Tentative extension on both layers.
+        cache.update(torch.randn(2, 4, 5, 8), torch.randn(2, 4, 5, 8), layer_idx=0)
+        cache.update(torch.randn(2, 4, 5, 8), torch.randn(2, 4, 5, 8), layer_idx=1)
+        self.assertEqual(cache.layers[0].get_seq_length(), 8)
+        self.assertEqual(cache.layers[1].get_seq_length(), 8)
+
+        cache.restore(snapshot)
+        self.assertEqual(cache.layers[0].get_seq_length(), 3)
+        self.assertEqual(cache.layers[1].get_seq_length(), 3)
+        self.assertTrue(torch.equal(cache.layers[0].keys, keys_a))
+        self.assertTrue(torch.equal(cache.layers[1].keys, keys_b))
+
+    def test_cache_restore_rejects_layout_mismatch(self):
+        """Snapshots are tied to the cache they came from — restoring into a differently-sized cache is an error."""
+        cache_a = DynamicCache()
+        cache_a.update(torch.randn(2, 4, 3, 8), torch.randn(2, 4, 3, 8), layer_idx=0)
+        snapshot = cache_a.snapshot()
+
+        cache_b = DynamicCache()
+        cache_b.update(torch.randn(2, 4, 3, 8), torch.randn(2, 4, 3, 8), layer_idx=0)
+        cache_b.update(torch.randn(2, 4, 3, 8), torch.randn(2, 4, 3, 8), layer_idx=1)
+        with self.assertRaises(ValueError):
+            cache_b.restore(snapshot)
+
+
 def _skip_on_failed_cache_prerequisites(test, cache_implementation):
     """Function to skip tests on failed cache prerequisites, given a cache implementation"""
     # Installed dependencies

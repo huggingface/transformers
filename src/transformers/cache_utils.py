@@ -105,6 +105,26 @@ class CacheLayerMixin(ABC):
             self.keys = self.keys.index_select(0, beam_idx.to(self.keys.device))
             self.values = self.values.index_select(0, beam_idx.to(self.values.device))
 
+    def snapshot(self) -> dict:
+        """
+        Return an opaque snapshot of this layer's state that can be passed to `restore()` to roll back to the
+        current state. Used by speculative decoding (and any "tentative forward then maybe undo" pattern) on
+        layer types where `crop()` is lossy or undefined — see `LinearAttentionCacheLayerMixin.crop`.
+
+        Subclasses that own additional state should extend this and pair it with `restore()`.
+        """
+        return {
+            "is_initialized": self.is_initialized,
+            "keys": self.keys.clone() if self.is_initialized and self.keys is not None else None,
+            "values": self.values.clone() if self.is_initialized and self.values is not None else None,
+        }
+
+    def restore(self, snapshot: dict) -> None:
+        """Restore this layer to the state captured by a previous `snapshot()` call."""
+        self.is_initialized = bool(snapshot["is_initialized"])
+        self.keys = snapshot["keys"]
+        self.values = snapshot["values"]
+
 
 class DynamicLayer(CacheLayerMixin):
     """
@@ -259,6 +279,15 @@ class DynamicSlidingWindowLayer(DynamicLayer):
     def get_max_cache_shape(self) -> int:
         """Return the maximum cache shape of the cache"""
         return self.sliding_window
+
+    def snapshot(self) -> dict:
+        snap = super().snapshot()
+        snap["cumulative_length"] = self.cumulative_length
+        return snap
+
+    def restore(self, snapshot: dict) -> None:
+        super().restore(snapshot)
+        self.cumulative_length = int(snapshot["cumulative_length"])
 
     def crop(self, max_length: int) -> None:
         """
@@ -760,6 +789,47 @@ class LinearAttentionCacheLayerMixin(ABC):
         # We don't crop the linear attention cache, so simply do nothing here
         pass
 
+    def snapshot(self) -> dict:
+        """
+        Return an opaque snapshot of this layer's state for use with `restore()`.
+
+        Linear-attention layers fold every observed token into a fixed-size recurrent state, so `crop()` is a
+        no-op and there is no length-based way to undo a forward pass. Snapshot+restore is the supported
+        primitive for "tentative forward then maybe undo" patterns (speculative decoding, beam search rollback).
+        """
+        return {
+            "is_conv_states_initialized": self.is_conv_states_initialized,
+            "is_recurrent_states_initialized": self.is_recurrent_states_initialized,
+            "has_previous_state": self.has_previous_state,
+            "conv_states": self.conv_states.clone() if self.is_conv_states_initialized else None,
+            "recurrent_states": self.recurrent_states.clone() if self.is_recurrent_states_initialized else None,
+        }
+
+    def restore(self, snapshot: dict) -> None:
+        """Restore this layer to the state captured by a previous `snapshot()` call.
+
+        Uses `.copy_()` into existing tensors when available so any cudagraph static-address assumption on
+        `conv_states` / `recurrent_states` survives the rollback; falls back to clone-assign when the layer was
+        uninitialized or has been replaced since the snapshot.
+        """
+        self.is_conv_states_initialized = bool(snapshot["is_conv_states_initialized"])
+        self.is_recurrent_states_initialized = bool(snapshot["is_recurrent_states_initialized"])
+        self.has_previous_state = bool(snapshot["has_previous_state"])
+
+        if snapshot["conv_states"] is None:
+            self.conv_states = None
+        elif self.conv_states is not None and self.conv_states.shape == snapshot["conv_states"].shape:
+            self.conv_states.copy_(snapshot["conv_states"])
+        else:
+            self.conv_states = snapshot["conv_states"].clone()
+
+        if snapshot["recurrent_states"] is None:
+            self.recurrent_states = None
+        elif self.recurrent_states is not None and self.recurrent_states.shape == snapshot["recurrent_states"].shape:
+            self.recurrent_states.copy_(snapshot["recurrent_states"])
+        else:
+            self.recurrent_states = snapshot["recurrent_states"].clone()
+
 
 class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
     def __init__(self, config: PreTrainedConfig | None = None):
@@ -862,6 +932,15 @@ class LinearAttentionAndFullAttentionLayer(LinearAttentionLayer, DynamicLayer):
         """Reorders the cache for beam search, given the selected beam indices."""
         LinearAttentionLayer.reorder_cache(self, beam_idx)
         DynamicLayer.reorder_cache(self, beam_idx)
+
+    def snapshot(self) -> dict:
+        # Both parents return disjoint dict keys (linear-attn uses conv/recurrent + flags; full-attn uses
+        # keys/values + is_initialized), so we can merge under a single dict.
+        return {**LinearAttentionLayer.snapshot(self), **DynamicLayer.snapshot(self)}
+
+    def restore(self, snapshot: dict) -> None:
+        LinearAttentionLayer.restore(self, snapshot)
+        DynamicLayer.restore(self, snapshot)
 
 
 # Pre-register the standard layer types (some classes are shared between multiple types,
@@ -1174,6 +1253,35 @@ class Cache:
         """Crop the cache to the given length"""
         for layer_idx in range(len(self.layers)):
             self.layers[layer_idx].crop(max_length)
+
+    def snapshot(self) -> list[dict]:
+        """
+        Return a per-layer snapshot of the current cache state. Pair with `restore()` to undo a tentative forward
+        pass. Required for layer types where `crop()` is lossy or undefined (e.g. linear-attention layers, whose
+        `crop()` is a documented no-op).
+
+        Speculative decoding pattern:
+            snap = cache.snapshot()
+            run_target_on_speculative_block(...)
+            if partial_accept:
+                cache.restore(snap)
+                run_target_on_accepted_prefix(...)
+        """
+        return [layer.snapshot() for layer in self.layers]
+
+    def restore(self, snapshot: list[dict]) -> None:
+        """Restore the cache to the state captured by a previous `snapshot()` call.
+
+        The snapshot must have been produced from a cache with the same layer layout; the per-layer dicts are
+        forwarded to each layer's `restore()` in order.
+        """
+        if len(snapshot) != len(self.layers):
+            raise ValueError(
+                f"Snapshot has {len(snapshot)} layers but cache has {len(self.layers)}; the snapshot was likely "
+                "taken from a different cache."
+            )
+        for layer, layer_snapshot in zip(self.layers, snapshot):
+            layer.restore(layer_snapshot)
 
     def batch_repeat_interleave(self, repeats: int):
         """Repeat and interleave the cache"""
