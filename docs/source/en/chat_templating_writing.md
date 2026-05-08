@@ -35,7 +35,7 @@ the starting header for an assistant message to the end of the conversation.
 
 Load the written template as a string and assign it to the tokenizer's `chat_template` attribute. Once set, the template is used whenever you call [`~PreTrainedTokenizerBase.apply_chat_template`]. It is also saved
 with the tokenizer whenever [`~PreTrainedTokenizer.save_pretrained`] or [`~PreTrainedTokenizer.push_to_hub`] is called. The template is saved in the `chat_template.jinja` file in the tokenizer directory. You can
-edit this file directly to change the template, which is often easier than manipulating a template string.
+edit this file directly to change the template, which is often easier than manipulating a template string. See [How chat templates are stored and loaded](#how-chat-templates-are-stored-and-loaded) below for the other on-disk shapes Transformers supports.
 
 ## Template writing tips
 
@@ -143,6 +143,55 @@ You could also load an edited template back into the tokenizer.
 
 ```py
 tokenizer.chat_template = open("template.jinja").read()
+```
+
+## Storing and loading chat templates
+
+Chat templates are stored on disk in several different formats. Modern checkpoints save templates as standalone `.jinja` files while older checkpoints embed them in the tokenizer or processor config.
+
+### Storage formats
+
+Templates may be stored in any of the following formats.
+
+- `chat_template.jinja` (recommended). A standalone Jinja file at the root of the repository, containing a single chat template. This is what [`~PreTrainedTokenizer.save_pretrained`] writes by default. Storing the template in its own file makes it easy to inspect, edit, and diff. Both tokenizers and processors load `chat_template.jinja` the same way.
+
+- `additional_chat_templates/<name>.jinja`. A directory of standalone Jinja files used when a model ships multiple named templates (for example, a `default` template and a separate `tool_use` template). The `default` template still goes in `chat_template.jinja` at the repo root, but every other named template goes in `additional_chat_templates/<name>.jinja`, where the filename stem is the template name.
+
+- `chat_template` field in `tokenizer_config.json`. The legacy format used before standalone `.jinja` files. The template is embedded as a JSON string in `tokenizer_config.json`. When a model has multiple named templates, the field is a list of `{"name": ..., "template": ...}` dicts instead of a single string. This format is still fully supported on load, and you can opt back into it when saving by passing `save_jinja_files=False` to `save_pretrained`.
+
+- `chat_template.json`. The legacy format used by older multimodal processor checkpoints. A JSON file of the form `{"chat_template": "<template string>"}`. This format is read-only for backward compatibility. Don't create new repositories using this format, and convert them to `chat_template.jinja` instead. A processor repository that mixes a legacy `chat_template.json` with modern `.jinja` files raises an error on load.
+
+### Loading precedence
+
+When calling [`~PreTrainedTokenizer.from_pretrained`], Transformers resolves the storage formats with a fixed precedence. Standalone `.jinja` files take priority over templates embedded in the config. The loader:
+
+1. Reads any `chat_template` field present in `tokenizer_config.json` (or, for processors, the legacy `chat_template.json`).
+2. Reads `chat_template.jinja` at the repo root if it exists, and uses it as the `default` template, overriding step 1.
+3. Reads every `.jinja` file in `additional_chat_templates/`, keyed by the filename stem, and merges them in.
+
+If the result has a single `default` template, [`~PreTrainedTokenizer.chat_template`] is set to that string. If multiple named templates exist, `chat_template` becomes a dict of `{name: template_string}`. In that case, [`~PreTrainedTokenizer.apply_chat_template`] picks the `tool_use` entry when tools are passed, and `default` otherwise.
+
+### Saving
+
+[`~PreTrainedTokenizer.save_pretrained`] and [`~PreTrainedTokenizer.push_to_hub`] writes the `.jinja` format by default. A single string template becomes `chat_template.jinja`. A dict of named templates writes the `default` entry to `chat_template.jinja` and one file per remaining entry under `additional_chat_templates/`. The `chat_template` field is removed from `tokenizer_config.json` to avoid duplication.
+
+Pass `save_jinja_files=False` to fall back to the legacy embedded format.
+
+```py
+tokenizer.save_pretrained("my-model", save_jinja_files=False)
+```
+
+### Updating an older repository
+
+Migrate an embedded template in `tokenizer_config.json` or `chat_template.json` to the recommended `.jinja` format by loading and saving it again.
+
+The load step normalizes whichever legacy format the repository uses in `chat_template`, and [`~PushToHubMixin.push_to_hub`] returns a `chat_template.jinja` file.
+
+```py
+from transformers import AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("your-org/your-model")
+tokenizer.push_to_hub("your-org/your-model")
 ```
 
 ## Templates for tools
