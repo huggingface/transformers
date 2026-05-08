@@ -23,7 +23,8 @@ import re
 from typing import Any
 
 from .content_parsers import process_field
-from .response_templates import ResponseTemplateField, ResponseTemplate, load_response_template
+from .response_templates import ResponseTemplate, ResponseTemplateField, load_response_template
+
 
 def parse_response(text: str, response_template: dict | ResponseTemplate, *, prefix: str | None = None) -> dict:
     """A convenience function for response parsing when you don't want streaming. Takes a whole output + text
@@ -211,7 +212,9 @@ class ResponseParser:
                 watch.append(("close", impl))
         return watch
 
-    def _best_match(self, watch: list[tuple[str, ResponseTemplateField]]) -> tuple[str, ResponseTemplateField, re.Match] | None:
+    def _best_match(
+        self, watch: list[tuple[str, ResponseTemplateField]]
+    ) -> tuple[str, ResponseTemplateField, re.Match] | None:
         """Earliest-starting (longest on ties, opens before closes) match."""
         best_key: tuple | None = None
         best: tuple[str, ResponseTemplateField, re.Match] | None = None

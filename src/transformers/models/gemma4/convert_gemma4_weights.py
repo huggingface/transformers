@@ -2555,9 +2555,7 @@ def main(*args):
 
     chat_template = _CHAT_TEMPLATE_LARGE if variant in _LARGE_MODEL_VARIANTS else _CHAT_TEMPLATE
     chat_template_kwargs = {"chat_template": chat_template} if _INCLUDE_CHAT_TEMPLATE.value else {}
-    response_template_kwargs = (
-        {"response_template": _RESPONSE_TEMPLATE} if _INCLUDE_RESPONSE_TEMPLATE.value else {}
-    )
+    response_template_kwargs = {"response_template": _RESPONSE_TEMPLATE} if _INCLUDE_RESPONSE_TEMPLATE.value else {}
 
     # Load the tokenizer from either a SentencePiece `.model` file (when the
     # path exists locally) or directly from a HF repo (e.g. `google/gemma-4-E2B-it`).

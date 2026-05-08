@@ -19,6 +19,7 @@ from .content_parsers import CONTENT_PARSERS
 
 logger = logging.get_logger(__name__)
 
+
 @dataclass
 class ResponseTemplateField:
     name: str
@@ -74,8 +75,8 @@ class ResponseTemplate:
 
 def _compile_anchor(scope: str, field: dict, lit_key: str, pat_key: str) -> tuple[re.Pattern | None, str | None]:
     """The start and end anchors for a region can be either regexes or literal strings. Although both get compiled
-     to a regex for actual matching, we keep the literal string around too - when it's present, we can emit
-     regions much more quickly, rather than needing to keep a safety buffer as we do with regexes."""
+    to a regex for actual matching, we keep the literal string around too - when it's present, we can emit
+    regions much more quickly, rather than needing to keep a safety buffer as we do with regexes."""
     if lit_key in field and pat_key in field:
         raise ValueError(f"{scope}: cannot specify both '{lit_key}' and '{pat_key}'")
     if lit_key in field:
@@ -93,8 +94,16 @@ def _compile_anchor(scope: str, field: dict, lit_key: str, pat_key: str) -> tupl
 
 def load_response_template(spec: dict | ResponseTemplate) -> ResponseTemplate:
     _ALLOWED_FIELD_KEYS = {
-        "open", "open_pattern", "close", "close_pattern",
-        "content", "content_args", "repeats", "optional", "assemble", "coerce",
+        "open",
+        "open_pattern",
+        "close",
+        "close_pattern",
+        "content",
+        "content_args",
+        "repeats",
+        "optional",
+        "assemble",
+        "coerce",
     }
     # Error checking / validation block
     if isinstance(spec, ResponseTemplate):
