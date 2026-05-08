@@ -636,7 +636,7 @@ class Kosmos2_5VisionEncoder(Kosmos2_5PreTrainedModel):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
-# Copied from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextSinusoidalPositionalEmbedding with Kosmos2->Kosmos2_5
+# Adapted from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextSinusoidalPositionalEmbedding with Kosmos2->Kosmos2_5
 class Kosmos2_5TextSinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
 
