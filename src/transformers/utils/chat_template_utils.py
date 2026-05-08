@@ -547,6 +547,8 @@ def render_jinja_template(
             
             if (final_message := chat[-1].get(continue_final_message)) is None:
                 raise ValueError(f"continue_final_message is set but the final message has no \"{continue_final_message}\" to continue!")
+            if continue_final_message not in chat_template:
+                raise ValueError(f"continue_final_message is set to \"{continue_final_message}\" but this is not an accepted field in the chat_template")
             
             elif isinstance(final_message, (list, tuple)):
                 for content_block in reversed(final_message):
