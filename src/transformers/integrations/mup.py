@@ -123,7 +123,7 @@ def build_mup_param_groups(model: nn.Module, lr: float, weight_decay: float = 0.
             vector_like.append(p)
 
     return [
-        {"params": matrix_like, "lr": lr / width_mult, "weight_decay": weight_decay * width_mult},
+        {"params": matrix_like, "lr": lr / width_mult, "weight_decay": weight_decay},
         {"params": vector_like, "lr": lr, "weight_decay": weight_decay},
     ]
 

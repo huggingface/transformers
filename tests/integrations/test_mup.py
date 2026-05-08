@@ -88,10 +88,13 @@ class MupLlamaTest(unittest.TestCase):
         # width_mult = 2: matrix-like (hidden Linear weights) get lr/m, vector-like (readout weight,
         # embeddings, biases, LayerNorm) keep lr. Mirrors `mup.MuAdam`.
         m = _make_llama(width=128, mup=True, base_width=64)
-        groups = build_mup_param_groups(m, lr=1e-3)
+        groups = build_mup_param_groups(m, lr=1e-3, weight_decay=0.1)
         matrix_group, vector_group = groups
         self.assertAlmostEqual(matrix_group["lr"], 5e-4)
         self.assertAlmostEqual(vector_group["lr"], 1e-3)
+        # Decoupled AdamW assumption: weight_decay is not scaled by width_mult.
+        self.assertAlmostEqual(matrix_group["weight_decay"], 0.1)
+        self.assertAlmostEqual(vector_group["weight_decay"], 0.1)
         q_proj_w = m.model.layers[0].self_attn.q_proj.weight
         self.assertTrue(any(p is q_proj_w for p in matrix_group["params"]))
         # The (tied) embedding/lm_head weight is vector-like under μP.
@@ -117,6 +120,24 @@ class MupLlamaTest(unittest.TestCase):
         ratio_mup = _max_ratio(rec_mup)
         ratio_sp = _max_ratio(rec_sp)
         self.assertLess(ratio_mup, ratio_sp)
+
+    def test_trainer_create_optimizer_applies_mup(self):
+        # `Trainer.create_optimizer` should split decay groups along matrix/vector axis and divide the matrix-like
+        # learning rate by `width_mult` when `config.mup` is set.
+        from transformers import Trainer, TrainingArguments
+
+        m = _make_llama(width=128, mup=True, base_width=64)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            args = TrainingArguments(output_dir=tmpdir, learning_rate=1e-3, weight_decay=0.1, report_to="none")
+            trainer = Trainer(model=m, args=args)
+            trainer.create_optimizer()
+        lrs = sorted({g["lr"] for g in trainer.optimizer.param_groups})
+        self.assertEqual(lrs, [5e-4, 1e-3])
+        # Sanity: the matrix-like (lr=5e-4) groups should hold attention/MLP projection weights.
+        matrix_params = {id(p) for g in trainer.optimizer.param_groups if g["lr"] == 5e-4 for p in g["params"]}
+        self.assertIn(id(m.model.layers[0].self_attn.q_proj.weight), matrix_params)
+        # The (tied) embedding/lm_head weight stays vector-like.
+        self.assertNotIn(id(m.model.embed_tokens.weight), matrix_params)
 
     def test_save_load_round_trip(self):
         m = _make_llama(width=128, mup=True, base_width=64)

@@ -1172,6 +1172,24 @@ class Trainer:
                 },
             ]
 
+            # Maximal Update Parametrization (μP): split each decay group along the matrix-like / vector-like
+            # axis and divide the matrix-like learning rate by `width_mult`. Assumes an Adam(W)-family optimizer;
+            # SGD μP uses a different recipe.
+            if opt_model.config.mup:
+                from .integrations.mup import _matrix_like_param_ids
+
+                matrix_ids = _matrix_like_param_ids(opt_model)
+                width_mult = opt_model.config.hidden_size / opt_model.config.mup_base_width
+                refined = []
+                for group in optimizer_grouped_parameters:
+                    matrix_p = [p for p in group["params"] if id(p) in matrix_ids]
+                    vector_p = [p for p in group["params"] if id(p) not in matrix_ids]
+                    if matrix_p:
+                        refined.append({**group, "params": matrix_p, "lr": self.args.learning_rate / width_mult})
+                    if vector_p:
+                        refined.append({**group, "params": vector_p})
+                optimizer_grouped_parameters = refined
+
             if self.optimizer_cls_and_kwargs is not None:
                 optimizer_cls, optimizer_kwargs = self.optimizer_cls_and_kwargs
             else:

@@ -30,7 +30,9 @@ config = LlamaConfig(
 model = AutoModelForCausalLM.from_config(config)
 ```
 
-Use [`~integrations.build_mup_param_groups`] to build optimizer parameter groups that apply the μP learning-rate rule.
+When using [`Trainer`], the AdamW μP learning-rate split is applied automatically as soon as `config.mup` is set; you do not need to build the parameter groups yourself.
+
+If you build your own optimizer, use [`~integrations.build_mup_param_groups`].
 
 ```py
 import torch
