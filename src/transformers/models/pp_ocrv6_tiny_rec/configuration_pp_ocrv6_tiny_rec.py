@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
@@ -31,7 +30,7 @@ from ..auto import AutoConfig
 @strict
 class PPOCRV6TinyRecConfig(PreTrainedConfig):
     r"""
-    head_out_channels (`int`, *optional*, defaults to 18385):
+    head_out_channels (`int`, *optional*, defaults to 18714):
         The number of output channels from the PPOCRV6TinyRecHead, responsible for final classification.
     """
 

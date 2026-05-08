@@ -1355,12 +1355,20 @@
         title: PP-OCRv5_server_det
       - local: model_doc/pp_ocrv5_server_rec
         title: PP-OCRv5_server_rec
+      - local: model_doc/pp_ocrv6_base_rec
+        title: PP-OCRv6_base_rec
+      - local: model_doc/pp_ocrv6_small_rec
+        title: PP-OCRv6_small_rec
+      - local: model_doc/pp_ocrv6_tiny_rec
+        title: PP-OCRv6_tiny_rec
       - local: model_doc/pp_chart2table
         title: PPChart2Table
       - local: model_doc/pp_lcnet
         title: PPLCNet
       - local: model_doc/pp_lcnet_v3
         title: PPLCNetV3
+      - local: model_doc/pp_lcnet_v4
+        title: PPLCNetV4
       - local: model_doc/qianfan_ocr
         title: QianfanOCR
       - local: model_doc/qwen2_5_omni

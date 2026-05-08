@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -344,8 +345,8 @@ class PPOCRV6BaseRecModel(PPOCRV6BaseRecPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class PPOCRV6BaseRecForTextRecognitionOutput(BaseModelOutputWithNoAttention):
     r"""
     head_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
@@ -383,4 +384,9 @@ class PPOCRV6BaseRecForTextRecognition(PPOCRV6BaseRecPreTrainedModel):
         )
 
 
-__all__ = ["PPOCRV6BaseRecForTextRecognition"]
+__all__ = [
+    "PPOCRV6BaseRecForTextRecognition",
+    "PPOCRV6BaseRecModel",
+    "PPOCRV6BaseRecEncoderWithSVTR",
+    "PPOCRV6BaseRecPreTrainedModel",
+]

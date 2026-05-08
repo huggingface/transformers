@@ -32,7 +32,6 @@ from ...utils import (
 from ..pp_ocrv6_small_rec.configuration_pp_ocrv6_small_rec import PPOCRV6SmallRecConfig
 from ..pp_ocrv6_small_rec.modeling_pp_ocrv6_small_rec import (
     PPOCRV6SmallRecForTextRecognition,
-    PPOCRV6SmallRecModel,
     PPOCRV6SmallRecPreTrainedModel,
 )
 
@@ -60,6 +59,8 @@ class PPOCRV6TinyRecConfig(PPOCRV6SmallRecConfig):
 
 @auto_docstring
 class PPOCRV6TinyRecPreTrainedModel(PPOCRV6SmallRecPreTrainedModel):
+    supports_gradient_checkpointing = False
+    _no_split_modules = []
     _can_record_outputs = {}
 
 
@@ -116,11 +117,7 @@ class PPOCRV6TinyRecHead(nn.Module):
         return hidden_states
 
 
-class PPOCRV6TinyRecModel(PPOCRV6SmallRecModel):
-    pass
-
-
-@auto_docstring(custom_intro="PPOCR6SmallRec model for text recognition tasks.")
+@auto_docstring(custom_intro="PPOCR6TinyRec model for text recognition tasks.")
 class PPOCRV6TinyRecForTextRecognition(PPOCRV6SmallRecForTextRecognition):
     @can_return_tuple
     @auto_docstring
@@ -141,6 +138,6 @@ class PPOCRV6TinyRecForTextRecognition(PPOCRV6SmallRecForTextRecognition):
 __all__ = [
     "PPOCRV6TinyRecForTextRecognition",
     "PPOCRV6TinyRecConfig",
-    "PPOCRV6TinyRecModel",
-    "PPOCRV6TinyRecPreTrainedModel",  # noqa: F822
+    "PPOCRV6TinyRecModel",  # noqa: F822
+    "PPOCRV6TinyRecPreTrainedModel",
 ]

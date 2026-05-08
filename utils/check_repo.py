@@ -211,6 +211,11 @@ IGNORE_NON_TESTED = (
         "PPOCRV5MobileRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileRecForTextRecognition.
         "PPOCRV5ServerRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerRecForTextRecognition.
         "PPOCRV5ServerRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerRecForTextRecognition.
+        "PPOCRV6SmallRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6SmallRecForTextRecognition.
+        "PPOCRV6SmallRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6SmallRecForTextRecognition.
+        "PPOCRV6BaseRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6BaseRecForTextRecognition.
+        "PPOCRV6BaseRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6BaseRecForTextRecognition.
+        "PPOCRV6TinyRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6TinyRecForTextRecognition.
         "PPLCNetModel",  # Building part of bigger (tested) model. Tested implicitly through PPLCNetForImageClassification.
         "PaddleOCRVLModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
         "PaddleOCRVisionModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.

@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
 from ...utils import (
@@ -20,8 +19,7 @@ from ...utils import (
     logging,
 )
 from ..pp_ocrv6_small_rec.configuration_pp_ocrv6_small_rec import PPOCRV6SmallRecConfig
-from ..pp_ocrv6_small_rec.modeling_pp_ocrv6_small_rec import PPOCRV6SmallRecForTextRecognition, PPOCRV6SmallRecHead
-from ..pp_ocrv6_tiny_rec.modeling_pp_ocrv6_tiny_rec import PPOCRV6TinyRecGuideHead
+from ..pp_ocrv6_small_rec.modeling_pp_ocrv6_small_rec import PPOCRV6SmallRecForTextRecognition
 
 
 logger = logging.get_logger(__name__)
@@ -32,7 +30,6 @@ logger = logging.get_logger(__name__)
 class PPOCRV6BaseRecConfig(PPOCRV6SmallRecConfig):
     hidden_size: int = 192
     mlp_ratio: float = 4.0
-    depth: int = 3
 
 
 @auto_docstring(custom_intro="PPOCR6BaseRec model for text recognition tasks.")
@@ -43,4 +40,7 @@ class PPOCRV6BaseRecForTextRecognition(PPOCRV6SmallRecForTextRecognition):
 __all__ = [
     "PPOCRV6BaseRecForTextRecognition",
     "PPOCRV6BaseRecConfig",
+    "PPOCRV6BaseRecModel",  # noqa: F822
+    "PPOCRV6BaseRecEncoderWithSVTR",  # noqa: F822
+    "PPOCRV6BaseRecPreTrainedModel",  # noqa: F822
 ]

@@ -30,7 +30,7 @@ from ..auto import AutoConfig
 @strict
 class PPOCRV6BaseRecConfig(PreTrainedConfig):
     r"""
-    head_out_channels (`int`, *optional*, defaults to 18385):
+    head_out_channels (`int`, *optional*, defaults to 18714):
         The number of output channels from the PPOCRV6BaseRecHead, responsible for final classification.
     """
 
@@ -39,10 +39,11 @@ class PPOCRV6BaseRecConfig(PreTrainedConfig):
 
     hidden_act: str = "silu"
     backbone_config: dict | PreTrainedConfig | None = None
-    hidden_size: int = 120
-    mlp_ratio: float = 2.0
+    hidden_size: int = 192
+    mlp_ratio: float = 4.0
     depth: int = 2
-    head_out_channels: int = 18385
+
+    head_out_channels: int = 18714
     conv_kernel_size: list | None = None
     qkv_bias: bool = True
     num_attention_heads: int = 8

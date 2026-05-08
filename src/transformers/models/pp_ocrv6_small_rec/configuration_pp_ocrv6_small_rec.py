@@ -30,7 +30,7 @@ from ..auto import AutoConfig
 @strict
 class PPOCRV6SmallRecConfig(PreTrainedConfig):
     r"""
-    head_out_channels (`int`, *optional*, defaults to 18385):
+    head_out_channels (`int`, *optional*, defaults to 18714):
         The number of output channels from the PPOCRV6SmallRecHead, responsible for final classification.
     """
 
@@ -42,7 +42,8 @@ class PPOCRV6SmallRecConfig(PreTrainedConfig):
     hidden_size: int = 120
     mlp_ratio: float = 2.0
     depth: int = 2
-    head_out_channels: int = 18385
+
+    head_out_channels: int = 18714
     conv_kernel_size: list | None = None
     qkv_bias: bool = True
     num_attention_heads: int = 8

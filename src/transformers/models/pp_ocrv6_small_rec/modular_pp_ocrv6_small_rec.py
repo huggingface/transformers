@@ -43,6 +43,13 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="PaddlePaddle/PP-OCRv6_small_rec_safetensors")
 @strict
 class PPOCRV6SmallRecConfig(PPOCRV5ServerRecConfig):
+    r"""
+    head_out_channels (`int`, *optional*, defaults to 18714):
+        The number of output channels from the PPOCRV6SmallRecHead, responsible for final classification.
+    """
+
+    head_out_channels: int = 18714
+
     def __post_init__(self, **kwargs):
         if self.conv_kernel_size is None:
             self.conv_kernel_size = [1, 7]
@@ -136,6 +143,7 @@ class PPOCRV6SmallRecForTextRecognition(PPOCRV5ServerRecForTextRecognition):
 __all__ = [
     "PPOCRV6SmallRecForTextRecognition",
     "PPOCRV6SmallRecConfig",
-    "PPOCRV6SmallRecModel",
+    "PPOCRV6SmallRecModel",  # noqa: F822
     "PPOCRV6SmallRecEncoderWithSVTR",
+    "PPOCRV6SmallRecPreTrainedModel",  # noqa: F822
 ]

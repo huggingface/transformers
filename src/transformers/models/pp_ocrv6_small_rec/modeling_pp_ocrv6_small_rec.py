@@ -344,8 +344,8 @@ class PPOCRV6SmallRecModel(PPOCRV6SmallRecPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class PPOCRV6SmallRecForTextRecognitionOutput(BaseModelOutputWithNoAttention):
     r"""
     head_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
@@ -383,4 +383,9 @@ class PPOCRV6SmallRecForTextRecognition(PPOCRV6SmallRecPreTrainedModel):
         )
 
 
-__all__ = ["PPOCRV6SmallRecForTextRecognition", "PPOCRV6SmallRecModel", "PPOCRV6SmallRecEncoderWithSVTR"]
+__all__ = [
+    "PPOCRV6SmallRecForTextRecognition",
+    "PPOCRV6SmallRecModel",
+    "PPOCRV6SmallRecEncoderWithSVTR",
+    "PPOCRV6SmallRecPreTrainedModel",
+]
