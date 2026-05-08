@@ -16,6 +16,7 @@
 # by pytest before any tests are run
 
 import doctest
+import importlib
 import os
 import sys
 import warnings
@@ -24,6 +25,7 @@ from os.path import abspath, dirname, join
 import _pytest
 import pytest
 
+from transformers.dynamic_module_utils import init_hf_modules
 from transformers.testing_utils import (
     HfDoctestModule,
     HfDocTestParser,
@@ -34,6 +36,9 @@ from transformers.testing_utils import (
 from transformers.utils import enable_tf32
 from transformers.utils.network_logging import register_network_debug_plugin
 
+
+init_hf_modules()
+importlib.invalidate_caches()
 
 NOT_DEVICE_TESTS = {
     "test_tokenization",

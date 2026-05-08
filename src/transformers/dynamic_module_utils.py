@@ -282,7 +282,6 @@ def get_class_in_module(
     Returns:
         `typing.Type`: The class looked for.
     """
-    init_hf_modules()
     name = os.path.normpath(module_path)
     name = name.removesuffix(".py")
     name = name.replace(os.path.sep, ".")
