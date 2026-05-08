@@ -39,10 +39,6 @@ class PPOCRV6TinyRecConfig(PreTrainedConfig):
     backbone_config: dict | PreTrainedConfig | None = None
     hidden_size: int = 120
     head_out_channels: int = 6625
-    qkv_bias: bool = True
-    num_attention_heads: int = 8
-    attention_dropout: float | int = 0.0
-    layer_norm_eps: float = 1e-6
 
     def __post_init__(self, **kwargs):
         self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(

@@ -47,6 +47,10 @@ class PPOCRV6TinyRecConfig(PPOCRV6SmallRecConfig):
     mlp_ratio = AttributeError()
     depth = AttributeError()
     hidden_act = AttributeError()
+    attention_dropout = AttributeError()
+    layer_norm_eps = AttributeError()
+    num_attention_heads = AttributeError()
+    qkv_bias = AttributeError()
 
     def __post_init__(self, **kwargs):
         self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
