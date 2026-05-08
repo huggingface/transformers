@@ -304,7 +304,6 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
             )
-
         else:
             core_attn_out, last_recurrent_state = self.chunk_gated_delta_rule(
                 query,
@@ -317,7 +316,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                 use_qk_l2norm_in_kernel=True,
                 # The chunked FLA kernel takes a single `cu_seqlens` arg; for packed self-attention this matches q-side lengths.
                 cu_seqlens=kwargs.get("cu_seq_lens_q"),
-
+            )
         # Update cache
         if cache_params is not None:
             cache_params.update_recurrent_state(last_recurrent_state, self.layer_idx)
