@@ -35,7 +35,7 @@ the starting header for an assistant message to the end of the conversation.
 
 Load the written template as a string and assign it to the tokenizer's `chat_template` attribute. Once set, the template is used whenever you call [`~PreTrainedTokenizerBase.apply_chat_template`]. It is also saved
 with the tokenizer whenever [`~PreTrainedTokenizer.save_pretrained`] or [`~PreTrainedTokenizer.push_to_hub`] is called. The template is saved in the `chat_template.jinja` file in the tokenizer directory. You can
-edit this file directly to change the template, which is often easier than manipulating a template string. See [How chat templates are stored and loaded](#how-chat-templates-are-stored-and-loaded) below for the other on-disk shapes Transformers supports.
+edit this file directly to change the template, which is often easier than manipulating a template string. See [Storing and loading chat templates](#storing-and-loading-chat-templates) below for the other on-disk shapes Transformers supports.
 
 ## Template writing tips
 
