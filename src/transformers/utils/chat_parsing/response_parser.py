@@ -220,6 +220,7 @@ class ResponseParser:
         best: tuple[str, ResponseTemplateField, re.Match] | None = None
         for kind, fld in watch:
             regex = fld.open_re if kind == "open" else fld.close_re
+            assert regex is not None  # Should always be correct, and keeps ty happy
             m = regex.search(self._buffer, self._pos)
             if m is None:
                 continue
