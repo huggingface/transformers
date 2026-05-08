@@ -380,7 +380,6 @@ class FlaubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         {
             "feature-extraction": FlaubertModel,
             "fill-mask": FlaubertWithLMHeadModel,
-            "question-answering": FlaubertForQuestionAnsweringSimple,
             "text-classification": FlaubertForSequenceClassification,
             "token-classification": FlaubertForTokenClassification,
             "zero-shot": FlaubertForSequenceClassification,

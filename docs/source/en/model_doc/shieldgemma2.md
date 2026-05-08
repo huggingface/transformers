@@ -33,15 +33,17 @@ This model was contributed by [Ryan Mullins](https://huggingface.co/RyanMullins)
 ## Usage Example
 
 - ShieldGemma 2 provides a Processor that accepts a list of `images` and an optional list of `policies` as input, and constructs a batch of prompts as the product of these two lists using the provided chat template.
-- You can extend ShieldGemma's built-in in policies with the `custom_policies` argument to the Processor. Using the same key as one of the built-in policies will overwrite that policy with your custom definition.
+- You can extend ShieldGemma's built-in policies with the `custom_policies` argument to the Processor. Using the same key as one of the built-in policies will overwrite that policy with your custom definition.
 - ShieldGemma 2 does not support the image cropping capabilities used by Gemma 3.
 
 ### Classification against Built-in Policies
 
 ```python
-from PIL import Image
 import requests
+from PIL import Image
+
 from transformers import AutoProcessor, ShieldGemma2ForImageClassification
+
 
 model_id = "google/shieldgemma-2-4b-it"
 model = ShieldGemma2ForImageClassification.from_pretrained(model_id, device_map="auto")
@@ -59,9 +61,11 @@ print(output.probabilities)
 ### Classification against Custom Policies
 
 ```python
-from PIL import Image
 import requests
+from PIL import Image
+
 from transformers import AutoProcessor, ShieldGemma2ForImageClassification
+
 
 model_id = "google/shieldgemma-2-4b-it"
 model = ShieldGemma2ForImageClassification.from_pretrained(model_id, device_map="auto")
@@ -71,8 +75,8 @@ url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/
 image = Image.open(requests.get(url, stream=True).raw)
 
 custom_policies = {
-    "key_a": "descrition_a",
-    "key_b": "descrition_b",
+    "key_a": "description_a",
+    "key_b": "description_b",
 }
 
 inputs = processor(

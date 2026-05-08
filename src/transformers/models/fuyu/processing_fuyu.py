@@ -20,6 +20,7 @@ from typing import Union
 
 import numpy as np
 
+from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import (
     MultiModalData,
@@ -30,10 +31,6 @@ from ...processing_utils import (
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available, logging, requires_backends
 from ...utils.import_utils import requires
-
-
-if is_torch_available():
-    from .image_processing_fuyu import FuyuBatchFeature
 
 
 logger = logging.get_logger(__name__)
@@ -360,6 +357,7 @@ class FuyuProcessor(ProcessorMixin):
         self.dummy_image_index = -1
         self.image_token_id = tokenizer.encode("|SPEAKER|", add_special_tokens=False)[1]
         self.image_newline_id = tokenizer.encode("|NEWLINE|", add_special_tokens=False)[1]
+        self.image_ids = [self.image_newline_id, self.image_token_id]
 
     def _left_pad_inputs_with_attention_mask(self, model_inputs: list[dict], return_attention_mask: bool):
         max_length_input_ids = max(entry["input_ids"].shape[1] for entry in model_inputs)
@@ -487,7 +485,7 @@ class FuyuProcessor(ProcessorMixin):
         images: ImageInput | None = None,
         text: str | list[str] | TextInput | PreTokenizedInput | None = None,
         **kwargs: Unpack[FuyuProcessorKwargs],
-    ) -> "FuyuBatchFeature":
+    ) -> "BatchFeature":
         r"""
         Returns:
             [`FuyuBatchEncoding`]: A [`FuyuBatchEncoding`] with the following fields:
@@ -541,20 +539,17 @@ class FuyuProcessor(ProcessorMixin):
         self.batch_size = len(batch_images)
 
         # --- Use self.tokenizer to get the ids of special tokens to insert into image ids ---
-
-        tensor_batch_images = torch.stack([img[0] for img in batch_images if img]).unsqueeze(1)
-
         # --- Use self.image_processor again to obtain the full token ids and batch inputs ---
         all_encodings = []
 
         for prompt, scale_factor, image_unpadded_height, image_unpadded_width, tensor_batch_image in zip(
-            prompts, scale_factors, image_unpadded_heights, image_unpadded_widths, tensor_batch_images
+            prompts, scale_factors, image_unpadded_heights, image_unpadded_widths, batch_images
         ):
             sample_encoding = self.get_sample_encoding(
                 prompts=[prompt],
                 scale_factors=[scale_factor],
-                image_unpadded_heights=torch.tensor([image_unpadded_height]),
-                image_unpadded_widths=torch.tensor([image_unpadded_width]),
+                image_unpadded_heights=torch.tensor([image_unpadded_height]).unsqueeze(0),
+                image_unpadded_widths=torch.tensor([image_unpadded_width]).unsqueeze(0),
                 image_placeholder_id=self.image_token_id,
                 image_newline_id=self.image_newline_id,
                 tensor_batch_images=tensor_batch_image.unsqueeze(0),
@@ -565,13 +560,9 @@ class FuyuProcessor(ProcessorMixin):
             model_inputs=all_encodings, return_attention_mask=True
         )
         if return_mm_token_type_ids:
-            input_ids = batch_encoding["input_ids"]
-            mm_token_type_ids = torch.zeros_like(input_ids)
-            mm_token_type_ids[input_ids == self.image_token_id] = 1
-            mm_token_type_ids[input_ids == self.image_newline_id] = 1
-            batch_encoding["mm_token_type_ids"] = mm_token_type_ids
-
-        return FuyuBatchFeature(data=batch_encoding)
+            batch_encoding["mm_token_type_ids"] = self.create_mm_token_type_ids(batch_encoding["input_ids"])
+            batch_encoding["mm_token_type_ids"] = torch.tensor(batch_encoding["mm_token_type_ids"])
+        return BatchFeature(data=batch_encoding)
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """

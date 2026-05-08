@@ -17,9 +17,6 @@ rendered properly in your Markdown viewer.
 
 # PhoBERT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -38,19 +35,21 @@ This model was contributed by [dqnguyen](https://huggingface.co/dqnguyen). The o
 ## Usage example
 
 ```python
->>> import torch
->>> from transformers import AutoModel, AutoTokenizer
+import torch
 
->>> phobert = AutoModel.from_pretrained("vinai/phobert-base")
->>> tokenizer = AutoTokenizer.from_pretrained("vinai/phobert-base")
+from transformers import AutoModel, AutoTokenizer
 
->>> # INPUT TEXT MUST BE ALREADY WORD-SEGMENTED!
->>> line = "Tôi là sinh_viên trường đại_học Công_nghệ ."
 
->>> input_ids = torch.tensor([tokenizer.encode(line)])
+phobert = AutoModel.from_pretrained("vinai/phobert-base", device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained("vinai/phobert-base")
 
->>> with torch.no_grad():
-...     features = phobert(input_ids)  # Models outputs are now tuples
+# INPUT TEXT MUST BE ALREADY WORD-SEGMENTED!
+line = "Tôi là sinh_viên trường đại_học Công_nghệ ."
+
+input_ids = torch.tensor([tokenizer.encode(line)])
+
+with torch.no_grad():
+    features = phobert(input_ids)  # Models outputs are now tuples
 ```
 
 <Tip>

@@ -33,12 +33,12 @@ from .retrieval_rag import RagRetriever
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for retriever augmented marginalized models outputs.
     """
 )
+@dataclass
 class RetrievAugLMMarginOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -129,8 +129,8 @@ class RetrievAugLMMarginOutput(ModelOutput):
     generator_cross_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class RetrievAugLMOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
@@ -1566,6 +1566,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         model_kwargs["encoder_outputs"] = encoder_outputs
         model_kwargs["attention_mask"] = context_attention_mask
         model_kwargs["n_docs"] = n_docs
+        model_kwargs["use_cache"] = generation_config.use_cache
 
         prepared_logits_processor = self._get_logits_processor(
             generation_config=generation_config,
@@ -1587,9 +1588,6 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             batch_size=input_ids.shape[0],
             max_cache_length=generation_config.max_length - 1,
         )
-
-        # Prefill pass
-        generation_mode_kwargs["prefill_outputs"] = self._prefill(input_ids, generation_config, model_kwargs)
 
         return decoding_method(
             self,

@@ -98,9 +98,7 @@ class T5Gemma2RotaryEmbedding(nn.Module):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
-
         self.config = config
-
         self.layer_types = list(set(config.layer_types))
         self.rope_type = {}
         for layer_type in self.layer_types:
@@ -112,7 +110,7 @@ class T5Gemma2RotaryEmbedding(nn.Module):
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, layer_type=layer_type)
             self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
             self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
@@ -223,7 +221,7 @@ def eager_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    dropout: float = 0.0,
+    dropout: float | int = 0.0,
     scaling: float | None = None,
     softcap: float | None = None,
     **kwargs,
@@ -291,7 +289,6 @@ class T5Gemma2SelfAttention(nn.Module):
         position_embeddings: torch.Tensor = None,
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         input_shape = hidden_states.shape[:-1]
@@ -308,9 +305,7 @@ class T5Gemma2SelfAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -377,7 +372,6 @@ class T5Gemma2MergedAttention(nn.Module):
         encoder_hidden_states: torch.Tensor,
         # cache inputs
         past_key_values: EncoderDecoderCache | None = None,
-        cache_position: torch.LongTensor | None = None,
         # others
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
@@ -400,12 +394,8 @@ class T5Gemma2MergedAttention(nn.Module):
 
         if past_key_values is not None:
             # self-attention.
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             self_attention_cache = past_key_values.self_attention_cache
-            key_states, value_states = self_attention_cache.update(
-                key_states, value_states, self.layer_idx, cache_kwargs
-            )
+            key_states, value_states = self_attention_cache.update(key_states, value_states, self.layer_idx)
 
             # cross-attention.
             is_updated = past_key_values.is_updated.get(self.layer_idx)
@@ -543,7 +533,6 @@ class T5Gemma2DecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: EncoderDecoderCache | None = None,
         use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.FloatTensor:
@@ -557,7 +546,6 @@ class T5Gemma2DecoderLayer(GradientCheckpointingLayer):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             encoder_hidden_states=encoder_hidden_states,
             **kwargs,
         )
@@ -716,7 +704,7 @@ class T5Gemma2PreTrainedModel(PreTrainedModel):
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
 
-    def prepare_decoder_input_ids_from_labels(self, input_ids):
+    def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         """
         Shifts input_ids to the right, prepends the decoder_start_token_id, and handles
         pad_token_id replacement for labels that were -100.
@@ -730,8 +718,8 @@ class T5Gemma2PreTrainedModel(PreTrainedModel):
             raise ValueError("self.model.config.decoder.bos_token_id has to be defined. ")
 
         # shift inputs to the right
-        shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-        shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
+        shifted_input_ids = labels.new_zeros(labels.shape)
+        shifted_input_ids[..., 1:] = labels[..., :-1].clone()
         shifted_input_ids[..., 0] = decoder_start_token_id
 
         if pad_token_id is None:
@@ -842,17 +830,17 @@ class T5Gemma2TextEncoder(T5Gemma2PreTrainedModel):
 
         # global and local position embeddings
         position_embeddings = {}
-        for layer_type in self.config.layer_types:
+        for layer_type in set(self.config.layer_types):
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         # dropout
         hidden_states = self.dropout(hidden_states)
 
-        for layer_module in self.layers[: self.config.num_hidden_layers]:
+        for i, layer_module in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = layer_module(
                 hidden_states,
-                position_embeddings[layer_module.attention_type],
-                self_attn_mask_mapping[layer_module.attention_type],
+                position_embeddings[self.config.layer_types[i]],
+                self_attn_mask_mapping[self.config.layer_types[i]],
                 position_ids,
                 **kwargs,
             )
@@ -968,19 +956,6 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         return outputs
 
 
-def bidirectional_mask_function(attention_mask: torch.Tensor | None) -> Callable:
-    """
-    This creates bidirectional attention mask.
-    """
-
-    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        if attention_mask is None:
-            return torch.ones((), dtype=torch.bool)
-        return attention_mask[batch_idx, kv_idx].to(torch.bool)
-
-    return inner_mask
-
-
 class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
     config: T5Gemma2DecoderConfig
     _can_record_outputs = {
@@ -1022,7 +997,6 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
         past_key_values: EncoderDecoderCache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1038,46 +1012,37 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
         if not self.training and use_cache and past_key_values is None:
             past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache())
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         if not isinstance(self_attn_mask_mapping := attention_mask, dict):
+            # this masking function does nothing to masking but forces `allow_is_causal_skip` to be False
+            # as we always need a mask during decoding for merged attention.
+            dummy_and_mask_function = lambda *args: torch.tensor(True, dtype=torch.bool)  # noqa
             mask_kwargs = {
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "cache_position": cache_position,
                 "past_key_values": past_key_values.self_attention_cache if past_key_values is not None else None,
                 "position_ids": position_ids,
+                "and_mask_function": dummy_and_mask_function,
             }
-            # this masking function did nothing to masking but forces `allow_is_causal_skip` to be False
-            # as we always need a mask during decoding for merged attention.
-            mask_kwargs["and_mask_function"] = lambda *args: torch.tensor(True, dtype=torch.bool)
             self_attn_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
                 "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
             }
 
         if not isinstance(cross_attn_mask_mapping := encoder_attention_mask, dict):
-            mask_kwargs = {
-                "config": self.config,
-                "inputs_embeds": encoder_hidden_states,
-                "attention_mask": encoder_attention_mask,
-                "cache_position": cache_position,
-                "past_key_values": None,
-                "position_ids": None,
-            }
             cross_attn_mask_mapping = {
-                "full_attention": create_causal_mask(
-                    **mask_kwargs,
-                    or_mask_function=bidirectional_mask_function(encoder_attention_mask),
-                ),
+                "full_attention": create_bidirectional_mask(
+                    config=self.config,
+                    inputs_embeds=inputs_embeds,
+                    attention_mask=encoder_attention_mask,
+                    encoder_hidden_states=encoder_hidden_states,
+                    and_mask_function=dummy_and_mask_function,
+                )
             }
 
         merged_attn_mask_mapping = {
@@ -1094,21 +1059,20 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
 
         # global and local position embeddings
         position_embeddings = {}
-        for layer_type in self.config.layer_types:
+        for layer_type in set(self.config.layer_types):
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         # dropout
         hidden_states = self.dropout(hidden_states)
 
-        for layer_module in self.layers[: self.config.num_hidden_layers]:
+        for i, layer_module in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = layer_module(
                 hidden_states,
-                position_embeddings[layer_module.attention_type],
-                merged_attn_mask_mapping[layer_module.attention_type],
+                position_embeddings[self.config.layer_types[i]],
+                merged_attn_mask_mapping[self.config.layer_types[i]],
                 position_ids,
                 past_key_values,
                 use_cache,
-                cache_position,
                 encoder_hidden_states,
                 **kwargs,
             )
@@ -1168,7 +1132,6 @@ class T5Gemma2Model(T5Gemma2PreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         decoder_inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqModelOutput:
         r"""
@@ -1200,7 +1163,6 @@ class T5Gemma2Model(T5Gemma2PreTrainedModel):
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=attention_mask,
             use_cache=use_cache,
-            cache_position=cache_position,
             return_dict=True,
             **kwargs,
         )
@@ -1283,7 +1245,6 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | Seq2SeqLMOutput:
@@ -1314,7 +1275,6 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1379,8 +1339,8 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
         cross_attn_config = copy.deepcopy(self.config.get_text_config(decoder=True))
 
         # cross-attention does not use sliding window
-        del cross_attn_config.sliding_window
-        del cross_attn_config.layer_types
+        cross_attn_config.sliding_window = None
+        cross_attn_config.layer_types = ["full_attention"] * cross_attn_config.num_hidden_layers
 
         cross_attn_cache_kwargs = {
             "config": cross_attn_config,

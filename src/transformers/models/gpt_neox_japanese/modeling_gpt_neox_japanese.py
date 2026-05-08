@@ -185,8 +185,8 @@ class GPTNeoXJapaneseAttention(nn.Module):
         layer_past: Cache | None = None,
         use_cache: bool | None = False,
         output_attentions: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs,
     ):
         # Compute QKV
         # Attention heads [batch, seq_len, hidden_size]
@@ -216,13 +216,7 @@ class GPTNeoXJapaneseAttention(nn.Module):
 
         # Cache QKV values
         if layer_past is not None:
-            cache_kwargs = {
-                "sin": sin,
-                "cos": cos,
-                "partial_rotation_size": self.rotary_ndims,
-                "cache_position": cache_position,
-            }
-            key, value = layer_past.update(key, value, self.layer_idx, cache_kwargs)
+            key, value = layer_past.update(key, value, self.layer_idx)
 
         # Compute attention
         attn_output, attn_weights = self._attn(query, key, value, attention_mask)
@@ -353,8 +347,8 @@ class GPTNeoXJapaneseLayer(nn.Module):
         use_cache: bool | None = False,
         layer_past: Cache | None = None,
         output_attentions: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs,
     ):
         residual = hidden_states
         ln_out = self.input_layernorm(hidden_states)
@@ -365,7 +359,6 @@ class GPTNeoXJapaneseLayer(nn.Module):
             use_cache=use_cache,
             output_attentions=output_attentions,
             position_ids=position_ids,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
         )
 
@@ -421,7 +414,6 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPast:
         r"""
@@ -444,7 +436,7 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -456,19 +448,15 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        seq_length = inputs_embeds.shape[1]
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(past_seen_tokens, past_seen_tokens + seq_length, device=inputs_embeds.device)
-
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
@@ -489,7 +477,6 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
                 layer_past=past_key_values,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
-                cache_position=cache_position,
                 position_embeddings=position_embeddings,
             )
             hidden_states = outputs[0]
@@ -551,7 +538,6 @@ class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel, GenerationMixin
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> tuple | CausalLMOutputWithPast:
@@ -578,7 +564,7 @@ class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel, GenerationMixin
         >>> prediction_logits = outputs.logits
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.gpt_neox_japanese(
             input_ids,
@@ -590,7 +576,6 @@ class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel, GenerationMixin
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         hidden_states = outputs[0]

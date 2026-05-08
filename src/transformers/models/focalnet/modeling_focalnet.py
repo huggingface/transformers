@@ -22,23 +22,24 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import BackboneMixin
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
+from ...utils.generic import can_return_tuple
 from .configuration_focalnet import FocalNetConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     FocalNet encoder's outputs, with potential hidden states.
     """
 )
+@dataclass
 class FocalNetEncoderOutput(ModelOutput):
     r"""
     reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
@@ -54,12 +55,12 @@ class FocalNetEncoderOutput(ModelOutput):
     reshaped_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     FocalNet model's outputs that also contains a pooling of the last hidden states.
     """
 )
+@dataclass
 class FocalNetModelOutput(ModelOutput):
     r"""
     pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*, returned when `add_pooling_layer=True` is passed):
@@ -78,12 +79,12 @@ class FocalNetModelOutput(ModelOutput):
     reshaped_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     FocalNet masked image model outputs.
     """
 )
+@dataclass
 class FocalNetMaskedImageModelingOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `bool_masked_pos` is provided):
@@ -104,12 +105,12 @@ class FocalNetMaskedImageModelingOutput(ModelOutput):
     reshaped_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     FocalNet outputs for image classification.
     """
 )
+@dataclass
 class FocalNetImageClassifierOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -635,7 +636,7 @@ class FocalNetModel(FocalNetPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -741,7 +742,7 @@ class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
         >>> list(reconstructed_pixel_values.shape)
         [1, 3, 192, 192]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.focalnet(
             pixel_values,
@@ -822,7 +823,7 @@ class FocalNetForImageClassification(FocalNetPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.focalnet(
             pixel_values,
@@ -867,6 +868,8 @@ class FocalNetBackbone(BackboneMixin, FocalNetPreTrainedModel):
         # initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
@@ -895,7 +898,7 @@ class FocalNetBackbone(BackboneMixin, FocalNetPreTrainedModel):
         >>> inputs = processor(image, return_tensors="pt")
         >>> outputs = model(**inputs)
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

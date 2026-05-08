@@ -37,7 +37,6 @@ from .configuration_dab_detr import DabDetrConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the Conditional DETR decoder. This class adds one attribute to
@@ -46,6 +45,7 @@ logger = logging.get_logger(__name__)
     decoding losses.
     """
 )
+@dataclass
 # Copied from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrDecoderOutput with ConditionalDetr->DabDetr,Conditional DETR->DAB-DETR,2 (anchor points)->4 (anchor points)
 class DabDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     r"""
@@ -64,7 +64,6 @@ class DabDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     reference_points: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the Conditional DETR encoder-decoder model. This class adds one attribute to
@@ -73,6 +72,7 @@ class DabDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     losses.
     """
 )
+@dataclass
 # Copied from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrModelOutput with ConditionalDetr->DabDetr,Conditional DETR->DAB-DETR,2 (anchor points)->4 (anchor points)
 class DabDetrModelOutput(Seq2SeqModelOutput):
     r"""
@@ -89,12 +89,12 @@ class DabDetrModelOutput(Seq2SeqModelOutput):
     reference_points: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`DabDetrForObjectDetection`].
     """
 )
+@dataclass
 # Copied from transformers.models.detr.modeling_detr.DetrObjectDetectionOutput with Detr->DabDetr
 class DabDetrObjectDetectionOutput(ModelOutput):
     r"""
@@ -915,7 +915,7 @@ class DabDetrEncoder(DabDetrPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         hidden_states = inputs_embeds
 
@@ -1045,7 +1045,7 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
@@ -1248,8 +1248,8 @@ class DabDetrModel(DabDetrPreTrainedModel):
         >>> with httpx.stream("GET", url) as response:
         ...     image = Image.open(BytesIO(response.read()))
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("IDEA-Research/dab_detr-base")
-        >>> model = AutoModel.from_pretrained("IDEA-Research/dab_detr-base")
+        >>> image_processor = AutoImageProcessor.from_pretrained("IDEA-Research/dab-detr-resnet-50")
+        >>> model = AutoModel.from_pretrained("IDEA-Research/dab-detr-resnet-50")
 
         >>> # prepare image for the model
         >>> inputs = image_processor(images=image, return_tensors="pt")
@@ -1267,7 +1267,7 @@ class DabDetrModel(DabDetrPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         batch_size, _, height, width = pixel_values.shape
         device = pixel_values.device
@@ -1530,7 +1530,7 @@ class DabDetrForObjectDetection(DabDetrPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # First, sent images through DAB_DETR base model to obtain encoder + decoder outputs
         model_outputs = self.model(

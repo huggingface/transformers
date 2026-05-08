@@ -174,7 +174,7 @@ class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def setUp(self):
         self.model_tester = EsmFoldModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=EsmConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=EsmConfig, hidden_size=48)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -224,6 +224,23 @@ class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     @unittest.skip(reason="ESMFold does not support input chunking.")
     def test_feed_forward_chunking(self):
         pass
+
+    def test_reverse_loading_mapping(self):
+        # EsmFold defaults to absolute position embeddings, which means it has no
+        # rotary_embeddings.inv_freq keys. Temporarily switch to rotary so the
+        # inv_freq conversion pattern registered for "esm" has keys to match.
+        original = self.model_tester.get_config
+
+        def _get_config_with_rotary():
+            config = original()
+            config.position_embedding_type = "rotary"
+            return config
+
+        self.model_tester.get_config = _get_config_with_rotary
+        try:
+            super().test_reverse_loading_mapping()
+        finally:
+            self.model_tester.get_config = original
 
     @unittest.skip(reason="ESMFold doesn't support data parallel.")
     def test_multi_gpu_data_parallel_forward(self):

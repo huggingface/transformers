@@ -466,7 +466,6 @@ class PeAudioEncoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -479,7 +478,6 @@ class PeAudioEncoderLayer(GradientCheckpointingLayer):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -498,7 +496,7 @@ class PeAudioPreTrainedModel(PreTrainedModel):
     config: PeAudioConfig
     base_model_prefix = "audio_model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["PeAudioEncoderLayer"]
+    _no_split_modules = ["PeAudioEncoderLayer", "TimmWrapperForImageClassification"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -535,13 +533,22 @@ class PeAudioPreTrainedModel(PreTrainedModel):
             init.normal_(module.weight, mean=0.0, std=0.02)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`PeAudioEncoder`].
     """
 )
+@dataclass
 class PeAudioEncoderOutput(BaseModelOutputWithPooling):
+    r"""
+    codec_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        Features extracted from the codec encoder, used as intermediate representations before the main encoder
+        processing.
+    output_mask (`tuple(torch.FloatTensor)`, *optional*):
+        Tuple of `torch.FloatTensor` masks corresponding to the encoder outputs, used to avoid performing attention
+        on padded regions.
+    """
+
     codec_features: torch.FloatTensor | None = None
     output_mask: tuple[torch.FloatTensor] | None = None
 

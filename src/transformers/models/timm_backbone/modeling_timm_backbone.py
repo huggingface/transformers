@@ -17,10 +17,11 @@ import torch
 from torch import Tensor, nn
 
 from ... import initialization as init
-from ...backbone_utils import BackboneMixin
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import is_timm_available, requires_backends
+from ...utils.generic import can_return_tuple
 from .configuration_timm_backbone import TimmBackboneConfig
 
 
@@ -44,9 +45,6 @@ class TimmBackbone(BackboneMixin, PreTrainedModel):
 
         if config.backbone is None:
             raise ValueError("backbone is not set in the config. Please set it to a timm model name.")
-
-        if hasattr(config, "out_features") and config.out_features is not None:
-            raise ValueError("out_features is not supported by TimmBackbone. Please use out_indices instead.")
 
         # We just take the final layer by default. This matches the default for the transformers models.
         out_indices = config.out_indices if getattr(config, "out_indices", None) is not None else (-1,)
@@ -119,6 +117,8 @@ class TimmBackbone(BackboneMixin, PreTrainedModel):
                 init.ones_(module.running_var)
                 init.zeros_(module.num_batches_tracked)
 
+    @can_return_tuple
+    @filter_output_hidden_states
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -127,7 +127,7 @@ class TimmBackbone(BackboneMixin, PreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> BackboneOutput | tuple[Tensor, ...]:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

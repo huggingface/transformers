@@ -31,12 +31,12 @@ from .configuration_seggpt import SegGptConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`SegGptEncoderOutput`].
     """
 )
+@dataclass
 class SegGptEncoderOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, patch_height, patch_width, hidden_size)`):
@@ -59,12 +59,12 @@ class SegGptEncoderOutput(ModelOutput):
     intermediate_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`SegGptImageSegmentationOutput`].
     """
 )
+@dataclass
 class SegGptImageSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided):
@@ -702,7 +702,7 @@ class SegGptModel(SegGptPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         feature_ensemble = feature_ensemble if feature_ensemble is not None else False
 
         expected_dtype = self.embeddings.patch_embeddings.projection.weight.dtype
@@ -905,7 +905,7 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if bool_masked_pos is None:
             num_patches = self.model.embeddings.patch_embeddings.num_patches

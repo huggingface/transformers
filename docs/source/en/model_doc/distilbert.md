@@ -17,7 +17,6 @@ rendered properly in your Markdown viewer.
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
     </div>
@@ -38,14 +37,13 @@ The example below demonstrates how to classify text with [`Pipeline`], [`AutoMod
 
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 classifier = pipeline(
     task="text-classification",
     model="distilbert-base-uncased-finetuned-sst-2-english",
-    dtype=torch.float16,
     device=0
 )
 
@@ -58,16 +56,17 @@ print(result)
 
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "distilbert/distilbert-base-uncased-finetuned-sst-2-english",
 )
 model = AutoModelForSequenceClassification.from_pretrained(
     "distilbert/distilbert-base-uncased-finetuned-sst-2-english",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -79,14 +78,6 @@ with torch.no_grad():
 predicted_class_id = torch.argmax(outputs.logits, dim=-1).item()
 predicted_label = model.config.id2label[predicted_class_id]
 print(f"Predicted label: {predicted_label}")
-```
-
-</hfoption>
-
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "I love using Hugging Face Transformers!" | transformers run --task text-classification --model distilbert-base-uncased-finetuned-sst-2-english
 ```
 
 </hfoption>

@@ -47,7 +47,6 @@ from .configuration_detr import DetrConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the DETR decoder. This class adds one attribute to BaseModelOutputWithCrossAttentions,
@@ -55,6 +54,7 @@ logger = logging.get_logger(__name__)
     gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
     """
 )
+@dataclass
 class DetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     r"""
     cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
@@ -69,7 +69,6 @@ class DetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     intermediate_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the DETR encoder-decoder model. This class adds one attribute to Seq2SeqModelOutput,
@@ -77,6 +76,7 @@ class DetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
     """
 )
+@dataclass
 class DetrModelOutput(Seq2SeqModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -89,12 +89,12 @@ class DetrModelOutput(Seq2SeqModelOutput):
     intermediate_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`DetrForObjectDetection`].
     """
 )
+@dataclass
 class DetrObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
@@ -132,12 +132,12 @@ class DetrObjectDetectionOutput(ModelOutput):
     encoder_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`DetrForSegmentation`].
     """
 )
+@dataclass
 class DetrSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
@@ -624,7 +624,7 @@ class DetrEncoderLayer(GradientCheckpointingLayer):
         hidden_states = self.final_layer_norm(hidden_states)
 
         if self.training:
-            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+            if not torch.isfinite(hidden_states).all():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
@@ -1435,26 +1435,6 @@ class DetrForObjectDetection(DetrPreTrainedModel):
     """
 )
 class DetrForSegmentation(DetrPreTrainedModel):
-    _checkpoint_conversion_mapping = {
-        "bbox_attention.q_linear": "bbox_attention.q_proj",
-        "bbox_attention.k_linear": "bbox_attention.k_proj",
-        # Mask head refactor
-        "mask_head.lay1": "mask_head.conv1.conv",
-        "mask_head.gn1": "mask_head.conv1.norm",
-        "mask_head.lay2": "mask_head.conv2.conv",
-        "mask_head.gn2": "mask_head.conv2.norm",
-        "mask_head.adapter1": "mask_head.fpn_stages.0.fpn_adapter",
-        "mask_head.lay3": "mask_head.fpn_stages.0.refine.conv",
-        "mask_head.gn3": "mask_head.fpn_stages.0.refine.norm",
-        "mask_head.adapter2": "mask_head.fpn_stages.1.fpn_adapter",
-        "mask_head.lay4": "mask_head.fpn_stages.1.refine.conv",
-        "mask_head.gn4": "mask_head.fpn_stages.1.refine.norm",
-        "mask_head.adapter3": "mask_head.fpn_stages.2.fpn_adapter",
-        "mask_head.lay5": "mask_head.fpn_stages.2.refine.conv",
-        "mask_head.gn5": "mask_head.fpn_stages.2.refine.norm",
-        "mask_head.out_lay": "mask_head.output_conv",
-    }
-
     def __init__(self, config: DetrConfig):
         super().__init__(config)
 

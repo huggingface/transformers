@@ -17,9 +17,6 @@ rendered properly in your Markdown viewer.
 
 # EfficientNet
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -43,9 +40,9 @@ The original code can be found [here](https://github.com/tensorflow/tpu/tree/mas
 [[autodoc]] EfficientNetImageProcessor
     - preprocess
 
-## EfficientNetImageProcessorFast
+## EfficientNetImageProcessorPil
 
-[[autodoc]] EfficientNetImageProcessorFast
+[[autodoc]] EfficientNetImageProcessorPil
     - preprocess
 
 ## EfficientNetModel

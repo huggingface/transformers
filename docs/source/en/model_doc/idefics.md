@@ -18,7 +18,6 @@ rendered properly in your Markdown viewer.
 # IDEFICS
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
@@ -44,6 +43,14 @@ To train a new IDEFICS model from scratch use the m4 codebase (a link will be pr
 
 [[autodoc]] IdeficsConfig
 
+## IdeficsVisionConfig
+
+[[autodoc]] IdeficsVisionConfig
+
+## IdeficsPerceiverConfig
+
+[[autodoc]] IdeficsPerceiverConfig
+
 ## IdeficsModel
 
 [[autodoc]] IdeficsModel
@@ -57,6 +64,11 @@ To train a new IDEFICS model from scratch use the m4 codebase (a link will be pr
 ## IdeficsImageProcessor
 
 [[autodoc]] IdeficsImageProcessor
+    - preprocess
+
+## IdeficsImageProcessorPil
+
+[[autodoc]] IdeficsImageProcessorPil
     - preprocess
 
 ## IdeficsProcessor

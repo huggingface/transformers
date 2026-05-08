@@ -238,15 +238,6 @@ La traduction convertit un texte d'une langue à une autre. Elle facilite la com
 
 Initialement, les modèles de traduction étaient principalement monolingues, mais il y a eu récemment un intérêt croissant pour les modèles multilingues capables de traduire entre plusieurs paires de langues.
 
-```py
->>> from transformers import pipeline
-
->>> text = "translate English to French: Hugging Face is a community-based open-source platform for machine learning."
->>> translator = pipeline(task="translation", model="google-t5/t5-small")
->>> translator(text)
-[{'translation_text': "Hugging Face est une tribune communautaire de l'apprentissage des machines."}]
-```
-
 ### Modélisation du langage
 
 La modélisation du langage consiste à prédire un mot dans un texte. Cette tâche est devenue très populaire en traitement du language naturel, car un modèle de langage préentraîné sur cette tâche peut ensuite être ajusté (*finetuned*) pour accomplir de nombreuses autres tâches. Récemment, les grands modèles de langage (LLMs) ont suscité beaucoup d'intérêt pour leur capacité à apprendre avec peu ou pas de données spécifiques à une tâche, ce qui leur permet de résoudre des problèmes pour lesquels ils n'ont pas été explicitement entraînés. Ces modèles peuvent générer du texte fluide et convaincant, bien qu'il soit important de vérifier leur précision.

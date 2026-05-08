@@ -230,17 +230,6 @@ def _get_adamw_torch_npu_fused(ctx: OptimizerContext) -> tuple[Any, dict[str, An
         raise ValueError("Trainer failed to import FusedAdamW from torch_npu.")
 
 
-def _get_adamw_apex_fused(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
-    """Get Apex Fused Adam optimizer."""
-    try:
-        from apex.optimizers import FusedAdam
-
-        ctx.optimizer_kwargs.update(ctx.adam_kwargs)
-        return FusedAdam, ctx.optimizer_kwargs
-    except ImportError:
-        raise ValueError("Trainer tried to instantiate apex FusedAdam but apex is not installed!")
-
-
 def _get_bitsandbytes_optimizer(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
     """Get bitsandbytes optimizer (AdamW, Lion, RMSprop variants)."""
     if not is_bitsandbytes_available():
@@ -314,17 +303,36 @@ def _get_adamw_anyprecision(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]
 
 def _get_sgd(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
     """Get SGD optimizer."""
-    return torch.optim.SGD, ctx.optimizer_kwargs
+    kwargs = ctx.optimizer_kwargs.copy()
+    if ctx.optim_args:
+        for key in ("momentum", "dampening", "weight_decay"):
+            if key in ctx.optim_args:
+                kwargs[key] = float(ctx.optim_args[key])
+        if "nesterov" in ctx.optim_args:
+            kwargs["nesterov"] = ctx.optim_args["nesterov"].lower() in ("true", "1", "yes")
+    return torch.optim.SGD, kwargs
 
 
 def _get_adagrad(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
     """Get Adagrad optimizer."""
-    return torch.optim.Adagrad, ctx.optimizer_kwargs
+    kwargs = ctx.optimizer_kwargs.copy()
+    if ctx.optim_args:
+        for key in ("lr_decay", "weight_decay", "eps"):
+            if key in ctx.optim_args:
+                kwargs[key] = float(ctx.optim_args[key])
+    return torch.optim.Adagrad, kwargs
 
 
 def _get_rmsprop(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
     """Get RMSprop optimizer."""
-    return torch.optim.RMSprop, ctx.optimizer_kwargs
+    kwargs = ctx.optimizer_kwargs.copy()
+    if ctx.optim_args:
+        for key in ("momentum", "alpha", "eps", "weight_decay"):
+            if key in ctx.optim_args:
+                kwargs[key] = float(ctx.optim_args[key])
+        if "centered" in ctx.optim_args:
+            kwargs["centered"] = ctx.optim_args["centered"].lower() in ("true", "1", "yes")
+    return torch.optim.RMSprop, kwargs
 
 
 def _get_galore_optimizer(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
@@ -591,7 +599,6 @@ _OPTIMIZER_HANDLERS: dict[str, OptimizerHandler] = {
     OptimizerNames.ADAMW_TORCH_FUSED: _get_adamw_torch,
     OptimizerNames.ADAMW_TORCH_XLA: _get_adamw_torch_xla,
     OptimizerNames.ADAMW_TORCH_NPU_FUSED: _get_adamw_torch_npu_fused,
-    OptimizerNames.ADAMW_APEX_FUSED: _get_adamw_apex_fused,
     OptimizerNames.ADAMW_ANYPRECISION: _get_adamw_anyprecision,
     OptimizerNames.SGD: _get_sgd,
     OptimizerNames.ADAGRAD: _get_adagrad,

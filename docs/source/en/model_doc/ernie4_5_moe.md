@@ -17,7 +17,6 @@ rendered properly in your Markdown viewer.
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
@@ -45,8 +44,8 @@ Other models from the family can be found at [Ernie 4.5](./ernie4_5) and [Ernie 
 ### Generate text
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 model_name = "baidu/ERNIE-4.5-21B-A3B-PT"
 
@@ -55,11 +54,10 @@ tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
     device_map="auto",
-    dtype=torch.bfloat16,
 )
 
 # prepare the model input
-inputs = tokenizer("Hey, are you conscious? Can you talk to me?", return_tensors="pt")
+inputs = tokenizer("Hey, are you conscious? Can you talk to me?", return_tensors="pt").to(model.device)
 prompt = "Hey, are you conscious? Can you talk to me?"
 messages = [
     {"role": "user", "content": prompt}
@@ -85,8 +83,8 @@ generate_text = tokenizer.decode(output_ids, skip_special_tokens=True)
 ### Distributed Generation with Tensor Parallelism
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 model_name = "baidu/ERNIE-4.5-21B-A3B-PT"
 
@@ -95,12 +93,11 @@ tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
     device_map="auto",
-    dtype=torch.bfloat16,
     tp_plan="auto",
 )
 
 # prepare the model input
-inputs = tokenizer("Hey, are you conscious? Can you talk to me?", return_tensors="pt")
+inputs = tokenizer("Hey, are you conscious? Can you talk to me?", return_tensors="pt").to(model.device)
 prompt = "Hey, are you conscious? Can you talk to me?"
 messages = [
     {"role": "user", "content": prompt}
@@ -126,8 +123,8 @@ generate_text = tokenizer.decode(output_ids, skip_special_tokens=True)
 ### Quantization with Bitsandbytes
 
 ```python
-import torch
-from transformers import BitsAndBytesConfig, AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
 
 model_name = "baidu/ERNIE-4.5-21B-A3B-PT"
 
@@ -140,7 +137,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 
 # prepare the model input
-inputs = tokenizer("Hey, are you conscious? Can you talk to me?", return_tensors="pt")
+inputs = tokenizer("Hey, are you conscious? Can you talk to me?", return_tensors="pt").to(model.device)
 prompt = "Hey, are you conscious? Can you talk to me?"
 messages = [
     {"role": "user", "content": prompt}

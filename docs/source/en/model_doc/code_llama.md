@@ -15,11 +15,6 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2023-08-24 and added to Hugging Face Transformers on 2023-08-25.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
 
 # CodeLlama
 
@@ -35,14 +30,13 @@ The example below demonstrates how to generate code with [`Pipeline`], or the [`
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     "text-generation",
     model="meta-llama/CodeLlama-7b-hf",
-    dtype=torch.float16,
     device_map=0
 )
 
@@ -58,14 +52,13 @@ print(infill_result[0]['generated_text'])
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/CodeLlama-7b-hf")
 model = AutoModelForCausalLM.from_pretrained(
     "meta-llama/CodeLlama-7b-hf",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -91,29 +84,23 @@ print(filled_text)
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "# Function to calculate the factorial of a number\ndef factorial(n):" | transformers run --task text-generation --model meta-llama/CodeLlama-7b-hf --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
 
-```py
+```python
 # pip install bitsandbytes
 import torch
-from transformers import AutoModelForCausalLM, CodeLlamaTokenizer, BitsAndBytesConfig
+
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig, CodeLlamaTokenizer
+
 
 bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True)
 tokenizer = CodeLlamaTokenizer.from_pretrained("meta-llama/CodeLlama-34b-hf")
 model = AutoModelForCausalLM.from_pretrained(
    "meta-llama/CodeLlama-34b-hf",
-   dtype=torch.bfloat16,
    device_map="auto",
    quantization_config=bnb_config
 )
@@ -127,8 +114,9 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
 
-```py
+```python
 from transformers.utils.attention_visualizer import AttentionMaskVisualizer
+
 
 visualizer = AttentionMaskVisualizer("meta-llama/CodeLlama-7b-hf")
 visualizer("""def func(a, b):
@@ -148,12 +136,12 @@ visualizer("""def func(a, b):
     from transformers import LlamaForCausalLM, CodeLlamaTokenizer
 
     tokenizer = CodeLlamaTokenizer.from_pretrained("meta-llama/CodeLlama-7b-hf")
-    model = LlamaForCausalLM.from_pretrained("meta-llama/CodeLlama-7b-hf")
+    model = LlamaForCausalLM.from_pretrained("meta-llama/CodeLlama-7b-hf", device_map="auto")
     PROMPT = '''def remove_non_ascii(s: str) -> str:
         """ <FILL_ME>
         return result
     '''
-    input_ids = tokenizer(PROMPT, return_tensors="pt")["input_ids"]
+    input_ids = tokenizer(PROMPT, return_tensors="pt").to(model.device)["input_ids"]
     generated_ids = model.generate(input_ids, max_new_tokens=128)
 
     filling = tokenizer.batch_decode(generated_ids[:, input_ids.shape[1]:], skip_special_tokens = True)[0]

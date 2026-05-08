@@ -15,11 +15,13 @@
 """Collection of utils to be used by backbones and their components."""
 
 import enum
+import functools
 import inspect
 
 from huggingface_hub import repo_exists
 
 from .utils import logging
+from .utils.output_capturing import maybe_install_capturing_hooks
 
 
 logger = logging.get_logger(__name__)
@@ -155,6 +157,27 @@ class BackboneConfigMixin:
         return output
 
 
+def filter_output_hidden_states(forward_function):
+    """
+    Wrapper to filer out `hidden_states` as backbones tend to always use them to get their feature maps, i.e.
+    they also always output `hidden_states`. This controls for user-defined behavior again.
+
+    NOTE: We assume a `can_return_tuple` decorator to be applied before so that we always expect a dict like
+          object to remove the hidden states.
+    """
+
+    @functools.wraps(forward_function)
+    def wrapper(self, *args, **kwargs):
+        output_hidden_states = kwargs.get("output_hidden_states", getattr(self.config, "output_hidden_states", False))
+        output = forward_function(self, *args, **kwargs)
+        if not output_hidden_states:
+            filtered_output_data = {k: v for k, v in output.items() if k not in ("hidden_states")}
+            output = type(output)(**filtered_output_data)
+        return output
+
+    return wrapper
+
+
 class BackboneMixin:
     backbone_type: BackboneType | None = None
 
@@ -181,10 +204,25 @@ class BackboneMixin:
         else:
             raise ValueError(f"backbone_type {self.backbone_type} not supported.")
 
+    def post_init(self):
+        """
+        Override `post_init` to always install capturing hooks, as backbone will ALWAYS capture outputs. We need to do
+        it in `post_init`, as modules need to be already instantiated.
+        It avoids some mixups with `torch.compile`, as the first hook installation will need/create a graph break,
+        which can clash with external user call such as `model = torch.compile(model...)`.
+        """
+        # NOTE: Since this class is ALWAYS used as a Mixin with another PreTrainedModel class, this `super` call
+        # will call the PreTrained's `post_init`
+        super().post_init()
+        maybe_install_capturing_hooks(self)
+
     def _init_timm_backbone(self, backbone) -> None:
         """
         Initialize the backbone model from timm. The backbone must already be loaded to backbone
         """
+
+        out_features_from_config = getattr(self.config, "out_features", None)
+        stage_names_from_config = getattr(self.config, "stage_names", None)
 
         # These will disagree with the defaults for the transformers models e.g. for resnet50
         # the transformer model has out_features = ['stem', 'stage1', 'stage2', 'stage3', 'stage4']
@@ -192,12 +230,24 @@ class BackboneMixin:
         self.stage_names = [stage["module"] for stage in backbone.feature_info.info]
         self.num_features = [stage["num_chs"] for stage in backbone.feature_info.info]
 
-        self.config._out_indices = list(backbone.feature_info.out_indices)
-        self.config._out_features = backbone.feature_info.module_name()
-        self.config.stage_names = self.stage_names
+        out_indices = list(backbone.feature_info.out_indices)
+        out_features = backbone.feature_info.module_name()
 
-        # We verify the out indices and out features are valid
-        self.config.verify_out_features_out_indices()
+        if out_features_from_config is not None and out_features_from_config != out_features:
+            raise ValueError(
+                f"Config has `out_features` set to {out_features_from_config} which doesn't match `out_features` "
+                "from backbone's feature_info. Please check if your checkpoint has correct out features/indices saved."
+            )
+
+        if stage_names_from_config is not None and stage_names_from_config != self.stage_names:
+            raise ValueError(
+                f"Config has `stage_names` set to {stage_names_from_config} which doesn't match `stage_names` "
+                "from backbone's feature_info. Please check if your checkpoint has correct `stage_names` saved."
+            )
+
+        # We set, align and verify out indices, out features and stage names
+        self.config.stage_names = self.stage_names
+        self.config.set_output_features_output_indices(out_features, out_indices)
 
     def _init_transformers_backbone(self) -> None:
         self.stage_names = self.config.stage_names

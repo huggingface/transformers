@@ -357,31 +357,6 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         return {"text": string, "char_offsets": char_offsets, "word_offsets": word_offsets}
 
     @staticmethod
-    def clean_up_tokenization(out_string: str) -> str:
-        """
-        Clean up a list of simple English tokenization artifacts like spaces before punctuations and abbreviated forms.
-
-        Args:
-            out_string (`str`): The text to clean up.
-
-        Returns:
-            `str`: The cleaned-up string.
-        """
-        out_string = (
-            out_string.replace(" .", ".")
-            .replace(" ?", "?")
-            .replace(" !", "!")
-            .replace(" ,", ",")
-            .replace(" ' ", "'")
-            .replace(" n't", "n't")
-            .replace(" 'm", "'m")
-            .replace(" 's", "'s")
-            .replace(" 've", "'ve")
-            .replace(" 're", "'re")
-        )
-        return out_string
-
-    @staticmethod
     def _compute_offsets(char_repetitions: list[int], chars: list[str], ctc_token: int) -> list[dict[str, str | int]]:
         end_indices = np.asarray(char_repetitions).cumsum()
         start_indices = np.concatenate(([0], end_indices[:-1]))

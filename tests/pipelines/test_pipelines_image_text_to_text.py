@@ -20,6 +20,7 @@ from transformers.pipelines import ImageTextToTextPipeline, pipeline
 from transformers.testing_utils import (
     Expectations,
     is_pipeline_test,
+    require_deterministic_for_xpu,
     require_torch,
     require_vision,
     slow,
@@ -112,6 +113,10 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                     "rocm",
                     (9, 4),
                 ): "Hugging Face, a company of minds\nWith tools and services that make our lives easier\nFrom natural language processing\nTo machine learning and more, they do it all\n\nThey help us to create and share\nContent that is both true and true\nAnd make the world a better place\nWith their tools and services, we can do it all\n\nFrom image and video to text and speech\nThey make it all possible\nWith their tools and services, we can do it all\nAnd make the world a better place\n\nSo let us embrace and use\nHugging Face's tools and services\nTo create and share\nContent that is true and true\nAnd make the world a better place.",
+                (
+                    "xpu",
+                    3,
+                ): "Hugging Face, a company of minds\nWith tools and services that make our lives easier\nFrom natural language processing\nTo machine learning and more, they do it all\n\nThey help us to create and share\nContent that's both engaging and informative\nWith their tools, we can write\nAnd create stories that are both true and true\n\nThey help us to analyze\nAnd make sense of data that's hard to see\nWith their tools, we can see\nAnd make sense of the world around us\n\nThey help us to create\nAnd share content that's both true and true\nWith their tools, we can see\nAnd make sense of the world around us\n\nSo here's to Hugging Face, a company of minds\nWith tools and services that make our lives easier\nFrom natural language processing\nTo machine learning and more, they do it all\n\nThank you, Hugging Face, for all you do\nWith tools and services that make our lives easier\nSo here's to you, and all the great things you do",
             }
         ).get_expectation()
         self.assertEqual(
@@ -158,6 +163,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         )
 
     @require_torch
+    @require_deterministic_for_xpu
     def test_small_model_pt_token(self):
         pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
@@ -174,6 +180,10 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                     "rocm",
                     (9, 4),
                 ): "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are facing the camera, and they appear to be sleeping or resting. The blanket is placed on a couch, and the cats are positioned in such a way that they are facing the camera. The image captures a peaceful moment between the two cats, and it's a great way to showcase their cuteness and relaxed demeanor.",
+                (
+                    "xpu",
+                    3,
+                ): "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are facing the camera, and they appear to be sleeping or resting. The blanket is placed on a surface that looks like a couch or a chair, and it is covered with a soft fabric. The cats' fur is a mix of black, white, and brown, and they have a variety of patterns on their bodies. The image captures a moment of tranquility and companionship between the cats.",
             }
         ).get_expectation()
         self.assertEqual(
@@ -197,6 +207,10 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                     "rocm",
                     (9, 4),
                 ): "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are facing the camera, and they appear to be sleeping or resting. The blanket is placed on a couch, and the overall setting is cozy and comfortable.",
+                (
+                    "xpu",
+                    3,
+                ): "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are facing the camera, and they appear to be sleeping or resting. The blanket is placed on a surface that looks like a couch or a chair, and it is covered with a soft fabric. The cats' fur is a mix of black, white, and brown, and they have a variety of patterns on their bodies. The image captures a moment of tranquility and companionship between the cats.",
             }
         ).get_expectation()
         self.assertEqual(
@@ -222,6 +236,45 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         outputs = pipe([image, image], text=[prompt, prompt], max_new_tokens=10)
         outputs_batched = pipe([image, image], text=[prompt, prompt], batch_size=2, max_new_tokens=10)
         self.assertEqual(outputs, outputs_batched)
+
+    @slow
+    @require_torch
+    def test_model_pt_chat_template_with_response_parsing(self):
+        pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What's the difference between these two images?"},
+                    {
+                        "type": "image",
+                        "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                    },
+                    {
+                        "type": "image",
+                        "url": "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg",
+                    },
+                ],
+            }
+        ]
+        pipe.tokenizer.response_schema = {
+            # A real response schema should probably have things like "role" and "content"
+            # and "reasoning_content" but it's unlikely we'd get a tiny model to reliably
+            # output anything like that, so let's keep it simple.
+            "type": "object",
+            "properties": {
+                "first_word": {"type": "string", "x-regex": r"^\s*([a-zA-Z]+)"},
+                "last_word": {"type": "string", "x-regex": r"([a-zA-Z]+)\s*$"},
+            },
+        }
+        outputs = pipe(text=messages, do_sample=False, max_new_tokens=10)
+        parsed_message = outputs[0]["generated_text"][-1]
+        # The parsed message should be a dict with the schema keys, not {"role": "assistant", "content": ...}
+        self.assertIn("first_word", parsed_message)
+        self.assertIn("last_word", parsed_message)
+        self.assertNotIn("role", parsed_message)
+        self.assertIsInstance(parsed_message["first_word"], str)
+        self.assertIsInstance(parsed_message["last_word"], str)
 
     @slow
     @require_torch
@@ -258,6 +311,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
             {
                 ("rocm", (9, 4)): "The first image shows a statue of the Statue of",
                 ("cuda", 8): "The first image shows a statue of Liberty in the",
+                ("xpu", 3): "The first image shows a statue of Liberty in the",
             }
         ).get_expectation()
 

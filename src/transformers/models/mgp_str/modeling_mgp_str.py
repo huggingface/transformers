@@ -61,12 +61,12 @@ class MgpstrDropPath(nn.Module):
         return f"p={self.drop_prob}"
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
     """
 )
+@dataclass
 class MgpstrModelOutput(ModelOutput):
     r"""
     logits (`tuple(torch.FloatTensor)` of shape `(batch_size, config.num_character_labels)`):
@@ -326,7 +326,7 @@ class MgpstrModel(MgpstrPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -422,7 +422,7 @@ class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         mgp_outputs = self.mgp_str(
             pixel_values,

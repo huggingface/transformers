@@ -49,7 +49,6 @@ LOGIT_SCALE_CLAMP_MAX = 4.6052
 FlavaPossibleConfigs = FlavaTextConfig | FlavaImageConfig | FlavaMultimodalConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output from FlavaModel containing embeddings and outputs from individual encoders.
@@ -59,6 +58,7 @@ FlavaPossibleConfigs = FlavaTextConfig | FlavaImageConfig | FlavaMultimodalConfi
     `text_projection` layers on `image_embeddings` and `text_embeddings` respectively.
     """
 )
+@dataclass
 class FlavaModelOutput(ModelOutput):
     r"""
     image_embeddings (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when `pixel_values` are present):
@@ -89,12 +89,12 @@ class FlavaModelOutput(ModelOutput):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class representing pretraining losses from FLAVA model
     """
 )
+@dataclass
 class FlavaLosses(ModelOutput):
     r"""
     mim (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `mim_labels` and `pixel_values` are present, `input_ids_masked` is absent and `mim_weight` > 0.):
@@ -129,7 +129,6 @@ class FlavaLosses(ModelOutput):
         return all_none
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output from FlavaForPreTraining containing embeddings, and outputs from individual encoders.
@@ -139,6 +138,7 @@ class FlavaLosses(ModelOutput):
     `text_projection` layers on `image_embeddings` and `text_embeddings` respectively.
     """
 )
+@dataclass
 class FlavaForPreTrainingOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor`, *optional*, returned when `return_loss` is True):
@@ -338,7 +338,7 @@ class PatchEmbeddings(nn.Module):
 
     def __init__(
         self,
-        image_size: int = 224,
+        image_size: int | list[int] | tuple[int, int] = 224,
         patch_size: int | tuple[int, int] = 16,
         num_channels: int = 3,
         embed_dim: int = 768,
@@ -446,22 +446,11 @@ class FlavaSelfAttention(nn.Module):
         attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor]:
-        batch_size, seq_length, _ = hidden_states.shape
-        query_layer = (
-            self.query(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        key_layer = (
-            self.key(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        value_layer = (
-            self.value(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
+        query_layer = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_layer = self.key(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_layer = self.value(hidden_states).view(hidden_shape).transpose(1, 2)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -739,7 +728,7 @@ class FlavaImageModel(FlavaPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -827,7 +816,7 @@ class FlavaTextModel(FlavaPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is None:
             raise ValueError("You have to specify input_ids")
@@ -909,7 +898,7 @@ class FlavaMultimodalModel(FlavaPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         batch_size, seq_length, _ = hidden_states.size()
 
@@ -1661,7 +1650,7 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
         >>> output = model(**inputs)
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         return_loss = return_loss if return_loss is not None else self.config.return_loss
 
         skip_unmasked_multimodal_encoder = (

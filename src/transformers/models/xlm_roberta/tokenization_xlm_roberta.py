@@ -62,6 +62,7 @@ class XLMRobertaTokenizer(TokenizersBackend):
         unk_token: str = "<unk>",
         pad_token: str = "<pad>",
         mask_token: str = "<mask>",
+        _spm_precompiled_charsmap: str | None = None,
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space
@@ -79,12 +80,8 @@ class XLMRobertaTokenizer(TokenizersBackend):
 
         self._tokenizer = Tokenizer(Unigram(vocab=self._vocab, unk_id=3, byte_fallback=False))
 
-        self._tokenizer.normalizer = normalizers.Sequence(
-            [
-                normalizers.Strip(left=False, right=True),
-                normalizers.Replace(" {2,}", "▁"),
-            ]
-        )
+        if _spm_precompiled_charsmap is not None:
+            self._tokenizer.normalizer = normalizers.Precompiled(_spm_precompiled_charsmap)
 
         prepend_scheme = "always" if add_prefix_space else "never"
         self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
@@ -108,7 +105,7 @@ class XLMRobertaTokenizer(TokenizersBackend):
 
         self._tokenizer.post_processor = processors.TemplateProcessing(
             single=[str(bos_token), "$A", str(eos_token)],
-            pair=[str(bos_token), "$A", str(eos_token), "$B", str(eos_token)],
+            pair=[str(bos_token), "$A", str(eos_token), str(eos_token), "$B", str(eos_token)],
             special_tokens=[
                 (str(bos_token), self.bos_token_id),
                 (str(eos_token), self.eos_token_id),

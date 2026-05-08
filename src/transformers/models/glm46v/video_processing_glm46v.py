@@ -21,6 +21,7 @@
 
 import numpy as np
 import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import (
@@ -81,24 +82,17 @@ class Glm46VVideoProcessor(BaseVideoProcessor):
 
     def __init__(self, **kwargs: Unpack[Glm46VVideoProcessorInitKwargs]):
         super().__init__(**kwargs)
-        if self.size is not None and (
-            self.size.get("shortest_edge", None) is None or self.size.get("longest_edge", None) is None
-        ):
-            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
 
-    def _further_process_kwargs(
-        self,
-        size: SizeDict | None = None,
-        **kwargs,
-    ) -> dict:
+    def _standardize_kwargs(self, **kwargs) -> dict:
         """
         Update kwargs that need further processing before being validated
         Can be overridden by subclasses to customize the processing of kwargs.
         """
-        if size is not None and ("shortest_edge" not in size or "longest_edge" not in size):
+        kwargs = super()._standardize_kwargs(**kwargs)
+        size = kwargs.get("size", self.size)
+        if not size.shortest_edge or not size.longest_edge:
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
-
-        return super()._further_process_kwargs(size=size, **kwargs)
+        return kwargs
 
     def sample_frames(
         self,
@@ -182,7 +176,7 @@ class Glm46VVideoProcessor(BaseVideoProcessor):
         do_convert_rgb: bool = True,
         do_resize: bool = True,
         size: SizeDict | None = None,
-        interpolation: PILImageResampling = PILImageResampling.BICUBIC,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255.0,
         do_normalize: bool = True,
@@ -214,7 +208,7 @@ class Glm46VVideoProcessor(BaseVideoProcessor):
                 stacked_videos = self.resize(
                     stacked_videos,
                     size=SizeDict(height=resized_height, width=resized_width),
-                    interpolation=interpolation,
+                    resample=resample,
                 )
                 stacked_videos = stacked_videos.view(B, T, C, resized_height, resized_width)
             resized_videos_grouped[shape] = stacked_videos

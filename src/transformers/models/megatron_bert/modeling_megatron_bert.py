@@ -130,13 +130,12 @@ class MegatronBertSelfAttention(nn.Module):
         encoder_hidden_states: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
         output_attentions: bool | None = False,
-        cache_position: torch.Tensor | None = None,
+        **kwargs,
     ) -> tuple[torch.Tensor]:
-        batch_size, seq_length, _ = hidden_states.shape
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
         query_layer = self.query(hidden_states)
-        query_layer = query_layer.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(
-            1, 2
-        )
+        query_layer = query_layer.view(hidden_shape).transpose(1, 2)
 
         is_updated = False
         is_cross_attention = encoder_hidden_states is not None
@@ -158,20 +157,13 @@ class MegatronBertSelfAttention(nn.Module):
             value_layer = curr_past_key_values.layers[self.layer_idx].values
         else:
             key_layer = self.key(current_states)
-            key_layer = key_layer.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(
-                1, 2
-            )
+            key_layer = key_layer.view(hidden_shape).transpose(1, 2)
             value_layer = self.value(current_states)
-            value_layer = value_layer.view(
-                batch_size, -1, self.num_attention_heads, self.attention_head_size
-            ).transpose(1, 2)
+            value_layer = value_layer.view(hidden_shape).transpose(1, 2)
 
             if past_key_values is not None:
                 # save all key/value_layer to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_layer, value_layer = curr_past_key_values.update(
-                    key_layer, value_layer, self.layer_idx, {"cache_position": cache_position}
-                )
+                key_layer, value_layer = curr_past_key_values.update(key_layer, value_layer, self.layer_idx)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
@@ -228,7 +220,7 @@ class MegatronBertAttention(nn.Module):
         encoder_hidden_states: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
         output_attentions: bool | None = False,
-        cache_position: torch.Tensor | None = None,
+        **kwargs,
     ) -> tuple[torch.Tensor]:
         ln_outputs = self.ln(hidden_states)
         self_outputs = self.self(
@@ -237,7 +229,6 @@ class MegatronBertAttention(nn.Module):
             encoder_hidden_states=encoder_hidden_states,
             past_key_values=past_key_values,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -298,7 +289,7 @@ class MegatronBertLayer(GradientCheckpointingLayer):
         encoder_attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
         output_attentions: bool | None = False,
-        cache_position: torch.Tensor | None = None,
+        **kwargs,
     ) -> tuple[torch.Tensor]:
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attention_outputs = self.attention(
@@ -306,7 +297,6 @@ class MegatronBertLayer(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             past_key_values=past_key_values,
-            cache_position=cache_position,
         )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
@@ -324,7 +314,6 @@ class MegatronBertLayer(GradientCheckpointingLayer):
                 encoder_hidden_states=encoder_hidden_states,
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
-                cache_position=cache_position,
             )
             attention_output = cross_attention_outputs[0]
             outputs = outputs + cross_attention_outputs[1:]  # add cross attentions if we output attention weights
@@ -363,7 +352,7 @@ class MegatronBertEncoder(nn.Module):
         output_attentions: bool | None = False,
         output_hidden_states: bool | None = False,
         return_dict: bool | None = True,
-        cache_position: torch.Tensor | None = None,
+        **kwargs,
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -389,7 +378,6 @@ class MegatronBertEncoder(nn.Module):
                 encoder_attention_mask,
                 past_key_values,
                 output_attentions,
-                cache_position,
             )
 
             # Because we moved the layer-norm at the end of the hidden layer, we have non-normali-
@@ -530,12 +518,12 @@ class MegatronBertPreTrainedModel(PreTrainedModel):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`MegatronBertForPreTraining`].
     """
 )
+@dataclass
 # Copied from transformers.models.bert.modeling_bert.BertForPreTrainingOutput with Bert->MegatronBert
 class MegatronBertForPreTrainingOutput(ModelOutput):
     r"""
@@ -607,14 +595,13 @@ class MegatronBertModel(MegatronBertPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPoolingAndCrossAttentions:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if self.config.is_decoder:
             use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -673,7 +660,6 @@ class MegatronBertModel(MegatronBertPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
@@ -765,7 +751,7 @@ class MegatronBertForPreTraining(MegatronBertPreTrainedModel):
         >>> prediction_logits = outputs.prediction_logits
         >>> seq_relationship_logits = outputs.seq_relationship_logits
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.bert(
             input_ids,
@@ -847,7 +833,6 @@ class MegatronBertForCausalLM(MegatronBertPreTrainedModel, GenerationMixin):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> tuple | CausalLMOutputWithCrossAttentions:
@@ -871,7 +856,7 @@ class MegatronBertForCausalLM(MegatronBertPreTrainedModel, GenerationMixin):
 
         >>> prediction_logits = outputs.logits
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         if labels is not None:
             use_cache = False
 
@@ -888,7 +873,6 @@ class MegatronBertForCausalLM(MegatronBertPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         hidden_states = outputs[0]
@@ -966,7 +950,7 @@ class MegatronBertForMaskedLM(MegatronBertPreTrainedModel):
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.bert(
             input_ids,
@@ -1056,7 +1040,7 @@ class MegatronBertForNextSentencePrediction(MegatronBertPreTrainedModel):
         >>> assert logits[0, 0] < logits[0, 1]  # next sentence was random
         ```"""
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.bert(
             input_ids,
@@ -1128,7 +1112,7 @@ class MegatronBertForSequenceClassification(MegatronBertPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.bert(
             input_ids,
@@ -1236,7 +1220,7 @@ class MegatronBertForMultipleChoice(MegatronBertPreTrainedModel):
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
@@ -1314,7 +1298,7 @@ class MegatronBertForTokenClassification(MegatronBertPreTrainedModel):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.bert(
             input_ids,
@@ -1376,7 +1360,7 @@ class MegatronBertForQuestionAnswering(MegatronBertPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | QuestionAnsweringModelOutput:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.bert(
             input_ids,

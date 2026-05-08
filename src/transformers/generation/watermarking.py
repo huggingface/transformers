@@ -124,7 +124,7 @@ class WatermarkDetector:
         self,
         model_config: "PreTrainedConfig",
         device: str,
-        watermarking_config: Union["WatermarkingConfig", dict] | None,
+        watermarking_config: Union["WatermarkingConfig", dict],
         ignore_repeated_ngrams: bool = False,
         max_cache_size: int = 128,
     ):

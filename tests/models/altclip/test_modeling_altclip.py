@@ -18,13 +18,15 @@ import unittest
 
 import numpy as np
 import requests
+from parameterized import parameterized
 
 from transformers import AltCLIPConfig, AltCLIPProcessor, AltCLIPTextConfig, AltCLIPVisionConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import is_flaky, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     floats_tensor,
     ids_tensor,
@@ -137,7 +139,7 @@ class AltCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = AltCLIPVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=AltCLIPVisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=AltCLIPVisionConfig, has_text_modality=False, hidden_size=36
         )
 
     def test_config(self):
@@ -296,7 +298,7 @@ class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = AltCLIPTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=AltCLIPTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=AltCLIPTextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -400,6 +402,7 @@ class AltCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     test_resize_embeddings = False
     test_attention_outputs = False
+    additional_model_inputs = ["pixel_values"]
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(
@@ -432,6 +435,13 @@ class AltCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @slow
+    @is_flaky()
+    def test_eager_matches_sdpa_inference(self, *args):
+        # adding only flaky decorator here and call the parent test method
+        return getattr(ModelTesterMixin, self._testMethodName)(self)
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):

@@ -17,9 +17,6 @@ rendered properly in your Markdown viewer.
 
 # Swin2SR
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -51,9 +48,9 @@ A demo Space for image super-resolution with SwinSR can be found [here](https://
 [[autodoc]] Swin2SRImageProcessor
     - preprocess
 
-## Swin2SRImageProcessorFast
+## Swin2SRImageProcessorPil
 
-[[autodoc]] Swin2SRImageProcessorFast
+[[autodoc]] Swin2SRImageProcessorPil
     - preprocess
 
 ## Swin2SRConfig

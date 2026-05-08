@@ -43,14 +43,13 @@ The example below demonstrates how to predict the `[MASK]` token with [`Pipeline
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="fill-mask",
     model="albert-base-v2",
-    dtype=torch.float16,
     device=0
 )
 pipeline("Plants create [MASK] through a process known as photosynthesis.", top_k=5)
@@ -59,14 +58,15 @@ pipeline("Plants create [MASK] through a process known as photosynthesis.", top_
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForMaskedLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("albert/albert-base-v2")
 model = AutoModelForMaskedLM.from_pretrained(
     "albert/albert-base-v2",
-    dtype=torch.float16,
     attn_implementation="sdpa",
     device_map="auto"
 )
@@ -82,13 +82,6 @@ with torch.no_grad():
 top_k = torch.topk(predictions, k=5).indices.tolist()
 for token_id in top_k[0]:
     print(f"Prediction: {tokenizer.decode([token_id])}")
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plants create [MASK] through a process known as photosynthesis." | transformers run --task fill-mask --model albert-base-v2 --device 0
 ```
 
 </hfoption>

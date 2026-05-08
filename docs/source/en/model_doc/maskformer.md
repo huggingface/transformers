@@ -17,9 +17,6 @@ rendered properly in your Markdown viewer.
 
 # MaskFormer
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 <Tip>
 
@@ -64,6 +61,10 @@ This model was contributed by [francesco](https://huggingface.co/francesco). The
 
 [[autodoc]] models.maskformer.modeling_maskformer.MaskFormerForInstanceSegmentationOutput
 
+## MaskFormerDetrConfig
+
+[[autodoc]] MaskFormerDetrConfig
+
 ## MaskFormerConfig
 
 [[autodoc]] MaskFormerConfig
@@ -72,14 +73,13 @@ This model was contributed by [francesco](https://huggingface.co/francesco). The
 
 [[autodoc]] MaskFormerImageProcessor
     - preprocess
-    - encode_inputs
     - post_process_semantic_segmentation
     - post_process_instance_segmentation
     - post_process_panoptic_segmentation
 
-## MaskFormerImageProcessorFast
+## MaskFormerImageProcessorPil
 
-[[autodoc]] MaskFormerImageProcessorFast
+[[autodoc]] MaskFormerImageProcessorPil
     - preprocess
     - post_process_semantic_segmentation
     - post_process_instance_segmentation

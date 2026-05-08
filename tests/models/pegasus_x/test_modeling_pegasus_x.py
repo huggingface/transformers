@@ -205,9 +205,6 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     pipeline_model_mapping = (
         {
             "feature-extraction": PegasusXModel,
-            "summarization": PegasusXForConditionalGeneration,
-            "text2text-generation": PegasusXForConditionalGeneration,
-            "translation": PegasusXForConditionalGeneration,
         }
         if is_torch_available()
         else {}

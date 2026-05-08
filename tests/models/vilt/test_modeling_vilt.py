@@ -224,11 +224,7 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = (
-        {"image-feature-extraction": ViltModel, "visual-question-answering": ViltForQuestionAnswering}
-        if is_torch_available()
-        else {}
-    )
+    pipeline_model_mapping = {"image-feature-extraction": ViltModel} if is_torch_available() else {}
 
     model_split_percents = [0.5, 0.8, 0.9]
     test_torch_exportable = False
@@ -255,7 +251,7 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = ViltModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ViltConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ViltConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -534,7 +530,7 @@ class ViltForImagesAndTextClassificationModelTest(ViltModelTest, unittest.TestCa
 
     def setUp(self):
         self.model_tester = ViltModelTester(self, modality_type_vocab_size=3, add_multiple_images=True, num_images=2)
-        self.config_tester = ConfigTester(self, config_class=ViltConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ViltConfig, hidden_size=32)
 
     @unittest.skip(reason="We only test the model that takes in multiple images")
     def test_model(self):

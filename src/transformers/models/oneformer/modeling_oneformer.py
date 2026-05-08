@@ -731,13 +731,13 @@ class OneFormerLoss(nn.Module):
         return num_masks
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the Transformer decoder. This class adds attributes for class predictions, mask
     predictions and contrastive logits to BaseModelOutputWithCrossAttentions.
     """
 )
+@dataclass
 class OneFormerTransformerDecoderOutput(BaseModelOutput):
     r"""
     object_queries (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_dim)`):
@@ -759,13 +759,13 @@ class OneFormerTransformerDecoderOutput(BaseModelOutput):
     auxiliary_predictions: tuple[dict[str, torch.FloatTensor]] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     OneFormer's pixel decoder module output, practically a Multi-Scale Deformable Attention based decoder. It returns
     the mask features and the multiscale features.
     """
 )
+@dataclass
 # Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerPixelDecoderOutput with Mask2->One
 class OneFormerPixelDecoderOutput(ModelOutput):
     r"""
@@ -786,7 +786,6 @@ class OneFormerPixelDecoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     OneFormer's pixel level module output. It returns both the last and (optionally) the hidden states from the
@@ -794,6 +793,7 @@ class OneFormerPixelDecoderOutput(ModelOutput):
     Deformable Attention based decoder.
     """
 )
+@dataclass
 class OneFormerPixelLevelModuleOutput(ModelOutput):
     r"""
     encoder_features (List of `(torch.FloatTensor)`):
@@ -811,12 +811,12 @@ class OneFormerPixelLevelModuleOutput(ModelOutput):
     decoder_last_feature: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`OneFormerModel`]. This class returns all the needed hidden states to compute the logits.
     """
 )
+@dataclass
 class OneFormerModelOutput(ModelOutput):
     r"""
     encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
@@ -863,7 +863,6 @@ class OneFormerModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`OneFormerForUniversalSegmentationOutput`].
@@ -874,6 +873,7 @@ class OneFormerModelOutput(ModelOutput):
     [`~OneFormerImageProcessor] for details regarding usage.
     """
 )
+@dataclass
 class OneFormerForUniversalSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.Tensor`, *optional*):
@@ -1107,7 +1107,7 @@ class OneFormerPixelDecoderEncoderLayer(nn.Module):
         hidden_states = self.final_layer_norm(hidden_states)
 
         if self.is_training:
-            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+            if not torch.isfinite(hidden_states).all():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
@@ -1210,7 +1210,7 @@ class OneFormerPixelDecoderEncoderOnly(nn.Module):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         hidden_states = inputs_embeds
         reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device=inputs_embeds.device)
@@ -2887,7 +2887,7 @@ class OneFormerModel(OneFormerPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         batch_size, _, height, width = pixel_values.shape
 
@@ -3125,7 +3125,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.model(
             pixel_values=pixel_values,

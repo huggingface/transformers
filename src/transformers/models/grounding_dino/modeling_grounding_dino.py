@@ -91,7 +91,6 @@ class MultiScaleDeformableAttention(nn.Module):
         return output.transpose(1, 2).contiguous()
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the GroundingDinoDecoder. This class adds two attributes to
@@ -100,6 +99,7 @@ class MultiScaleDeformableAttention(nn.Module):
     - a stacked tensor of intermediate reference points.
     """
 )
+@dataclass
 class GroundingDinoDecoderOutput(ModelOutput):
     r"""
     intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -115,7 +115,6 @@ class GroundingDinoDecoderOutput(ModelOutput):
     attentions: tuple[tuple[torch.FloatTensor]] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the GroundingDinoEncoder. This class extends BaseModelOutput, due to:
@@ -123,6 +122,7 @@ class GroundingDinoDecoderOutput(ModelOutput):
     - vision and text intermediate hidden states
     """
 )
+@dataclass
 class GroundingDinoEncoderOutput(ModelOutput):
     r"""
     last_hidden_state_vision (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -146,12 +146,12 @@ class GroundingDinoEncoderOutput(ModelOutput):
     attentions: tuple[tuple[torch.FloatTensor]] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the Grounding DINO encoder-decoder model.
     """
 )
+@dataclass
 class GroundingDinoModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
@@ -209,12 +209,12 @@ class GroundingDinoModelOutput(ModelOutput):
     encoder_pred_boxes: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`GroundingDinoForObjectDetection`].
     """
 )
+@dataclass
 class GroundingDinoObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
@@ -994,7 +994,7 @@ class GroundingDinoDeformableLayer(nn.Module):
         hidden_states = self.final_layer_norm(hidden_states)
 
         if self.training:
-            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+            if not torch.isfinite(hidden_states).all():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
@@ -1525,7 +1525,7 @@ class GroundingDinoEncoder(GroundingDinoPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         reference_points = self.get_reference_points(spatial_shapes_list, valid_ratios, device=vision_features.device)
 
@@ -1676,7 +1676,7 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
@@ -2074,7 +2074,7 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         text_self_attention_masks, position_ids = generate_masks_with_special_tokens_and_transfer_map(input_ids)
 
@@ -2500,7 +2500,7 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         Detected a cat with confidence 0.438 at location [12.27, 51.91, 316.86, 472.44]
         Detected a remote control with confidence 0.478 at location [38.57, 70.0, 176.78, 118.18]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)

@@ -16,7 +16,6 @@ rendered properly in your Markdown viewer.
 *This model was released on 2023-06-20 and added to Hugging Face Transformers on 2023-11-10.*
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
@@ -41,7 +40,7 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(task="text-generation", model="microsoft/phi-1.5", device=0, dtype=torch.bfloat16)
+pipeline = pipeline(task="text-generation", model="microsoft/phi-1.5", device=0)
 pipeline("pipeline('''def print_prime(n): """ Print all primes between 1 and n"""''')")
 
 ```
@@ -50,12 +49,12 @@ pipeline("pipeline('''def print_prime(n): """ Print all primes between 1 and n""
 
 <hfoption id="AutoModel">
 
-```py
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1")
-model = AutoModelForCausalLM.from_pretrained("microsoft/phi-1", dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+model = AutoModelForCausalLM.from_pretrained("microsoft/phi-1", device_map="auto", attn_implementation="sdpa")
 
 input_ids = tokenizer('''def print_prime(n):
    """
@@ -67,26 +66,21 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "'''def print_prime(n): """ Print all primes between 1 and n"""'''" | transformers run --task text-classification --model microsoft/phi-1.5 --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
 The example below uses [bitsandbytes](https://huggingface.co/docs/transformers/en/quantization/bitsandbytes) to only quantize the weights to 4-bits.
 
-```py
+```python
 import torch
-from transformers import BitsAndBytesConfig, AutoTokenizer, AutoModelForCausalLM
+
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
 
 bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True)
 tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1")
-model = AutoModelForCausalLM.from_pretrained("microsoft/phi-1", dtype=torch.float16, device_map="auto", attn_implementation="sdpa", quantization_config=bnb_config)
+model = AutoModelForCausalLM.from_pretrained("microsoft/phi-1", device_map="auto", attn_implementation="sdpa", quantization_config=bnb_config)
 
 input_ids = tokenizer('''def print_prime(n):
    """
@@ -108,7 +102,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
     tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1")
     model = AutoModelForCausalLM.from_pretrained(
         "microsoft/phi-1",
-        dtype=torch.float16,
         device_map="auto",
         trust_remote_code=True,
         attn_implementation="sdpa")

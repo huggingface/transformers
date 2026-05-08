@@ -19,6 +19,7 @@ import unittest
 import pytest
 
 from transformers import BitsAndBytesConfig, is_torch_available
+from transformers.models.ernie4_5_moe.modeling_ernie4_5_moe import load_balancing_loss_func
 from transformers.testing_utils import (
     cleanup,
     is_flaky,
@@ -30,6 +31,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.trainer_utils import set_seed
 
 
 if is_torch_available():
@@ -93,6 +95,7 @@ class Ernie4_5_MoeModelTest(CausalLMModelTest, unittest.TestCase):
         r"""
         Let's make sure we can actually compute the loss and do a backward on it.
         """
+        set_seed(42)
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
         config.num_experts = 3
@@ -111,22 +114,39 @@ class Ernie4_5_MoeModelTest(CausalLMModelTest, unittest.TestCase):
         # loss(input_ids, attention_mask=None) == loss(input_ids + padding, attention_mask=attention_mask_with_padding)
         # (This length is selected from experiments)
         pad_length = input_ids.shape[1] * 4
-        # Add padding tokens to input_ids
-        padding_block = config.pad_token_id * torch.ones(input_ids.shape[0], pad_length, dtype=torch.int32).to(
-            torch_device
+        # Add extra tokens to input_ids and mask them out to simulate left padding
+        padding_block = torch.randint(
+            low=0,
+            high=config.vocab_size,
+            size=(input_ids.shape[0], pad_length),
+            dtype=torch.int32,
+            device=torch_device,
         )
-        padded_input_ids = torch.cat((padding_block, input_ids), dim=1)  # this is to simulate padding to the left
-        padded_attention_mask = padded_input_ids.ne(config.pad_token_id).to(torch_device)
+        padding_block[padding_block == config.pad_token_id] = (config.pad_token_id + 1) % config.vocab_size
+        padded_input_ids = torch.cat((padding_block, input_ids), dim=1)
+        padded_attention_mask = torch.zeros_like(padded_input_ids, dtype=torch.long)
+        padded_attention_mask[:, pad_length:] = 1
 
         padded_result = model(padded_input_ids, attention_mask=padded_attention_mask)
         torch.testing.assert_close(result.aux_loss.cpu(), padded_result.aux_loss.cpu(), rtol=1e-4, atol=1e-4)
 
-        # We make sure that the loss of including padding tokens != the loss without padding tokens
-        # if attention_mask=None --> we don't exclude padding tokens
-        include_padding_result = model(padded_input_ids, attention_mask=None)
-
-        # This is to mimic torch.testing.assert_not_close
-        self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
+        # We make sure that masking can change the loss using a deterministic synthetic example.
+        # This avoids flakiness when the model routes tokens uniformly.
+        num_experts = 3
+        top_k = 1
+        synthetic_logits = torch.tensor(
+            [
+                [10.0, 0.0, 0.0],  # unmasked token -> expert 0
+                [10.0, 0.0, 0.0],  # unmasked token -> expert 0
+                [0.0, 10.0, 0.0],  # masked token -> expert 1
+                [0.0, 10.0, 0.0],  # masked token -> expert 1
+            ],
+            device=torch_device,
+        )
+        synthetic_mask = torch.tensor([[1, 1, 0, 0]], device=torch_device)
+        masked_loss = load_balancing_loss_func((synthetic_logits,), num_experts, top_k, synthetic_mask)
+        unmasked_loss = load_balancing_loss_func((synthetic_logits,), num_experts, top_k, attention_mask=None)
+        self.assertNotAlmostEqual(masked_loss.item(), unmasked_loss.item(), places=6)
 
 
 @slow

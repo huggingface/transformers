@@ -86,7 +86,7 @@ class DiaProcessor(ProcessorMixin):
     def __init__(self, feature_extractor, tokenizer, audio_tokenizer):
         r"""
         audio_tokenizer (`DacModel`):
-            An instance of [`DacModel`] used to encode/decode audio into/from codebooks. It is is a required input.
+            An instance of [`DacModel`] used to encode/decode audio into/from codebooks. It is a required input.
         """
         super().__init__(feature_extractor, tokenizer, audio_tokenizer=audio_tokenizer)
 

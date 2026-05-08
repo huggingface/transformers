@@ -41,6 +41,19 @@ from huggingface_hub import hf_hub_download, upload_folder
 from transformers.utils import direct_transformers_import
 
 
+CHECKER_CONFIG = {
+    "name": "update_metadata",
+    "label": "Model metadata",
+    # Approximate: imports the transformers module and inspects pipeline/auto mappings
+    # at runtime. Does not iterate over files matching these globs directly.
+    "cache_globs": ["src/transformers/models/**/*.py", "docs/**/*.md"],
+    "check_args": ["--check-only"],
+    # No safe local "fix" mode: running without `--check-only` pushes to the
+    # `huggingface/transformers-metadata` Hub dataset (requires an auth token).
+    # `fix_args=None` makes `make fix-repo` skip this checker, like other check-only ones.
+    "fix_args": None,
+}
+
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/update_metadata.py
 TRANSFORMERS_PATH = "src/transformers"
@@ -66,7 +79,6 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
     ("image-segmentation", "MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES", "AutoModelForImageSegmentation"),
     ("any-to-any", "MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES", "AutoModelForMultimodalLM"),
     ("image-text-to-text", "MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES", "AutoModelForImageTextToText"),
-    ("image-to-image", "MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES", "AutoModelForImageToImage"),
     ("fill-mask", "MODEL_FOR_MASKED_LM_MAPPING_NAMES", "AutoModelForMaskedLM"),
     ("object-detection", "MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES", "AutoModelForObjectDetection"),
     (

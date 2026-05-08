@@ -17,9 +17,6 @@ rendered properly in your Markdown viewer.
 
 # Mask2Former
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -75,14 +72,13 @@ The resource should ideally demonstrate something new instead of duplicating an 
 
 [[autodoc]] Mask2FormerImageProcessor
     - preprocess
-    - encode_inputs
     - post_process_semantic_segmentation
     - post_process_instance_segmentation
     - post_process_panoptic_segmentation
 
-## Mask2FormerImageProcessorFast
+## Mask2FormerImageProcessorPil
 
-[[autodoc]] Mask2FormerImageProcessorFast
+[[autodoc]] Mask2FormerImageProcessorPil
     - preprocess
     - post_process_semantic_segmentation
     - post_process_instance_segmentation

@@ -87,8 +87,6 @@ class Lfm2VlModelOutputWithPast(LlavaModelOutputWithPast):
 
 
 class Lfm2VlModel(LlavaModel):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: Lfm2VlConfig):
         super().__init__(config)
 
@@ -179,7 +177,6 @@ class Lfm2VlModel(LlavaModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Lfm2VlModelOutputWithPast:
         r"""
@@ -216,7 +213,6 @@ class Lfm2VlModel(LlavaModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -230,8 +226,6 @@ class Lfm2VlModel(LlavaModel):
 
 
 class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
-    _checkpoint_conversion_mapping = {}
-
     @auto_docstring
     def get_image_features(
         self,
@@ -268,7 +262,6 @@ class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Lfm2VlCausalLMOutputWithPast:
@@ -336,7 +329,6 @@ class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 

@@ -149,7 +149,7 @@ class AriaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Pad the first input to match the second input
         pad_len = len(expected_input_ids_2) - len(expected_input_ids_1)
 
-        expected_attention_mask = [ [1] * len(expected_input_ids_1) + [0] * pad_len, [1] * (len(expected_input_ids_2))]
+        expected_attention_mask = [ [0] * pad_len + [1] * len(expected_input_ids_1), [1] * (len(expected_input_ids_2))]
 
         self.assertEqual(
             inputs["attention_mask"],
@@ -236,8 +236,10 @@ And who is that?<|im_end|>
             messages,
             add_generation_prompt=True,
             tokenize=True,
-            padding="max_length",
-            max_length=50,
+            processor_kwargs={
+                "padding": "max_length",
+                "max_length": 50,
+            },
         )
         self.assertEqual(len(formatted_prompt_tokenized[0]), 50)
 
@@ -245,8 +247,7 @@ And who is that?<|im_end|>
             messages,
             add_generation_prompt=True,
             tokenize=True,
-            truncation=True,
-            max_length=5,
+            processor_kwargs={"max_length": 5, "truncation": True},
         )
         self.assertEqual(len(formatted_prompt_tokenized[0]), 5)
 
@@ -264,8 +265,8 @@ And who is that?<|im_end|>
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
-            max_image_size=980,
             return_tensors="pt",
+            processor_kwargs={"max_image_size": 980},
         )
         self.assertListEqual(list(out_dict[self.images_input_name].shape), [1, 3, 980, 980])
 

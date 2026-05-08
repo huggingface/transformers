@@ -37,6 +37,7 @@ from .utils import (
     is_torchcodec_available,
     requires_backends,
 )
+from .utils.generic import retry
 
 
 if TYPE_CHECKING:
@@ -55,6 +56,14 @@ if is_torchcodec_available():
     TORCHCODEC_VERSION = version.parse(importlib.metadata.version("torchcodec"))
 
 AudioInput = Union[np.ndarray, "torch.Tensor", Sequence[np.ndarray], Sequence["torch.Tensor"]]
+
+
+@retry(exceptions=(httpx.HTTPError,))
+def _fetch_audio_bytes(url: str, timeout: float | None = 10.0) -> bytes:
+    """Fetch audio bytes from a URL with automatic retry and exponential backoff."""
+    response = httpx.get(url, follow_redirects=True, timeout=timeout)
+    response.raise_for_status()
+    return response.content
 
 
 def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None) -> np.ndarray:
@@ -78,7 +87,7 @@ def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None) -> np
         # fallback to `librosa`. If using an audio-only model, most probably `torchcodec` won't be
         # needed. Do not raise any errors if not installed or versions do not match
         if is_torchcodec_available() and version.parse("0.3.0") <= TORCHCODEC_VERSION:
-            audio = load_audio_torchcodec(audio, sampling_rate=sampling_rate)
+            audio = load_audio_torchcodec(audio, sampling_rate=sampling_rate, timeout=timeout)
         else:
             audio = load_audio_librosa(audio, sampling_rate=sampling_rate, timeout=timeout)
     elif not isinstance(audio, np.ndarray):
@@ -88,7 +97,7 @@ def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None) -> np
     return audio
 
 
-def load_audio_torchcodec(audio: str | np.ndarray, sampling_rate=16000) -> np.ndarray:
+def load_audio_torchcodec(audio: str | np.ndarray, sampling_rate=16000, timeout=None) -> np.ndarray:
     """
     Loads `audio` to an np.ndarray object using `torchcodec`.
 
@@ -98,6 +107,8 @@ def load_audio_torchcodec(audio: str | np.ndarray, sampling_rate=16000) -> np.nd
         sampling_rate (`int`, *optional*, defaults to 16000):
             The sampling rate to be used when loading the audio. It should be same as the
             sampling rate the model you will be using further was trained with.
+        timeout (`float`, *optional*):
+            The timeout value in seconds for the URL request.
 
     Returns:
         `np.ndarray`: A numpy array representing the audio.
@@ -105,6 +116,10 @@ def load_audio_torchcodec(audio: str | np.ndarray, sampling_rate=16000) -> np.nd
     # Lazy import so that issues in torchcodec compatibility don't crash the whole library
     requires_backends(load_audio_torchcodec, ["torchcodec"])
     from torchcodec.decoders import AudioDecoder
+
+    # Fetch bytes for URLs so we get retry logic; torchcodec does not surface ffmpeg network retries options
+    if isinstance(audio, str) and audio.startswith(("http://", "https://")):
+        audio = _fetch_audio_bytes(audio, timeout=timeout)
 
     # Set `num_channels` to `1` which is what most models expects and the default in librosa
     decoder = AudioDecoder(audio, sample_rate=sampling_rate, num_channels=1)
@@ -132,9 +147,7 @@ def load_audio_librosa(audio: str | np.ndarray, sampling_rate=16000, timeout=Non
 
     # Load audio from URL (e.g https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/translate_to_chinese.wav)
     if audio.startswith("http://") or audio.startswith("https://"):
-        audio = librosa.load(
-            BytesIO(httpx.get(audio, follow_redirects=True, timeout=timeout).content), sr=sampling_rate
-        )[0]
+        audio = librosa.load(BytesIO(_fetch_audio_bytes(audio, timeout=timeout)), sr=sampling_rate)[0]
     elif os.path.isfile(audio):
         audio = librosa.load(audio, sr=sampling_rate)[0]
     return audio
@@ -175,9 +188,7 @@ def load_audio_as(
         # Load audio bytes from URL or file
         audio_bytes = None
         if audio.startswith(("http://", "https://")):
-            response = httpx.get(audio, follow_redirects=True, timeout=timeout)
-            response.raise_for_status()
-            audio_bytes = response.content
+            audio_bytes = _fetch_audio_bytes(audio, timeout=timeout)
         elif os.path.isfile(audio):
             with open(audio, "rb") as audio_file:
                 audio_bytes = audio_file.read()

@@ -26,13 +26,13 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import BackboneMixin
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_vitpose_backbone import VitPoseBackboneConfig
 
@@ -147,7 +147,11 @@ class VitPoseBackboneSelfAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = hidden_states.shape[0]
         new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
 
@@ -168,6 +172,7 @@ class VitPoseBackboneSelfAttention(nn.Module):
             is_causal=self.is_causal,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,
+            **kwargs,
         )
 
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
@@ -201,8 +206,12 @@ class VitPoseBackboneAttention(nn.Module):
         self.attention = VitPoseBackboneSelfAttention(config)
         self.output = VitPoseBackboneSelfOutput(config)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        self_attn_output, _ = self.attention(hidden_states)
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        self_attn_output, _ = self.attention(hidden_states, **kwargs)
         output = self.output(self_attn_output, hidden_states)
         return output
 
@@ -288,6 +297,7 @@ class VitPoseBackboneLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         dataset_index: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         # Validate dataset_index when using multiple experts
         if self.num_experts > 1 and dataset_index is None:
@@ -298,7 +308,7 @@ class VitPoseBackboneLayer(GradientCheckpointingLayer):
             )
 
         hidden_states_norm = self.layernorm_before(hidden_states)
-        attention_output = self.attention(hidden_states_norm)
+        attention_output = self.attention(hidden_states_norm, **kwargs)
 
         # first residual connection
         hidden_states = attention_output + hidden_states
@@ -315,33 +325,6 @@ class VitPoseBackboneLayer(GradientCheckpointingLayer):
         return layer_output
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->VitPoseBackbone
-class VitPoseBackboneEncoder(nn.Module):
-    def __init__(self, config: VitPoseBackboneConfig):
-        super().__init__()
-        self.config = config
-        self.layer = nn.ModuleList([VitPoseBackboneLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    # Ignore copy
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        dataset_index: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
-    ) -> BaseModelOutput:
-        all_hidden_states = [hidden_states] if output_hidden_states else None
-        for i, layer_module in enumerate(self.layer):
-            hidden_states = layer_module(hidden_states, dataset_index)
-            if all_hidden_states is not None:
-                all_hidden_states.append(hidden_states)
-
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=tuple(all_hidden_states) if all_hidden_states else None,
-        )
-
-
 @auto_docstring
 class VitPoseBackbonePreTrainedModel(PreTrainedModel):
     config: VitPoseBackboneConfig
@@ -353,6 +336,7 @@ class VitPoseBackbonePreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flash_attn = True
     _can_record_outputs = {
+        "hidden_states": VitPoseBackboneLayer,
         "attentions": VitPoseBackboneSelfAttention,
     }
 
@@ -368,6 +352,26 @@ class VitPoseBackbonePreTrainedModel(PreTrainedModel):
             init.ones_(module.weight)
         elif isinstance(module, VitPoseBackboneEmbeddings):
             init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
+
+
+class VitPoseBackboneEncoder(VitPoseBackbonePreTrainedModel):
+    def __init__(self, config: VitPoseBackboneConfig):
+        super().__init__(config)
+        self.layer = nn.ModuleList([VitPoseBackboneLayer(config) for _ in range(config.num_hidden_layers)])
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        dataset_index: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        for layer_module in self.layer:
+            hidden_states = layer_module(hidden_states, dataset_index, **kwargs)
+
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 @auto_docstring(
@@ -388,15 +392,14 @@ class VitPoseBackbone(BackboneMixin, VitPoseBackbonePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
         dataset_index: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
         dataset_index (`torch.Tensor` of shape `(batch_size,)`):
@@ -417,14 +420,10 @@ class VitPoseBackbone(BackboneMixin, VitPoseBackbonePreTrainedModel):
         >>> dataset_index = torch.tensor([1])
         >>> outputs = model(pixel_values, dataset_index)
         ```"""
-
-        if output_hidden_states is None:
-            output_hidden_states = self.config.output_hidden_states
+        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
 
         embedding_output = self.embeddings(pixel_values)
-        outputs: BaseModelOutput = self.encoder(
-            embedding_output, dataset_index=dataset_index, output_hidden_states=True
-        )
+        outputs: BaseModelOutput = self.encoder(embedding_output, dataset_index=dataset_index, **kwargs)
         hidden_states = outputs.hidden_states
 
         feature_maps = []
@@ -435,7 +434,8 @@ class VitPoseBackbone(BackboneMixin, VitPoseBackbonePreTrainedModel):
 
         return BackboneOutput(
             feature_maps=tuple(feature_maps),
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 

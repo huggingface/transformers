@@ -32,12 +32,12 @@ from .configuration_longformer import LongformerConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Longformer's outputs, with potential hidden states, local and global attentions.
     """
 )
+@dataclass
 class LongformerBaseModelOutput(ModelOutput):
     r"""
     attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
@@ -70,12 +70,12 @@ class LongformerBaseModelOutput(ModelOutput):
     global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Longformer's outputs that also contains a pooling of the last hidden states.
     """
 )
+@dataclass
 class LongformerBaseModelOutputWithPooling(ModelOutput):
     r"""
     pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
@@ -113,12 +113,12 @@ class LongformerBaseModelOutputWithPooling(ModelOutput):
     global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for masked language models outputs.
     """
 )
+@dataclass
 class LongformerMaskedLMOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -156,12 +156,12 @@ class LongformerMaskedLMOutput(ModelOutput):
     global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of question answering Longformer models.
     """
 )
+@dataclass
 class LongformerQuestionAnsweringModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -198,12 +198,12 @@ class LongformerQuestionAnsweringModelOutput(ModelOutput):
     global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of sentence classification models.
     """
 )
+@dataclass
 class LongformerSequenceClassifierOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -241,12 +241,12 @@ class LongformerSequenceClassifierOutput(ModelOutput):
     global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of multiple choice Longformer models.
     """
 )
+@dataclass
 class LongformerMultipleChoiceModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape *(1,)*, *optional*, returned when `labels` is provided):
@@ -286,12 +286,12 @@ class LongformerMultipleChoiceModelOutput(ModelOutput):
     global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of token classification models.
     """
 )
+@dataclass
 class LongformerTokenClassifierOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -1467,7 +1467,7 @@ class LongformerModel(LongformerPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -1618,7 +1618,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
         ['healthy', 'skinny', 'thin', 'good', 'vegetarian']
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.longformer(
             input_ids,
@@ -1703,7 +1703,7 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if global_attention_mask is None:
             logger.warning_once("Initializing global attention on CLS token...")
@@ -1849,7 +1849,7 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
         ...     tokenizer.convert_tokens_to_ids(answer_tokens)
         ... )  # remove space prepending space token
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if global_attention_mask is None:
             if input_ids is None:
@@ -1953,7 +1953,7 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.longformer(
             input_ids,
@@ -2060,7 +2060,7 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
             model's internal embedding lookup matrix.
         """
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # set global attention on question tokens
         if global_attention_mask is None and input_ids is not None:

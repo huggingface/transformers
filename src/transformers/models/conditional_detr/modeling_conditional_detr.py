@@ -39,7 +39,6 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_conditional_detr import ConditionalDetrConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the CONDITIONAL_DETR decoder. This class adds one attribute to BaseModelOutputWithCrossAttentions,
@@ -47,6 +46,7 @@ from .configuration_conditional_detr import ConditionalDetrConfig
     gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
     """
 )
+@dataclass
 class ConditionalDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     r"""
     cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
@@ -65,7 +65,6 @@ class ConditionalDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     reference_points: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the CONDITIONAL_DETR encoder-decoder model. This class adds one attribute to Seq2SeqModelOutput,
@@ -73,6 +72,7 @@ class ConditionalDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
     """
 )
+@dataclass
 class ConditionalDetrModelOutput(Seq2SeqModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -89,12 +89,12 @@ class ConditionalDetrModelOutput(Seq2SeqModelOutput):
     reference_points: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`ConditionalDetrForObjectDetection`].
     """
 )
+@dataclass
 class ConditionalDetrObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
@@ -132,12 +132,12 @@ class ConditionalDetrObjectDetectionOutput(ModelOutput):
     encoder_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`ConditionalDetrForSegmentation`].
     """
 )
+@dataclass
 class ConditionalDetrSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
@@ -489,7 +489,7 @@ class ConditionalDetrDecoderSelfAttention(nn.Module):
         config: ConditionalDetrConfig,
         hidden_size: int,
         num_attention_heads: int,
-        dropout: float = 0.0,
+        dropout: float | int = 0.0,
     ):
         super().__init__()
         self.config = config
@@ -575,7 +575,7 @@ class ConditionalDetrDecoderCrossAttention(nn.Module):
         config: ConditionalDetrConfig,
         hidden_size: int,
         num_attention_heads: int,
-        dropout: float = 0.0,
+        dropout: float | int = 0.0,
     ):
         super().__init__()
         self.config = config
@@ -749,7 +749,7 @@ class ConditionalDetrEncoderLayer(GradientCheckpointingLayer):
         hidden_states = self.final_layer_norm(hidden_states)
 
         if self.training:
-            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+            if not torch.isfinite(hidden_states).all():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
@@ -1364,10 +1364,12 @@ class ConditionalDetrModel(ConditionalDetrPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, AutoModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/conditional-detr-resnet-50")
         >>> model = AutoModel.from_pretrained("microsoft/conditional-detr-resnet-50")
@@ -1523,10 +1525,12 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, AutoModelForObjectDetection
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/conditional-detr-resnet-50")
         >>> model = AutoModelForObjectDetection.from_pretrained("microsoft/conditional-detr-resnet-50")
@@ -1621,26 +1625,6 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
     """
 )
 class ConditionalDetrForSegmentation(ConditionalDetrPreTrainedModel):
-    _checkpoint_conversion_mapping = {
-        "bbox_attention.q_linear": "bbox_attention.q_proj",
-        "bbox_attention.k_linear": "bbox_attention.k_proj",
-        # Mask head refactor
-        "mask_head.lay1": "mask_head.conv1.conv",
-        "mask_head.gn1": "mask_head.conv1.norm",
-        "mask_head.lay2": "mask_head.conv2.conv",
-        "mask_head.gn2": "mask_head.conv2.norm",
-        "mask_head.adapter1": "mask_head.fpn_stages.0.fpn_adapter",
-        "mask_head.lay3": "mask_head.fpn_stages.0.refine.conv",
-        "mask_head.gn3": "mask_head.fpn_stages.0.refine.norm",
-        "mask_head.adapter2": "mask_head.fpn_stages.1.fpn_adapter",
-        "mask_head.lay4": "mask_head.fpn_stages.1.refine.conv",
-        "mask_head.gn4": "mask_head.fpn_stages.1.refine.norm",
-        "mask_head.adapter3": "mask_head.fpn_stages.2.fpn_adapter",
-        "mask_head.lay5": "mask_head.fpn_stages.2.refine.conv",
-        "mask_head.gn5": "mask_head.fpn_stages.2.refine.norm",
-        "mask_head.out_lay": "mask_head.output_conv",
-    }
-
     def __init__(self, config: ConditionalDetrConfig):
         super().__init__(config)
 

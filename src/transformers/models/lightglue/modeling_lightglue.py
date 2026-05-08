@@ -19,7 +19,6 @@
 # limitations under the License.
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Union
 
 import numpy as np
 import torch
@@ -32,13 +31,11 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring
-from ...utils.generic import can_return_tuple
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto.modeling_auto import AutoModelForKeypointDetection
 from .configuration_lightglue import LightGlueConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of LightGlue keypoint matching models. Due to the nature of keypoint detection and matching,
@@ -48,6 +45,7 @@ from .configuration_lightglue import LightGlueConfig
     matching information.
     """
 )
+@dataclass
 class LightGlueKeypointMatchingOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
@@ -505,9 +503,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
 
     def __init__(self, config: LightGlueConfig):
         super().__init__(config)
-        self.keypoint_detector = AutoModelForKeypointDetection.from_config(
-            config.keypoint_detector_config, trust_remote_code=config.trust_remote_code
-        )
+        self.keypoint_detector = AutoModelForKeypointDetection.from_config(config.keypoint_detector_config)
 
         self.keypoint_detector_descriptor_dim = config.keypoint_detector_config.descriptor_decoder_dim
         self.descriptor_dim = config.descriptor_dim
@@ -874,7 +870,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, "LightGlueKeypointMatchingOutput"]:
+    ) -> tuple | LightGlueKeypointMatchingOutput:
         loss = None
         if labels is not None:
             raise ValueError("LightGlue is not trainable, no labels should be provided.")

@@ -173,6 +173,7 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     pipeline_model_mapping = {"image-text-to-text": PaliGemmaForConditionalGeneration}
 
     _is_composite = True
+    additional_model_inputs = ["token_type_ids"]
 
     def setUp(self):
         self.model_tester = PaliGemma2VisionText2TextModelTester(self)

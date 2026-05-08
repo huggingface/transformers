@@ -30,12 +30,12 @@ from .configuration_cvt import CvtConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for model's outputs, with potential hidden states and attentions.
     """
 )
+@dataclass
 class BaseModelOutputWithCLSToken(ModelOutput):
     r"""
     cls_token_value (`torch.FloatTensor` of shape `(batch_size, 1, hidden_size)`):
@@ -530,7 +530,7 @@ class CvtModel(CvtPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -588,7 +588,7 @@ class CvtForImageClassification(CvtPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         outputs = self.cvt(
             pixel_values,
             output_hidden_states=output_hidden_states,

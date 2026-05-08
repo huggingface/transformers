@@ -163,8 +163,8 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
         return vocab
 
     @property
-    def tgt_lang(self) -> str:
-        return self._tgt_lang
+    def tgt_lang(self) -> str | None:
+        return getattr(self, "_tgt_lang", None)
 
     @tgt_lang.setter
     def tgt_lang(self, new_tgt_lang) -> None:

@@ -57,8 +57,8 @@ from .configuration_blip_2 import Blip2Config, Blip2QFormerConfig, Blip2VisionCo
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class BaseModelOutputWithVisionQformerOutputs(BaseModelOutputWithPooling):
     r"""
     vision_outputs (`BaseModelOutputWithPooling`):
@@ -71,12 +71,12 @@ class BaseModelOutputWithVisionQformerOutputs(BaseModelOutputWithPooling):
     qformer_outputs: BaseModelOutputWithPoolingAndCrossAttentions | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class defining the outputs of [`Blip2ForConditionalGeneration`].
     """
 )
+@dataclass
 class Blip2ForConditionalGenerationModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
@@ -106,8 +106,8 @@ class Blip2ForConditionalGenerationModelOutput(ModelOutput):
         )
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Blip2ImageTextMatchingModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
@@ -143,12 +143,12 @@ class Blip2ImageTextMatchingModelOutput(ModelOutput):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for text model's outputs that also contains a pooling of the last hidden states.
     """
 )
+@dataclass
 # Copied from transformers.models.clip.modeling_clip.CLIPTextModelOutput with CLIP->Blip2
 class Blip2TextModelOutput(ModelOutput):
     r"""
@@ -162,12 +162,12 @@ class Blip2TextModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
     """
 )
+@dataclass
 # Copied from transformers.models.clip.modeling_clip.CLIPVisionModelOutput with CLIP->Blip2
 class Blip2VisionModelOutput(ModelOutput):
     r"""
@@ -878,6 +878,8 @@ class Blip2TextEmbeddings(nn.Module):
     """
 )
 class Blip2QFormerModel(Blip2PreTrainedModel):
+    config: Blip2QFormerConfig
+
     _supports_attention_backend = False  # adds position on attn weights before last matmul
     _supports_flash_attn = False
     _supports_sdpa = False
@@ -1972,7 +1974,7 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
         44.7% that image 0 is 'a photo of a dog'
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

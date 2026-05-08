@@ -1,4 +1,4 @@
-<!--Copyright 2025 The Qwen Team and The HuggingFace Inc. team. All rights reserved.
+<!--Copyright 2025 The Baidu and HuggingFace Inc. team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -17,7 +17,6 @@ rendered properly in your Markdown viewer.
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
@@ -52,14 +51,15 @@ The example below demonstrates how to generate text based on an image with [`Pip
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="image-text-to-text",
     model="baidu/ERNIE-4.5-VL-28B-A3B-PT",
     device_map="auto",
-    revision="refs/pr/10",
+    revision="refs/pr/11",
 )
 message = [
     {
@@ -79,19 +79,19 @@ print(pipe(text=message, max_new_tokens=20, return_full_text=False))
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 from transformers import AutoModelForImageTextToText, AutoProcessor
+
 
 model = AutoModelForImageTextToText.from_pretrained(
     "baidu/ERNIE-4.5-VL-28B-A3B-PT",
-    dtype="auto",
     device_map="auto",  # Use tp_plan="auto" instead to enable Tensor Parallelism!
-    revision="refs/pr/10",
+    revision="refs/pr/11",
 )
 processor = AutoProcessor.from_pretrained(
     "baidu/ERNIE-4.5-VL-28B-A3B-PT",
     # use_fast=False,  # closer to the original implementation for less speed
-    revision="refs/pr/10",
+    revision="refs/pr/11",
 )
 message = [
     {
@@ -133,13 +133,13 @@ The model can process video data and generate text based on the content of the v
 ```python
 from transformers import AutoModelForImageTextToText, AutoProcessor
 
+
 model = AutoModelForImageTextToText.from_pretrained(
     "baidu/ERNIE-4.5-VL-28B-A3B-PT",
-    dtype="auto",
     device_map="auto",  # Use tp_plan="auto" instead to enable Tensor Parallelism!
-    revision="refs/pr/10",
+    revision="refs/pr/11",
 )
-processor = AutoProcessor.from_pretrained("baidu/ERNIE-4.5-VL-28B-A3B-PT", revision="refs/pr/10")
+processor = AutoProcessor.from_pretrained("baidu/ERNIE-4.5-VL-28B-A3B-PT", revision="refs/pr/11")
 message = [
     {
         "role": "user",
@@ -171,63 +171,63 @@ output_text = processor.batch_decode(
 print(output_text)
 ```
 
-## Ernie4_5_VL_MoeConfig
+## Ernie4_5_VLMoeConfig
 
-[[autodoc]] Ernie4_5_VL_MoeConfig
+[[autodoc]] Ernie4_5_VLMoeConfig
 
-## Ernie4_5_VL_MoeTextConfig
+## Ernie4_5_VLMoeTextConfig
 
-[[autodoc]] Ernie4_5_VL_MoeTextConfig
+[[autodoc]] Ernie4_5_VLMoeTextConfig
 
-## Ernie4_5_VL_MoeVisionConfig
+## Ernie4_5_VLMoeVisionConfig
 
-[[autodoc]] Ernie4_5_VL_MoeVisionConfig
+[[autodoc]] Ernie4_5_VLMoeVisionConfig
 
-## Ernie4_5_VL_MoeImageProcessor
+## Ernie4_5_VLMoeImageProcessor
 
-[[autodoc]] Ernie4_5_VL_MoeImageProcessor
+[[autodoc]] Ernie4_5_VLMoeImageProcessor
     - preprocess
 
-## Ernie4_5_VL_MoeImageProcessorFast
+## Ernie4_5_VLMoeImageProcessorPil
 
-[[autodoc]] Ernie4_5_VL_MoeImageProcessorFast
+[[autodoc]] Ernie4_5_VLMoeImageProcessorPil
     - preprocess
 
-## Ernie4_5_VL_MoeVideoProcessor
+## Ernie4_5_VLMoeVideoProcessor
 
-[[autodoc]] Ernie4_5_VL_MoeVideoProcessor
+[[autodoc]] Ernie4_5_VLMoeVideoProcessor
     - preprocess
 
-## Ernie4_5_VL_MoeProcessor
+## Ernie4_5_VLMoeProcessor
 
-[[autodoc]] Ernie4_5_VL_MoeProcessor
+[[autodoc]] Ernie4_5_VLMoeProcessor
     - __call__
 
-## Ernie4_5_VL_MoeTextModel
+## Ernie4_5_VLMoeTextModel
 
-[[autodoc]] Ernie4_5_VL_MoeTextModel
+[[autodoc]] Ernie4_5_VLMoeTextModel
     - forward
 
-## Ernie4_5_VL_MoeVisionTransformerPretrainedModel
+## Ernie4_5_VLMoeVisionTransformerPretrainedModel
 
-[[autodoc]] Ernie4_5_VL_MoeVisionTransformerPretrainedModel
+[[autodoc]] Ernie4_5_VLMoeVisionTransformerPretrainedModel
     - forward
 
-## Ernie4_5_VL_MoeVariableResolutionResamplerModel
+## Ernie4_5_VLMoeVariableResolutionResamplerModel
 
-[[autodoc]] Ernie4_5_VL_MoeVariableResolutionResamplerModel
+[[autodoc]] Ernie4_5_VLMoeVariableResolutionResamplerModel
     - forward
 
-## Ernie4_5_VL_MoeModel
+## Ernie4_5_VLMoeModel
 
-[[autodoc]] Ernie4_5_VL_MoeModel
+[[autodoc]] Ernie4_5_VLMoeModel
     - forward
     - get_video_features
     - get_image_features
 
-## Ernie4_5_VL_MoeForConditionalGeneration
+## Ernie4_5_VLMoeForConditionalGeneration
 
-[[autodoc]] Ernie4_5_VL_MoeForConditionalGeneration
+[[autodoc]] Ernie4_5_VLMoeForConditionalGeneration
     - forward
     - get_video_features
     - get_image_features

@@ -40,6 +40,7 @@ if is_torch_available():
 
     from transformers import (
         Olmo2ForCausalLM,
+        Olmo2ForSequenceClassification,
         Olmo2Model,
     )
 
@@ -162,11 +163,13 @@ class Olmo2ModelTester:
 
 @require_torch
 class Olmo2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (Olmo2Model, Olmo2ForCausalLM) if is_torch_available() else ()
+    all_model_classes = (Olmo2Model, Olmo2ForCausalLM, Olmo2ForSequenceClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": Olmo2Model,
             "text-generation": Olmo2ForCausalLM,
+            "text-classification": Olmo2ForSequenceClassification,
+            "zero-shot": Olmo2ForSequenceClassification,
         }
         if is_torch_available()
         else {}
@@ -178,7 +181,7 @@ class Olmo2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     def setUp(self):
         self.model_tester = Olmo2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Olmo2Config, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Olmo2Config, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()

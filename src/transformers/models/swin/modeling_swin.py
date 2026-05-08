@@ -22,11 +22,12 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import BackboneMixin
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging, torch_int
+from ...utils.generic import can_return_tuple
 from .configuration_swin import SwinConfig
 
 
@@ -36,12 +37,12 @@ logger = logging.get_logger(__name__)
 # drop_path, SwinPatchEmbeddings, SwinPatchMerging and SwinDropPath are from the timm library.
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Swin encoder's outputs, with potential hidden states and attentions.
     """
 )
+@dataclass
 class SwinEncoderOutput(ModelOutput):
     r"""
     reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
@@ -58,12 +59,12 @@ class SwinEncoderOutput(ModelOutput):
     reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Swin model's outputs that also contains a pooling of the last hidden states.
     """
 )
+@dataclass
 class SwinModelOutput(ModelOutput):
     r"""
     pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*, returned when `add_pooling_layer=True` is passed):
@@ -83,12 +84,12 @@ class SwinModelOutput(ModelOutput):
     reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Swin masked image model outputs.
     """
 )
+@dataclass
 class SwinMaskedImageModelingOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `bool_masked_pos` is provided):
@@ -110,12 +111,12 @@ class SwinMaskedImageModelingOutput(ModelOutput):
     reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Swin outputs for image classification.
     """
 )
+@dataclass
 class SwinImageClassifierOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -861,7 +862,7 @@ class SwinModel(SwinPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -969,7 +970,7 @@ class SwinForMaskedImageModeling(SwinPreTrainedModel):
         >>> list(reconstructed_pixel_values.shape)
         [1, 3, 192, 192]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.swin(
             pixel_values,
@@ -1062,7 +1063,7 @@ class SwinForImageClassification(SwinPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.swin(
             pixel_values,
@@ -1118,6 +1119,8 @@ class SwinBackbone(BackboneMixin, SwinPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
+    @can_return_tuple
+    @filter_output_hidden_states
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -1153,7 +1156,7 @@ class SwinBackbone(BackboneMixin, SwinPreTrainedModel):
         >>> list(feature_maps[-1].shape)
         [1, 768, 7, 7]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

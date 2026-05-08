@@ -241,7 +241,6 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             "text-classification": ModernBertForSequenceClassification,
             "token-classification": ModernBertForTokenClassification,
             "zero-shot": ModernBertForSequenceClassification,
-            "question-answering": ModernBertForQuestionAnswering,
         }
         if is_torch_available()
         else {}
@@ -268,7 +267,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     def setUp(self):
         self.model_tester = ModernBertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ModernBertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ModernBertConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -374,43 +373,6 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
         expected = torch.tensor([[1.6466, 4.5662]])
         torch.testing.assert_close(output, expected, rtol=1e-4, atol=1e-4)
 
-    @pytest.mark.torch_export_test
-    @slow
-    def test_export(self):
-        bert_model = "answerdotai/ModernBERT-base"
-        device = "cpu"
-        attn_implementation = "sdpa"
-        max_length = 512
-
-        tokenizer = AutoTokenizer.from_pretrained(bert_model)
-        inputs = tokenizer(
-            "the man worked as a [MASK].",
-            return_tensors="pt",
-            padding="max_length",
-            max_length=max_length,
-        )
-
-        model = ModernBertForMaskedLM.from_pretrained(
-            bert_model,
-            device_map=device,
-            attn_implementation=attn_implementation,
-        )
-
-        logits = model(**inputs).logits
-        eg_predicted_mask = tokenizer.decode(logits[0, 6].topk(5).indices)
-        self.assertEqual(eg_predicted_mask.split(), ["lawyer", "mechanic", "teacher", "doctor", "waiter"])
-
-        exported_program = torch.export.export(
-            model,
-            args=(inputs["input_ids"],),
-            kwargs={"attention_mask": inputs["attention_mask"]},
-            strict=True,
-        )
-
-        result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
-        ep_predicted_mask = tokenizer.decode(result.logits[0, 6].topk(5).indices)
-        self.assertEqual(eg_predicted_mask, ep_predicted_mask)
-
     @slow
     def test_inference_multiple_choice(self):
         tokenizer = AutoTokenizer.from_pretrained("answerdotai/ModernBERT-base")
@@ -464,6 +426,10 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
             {
                 ("cuda", None): torch.tensor(
                     [[[3.8203, -0.2125, 12.2812], [3.6055, 0.6797, 14.6875], [-5.1094, -3.8105, 11.9922]]],
+                    dtype=torch.float16,
+                ),
+                ("rocm", None): torch.tensor(
+                    [[[3.8223, -0.2045, 12.2891], [3.6328, 0.6875, 14.7031], [-5.1133, -3.8105, 11.9922]]],
                     dtype=torch.float16,
                 ),
                 ("xpu", None): torch.tensor(

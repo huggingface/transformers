@@ -23,7 +23,7 @@ from transformers import (
     AutoModel,
     AutoTokenizer,
     GenerationConfig,
-    GotOcr2ImageProcessorFast,
+    GotOcr2ImageProcessor,
     InternVLConfig,
     InternVLForConditionalGeneration,
     InternVLProcessor,
@@ -308,7 +308,7 @@ def write_model(
     if push_to_hub:
         model.push_to_hub(model_name)
 
-    image_processor = GotOcr2ImageProcessorFast.from_pretrained(model_path)
+    image_processor = GotOcr2ImageProcessor.from_pretrained(model_path)
     video_processor = InternVLVideoProcessor.from_pretrained(model_path)
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     processor = InternVLProcessor(
@@ -398,7 +398,7 @@ def write_tokenizer(save_dir: str, push_to_hub: bool = False, path: str | None =
 
 
 def write_image_processor(save_dir: str, push_to_hub: bool = False, hub_dir: str | None = None):
-    image_processor = GotOcr2ImageProcessorFast(
+    image_processor = GotOcr2ImageProcessor(
         do_resize=True,
         size={"height": 448, "width": 448},
         do_rescale=True,

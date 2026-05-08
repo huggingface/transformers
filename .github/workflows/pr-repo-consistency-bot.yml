@@ -172,6 +172,13 @@ jobs:
           cp utils/check_docstrings.py pr-repo/utils/check_docstrings.py
           cp utils/add_dates.py pr-repo/utils/add_dates.py
 
+      - name: Install editable transformers from PR branch with copied scripts
+        run: |
+          # Run commands in PR directory (with the copied trusted scripts)
+          cd pr-repo
+
+          pip install -e .
+
       - name: Run repo consistency checks with trusted script
         id: run_repo_checks
         if: startsWith(github.event.comment.body, '@bot /repo')

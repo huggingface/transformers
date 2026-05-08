@@ -64,9 +64,9 @@ This model was contributed by [Raushan Turganbay](https://huggingface.co/Raushan
 [[autodoc]] Glm46VVideoProcessor
     - preprocess
 
-## Glm46VImageProcessorFast
+## Glm46VImageProcessorPil
 
-[[autodoc]] Glm46VImageProcessorFast
+[[autodoc]] Glm46VImageProcessorPil
     - preprocess
 
 ## Glm46VProcessor

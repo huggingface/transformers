@@ -47,10 +47,10 @@ command line.
 ```python
 from transformers import pipeline
 
+
 pipe = pipeline(
     task="text-generation",
     model="google/vaultgemma-1b",
-    dtype="auto",
     device_map="auto",
 )
 
@@ -65,24 +65,18 @@ print(response)
 
 ```python
 # pip install accelerate
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 model_id = "google/vaultgemma-1b"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", dtype="auto")
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
 
 text = "Tell me an unknown interesting biology fact about the brain."
 input_ids = tokenizer(text, return_tensors="pt").to(model.device)
 
 outputs = model.generate(**input_ids, max_new_tokens=32)
 print(tokenizer.decode(outputs[0]))
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Write me a poem about Machine Learning. Answer:" | transformers run --task text2text-generation --model google/vaultgemma-1b-pt --device 0
 ```
 
 </hfoption>

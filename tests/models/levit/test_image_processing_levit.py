@@ -16,16 +16,8 @@
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-
-
-if is_vision_available():
-    from transformers import LevitImageProcessor
-
-    if is_torchvision_available():
-        from transformers import LevitImageProcessorFast
 
 
 class LevitImageProcessingTester:
@@ -90,9 +82,6 @@ class LevitImageProcessingTester:
 @require_torch
 @require_vision
 class LevitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = LevitImageProcessor if is_vision_available() else None
-    fast_image_processing_class = LevitImageProcessorFast if is_torchvision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = LevitImageProcessingTester(self)
@@ -102,7 +91,7 @@ class LevitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
@@ -112,7 +101,7 @@ class LevitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "size"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"shortest_edge": 18})
             self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
