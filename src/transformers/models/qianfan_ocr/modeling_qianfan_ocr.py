@@ -506,12 +506,12 @@ class QianfanOCRPreTrainedModel(PreTrainedModel):
     config_class = QianfanOCRConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for QianfanOCR outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class QianfanOCRModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     image_hidden_states (`torch.FloatTensor`, *optional*):

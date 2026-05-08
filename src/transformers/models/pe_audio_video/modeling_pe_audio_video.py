@@ -545,13 +545,22 @@ class PeAudioVideoPreTrainedModel(PreTrainedModel):
             init.normal_(module.class_embedding, mean=0.0, std=embed_dim**-0.5 * std)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`PeAudioVideoEncoder`].
     """
 )
+@dataclass
 class PeAudioVideoEncoderOutput(BaseModelOutputWithPooling):
+    r"""
+    audio_model_output (`BaseModelOutputWithPooling`, *optional*):
+        Output of the audio encoder, containing the last hidden state, pooled output, and optional hidden states
+        and attentions. See [`~modeling_outputs.BaseModelOutputWithPooling`] for details.
+    video_model_output (`BaseModelOutputWithPooling`, *optional*):
+        Output of the video encoder, containing the last hidden state, pooled output, and optional hidden states
+        and attentions. See [`~modeling_outputs.BaseModelOutputWithPooling`] for details.
+    """
+
     audio_model_output: BaseModelOutputWithPooling | None = None
     video_model_output: BaseModelOutputWithPooling | None = None
 

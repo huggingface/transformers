@@ -519,6 +519,7 @@ class LwDetrC2FLayer(nn.Module):
         hidden_states = self.conv1(hidden_states)
         all_hidden_states = list(hidden_states.split(self.hidden_channels, 1))
         hidden_states = all_hidden_states[-1]
+        hidden_states = hidden_states.contiguous()
 
         for bottleneck in self.bottlenecks:
             hidden_states = bottleneck(hidden_states)
@@ -1018,7 +1019,6 @@ class LwDetrPreTrainedModel(PreTrainedModel):
             init.constant_(module.bbox_embed.layers[-1].bias, 0)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the LwDetrDecoder. This class adds two attributes to
@@ -1027,6 +1027,7 @@ class LwDetrPreTrainedModel(PreTrainedModel):
     - a stacked tensor of intermediate reference points.
     """
 )
+@dataclass
 class LwDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     r"""
     cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):

@@ -72,12 +72,12 @@ class Cohere2VisionMultiModalProjector(nn.Module):
         return hidden_states
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Cohere2Vision outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class Cohere2VisionModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):

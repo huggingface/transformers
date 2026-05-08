@@ -128,6 +128,7 @@ else:
             ("qwen3_vl", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("regnet", {"torchvision": "ConvNextImageProcessor", "pil": "ConvNextImageProcessorPil"}),
             ("resnet", {"torchvision": "ConvNextImageProcessor", "pil": "ConvNextImageProcessorPil"}),
+            ("rf_detr", {"torchvision": "DetrImageProcessor", "pil": "DetrImageProcessorPil"}),
             ("sam2_video", {"torchvision": "Sam2ImageProcessor"}),
             ("sam3_lite_text", {"torchvision": "Sam3ImageProcessor"}),
             ("sam3_tracker", {"torchvision": "Sam3ImageProcessor"}),

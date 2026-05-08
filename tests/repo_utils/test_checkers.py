@@ -37,7 +37,7 @@ def patch_checkers_paths(repo_root: Path):
         stack.enter_context(patch.object(checkers, "REPO_ROOT", repo_root))
         stack.enter_context(patch.object(checkers, "CACHE_PATH", cache_path))
         stack.enter_context(patch.object(checkers, "CHECKERS", {"demo": ("Demo checker", "fake_checker.py", [], [])}))
-        stack.enter_context(patch.object(checkers, "CHECKER_FILE_GLOBS", {"demo": ["tracked/**/*.txt"]}))
+        stack.enter_context(patch.object(checkers, "CHECKER_CACHE_GLOBS", {"demo": ["tracked/**/*.txt"]}))
         yield cache_path
 
 

@@ -70,12 +70,12 @@ class Idefics2BaseModelOutputWithPast(ModelOutput):
     image_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Idefics2 causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 # Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->Idefics2
 class Idefics2CausalLMOutputWithPast(ModelOutput):
     r"""

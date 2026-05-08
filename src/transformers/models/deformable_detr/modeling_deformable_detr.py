@@ -42,7 +42,6 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_deformable_detr import DeformableDetrConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the DEFORMABLE_DETR decoder. This class adds one attribute to BaseModelOutputWithCrossAttentions,
@@ -50,6 +49,7 @@ from .configuration_deformable_detr import DeformableDetrConfig
     gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
     """
 )
+@dataclass
 class DeformableDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     r"""
     cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):

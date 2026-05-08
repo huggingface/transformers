@@ -62,8 +62,8 @@ def image_text_contrastive_loss(similarity: torch.Tensor) -> torch.Tensor:
     return (caption_loss + image_loss) / 2.0
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Owlv2Output(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
@@ -224,12 +224,12 @@ class Owlv2ObjectDetectionOutput(ModelOutput):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`Owlv2ForObjectDetection.image_guided_detection`].
     """
 )
+@dataclass
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTImageGuidedObjectDetectionOutput with OwlViT->Owlv2,OWL-ViT->OWLv2
 class Owlv2ImageGuidedObjectDetectionOutput(ModelOutput):
     r"""

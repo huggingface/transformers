@@ -35,12 +35,12 @@ from ..auto import AutoModel
 from .configuration_vipllava import VipLlavaConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for VipLlava outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class VipLlavaModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):

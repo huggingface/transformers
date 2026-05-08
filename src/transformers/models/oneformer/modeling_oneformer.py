@@ -731,13 +731,13 @@ class OneFormerLoss(nn.Module):
         return num_masks
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the Transformer decoder. This class adds attributes for class predictions, mask
     predictions and contrastive logits to BaseModelOutputWithCrossAttentions.
     """
 )
+@dataclass
 class OneFormerTransformerDecoderOutput(BaseModelOutput):
     r"""
     object_queries (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_dim)`):
@@ -759,13 +759,13 @@ class OneFormerTransformerDecoderOutput(BaseModelOutput):
     auxiliary_predictions: tuple[dict[str, torch.FloatTensor]] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     OneFormer's pixel decoder module output, practically a Multi-Scale Deformable Attention based decoder. It returns
     the mask features and the multiscale features.
     """
 )
+@dataclass
 # Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerPixelDecoderOutput with Mask2->One
 class OneFormerPixelDecoderOutput(ModelOutput):
     r"""
@@ -863,7 +863,6 @@ class OneFormerModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`OneFormerForUniversalSegmentationOutput`].
@@ -874,6 +873,7 @@ class OneFormerModelOutput(ModelOutput):
     [`~OneFormerImageProcessor] for details regarding usage.
     """
 )
+@dataclass
 class OneFormerForUniversalSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.Tensor`, *optional*):
