@@ -39,6 +39,7 @@ class LagunaModelTester(CausalLMModelTester):
 
     def __init__(self, parent):
         super().__init__(parent=parent)
+        self.vocab_size = 64
         self.head_dim = 8
         self.sliding_window = 32
         self.shared_expert_intermediate_size = 16
