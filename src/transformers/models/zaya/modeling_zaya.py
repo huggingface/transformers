@@ -543,7 +543,6 @@ def _apply_residual_scaling(
 
 class ZayaDecoderATTLayer(GradientCheckpointingLayer):
     def __init__(self, config: ZayaConfig, layer_n: int):
-
         super().__init__()
         self.config = config
         self.self_attn = ZayaAttention(config, layer_n)
@@ -715,7 +714,6 @@ class ZayaBlock(nn.Module):
         ffn_hidden_size: int,
         layer_n: int,
     ):
-
         super().__init__()
         self.config = config
         self.hidden_dim = config.hidden_size
@@ -755,7 +753,6 @@ class ZayaDecoderMLPLayer(GradientCheckpointingLayer):
         ffn_hidden_size: int,
         layer_n: int,
     ):
-
         super().__init__()
         self.config = config
         self.zaya_block = ZayaBlock(
@@ -829,7 +826,6 @@ class ZayaPreTrainedModel(PreTrainedModel):
 @auto_docstring
 class ZayaModel(ZayaPreTrainedModel):
     def __init__(self, config: ZayaConfig):
-
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
