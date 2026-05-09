@@ -355,6 +355,7 @@ def fuse_feature_maps(feature_map_1: torch.Tensor, feature_map_2: torch.Tensor, 
 class Deimv2ConvEncoder(DFineConvEncoder):
     def __init__(self, config):
         super().__init__(config)
+        self._no_split_modules = getattr(self.model, "_no_split_modules", [])
         self.encoder_input_proj = nn.ModuleList(
             [
                 Deimv2ConvNormLayer(config, in_channel, config.encoder_hidden_dim, 1, 1)
@@ -373,6 +374,7 @@ class Deimv2DINOv3ConvEncoder(nn.Module):
     def __init__(self, config: Deimv2Config):
         super().__init__()
         self.backbone = load_backbone(config)
+        self._no_split_modules = getattr(self.backbone, "_no_split_modules", [])
 
         self.spatial_tuning_adapter = Deimv2SpatialTuningAdapter(config)
 
@@ -486,7 +488,7 @@ class Deimv2DecoderLayer(DFineDecoderLayer):
 
 
 class Deimv2PreTrainedModel(DFinePreTrainedModel):
-    _no_split_modules = [r"Deimv2HybridEncoder", r"Deimv2LiteEncoder", r"Deimv2DecoderLayer", r"HGNetV2BasicLayer"]
+    _no_split_modules = [r"Deimv2HybridEncoder", r"Deimv2LiteEncoder", r"Deimv2DecoderLayer"]
 
     @torch.no_grad()
     def _init_weights(self, module):

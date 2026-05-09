@@ -878,6 +878,7 @@ class Deimv2ConvEncoder(nn.Module):
             with torch.no_grad():
                 replace_batch_norm(backbone)
         self.model = backbone
+        self._no_split_modules = getattr(self.model, "_no_split_modules", [])
         self.intermediate_channel_sizes = self.model.channels
         self.encoder_input_proj = nn.ModuleList(
             [
@@ -897,6 +898,7 @@ class Deimv2DINOv3ConvEncoder(nn.Module):
     def __init__(self, config: Deimv2Config):
         super().__init__()
         self.backbone = load_backbone(config)
+        self._no_split_modules = getattr(self.backbone, "_no_split_modules", [])
 
         self.spatial_tuning_adapter = Deimv2SpatialTuningAdapter(config)
 
@@ -1078,7 +1080,7 @@ class Deimv2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "deimv2"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    _no_split_modules = [r"Deimv2HybridEncoder", r"Deimv2LiteEncoder", r"Deimv2DecoderLayer", r"HGNetV2BasicLayer"]
+    _no_split_modules = [r"Deimv2HybridEncoder", r"Deimv2LiteEncoder", r"Deimv2DecoderLayer"]
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_attention_backend = True
