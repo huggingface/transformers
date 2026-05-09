@@ -35,8 +35,9 @@ model_id = "Zyphra/ZAYA1-8B"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
 
-inputs = tokenizer("What factors contributed to the fall of the Roman Empire?", return_tensors="pt").to(model.device)
-outputs = model.generate(**inputs, max_new_tokens=100)
+inputs = tokenizer.apply_chat_template([{"role": "user", "content": "Write a haiku about recursion in programming."}], tokenize=True, add_generation_prompt=True, enable_thinking=False, return_tensors="pt")
+inputs = inputs.to(model.device)
+outputs = model.generate(**inputs, max_new_tokens=2048)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
