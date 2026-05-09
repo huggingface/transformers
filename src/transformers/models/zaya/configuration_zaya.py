@@ -18,27 +18,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="Zyphra/ZAYA1-8B")
+@strict
 class ZayaConfig(PreTrainedConfig):
     r"""
-    num_query_groups (`int`, *optional*, defaults to 2):
-        Number of query groups. For ZAYA checkpoints this matches `num_key_value_heads`.
-    lm_head_bias (`bool`, *optional*, defaults to `False`):
-        Whether to add a bias to the language modeling head.
     ffn_hidden_size (`int`, *optional*, defaults to 4096):
         Dimension of the feed-forward and expert hidden states.
+    num_query_groups (`int`, *optional*, defaults to 2):
+        Number of query groups. For ZAYA checkpoints this matches `num_key_value_heads`.
     rope_theta (`float`, *optional*, defaults to 5000000):
         The base period of the RoPE embeddings.
+    partial_rotary_factor (`float`, *optional*, defaults to 0.5):
+        Fraction of each attention head dimension using rotary embeddings.
+    lm_head_bias (`bool`, *optional*, defaults to `False`):
+        Whether to add a bias to the language modeling head.
     moe_router_topk (`int`, *optional*, defaults to 1):
         Number of selected experts per token. ZAYA checkpoints use top-1 routing.
     zaya_mlp_expansion (`int`, *optional*, defaults to 256):
         Expansion size used by the dense ZAYA blocks.
-    partial_rotary_factor (`float`, *optional*, defaults to 0.5):
-        Fraction of each attention head dimension using rotary embeddings.
     cca_time0 (`int`, *optional*, defaults to 2):
         First temporal parameter of the CCA projection.
     cca_time1 (`int`, *optional*, defaults to 2):
@@ -61,42 +65,39 @@ class ZayaConfig(PreTrainedConfig):
     model_type = "zaya"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    def __init__(
-        self,
-        num_query_groups=2,
-        use_cache=True,
-        attention_bias=False,
-        lm_head_bias=False,
-        vocab_size=262272,
-        hidden_size=2048,
-        ffn_hidden_size=4096,
-        num_hidden_layers=80,
-        num_experts=16,
-        num_attention_heads=8,
-        hidden_act="silu",
-        head_dim=128,
-        initializer_range=0.02,
-        max_position_embeddings=131072,
-        norm_epsilon=1e-05,
-        pad_token_id=0,
-        bos_token_id=2,
-        eos_token_id=106,
-        tie_word_embeddings=True,
-        rope_theta=5000000,
-        attention_dropout=0.0,
-        moe_router_topk=1,
-        zaya_mlp_expansion=256,
-        rope_parameters=None,
-        partial_rotary_factor=0.5,
-        num_key_value_heads=2,
-        cca_time0=2,
-        cca_time1=2,
-        swa_layers=None,
-        swa_rotary_base=None,
-        output_router_logits=False,
-        _attn_implementation="eager",
-        **kwargs,
-    ):
+    vocab_size: int = 262272
+    hidden_size: int = 2048
+    ffn_hidden_size: int = 4096
+    num_hidden_layers: int = 80
+    num_experts: int = 16
+    num_attention_heads: int = 8
+    num_key_value_heads: int | None = 2
+    num_query_groups: int | None = 2
+    hidden_act: str = "silu"
+    head_dim: int = 128
+    max_position_embeddings: int = 131072
+    initializer_range: float = 0.02
+    norm_epsilon: float = 1e-5
+    use_cache: bool = True
+    tie_word_embeddings: bool = True
+    rope_parameters: RopeParameters | dict | None = None
+    rope_theta: float | int = 5000000
+    partial_rotary_factor: float = 0.5
+    attention_bias: bool = False
+    lm_head_bias: bool = False
+    attention_dropout: float | int = 0.0
+    moe_router_topk: int = 1
+    zaya_mlp_expansion: int = 256
+    cca_time0: int | None = 2
+    cca_time1: int | None = 2
+    swa_layers: list[int] | None = None
+    swa_rotary_base: float | int | None = None
+    output_router_logits: bool = False
+    pad_token_id: int | None = 0
+    bos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 106
+
+    def __post_init__(self, **kwargs):
         for unused_checkpoint_kwarg in (
             "cca",
             "activation_func",
@@ -108,6 +109,8 @@ class ZayaConfig(PreTrainedConfig):
             "bias_activation_fusion",
             "activation_func_fp8_input_store",
             "clamp_temp",
+            "kv_channels",
+            "mamba_cache_dtype",
             "residual_in_fp32",
             "rope_scaling",
             "scale_residual_merge",
@@ -118,66 +121,32 @@ class ZayaConfig(PreTrainedConfig):
         ):
             kwargs.pop(unused_checkpoint_kwarg, None)
 
-        num_query_groups = num_key_value_heads if num_query_groups is None else num_query_groups
-        if head_dim is None:
+        self.num_key_value_heads = (
+            self.num_attention_heads if self.num_key_value_heads is None else self.num_key_value_heads
+        )
+        self.num_query_groups = self.num_key_value_heads if self.num_query_groups is None else self.num_query_groups
+        if self.head_dim is None:
             raise ValueError("`head_dim` must be set for ZAYA.")
-        if num_query_groups != num_key_value_heads:
+        if self.num_query_groups != self.num_key_value_heads:
             raise ValueError("`num_query_groups` must be equal to `num_key_value_heads` for ZAYA.")
-        if moe_router_topk != 1:
+        if self.moe_router_topk != 1:
             raise ValueError("ZAYA currently supports `moe_router_topk=1` only.")
 
-        self.num_query_groups = num_query_groups
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.lm_head_bias = lm_head_bias
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.ffn_hidden_size = ffn_hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_experts = num_experts
-        self.num_attention_heads = num_attention_heads
-        self.hidden_act = hidden_act
-        self.head_dim = head_dim
-        self.initializer_range = initializer_range
-        self.num_key_value_heads = num_key_value_heads
-        self.max_position_embeddings = max_position_embeddings
-        self.norm_epsilon = norm_epsilon
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        self.attention_dropout = attention_dropout
-        self.moe_router_topk = moe_router_topk
-        self.zaya_mlp_expansion = zaya_mlp_expansion
-        self.partial_rotary_factor = partial_rotary_factor
-        self.rope_theta = rope_theta
-        rope_parameters = dict(rope_parameters) if rope_parameters is not None else {"rope_type": "default"}
-        rope_parameters.setdefault("rope_theta", rope_theta)
-        rope_parameters.setdefault("partial_rotary_factor", partial_rotary_factor)
-        self.rope_parameters = rope_parameters
-        cca_time0 = 2 if cca_time0 is None else cca_time0
-        cca_time1 = 2 if cca_time1 is None else cca_time1
-        if (cca_time0, cca_time1) != (2, 2):
+        self.rope_parameters = (
+            dict(self.rope_parameters) if self.rope_parameters is not None else {"rope_type": "default"}
+        )
+        self.rope_parameters.setdefault("rope_theta", self.rope_theta)
+        self.rope_parameters.setdefault("partial_rotary_factor", self.partial_rotary_factor)
+        self.cca_time0 = 2 if self.cca_time0 is None else self.cca_time0
+        self.cca_time1 = 2 if self.cca_time1 is None else self.cca_time1
+        if (self.cca_time0, self.cca_time1) != (2, 2):
             raise ValueError("ZAYA currently supports `cca_time0=2` and `cca_time1=2` only.")
-        if swa_layers is not None and len(swa_layers) != num_hidden_layers:
+        if self.swa_layers is not None and len(self.swa_layers) != self.num_hidden_layers:
             raise ValueError("`swa_layers` must have one entry per hidden layer.")
-        if swa_layers is not None and swa_rotary_base is None:
+        if self.swa_layers is not None and self.swa_rotary_base is None:
             raise ValueError("`swa_rotary_base` must be set when `swa_layers` is provided.")
 
-        self.cca_time0 = cca_time0
-        self.cca_time1 = cca_time1
-        self.swa_layers = swa_layers
-        self.swa_rotary_base = swa_rotary_base
-        self.output_router_logits = output_router_logits
-        self._attn_implementation = _attn_implementation
-
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=self.tie_word_embeddings,
-            **kwargs,
-        )
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["ZayaConfig"]
