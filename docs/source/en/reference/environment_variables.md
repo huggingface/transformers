@@ -56,3 +56,21 @@ from transformers import pipeline
 
 model = pipeline(task="text-generation", model="facebook/opt-30b", device_map="auto")
 ```
+
+## HF_USE_MLX
+
+By default, Transformers detects whether MLX is installed when checking MLX availability. Set `HF_USE_MLX=0`
+to disable MLX availability detection. This is useful when MLX is installed but should not be used by Transformers,
+for example to avoid MLX import paths on systems where importing `mlx.core` is unsafe.
+
+Set this environment variable before importing Transformers.
+
+```py
+import os
+
+os.environ["HF_USE_MLX"] = "0"
+
+from transformers import is_mlx_available
+
+assert not is_mlx_available()
+```
