@@ -27,8 +27,6 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
 from ..pp_ocrv5_server_rec.configuration_pp_ocrv5_server_rec import PPOCRV5ServerRecConfig
 from ..pp_ocrv5_server_rec.modeling_pp_ocrv5_server_rec import (
     PPOCRV5ServerRecConvLayer,
@@ -111,12 +109,9 @@ class PPOCRV6SmallRecEncoderWithSVTR(PPOCRV5ServerRecEncoderWithSVTR):
                 ),
             ]
         )
-        self.norm = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
-        self.post_init()
 
-    @merge_with_config_defaults
-    @capture_outputs
     def forward(self, hidden_states: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
+        # PP-OCRv6_small_rec uses the output of the first conv block as the residual.
         residual = self.conv_block[0](hidden_states)
 
         hidden_states = self.conv_block[1](hidden_states)
@@ -129,6 +124,7 @@ class PPOCRV6SmallRecEncoderWithSVTR(PPOCRV5ServerRecEncoderWithSVTR):
 
         hidden_states = self.norm(hidden_states)
         hidden_states = hidden_states.view(batch_size, height, width, channels).permute(0, 3, 1, 2)
+        # PP-OCRv6_small_rec uses fewer conv blocks and residual fusion instead of concat fusion.
         hidden_states = hidden_states + residual
         hidden_states = hidden_states.squeeze(2).transpose(1, 2)
 

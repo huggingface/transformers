@@ -114,6 +114,8 @@ class PPLCNetV4Config(BackboneConfigMixin, PreTrainedConfig):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
         if len(self.block_configs) != 4:
             raise ValueError(f"block_configs must have 5 stages, but got {len(self.block_configs)}")
+        if self.stem_type not in ["large", "small"]:
+            raise ValueError(f"stem_type must be either 'large' or 'small', but got {self.stem_type}")
 
 
 __all__ = ["PPLCNetV4Config"]

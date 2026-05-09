@@ -21,7 +21,6 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_pp_ocrv6_base_rec import *
-    from .modeling_pp_ocrv6_base_rec import *
 else:
     import sys
 

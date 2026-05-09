@@ -279,12 +279,14 @@ class PPOCRV6SmallRecEncoderWithSVTR(PPOCRV6SmallRecPreTrainedModel):
         self.svtr_block = nn.ModuleList()
         for _ in range(config.depth):
             self.svtr_block.append(PPOCRV6SmallRecBlock(config=config))
+
         self.norm = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
         self.post_init()
 
     @merge_with_config_defaults
     @capture_outputs
     def forward(self, hidden_states: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
+        # PP-OCRv6_small_rec uses the output of the first conv block as the residual.
         residual = self.conv_block[0](hidden_states)
 
         hidden_states = self.conv_block[1](hidden_states)
@@ -297,6 +299,7 @@ class PPOCRV6SmallRecEncoderWithSVTR(PPOCRV6SmallRecPreTrainedModel):
 
         hidden_states = self.norm(hidden_states)
         hidden_states = hidden_states.view(batch_size, height, width, channels).permute(0, 3, 1, 2)
+        # PP-OCRv6_small_rec uses fewer conv blocks and residual fusion instead of concat fusion.
         hidden_states = hidden_states + residual
         hidden_states = hidden_states.squeeze(2).transpose(1, 2)
 

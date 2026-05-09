@@ -19,7 +19,6 @@ from ...utils import (
     logging,
 )
 from ..pp_ocrv6_small_rec.configuration_pp_ocrv6_small_rec import PPOCRV6SmallRecConfig
-from ..pp_ocrv6_small_rec.modeling_pp_ocrv6_small_rec import PPOCRV6SmallRecForTextRecognition
 
 
 logger = logging.get_logger(__name__)
@@ -32,15 +31,6 @@ class PPOCRV6BaseRecConfig(PPOCRV6SmallRecConfig):
     mlp_ratio: float = 4.0
 
 
-@auto_docstring(custom_intro="PPOCR6BaseRec model for text recognition tasks.")
-class PPOCRV6BaseRecForTextRecognition(PPOCRV6SmallRecForTextRecognition):
-    pass
-
-
 __all__ = [
-    "PPOCRV6BaseRecForTextRecognition",
     "PPOCRV6BaseRecConfig",
-    "PPOCRV6BaseRecModel",  # noqa: F822
-    "PPOCRV6BaseRecEncoderWithSVTR",  # noqa: F822
-    "PPOCRV6BaseRecPreTrainedModel",  # noqa: F822
 ]

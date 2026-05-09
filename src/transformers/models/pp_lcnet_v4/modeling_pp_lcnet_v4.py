@@ -188,30 +188,27 @@ class PPLCNetV4LargeStem(nn.Module):
 class PPLCNetV4SmallStem(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.stem = nn.ModuleList()
-        self.stem.append(
-            PPLCNetV4ConvLayer(
-                in_channels=config.stem_channels[0],
-                out_channels=config.stem_channels[1],
-                kernel_size=3,
-                stride=2,
-                activation=None,
-            )
+        self.conv1 = PPLCNetV4ConvLayer(
+            in_channels=config.stem_channels[0],
+            out_channels=config.stem_channels[1],
+            kernel_size=3,
+            stride=2,
+            activation=None,
         )
-        self.stem.append(ACT2FN["gelu"])
-        self.stem.append(
-            PPLCNetV4ConvLayer(
-                in_channels=config.stem_channels[1],
-                out_channels=config.stem_channels[2],
-                kernel_size=3,
-                stride=2,
-                activation=None,
-            )
+        self.act_fn = ACT2FN["gelu"]
+        self.conv2 = PPLCNetV4ConvLayer(
+            in_channels=config.stem_channels[1],
+            out_channels=config.stem_channels[2],
+            kernel_size=3,
+            stride=2,
+            activation=None,
         )
 
-    def forward(self, hidden_states):
-        for layer in self.stem:
-            hidden_states = layer(hidden_states)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.conv1(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
+        hidden_states = self.conv2(hidden_states)
+
         return hidden_states
 
 
@@ -230,61 +227,50 @@ class PPLCNetV4DepthwiseSeparableConvLayer(nn.Module):
         self.has_residual = in_channels == out_channels and stride == 1
         self.use_rep_dw = stride == 1 and in_channels == out_channels
 
-        self.token_mixer = nn.ModuleList()
-        if self.use_rep_dw:
-            self.token_mixer.append(
-                nn.Conv2d(
-                    in_channels=in_channels,
-                    out_channels=out_channels,
-                    kernel_size=kernel_size,
-                    stride=stride,
-                    padding=kernel_size // 2,
-                    groups=in_channels,
-                )
+        self.token_conv = (
+            nn.Conv2d(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=kernel_size // 2,
+                groups=in_channels,
             )
-        else:
-            self.token_mixer.append(
-                PPLCNetV4ConvLayer(
-                    in_channels=in_channels,
-                    out_channels=in_channels,
-                    kernel_size=kernel_size,
-                    stride=stride,
-                    groups=in_channels,
-                    activation=None,
-                )
+            if self.use_rep_dw
+            else PPLCNetV4ConvLayer(
+                in_channels=in_channels,
+                out_channels=in_channels,
+                kernel_size=kernel_size,
+                stride=stride,
+                groups=in_channels,
+                activation=None,
             )
-        squeeze_excitation_module = (
+        )
+        self.token_squeeze_excitation = (
             PPLCNetV4SqueezeExcitationModule(in_channels, config.reduction)
             if use_squeeze_excitation
             else nn.Identity()
         )
-        self.token_mixer.append(squeeze_excitation_module)
-
-        # out_channels = int(in_channels * config.expand_ratio)
-        # compress_bn_init = 0.0 if self.has_residual else 1.0
-        self.channel_mixer = nn.ModuleList()
-        self.channel_mixer.append(
-            PPLCNetV4ConvLayer(
-                in_channels=in_channels, out_channels=in_channels * 2, kernel_size=1, stride=1, activation=None
-            )
+        self.channel_conv1 = PPLCNetV4ConvLayer(
+            in_channels=in_channels, out_channels=in_channels * 2, kernel_size=1, stride=1, activation=None
         )
-        self.channel_mixer.append(ACT2FN["gelu"])
-        self.channel_mixer.append(
-            PPLCNetV4ConvLayer(
-                in_channels=in_channels * 2, out_channels=out_channels, kernel_size=1, stride=1, activation=None
-            )
+        self.channel_act_fn = ACT2FN["gelu"]
+        self.channel_conv2 = PPLCNetV4ConvLayer(
+            in_channels=in_channels * 2, out_channels=out_channels, kernel_size=1, stride=1, activation=None
         )
 
-    def forward(self, hidden_states):
-        for conv_layer in self.token_mixer:
-            hidden_states = conv_layer(hidden_states)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.token_conv(hidden_states)
+        hidden_states = self.token_squeeze_excitation(hidden_states)
         residual = hidden_states
-        for conv_layer in self.channel_mixer:
-            hidden_states = conv_layer(hidden_states)
-        if self.has_residual:
-            return residual + hidden_states
-        else:
-            return hidden_states
+
+        hidden_states = self.channel_conv1(hidden_states)
+        hidden_states = self.channel_act_fn(hidden_states)
+        hidden_states = self.channel_conv2(hidden_states)
+
+        hidden_states = residual + hidden_states if self.has_residual else hidden_states
+
+        return hidden_states
 
 
 class PPLCNetV4Block(nn.Module):
@@ -294,21 +280,22 @@ class PPLCNetV4Block(nn.Module):
 
         blocks = config.block_configs[stage_index]
 
-        self.layers = nn.ModuleList()
+        self.blocks = nn.ModuleList()
         for kernel_size, in_channels, out_channels, stride, use_squeeze_excitation in blocks:
-            depthwise_block = PPLCNetV4DepthwiseSeparableConvLayer(
-                in_channels=in_channels,
-                out_channels=out_channels,
-                kernel_size=kernel_size,
-                stride=stride,
-                use_squeeze_excitation=use_squeeze_excitation,
-                config=config,
+            self.blocks.append(
+                PPLCNetV4DepthwiseSeparableConvLayer(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    kernel_size=kernel_size,
+                    stride=stride,
+                    use_squeeze_excitation=use_squeeze_excitation,
+                    config=config,
+                )
             )
-            self.layers.append(depthwise_block)
 
-    def forward(self, hidden_states):
-        for layer in self.layers:
-            hidden_states = layer(hidden_states)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        for block in self.blocks:
+            hidden_states = block(hidden_states)
         return hidden_states
 
 

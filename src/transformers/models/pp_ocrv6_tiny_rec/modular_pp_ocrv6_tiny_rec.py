@@ -68,54 +68,41 @@ class PPOCRV6TinyRecPreTrainedModel(PPOCRV6SmallRecPreTrainedModel):
     _can_record_outputs = {}
 
 
-class PPOCRV6TinyRecGuideHead(nn.Module):
+class PPOCRV6TinyRecHead(nn.Module):
     def __init__(self, config):
         super().__init__()
         in_channels = config.backbone_config.block_configs[-1][-1][2]
         mid_channels = config.hidden_size
-        self.guide_layer = nn.ModuleList(
-            [
-                nn.Conv1d(
-                    in_channels,
-                    in_channels,
-                    kernel_size=5,
-                    padding=2,
-                    groups=in_channels,
-                    bias=False,
-                ),
-                nn.BatchNorm1d(in_channels),
-                nn.Hardswish(),
-                nn.Conv1d(
-                    in_channels,
-                    in_channels,
-                    kernel_size=1,
-                    bias=False,
-                ),
-                nn.BatchNorm1d(in_channels),
-                nn.Hardswish(),
-            ]
+
+        self.conv1 = nn.Conv1d(
+            in_channels,
+            in_channels,
+            kernel_size=5,
+            padding=2,
+            groups=in_channels,
+            bias=False,
         )
-        self.head1 = nn.Linear(in_channels, mid_channels)
-        self.head2 = nn.Linear(mid_channels, config.head_out_channels)
-
-    def forward(self, hidden_states):
-        hidden_states = hidden_states.transpose(1, 2)
-        for layer in self.guide_layer:
-            hidden_states = layer(hidden_states)
-        hidden_states = hidden_states.transpose(1, 2)
-        hidden_states = self.head1(hidden_states)
-        hidden_states = self.head2(hidden_states)
-        return hidden_states
-
-
-class PPOCRV6TinyRecHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.head = PPOCRV6TinyRecGuideHead(config)
+        self.norm1 = nn.BatchNorm1d(in_channels)
+        self.conv2 = nn.Conv1d(
+            in_channels,
+            in_channels,
+            kernel_size=1,
+            bias=False,
+        )
+        self.norm2 = nn.BatchNorm1d(in_channels)
+        self.act_fn = nn.Hardswish()
+        self.fc1 = nn.Linear(in_channels, mid_channels)
+        self.fc2 = nn.Linear(mid_channels, config.head_out_channels)
 
     def forward(self, hidden_states: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
-        hidden_states = hidden_states.squeeze(2).transpose(1, 2)
-        hidden_states = self.head(hidden_states)
+        hidden_states = hidden_states.squeeze(2)
+        hidden_states = self.act_fn(self.norm1(self.conv1(hidden_states)))
+        hidden_states = self.act_fn(self.norm2(self.conv2(hidden_states)))
+
+        hidden_states = hidden_states.transpose(1, 2)
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+
         hidden_states = F.softmax(hidden_states, dim=2, dtype=torch.float32).to(hidden_states.dtype)
 
         return hidden_states
