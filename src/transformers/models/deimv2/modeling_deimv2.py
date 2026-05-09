@@ -878,8 +878,8 @@ class Deimv2ConvEncoder(nn.Module):
             with torch.no_grad():
                 replace_batch_norm(backbone)
         self.model = backbone
-        self._no_split_modules = getattr(self.model, "_no_split_modules", [])
         self.intermediate_channel_sizes = self.model.channels
+        self._no_split_modules = getattr(self.model, "_no_split_modules", [])
         self.encoder_input_proj = nn.ModuleList(
             [
                 Deimv2ConvNormLayer(config, in_channel, config.encoder_hidden_dim, 1, 1)
