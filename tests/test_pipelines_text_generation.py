@@ -12,7 +12,6 @@ Fix: postprocess() now slices by token position (input_ids.shape[-1])
 import unittest
 
 from transformers import AutoTokenizer, pipeline
-from transformers.pipelines.text_generation import ReturnType, TextGenerationPipeline
 
 
 class TestReturnFullTextChatTemplate(unittest.TestCase):
