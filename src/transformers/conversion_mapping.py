@@ -561,6 +561,18 @@ def _build_checkpoint_conversion_mapping():
                 operations=[Transpose(1, 2, check_dims=True)],
             ),
         ],
+        "zaya": [
+            WeightConverter(
+                source_patterns="zaya_block.experts.local_experts.*.linear_fc1.weight",
+                target_patterns="zaya_block.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns="zaya_block.experts.local_experts.*.linear_fc2.weight",
+                target_patterns="zaya_block.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+        ],
         "phimoe": [
             WeightRenaming(".block_sparse_moe.", ".mlp."),
             WeightRenaming(".gate.weight", ".router.weight"),

@@ -479,6 +479,7 @@ if TYPE_CHECKING:
     from .youtu import *
     from .zamba import *
     from .zamba2 import *
+    from .zaya import *
     from .zoedepth import *
 else:
     import sys

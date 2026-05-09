@@ -643,6 +643,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("youtu", "YoutuConfig"),
         ("zamba", "ZambaConfig"),
         ("zamba2", "Zamba2Config"),
+        ("zaya", "ZayaConfig"),
         ("zoedepth", "ZoeDepthConfig"),
     ]
 )
