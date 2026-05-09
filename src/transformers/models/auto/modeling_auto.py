@@ -510,9 +510,9 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("yolos", "YolosModel"),
         ("yoso", "YosoModel"),
         ("youtu", "YoutuModel"),
-        ("zaya", "ZayaModel"),
         ("zamba", "ZambaModel"),
         ("zamba2", "Zamba2Model"),
+        ("zaya", "ZayaModel"),
     ]
 )
 
@@ -773,9 +773,9 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("xlstm", "xLSTMForCausalLM"),
         ("xmod", "XmodForCausalLM"),
         ("youtu", "YoutuForCausalLM"),
-        ("zaya", "ZayaForCausalLM"),
         ("zamba", "ZambaForCausalLM"),
         ("zamba2", "Zamba2ForCausalLM"),
+        ("zaya", "ZayaForCausalLM"),
     ]
 )
 
