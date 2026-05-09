@@ -165,8 +165,10 @@ if is_torch_available():
     # te that cuDNN conv and cuDNN RNN have different TF32 flags.This combination indicates that you have used a mix of the legacy and new APIs
     #  to set the TF32 flags. We suggest only using the new API to set the TF32 flag(s).`.
     # TODO: report a bug to `torch`
-    if hasattr(torch.backends.cudnn, "allow_tf32"):
-        torch.backends.cudnn.allow_tf32 = False
+    if hasattr(torch.backends.cudnn.conv, "fp32_precision"):
+    	torch.backends.cudnn.conv.fp32_precision = "ieee"
+    elif hasattr(torch.backends.cudnn, "allow_tf32"):
+    	torch.backends.cudnn.allow_tf32 = False
 
     # This is necessary to make several `test_batching_equivalence` pass (within the tolerance `1e-5`)
     if hasattr(torch.backends.cudnn, "conv") and hasattr(torch.backends.cudnn.conv, "fp32_precision"):

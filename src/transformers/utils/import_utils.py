@@ -614,27 +614,38 @@ def is_torch_tf32_available() -> bool:
 
 
 @lru_cache
+@
 def enable_tf32(enable: bool) -> None:
     """
     Set TF32 mode using the appropriate PyTorch API.
-    For PyTorch 2.9+, uses the new fp32_precision API.
-    For older versions, uses the legacy allow_tf32 flags.
+    Uses the new fp32_precision API introduced in PyTorch 2.7.
+    
     Args:
         enable: Whether to enable TF32 mode
     """
     import torch
-
-    pytorch_version = version.parse(get_torch_version())
-    if pytorch_version >= version.parse("2.9.0"):
-        precision_mode = "tf32" if enable else "ieee"
-        if hasattr(torch.backends, "fp32_precision"):
-            torch.backends.fp32_precision = precision_mode
-    else:
-        if is_torch_musa_available():
-            if hasattr(torch.backends, "mudnn"):
+    
+    precision_mode = "tf32" if enable else "ieee"
+    
+    if is_torch_musa_available():
+        if hasattr(torch.backends, "mudnn"):
+            if hasattr(torch.backends.mudnn, "fp32_precision"):
+                torch.backends.mudnn.fp32_precision = precision_mode
+            else:
+                # Fallback for very old versions
                 torch.backends.mudnn.allow_tf32 = enable
+    else:
+        # CUDA backend
+        if hasattr(torch.backends.cuda.matmul, "fp32_precision"):
+            torch.backends.cuda.matmul.fp32_precision = precision_mode
         else:
+            # Fallback for PyTorch < 2.7
             torch.backends.cuda.matmul.allow_tf32 = enable
+            
+        if hasattr(torch.backends.cudnn.conv, "fp32_precision"):
+            torch.backends.cudnn.conv.fp32_precision = precision_mode
+        else:
+            # Fallback for PyTorch < 2.7
             torch.backends.cudnn.allow_tf32 = enable
 
 
