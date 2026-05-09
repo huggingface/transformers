@@ -425,7 +425,9 @@ class StaticLayer(CacheLayerMixin):
             "keys": self.keys.clone() if self.is_initialized and self.keys is not None else None,
             "values": self.values.clone() if self.is_initialized and self.values is not None else None,
             "cumulative_length": (
-                self.cumulative_length.clone() if torch.is_tensor(self.cumulative_length) else int(self.cumulative_length)
+                self.cumulative_length.clone()
+                if torch.is_tensor(self.cumulative_length)
+                else int(self.cumulative_length)
             ),
         }
 

@@ -226,7 +226,9 @@ class CacheSnapshotRestoreTest(unittest.TestCase):
         snapshot = layer.snapshot()
         original_keys = layer.keys.clone()
         original_cum_length = (
-            layer.cumulative_length.clone() if torch.is_tensor(layer.cumulative_length) else int(layer.cumulative_length)
+            layer.cumulative_length.clone()
+            if torch.is_tensor(layer.cumulative_length)
+            else int(layer.cumulative_length)
         )
         keys_id_before = id(layer.keys)
         cum_id_before = id(layer.cumulative_length) if torch.is_tensor(layer.cumulative_length) else None
