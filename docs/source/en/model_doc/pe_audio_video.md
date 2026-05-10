@@ -13,21 +13,24 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2025-12-16.*
+*This model was released on 2025-12-16 and added to Hugging Face Transformers on 2025-12-16.*
 
-# PE Audio Video (Perception Encoder Audio-Video)
+# PE Audio-Visual (Perception Encoder Audio-Visual)
 
 ## Overview
 
-TODO
+Perception Encoder Audio-Visual (PE-AV) was proposed in [Pushing the Frontier of Audiovisual Perception with Large-Scale Multimodal Correspondence Learning](https://huggingface.co/papers/2512.19687) by Apoorv Vyas et al. It extends the Perception Encoder framework to multiple modalities (text, audio, and video).
 
-## Usage
+PE-AV is a family of encoders trained on O(100M) audio-video pairs with synthetic captions, using ten pairwise contrastive objectives to align all three modalities in a shared embedding space.
 
-### Basic usage
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/pe-av.png"
+alt="PE-AV architecture" width="600"/>
 
-```py
-TODO
-```
+<small>PE-AV architecture. Taken from the <a href="https://ai.meta.com/blog/sam-audio/">Meta AI blog post.</a></small>
+
+Audio and video are processed by dedicated encoders and combined through an Audio-Visual Fusion Encoder, while captions pass through a separate Text Encoder. Each branch produces CLS embeddings: `CLS-A`, `CLS-V`, `CLS-AV` for the three modality views, and `CLS-AT`, `CLS-VT`, `CLS-AVT` for text-projection variants aligned to each target. The model is trained with a combination of single-modality and fused-modality alignment losses.
+
+See the [PE-AV collection](https://huggingface.co/collections/facebook/perception-encoder-audio-visual) on the Hub for the full checkpoint family and usage examples.
 
 ## PeAudioVideoProcessor
 
