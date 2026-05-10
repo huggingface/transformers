@@ -16,7 +16,9 @@ import json
 import os
 from dataclasses import asdict, dataclass
 
-import torch
+from ..utils import is_torch_available
+if is_torch_available():
+    import torch
 
 
 @dataclass
