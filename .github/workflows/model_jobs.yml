@@ -43,6 +43,9 @@ env:
   HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   TF_FORCE_GPU_ALLOW_GROWTH: true
   CUDA_VISIBLE_DEVICES: 0,1
+  # Self-hosted OTLP collector wiring. If the secrets are unset, configure-ci-otel is a no-op.
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}
+  OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.OTEL_EXPORTER_OTLP_HEADERS }}
 
 jobs:
   run_models_gpu:
@@ -92,7 +95,7 @@ jobs:
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .[ci]
 
       - name: Update / Install some packages (for Past CI)
         if: ${{ contains(inputs.docker, '-past-') }}
@@ -165,7 +168,7 @@ jobs:
           elif [ "$model" = "trainer" ] && [ "$report_name_prefix" = "run_trainer_and_fsdp_gpu" ]; then
             test_path="tests/trainer --ignore=tests/trainer/distributed"
           fi
-          script -q -c "PATCH_TESTING_METHODS_TO_COLLECT_OUTPUTS=yes _PATCHED_TESTING_METHODS_OUTPUT_DIR=/transformers/reports/${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports python3 -m pytest -rsfE -v -m '${pytest_marker}' --make-reports=${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports ${test_path}" test_outputs.txt
+          script -q -c "PATCH_TESTING_METHODS_TO_COLLECT_OUTPUTS=yes _PATCHED_TESTING_METHODS_OUTPUT_DIR=/transformers/reports/${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports configure-ci-otel --job-name ${report_name_prefix}_${matrix_folders} -- python3 -m pytest -rsfE -v -m '${pytest_marker}' --make-reports=${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports ${test_path}" test_outputs.txt
           ls -la
           # Extract the exit code from the output file
           EXIT_CODE=$(tail -1 test_outputs.txt | grep -o 'COMMAND_EXIT_CODE="[0-9]*"' | cut -d'"' -f2)

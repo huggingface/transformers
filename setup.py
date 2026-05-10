@@ -213,6 +213,8 @@ if PYTHON_MINOR_VERSION < 14:
     extras["ja"] += deps_list("sudachipy", "sudachidict_core")
 # OpenTelemetry dependencies for metrics collection in continuous batching
 extras["open-telemetry"] = deps_list("opentelemetry-api", "opentelemetry-exporter-otlp", "opentelemetry-sdk")
+# CI support (OpenTelemetry integration, resource metrics plugin, trace exporter).
+extras["ci"] = ["transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main"]
 
 extras["testing"] = (
     deps_list(
