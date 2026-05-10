@@ -37,8 +37,6 @@ if is_torch_available() and is_torch_greater_or_equal("2.5"):
     from torch.distributed.tensor.parallel.style import ParallelStyle
     from torch.distributed.tensor.placement_types import _StridedShard
 
-    from ..distributed.patches import patch_dtensor_ops
-
     # Cache this result has it's a C FFI call which can be pretty time-consuming
     _torch_distributed_available = torch.distributed.is_available()
 
@@ -507,10 +505,6 @@ def apply_tensor_parallel(model, tp_mesh, tp_plan):
         parallelize_plan[name] = ALL_PARALLEL_STYLES[style_value]
 
     parallelize_module(model, tp_mesh, parallelize_plan)
-
-    # Patch DTensor-aware operations (e.g. rotary embeddings) onto the
-    # model's modeling module so modeling files stay free of DTensor code.
-    patch_dtensor_ops(model)
 
     # Under SP, inputs_embeds is sequence-sharded after embed_tokens, so
     # auto-generated position_ids would use the wrong (local) seq_len.
