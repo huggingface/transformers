@@ -247,7 +247,7 @@ def convert_mlcd_checkpoint(model_name, input_dir, output_dir, verify_hidden_sta
 
     # Load original checkpoint
     print(f"Loading checkpoint from {checkpoint_path}...")
-    state_dict = torch.load(checkpoint_path, "cpu")
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
 
     # Flatten nested dictionary
     print("Flattening nested dictionary...")

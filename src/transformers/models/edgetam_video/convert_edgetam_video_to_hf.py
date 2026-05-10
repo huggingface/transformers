@@ -235,7 +235,7 @@ def replace_keys(state_dict):
 def convert_edgetam_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, push_to_hub, run_sanity_check):
     config = get_config(model_name)
 
-    state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)["model"]
     state_dict = replace_keys(state_dict)
 
     image_processor = Sam2ImageProcessorFast()

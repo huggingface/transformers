@@ -233,7 +233,7 @@ def split_qkv(state_dict: dict) -> dict:
 def load_original_state_dict(checkpoint_path: str) -> dict[str, torch.Tensor]:
     """Load the original EfficientSAM3 LiteText checkpoint."""
     print(f"Loading original checkpoint from {checkpoint_path}")
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     if "model" in checkpoint:
         state_dict = checkpoint["model"]
     elif "state_dict" in checkpoint:
