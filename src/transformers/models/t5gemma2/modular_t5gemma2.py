@@ -334,8 +334,10 @@ class T5Gemma2MergedAttention(Gemma3Attention):
         # producing a combined key tensor and a merged 4D mask. Flash Attention 2 expects
         # either a causal flag or a 2D padding mask and cannot express this merged pattern,
         # so we fall back to eager attention for the decoder regardless of _attn_implementation.
+        # Strip a potential "paged|" prefix (continuous batching) before checking.
         _attn_impl = self.config._attn_implementation
-        if _attn_impl in ("flash_attention_2", "flash_attention_3", "flash_attention_4"):
+        _base_impl = _attn_impl.split("|")[-1] if "|" in _attn_impl else _attn_impl
+        if "flash_attention" in _base_impl:
             _attn_impl = "eager"
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(_attn_impl, eager_attention_forward)
 
@@ -815,11 +817,18 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
 
         # FA2's mask interface returns None (no-padding) or a 2D tensor, both of which
         # cannot be torch.cat'd when building the merged self+cross mask. The merged
-        # attention falls back to eager anyway, so use SDPA (4D) masks for the decoder.
+        # attention falls back to eager anyway, so force eager-format (4D float) masks
+        # for the decoder. "sdpa" returns 4D bool; eager needs 4D float 0/-inf additive bias.
+        # Also handle paged variants like "paged|flash_attention_2" via substring check.
         _mask_config = self.config
-        if self.config._attn_implementation in ("flash_attention_2", "flash_attention_3", "flash_attention_4"):
+        _base_impl = (
+            self.config._attn_implementation.split("|")[-1]
+            if "|" in self.config._attn_implementation
+            else self.config._attn_implementation
+        )
+        if "flash_attention" in _base_impl:
             _mask_config = copy.copy(self.config)
-            _mask_config._attn_implementation = "sdpa"
+            _mask_config._attn_implementation = "eager"
 
         if not isinstance(self_attn_mask_mapping := attention_mask, dict):
             # this masking function does nothing to masking but forces `allow_is_causal_skip` to be False
