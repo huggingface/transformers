@@ -27,6 +27,7 @@ from huggingface_hub import create_repo
 from huggingface_hub.dataclasses import strict
 from packaging import version
 from typing_extensions import dataclass_transform
+import hi
 
 from . import __version__
 from .dynamic_module_utils import custom_object_save
