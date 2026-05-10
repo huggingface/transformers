@@ -27,8 +27,8 @@ from ...utils import ModelOutput, auto_docstring
 from .configuration_dac import DacConfig
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class DacOutput(ModelOutput):
     r"""
     loss (`torch.Tensor`):
@@ -50,8 +50,8 @@ class DacOutput(ModelOutput):
     projected_latents: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class DacEncoderOutput(ModelOutput):
     r"""
     loss (`torch.Tensor`):
@@ -70,8 +70,8 @@ class DacEncoderOutput(ModelOutput):
     projected_latents: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 # Copied from transformers.models.encodec.modeling_encodec.EncodecDecoderOutput with Encodec->Dac, segment_length->input_length
 class DacDecoderOutput(ModelOutput):
     r"""

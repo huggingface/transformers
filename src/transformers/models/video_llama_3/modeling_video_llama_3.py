@@ -495,12 +495,12 @@ class VideoLlama3Projector(nn.Module):
         return hidden_states
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for VideoLLaMA3 outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class VideoLlama3ModelOutputWithPast(ModelOutput):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -722,12 +722,12 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for VideoLLaMA3 causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class VideoLlama3CausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

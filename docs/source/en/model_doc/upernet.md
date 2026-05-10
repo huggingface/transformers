@@ -17,9 +17,6 @@ rendered properly in your Markdown viewer.
 
 # UPerNet
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -42,8 +39,9 @@ This model was contributed by [nielsr](https://huggingface.co/nielsr). The origi
 
 UPerNet is a general framework for semantic segmentation. It can be used with any vision backbone, like so:
 
-```py
+```python
 from transformers import SwinConfig, UperNetConfig, UperNetForSemanticSegmentation
+
 
 backbone_config = SwinConfig(out_features=["stage1", "stage2", "stage3", "stage4"])
 
@@ -53,8 +51,9 @@ model = UperNetForSemanticSegmentation(config)
 
 To use another vision backbone, like [ConvNeXt](convnext), simply instantiate the model with the appropriate backbone:
 
-```py
+```python
 from transformers import ConvNextConfig, UperNetConfig, UperNetForSemanticSegmentation
+
 
 backbone_config = ConvNextConfig(out_features=["stage1", "stage2", "stage3", "stage4"])
 

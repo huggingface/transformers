@@ -18,7 +18,6 @@ rendered properly in your Markdown viewer.
 # Blenderbot
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
@@ -51,15 +50,16 @@ rather than the left.
 An example:
 
 ```python
->>> from transformers import BlenderbotTokenizer, BlenderbotForConditionalGeneration
+from transformers import BlenderbotForConditionalGeneration, BlenderbotTokenizer
 
->>> mname = "facebook/blenderbot-400M-distill"
->>> model = BlenderbotForConditionalGeneration.from_pretrained(mname)
->>> tokenizer = BlenderbotTokenizer.from_pretrained(mname)
->>> UTTERANCE = "My friends are cool but they eat too many carbs."
->>> inputs = tokenizer([UTTERANCE], return_tensors="pt")
->>> reply_ids = model.generate(**inputs)
->>> print(tokenizer.batch_decode(reply_ids))
+
+mname = "facebook/blenderbot-400M-distill"
+model = BlenderbotForConditionalGeneration.from_pretrained(mname, device_map="auto")
+tokenizer = BlenderbotTokenizer.from_pretrained(mname)
+UTTERANCE = "My friends are cool but they eat too many carbs."
+inputs = tokenizer([UTTERANCE], return_tensors="pt").to(model.device)
+reply_ids = model.generate(**inputs)
+print(tokenizer.batch_decode(reply_ids))
 ["<s> That's unfortunate. Are they trying to lose weight or are they just trying to be healthier?</s>"]
 ```
 

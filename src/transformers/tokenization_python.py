@@ -1070,9 +1070,11 @@ class PythonBackend(PreTrainedTokenizerBase):
             )
 
         tokens = []
+        # self.all_special_ids is an @property which may be slow, so only compute it once before the loop
+        ids_to_skip = set(self.all_special_ids) if skip_special_tokens else set()
         for index in ids:
             index = int(index)
-            if skip_special_tokens and index in self.all_special_ids:
+            if index in ids_to_skip:
                 continue
             tokens.append(
                 self._added_tokens_decoder[index].content
