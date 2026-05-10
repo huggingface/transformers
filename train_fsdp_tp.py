@@ -9,8 +9,7 @@ from torch.distributed.tensor import DTensor
 from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.distributed import DistributedConfig
-from transformers.distributed.utils import load_optimizer, save_optimizer
-from transformers.integrations.tensor_parallel import _replicate_dtensor
+from transformers.distributed.utils import load_optimizer, save_optimizer, _replicate_dtensor
 
 def build_packed_dataset(dataset_name, tokenizer, seq_len, dp_rank, dp_world_size):
     """Stream + tokenize + greedy-pack documents into fixed-length (input, label) windows."""
