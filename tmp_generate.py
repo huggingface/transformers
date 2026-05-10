@@ -22,7 +22,7 @@ torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=world
 @record
 def main(args):
 
-    distributed_config = DistributedConfig(tp_size=4, tp_plan="auto")
+    distributed_config = DistributedConfig(tp_size=8, tp_plan="auto")
     model = AutoModelForCausalLM.from_pretrained(model_id, distributed_config=distributed_config, dtype=torch.bfloat16)
     # model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
     tokenizer = AutoTokenizer.from_pretrained(model_id)

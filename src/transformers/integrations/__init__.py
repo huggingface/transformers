@@ -163,9 +163,6 @@ else:
 _import_structure["tensor_parallel"] = [
     "ALL_PARALLEL_STYLES",
     "apply_tensor_parallel",
-    "convert_strided_to_shard",
-    "gather_full_state_dict",
-    "restore_strided_from_shard",
     "verify_tp_plan",
 ]
 try:
@@ -301,9 +298,6 @@ if TYPE_CHECKING:
     from .tensor_parallel import (
         ALL_PARALLEL_STYLES,
         apply_tensor_parallel,
-        convert_strided_to_shard,
-        gather_full_state_dict,
-        restore_strided_from_shard,
         verify_tp_plan,
     )
     from .vptq import replace_with_vptq_linear

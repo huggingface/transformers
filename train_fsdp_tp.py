@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.distributed import DistributedConfig
 from transformers.distributed.utils import load_optimizer, save_optimizer
+from transformers.integrations.tensor_parallel import _replicate_dtensor
 
 def build_packed_dataset(dataset_name, tokenizer, seq_len, dp_rank, dp_world_size):
     """Stream + tokenize + greedy-pack documents into fixed-length (input, label) windows."""
@@ -104,9 +105,12 @@ if __name__ == "__main__":
         loss = model(input_ids, labels=labels).loss
         loss.backward()
 
-        # Custom grad clip: convert DTensor grads to local to avoid mixed-mesh torch.stack
+        # Custom grad clip: convert DTensor grads to local to avoid mixed-mesh torch.stack.
+        # Use _replicate_dtensor (not full_tensor) — full_tensor calls redistribute(), which
+        # cannot normalize FSDP+TP placements like (Shard(0), _StridedShard(1, sf=2)) from
+        # packed_colwise MoE experts.
         grads = [p.grad for p in model.parameters() if p.grad is not None]
-        local_grads = [g.full_tensor() if isinstance(g, DTensor) else g for g in grads]
+        local_grads = [_replicate_dtensor(g).to_local() if isinstance(g, DTensor) else g for g in grads]
         total_norm = torch.nn.utils.get_total_norm(local_grads, norm_type=2.0)
         torch.nn.utils.clip_grads_with_norm_(grads, max_norm=1.0, total_norm=total_norm)
         optimizer.step()

@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT="train_fsdp_tp.py"
 LOG_FSDP_TP="log.txt"
 LOG_FSDP_ONLY="ref.txt"
+LOG_DIFF="diff.txt"
 
 MODEL_NAME="${MODEL_NAME:-hf-internal-testing/tiny-random-MixtralForCausalLM}"
 COMMON_ARGS="--model_name $MODEL_NAME --lr 3e-4 --seed 42"
@@ -47,10 +48,18 @@ echo "FSDP+TP PID=$PID1 | FSDP-only PID=$PID2"
 wait $PID1 && echo "Phase 2 FSDP+TP done" || { echo "Phase 2 FSDP+TP failed (exit $?)"; cat "${LOG_FSDP_TP}.phase2"; exit 1; }
 wait $PID2 && echo "Phase 2 FSDP-only done" || { echo "Phase 2 FSDP-only failed (exit $?)"; cat "${LOG_FSDP_ONLY}.phase2"; exit 1; }
 
-# Combine phase logs
-cat "${LOG_FSDP_TP}.phase1" "${LOG_FSDP_TP}.phase2" > "$LOG_FSDP_TP"
-cat "${LOG_FSDP_ONLY}.phase1" "${LOG_FSDP_ONLY}.phase2" > "$LOG_FSDP_ONLY"
+# Combine phase logs, keeping only signal lines (loss/grad steps + checkpoint markers).
+# Drops every kind of warning/progress noise: rank warnings, torchrun banners,
+# transformers deprecations, tqdm progress bars, ProcessGroup teardown warnings, etc.
+strip_warnings() {
+  grep -E '^(Step |Resumed |Saved )'
+}
+strip_warnings < "${LOG_FSDP_TP}.phase1"   > "$LOG_FSDP_TP"
+strip_warnings < "${LOG_FSDP_TP}.phase2"  >> "$LOG_FSDP_TP"
+strip_warnings < "${LOG_FSDP_ONLY}.phase1" > "$LOG_FSDP_ONLY"
+strip_warnings < "${LOG_FSDP_ONLY}.phase2" >> "$LOG_FSDP_ONLY"
 
 echo ""
 echo "=== Full Loss & Grad Diff (steps 0-19) ==="
-git diff --no-index --color --word-diff=color "$LOG_FSDP_TP" "$LOG_FSDP_ONLY" || true
+git diff --no-index --color --word-diff=color "$LOG_FSDP_TP" "$LOG_FSDP_ONLY" | tee "$LOG_DIFF" || true
+echo "Diff written to $LOG_DIFF"

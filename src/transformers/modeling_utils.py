@@ -52,7 +52,7 @@ from .core_model_loading import (
     revert_weight_conversion,
 )
 from .distributed import DistributedConfig
-from .distributed.utils import init_device_mesh, is_fsdp_enabled
+from .distributed.utils import gather_full_state_dict, init_device_mesh, is_fsdp_enabled
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, hub_kernels, is_deepspeed_zero3_enabled
@@ -78,7 +78,6 @@ from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .integrations.tensor_parallel import (
     _get_parameter_tp_plan,
     apply_tensor_parallel,
-    gather_full_state_dict,
     verify_tp_plan,
 )
 from .loss.loss_utils import LOSS_MAPPING
