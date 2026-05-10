@@ -14,6 +14,7 @@ Usage:
 
 Requires: torch >= 2.13 (pytorch/pytorch#182648), transformers, datasets, psutil, MPS.
 """
+
 import argparse
 import json
 import math
@@ -29,14 +30,13 @@ from torch.optim import AdamW
 
 
 assert torch.backends.mps.is_available(), "MPS not available"
-assert hasattr(torch.mps, 'clear_graph_cache'), \
-    "clear_graph_cache requires PyTorch >= 2.13 (pytorch/pytorch#182648)"
+assert hasattr(torch.mps, "clear_graph_cache"), "clear_graph_cache requires PyTorch >= 2.13 (pytorch/pytorch#182648)"
 
-DEVICE   = torch.device("mps")
-ITERS    = 200
-WARMUP   = 5
-MAX_LEN  = 128
-BS       = 8
+DEVICE = torch.device("mps")
+ITERS = 200
+WARMUP = 5
+MAX_LEN = 128
+BS = 8
 
 
 def _cur_rss_mb():
@@ -48,35 +48,37 @@ def _make_workload(quiet=False):
 
     from transformers import AutoModelForMaskedLM, AutoTokenizer, DataCollatorWithPadding
 
-    dataset   = load_dataset("wikitext", "wikitext-2-raw-v1", split="train")
+    dataset = load_dataset("wikitext", "wikitext-2-raw-v1", split="train")
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-    model     = AutoModelForMaskedLM.from_pretrained("bert-base-uncased").to(DEVICE).train()
+    model = AutoModelForMaskedLM.from_pretrained("bert-base-uncased").to(DEVICE).train()
     optimizer = AdamW(model.parameters(), lr=2e-5)
-    collator  = DataCollatorWithPadding(tokenizer, return_tensors="pt")
+    collator = DataCollatorWithPadding(tokenizer, return_tensors="pt")
 
     texts = [t for t in dataset["text"] if len(t.strip()) > 20][:10000]
 
     def tokenize(text):
-        return tokenizer(text, truncation=True, max_length=MAX_LEN,
-                         return_attention_mask=True)
+        return tokenizer(text, truncation=True, max_length=MAX_LEN, return_attention_mask=True)
 
     tok_cache = [tokenize(t) for t in texts]
-    lengths   = [len(e["input_ids"]) for e in tok_cache]
-    n_unique  = len(set(lengths))
+    lengths = [len(e["input_ids"]) for e in tok_cache]
+    n_unique = len(set(lengths))
 
     # warmup formula for 1-D shape space
-    std_len   = statistics.stdev(lengths)
-    eff_1d    = math.sqrt(BS) * std_len * 2 * math.pi
+    std_len = statistics.stdev(lengths)
+    eff_1d = math.sqrt(BS) * std_len * 2 * math.pi
     freeze_at = min(ITERS // 4, max(5, int(math.sqrt(eff_1d))))
 
     if not quiet:
-        print(f"  WikiText-2: {len(texts)} docs  max_len={MAX_LEN}  "
-              f"std_len={std_len:.1f}  n_unique_lengths={n_unique}  "
-              f"eff_1d={eff_1d:.0f}  freeze_at={freeze_at}")
+        print(
+            f"  WikiText-2: {len(texts)} docs  max_len={MAX_LEN}  "
+            f"std_len={std_len:.1f}  n_unique_lengths={n_unique}  "
+            f"eff_1d={eff_1d:.0f}  freeze_at={freeze_at}"
+        )
 
     import random
+
     def step_fn(i):
-        rng   = random.Random(i)
+        rng = random.Random(i)
         batch = [tok_cache[rng.randint(0, len(tok_cache) - 1)] for _ in range(BS)]
         batch = collator(batch)
         # simple MLM: use input_ids as labels (not masking for bench simplicity)
@@ -91,6 +93,7 @@ def _make_workload(quiet=False):
 
 
 # -- subprocess runner --------------------------------------------------------
+
 
 def run_strategy(strat_name, freeze_at):
     if strat_name == "never":
@@ -112,7 +115,7 @@ def run_strategy(strat_name, freeze_at):
     rss_post_warmup = _cur_rss_mb()
 
     times = []
-    drvs  = []
+    drvs = []
     iter_peak_rss = rss_pre
     rss_at_freeze = None
 
@@ -137,23 +140,22 @@ def run_strategy(strat_name, freeze_at):
     n = len(drvs)
     xm = (n - 1) / 2.0
     denom = max(1, sum((j - xm) ** 2 for j in range(n)))
-    slope_kbpi = sum(
-        (j - xm) * (drvs[j] - drvs[0]) for j in range(n)
-    ) / denom / 1024
+    slope_kbpi = sum((j - xm) * (drvs[j] - drvs[0]) for j in range(n)) / denom / 1024
 
     return {
-        "strat":        strat_name,
-        "rss_delta":    rss_final - rss_pre,
+        "strat": strat_name,
+        "rss_delta": rss_final - rss_pre,
         "warmup_swell": rss_post_warmup - rss_pre,
         "freeze_swell": (rss_at_freeze - rss_pre) if rss_at_freeze is not None else None,
-        "iter_peak":    (iter_peak_rss - rss_pre) if strat_name == "clear_per_iter" else None,
-        "mean_ms":      statistics.mean(times),
-        "std_ms":       statistics.stdev(times) if len(times) > 1 else 0.0,
-        "slope_kbpi":   slope_kbpi,
+        "iter_peak": (iter_peak_rss - rss_pre) if strat_name == "clear_per_iter" else None,
+        "mean_ms": statistics.mean(times),
+        "std_ms": statistics.stdev(times) if len(times) > 1 else 0.0,
+        "slope_kbpi": slope_kbpi,
     }
 
 
 # -- orchestrator -------------------------------------------------------------
+
 
 def main_benchmark():
     _, freeze_at, n_unique = _make_workload()
@@ -165,7 +167,7 @@ def main_benchmark():
     print(f"  n_unique_padded_lengths={n_unique}  (subprocess-isolated, psutil RSS)")
     print()
     print(f"  {'Strategy':<22} {'ΔRSS MB':>9}  {'ms/iter':>9}  {'+-':>6}  note")
-    print(f"  {'-'*22} {'-'*9}  {'-'*9}  {'-'*6}  ------")
+    print(f"  {'-' * 22} {'-' * 9}  {'-' * 9}  {'-' * 6}  ------")
 
     always_ms = None
 
@@ -174,9 +176,9 @@ def main_benchmark():
         sys.stdout.flush()
 
         result = subprocess.run(
-            [sys.executable, __file__, "--strategy", strat_name,
-             "--freeze-at", str(freeze_at)],
-            capture_output=True, text=True,
+            [sys.executable, __file__, "--strategy", strat_name, "--freeze-at", str(freeze_at)],
+            capture_output=True,
+            text=True,
             env=os.environ.copy(),
         )
 
@@ -200,25 +202,28 @@ def main_benchmark():
         else:
             note = f"({metrics['mean_ms'] / always_ms:.2f}x, bounded)"
 
-        print(f"  {strat_name:<22} {metrics['rss_delta']:>+9.1f}  "
-              f"{metrics['mean_ms']:>9.1f}  {metrics['std_ms']:>6.1f}  {note}")
+        print(
+            f"  {strat_name:<22} {metrics['rss_delta']:>+9.1f}  "
+            f"{metrics['mean_ms']:>9.1f}  {metrics['std_ms']:>6.1f}  {note}"
+        )
 
         if strat_name == "freeze_after_warmup" and metrics["freeze_swell"] is not None:
-            print(f"    warmup loop: +{metrics['warmup_swell']:.1f} MB  |  "
-                  f"at freeze point: +{metrics['freeze_swell']:.1f} MB")
+            print(
+                f"    warmup loop: +{metrics['warmup_swell']:.1f} MB  |  "
+                f"at freeze point: +{metrics['freeze_swell']:.1f} MB"
+            )
 
         if strat_name == "clear_per_iter" and metrics["iter_peak"] is not None:
-            print(f"    peak/iter before clear: +{metrics['iter_peak']:.1f} MB  "
-                  f"(net: {metrics['rss_delta']:+.1f} MB)")
+            print(f"    peak/iter before clear: +{metrics['iter_peak']:.1f} MB  (net: {metrics['rss_delta']:+.1f} MB)")
 
     print()
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--strategy", default=None,
-                        choices=["always", "freeze_after_warmup",
-                                 "clear_per_iter", "never"])
+    parser.add_argument(
+        "--strategy", default=None, choices=["always", "freeze_after_warmup", "clear_per_iter", "never"]
+    )
     parser.add_argument("--freeze-at", type=int, default=10)
     args = parser.parse_args()
 

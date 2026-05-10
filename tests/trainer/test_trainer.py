@@ -1248,17 +1248,19 @@ class TrainerIntegrationTest(TestCasePlus):
         model_wrapped_after = trainer.model_wrapped
         self.assertIs(model_wrapped_before, model_wrapped_after, "should be not wrapped twice")
 
+
 class TrainerMPSGraphCacheTest(TestCasePlus):
     """Tests for MPS graph cache clearing after each optimizer step."""
 
     def test_clear_graph_cache_noop_on_non_mps(self):
         """clear_graph_cache is never called when MPS is unavailable."""
         mock_clear = MagicMock()
-        with patch("torch.backends.mps.is_available", return_value=False),              patch.object(torch.mps, "clear_graph_cache", mock_clear, create=True):
+        with (
+            patch("torch.backends.mps.is_available", return_value=False),
+            patch.object(torch.mps, "clear_graph_cache", mock_clear, create=True),
+        ):
             with tempfile.TemporaryDirectory() as tmp_dir:
-                trainer = get_regression_trainer(
-                    output_dir=tmp_dir, max_steps=3, use_cpu=True
-                )
+                trainer = get_regression_trainer(output_dir=tmp_dir, max_steps=3, use_cpu=True)
                 trainer.train()
         self.assertEqual(mock_clear.call_count, 0)
 
@@ -1268,20 +1270,18 @@ class TrainerMPSGraphCacheTest(TestCasePlus):
             self.skipTest("requires PyTorch without clear_graph_cache API (< 2.13)")
         with patch("torch.backends.mps.is_available", return_value=True):
             with tempfile.TemporaryDirectory() as tmp_dir:
-                trainer = get_regression_trainer(
-                    output_dir=tmp_dir, max_steps=3, use_cpu=True
-                )
+                trainer = get_regression_trainer(output_dir=tmp_dir, max_steps=3, use_cpu=True)
                 trainer.train()  # must not raise AttributeError
 
     def test_clear_graph_cache_called_once_per_step(self):
         """clear_graph_cache is called exactly once per optimizer step on MPS."""
         max_steps = 4
         mock_clear = MagicMock()
-        with patch("torch.backends.mps.is_available", return_value=True),              patch.object(torch.mps, "clear_graph_cache", mock_clear, create=True):
+        with (
+            patch("torch.backends.mps.is_available", return_value=True),
+            patch.object(torch.mps, "clear_graph_cache", mock_clear, create=True),
+        ):
             with tempfile.TemporaryDirectory() as tmp_dir:
-                trainer = get_regression_trainer(
-                    output_dir=tmp_dir, max_steps=max_steps, use_cpu=True
-                )
+                trainer = get_regression_trainer(output_dir=tmp_dir, max_steps=max_steps, use_cpu=True)
                 trainer.train()
         self.assertEqual(mock_clear.call_count, max_steps)
-
