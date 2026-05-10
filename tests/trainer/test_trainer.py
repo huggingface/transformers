@@ -20,8 +20,8 @@ mixed precision, logging, NEFTune, memory metrics, and end-to-end training.
 import math
 import os
 import tempfile
-from unittest.mock import MagicMock, patch
 from functools import partial
+from unittest.mock import MagicMock, patch
 
 import datasets
 import numpy as np

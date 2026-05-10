@@ -27,6 +27,7 @@ import psutil
 import torch
 from torch.optim import AdamW
 
+
 assert torch.backends.mps.is_available(), "MPS not available"
 assert hasattr(torch.mps, 'clear_graph_cache'), \
     "clear_graph_cache requires PyTorch >= 2.13 (pytorch/pytorch#182648)"
@@ -44,8 +45,8 @@ def _cur_rss_mb():
 
 def _make_workload(quiet=False):
     from datasets import load_dataset
-    from transformers import (AutoTokenizer, AutoModelForMaskedLM,
-                              DataCollatorWithPadding)
+
+    from transformers import AutoModelForMaskedLM, AutoTokenizer, DataCollatorWithPadding
 
     dataset   = load_dataset("wikitext", "wikitext-2-raw-v1", split="train")
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")

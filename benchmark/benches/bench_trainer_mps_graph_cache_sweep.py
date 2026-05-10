@@ -20,6 +20,7 @@ import psutil
 import torch
 from torch.optim import AdamW
 
+
 assert torch.backends.mps.is_available(), "MPS not available"
 
 DEVICE  = torch.device("mps")
@@ -35,7 +36,8 @@ def _cur_rss_mb():
 
 def _make_workload(max_len, quiet=False):
     from datasets import load_dataset
-    from transformers import AutoTokenizer, AutoModelForMaskedLM, DataCollatorWithPadding
+
+    from transformers import AutoModelForMaskedLM, AutoTokenizer, DataCollatorWithPadding
 
     dataset   = load_dataset("wikitext", "wikitext-2-raw-v1", split="train")
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
@@ -87,8 +89,6 @@ def run_strategy(strat_name, freeze_at, max_len):
     torch.mps.synchronize()
 
     times = []
-    rss_at_freeze = None
-
     for i in range(ITERS):
         t0 = time.perf_counter()
         step_fn(WARMUP + i)
@@ -96,7 +96,6 @@ def run_strategy(strat_name, freeze_at, max_len):
         if strat_name == "clear_per_iter":
             torch.mps.clear_graph_cache()
         elif strat_name == "freeze_after_warmup" and i == freeze_at:
-            rss_at_freeze = _cur_rss_mb()
             torch.mps.freeze_graph_cache()
 
         torch.mps.synchronize()
