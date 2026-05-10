@@ -1027,9 +1027,9 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
 
         # FA2's mask interface returns None (no-padding) or a 2D tensor, both of which
         # cannot be torch.cat'd when building the merged self+cross mask. The merged
-        # attention falls back to eager anyway, so force eager mask creation (4D float
-        # additive bias) which is what eager_attention_forward expects.
-        # Also handles paged variants like "paged|flash_attention_2" via substring check.
+        # attention falls back to eager anyway, so force eager-format (4D float) masks
+        # for the decoder. "sdpa" returns 4D bool; eager needs 4D float 0/-inf additive bias.
+        # Also handle paged variants like "paged|flash_attention_2" via substring check.
         _mask_config = self.config
         _base_impl = (
             self.config._attn_implementation.split("|")[-1]
