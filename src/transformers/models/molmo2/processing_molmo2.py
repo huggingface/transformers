@@ -22,8 +22,11 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, make_flat_list_of_images, make_nested_list_of_images
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
 from ...video_utils import VideoInput
+
+
+logger = logging.get_logger(__name__)
 
 
 class Molmo2ImagesKwargs(ImagesKwargs, total=False):
@@ -297,6 +300,16 @@ class Molmo2Processor(ProcessorMixin):
                 video_grids_i = video_grids[index : index + num_videos]
                 metadata_i = video_metadata[index : index + num_videos]
                 for video_grid, metadata in zip(video_grids_i, metadata_i):
+                    if metadata.frames_indices is None:
+                        metadata.frames_indices = list(range(video_grid[0].item()))
+                    if metadata.fps is None:
+                        metadata.fps = self.video_processor.max_fps
+                        logger.warning_once(
+                            "Molmo2 requires frame timestamps to construct prompts, but the `fps` of the input video "
+                            "could not be inferred. Probably `video_metadata` was missing from inputs and you passed "
+                            f"pre-sampled frames. Defaulting to `fps={metadata.fps}`. Please provide `video_metadata` "
+                            "for more accurate results."
+                        )
                     text[i] = text[i].replace(
                         self.video_token, self.get_video_string(video_grid, metadata.timestamps), 1
                     )

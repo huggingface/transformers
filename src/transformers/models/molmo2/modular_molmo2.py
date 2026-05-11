@@ -17,7 +17,6 @@
 import math
 from collections.abc import Callable
 
-import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -51,10 +50,7 @@ from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_
 from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoInput, VideoMetadata
-from ..cohere2_vision.image_processing_cohere2_vision import (
-    get_all_supported_aspect_ratios,
-    get_optimal_tiled_canvas,
-)
+from ..cohere2_vision.image_processing_cohere2_vision import get_optimal_tiled_canvas
 from ..llama.modeling_llama import (
     LlamaPreTrainedModel,
     LlamaRMSNorm,
@@ -529,6 +525,38 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         if self.size is not None and (self.size.get("height", None) is None or self.size.get("width", None) is None):
             raise ValueError("size must contain 'height' and 'width' keys.")
 
+    def sample_frames(
+        self,
+        metadata: VideoMetadata,
+        num_frames: int | None = None,
+        fps: int | float | None = None,
+        max_fps: int | float | None = None,
+        **kwargs,
+    ):
+        if fps is not None and num_frames is not None:
+            raise ValueError("`num_frames` and `fps` are mutually exclusive arguments, please use only one!")
+
+        num_frames = num_frames if num_frames is not None else self.num_frames
+        max_fps = max_fps if max_fps is not None else self.max_fps
+
+        if metadata.fps is None:
+            metadata.fps = fps or max_fps
+            logger.warning_once(
+                "Molmo2 requires frame timestamps to construct prompts, but the `fps` of the input video could not "
+                "be inferred. Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
+                f"Defaulting to `fps={metadata.fps}`. Please provide `video_metadata` for more accurate results."
+            )
+        if metadata.duration is None and metadata.fps is not None:
+            metadata.duration = metadata.total_num_frames / metadata.fps
+
+        if fps is not None:
+            return super().sample_frames(metadata=metadata, fps=fps)
+        elif max_fps is not None and metadata.fps > max_fps:
+            num_frames = min(num_frames, int(metadata.duration * max_fps))
+
+        num_frames = max(min(num_frames, metadata.total_num_frames), 1)
+        return super().sample_frames(metadata=metadata, num_frames=num_frames)
+
     def _build_resized_image(
         self,
         image_chw: torch.Tensor,
@@ -862,6 +890,16 @@ class Molmo2Processor(ProcessorMixin):
                 video_grids_i = video_grids[index : index + num_videos]
                 metadata_i = video_metadata[index : index + num_videos]
                 for video_grid, metadata in zip(video_grids_i, metadata_i):
+                    if metadata.frames_indices is None:
+                        metadata.frames_indices = list(range(video_grid[0].item()))
+                    if metadata.fps is None:
+                        metadata.fps = self.video_processor.max_fps
+                        logger.warning_once(
+                            "Molmo2 requires frame timestamps to construct prompts, but the `fps` of the input video "
+                            "could not be inferred. Probably `video_metadata` was missing from inputs and you passed "
+                            f"pre-sampled frames. Defaulting to `fps={metadata.fps}`. Please provide `video_metadata` "
+                            "for more accurate results."
+                        )
                     text[i] = text[i].replace(self.video_token, self.get_video_string(video_grid, metadata.timestamps), 1)
                 index += num_videos
 

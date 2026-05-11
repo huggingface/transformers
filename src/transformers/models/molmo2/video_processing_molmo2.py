@@ -18,15 +18,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import torch
 from torch.nn import functional as F
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring
+from ...utils import TensorType, auto_docstring, logging
 from ...video_processing_utils import BaseVideoProcessor
+from ...video_utils import VideoMetadata
 from .processing_molmo2 import Molmo2VideosKwargs
+
+
+logger = logging.get_logger(__name__)
 
 
 def batch_pixels_to_patches(array: torch.Tensor, patch_size: int) -> torch.Tensor:
@@ -88,6 +93,38 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         super().__init__(**kwargs)
         if self.size is not None and (self.size.get("height", None) is None or self.size.get("width", None) is None):
             raise ValueError("size must contain 'height' and 'width' keys.")
+
+    def sample_frames(
+        self,
+        metadata: VideoMetadata,
+        num_frames: int | None = None,
+        fps: int | float | None = None,
+        max_fps: int | float | None = None,
+        **kwargs,
+    ):
+        if fps is not None and num_frames is not None:
+            raise ValueError("`num_frames` and `fps` are mutually exclusive arguments, please use only one!")
+
+        num_frames = num_frames if num_frames is not None else self.num_frames
+        max_fps = max_fps if max_fps is not None else self.max_fps
+
+        if metadata.fps is None:
+            metadata.fps = fps or max_fps
+            logger.warning_once(
+                "Molmo2 requires frame timestamps to construct prompts, but the `fps` of the input video could not "
+                "be inferred. Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
+                f"Defaulting to `fps={metadata.fps}`. Please provide `video_metadata` for more accurate results."
+            )
+        if metadata.duration is None and metadata.fps is not None:
+            metadata.duration = metadata.total_num_frames / metadata.fps
+
+        if fps is not None:
+            return super().sample_frames(metadata=metadata, fps=fps)
+        elif max_fps is not None and metadata.fps > max_fps:
+            num_frames = min(num_frames, int(metadata.duration * max_fps))
+
+        num_frames = max(min(num_frames, metadata.total_num_frames), 1)
+        return super().sample_frames(metadata=metadata, num_frames=num_frames)
 
     def _build_resized_image(
         self,
