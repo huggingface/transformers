@@ -504,7 +504,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         self.assertEqual(helper.dp_size, 1)
         self.assertTrue(helper.is_tp_driver)
         self.assertIsNone(helper.tp_group)
-        self.assertIsNone(helper.ingress_group)
+        self.assertIsNone(helper.cpu_comm_group)
 
         # Tensor and object broadcasts should be no-ops without a TP group
         tensor = torch.tensor([1.0, 2.0])

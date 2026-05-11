@@ -248,24 +248,24 @@ class DistributedHelper:
             self.is_tp_driver = self.tp_local_rank == 0
             # If TP is on, we create a dedicate CPU group
             tp_ranks = dist.get_process_group_ranks(self.tp_group)
-            self.ingress_group = dist.new_group(ranks=tp_ranks, backend="gloo")
+            self.cpu_comm_group = dist.new_group(ranks=tp_ranks, backend="gloo")
         else:
             self.tp_size = 1
             self.tp_group = None
             self.tp_root_global_rank = 0
             self.tp_local_rank = 0
             self.is_tp_driver = False
-            self.ingress_group = None
+            self.cpu_comm_group = None
 
         # These attributes depend on the DP state
         self.dp_rank = self.global_rank // self.tp_size
         self.dp_size = self.world_size // self.tp_size
 
-    def destroy_ingress_group(self) -> None:
-        """Destroys the ingress group."""
-        if self.ingress_group is not None:
-            dist.destroy_process_group(self.ingress_group)
-            self.ingress_group = None
+    def destroy_cpu_comm_group(self) -> None:
+        """Destroys the CPU comm group."""
+        if self.cpu_comm_group is not None:
+            dist.destroy_process_group(self.cpu_comm_group)
+            self.cpu_comm_group = None
 
     def tp_broadcast_from_rank_0(self, value: torch.Tensor) -> torch.Tensor:
         """Inside each TP group, broadcasts the given value from rank 0 to all other ranks."""
@@ -274,9 +274,9 @@ class DistributedHelper:
         return value
 
     def tp_broadcast_cpu_from_rank_0(self, value: torch.Tensor) -> torch.Tensor:
-        """Inside each TP group, broadcasts a CPU tensor from rank 0 over the gloo ingress group."""
+        """Inside each TP group, broadcasts a CPU tensor from rank 0 over the gloo CPU comm group."""
         if self.tp_size > 1:
-            dist.broadcast(value, src=self.tp_root_global_rank, async_op=False, group=self.ingress_group)
+            dist.broadcast(value, src=self.tp_root_global_rank, async_op=False, group=self.cpu_comm_group)
         return value
 
     def tp_all_reduce_min(self, value: torch.Tensor) -> torch.Tensor:
@@ -285,15 +285,15 @@ class DistributedHelper:
             dist.all_reduce(value, op=dist.ReduceOp.MIN, group=self.tp_group)
         return value
 
-    def tp_broadcast_object(self, obj):
+    def tp_broadcast_object(self, obj: T) -> T:
         """Inside each TP group, broadcasts an arbitrary picklable Python object from TP-rank 0 to all other ranks.
         Used to keep request ingress and cancellations consistent across TP workers without requiring all ranks to
-        receive the same external request stream. Uses a dedicated CPU (gloo) `ingress_group` for broadcast."""
+        receive the same external request stream. Uses a dedicated CPU (gloo) `cpu_comm_group` for broadcast."""
         if self.tp_size <= 1:
             return obj
         holder = [obj] if self.is_tp_driver else [None]
         dist.broadcast_object_list(
-            holder, src=self.tp_root_global_rank, group=self.ingress_group, device=torch.device("cpu")
+            holder, src=self.tp_root_global_rank, group=self.cpu_comm_group, device=torch.device("cpu")
         )
         return holder[0]
 

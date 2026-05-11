@@ -609,7 +609,7 @@ class ContinuousBatchingManager:
         # If the manager is not being kept for next session, we clear the batch processor
         if not keep_for_next_session:
             self.batch_processor = None
-            self.distributed_helper.destroy_ingress_group()
+            self.distributed_helper.destroy_cpu_comm_group()
         # Otherwise, we keep the batch processor and cache the manager as a model attribute
         else:
             logger.info("Continuous batching manager will be kept for next session.")
