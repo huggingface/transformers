@@ -1406,7 +1406,7 @@ class Gemma4TextModel(Gemma3TextModel):
             merging multimodal soft tokens into `inputs_embeds` — at which point the original token ids are
             no longer recoverable.
         """
-        if (input_ids is None) ^ (inputs_embeds is not None):
+        if (input_ids is None) and (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if input_ids is not None:
@@ -1921,7 +1921,7 @@ class Gemma4Model(Gemma3nModel):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
         """
-        if (input_ids is None) ^ (inputs_embeds is not None):
+        if (input_ids is None) and (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         image_mask, video_mask, audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds)
