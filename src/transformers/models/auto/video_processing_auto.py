@@ -333,23 +333,21 @@ class AutoVideoProcessor:
                 video_processor_auto_map = image_processor_auto_map.replace("ImageProcessor", "VideoProcessor")
 
         # If we don't find the video processor class in the video processor config, let's try the model config.
-        if video_processor_class is None or video_processor_auto_map is None:
-            if not isinstance(config, PreTrainedConfig):
-                try:
-                    if not isinstance(config, PreTrainedConfig):
-                        config = AutoConfig.from_pretrained(
-                            pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
-                        )
+        if video_processor_class is None:
+            try:
+                if not isinstance(config, PreTrainedConfig):
+                    config = AutoConfig.from_pretrained(
+                        pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                    )
 
-                    # It could be in `config.video_processor_type``
-                    video_processor_class = getattr(config, "video_processor_type", None)
-                    if hasattr(config, "auto_map") and "AutoVideoProcessor" in config.auto_map:
-                        video_processor_auto_map = config.auto_map["AutoVideoProcessor"]
-
-                except ValueError:
-                    # Config loading failed (unrecognized model_type, invalid config, etc.)
-                    # Continue to fallback logic below (AutoTokenizer, AutoImageProcessor, etc.)
-                    pass
+                # It could be in `config.video_processor_type``
+                video_processor_class = getattr(config, "video_processor_type", None)
+                if hasattr(config, "auto_map") and "AutoVideoProcessor" in config.auto_map:
+                    video_processor_auto_map = config.auto_map["AutoVideoProcessor"]
+            except ValueError:
+                # Config loading failed (unrecognized model_type, invalid config, etc.)
+                # Continue to fallback logic below (AutoTokenizer, AutoImageProcessor, etc.)
+                pass
 
         if video_processor_class is not None:
             video_processor_class = video_processor_class_from_name(video_processor_class)

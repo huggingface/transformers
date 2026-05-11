@@ -163,7 +163,6 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("internvl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("jais2", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("jina_embeddings_v3", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
-        ("kimi_k25", "Kimi_K25Tokenizer" if is_tiktoken_available() else None),
         ("kosmos-2", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("lasr_ctc", "LasrTokenizer" if is_tokenizers_available() else None),
         ("lasr_encoder", "LasrTokenizer" if is_tokenizers_available() else None),
@@ -361,6 +360,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "internvl_chat",
     "jamba",
     "janus",
+    "kimi_k25",
     "llava",
     "llava_next",
     "minicpmv",
@@ -758,17 +758,6 @@ class AutoTokenizer:
                 ).__module__.startswith("transformers.")
             )
         )
-
-        # Give priority to a tokenizer class from MAPPING over `config` when it is remote
-        # and users has requested explicitly `trust_remote_code=False`
-        if (
-            has_remote_code
-            and not trust_remote_code
-            and tokenizer_config_class is not None
-            and tokenizer_class_from_name(tokenizer_config_class) is None
-            and (tokenizer_class_from_config := TOKENIZER_MAPPING.get(type(config), None)) is not None
-        ):
-            tokenizer_config_class = tokenizer_class_from_config.__name__
 
         # V5: Skip remote tokenizer for custom models with incorrect hub tokenizer class
         if has_remote_code and config_model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS:

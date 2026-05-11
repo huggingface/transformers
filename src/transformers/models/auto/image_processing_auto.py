@@ -583,21 +583,20 @@ class AutoImageProcessor:
                 image_processor_auto_map = feature_extractor_auto_map.replace("FeatureExtractor", "ImageProcessor")
 
         # If not in image processor config, try the model config
-        if image_processor_type is None or image_processor_auto_map is None:
-            if not isinstance(config, PreTrainedConfig):
-                try:
-                    if not isinstance(config, PreTrainedConfig):
-                        config = AutoConfig.from_pretrained(
-                            pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
-                        )
+        if image_processor_type is None:
+            try:
+                if not isinstance(config, PreTrainedConfig):
+                    config = AutoConfig.from_pretrained(
+                        pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                    )
 
-                    image_processor_type = getattr(config, "image_processor_type", None)
-                    if hasattr(config, "auto_map") and "AutoImageProcessor" in config.auto_map:
-                        image_processor_auto_map = config.auto_map["AutoImageProcessor"]
-                except ValueError:
-                    # Config loading failed (unrecognized model_type, invalid config, etc.)
-                    # Continue to fallback logic below (AutoTokenizer, AutoImageProcessor, etc.)
-                    pass
+                image_processor_type = getattr(config, "image_processor_type", None)
+                if hasattr(config, "auto_map") and "AutoImageProcessor" in config.auto_map:
+                    image_processor_auto_map = config.auto_map["AutoImageProcessor"]
+            except ValueError:
+                # Config loading failed (unrecognized model_type, invalid config, etc.)
+                # Continue to fallback logic below (AutoTokenizer, AutoImageProcessor, etc.)
+                pass
 
         # Derive base_class_name from image_processor_type
         is_legacy_fast = False
