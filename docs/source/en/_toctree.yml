@@ -665,6 +665,8 @@
         title: HunYuanDenseV1
       - local: model_doc/hunyuan_v1_moe
         title: HunYuanMoEV1
+      - local: model_doc/hyperclovax
+        title: HyperCLOVAX
       - local: model_doc/hy_v3
         title: HYV3
       - local: model_doc/ibert
