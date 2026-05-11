@@ -24,6 +24,77 @@ from ...tokenization_utils_base import TextInput
 from ...utils.import_utils import is_nagisa_available, is_soynlp_available
 
 
+# fmt: off
+# The ASR model was trained with these full names as system prompts.
+LANGUAGE_CODE_TO_NAME = {
+    "ar": "Arabic",
+    "yue": "Cantonese",
+    "zh": "Chinese",
+    "cs": "Czech",
+    "da": "Danish",
+    "nl": "Dutch",
+    "en": "English",
+    "fil": "Filipino",
+    "fi": "Finnish",
+    "fr": "French",
+    "de": "German",
+    "el": "Greek",
+    "hi": "Hindi",
+    "hu": "Hungarian",
+    "id": "Indonesian",
+    "it": "Italian",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "mk": "Macedonian",
+    "ms": "Malay",
+    "fa": "Persian",
+    "pl": "Polish",
+    "pt": "Portuguese",
+    "ro": "Romanian",
+    "ru": "Russian",
+    "es": "Spanish",
+    "sv": "Swedish",
+    "th": "Thai",
+    "tr": "Turkish",
+    "vi": "Vietnamese",
+}
+
+# The forced aligner supports a subset of the ASR languages.
+FORCED_ALIGNER_LANGUAGES = {
+    "Chinese", "English", "Cantonese", "French", "German",
+    "Italian", "Japanese", "Korean", "Portuguese", "Russian", "Spanish",
+}
+# fmt: on
+
+SUPPORTED_LANGUAGE_NAMES = set(LANGUAGE_CODE_TO_NAME.values())
+
+
+def _resolve_language(language: str | None) -> str | None:
+    """Map a language code or name to the canonical full name, with validation.
+
+    Accepts language codes (e.g. ``"zh"``, ``"en"``) or full names
+    (e.g. ``"Chinese"``, ``"English"``). Returns the full name.
+    Raises ``ValueError`` if the language is not recognized.
+    ``None`` passes through unchanged (auto-detect).
+    """
+    if language is None:
+        return None
+    # Try code lookup first
+    resolved = LANGUAGE_CODE_TO_NAME.get(language.lower())
+    if resolved is not None:
+        return resolved
+    # Check if it's already a valid full name (case-insensitive)
+    for name in SUPPORTED_LANGUAGE_NAMES:
+        if language.lower() == name.lower():
+            return name
+    raise ValueError(
+        f"Unsupported language: {language!r}. Use a language code "
+        f"(e.g. 'en', 'zh') or full name (e.g. 'English', 'Chinese'). "
+        f"Supported codes: {sorted(LANGUAGE_CODE_TO_NAME.keys())}. "
+        f"Supported names: {sorted(SUPPORTED_LANGUAGE_NAMES)}."
+    )
+
+
 class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
@@ -65,17 +136,22 @@ def _prepare_audio_inputs(audio: AudioInput) -> list:
 def _prepare_language_inputs(
     language: str | list[str] | None, batch_size: int, allow_broadcast: bool = False
 ) -> list[str | None]:
-    """Broadcast / validate a language argument to match batch_size."""
+    """Broadcast / validate a language argument to match batch_size.
+
+    Accepts language codes (e.g. ``"zh"``, ``"en"``) or full names
+    (e.g. ``"Chinese"``, ``"English"``). Each value is resolved to the
+    canonical full language name via :func:`_resolve_language`.
+    """
     if language is None:
         return [None] * batch_size
     if isinstance(language, str):
-        return [language] * batch_size
+        return [_resolve_language(language)] * batch_size
     if isinstance(language, (list, tuple)):
         if allow_broadcast and len(language) == 1 and batch_size > 1:
-            return list(language) * batch_size
+            return [_resolve_language(language[0])] * batch_size
         if len(language) != batch_size:
             raise ValueError(f"Got {len(language)} language(s) for {batch_size} sample(s); counts must match.")
-        return list(language)
+        return [_resolve_language(lang) for lang in language]
     raise TypeError("`language` must be a string, a list of strings, or `None`.")
 
 
@@ -356,9 +432,10 @@ class Qwen3ASRProcessor(ProcessorMixin):
             audio (`AudioInput` or `list[AudioInput]`):
                 Audio to transcribe. Can be a URL string, local path, numpy array, or a list of these.
             language (`str` or `list[str]`, *optional*):
-                Language hint(s) to include in the system prompt (e.g. "English", "Chinese").
+                Language hint(s) to include in the system prompt. Accepts full names
+                (e.g. ``"English"``, ``"Chinese"``) or ISO codes (e.g. ``"en"``, ``"zh"``).
                 A list must be the same length as the audio batch.
-                When `None`, the model performs automatic language detection.
+                When ``None``, the model performs automatic language detection.
             **kwargs:
                 Additional keyword arguments forwarded to
                 [`~Qwen3ASRProcessor.apply_chat_template`].
@@ -473,9 +550,9 @@ class Qwen3ASRProcessor(ProcessorMixin):
         Args:
             text (`str`): Transcript text.
             language (`str` or `None`, *optional*):
-                Language of the transcript (e.g. ``"Japanese"``, ``"Korean"``,
-                ``"English"``, ``"Chinese"``).  When ``None``, falls back to the
-                default CJK / space-based tokenizer.
+                Language of the transcript. Accepts full names (e.g. ``"Japanese"``,
+                ``"English"``) or codes (e.g. ``"ja"``, ``"en"``).  When ``None``,
+                falls back to the default CJK / space-based tokenizer.
 
         Returns:
             `list[str]`: Word-level tokens.
@@ -564,6 +641,19 @@ class Qwen3ASRProcessor(ProcessorMixin):
             raise ValueError(f"Got {len(transcript)} transcript(s) but {batch_size} audio(s); they must match 1:1.")
 
         languages = _prepare_language_inputs(language, batch_size, allow_broadcast=True)
+
+        # Validate that all languages are supported by the forced aligner
+        for lang in languages:
+            if lang is not None and lang not in FORCED_ALIGNER_LANGUAGES:
+                aligner_codes = sorted(
+                    code for code, name in LANGUAGE_CODE_TO_NAME.items() if name in FORCED_ALIGNER_LANGUAGES
+                )
+                raise ValueError(
+                    f"Language {lang!r} is not supported by the forced aligner. "
+                    f"Supported languages: {sorted(FORCED_ALIGNER_LANGUAGES)} "
+                    f"(codes: {aligner_codes})."
+                )
+
         word_lists = [self.split_words_for_alignment(t, lang) for t, lang in zip(transcript, languages)]
 
         conversations = []
