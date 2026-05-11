@@ -153,11 +153,6 @@ class ALMModelTest(MultiModalModelTest):
     - `pipeline_model_mapping`: Override if not using default from model_tester
     """
 
-    # TODO: @eustlb, remove this once #45534 is merged
-    @unittest.skip("Audio-LMs have no separate base model without a head.")
-    def test_model_base_model_prefix(self):
-        pass
-
     def test_mismatching_num_audio_tokens(self):
         """
         Tests that ALMs throw an error with explicit message saying what is wrong
