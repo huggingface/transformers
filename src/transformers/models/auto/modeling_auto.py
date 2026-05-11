@@ -1302,7 +1302,6 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("helium", "HeliumForSequenceClassification"),
         ("hunyuan_v1_dense", "HunYuanDenseV1ForSequenceClassification"),
         ("hunyuan_v1_moe", "HunYuanMoEV1ForSequenceClassification"),
-        ("hyperclovax", "HyperCLOVAXForSequenceClassification"),
         ("hyperclovax_vision_v2", "HCXVisionV2ForSequenceClassification"),
         ("ibert", "IBertForSequenceClassification"),
         ("jamba", "JambaForSequenceClassification"),

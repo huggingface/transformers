@@ -20,81 +20,8 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
-
-
-@auto_docstring(checkpoint="naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
-@strict
-class HyperCLOVAXConfig(PreTrainedConfig):
-    r"""
-    use_post_norm (`bool`, *optional*, defaults to False):
-        Whether to use post-norm (Peri-LN) architecture. For more details checkout [this
-        paper](https://arxiv.org/pdf/2502.02732.pdf)
-
-    ```python
-    >>> from transformers import HyperCLOVAXConfig, HyperCLOVAXModel
-
-    >>> # Initializing a HyperCLOVAX configuration
-    >>> configuration = HyperCLOVAXConfig()
-
-    >>> # Initializing a model from the configuration
-    >>> model = HyperCLOVAXModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```
-    """
-
-    model_type = "hyperclovax"
-    keys_to_ignore_at_inference = ["past_key_values"]
-    # Default tensor parallel plan for base model `HyperCLOVAXModel`
-    base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
-    }
-    base_model_pp_plan = {
-        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
-        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
-        "norm": (["hidden_states"], ["hidden_states"]),
-    }
-
-    vocab_size: int = 32000
-    hidden_size: int = 4096
-    intermediate_size: int = 11008
-    num_hidden_layers: int = 32
-    num_attention_heads: int = 32
-    num_key_value_heads: int | None = None
-    hidden_act: str = "silu"
-    max_position_embeddings: int = 2048
-    initializer_range: float = 0.02
-    rms_norm_eps: float = 1e-6
-    use_cache: bool = True
-    pad_token_id: int | None = None
-    bos_token_id: int | None = 1
-    eos_token_id: int | list[int] | None = 2
-    tie_word_embeddings: bool = False
-    rope_parameters: RopeParameters | dict | None = None
-    attention_bias: bool = False
-    attention_dropout: float | int = 0.0
-    mlp_bias: bool = False
-    embedding_multiplier: float | int = 1.0
-    logits_scaling: float | int = 1.0
-    residual_multiplier: float | int = 1.0
-    attention_multiplier: float | int = 1.0
-    use_post_norm: bool = False  # Peri-LN (post-norm)
-
-    def __post_init__(self, **kwargs):
-        if self.num_key_value_heads is None:
-            self.num_key_value_heads = self.num_attention_heads
-
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
@@ -130,13 +57,14 @@ class HCXVisionV2Config(PreTrainedConfig):
     """
 
     model_type = "hyperclovax_vision_v2"
-    sub_configs = {"text_config": HyperCLOVAXConfig, "vision_config": AutoConfig}
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
     image_token_id: int | None = None
     video_token_id: int | None = None
+    tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):
@@ -151,7 +79,7 @@ class HCXVisionV2Config(PreTrainedConfig):
             model_type = self.text_config.get("model_type", "hyperclovax")
             self.text_config = CONFIG_MAPPING[model_type](**self.text_config)
         elif self.text_config is None:
-            self.text_config = HyperCLOVAXConfig()
+            self.text_config = CONFIG_MAPPING["hyperclovax"]()
 
         if self.image_token_id is None:
             self.image_token_id = kwargs.pop("img_start_id", 128060)
@@ -165,4 +93,4 @@ class HCXVisionV2Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["HCXVisionV2Config", "HyperCLOVAXConfig"]
+__all__ = ["HCXVisionV2Config"]

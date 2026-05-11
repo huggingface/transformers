@@ -31,7 +31,6 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_cv2_available
 
-from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_modeling_common import floats_tensor, ids_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
@@ -52,9 +51,6 @@ if is_torch_available():
         HCXVisionV2Model,
         HCXVisionV2Processor,
         HyperCLOVAXConfig,
-        HyperCLOVAXForCausalLM,
-        HyperCLOVAXForSequenceClassification,
-        HyperCLOVAXModel,
         Qwen2_5_VLVisionConfig,
     )
 
@@ -115,12 +111,6 @@ class HCXVisionV2VisionText2TextModelTester(VLMModelTester):
     def get_additional_inputs(self, config, input_ids, pixel_values):
         image_grid_thw = torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device)
         return {"image_grid_thw": image_grid_thw}
-
-
-class HyperCLOVAXModelTester(CausalLMModelTester):
-    base_model_class = HyperCLOVAXModel
-    causal_lm_class = HyperCLOVAXForCausalLM
-    sequence_classification_class = HyperCLOVAXForSequenceClassification
 
 
 @require_torch
@@ -273,37 +263,6 @@ class HCXVisionV2ModelTest(VLMModelTest, unittest.TestCase):
     @unittest.skip(reason="Inherits Qwen2_5_VL vision module with get_window_index incompatible with torch.export")
     def test_torch_export(self):
         pass
-
-
-@require_torch
-class HyperCLOVAXModelTest(CausalLMModelTest, unittest.TestCase):
-    model_tester_class = HyperCLOVAXModelTester
-    test_cpu_offload = False
-    test_disk_offload_safetensors = False
-    test_disk_offload_bin = False
-
-    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
-        # Conversion happens only for the `ConditionalGeneration` model, not the base model
-        try:
-            self.all_model_classes = (
-                (
-                    HyperCLOVAXForCausalLM,
-                    HyperCLOVAXForSequenceClassification,
-                )
-                if is_torch_available()
-                else ()
-            )
-            super().test_reverse_loading_mapping(check_keys_were_modified)
-        finally:
-            self.all_model_classes = (
-                (
-                    HyperCLOVAXModel,
-                    HyperCLOVAXForCausalLM,
-                    HyperCLOVAXForSequenceClassification,
-                )
-                if is_torch_available()
-                else ()
-            )
 
 
 @require_torch

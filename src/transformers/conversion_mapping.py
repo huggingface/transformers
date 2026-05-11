@@ -113,7 +113,6 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "ViTMSNModel": "ViTModel",
     "VivitModel": "ViTModel",
     "hyperclovax_vision_v2": "llava",
-    "qwen2_5_vl": "qwen2_vl",
 }
 
 
