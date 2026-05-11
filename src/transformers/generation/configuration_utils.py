@@ -1653,6 +1653,8 @@ class ContinuousBatchingConfig:
             Scheduler type to use.
         return_logprobs (`bool`, *optional*, defaults to `False`):
             Whether to return log probabilities along with the generated tokens.
+        seed (`int | None`, *optional*):
+            An optional seed for generation. If not specified, the internal seed will be set to a random value.
         cpu_offload_space (`float`, *optional*, defaults to 0.0):
             CPU swap space in GiB for KV cache offloading. A pre-allocated pinned CPU buffer of this size is
             created at initialization. When the GPU cache is full, evicted requests' KV caches are copied here
@@ -1666,6 +1668,8 @@ class ContinuousBatchingConfig:
             Enable per-request logits processor parameters. Default is False.
         drop_unsupported_processors (`bool`, *optional*, defaults to `True`):
             Remove unsupported logits processors instead of erroring. Default is True.
+        disable_nccl_graph_mixing (`bool`, *optional*, defaults to `True`):
+            Disable NCCL's safety net for parallel graph-captured comms. Never happens in CB and gives TP a perf boost.
     """
 
     # Size of each KV cache block
