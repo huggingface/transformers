@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 
 if is_torch_available():
     import torch
+    from torch.distributed._functional_collectives import wait_tensor
     from torch.distributed.tensor import DTensor, Replicate
     from torch.distributed.tensor._utils import compute_local_shape_and_global_offset
     from torch.distributed.tensor.placement_types import Shard, _StridedShard
@@ -243,6 +244,9 @@ def _replicate_dtensor(tensor: DTensor) -> DTensor:
                     if not pj.is_replicate():
                         logical_shape[pj.dim] //= mesh.size(j)
                 local = p._to_replicate_tensor(local, mesh, i, logical_shape)
+                # Drain the async functional collective so downstream storage
+                # queries (e.g. tied-weight dedup) don't hit "invalid python storage".
+                local = wait_tensor(local)
             return DTensor.from_local(local, mesh, replicate_all, run_check=False)
 
         return tensor.redistribute(placements=replicate_all)

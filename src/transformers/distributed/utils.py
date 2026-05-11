@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 if is_torch_available():
     import torch
     import torch.distributed.checkpoint as dcp
+    from torch.distributed.checkpoint.state_dict import get_model_state_dict
     from torch.distributed.tensor import DTensor
 
     from .sharding_utils import _replicate_dtensor, convert_strided_to_shard, restore_strided_from_shard
@@ -125,18 +126,6 @@ def init_device_mesh(distributed_config: DistributedConfig) -> torch.distributed
     return mesh
 
 
-def _to_cpu_fresh(tensor: torch.Tensor) -> torch.Tensor:
-    """Plain tensor → contiguous CPU tensor with fresh storage for safetensors."""
-    if tensor.device.type == "meta":
-        return tensor
-    t = tensor.detach()
-    if t.device.type != "cpu":
-        t = t.to(device="cpu")
-    out = torch.empty(t.shape, dtype=t.dtype, device="cpu")
-    out.copy_(t)
-    return out.contiguous()
-
-
 def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
     """Gather all sharded params to full plain tensors for saving.
 
@@ -144,36 +133,22 @@ def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
     Streams one parameter at a time to avoid holding all full tensors on GPU.
     Only rank 0 accumulates the result; other ranks return ``{}``.
     """
-    tp_size = model.tp_size
     is_rank0 = torch.distributed.get_rank() == 0
-
-    # Get state dict — FSDP unshard if needed (returns DTensors, not full tensors)
-    if getattr(model, "_is_fsdp_managed_module", False):
-        from torch.distributed.checkpoint.state_dict import get_model_state_dict
-
-        state_dict = get_model_state_dict(model)
-    else:
-        state_dict = model.state_dict()
-
-    # No TP — materialize on rank 0 only
-    if tp_size is None:
-        if is_rank0:
-            return {k: _to_cpu_fresh(v) for k, v in state_dict.items()}
-        return {}
+    state_dict = get_model_state_dict(model)
 
     # Stream: gather one param at a time, only rank 0 keeps the CPU copy
     result = {}
     for key, tensor in state_dict.items():
-        if isinstance(tensor, DTensor):
-            # All ranks participate in the collective, only rank 0 keeps the result
-            with torch.no_grad():
-                full = _replicate_dtensor(tensor).to_local()
+        if not isinstance(tensor, DTensor):
             if is_rank0:
-                result[key] = _to_cpu_fresh(full)
-            del full
-        elif is_rank0:
-            result[key] = _to_cpu_fresh(tensor)
+                result[key] = tensor.detach().to(device="cpu", copy=True).contiguous()
+            continue
 
+        with torch.no_grad():
+            full = _replicate_dtensor(tensor).to_local()
+            if is_rank0:
+                result[key] = full.detach().to(device="cpu", copy=True).contiguous()
+            del full
     return result
 
 
