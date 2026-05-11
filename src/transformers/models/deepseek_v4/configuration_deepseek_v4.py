@@ -308,7 +308,7 @@ class DeepseekV4Config(PreTrainedConfig):
             # Already nested — drop any leftover top-level keys.
             self.rope_parameters = {"sliding": rp["sliding"], "compress": rp["compress"]}
         else:
-            base = {k: v for k, v in rp.items() if k not in ("main", "sliding", "compress")}
+            base = {k: v for k, v in rp.items() if k not in ("sliding", "compress")}
             base.setdefault("rope_type", "default")
             base["partial_rotary_factor"] = self.partial_rotary_factor
             sliding = {

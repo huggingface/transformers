@@ -729,14 +729,9 @@ class DeepseekV4Attention(nn.Module):
                 k_per_query = n_compressor // S
                 q_idx = torch.arange(S, device=q.device).unsqueeze(1)  # [S, 1]
                 kv_idx = torch.arange(n_compressor, device=q.device).div(k_per_query, rounding_mode="floor")  # [S*k]
-                own_q = q_idx == kv_idx  # [S, S*k]
-                if compressor_valid is not None:
-                    allowed = own_q.unsqueeze(0) & compressor_valid.unsqueeze(1)  # [B, S, S*k]
-                    extra = torch.where(allowed, 0.0, float("-inf")).to(attention_mask.dtype).unsqueeze(1)
-                    extra = extra.expand(attention_mask.shape[0], attention_mask.shape[1], -1, -1)
-                else:
-                    extra = torch.where(own_q, 0.0, float("-inf")).to(attention_mask.dtype)
-                    extra = extra.expand(*attention_mask.shape[:-2], S, n_compressor)
+                allowed = (q_idx == kv_idx).unsqueeze(0) & compressor_valid.unsqueeze(1)  # [B, S, S*k]
+                extra = torch.where(allowed, 0.0, float("-inf")).to(attention_mask.dtype).unsqueeze(1)
+                extra = extra.expand(attention_mask.shape[0], attention_mask.shape[1], -1, -1)
                 attention_mask = torch.cat([attention_mask, extra], dim=-1)
             else:
                 # HCA (every query sees every entry) and CSA decode (single query's k slots
@@ -797,10 +792,10 @@ class DeepseekV4HyperConnection(nn.Module):
                         [B, S, H]                 [B, S, H]                                 [B, S, H, H]
                         × scale[0]                × scale[1]                                × scale[2]
                         + base[:H]                + base[H:2H]                              + base[2H:]
-                        σ() + eps                 σ() + eps                                 σ() + eps
+                        σ() + eps                 2·σ()                                     softmax(-1) + eps
                         │                         │                                         │
-                        pre                        post                                     Sinkhorn(iters)
-                        (stream collapse weights)  (block-output placement)                 row/col normalise
+                        pre                       post                                      Sinkhorn(iters)
+                        (stream collapse weights) (block-output placement, range [0, 2])    row/col normalise
                                                                                             │
                                                                                             comb
                                                                                             (stream mixer)
@@ -822,15 +817,6 @@ class DeepseekV4HyperConnection(nn.Module):
         self.scale = nn.Parameter(torch.empty(3))
 
     def forward(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        r"""
-        Compute `pre`, `post`, `comb` from the mHC mapping (paper §2.2 eq. 8).
-        `comb` is projected onto the doubly-stochastic manifold via Sinkhorn-
-        Knopp: starting from the sigmoid-positive matrix, alternate row and
-        column normalisation for `hc_sinkhorn_iters` steps. `pre` then collapses
-        the `hc_mult` parallel streams into a single sequence (input projection
-        into the sublayer); `post` and `comb` are returned for the caller to
-        apply on the sublayer output.
-        """
         flat = self.input_norm(hidden_streams.flatten(start_dim=2).float())
         mix = F.linear(flat, self.fn.float())  # [B, S, (2+H)*H]
         pre_scale, post_scale, comb_scale = self.scale.unbind(0)
