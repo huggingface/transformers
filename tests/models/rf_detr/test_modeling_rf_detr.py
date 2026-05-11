@@ -469,15 +469,34 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         outputs = model(**inputs)
 
         # Check raw outputs from the model
-        expectations = Expectations({("cuda", (8, 0)): [-7.58881, -4.64088, -10.02118, -5.65906, -9.8343]})
+        # fmt: off
+        expectations = Expectations(
+            {
+                ("cuda", (8, 0)): [-7.58881, -4.64088, -10.02118, -5.65906, -9.8343],
+                ("xpu", None): [-7.59672, -4.63663, -10.01015, -5.64823, -9.82786],
+            }
+        )
+        # fmt: on
         expected_logits = torch.tensor(expectations.get_expectation()).to(torch_device)
         expected_logits_shape = torch.Size((1, model.config.num_queries, model.config.num_labels))
 
-        expectations = Expectations({("cuda", (8, 0)): [0.25457, 0.54871, 0.48585, 0.86988, 0.16926]})
+        # fmt: off
+        expectations = Expectations(
+            {
+                ("cuda", (8, 0)): [0.25457, 0.54871, 0.48585, 0.86988, 0.16926],
+                ("xpu", None): [0.25460, 0.54872, 0.48586, 0.86991, 0.16926],
+            }
+        )
+        # fmt: on
         expected_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
         expected_boxes_shape = torch.Size((1, model.config.num_queries, 4))
 
-        expectations = Expectations({("cuda", (8, 0)): 21.911297})
+        expectations = Expectations(
+            {
+                ("cuda", (8, 0)): 21.911297,
+                ("xpu", None): 21.834641,
+            }
+        )
         expected_loss = torch.tensor(expectations.get_expectation()).to(torch_device)
 
         predicted_logits = outputs.logits.flatten()[:5]
@@ -494,11 +513,31 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         post_processed_outputs = image_processor.post_process_object_detection(
             outputs, threshold=0.0, target_sizes=[image.size[::-1]]
         )[0]
-        expectations = Expectations({("cuda", (8, 0)): [17, 75, 17, 75, 63]})
+        expectations = Expectations(
+            {
+                ("cuda", (8, 0)): [17, 75, 17, 75, 63],
+                ("xpu", None): [17, 75, 17, 75, 63],
+            }
+        )
         expected_post_process_labels = torch.tensor(expectations.get_expectation()).to(torch_device)
-        expectations = Expectations({("cuda", (8, 0)): [0.982765, 0.975941, 0.978163, 0.868452, 0.619554]})
+        # fmt: off
+        expectations = Expectations(
+            {
+                ("cuda", (8, 0)): [0.982765, 0.975941, 0.978163, 0.868452, 0.619554],
+                ("xpu", None): [0.98277, 0.976018, 0.977666, 0.868674, 0.615991],
+            }
+        )
+        # fmt: on
         expected_post_process_scores = torch.tensor(expectations.get_expectation()).to(torch_device)
-        expectations = Expectations({("cuda", (8, 0)): [7.44911, 54.60959, 318.39551, 472.15417]})
+
+        # fmt: off
+        expectations = Expectations(
+            {
+                ("cuda", (8, 0)): [7.44911, 54.60959, 318.39551, 472.15417],
+                ("xpu", None): [7.46919, 54.60617, 318.41934, 472.16153],
+            }
+        )
+        # fmt: on
         expected_post_process_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
 
         post_processed_labels = post_processed_outputs["labels"][:5]
@@ -530,15 +569,36 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         outputs = model(**inputs)
 
         # Check raw outputs from the model
-        expectations = Expectations({("cuda", (8, 0)): [-7.3531, -5.14075, -9.63576, -10.81916, -8.3615]})
+        # fmt: off
+        expectations = Expectations(
+            {
+                ("cuda", (8, 0)): [-7.3531, -5.14075, -9.63576, -10.81916, -8.3615],
+                ("xpu", None): [-7.3542, -5.14673, -9.64132, -10.82835, -8.3629],
+            }
+        )
+        # fmt: on
         expected_logits = torch.tensor(expectations.get_expectation()).to(torch_device)
         expected_logits_shape = torch.Size((1, model.config.num_queries, model.config.num_labels))
 
-        expectations = Expectations({("cuda", (8, 0)): [0.25602, 0.54813, 0.48043, 0.87045, 0.77213]})
+        # fmt: off
+        expectations = Expectations(
+            {
+                ("cuda", (8, 0)): [0.25602, 0.54813, 0.48043, 0.87045, 0.77213],
+                ("xpu", None): [0.25603, 0.54812, 0.48039, 0.87042, 0.77208],
+            }
+        )
+        # fmt: on
         expected_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
         expected_boxes_shape = torch.Size((1, model.config.num_queries, 4))
 
-        expectations = Expectations({("cuda", (8, 0)): [-13.1366, -13.08283, -13.9058, -13.88317, -13.71717]})
+        # fmt: off
+        expectations = Expectations(
+            {
+                ("cuda", (8, 0)): [-13.1366, -13.08283, -13.9058, -13.88317, -13.71717],
+                ("xpu", None): [-13.1304, -13.0778, -13.9000, -13.8778, -13.7107],
+            }
+        )
+        # fmt: on
         expected_masks = torch.tensor(expectations.get_expectation()).to(torch_device)
         expected_masks_shape = torch.Size(
             (
@@ -549,7 +609,12 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
             )
         )
 
-        expectations = Expectations({("cuda", (8, 0)): 88.117493})
+        expectations = Expectations(
+            {
+                ("cuda", (8, 0)): 88.117493,
+                ("xpu", None): 87.474312,
+            }
+        )
         expected_loss = torch.tensor(expectations.get_expectation()).to(torch_device)
 
         predicted_logits = outputs.logits.flatten()[:5]
@@ -569,9 +634,19 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         post_processed_outputs = image_processor.post_process_instance_segmentation(
             outputs, threshold=0.0, target_sizes=[image.size[::-1]]
         )[0]
-        expectations = Expectations({("cuda", (8, 0)): [17, 17, 75, 75]})
+        expectations = Expectations(
+            {
+                ("cuda", (8, 0)): [17, 17, 75, 75],
+                ("xpu", None): [17, 17, 75, 75],
+            }
+        )
         expected_post_process_labels = torch.tensor(expectations.get_expectation()).to(torch_device)
-        expectations = Expectations({("cuda", (8, 0)): [0.984311, 0.976176, 0.984499, 0.970341]})
+        expectations = Expectations(
+            {
+                ("cuda", (8, 0)): [0.984311, 0.976176, 0.984499, 0.970341],
+                ("xpu", None): [0.984291, 0.97617, 0.984517, 0.970308],
+            }
+        )
         expected_post_process_scores = torch.tensor(expectations.get_expectation()).to(torch_device)
 
         post_processed_labels = [
