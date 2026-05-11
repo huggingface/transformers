@@ -479,17 +479,14 @@ class DeepseekV4Indexer(nn.Module):
         T = compressed_kv.shape[1]
         topk = min(self.index_topk, T)
 
-        # Causal pre-mask: compressed block s covers source positions
-        # `[s*compress_rate, (s+1)*compress_rate)`. A query at absolute position
-        # `p` may only attend to blocks whose tokens are strictly past, i.e.
-        # `(s+1)*compress_rate <= p`, equivalently `s < (p+1) // compress_rate`.
-        # Without this, the top-k can land on blocks containing future tokens
-        # during prefill / training-style forwards. After top-k, any picks that
-        # are still future-pointing (e.g. when every block is masked for an
-        # early query) are replaced with a `-1` sentinel for the gather caller.
-        if T > 0:
-            pos = position_ids if position_ids.dim() == 2 else position_ids.unsqueeze(0).expand(batch, -1)
-            causal_threshold = (pos + 1) // self.compress_rate  # [B, S]
+        # not all queries can attend to the compressed entries. If a query's position
+        # is small than the relative position of the key (say m=4, query 2 cannot attend
+        # to compressed key at position 4, because it compressed info for states at position
+        # 12 to 16. Thus we need to make sure that top_k does not land in that range.
+        # Picks that still point past `causal_threshold` (early queries with too few ready
+        # blocks) are replaced with a `-1` sentinel that the compresser treats as invalid.
+        if compressed_kv.shape[1] > 0:
+            causal_threshold = (position_ids + 1) // self.compress_rate  # [B, S]
             block_idx = torch.arange(T, device=index_scores.device)
             future_mask = block_idx.view(1, 1, -1) >= causal_threshold.unsqueeze(-1)  # [B, S, T]
             index_scores = index_scores.masked_fill(future_mask, float("-inf"))
@@ -598,16 +595,21 @@ class DeepseekV4CSACompressor(nn.Module):
         compressed_kv = compressed.unsqueeze(1)
 
         # Lightning Indexer: gather top-`index_topk` compressed entries per query.
-        # Indexer may return `-1` sentinels for queries with fewer ready blocks than
-        # `index_topk` (early prefill positions): clamp them to a safe gather index
-        # and remember the validity to build a per-query block mask below.
+        # in some cases, the output index can return top-k positions that should not be attended to.
+        # Ex: for query at index 5, m=4, and `index_topk=1024`, 1024 index are return but only 2 should be
+        # attended to. The indexer marks the rest with `-1`; we clamp before the gather and keep the `valid`
+        # to drop them from the per-query block mask afterwards.
         topk = self.indexer(hidden_states, q_residual, position_ids, past_key_values, layer_idx)  # [B, S, k]
         k = topk.shape[-1]
+        T = compressed_kv.shape[2]
         valid = topk >= 0  # [B, S, k]
+        # Flatten (B, T) into one row axis and shift picks by `b * T`, then index_select once.
+        # Same kernel as an embedding lookup — cheaper than `gather` over an expanded view.
         safe_topk = topk.clamp(min=0)
-        expanded = compressed_kv.unsqueeze(2).expand(-1, -1, seq_len, -1, -1)
-        idx = safe_topk.unsqueeze(1).unsqueeze(-1).expand(-1, 1, -1, -1, self.head_dim)
-        gathered = torch.gather(expanded, 3, idx).reshape(batch, 1, -1, self.head_dim)  # [B, 1, S*k, D]
+        offsets = (torch.arange(batch, device=compressed_kv.device) * T).view(batch, 1, 1)
+        flat_idx = (safe_topk + offsets).view(-1)  # [B*S*k]
+        flat_kv = compressed_kv.reshape(batch * T, self.head_dim)
+        gathered = flat_kv.index_select(0, flat_idx).view(batch, 1, -1, self.head_dim)  # [B, 1, S*k, D]
 
         # Per-query block bias over the flat `S*k` compressed segment: query `t` may
         # only see slots `[t*k : (t+1)*k]` (its own gathered entries) and only the
