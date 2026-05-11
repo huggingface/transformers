@@ -303,12 +303,11 @@ class Molmo2Processor(ProcessorMixin):
                     if metadata.frames_indices is None:
                         metadata.frames_indices = list(range(video_grid[0].item()))
                     if metadata.fps is None:
-                        metadata.fps = self.video_processor.max_fps
+                        metadata.fps = self.video_processor.max_fps or 2
                         logger.warning_once(
-                            "Molmo2 requires frame timestamps to construct prompts, but the `fps` of the input video "
-                            "could not be inferred. Probably `video_metadata` was missing from inputs and you passed "
-                            f"pre-sampled frames. Defaulting to `fps={metadata.fps}`. Please provide `video_metadata` "
-                            "for more accurate results."
+                            "Molmo2 inserts frame timestamps into video prompts, but the input video's `fps` was not "
+                            f"provided or could not be inferred. Defaulting to `fps={metadata.fps}`. Please provide "
+                            "`video_metadata` for more accurate timestamps."
                         )
                     text[i] = text[i].replace(
                         self.video_token, self.get_video_string(video_grid, metadata.timestamps), 1

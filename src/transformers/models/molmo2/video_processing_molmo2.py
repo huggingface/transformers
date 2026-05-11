@@ -111,9 +111,9 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         if metadata.fps is None:
             metadata.fps = fps or max_fps
             logger.warning_once(
-                "Molmo2 requires frame timestamps to construct prompts, but the `fps` of the input video could not "
-                "be inferred. Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
-                f"Defaulting to `fps={metadata.fps}`. Please provide `video_metadata` for more accurate results."
+                "Molmo2 inserts frame timestamps into video prompts, but the input video's `fps` was not provided "
+                f"or could not be inferred. Defaulting to `fps={metadata.fps}`. Please provide `video_metadata` "
+                "for more accurate timestamps."
             )
         if metadata.duration is None and metadata.fps is not None:
             metadata.duration = metadata.total_num_frames / metadata.fps
