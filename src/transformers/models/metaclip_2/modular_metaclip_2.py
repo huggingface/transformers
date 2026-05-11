@@ -258,7 +258,7 @@ class MetaClip2TextModel(CLIPTextModel):
 
         attention_mask = create_causal_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
             past_key_values=None,
         )
