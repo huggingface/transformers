@@ -134,7 +134,7 @@ The base class that handles pattern matching and tensor collection:
 
 ### WeightRenaming
 
-[`WeightRenaming`] is a specialized [`WeightTransform`] for pure key renames without tensor operations. Unlike [`WeightConverter`], a `WeightRenaming` does not **claim** the key (it does not occupy the "at most one converter per key" slot), so multiple renames may chain freely both before and after a [`WeightConverter`] has fired.
+[`WeightRenaming`] is a specialized [`WeightTransform`] for pure key renames without tensor operations. Unlike [`WeightConverter`], a `WeightRenaming` does not **claim** the key, so multiple renames may chain freely. On the load path all renames run before the converter; on the save path (inverted list) all inverted renames run after the inverted converter — see ordering rule above.
 
 ```py
 # Legacy checkpoint compatibility
