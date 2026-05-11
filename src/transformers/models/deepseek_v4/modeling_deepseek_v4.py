@@ -44,9 +44,10 @@ from .configuration_deepseek_v4 import DeepseekV4Config
 
 @use_kernel_forward_from_hub("RMSNorm")
 class DeepseekV4RMSNorm(nn.Module):
-    """Like V3's, but the weight·hidden multiply happens in fp32 before the cast
-    back to the input dtype. V3 downcasts `hidden_states` first and multiplies
-    in bf16, which loses precision across the ~5 norms × 43 layers.
+    """Like V3's, but `weight·hidden` runs in fp32 before the cast back to the input
+    dtype, matching the reference inference. V3 downcasts `hidden_states` first and
+    multiplies in bf16; the fp32 mul preserves a bit more precision across the ~5
+    norms × 43 layers and keeps eval numbers aligned with the published reference.
     """
 
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
@@ -961,7 +962,7 @@ class DeepseekV4HyperHead(nn.Module):
 class DeepseekV4MLP(nn.Module):
     """Used by the shared expert. Gate/up promoted to fp32, optionally clamped by
     `swiglu_limit`, SiLU+mul stay in fp32, then the product is cast back to the input
-    dtype before `down_proj`.
+    dtype before `down_proj`. Matches the reference inference precision pathway.
     """
 
     def __init__(self, config):
@@ -1020,8 +1021,8 @@ class DeepseekV4Experts(nn.Module):
         # Lives on the class (like gpt-oss's _apply_gate) so the grouped_mm / batched_mm
         # backends swapped in by `@use_experts_implementation` apply the same clamp +
         # SiLU on top of their packed gate_up output instead of bypassing it. Promote
-        # to fp32 for clamp + SiLU + mul; same shape as the shared-expert override in
-        # `DeepseekV4MLP`.
+        # to fp32 for clamp + SiLU + mul to match the reference inference; same shape
+        # as the shared-expert override in `DeepseekV4MLP`.
         dtype = gate_up.dtype
         gate, up = gate_up.float().chunk(2, dim=-1)
         gate = gate.clamp(max=self.limit)
