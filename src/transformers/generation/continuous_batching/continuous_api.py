@@ -243,6 +243,7 @@ class ContinuousBatchProcessor:
 
     def __del__(self) -> None:
         self.inputs_and_outputs = None  # clean up CUDA graphs in priority
+        self.distributed_helper.destroy_cpu_comm_group()
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -257,21 +258,21 @@ class ContinuousBatchProcessor:
 
     @traced
     def _get_new_requests(self) -> None:
-        """Pull new requests and cancellations from the queues and apply them to the scheduler. If the process is a TP
-        driver, the input_queue and cancel_queue are not None and the process will drain them. Otherwise, the process
-        will wait for the TP driver to send a payload containing the new requests and cancellations."""
-        # On the TP driver, drain the queues; non-driver ranks start from an empty tuple that gets overwritten by the
-        # broadcast below.
-        payload: tuple[list[RequestState], list[str]] = ([], [])
+        """Pull new requests and cancellations from the queues and apply them to the scheduler. In the context of TP,
+        only the TP driver of the TP group does this, and broadcast the new_states / cancellations to other TP ranks."""
+        # The payload is filled for TP drivers only, it stays empty for other processes
+        payload = ([], [])
         if self.input_queue is not None and self.cancel_queue is not None:
             payload = (drain_queue(self.input_queue), drain_queue(self.cancel_queue))
 
-        # Cheap CPU/gloo presence check: skip the (pickled) object broadcast entirely when there is nothing to send.
-        presence = torch.tensor([len(payload[0]) + len(payload[1])], dtype=torch.int64)
-        self.distributed_helper.tp_broadcast_cpu_from_rank_0(presence)
-        if presence.item() == 0:
-            return
+        # Cheap CPU-only comm to know if there is a payload to broadcast, to avoid pickling and broadcasting emptiness
+        semaphore = torch.tensor([len(payload[0]) + len(payload[1])], dtype=torch.int64)
+        self.distributed_helper.tp_broadcast_cpu_from_rank_0(semaphore)
 
+        # Early exit if there is no payload to broadcast
+        if semaphore.item() == 0:
+            return None
+        # Otherwise, broadcast and unpack the payload. No-op whe TP size is 1.
         new_states, cancellations = self.distributed_helper.tp_broadcast_object(payload)
 
         # All ranks apply the same updates in the same order.
@@ -609,7 +610,6 @@ class ContinuousBatchingManager:
         # If the manager is not being kept for next session, we clear the batch processor
         if not keep_for_next_session:
             self.batch_processor = None
-            self.distributed_helper.destroy_cpu_comm_group()
         # Otherwise, we keep the batch processor and cache the manager as a model attribute
         else:
             logger.info("Continuous batching manager will be kept for next session.")

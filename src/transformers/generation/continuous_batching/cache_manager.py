@@ -75,10 +75,11 @@ class BlockManager:
     it is in use.
     """
 
-    def __init__(self, num_blocks: int, block_size: int) -> None:
+    def __init__(self, num_blocks: int, block_size: int, tp_on: bool) -> None:
         """Initializes the block manager with a given number of blocks (num_blocks) of size (block_size)."""
         self.num_blocks = num_blocks
         self.block_size = block_size
+        self.tp_on = tp_on
         self._uninit_block_ids = deque(range(num_blocks))
         self._init_block_ids: dict[int, None] = {}  # effectively act as an ordered set
         self._hash_to_id: dict[int, int] = {}
@@ -277,15 +278,19 @@ class BlockManager:
 
     def compute_hash(self, parent_hash: int | None, tokens: list[int], group_id: int) -> int:
         """Computes the hash of a block identified by the (tokens) it contains, its (parent_hash) and the layer
-        (group_id) it belong to. If the block has no parent, the parent hash is None. Uses blake2b for a deterministic
-        64-bit digest that is stable across processes (unlike Python's salted built-in `hash`)."""
-        # NOTE: blake2b is ~10–20× slower than hash() here; consider gating by tp_size>1 or switching to xxhash.
-        h = hashlib.blake2b(digest_size=8)
-        if parent_hash is not None:
-            h.update(parent_hash.to_bytes(8, "little", signed=False))
-        h.update(array("i", tokens).tobytes())
-        h.update(group_id.to_bytes(4, "little", signed=False))
-        return int.from_bytes(h.digest(), "little", signed=False)
+        (group_id) it belong to. If the block has no parent, the parent hash is None."""
+        # If TP is on, we cannot use python `hash` because it depends on the process (it's per-process salted)
+        if self.tp_on:
+            h = hashlib.blake2b(digest_size=8)
+            if parent_hash is not None:
+                h.update(parent_hash.to_bytes(8, "little", signed=False))
+            h.update(array("i", tokens).tobytes())
+            h.update(group_id.to_bytes(4, "little", signed=False))
+            hash_ = int.from_bytes(h.digest(), "little", signed=False)
+        # Otherwise, use `hash`
+        else:
+            hash_ = hash((parent_hash, tuple(tokens), group_id))
+        return hash_
 
 
 class CacheAllocator(ABC):

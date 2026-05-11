@@ -278,7 +278,7 @@ class PagedAttentionCache:
 
         # We only use prefix sharing if the whole model has only full attention layers and block sharing is allowed
         self.use_prefix_sharing = self.allow_block_sharing and group_types == ["full_attention"]
-        self._block_manager = BlockManager(num_blocks, self.block_size)
+        self._block_manager = BlockManager(num_blocks, self.block_size, tp_on=tp_size > 1)
         self._total_prefix_length: int = 0  # a counter to measure the impact of prefix sharing, also used in tests
 
         # For block table support, we lazy init the name of the block table key
