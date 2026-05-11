@@ -31,9 +31,8 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, loggi
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..auto.modeling_auto import AutoModel
 from ..gemma3.modeling_gemma3 import Gemma3ForSequenceClassification
-from ..llava_next_video.modeling_llava_next_video import LlavaNextVideoPreTrainedModel
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor, Qwen2VLProcessorKwargs
-from ..video_llama_3.modeling_video_llama_3 import VideoLlama3Model
+from ..video_llama_3.modeling_video_llama_3 import VideoLlama3Model, VideoLlama3PreTrainedModel
 
 
 logger = logging.get_logger(__name__)
@@ -129,7 +128,7 @@ class HCXVisionV2Processor(Qwen2VLProcessor):
 
 
 @auto_docstring
-class HCXVisionV2PreTrainedModel(LlavaNextVideoPreTrainedModel):
+class HCXVisionV2PreTrainedModel(VideoLlama3PreTrainedModel):
     config: HCXVisionV2Config
     input_modalities = ("image", "video", "text")
     _no_split_modules = ["HyperCLOVAXDecoderLayer"]
@@ -138,7 +137,6 @@ class HCXVisionV2PreTrainedModel(LlavaNextVideoPreTrainedModel):
         "attentions": "HyperCLOVAXAttention",
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
 

@@ -18,8 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
-
 import torch
 from torch import nn
 
@@ -43,6 +41,51 @@ from .configuration_hyperclovax_vision_v2 import HCXVisionV2Config
 logger = logging.get_logger(__name__)
 
 
+class HCXVisionV2VisionRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
+    def __init__(self, dim: int, theta: float = 10000.0) -> None:
+        super().__init__()
+        self.dim = dim
+        self.theta = theta
+        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+
+    def forward(self, grid_thw, merge_sizes) -> tuple[torch.Tensor, torch.Tensor]:
+        pos_ids = []
+        for (t, h, w), merge_size in zip(grid_thw, merge_sizes):
+            hpos_ids = torch.arange(h).unsqueeze(1).expand(-1, w)
+            hpos_ids = hpos_ids.reshape(
+                h // merge_size,
+                merge_size,
+                w // merge_size,
+                merge_size,
+            )
+            hpos_ids = hpos_ids.permute(0, 2, 1, 3)
+            hpos_ids = hpos_ids.flatten()
+
+            wpos_ids = torch.arange(w).unsqueeze(0).expand(h, -1)
+            wpos_ids = wpos_ids.reshape(
+                h // merge_size,
+                merge_size,
+                w // merge_size,
+                merge_size,
+            )
+            wpos_ids = wpos_ids.permute(0, 2, 1, 3)
+            wpos_ids = wpos_ids.flatten()
+            pos_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
+
+        pos_ids = torch.cat(pos_ids, dim=0)
+        max_grid_thw = grid_thw[:, 1:].max()
+
+        seq = torch.arange(max_grid_thw, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        rotary_pos_emb_full = torch.outer(seq, self.inv_freq)
+        rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
+        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
+
+        return (emb.cos(), emb.sin())
+
+
 @auto_docstring
 class HCXVisionV2PreTrainedModel(PreTrainedModel):
     config: HCXVisionV2Config
@@ -51,24 +94,21 @@ class HCXVisionV2PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["HyperCLOVAXDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
-
     _supports_flash_attn = True
     _supports_sdpa = True
 
     _can_compile_fullgraph = True
-    _supports_flex_attn = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": "HyperCLOVAXDecoderLayer",
         "attentions": "HyperCLOVAXAttention",
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, HCXVisionV2Model):
-            embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
-            init.normal_(module.image_newline, mean=0.0, std=embed_std)
+        if isinstance(module, HCXVisionV2VisionRotaryEmbedding):
+            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
 
 
 @auto_docstring
