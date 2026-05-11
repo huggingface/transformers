@@ -130,18 +130,23 @@ model = AutoModelForImageTextToText.from_pretrained(
 
 Customize or create new attention functions by adding them to the attention registry with [`AttentionInterface.register`]. Models use these functions through the `attn_implementation` argument.
 
-This example customizes the attention function to print a statement for each layer.
+> [!WARNING]  
+> Register a matching attention mask function when you register a custom attention function. If the custom `attn_implementation` name is not registered in [`AttentionMaskInterface`], Transformers skips mask creation and passes `attention_mask=None` to the attention layers. Your attention function must handle causal, padding, packing, or sliding-window constraints itself, or those constraints can be silently dropped.
+
+This example customizes the attention function to print a statement for each layer. It keeps the mask in the original implementation by registering `masking_utils.sdpa_mask` as the attention mask function.
 
 ```python
 import torch
-from transformers import AutoModelForCausalLM, AttentionInterface
+from transformers import AutoModelForCausalLM, AttentionInterface, AttentionMaskInterface
 from transformers.integrations.sdpa_attention import sdpa_attention_forward
+from transformers.masking_utils import sdpa_mask
 
 def my_new_sdpa(*args, **kwargs):
     print("I just entered the attention computation")
     return sdpa_attention_forward(*args, **kwargs)
 
 AttentionInterface.register("my_new_sdpa", my_new_sdpa)
+AttentionMaskInterface.register("my_new_sdpa", sdpa_mask)  # must have the same name as the registered attention function
 
 model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.2-1B", attn_implementation="my_new_sdpa")
 model(torch.ones(1, 5, dtype=int))
@@ -151,8 +156,9 @@ You can also add new arguments to the attention function. Models supporting [`At
 
 ```python
 import torch
-from transformers import AutoModelForCausalLM, AttentionInterface
+from transformers import AutoModelForCausalLM, AttentionInterface, AttentionMaskInterface
 from transformers.integrations.sdpa_attention import sdpa_attention_forward
+from transformers.masking_utils import sdpa_mask
 
 def custom_attention(
     module: torch.nn.Module,  # required arg
@@ -168,6 +174,7 @@ def custom_attention(
     return attn_output, attn_weights  # attn_weights are optional here
 
 AttentionInterface.register("custom", custom_attention)
+AttentionMaskInterface.register("custom", sdpa_mask)  # to leave the existing mask untouched
 
 model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation="custom")
 model(torch.ones(1, 5, dtype=int), a_new_kwargs=..., another_new_kwargs=...)
