@@ -1168,18 +1168,20 @@ class TestConversionMapping(unittest.TestCase):
             "_tst_mtype", [WeightRenaming(r"^type_key", "type_renamed")], overwrite=True
         )
 
-        def make_mock(class_name):
-            m = type(class_name, (PreTrainedModel,), {})(PretrainedConfig(model_type="_tst_mtype"))
-            return m
+        class _TstCls(PreTrainedModel): ...
+
+        class _TstOther(PreTrainedModel): ...
 
         # A module whose class name has a registry entry → class entry wins.
-        transforms = get_model_conversion_mapping(make_mock("_TstCls"), add_legacy=False)
+        transforms = get_model_conversion_mapping(_TstCls(PretrainedConfig(model_type="_tst_mtype")), add_legacy=False)
         patterns = [t.source_patterns for t in transforms]
         self.assertIn(["^cls_key"], patterns)
         self.assertNotIn(["^type_key"], patterns)
 
         # A module with no class entry falls through to the model_type entry.
-        transforms = get_model_conversion_mapping(make_mock("_TstOther"), add_legacy=False)
+        transforms = get_model_conversion_mapping(
+            _TstOther(PretrainedConfig(model_type="_tst_mtype")), add_legacy=False
+        )
         patterns = [t.source_patterns for t in transforms]
         self.assertIn(["^type_key"], patterns)
         self.assertNotIn(["^cls_key"], patterns)
