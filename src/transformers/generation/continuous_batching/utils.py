@@ -233,39 +233,31 @@ class DistributedHelper:
 
     def __init__(self, device_mesh: DeviceMesh | None) -> None:
         self.device_mesh = device_mesh
-
-        # Check if distributed is on
         self.dist_on = dist.is_available() and dist.is_initialized()
 
-        # Get global attributes
-        if self.dist_on:
-            self.global_rank = dist.get_rank()
-            self.world_size = dist.get_world_size()
-        else:
-            self.global_rank = 0
-            self.world_size = 1
+        # These attributes depend on the global dist state
+        self.global_rank = dist.get_rank() if self.dist_on else 0
+        self.world_size = dist.get_world_size() if self.dist_on else 1
 
-        # Get TP attributes. If TP is on, the TP setup is stored in the device mesh
-        if self.dist_on and device_mesh is not None:
-            self.tp_size = device_mesh.size()
-            self.tp_group = device_mesh.get_group()
-            # The src for any TP-scoped collective must be the global rank of TP-rank 0 of THIS rank's TP group.
-            # In DP x TP, that is not necessarily global rank 0.
+        # These attributes depend on the TP state
+        if self.dist_on and self.device_mesh is not None:
+            self.tp_size = self.device_mesh.size()
+            self.tp_group = self.device_mesh.get_group()
             self.tp_root_global_rank = dist.get_global_rank(self.tp_group, 0)
-            self.tp_local_rank = device_mesh.get_local_rank()
-            # Dedicated CPU-only (gloo) process group for requests broadcasts
-            self.ingress_group = dist.new_group(ranks=dist.get_process_group_ranks(self.tp_group), backend="gloo")
+            self.tp_local_rank = self.device_mesh.get_local_rank()
+            self.is_tp_driver = self.tp_local_rank == 0
+            # If TP is on, we create a dedicate CPU group
+            tp_ranks = dist.get_process_group_ranks(self.tp_group)
+            self.ingress_group = dist.new_group(ranks=tp_ranks, backend="gloo")
         else:
             self.tp_size = 1
             self.tp_group = None
             self.tp_root_global_rank = 0
             self.tp_local_rank = 0
+            self.is_tp_driver = False
             self.ingress_group = None
 
-        # The TP-driver is the rank that owns the request queue and the scheduler decisions inside its TP group.
-        self.is_tp_driver = self.tp_local_rank == 0
-
-        # Get DP attributes
+        # These attributes depend on the DP state
         self.dp_rank = self.global_rank // self.tp_size
         self.dp_size = self.world_size // self.tp_size
 
@@ -273,7 +265,7 @@ class DistributedHelper:
         """Destroys the ingress group."""
         if self.ingress_group is not None:
             dist.destroy_process_group(self.ingress_group)
-        self.ingress_group = None
+            self.ingress_group = None
 
     def tp_broadcast_from_rank_0(self, value: torch.Tensor) -> torch.Tensor:
         """Inside each TP group, broadcasts the given value from rank 0 to all other ranks."""
@@ -293,7 +285,7 @@ class DistributedHelper:
             dist.all_reduce(value, op=dist.ReduceOp.MIN, group=self.tp_group)
         return value
 
-    def tp_broadcast_object(self, obj: T) -> T:
+    def tp_broadcast_object(self, obj):
         """Inside each TP group, broadcasts an arbitrary picklable Python object from TP-rank 0 to all other ranks.
         Used to keep request ingress and cancellations consistent across TP workers without requiring all ranks to
         receive the same external request stream. Uses a dedicated CPU (gloo) `ingress_group` for broadcast."""
