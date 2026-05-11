@@ -2652,11 +2652,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             # Call .keys() explicitly for compatibility with TensorDict and other Mapping subclasses
             encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0].keys()}
 
-        # `_pad` assumes 1D-per-sample inputs. A higher-rank per-sample `attention_mask`
-        # (e.g. a 4D causal mask of shape (batch, 1, q_len, kv_len)) is left untouched
-        # by the padding logic, but routing it through `to_py_obj` + `torch.tensor` on
-        # a deeply nested Python list dominates the runtime. Set it aside and stack it
-        # directly at the end of the batched path.
+        # Pop 4D nested-list attention masks and stack 
+        # them at the end to avoid slow `to_py_obj`
         preserved_attention_mask = None
         if "attention_mask" in encoded_inputs:
             mask = encoded_inputs["attention_mask"]
