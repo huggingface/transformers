@@ -1035,12 +1035,12 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
 ############################
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Qwen2.5OmniThinker causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Qwen2_5OmniThinkerCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -1993,12 +1993,12 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
 ############################
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Qwen2.5OmniTalker causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Qwen2_5OmniTalkerCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -3814,6 +3814,11 @@ __all__ = [
     "Qwen2_5OmniThinkerConfig",
     "Qwen2_5OmniTalkerConfig",
     "Qwen2_5OmniToken2WavConfig",
+    "Qwen2_5OmniAudioEncoderConfig",
+    "Qwen2_5OmniBigVGANConfig",
+    "Qwen2_5OmniDiTConfig",
+    "Qwen2_5OmniTextConfig",
+    "Qwen2_5OmniVisionEncoderConfig",
     "Qwen2_5OmniForConditionalGeneration",
     "Qwen2_5OmniThinkerTextModel",
     "Qwen2_5OmniThinkerForConditionalGeneration",

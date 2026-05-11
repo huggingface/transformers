@@ -17,8 +17,7 @@ rendered properly in your Markdown viewer.
 
 <div style="float: right;">
  <div class="flex flex-wrap space-x-1">
-  <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+  <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
  </div>
 </div>
 
@@ -44,10 +43,10 @@ The examples below demonstrate how to predict the `<mask>` token with [`Pipeline
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
 
-pipeline = pipeline("fill-mask", model="camembert-base", dtype=torch.float16, device=0)
+
+pipeline = pipeline("fill-mask", model="camembert-base", device=0)
 pipeline("Le camembert est un délicieux fromage <mask>.")
 ```
 
@@ -57,10 +56,12 @@ pipeline("Le camembert est un délicieux fromage <mask>.")
 
 ```python
 import torch
-from transformers import AutoTokenizer, AutoModelForMaskedLM
+
+from transformers import AutoModelForMaskedLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("camembert-base")
-model = AutoModelForMaskedLM.from_pretrained("camembert-base", dtype="auto", device_map="auto", attn_implementation="sdpa")
+model = AutoModelForMaskedLM.from_pretrained("camembert-base", device_map="auto", attn_implementation="sdpa")
 inputs = tokenizer("Le camembert est un délicieux fromage <mask>.", return_tensors="pt").to(model.device)
 
 with torch.no_grad():
@@ -83,8 +84,10 @@ Quantization reduces the memory burden of large models by representing weights i
 The example below uses [bitsandbytes](../quantization/bitsandbytes) quantization to quantize the weights to 8-bits.
 
 ```python
-from transformers import AutoTokenizer, AutoModelForMaskedLM, BitsAndBytesConfig
 import torch
+
+from transformers import AutoModelForMaskedLM, AutoTokenizer, BitsAndBytesConfig
+
 
 quant_config = BitsAndBytesConfig(load_in_8bit=True)
 model = AutoModelForMaskedLM.from_pretrained(

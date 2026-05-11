@@ -17,9 +17,6 @@ rendered properly in your Markdown viewer.
 
 # X-MOD
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -51,7 +48,8 @@ There are two ways to specify the input language:
 ```python
 from transformers import XmodModel
 
-model = XmodModel.from_pretrained("facebook/xmod-base")
+
+model = XmodModel.from_pretrained("facebook/xmod-base", device_map="auto")
 model.set_default_language("en_XX")
 ```
 
@@ -59,6 +57,7 @@ model.set_default_language("en_XX")
 
 ```python
 import torch
+
 
 input_ids = torch.tensor(
     [

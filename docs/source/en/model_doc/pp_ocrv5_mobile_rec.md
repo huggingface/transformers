@@ -17,9 +17,6 @@ rendered properly in your Markdown viewer.
 
 # PP-OCRv5_mobile_rec
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -38,10 +35,12 @@ The example below demonstrates how to detect text with PP-OCRv5_mobile_rec using
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModelForTextRecognition
+
 
 model_path="PaddlePaddle/PP-OCRv5_mobile_rec_safetensors"
 model = AutoModelForTextRecognition.from_pretrained(model_path, device_map="auto")
@@ -55,7 +54,6 @@ results = image_processor.post_process_text_recognition(outputs)
 
 for result in results:
     print(result)
-
 ```
 
 </hfoption>
@@ -68,10 +66,12 @@ Here is how you can do it with PP-OCRv5_mobile_rec using the [`AutoModel`]:
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModelForTextRecognition
+
 
 model_path = "PaddlePaddle/PP-OCRv5_mobile_rec_safetensors"
 model = AutoModelForTextRecognition.from_pretrained(model_path, device_map="auto")

@@ -18,20 +18,35 @@
       title: Customizing models
     - local: monkey_patching
       title: Monkey patching
+    - local: fusion_mapping
+      title: Fusion mapping
     - local: how_to_hack_models
       title: Customizing model components
     - local: model_sharing
       title: Sharing
     - local: serialization
       title: Exporting to production
-    - local: modular_transformers
-      title: Contributing a new model to Transformers
-    - local: add_new_model
-      title: Legacy model contribution
-    - local: auto_docstring
-      title: Documenting a model
-    - local: model_output_tracing
-      title: Tracing model intermediate outputs
+    - isExpanded: false
+      sections:
+      - local: contributing
+        title: Contribute to Transformers
+      - local: modular_transformers
+        title: Add a model with modular transformers
+      - local: add_vision_processing_components
+        title: Add vision processing components
+      - local: modeling_rules
+        title: Model structure rules
+      - local: model_output_tracing
+        title: Tracing model intermediate outputs
+      - local: auto_docstring
+        title: Auto-generating docstrings
+      - local: testing
+        title: Writing model tests
+      - local: pr_checks
+        title: Pull request checks
+      - local: add_new_model
+        title: Legacy model contribution
+      title: Contribute
     title: Models
   - isExpanded: false
     sections:
@@ -420,17 +435,6 @@
   title: Resources
 - isExpanded: false
   sections:
-  - local: contributing
-    title: Contribute to Transformers
-  - local: testing
-    title: Transformers model tests
-  - local: modeling_rules
-    title: Model structure rules
-  - local: pr_checks
-    title: Pull request checks
-  title: Contribute
-- isExpanded: false
-  sections:
   - sections:
     - local: model_doc/auto
       title: Auto Classes
@@ -553,6 +557,8 @@
         title: DeepSeek-V2
       - local: model_doc/deepseek_v3
         title: DeepSeek-V3
+      - local: model_doc/deepseek_v4
+        title: DeepSeek-V4
       - local: model_doc/dialogpt
         title: DialoGPT
       - local: model_doc/diffllama
@@ -581,6 +587,8 @@
         title: EuroBERT
       - local: model_doc/exaone4
         title: EXAONE-4.0
+      - local: model_doc/exaone4_5
+        title: EXAONE-4.5
       - local: model_doc/exaone_moe
         title: EXAONE-MoE
       - local: model_doc/falcon
@@ -657,6 +665,10 @@
         title: HunYuanDenseV1
       - local: model_doc/hunyuan_v1_moe
         title: HunYuanMoEV1
+      - local: model_doc/hyperclovax
+        title: HyperCLOVAX
+      - local: model_doc/hy_v3
+        title: HYV3
       - local: model_doc/ibert
         title: I-BERT
       - local: model_doc/jais2
@@ -667,6 +679,8 @@
         title: JetMoe
       - local: model_doc/jina_embeddings_v3
         title: jina_embeddings_v3
+      - local: model_doc/laguna
+        title: Laguna
       - local: model_doc/led
         title: LED
       - local: model_doc/lfm2
@@ -763,6 +777,8 @@
         title: OLMoE
       - local: model_doc/olmo_hybrid
         title: OlmoHybrid
+      - local: model_doc/openai_privacy_filter
+        title: OpenAI Privacy Filter
       - local: model_doc/opt
         title: OPT
       - local: model_doc/pegasus
@@ -891,6 +907,8 @@
         title: DAB-DETR
       - local: model_doc/deformable_detr
         title: Deformable DETR
+      - local: model_doc/deimv2
+        title: DEIMv2
       - local: model_doc/deit
         title: DeiT
       - local: model_doc/depth_anything
@@ -967,6 +985,8 @@
         title: RegNet
       - local: model_doc/resnet
         title: ResNet
+      - local: model_doc/rf_detr
+        title: RF-DETR
       - local: model_doc/rt_detr
         title: RT-DETR
       - local: model_doc/rt_detr_v2
@@ -1047,6 +1067,8 @@
         title: GLM-ASR
       - local: model_doc/granite_speech
         title: GraniteSpeech
+      - local: model_doc/granite_speech_plus
+        title: GraniteSpeechPlus
       - local: model_doc/higgs_audio_v2
         title: Higgs Audio V2
       - local: model_doc/higgs_audio_v2_tokenizer
@@ -1201,6 +1223,8 @@
         title: FLAVA
       - local: model_doc/florence2
         title: Florence2
+      - local: model_doc/gemma4_assistant
+        title: Gemma 4 Assistant
       - local: model_doc/gemma3
         title: Gemma3
       - local: model_doc/gemma3n
@@ -1219,6 +1243,8 @@
         title: GlmOcr
       - local: model_doc/got_ocr2
         title: GOT-OCR2
+      - local: model_doc/granite4_vision
+        title: Granite4Vision
       - local: model_doc/granitevision
         title: GraniteVision
       - local: model_doc/grounding-dino
@@ -1277,6 +1303,8 @@
         title: MetaCLIP 2
       - local: model_doc/mgp-str
         title: MGP-STR
+      - local: model_doc/minicpmv4_6
+        title: MiniCPM-V
       - local: model_doc/mistral3
         title: Mistral3
       - local: model_doc/mistral4
@@ -1321,6 +1349,8 @@
         title: PP-DocLayoutV2
       - local: model_doc/pp_doclayout_v3
         title: PP-DocLayoutV3
+      - local: model_doc/pp_formulanet
+        title: PP-FormulaNet
       - local: model_doc/pp_ocrv5_mobile_det
         title: PP-OCRv5_mobile_det
       - local: model_doc/pp_ocrv5_mobile_rec
@@ -1335,6 +1365,8 @@
         title: PPLCNet
       - local: model_doc/pp_lcnet_v3
         title: PPLCNetV3
+      - local: model_doc/qianfan_ocr
+        title: QianfanOCR
       - local: model_doc/qwen2_5_omni
         title: Qwen2.5-Omni
       - local: model_doc/qwen2_5_vl
@@ -1353,12 +1385,16 @@
         title: SAM3
       - local: model_doc/sam3_video
         title: SAM3 Video
+      - local: model_doc/sam3_lite_text
+        title: SAM3-LiteText
       - local: model_doc/shieldgemma2
         title: ShieldGemma2
       - local: model_doc/siglip
         title: SigLIP
       - local: model_doc/siglip2
         title: SigLIP2
+      - local: model_doc/slanet
+        title: SLANet
       - local: model_doc/slanext
         title: SLANeXt
       - local: model_doc/smollm3

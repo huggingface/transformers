@@ -100,12 +100,12 @@ class AyaVisionPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for AyaVision causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class AyaVisionCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -130,12 +130,12 @@ class AyaVisionCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for AyaVision outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class AyaVisionModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
