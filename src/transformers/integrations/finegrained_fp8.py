@@ -339,7 +339,12 @@ class FP8GroupedLinear(nn.Module):
         self.activation_scheme = activation_scheme
         self.has_bias = has_bias
 
-        if self.activation_scheme not in {"dynamic", "static"}:
+        if self.activation_scheme == "static":
+            raise NotImplementedError(
+                "FP8GroupedLinear does not support activation_scheme='static'. "
+                "Use activation_scheme='dynamic'."
+            )
+        if self.activation_scheme != "dynamic":
             raise NotImplementedError(f"Unsupported activation scheme: {self.activation_scheme}")
 
         self.weight = nn.Parameter(torch.empty(out_features, in_features_per_group, dtype=dtype))
@@ -350,11 +355,7 @@ class FP8GroupedLinear(nn.Module):
             scale_out = (out_features + block_size[0] - 1) // block_size[0]
             scale_in = (in_features_per_group + block_size[1] - 1) // block_size[1]
             self.weight_scale_inv = nn.Parameter(torch.empty(scale_out, scale_in, dtype=torch.float32))
-
-        if self.activation_scheme == "static":
-            self.activation_scale = nn.Parameter(torch.tensor(1.0, dtype=torch.float32))
-        else:
-            self.register_parameter("activation_scale", None)
+        self.register_parameter("activation_scale", None)
 
         if self.has_bias:
             self.bias = nn.Parameter(torch.empty(out_features))
@@ -379,49 +380,21 @@ class FP8GroupedLinear(nn.Module):
         # (out, K) -> (n_groups, N_per_group, K)
         wg = w.view(self.n_groups, out_per_group, hidden_dim)
         finegrained_fp8 = _load_finegrained_fp8_kernel()
-        if self.activation_scheme == "dynamic":
-            # (scale_out, scale_in) -> (n_groups, scale_out_per_group, scale_in)
-            scale_out_per_group = s.shape[0] // self.n_groups
-            sg = s.view(self.n_groups, scale_out_per_group, s.shape[1])
+        # (scale_out, scale_in) -> (n_groups, scale_out_per_group, scale_in)
+        scale_out_per_group = s.shape[0] // self.n_groups
+        sg = s.view(self.n_groups, scale_out_per_group, s.shape[1])
 
-            tokens_per_expert = torch.full((self.n_groups,), m, device=x.device, dtype=torch.int32)
-            offsets = torch.arange(m, m * (self.n_groups + 1), m, device=x.device, dtype=torch.int32)
+        tokens_per_expert = torch.full((self.n_groups,), m, device=x.device, dtype=torch.int32)
+        offsets = torch.arange(m, m * (self.n_groups + 1), m, device=x.device, dtype=torch.int32)
 
-            y = finegrained_fp8.grouped_fp8_matmul(
-                xg,
-                wg,
-                sg,
-                tokens_per_expert=tokens_per_expert,
-                block_size=self.block_size,
-                offsets=offsets,
-            )  # (n_groups * M, N_per_group)
-        else:
-            # Static mode: grouped_fp8_matmul has no explicit activation scale input.
-            # Quantize activations once with `activation_scale`, then run per-group matmul.
-            scale = self.activation_scale.to(torch.float32)
-            xg_3d = xg.view(self.n_groups, m, hidden_dim)
-            qxg_3d = (xg_3d / scale).clamp(min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
-
-            if s.ndim == 0:
-                sg = [s] * self.n_groups
-            else:
-                scale_out_per_group = s.shape[0] // self.n_groups
-                sg = s.view(self.n_groups, scale_out_per_group, s.shape[1])
-
-            y_chunks = []
-            for group_idx in range(self.n_groups):
-                group_scale = sg[group_idx] if isinstance(sg, torch.Tensor) else sg[group_idx]
-                y_chunks.append(
-                    finegrained_fp8.fp8_matmul(
-                        qxg_3d[group_idx],
-                        wg[group_idx],
-                        scale,
-                        group_scale,
-                        self.block_size,
-                        x.dtype,
-                    )
-                )
-            y = torch.stack(y_chunks, dim=0).reshape(self.n_groups * m, out_per_group)
+        y = finegrained_fp8.grouped_fp8_matmul(
+            xg,
+            wg,
+            sg,
+            tokens_per_expert=tokens_per_expert,
+            block_size=self.block_size,
+            offsets=offsets,
+        )  # (n_groups * M, N_per_group)
 
         y = y.reshape(self.n_groups, m, out_per_group).transpose(0, 1)
         return y.reshape(*input_shape, self.n_groups, out_per_group)
