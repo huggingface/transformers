@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import copy
-import unittest
 from inspect import signature
 
 from .multimodal_tester import MultiModalModelTest, MultiModalModelTester
