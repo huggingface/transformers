@@ -35,6 +35,7 @@ import torch
 from ..utils import logging
 from ..utils.import_utils import get_cuda_runtime_version, is_kernels_available, resolve_internal_import
 from .hub_kernels import lazy_load_kernel
+from .tensor_parallel import to_local
 
 
 logger = logging.get_logger(__name__)
@@ -149,7 +150,7 @@ def _ceil_to_ue8m0(sf: torch.Tensor) -> torch.Tensor:
     return (int_view + ((1 << 23) - 1)).bitwise_and_(~((1 << 23) - 1)).view(torch.float)
 
 
-def _coerce_sf_for_kernel(sf: torch.Tensor) -> torch.Tensor:
+def _coerce_sf_for_kernel(sf: torch.Tensor, expected_mn: int | None = None) -> torch.Tensor:
     """Lay out `sf` as DeepGEMM's `check_sf_layout` expects: MN-major
     (`stride(-2) == 1`) and TMA-aligned (`stride(-1) == align(mn, 16/esize)`).
 
@@ -158,8 +159,17 @@ def _coerce_sf_for_kernel(sf: torch.Tensor) -> torch.Tensor:
       - `float32`: per-token / per-block SFs from `per_token_cast_to_fp8` or
         on-disk weights — round to UE8M0 on SM100 (see `_ceil_to_ue8m0`).
       - `int32`: already-packed UE8M0 — pass through.
+
+    When `expected_mn` is set and the SF's M-dim is smaller (block-quantized
+    UE8M0, e.g. DSv4-Flash compressor weights with `(N/128, K/128)` SFs), we
+    repeat the SF on the M-axis to per-row before packing — the `(INT, 1, gran_k)`
+    DeepGEMM kernel branch is the only UE8M0 path on SM100; for `gran_mn > 1`
+    the kernel only handles FP32 SFs and would otherwise reject our INT SF here.
     """
     if sf.dtype == torch.float8_e8m0fnu:
+        if expected_mn is not None and sf.size(-2) < expected_mn:
+            gran_mn = expected_mn // sf.size(-2)
+            sf = sf.repeat_interleave(gran_mn, dim=-2)
         sf = sf.contiguous().view(torch.int32)
     elif sf.dtype == torch.float32 and torch.cuda.get_device_capability(sf.device)[0] >= 10:
         sf = _ceil_to_ue8m0(sf)
@@ -294,8 +304,14 @@ def _dispatch_routed_input(
     sentinel_mask = (expert_ids_g >= num_experts).unsqueeze(-1)
     expert_ids_g.clamp_(max=num_experts - 1)
     return (
-        sorted_hidden_states_g, sample_weights_g, expert_ids_g, sentinel_mask, perm,
-        sorted_to_padded, grouped_layout, total_padded_rows,
+        sorted_hidden_states_g,
+        sample_weights_g,
+        expert_ids_g,
+        sentinel_mask,
+        perm,
+        sorted_to_padded,
+        grouped_layout,
+        total_padded_rows,
     )
 
 
@@ -352,8 +368,8 @@ def deepgemm_fp8_fp4_linear(
     # (the default `(1, 1, 128)` mismatches FP4's gran_k=32). Float-SF leaves it None.
     sf_recipe = (1, 1, cast_kwargs["gran_k"]) if cast_kwargs.get("use_packed_ue8m0") else None
     deepgemm.fp8_fp4_matmul(
-        (qinput_2d, _coerce_sf_for_kernel(scale_2d)),
-        (weight, _coerce_sf_for_kernel(weight_scale_inv)),
+        (qinput_2d, _coerce_sf_for_kernel(scale_2d, expected_mn=qinput_2d.size(0))),
+        (weight, _coerce_sf_for_kernel(weight_scale_inv, expected_mn=weight.size(0))),
         output,
         recipe=sf_recipe,
     )
@@ -382,8 +398,14 @@ def deepgemm_bf16_experts_forward(
 
     use_psum_layout = torch.cuda.get_device_capability(device)[0] >= 10
     (
-        sorted_hidden, sorted_weights, expert_ids_g, sentinel_mask, perm,
-        sorted_to_padded, grouped_layout, total_padded_rows,
+        sorted_hidden,
+        sorted_weights,
+        expert_ids_g,
+        sentinel_mask,
+        perm,
+        sorted_to_padded,
+        grouped_layout,
+        total_padded_rows,
     ) = _dispatch_routed_input(hidden_states, top_k_index, top_k_weights, self.num_experts, use_psum_layout)
 
     # Up projection.
@@ -439,8 +461,14 @@ def deepgemm_fp8_fp4_experts_forward(
 
     use_psum_layout = torch.cuda.get_device_capability(device)[0] >= 10
     (
-        sorted_hidden, sorted_weights, _expert_ids_g, sentinel_mask, perm,
-        sorted_to_padded, grouped_layout, total_padded_rows,
+        sorted_hidden,
+        sorted_weights,
+        _expert_ids_g,
+        sentinel_mask,
+        perm,
+        sorted_to_padded,
+        grouped_layout,
+        total_padded_rows,
     ) = _dispatch_routed_input(hidden_states, top_k_index, top_k_weights, self.num_experts, use_psum_layout)
     sf_recipe = (1, 1, cast_kwargs["gran_k"]) if cast_kwargs.get("use_packed_ue8m0") else None
 
@@ -449,23 +477,9 @@ def deepgemm_fp8_fp4_experts_forward(
     act_fp8 = _pad_for_deepgemm(act_fp8, sorted_to_padded, total_padded_rows)
     act_scales = _pad_for_deepgemm(act_scales, sorted_to_padded, total_padded_rows)
     proj_out = torch.empty(total_padded_rows, w_up.shape[1], device=device, dtype=torch.bfloat16)
-    a_sf = _coerce_sf_for_kernel(act_scales)
-    b_sf = _coerce_sf_for_kernel(ws_up)
-    import os as _os
-    if _os.environ.get("RANK", "0") == "0" and not getattr(self, "_dg_shape_logged", False):
-        print(
-            f"[deepgemm.fp8_fp4] recipe={sf_recipe} use_psum={use_psum_layout}\n"
-            f"  a_fp8.shape={tuple(act_fp8.shape)} dtype={act_fp8.dtype}\n"
-            f"  a_sf.shape={tuple(a_sf.shape)} stride={tuple(a_sf.stride())} dtype={a_sf.dtype}\n"
-            f"  b.shape={tuple(w_up.shape)} dtype={w_up.dtype}\n"
-            f"  b_sf.shape={tuple(b_sf.shape)} stride={tuple(b_sf.stride())} dtype={b_sf.dtype}\n"
-            f"  raw ws_up.shape={tuple(ws_up.shape)} dtype={ws_up.dtype}",
-            flush=True,
-        )
-        self._dg_shape_logged = True
     deepgemm.grouped_fp8_fp4_matmul(
-        (act_fp8, a_sf),
-        (w_up, b_sf),
+        (act_fp8, _coerce_sf_for_kernel(act_scales, expected_mn=total_padded_rows)),
+        (w_up, _coerce_sf_for_kernel(ws_up, expected_mn=w_up.size(-2))),
         proj_out,
         grouped_layout,
         recipe=sf_recipe,
@@ -477,8 +491,8 @@ def deepgemm_fp8_fp4_experts_forward(
     proj_fp8, proj_scales = deepgemm.per_token_cast_to_fp8(proj_out, **cast_kwargs)
     out = torch.empty(total_padded_rows, hidden_dim, device=device, dtype=torch.bfloat16)
     deepgemm.grouped_fp8_fp4_matmul(
-        (proj_fp8, _coerce_sf_for_kernel(proj_scales)),
-        (self.down_proj, _coerce_sf_for_kernel(self.down_proj_scale_inv)),
+        (proj_fp8, _coerce_sf_for_kernel(proj_scales, expected_mn=total_padded_rows)),
+        (self.down_proj, _coerce_sf_for_kernel(self.down_proj_scale_inv, expected_mn=self.down_proj.size(-2))),
         out,
         grouped_layout,
         recipe=sf_recipe,
@@ -496,6 +510,72 @@ def deepgemm_fp8_fp4_experts_forward(
         hidden_dim,
         hidden_states.dtype,
     )
+
+
+def _ue8m0_to_fp32(sf: torch.Tensor) -> torch.Tensor:
+    """Reinterpret a UE8M0 SF tensor as fp32 by placing each byte in the float32 exponent
+    field. Matches vllm's `_ue8m0_uint8_to_float`: byte b → 2**(b - 127). Equivalent to
+    `sf.float()` for byte values in [1, 254]; we replicate the bit-shift form so the
+    integration is byte-identical to vllm's known-good Mega MoE setup.
+    """
+    return (sf.contiguous().view(torch.uint8).to(torch.int32) << 23).view(torch.float32)
+
+
+def _megamoe_setup_weights(
+    self: torch.nn.Module,
+    deepgemm: DeepGEMM,
+    num_experts: int,
+    intermediate_hidden: int,
+    hidden_dim: int,
+) -> None:
+    """One-shot pack + permute of the L1/L2 weights into the Mega MoE UTCCP layout.
+
+    1. Cast UE8M0 SF to FP32 (bit-shift, byte-identical to vllm's path) and call
+       `transform_sf_into_required_layout(recipe=(1, 32), num_groups=E_local)` →
+       packed int32 in MN-major TMA-aligned layout.
+    2. Run `transform_weights_for_mega_moe`: interleaves gate/up on L1 and transposes
+       both SFs for UTCCP.
+    3. Stash the transformed `(weight, sf)` pairs as plain tensors on `self` (not
+       `nn.Parameter`s, mirroring vllm) and clear the originals.
+
+    Unwraps any `DTensor` wrappers FSDP2/EP may have placed around the loader-side
+    Parameters — the kernel takes raw pointers, mirroring `fp8_grouped_mm_experts_forward`'s
+    contract.
+    """
+    gate_up_sf_raw = to_local(self.gate_up_proj_scale_inv.data)
+    down_sf_raw = to_local(self.down_proj_scale_inv.data)
+    # FP4 weights ship as `torch.float4_e2m1fn_x2`; the mega kernel checks for raw
+    # int8 storage (and `_interleave_l1_weights` does `reshape`/`empty_like`/`copy_`,
+    # which is safest on a plain int8 view). Mirrors vllm's
+    # `self.w13_weight.data.view(torch.int8).contiguous()` pattern.
+    gate_up_w = to_local(self.gate_up_proj.data).view(torch.int8).contiguous()
+    down_w = to_local(self.down_proj.data).view(torch.int8).contiguous()
+
+    gate_up_sf = deepgemm.transform_sf_into_required_layout(
+        _ue8m0_to_fp32(gate_up_sf_raw),
+        gate_up_w.size(1),  # 2 * intermediate
+        hidden_dim,
+        recipe=(1, 32),
+        num_groups=num_experts,
+    )
+    down_sf = deepgemm.transform_sf_into_required_layout(
+        _ue8m0_to_fp32(down_sf_raw),
+        down_w.size(1),  # hidden
+        intermediate_hidden,
+        recipe=(1, 32),
+        num_groups=num_experts,
+    )
+    (gate_up, gate_up_sf), (down, down_sf) = deepgemm.transform_weights_for_mega_moe(
+        (gate_up_w, gate_up_sf),
+        (down_w, down_sf),
+    )
+    self.gate_up_proj = None
+    self.gate_up_proj_scale_inv = None
+    self.down_proj = None
+    self.down_proj_scale_inv = None
+    self._megamoe_l1 = (gate_up, gate_up_sf)
+    self._megamoe_l2 = (down, down_sf)
+    self._megamoe_transformed = True
 
 
 def deepgemm_fp8_fp4_megamoe_experts_forward(
@@ -526,20 +606,33 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
     if torch.cuda.get_device_capability(hidden_states.device)[0] < 10:
         raise RuntimeError("DeepGEMM Mega MoE requires SM100+ (Blackwell). Use the 'deepgemm' dispatch on Hopper.")
 
+    if process_group is None:
+        raise ValueError(
+            "DeepGEMM Mega MoE requires a `process_group` for the EP group. The TP wrapping "
+            "(MegaMoeExpertsParallel) supplies it automatically; pass it explicitly otherwise."
+        )
+
     deepgemm = _load_deepgemm_kernel()
     num_tokens, hidden_dim = hidden_states.size(0), hidden_states.size(-1)
     num_top_k = top_k_index.size(-1)
-    num_experts = self.gate_up_proj.size(0)
-    intermediate_hidden = self.gate_up_proj.size(1) // 2
+
+    # First-forward one-shot: cast UE8M0 SFs → packed-int32 layout and interleave/transpose
+    # the L1/L2 weights for UTCCP. The kernel's `_transpose_sf_for_utccp` asserts
+    # `sf.dtype == torch.int`, so the raw loader-side `scale_inv` (UE8M0 / uint8) cannot
+    # be passed directly. After setup, the raw `gate_up_proj` / `down_proj` attrs are
+    # cleared; we read the transformed pair from `_megamoe_l{1,2}`.
+    if not getattr(self, "_megamoe_transformed", False):
+        num_experts = self.gate_up_proj.size(0)
+        intermediate_hidden = self.gate_up_proj.size(1) // 2
+        _megamoe_setup_weights(self, deepgemm, num_experts, intermediate_hidden, hidden_dim)
+    gate_up_w, gate_up_sf = self._megamoe_l1
+    down_w, down_sf = self._megamoe_l2
+    num_experts = gate_up_w.size(0)
+    intermediate_hidden = gate_up_w.size(1) // 2
 
     # Lazily allocate the symmetric buffer (re-allocate if cached one is too small).
     if getattr(self, "symm_buffer", None) is None or self.symm_buffer.num_max_tokens_per_rank < num_tokens:
-        if process_group is None:
-            raise ValueError(
-                "DeepGEMM Mega MoE requires a `process_group` for the EP group. The TP wrapping "
-                "(MoeTensorParalellExperts) supplies it automatically; pass it explicitly otherwise."
-            )
-        # `gate_up_proj.size(0)` is per-rank after sharding; the buffer needs the GLOBAL count.
+        # `gate_up_w.size(0)` is per-rank after sharding; the buffer needs the GLOBAL count.
         self.symm_buffer = deepgemm.get_symm_buffer_for_mega_moe(
             process_group,
             hidden=hidden_dim,
@@ -558,8 +651,8 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
     y = torch.empty((num_tokens, hidden_dim), dtype=torch.bfloat16, device=hidden_states.device)
     deepgemm.fp8_fp4_mega_moe(
         y,
-        (self.gate_up_proj, self.gate_up_proj_scale_inv),
-        (self.down_proj, self.down_proj_scale_inv),
+        (gate_up_w, gate_up_sf),
+        (down_w, down_sf),
         self.symm_buffer,
         activation_clamp=getattr(getattr(self, "config", None), "swiglu_limit", None),
     )

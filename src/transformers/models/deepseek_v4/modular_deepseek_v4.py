@@ -890,11 +890,15 @@ class DeepseekV4Experts(MixtralExperts):
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         # Lives on the class (like gpt-oss's _apply_gate) so the grouped_mm / batched_mm
         # backends swapped in by `@use_experts_implementation` apply the same clamp +
-        # SiLU on top of their packed gate_up output instead of bypassing it.
-        gate, up = gate_up.chunk(2, dim=-1)
+        # SiLU on top of their packed gate_up output instead of bypassing it. Promote
+        # to fp32 for the clamp + SiLU + mul to mirror reference `Expert.forward`
+        # (`inference/model.py:596-606`); same shape as the shared-expert override in
+        # `DeepseekV4MLP`.
+        dtype = gate_up.dtype
+        gate, up = gate_up.float().chunk(2, dim=-1)
         gate = gate.clamp(max=self.limit)
         up = up.clamp(min=-self.limit, max=self.limit)
-        return self.act_fn(gate) * up
+        return (self.act_fn(gate) * up).to(dtype)
 
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor

@@ -33,6 +33,7 @@ from .deepgemm import (
 )
 from .hub_kernels import lazy_load_kernel
 from .moe import ExpertsInterface, use_experts_implementation
+from .tensor_parallel import to_local
 
 
 logger = logging.get_logger(__name__)
@@ -282,11 +283,8 @@ class FP8Linear(nn.Linear):
         if self.weight.element_size() > 1:
             return F.linear(input, self.weight, self.bias)
 
-        weight = self.weight
-        scale_inv = self.weight_scale_inv
-        if isinstance(weight, torch.distributed.tensor.DTensor):
-            weight = weight.to_local()
-            scale_inv = scale_inv.to_local()
+        weight = to_local(self.weight)
+        scale_inv = to_local(self.weight_scale_inv)
 
         return fp8_linear(
             input,
@@ -297,6 +295,72 @@ class FP8Linear(nn.Linear):
             output_dtype=input.dtype,
             bias=self.bias,
         )
+
+
+class FP8GroupedLinear(FP8Linear):
+    """FP8 drop-in for block-diagonal grouped linears.
+
+    The underlying nn.Linear stores a single `(n_groups * out_per_group, in_per_group)`
+    weight; logically that's `n_groups` independent `(out_per_group, in_per_group)`
+    sub-matrices, each consuming a disjoint slice of the input's last-but-one dim.
+    Forward expects input of shape `(..., n_groups, in_per_group)` and returns
+    `(..., n_groups, out_per_group)` — same contract as the vanilla bf16 grouped
+    linear it replaces.
+
+    DSv4-specific: the FP4 routed experts and UE8M0 SFs already mandate DeepGEMM, so
+    the FP8 path skips Triton entirely and runs `n_groups` sequential
+    `deepgemm_fp8_fp4_linear` calls (one per group). DeepGEMM's m-grouped contiguous
+    kernel would also work but requires padding each group's M-dim to 128, wasting
+    >7× compute at decode batch sizes — revisit if a large-batch path needs it.
+    """
+
+    def __init__(
+        self,
+        in_features_per_group: int,
+        out_features: int,
+        n_groups: int,
+        block_size: tuple[int, int] | None = None,
+        activation_scheme: str = "dynamic",
+        scale_fmt: str = "float",
+        has_bias: bool = False,
+        dtype=_FP8_DTYPE,
+    ):
+        super().__init__(
+            in_features=in_features_per_group,
+            out_features=out_features,
+            block_size=block_size,
+            activation_scheme=activation_scheme,
+            scale_fmt=scale_fmt,
+            has_bias=has_bias,
+            dtype=dtype,
+        )
+        self.n_groups = n_groups
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        leading = x.shape[:-2]
+        in_per_group = x.shape[-1]
+        out_per_group = self.weight.size(0) // self.n_groups
+
+        # bf16 fast path (e.g. unquantized loads / dequantize=True).
+        if self.weight.element_size() > 1:
+            w = self.weight.view(self.n_groups, out_per_group, in_per_group).transpose(1, 2)
+            x_g = x.reshape(-1, self.n_groups, in_per_group).transpose(0, 1)
+            y = torch.bmm(x_g, w).transpose(0, 1)
+            return y.reshape(*leading, self.n_groups, out_per_group)
+
+        weight = to_local(self.weight)
+        scale = to_local(self.weight_scale_inv)
+        weight_g = weight.view(self.n_groups, out_per_group, in_per_group)
+        scale_g = scale.view(self.n_groups, scale.size(0) // self.n_groups, scale.size(1))
+
+        # DSv4-only path: UE8M0/FP4 mix mandates DeepGEMM; one call per group is the
+        # simplest correct shape. The m-grouped kernel needs M-padding to 128 on SM100
+        # which wastes >7× compute at decode batch sizes, so we skip it here.
+        outs = [deepgemm_fp8_fp4_linear(x[..., g, :], weight_g[g], scale_g[g]) for g in range(self.n_groups)]
+        out = torch.stack(outs, dim=-2)
+        if self.bias is not None:
+            out = out + self.bias.view(self.n_groups, out_per_group)
+        return out
 
 
 def fp8_batched_mm_experts_forward(
@@ -421,17 +485,10 @@ def fp8_grouped_mm_experts_forward(
     # quantized weights are inference-only, so no bwd pre-mask is needed.
     sentinel_mask = (expert_ids_g >= self.num_experts).unsqueeze(-1)
 
-    # FSDP2 / EP wraps weights as DTensors but the kernel takes raw pointers — unwrap to
-    # local shards. Inference-only path, so `to_local()` autograd-awareness is moot.
-    w_up = self.gate_up_proj if self.has_gate else self.up_proj
-    ws_up = self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv
-    w_down = self.down_proj
-    ws_down = self.down_proj_scale_inv
-    if isinstance(w_up, torch.distributed.tensor.DTensor):
-        w_up = w_up.to_local()
-        ws_up = ws_up.to_local()
-        w_down = w_down.to_local()
-        ws_down = ws_down.to_local()
+    w_up = to_local(self.gate_up_proj if self.has_gate else self.up_proj)
+    ws_up = to_local(self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv)
+    w_down = to_local(self.down_proj)
+    ws_down = to_local(self.down_proj_scale_inv)
 
     # --- Up projection per expert (FP8 grouped) ---
     proj_out = finegrained_fp8.grouped_matmul(
@@ -675,10 +732,28 @@ def replace_with_fp8_linear(
                     has_gate=has_gate,
                     **module_kwargs,
                 )
-            elif isinstance(module, nn.Linear):
+            elif type(module) is nn.Linear:
+                # Vanilla `nn.Linear` → standard FP8Linear swap.
                 new_module = FP8Linear(
                     in_features=module.in_features,
                     out_features=module.out_features,
+                    block_size=quantization_config.weight_block_size,
+                    activation_scheme=quantization_config.activation_scheme,
+                    scale_fmt=quantization_config.scale_fmt,
+                    has_bias=module.bias is not None,
+                    **module_kwargs,
+                )
+            elif isinstance(module, nn.Linear) and hasattr(module, "n_groups"):
+                # Block-diagonal grouped linear (DSv4's `DeepseekV4GroupedLinear` —
+                # one underlying weight conceptually split into `n_groups` independent
+                # sub-matmuls fed by disjoint input slices). Vanilla `FP8Linear` would
+                # collapse those groups into one giant linear and yield the wrong
+                # output dim, so swap to `FP8GroupedLinear` which keeps the per-group
+                # bmm contract and runs each block as its own FP8 matmul.
+                new_module = FP8GroupedLinear(
+                    in_features_per_group=module.in_features,
+                    out_features=module.out_features,
+                    n_groups=module.n_groups,
                     block_size=quantization_config.weight_block_size,
                     activation_scheme=quantization_config.activation_scheme,
                     scale_fmt=quantization_config.scale_fmt,
