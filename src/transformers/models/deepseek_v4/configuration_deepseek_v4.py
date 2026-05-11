@@ -199,7 +199,7 @@ class DeepseekV4Config(PreTrainedConfig):
     # back to wrapping the whole dict as a single set of params when the subset check
     # fails, which then warns about `main` / `compress` as unrecognized keys. Override
     # to iterate the rope-type-keyed sub-dicts directly.
-    _rope_type_labels = ("main", "compress")
+    _rope_type_labels = ("sliding", "compress")
 
     def validate_rope(self):
         rope_parameters_dict = getattr(self, "rope_parameters", None) or {}
@@ -297,19 +297,27 @@ class DeepseekV4Config(PreTrainedConfig):
 
         # `rope_parameters`: split the flat dict (left by `convert_rope_params_to_dict`,
         # which folded any legacy `rope_scaling` block in) into per-rope-type
-        # `{main, compress}` sub-dicts. Idempotent: re-loading an already-split config
-        # is a no-op via the `isinstance` short-circuit. The two sub-dicts differ only
-        # in `rope_theta` (main: 10000, compress: 160000).
+        # `{sliding, compress}` sub-dicts. Mirrors reference `inference/model.py:475-481`:
+        # sliding-window attention layers use base RoPE (`rope_theta=10000`, no YaRN —
+        # `original_seq_len=0` disables it); CSA/HCA layers (and their internal
+        # compressors/indexer) use `compress_rope_theta=160000` with YaRN frequency
+        # interpolation. Idempotent: re-loading an already-split config is a no-op via
+        # the `isinstance` short-circuit.
         rp = self.rope_parameters or {}
-        if isinstance(rp.get("main"), dict) and isinstance(rp.get("compress"), dict):
+        if isinstance(rp.get("sliding"), dict) and isinstance(rp.get("compress"), dict):
             # Already nested — drop any leftover top-level keys.
-            self.rope_parameters = {"main": rp["main"], "compress": rp["compress"]}
+            self.rope_parameters = {"sliding": rp["sliding"], "compress": rp["compress"]}
         else:
-            base = {k: v for k, v in rp.items() if k not in ("main", "compress")}
-            base.setdefault("rope_theta", self.rope_theta)
+            base = {k: v for k, v in rp.items() if k not in ("main", "sliding", "compress")}
             base.setdefault("rope_type", "default")
             base["partial_rotary_factor"] = self.partial_rotary_factor
-            self.rope_parameters = {"main": dict(base), "compress": {**base, "rope_theta": self.compress_rope_theta}}
+            sliding = {
+                "rope_theta": self.rope_theta,
+                "rope_type": "default",
+                "partial_rotary_factor": self.partial_rotary_factor,
+            }
+            compress = {**base, "rope_theta": self.compress_rope_theta}
+            self.rope_parameters = {"sliding": sliding, "compress": compress}
 
 
 __all__ = ["DeepseekV4Config"]

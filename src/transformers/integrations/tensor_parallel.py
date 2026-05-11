@@ -37,6 +37,20 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+def to_local(t):
+    """Unwrap a `DTensor` to its local shard if needed; pass through otherwise.
+
+    Custom kernels (CUTLASS, CuteDSL, Triton) take raw tensor pointers and don't
+    understand `DTensor`, so weights wrapped by FSDP2 / EP need this unwrap before
+    they can be fed to the kernel. ``to_local()`` is autograd-aware on the train
+    path: backward rewraps the gradient as a DTensor matching each parameter's
+    placements.
+    """
+    if is_torch_available() and isinstance(t, torch.distributed.tensor.DTensor):
+        return t.to_local()
+    return t
+
+
 def initialize_tensor_parallelism(
     tp_plan: str | dict[str, str] | None, tp_size: int | None = None, device_mesh=None, device_map=None
 ):
@@ -766,6 +780,28 @@ class ReplicatedWithGradAllReduce(TensorParallelLayer):
         module.register_full_backward_hook(_backward_hook)
 
 
+class AllReduceParallel(TensorParallelLayer):
+    """
+    Marker layer: parameters (if any) are replicated; the forward output is all-reduced
+    across the TP mesh. Use as a no-op `nn.Identity` placed at a sync point after a
+    colwise-sharded compute that ends in a head-axis (or similar) reduction, so each
+    rank holds only a partial sum and needs to share it before the next dependent op
+    (e.g. the lightning indexer's score sum before its top-k).
+    """
+
+    def _prepare_input_fn(self, mod, inputs, device_mesh):
+        return inputs
+
+    def _prepare_output_fn(self, mod, outputs, device_mesh):
+        return all_reduce_forward(outputs, device_mesh)
+
+    def shard_tensor(self, param, tensor_idx=None, device=None, dtype=None):
+        return param[...].to(device=device, dtype=dtype)
+
+    def prepare_module_tp(self, module, device_mesh, **kwargs):
+        distribute_module(module, device_mesh, output_fn=self._prepare_output_fn)
+
+
 class MlaKvAProjParallel(TensorParallelLayer):
     """
     For MLA attention used in DeepSeek-V2 style models (deepseek_v2, longcat_flash, glm_moe_dsa, glm4_moe_lite):
@@ -1079,16 +1115,6 @@ class GroupedGemmParallel(TensorParallelLayer):
             module.num_experts = self.get_expected_sharded_shape((self.empty_param.shape[0],))[0]
 
 
-def _is_ep_native_experts_impl(mod: nn.Module) -> bool:
-    """Whether `mod`'s experts implementation handles EP dispatch + combine itself.
-
-    These kernels (e.g. DeepGEMM Mega MoE) want GLOBAL expert ids with unmasked routing
-    weights and produce the fully-reduced output, so `RouterParallel` skips the per-rank
-    index remap and `MoeTensorParalellExperts` skips the post-forward all-reduce.
-    """
-    return getattr(getattr(mod, "config", None), "_experts_implementation", None) in {"deepgemm_megamoe"}
-
-
 class RouterParallel(TensorParallelLayer):
     """
     Allows to reshape the router scores to support running expert parallel.
@@ -1098,7 +1124,7 @@ class RouterParallel(TensorParallelLayer):
         super().__init__(**kwargs)
 
     def _prepare_input_fn(self, mod, inputs, device_mesh):
-        return inputs[0] if inputs else inputs
+        return inputs
 
     def _prepare_output_fn(self, mod, outputs, device_mesh):
         """
@@ -1145,13 +1171,11 @@ class RouterParallel(TensorParallelLayer):
         The sentinel index (num_local_experts) is skipped by one_hot encoding or clamped
         + masked in grouped_mm/batched_mm. After the expert forward, an all_reduce sums
         partial outputs across EP ranks to produce the full result.
+
+        Mega MoE skips this remap: its kernel does the EP dispatch itself and wants raw
+        global expert ids with unmasked routing weights.
         """
-        # Mega MoE: keep the router's raw output. The router still runs (it produces topk_idx
-        # / topk_weights per token), but we skip the EP-time post-processing — Mega MoE's kernel
-        # does the EP token dispatch itself and needs GLOBAL expert ids with unmasked routing
-        # weights. Mirrored on the experts side by `MoeTensorParalellExperts._prepare_output_fn`
-        # which skips the post-forward all_reduce.
-        if _is_ep_native_experts_impl(mod):
+        if _is_megamoe(mod):
             return outputs
 
         ep_rank, ep_size = device_mesh.get_local_rank(), device_mesh.size()
@@ -1201,6 +1225,12 @@ class MoeTensorParalellExperts(TensorParallelLayer):
         top_k_index = inputs[1]
         top_k_weights = inputs[2]
 
+        # Mega MoE is inference-only (the kernel has no backward) and handles EP
+        # dispatch + combine + per-rank token sharding internally. Skip the gradient
+        # sync hooks and append the EP `process_group` so the forward can rendezvous.
+        if _is_megamoe(mod):
+            return hidden_states, top_k_index, top_k_weights, device_mesh.get_group()
+
         # all_reduce_backward on hidden_states for correct colwise (gate_up_proj) gradient
         hidden_states = all_reduce_backward(hidden_states, device_mesh)
 
@@ -1209,18 +1239,12 @@ class MoeTensorParalellExperts(TensorParallelLayer):
         # and partial_expert_output is different on each GPU before all-reduce
         top_k_weights = all_reduce_backward(top_k_weights, device_mesh)
 
-        # Mega MoE handles EP dispatch + combine inside the kernel — append the EP `process_group`
-        # so the forward can rendezvous the symm-buffer on first call.
-        if _is_ep_native_experts_impl(mod):
-            return hidden_states, top_k_index, top_k_weights, device_mesh.get_group()
-
         return hidden_states, top_k_index, top_k_weights
 
     def _prepare_output_fn(self, mod, outputs, device_mesh):
-        # Mega MoE handles the EP combine inside the kernel — output is already fully reduced.
-        if _is_ep_native_experts_impl(mod):
+        # Mega MoE returned the fully-combined gathered output; skip the all-reduce.
+        if _is_megamoe(mod):
             return outputs
-
         # all_reduce_forward to sum partial expert outputs across GPUs
         return all_reduce_forward(outputs, device_mesh)
 
@@ -1230,6 +1254,10 @@ class MoeTensorParalellExperts(TensorParallelLayer):
         # This class doesn't shard tensors - sharding is handled by packed_colwise/rowwise
         # on the individual weight tensors (gate_up_proj/down_proj)
         return param[...].to(device=device, dtype=dtype)
+
+
+def _is_megamoe(mod: nn.Module) -> bool:
+    return getattr(getattr(mod, "config", None), "_experts_implementation", None) == "deepgemm_megamoe"
 
 
 class MoeIdentityExpertParallel(TensorParallelLayer):
@@ -1274,6 +1302,7 @@ class ParallelInterface(GeneralInterface):
             "moe_identity_expert": MoeIdentityExpertParallel(),
             "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
             "mla_kv_a_proj": MlaKvAProjParallel(),
+            "all_reduce": AllReduceParallel(),
         }
         if is_torch_available() and _torch_distributed_available
         else {}
@@ -1294,6 +1323,7 @@ class ParallelInterface(GeneralInterface):
         "sequence_parallel": None,
         "replicated_with_grad_allreduce": None,
         "mla_kv_a_proj": None,
+        "all_reduce": None,
     }
 
     # Bias sharding: colwise shards bias, rowwise doesn't (bias is replicated and all-reduced)
@@ -1309,6 +1339,7 @@ class ParallelInterface(GeneralInterface):
         "sequence_parallel": None,
         "replicated_with_grad_allreduce": None,
         "mla_kv_a_proj": None,
+        "all_reduce": None,
     }
 
     @classmethod

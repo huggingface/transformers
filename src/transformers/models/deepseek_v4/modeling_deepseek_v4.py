@@ -44,6 +44,13 @@ from .configuration_deepseek_v4 import DeepseekV4Config
 
 @use_kernel_forward_from_hub("RMSNorm")
 class DeepseekV4RMSNorm(nn.Module):
+    """Like V3's, but the weight·hidden multiply happens in fp32 before the cast
+    back to the input dtype — mirrors reference `inference/model.py:191-196`
+    where `weight` is declared `dtype=torch.float32` and the multiply runs in
+    fp32 before the final `.to(dtype)`. V3 downcasts hidden_states first and
+    multiplies in bf16, which loses precision across the ~5 norms × 43 layers.
+    """
+
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
         DeepseekV4RMSNorm is equivalent to T5LayerNorm
@@ -53,11 +60,11 @@ class DeepseekV4RMSNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
+        dtype = hidden_states.dtype
+        hidden_states = hidden_states.float()
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
+        return (self.weight.float() * hidden_states).to(dtype)
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
@@ -106,10 +113,13 @@ class DeepseekV4RotaryEmbedding(nn.Module):
             rope_init_fn = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            inv_freq, attention_scaling = rope_init_fn(config, layer_type=layer_type)
+            # Reference (`inference/model.py:228`) builds cos/sin via
+            # `torch.polar(torch.ones_like(freqs), freqs)` — unit magnitude, no YaRN
+            # `attention_factor` scaling. We discard `rope_init_fn`'s scaling factor
+            # and emit raw `cos = freqs.cos()` / `sin = freqs.sin()` in `forward`.
+            inv_freq, _ = rope_init_fn(config, layer_type=layer_type)
             self.register_buffer(f"{layer_type}_inv_freq", inv_freq, persistent=False)
             self.register_buffer(f"{layer_type}_original_inv_freq", inv_freq.clone(), persistent=False)
-            setattr(self, f"{layer_type}_attention_scaling", attention_scaling)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -157,14 +167,13 @@ class DeepseekV4RotaryEmbedding(nn.Module):
         # the `repeat_interleave(2)` next to the rotation math, where the link between
         # the doubled dim and `rotate_half` is local and obvious.
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
-        attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
         inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            cos = freqs.cos() * attention_scaling
-            sin = freqs.sin() * attention_scaling
+            cos = freqs.cos()
+            sin = freqs.sin()
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
@@ -764,11 +773,18 @@ class DeepseekV4Attention(nn.Module):
         self.compressor = (
             COMPRESSOR_CLASSES[self.layer_type](config) if self.layer_type != "sliding_attention" else None
         )
+        # Reference `inference/model.py:475-481` picks `freqs_cis` per attention layer:
+        # sliding layers use base RoPE (`rope_theta=10000`, no YaRN); CSA/HCA layers
+        # use `compress_rope_theta=160000` with YaRN. The compressor inside a CSA/HCA
+        # layer shares its parent attention's `freqs_cis`, so main Q/K and compressor
+        # rotate consistently. We mirror that by selecting from a per-branch dict
+        # built once in `DeepseekV4Model.forward`.
+        self.rope_branch = "sliding" if self.layer_type == "sliding_attention" else "compress"
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: dict[str, tuple[torch.Tensor, torch.Tensor]],
         position_ids: torch.Tensor,
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
@@ -776,7 +792,7 @@ class DeepseekV4Attention(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
-        cos, sin = position_embeddings
+        cos, sin = position_embeddings[self.rope_branch]
 
         q_residual = self.q_a_norm(self.q_a_proj(hidden_states))
         q = self.q_b_proj(q_residual).view(*hidden_shape).transpose(1, 2)
@@ -963,6 +979,11 @@ class DeepseekV4HyperHead(nn.Module):
 
 
 class DeepseekV4MLP(nn.Module):
+    """Used by the shared expert. Mirrors reference `inference/model.py:587-606`:
+    gate/up promoted to fp32, optionally clamped by `swiglu_limit`, SiLU+mul stay in
+    fp32, then the product is cast back to the input dtype before `down_proj`.
+    """
+
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -973,9 +994,15 @@ class DeepseekV4MLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        dtype = x.dtype
+        gate = self.gate_proj(x).float()
+        up = self.up_proj(x).float()
+        limit = self.config.swiglu_limit
+        if limit > 0:
+            gate = gate.clamp(max=limit)
+            up = up.clamp(min=-limit, max=limit)
+        return self.down_proj((self.act_fn(gate) * up).to(dtype))
 
 
 @use_experts_implementation
@@ -1285,7 +1312,14 @@ class DeepseekV4Model(DeepseekV4PreTrainedModel):
                 position_ids=position_ids,
             )
         hidden_states = inputs_embeds.unsqueeze(2).expand(-1, -1, self.config.hc_mult, -1).contiguous()
-        position_embeddings = self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type="main")
+        # Per-layer rope: sliding-attention layers use base RoPE (`rope_theta=10000`,
+        # no YaRN), CSA/HCA layers use `compress_rope_theta=160000` with YaRN —
+        # mirrors reference `inference/model.py:475-481`. Each attention picks the
+        # right branch via `self.rope_branch`.
+        position_embeddings = {
+            "sliding": self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type="sliding"),
+            "compress": self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type="compress"),
+        }
 
         for layer in self.layers:
             hidden_states = layer(
