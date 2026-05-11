@@ -328,6 +328,10 @@ class Qwen3_5MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         pass
 
+    @unittest.skip("Qwen3.5-MoE hybrid linear-attention cache is not compatible with quantized cache yet.")
+    def test_generate_with_quant_cache(self):
+        pass
+
     def _get_conv_state_shape(self, batch_size: int, config):
         num_v_heads = config.linear_num_value_heads
         num_k_heads = config.linear_num_key_heads

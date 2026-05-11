@@ -75,6 +75,10 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
 
         return (batch_size, num_v_heads, head_k_dim, head_v_dim)
 
+    @unittest.skip("Qwen3-Next hybrid linear-attention cache is not compatible with quantized cache yet.")
+    def test_generate_with_quant_cache(self):
+        pass
+
     def test_attention_outputs(self):
         "Needs to be overwritten as Qwen3-Next alternates between attention layers and gated deltanet layers."
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
