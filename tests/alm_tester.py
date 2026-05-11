@@ -119,7 +119,6 @@ class ALMModelTester(MultiModalModelTester):
         return {self.audio_config_key: self.get_audio_config()}
 
     def _prepare_modality_inputs(self, input_ids, config):
-        # TODO: add a clear diagram that explains input prep ?
         audio_features = self.create_audio_features()
         audio_mask = self.create_audio_mask()
         audio_embeds_mask = self.get_audio_embeds_mask(audio_mask)
