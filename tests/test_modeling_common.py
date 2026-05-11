@@ -3594,30 +3594,38 @@ class ModelTesterMixin:
                 model_sdpa = model_class.from_pretrained(tmpdirname)
                 model_sdpa = model_sdpa.base_model
 
-                vision_model_names = {"visual", "image_tower", "vision_tower", "vision_model"}
+                modality_tower_names = {
+                    "visual",
+                    "image_tower",
+                    "vision_tower",
+                    "vision_model",
+                    "audio_tower",
+                    "audio_model",
+                }
                 language_model_names = {"language_model", "model", "text_model"}
-                vision_model_name = [name for name in vision_model_names if hasattr(model_sdpa, name)]
-                vision_model_name = vision_model_name[0] if len(vision_model_name) > 0 else None
+                modality_tower_name = [name for name in modality_tower_names if hasattr(model_sdpa, name)]
+                modality_tower_name = modality_tower_name[0] if len(modality_tower_name) > 0 else None
                 language_model_name = [name for name in language_model_names if hasattr(model_sdpa, name)]
                 language_model_name = language_model_name[0] if len(language_model_name) > 0 else None
-                if language_model_name is None or vision_model_name is None:
+                if language_model_name is None or modality_tower_name is None:
                     self.skipTest(
-                        reason="Model does not have both vision and language sub-models, cannot test composite SDPA dispatch"
+                        reason="Model does not have both a non-text modality tower and a language sub-model, "
+                        "cannot test composite SDPA dispatch"
                     )
-                vision_model_sdpa = getattr(model_sdpa, vision_model_name)
+                modality_tower_sdpa = getattr(model_sdpa, modality_tower_name)
                 language_model_sdpa = getattr(model_sdpa, language_model_name)
                 text_attn = "sdpa" if language_model_sdpa._supports_sdpa else "eager"
-                vision_attn = "sdpa" if vision_model_sdpa._supports_sdpa else "eager"
+                modality_attn = "sdpa" if modality_tower_sdpa._supports_sdpa else "eager"
 
                 # `None` as it is the requested one which will be assigned to each sub-config
                 # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
                 self.assertTrue(language_model_sdpa.config._attn_implementation == text_attn)
-                self.assertTrue(vision_model_sdpa.config._attn_implementation == vision_attn)
+                self.assertTrue(modality_tower_sdpa.config._attn_implementation == modality_attn)
 
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.base_model
                 self.assertTrue(getattr(model_eager, language_model_name).config._attn_implementation == "eager")
-                self.assertTrue(getattr(model_eager, vision_model_name).config._attn_implementation == "eager")
+                self.assertTrue(getattr(model_eager, modality_tower_name).config._attn_implementation == "eager")
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
