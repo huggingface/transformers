@@ -3207,25 +3207,23 @@ def get_device_properties() -> DeviceProperties:
     if IS_CUDA_SYSTEM or IS_ROCM_SYSTEM:
         import torch
 
-        if torch.cuda.is_available():
-            major, minor = torch.cuda.get_device_capability()
-            if IS_ROCM_SYSTEM:
-                return ("rocm", major, minor)
-            else:
-                return ("cuda", major, minor)
-    if IS_XPU_SYSTEM:
+        major, minor = torch.cuda.get_device_capability()
+        if IS_ROCM_SYSTEM:
+            return ("rocm", major, minor)
+        else:
+            return ("cuda", major, minor)
+    elif IS_XPU_SYSTEM:
         import torch
 
-        if torch.xpu.is_available():
-            # To get more info of the architecture meaning and bit allocation, refer to https://github.com/intel/llvm/blob/sycl/sycl/include/sycl/ext/oneapi/experimental/device_architecture.def
-            arch = torch.xpu.get_device_capability()["architecture"]
-            gen_mask = 0x000000FF00000000
-            gen = (arch & gen_mask) >> 32
-            return ("xpu", gen, None)
-    if IS_NPU_SYSTEM:
-        # TODO: after torch 2.5.1, use `if hasattr(torch, "npu") and torch.npu.is_available()` here for consistency with CUDA/XPU blocks
+        # To get more info of the architecture meaning and bit allocation, refer to https://github.com/intel/llvm/blob/sycl/sycl/include/sycl/ext/oneapi/experimental/device_architecture.def
+        arch = torch.xpu.get_device_capability()["architecture"]
+        gen_mask = 0x000000FF00000000
+        gen = (arch & gen_mask) >> 32
+        return ("xpu", gen, None)
+    elif IS_NPU_SYSTEM:
         return ("npu", None, None)
-    return (torch_device, None, None)
+    else:
+        return (torch_device, None, None)
 
 
 def unpack_device_properties(
