@@ -125,9 +125,6 @@ class LlavaNextForConditionalGenerationModelTest(VLMModelTest, unittest.TestCase
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
 
-    def test_reverse_loading_mapping(self):
-        super().test_reverse_loading_mapping(skip_base_model=True)
-
 
 @require_torch
 class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):

@@ -66,14 +66,14 @@ class DepthProModelTester:
             "patch_size": 4,
         },
         patch_model_config={
-            "model_type": "vit",
+            "model_type": "dinov2",
             "num_hidden_layers": 2,
             "hidden_size": 24,
             "num_attention_heads": 2,
             "patch_size": 6,
         },
         fov_model_config={
-            "model_type": "vit",
+            "model_type": "dinov2",
             "num_hidden_layers": 2,
             "hidden_size": 32,
             "num_attention_heads": 4,

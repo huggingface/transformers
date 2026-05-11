@@ -51,12 +51,12 @@ from .configuration_git import GitConfig, GitVisionConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
     """
 )
+@dataclass
 # Copied from transformers.models.clip.modeling_clip.CLIPVisionModelOutput with CLIP->Git
 class GitVisionModelOutput(ModelOutput):
     r"""
@@ -70,7 +70,6 @@ class GitVisionModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-# Copied from transformers.models.gemma3.modeling_gemma3.token_type_ids_mask_function
 def token_type_ids_mask_function(group_ids: torch.Tensor) -> Callable:
     """
     This function adds the correct offsets to the `q_idx` and `kv_idx` as the torch API can only accept lengths,

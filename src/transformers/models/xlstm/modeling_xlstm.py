@@ -1378,8 +1378,8 @@ class xLSTMCache:
         }
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class xLSTMOutput(ModelOutput):
     r"""
     cache_params (`xLSTMCache`):
@@ -1496,8 +1496,8 @@ class xLSTMModel(xLSTMPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class xLSTMCausalLMOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

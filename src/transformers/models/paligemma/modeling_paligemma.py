@@ -34,7 +34,6 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from .configuration_paligemma import PaliGemmaConfig
 
@@ -42,12 +41,12 @@ from .configuration_paligemma import PaliGemmaConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Paligemma outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class PaligemmaModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     image_hidden_states (`torch.FloatTensor`, *optional*):
@@ -434,7 +433,6 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         return model_inputs
 
     @staticmethod
-    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     def create_masks_for_generate(
         config: PreTrainedConfig,
         inputs_embeds: torch.Tensor,

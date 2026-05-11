@@ -101,12 +101,12 @@ class PerceptionLMPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for PerceptionLM outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class PerceptionLMModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):

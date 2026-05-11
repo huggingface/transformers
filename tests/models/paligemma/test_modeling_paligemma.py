@@ -327,9 +327,6 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
                                     f"Found non-zero attention weights for padding token at batch {batch_idx}, sequence position {seq_idx}",
                                 )
 
-    def test_reverse_loading_mapping(self):
-        super().test_reverse_loading_mapping(skip_base_model=True)
-
 
 @slow
 @require_torch
