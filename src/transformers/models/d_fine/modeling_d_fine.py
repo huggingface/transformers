@@ -40,7 +40,6 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_d_fine import DFineConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the DFineDecoder. This class adds two attributes to
@@ -49,6 +48,7 @@ from .configuration_d_fine import DFineConfig
     - a stacked tensor of intermediate reference points.
     """
 )
+@dataclass
 class DFineDecoderOutput(ModelOutput):
     r"""
     intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -1246,12 +1246,12 @@ class DFineDecoder(DFinePreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the RT-DETR encoder-decoder model.
     """
 )
+@dataclass
 class DFineModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
@@ -1803,12 +1803,12 @@ class DFineModel(DFinePreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`DFineForObjectDetection`].
     """
 )
+@dataclass
 class DFineObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):

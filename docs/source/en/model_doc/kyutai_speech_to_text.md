@@ -33,17 +33,16 @@ rendered properly in your Markdown viewer.
 ### Inference
 
 ```python
-import torch
-from datasets import load_dataset, Audio
-from transformers import KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForConditionalGeneration
-from accelerate import Accelerator
+from datasets import Audio, load_dataset
+
+from transformers import KyutaiSpeechToTextForConditionalGeneration, KyutaiSpeechToTextProcessor
+
 
 # 1. load the model and the processor
-torch_device = Accelerator().device
 model_id = "kyutai/stt-2.6b-en-trfs"
 
 processor = KyutaiSpeechToTextProcessor.from_pretrained(model_id)
-model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(model_id, device_map=torch_device, dtype="auto")
+model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
 # 2. load audio samples
 ds = load_dataset(
@@ -67,17 +66,16 @@ print(processor.batch_decode(output_tokens, skip_special_tokens=True))
 ### Batched Inference
 
 ```python
-import torch
-from datasets import load_dataset, Audio
-from transformers import KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForConditionalGeneration
-from accelerate import Accelerator
+from datasets import Audio, load_dataset
+
+from transformers import KyutaiSpeechToTextForConditionalGeneration, KyutaiSpeechToTextProcessor
+
 
 # 1. load the model and the processor
-torch_device = Accelerator().device
 model_id = "kyutai/stt-2.6b-en-trfs"
 
 processor = KyutaiSpeechToTextProcessor.from_pretrained(model_id)
-model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(model_id, device_map=torch_device, dtype="auto")
+model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
 # 2. load audio samples
 ds = load_dataset(
@@ -87,7 +85,7 @@ ds = ds.cast_column("audio", Audio(sampling_rate=24000))
 
 # 3. prepare the model inputs
 audio_arrays = [ds[i]["audio"]["array"] for i in range(4)]
-inputs = processor(audio_arrays, return_tensors="pt", padding=True)
+inputs = processor(audio_arrays, return_tensors="pt", padding=True).to(model.device)
 inputs = inputs.to(model.device)
 
 # 4. infer the model

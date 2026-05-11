@@ -33,14 +33,13 @@ The example below demonstrates how to obtain an image embedding with [`Pipeline`
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="image-feature-extraction",
     model="facebook/dinov3-vits16-pretrain-lvd1689m",
-    dtype=torch.bfloat16,
 )
 
 pipe("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
@@ -49,10 +48,12 @@ pipe("https://huggingface.co/datasets/huggingface/documentation-images/resolve/m
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoImageProcessor, AutoModel
 from transformers.image_utils import load_image
+
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = load_image(url)
@@ -60,7 +61,6 @@ image = load_image(url)
 processor = AutoImageProcessor.from_pretrained("facebook/dinov3-vits16-pretrain-lvd1689m")
 model = AutoModel.from_pretrained(
     "facebook/dinov3-vits16-pretrain-lvd1689m",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -80,11 +80,12 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
 
-```py
+```python
 # pip install torchao
 import torch
-from transformers import TorchAoConfig, AutoImageProcessor, AutoModel
 from torchao.quantization import Int4WeightOnlyConfig
+
+from transformers import AutoImageProcessor, AutoModel, TorchAoConfig
 from transformers.image_utils import load_image
 
 
@@ -98,7 +99,6 @@ quantization_config = TorchAoConfig(quant_type=quant_type)
 
 model = AutoModel.from_pretrained(
     "facebook/dinov3-vit7b16-pretrain-lvd1689m",
-    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )
@@ -132,12 +132,12 @@ print("Pooled output shape:", pooled_output.shape)
   print("Image size:", image.height, image.width)  # [480, 640]
 
   processor = AutoImageProcessor.from_pretrained("facebook/dinov3-vits16-pretrain-lvd1689m")
-  model = AutoModel.from_pretrained("facebook/dinov3-vits16-pretrain-lvd1689m")
+  model = AutoModel.from_pretrained("facebook/dinov3-vits16-pretrain-lvd1689m", device_map="auto")
   patch_size = model.config.patch_size
   print("Patch size:", patch_size) # 16
   print("Num register tokens:", model.config.num_register_tokens) # 4
 
-  inputs = processor(images=image, return_tensors="pt")
+  inputs = processor(images=image, return_tensors="pt").to(model.device)
   print("Preprocessed image size:", inputs.pixel_values.shape)  # [1, 3, 224, 224]
 
   batch_size, _, img_height, img_width = inputs.pixel_values.shape

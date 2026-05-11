@@ -40,13 +40,12 @@ The example below demonstrates how to automatically transcribe speech into text 
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="automatic-speech-recognition",
     model="facebook/hubert-large-ls960-ft",
-    dtype=torch.float16,
     device=0
 )
 
@@ -58,16 +57,18 @@ pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
 
 ```python
 import torch
-from transformers import AutoProcessor, AutoModelForCTC
 from datasets import load_dataset
+
+from transformers import AutoModelForCTC, AutoProcessor
+
 
 dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation").sort("id")
 sampling_rate = dataset.features["audio"].sampling_rate
 
 processor = AutoProcessor.from_pretrained("facebook/hubert-base-ls960")
-model = AutoModelForCTC.from_pretrained("facebook/hubert-base-ls960", dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+model = AutoModelForCTC.from_pretrained("facebook/hubert-base-ls960", device_map="auto", attn_implementation="sdpa")
 
-inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt").to(model.device)
 with torch.no_grad():
     logits = model(**inputs).logits
 predicted_ids = torch.argmax(logits, dim=-1)
@@ -88,8 +89,10 @@ The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize 
 
 ```python
 import torch
-from transformers import AutoProcessor, AutoModelForCTC, BitsAndBytesConfig
 from datasets import load_dataset
+
+from transformers import AutoModelForCTC, AutoProcessor, BitsAndBytesConfig
+
 
 bnb_config = BitsAndBytesConfig(
     load_in_8bit=True,
@@ -100,9 +103,9 @@ dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", spli
 sampling_rate = dataset.features["audio"].sampling_rate
 
 processor = AutoProcessor.from_pretrained("facebook/hubert-base-ls960")
-model = AutoModelForCTC.from_pretrained("facebook/hubert-base-ls960", quantization_config=bnb_config, dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+model = AutoModelForCTC.from_pretrained("facebook/hubert-base-ls960", quantization_config=bnb_config, device_map="auto", attn_implementation="sdpa")
 
-inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt").to(model.device)
 with torch.no_grad():
     logits = model(**inputs).logits
 predicted_ids = torch.argmax(logits, dim=-1)

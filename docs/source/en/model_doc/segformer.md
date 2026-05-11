@@ -41,10 +41,10 @@ The example below demonstrates semantic segmentation with [`Pipeline`] or the [`
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
 
-pipeline = pipeline(task="image-segmentation", model="nvidia/segformer-b0-finetuned-ade-512-512", torch_dtype=torch.float16)
+
+pipeline = pipeline(task="image-segmentation", model="nvidia/segformer-b0-finetuned-ade-512-512")
 pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 ```
 
@@ -54,15 +54,17 @@ pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resol
 ```python
 import requests
 from PIL import Image
-from transformers import AutoProcessor, AutoModelForSemanticSegmentation
+
+from transformers import AutoModelForSemanticSegmentation, AutoProcessor
+
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 
 processor = AutoProcessor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
-model = AutoModelForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
+model = AutoModelForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512", device_map="auto")
 
-inputs = processor(images=image, return_tensors="pt")
+inputs = processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 logits = outputs.logits # shape [batch, num_labels, height, width]
 ```
@@ -81,6 +83,8 @@ logits = outputs.logits # shape [batch, num_labels, height, width]
 
 ```python
 from transformers import SegformerImageProcessor
+
+
 processor = SegformerImageProcessor(do_reduce_labels=True)
 ```
 

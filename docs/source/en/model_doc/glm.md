@@ -60,26 +60,25 @@ Tips:
 In the following, we demonstrate how to use `glm-4-9b-chat` for the inference. Note that we have used the ChatML format for dialog, in this demo we show how to leverage `apply_chat_template` for this purpose.
 
 ```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
-from accelerate import Accelerator
->>> device = Accelerator().device # the device to load the model onto
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> model = AutoModelForCausalLM.from_pretrained("THUDM/glm-4-9b-chat", device_map="auto", trust_remote_code=True)
->>> tokenizer = AutoTokenizer.from_pretrained("THUDM/glm-4-9b-chat")
 
->>> prompt = "Give me a short introduction to large language model."
+model = AutoModelForCausalLM.from_pretrained("THUDM/glm-4-9b-chat", device_map="auto", trust_remote_code=True)
+tokenizer = AutoTokenizer.from_pretrained("THUDM/glm-4-9b-chat")
 
->>> messages = [{"role": "user", "content": prompt}]
+prompt = "Give me a short introduction to large language model."
 
->>> text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+messages = [{"role": "user", "content": prompt}]
 
->>> model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
+text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
->>> generated_ids = model.generate(model_inputs.input_ids, max_new_tokens=512, do_sample=True)
+model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
 
->>> generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)]
+generated_ids = model.generate(model_inputs.input_ids, max_new_tokens=512, do_sample=True)
 
->>> response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)]
+
+response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 ```
 
 ## GlmConfig

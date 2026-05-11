@@ -45,7 +45,7 @@ import torch
 from transformers import AutoProcessor, LlavaForConditionalGeneration
 
 model_id = "mistral-community/pixtral-12b"
-model = LlavaForConditionalGeneration.from_pretrained(model_id, dtype="auto", device_map="auto")
+model = LlavaForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 processor = AutoProcessor.from_pretrained(model_id)
 
 url_dog = "https://picsum.photos/id/237/200/300"
@@ -76,10 +76,12 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the model to 4-bits.
 
 ```python
-import torch
 import requests
+import torch
 from PIL import Image
-from transformers import AutoProcessor, LlavaForConditionalGeneration, BitsAndBytesConfig
+
+from transformers import AutoProcessor, BitsAndBytesConfig, LlavaForConditionalGeneration
+
 
 model_id = "mistral-community/pixtral-12b"
 
@@ -113,7 +115,7 @@ chat = [
 ]
 
 prompt = processor.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
-inputs = processor(text=prompt, images=[dog_image, mountain_image], return_tensors="pt")
+inputs = processor(text=prompt, images=[dog_image, mountain_image], return_tensors="pt").to(model.device)
 
 inputs["pixel_values"] = inputs["pixel_values"].to(model.dtype)
 inputs = {k: v.to(model.device) for k, v in inputs.items()}
