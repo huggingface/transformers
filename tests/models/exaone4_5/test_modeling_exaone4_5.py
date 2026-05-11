@@ -240,7 +240,7 @@ class Exaone4_5_IntegrationTest(unittest.TestCase):
                     "\n\nDescribe the image.\n\n<think>\n\n</think>\n\nThe image captures a fluffy, young lynx kitten walking across a snowy surface, its thick"
                 ),
                 ("xpu", None): (
-                    "\n\nDescribe the image.\n\n<think>\n\n</think>\n\nThe image captures a young, fluffy wild cat\u2014likely a lynx kitten\u2014walking through a"
+                    "\n\nDescribe the image.\n\n<think>\n\n</think>\n\nThe image captures a young, fluffy wild cat-likely a lynx kitten-walking through a"
                 ),
             }
         )
