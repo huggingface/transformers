@@ -35,13 +35,14 @@ from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, tra
 from ..logits_process import LogitsProcessorList
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
+from .distributed import DistributedHelper
 from .initialization import resolve_continuous_batching_config
 from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
 from .model_runner import ModelRunner
 from .offloading_manager import OffloadingManager
 from .requests import GenerationOutput, RequestState, RequestStatus, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
-from .utils import DistributedHelper, WorkloadHints, drain_queue
+from .utils import WorkloadHints, drain_queue
 
 
 """

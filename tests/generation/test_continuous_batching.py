@@ -41,10 +41,10 @@ from transformers.generation.continuous_batching.cache import (
 )
 from transformers.generation.continuous_batching.cache_manager import FullAttentionCacheAllocator
 from transformers.generation.continuous_batching.continuous_api import OutputRouter
+from transformers.generation.continuous_batching.distributed import DistributedHelper
 from transformers.generation.continuous_batching.input_outputs import build_attention_mask
 from transformers.generation.continuous_batching.offloading_manager import OffloadingManager
 from transformers.generation.continuous_batching.requests import GenerationOutput, RequestStatus
-from transformers.generation.continuous_batching.utils import DistributedHelper
 from transformers.testing_utils import (
     require_deterministic_for_xpu,
     require_flash_attn,
@@ -1436,7 +1436,7 @@ def _tp_continuous_batching_worker(
     import torch
     import torch.distributed as dist
 
-    from transformers.generation.continuous_batching.utils import DistributedHelper
+    from transformers.generation.continuous_batching.distributed import DistributedHelper
 
     tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
     if not hasattr(tokenizer, "pad_token") and hasattr(tokenizer, "eos_token"):
