@@ -18,6 +18,8 @@
 # limitations under the License.
 """video processor class for Qwen2-VL."""
 
+import math
+
 import torch
 import torchvision.transforms.v2.functional as tvF
 
@@ -67,11 +69,11 @@ class Kimi_K25VideoProcessor(BaseVideoProcessor):
     patch_size = 14
     temporal_patch_size = 4
     merge_size = 2
-    max_patches = 16384
+    max_patches = 4096
     fps = 2
     do_sample_frames = True
     valid_kwargs = Kimi_K25VideoProcessorInitKwargs
-    model_input_names = ["pixel_values_videos", "video_grid_thw"]
+    model_input_names = ["pixel_values_videos", "video_grid_thw", "num_chunks_per_video"]
 
     def __init__(self, **kwargs: Unpack[Kimi_K25VideoProcessorInitKwargs]):
         super().__init__(**kwargs)
@@ -106,16 +108,24 @@ class Kimi_K25VideoProcessor(BaseVideoProcessor):
         return_tensors: str | TensorType | None,
         **kwargs,
     ):
+        # Split video to chunks based on temporal patch size
+        chunked_videos, num_chunks_per_video = [], []
+        for video in videos:
+            for chunk in range(0, video.shape[0], temporal_patch_size):
+                video_chunk = video[chunk : chunk + temporal_patch_size]
+                chunked_videos.append(video_chunk)
+            num_chunks_per_video.append(math.ceil(video.shape[0] / temporal_patch_size))
+
         # Group videos by size for batched resizing
-        grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
+        grouped_videos, grouped_videos_index = group_videos_by_shape(chunked_videos)
         resized_videos_grouped = {}
         for shape, stacked_videos in grouped_videos.items():
             height, width = get_image_size(stacked_videos[0], channel_dim=ChannelDimension.FIRST)
             resized_height, resized_width = height, width
             if do_resize:
                 (resized_height, resized_width), (pad_height, pad_width) = navit_resize(
-                    height,
-                    width,
+                    300,
+                    300,
                     patch_size=patch_size,
                     merge_kernel_size=merge_size,
                     max_patches=max_patches,
@@ -127,6 +137,7 @@ class Kimi_K25VideoProcessor(BaseVideoProcessor):
                     resample=resample,
                 )
                 stacked_videos = self.pad(stacked_videos, pad_size=SizeDict(height=pad_height, width=pad_width))
+                stacked_videos = torch.stack(stacked_videos, dim=0)
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
 
@@ -157,7 +168,11 @@ class Kimi_K25VideoProcessor(BaseVideoProcessor):
         video_grid_thw = torch.tensor(processed_grids)
 
         return BatchFeature(
-            data={"pixel_values_videos": pixel_values_videos, "video_grid_thw": video_grid_thw},
+            data={
+                "pixel_values_videos": pixel_values_videos,
+                "video_grid_thw": video_grid_thw,
+                "num_chunks_per_video": num_chunks_per_video,
+            },
             tensor_type=return_tensors,
         )
 

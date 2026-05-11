@@ -611,6 +611,8 @@ def _build_checkpoint_conversion_mapping():
         ),
     ]
 
+    mapping["kimi_k25"] += mapping["qwen2_moe"].copy()
+
     mapping["ernie4_5_moe"] = mapping["qwen2_moe"].copy()
     mapping["ernie4_5_moe"] += [
         WeightRenaming("mlp.moe_statics.e_score_correction_bias", "mlp.gate.moe_statics.e_score_correction_bias")

@@ -20,6 +20,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -604,6 +605,20 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
         vision_outputs.pooler_output = image_embeds
         return vision_outputs
 
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        """
+        return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
+
     def get_placeholder_mask(
         self,
         input_ids: torch.LongTensor,
@@ -643,6 +658,8 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Kimi_K25ModelOutputWithPast:
         r"""
@@ -655,8 +672,17 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
 
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values, image_grid_thw).pooler_output
-            image_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds)
+            image_mask_ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
+            )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+
+        if pixel_values_videos is not None:
+            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw).pooler_output
+            video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=video_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
         outputs = self.language_model(
             input_ids=None,
@@ -675,18 +701,16 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
         )
 
 
-@auto_docstring(
-    custom_intro="""
-    The KIMI25 model which consists of a vision backbone and a language model.
-    """
-)
 class Kimi_K25ForConditionalGeneration(Kimi_K25PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    # Reference: fix gemma3 grad acc #37208
+    accepts_loss_kwargs = False
 
-    def __init__(self, config: Kimi_K25Config):
+    def __init__(self, config):
         super().__init__(config)
         self.model = Kimi_K25Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+
         self.post_init()
 
     def get_input_embeddings(self):
@@ -695,25 +719,37 @@ class Kimi_K25ForConditionalGeneration(Kimi_K25PreTrainedModel, GenerationMixin)
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    def get_output_embeddings(self) -> nn.Module:
-        return self.lm_head
+    @auto_docstring
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        """
+        return self.model.get_video_features(
+            pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs
+        )
 
     @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        image_grid_thw: torch.Tensor,
+        image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        return self.model.get_image_features(
-            pixel_values=pixel_values,
-            image_grid_thw=image_grid_thw,
-            **kwargs,
-        )
+        return self.model.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring
@@ -728,6 +764,8 @@ class Kimi_K25ForConditionalGeneration(Kimi_K25PreTrainedModel, GenerationMixin)
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Kimi_K25CausalLMOutputWithPast:
@@ -744,7 +782,7 @@ class Kimi_K25ForConditionalGeneration(Kimi_K25PreTrainedModel, GenerationMixin)
         ```python
         >>> from transformers import AutoProcessor, Kimi_K25ForConditionalGeneration
 
-        >>> model = Qwen2VLForConditionalGeneration.from_pretrained("TODO")
+        >>> model = Kimi_K25ForConditionalGeneration.from_pretrained("TODO")
         >>> processor = AutoProcessor.from_pretrained("TODO")
 
         >>> messages = [
@@ -780,6 +818,8 @@ class Kimi_K25ForConditionalGeneration(Kimi_K25PreTrainedModel, GenerationMixin)
             input_ids=input_ids,
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
+            pixel_values_videos=pixel_values_videos,
+            video_grid_thw=video_grid_thw,
             position_ids=position_ids,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
@@ -811,10 +851,14 @@ class Kimi_K25ForConditionalGeneration(Kimi_K25PreTrainedModel, GenerationMixin)
         self,
         input_ids,
         past_key_values=None,
-        inputs_embeds=None,
-        pixel_values=None,
         attention_mask=None,
-        logits_to_keep=None,
+        inputs_embeds=None,
+        position_ids=None,
+        use_cache=True,
+        pixel_values=None,
+        pixel_values_videos=None,
+        image_grid_thw=None,
+        video_grid_thw=None,
         is_first_iteration=False,
         **kwargs,
     ):
@@ -823,21 +867,167 @@ class Kimi_K25ForConditionalGeneration(Kimi_K25PreTrainedModel, GenerationMixin)
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            logits_to_keep=logits_to_keep,
+            inputs_embeds=inputs_embeds,
+            position_ids=position_ids,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            use_cache=use_cache,
             is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            # Pixel values are used only in the first iteration if available
-            # In subsequent iterations, they are already merged with text and cached
-            # NOTE: first iteration doesn't have to be prefill, it can be the first
-            # iteration with a question and cached system prompt (continue generate from cache)
-            model_inputs["pixel_values"] = pixel_values
+        if not is_first_iteration and use_cache:
+            model_inputs["pixel_values"] = None
+            model_inputs["pixel_values_videos"] = None
 
         return model_inputs
+
+    def _get_image_nums_and_video_nums(
+        self,
+        input_ids: torch.LongTensor | None,
+        inputs_embeds: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Get the number of images and videos for each sample to calculate the separation length of the sample tensor.
+        These parameters are not passed through the processor to avoid unpredictable impacts from interface modifications.
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary.
+
+        Returns:
+            image_nums (`torch.LongTensor` of shape `(batch_size, num_images_sample)`)
+            video_nums (`torch.LongTensor` of shape `(batch_size, num_videos_sample)`)
+        """
+
+        if inputs_embeds is not None:
+            is_image = (
+                inputs_embeds
+                == self.get_input_embeddings()(
+                    torch.tensor(self.config.image_start_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+            )[..., 0]
+            is_video_start = (
+                inputs_embeds
+                == self.get_input_embeddings()(
+                    torch.tensor(self.config.video_start_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+            )[..., 0]
+            is_video_end = (
+                inputs_embeds
+                == self.get_input_embeddings()(
+                    torch.tensor(self.config.video_end_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+            )[..., 0]
+        else:
+            is_image = input_ids == self.config.image_start_token_id
+            is_video_start = input_ids == self.config.video_start_token_id
+            is_video_end = input_ids == self.config.video_end_token_id
+
+        # Cumulative sum to track if we're inside a video span
+        # We'll assume well-formed video tags (i.e. matching starts and ends)
+        video_level = torch.cumsum(is_video_start.int() - is_video_end.int(), dim=1)
+        inside_video = video_level > 0  # shape (batch_size, seq_length)
+
+        # Mask out image tokens that are inside video spans
+        standalone_images = is_image & (~inside_video)
+
+        # Count per batch
+        image_counts = standalone_images.sum(dim=1)
+        video_counts = is_video_start.sum(dim=1)
+
+        return image_counts, video_counts
+
+    def _expand_inputs_for_generation(
+        self,
+        expand_size: int = 1,
+        is_encoder_decoder: bool = False,
+        input_ids: torch.LongTensor | None = None,
+        **model_kwargs,
+    ) -> tuple[torch.LongTensor, dict[str, Any]]:
+        # Overwritten -- Support for expanding tensors without a batch size dimension
+        # e.g., pixel_values, image_grid_thw, pixel_values_videos, video_grid_thw, second_per_grid_t
+        # pixel_values.shape[0] is sum(seqlen_images for samples)
+        # image_grid_thw.shape[0] is sum(num_images for samples)
+
+        if expand_size == 1:
+            return input_ids, model_kwargs
+
+        visual_keys = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw", "second_per_grid_ts"]
+
+        def _expand_dict_for_generation_visual(dict_to_expand):
+            image_grid_thw = model_kwargs.get("image_grid_thw", None)
+            video_grid_thw = model_kwargs.get("video_grid_thw", None)
+            image_nums, video_nums = self._get_image_nums_and_video_nums(
+                input_ids, inputs_embeds=model_kwargs.get("inputs_embeds", None)
+            )
+
+            def _repeat_interleave_samples(x, lengths, repeat_times):
+                samples = torch.split(x, lengths)
+                repeat_args = [repeat_times] + [1] * (x.dim() - 1)
+                result = torch.cat([sample.repeat(*repeat_args) for sample in samples], dim=0)
+                return result
+
+            for key in dict_to_expand:
+                if key == "pixel_values":
+                    # split images into samples
+                    samples = torch.split(image_grid_thw, list(image_nums))
+                    # compute the sequence length of images for each sample
+                    lengths = [torch.prod(sample, dim=1).sum() for sample in samples]
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
+                    )
+                elif key == "image_grid_thw":
+                    # get the num of images for each sample
+                    lengths = list(image_nums)
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
+                    )
+                elif key == "pixel_values_videos":
+                    samples = torch.split(video_grid_thw, list(video_nums))
+                    lengths = [torch.prod(sample, dim=1).sum() for sample in samples]
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
+                    )
+                elif key == "video_grid_thw":
+                    lengths = list(video_nums)
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
+                    )
+                elif key == "second_per_grid_ts":
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=list(video_nums), repeat_times=expand_size
+                    )
+            return dict_to_expand
+
+        def _expand_dict_for_generation(dict_to_expand):
+            for key in dict_to_expand:
+                if key == "position_ids" and dict_to_expand[key].ndim == 3:
+                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=1)
+                elif (
+                    dict_to_expand[key] is not None
+                    and isinstance(dict_to_expand[key], torch.Tensor)
+                    and key not in visual_keys
+                ):
+                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
+            return dict_to_expand
+
+        model_kwargs = _expand_dict_for_generation_visual(model_kwargs)
+
+        if input_ids is not None:
+            input_ids = input_ids.repeat_interleave(expand_size, dim=0)
+
+        model_kwargs = _expand_dict_for_generation(model_kwargs)
+
+        if is_encoder_decoder:
+            if model_kwargs.get("encoder_outputs") is None:
+                raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
+            model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
+
+        return input_ids, model_kwargs
 
 
 __all__ = ["Kimi_K25ForConditionalGeneration", "Kimi_K25Model", "Kimi_K25PreTrainedModel", "Kimi_K25VisionModel"]

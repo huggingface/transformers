@@ -97,7 +97,13 @@ class Kimi_K25Processor(ProcessorMixin):
 
         if videos is not None:
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
-            video_grid_thw = videos_inputs["video_grid_thw"]
+            num_chunks_per_video = videos_inputs.pop("num_chunks_per_video")
+            video_grid_thw = []
+            start = 0
+            for num in num_chunks_per_video:
+                video_grid_thw.append(videos_inputs["video_grid_thw"][start : start + num])
+                start += num
+
             # If user has not requested video metadata, pop it
             if not kwargs.get("return_metadata"):
                 video_metadata = videos_inputs.pop("video_metadata")
@@ -125,8 +131,7 @@ class Kimi_K25Processor(ProcessorMixin):
             index = 0
             for i in range(len(text)):
                 while self.video_token in text[i]:
-                    num_frames = video_grid_thw[index][0]
-                    num_frame_tokens = video_grid_thw[index][1:].prod() // merge_length
+                    num_chunks = num_chunks_per_video[index]
                     video_structure = ""
 
                     metadata = video_metadata[index]
@@ -138,25 +143,28 @@ class Kimi_K25Processor(ProcessorMixin):
                         )
                     metadata.fps = 24 if metadata.fps is None else metadata.fps
 
-                    for chunk_id in range(0, num_frames, temporal_patch_size):
-                        timestamp = float(metadata.timestamps[chunk_id])
-                        current_chunk = metadata.timestamps[chunk_id : chunk_id + temporal_patch_size]
+                    for chunk_id in range(num_chunks):
+                        current_chunk = metadata.timestamps[
+                            (chunk_id * temporal_patch_size) : (chunk_id + 1) * temporal_patch_size
+                        ]
+                        timestamp = float(current_chunk[0])
                         timestamp_str = (
                             time.strftime("%H:%M:%S", time.gmtime(timestamp)) + f".{int(timestamp % 1 * 1000):03d}"
                         )
-                        num_video_tokens = num_frame_tokens * "<|placeholder|>" * len(current_chunk)
+                        # [0, 120, 239, 359, 478, 598]
+                        num_frame_tokens = video_grid_thw[index][chunk_id][1:].prod() // merge_length
+                        video_tokens = num_frame_tokens * "<|placeholder|>"  # * len(current_chunk)
                         video_structure += (
-                            f"{timestamp_str}<|media_begin|>video<|media_content|>{num_video_tokens}<|media_end|>"
+                            f"{timestamp_str}<|media_begin|>video<|media_content|>{video_tokens}<|media_end|>"
                         )
 
                     text[i] = text[i].replace(self.video_token, video_structure, 1)
                     index += 1
-                text[i] = text[i].replace("<|placeholder|>", self.video_token)
+                text[i] = text[i].replace("<|placeholder|>", self.image_token)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
-
         if return_mm_token_type_ids:
             text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
 

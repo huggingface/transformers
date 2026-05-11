@@ -420,12 +420,17 @@ class FuseAndPermuteForRope(ConversionOps):
         self.permute_layer_names = permute_layer_names or []
 
     def _apply_permutation(self, tensor: torch.Tensor) -> torch.Tensor:
-        dim1, dim2 = tensor.shape
-        config = self.config.vision_config
-        n_heads = getattr(config, "num_attention_heads", 1)
+        dim0 = tensor.shape[0]
+        n_heads = getattr(self.config.vision_config, "num_attention_heads", 1)
+        half_head = dim0 // n_heads // 2
 
-        tensor = tensor.view(n_heads, 2, dim1 // n_heads // 2, dim2)
-        tensor = tensor.transpose(1, 2).reshape(dim1, dim2)
+        # Permute weights and biases if available
+        if tensor.ndim == 2:
+            tensor = tensor.view(n_heads, 2, half_head, tensor.shape[1])
+            tensor = tensor.transpose(1, 2).reshape(dim0, tensor.shape[-1])
+        elif tensor.ndim == 1:
+            tensor = tensor.view(n_heads, 2, half_head)
+            tensor = tensor.transpose(1, 2).reshape(dim0)
         return tensor
 
     @torch.no_grad
@@ -472,12 +477,17 @@ class UnfuseAndPermuteForRope(ConversionOps):
         self.permute_layer_names = permute_layer_names or []
 
     def _apply_permutation(self, tensor: torch.Tensor) -> torch.Tensor:
-        dim1, dim2 = tensor.shape
-        config = self.config.vision_config
-        n_heads = getattr(config, "num_attention_heads", 1)
+        dim0 = tensor.shape[0]
+        n_heads = getattr(self.config.vision_config, "num_attention_heads", 1)
+        half_head = dim0 // n_heads // 2
 
-        tensor = tensor.view(n_heads, dim1 // n_heads // 2, 2, dim2)
-        tensor = tensor.transpose(1, 2).reshape(dim1, dim2)
+        # Permute weights and biases if available
+        if tensor.ndim == 2:
+            tensor = tensor.view(n_heads, half_head, 2, tensor.shape[1])
+            tensor = tensor.transpose(1, 2).reshape(dim0, tensor.shape[-1])
+        elif tensor.ndim == 1:
+            tensor = tensor.view(n_heads, half_head, 2)
+            tensor = tensor.transpose(1, 2).reshape(dim0)
         return tensor
 
     @torch.no_grad
@@ -498,7 +508,7 @@ class UnfuseAndPermuteForRope(ConversionOps):
         output: dict[str, torch.Tensor] = dict(zip(targets, chunks))
         for key, value in output.items():
             # Permute q and key weights (skip biases) to match RoPE implementation
-            if any(name in key for name in self.permute_layer_names) and value.ndim == 2:
+            if any(name in key for name in self.permute_layer_names):
                 output[key] = self._apply_permutation(value)
         return output
 
