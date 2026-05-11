@@ -1437,7 +1437,9 @@ class StaticCache(Cache):
                     max_cache_len=max_cache_len, sliding_window=sliding_windows[layer_idx]
                 )
             elif layer_type in sliding_layer_types:
-                layer = StaticSlidingWindowLayer(max_cache_len=max_cache_len, sliding_window=sliding_windows[layer_idx])
+                layer = StaticSlidingWindowLayer(
+                    max_cache_len=max_cache_len, sliding_window=sliding_windows[layer_idx]
+                )
             # LinearAttention layers are static by essence - using `"moe"` as well is a trick, see the comment about it on DynamicCache
             elif layer_type in ("mamba", "conv", "linear_attention", "moe"):
                 layer = LinearAttentionLayer()
