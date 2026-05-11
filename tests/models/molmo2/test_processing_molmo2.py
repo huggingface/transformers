@@ -116,47 +116,6 @@ class Molmo2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(set(inputs.keys()).issubset(set(processor.model_input_names)))
 
     # =====================================================================
-    # Molmo2Processor.insert_bos() prepends a BOS token, so the processor
-    # output has one extra token compared to raw tokenizer output.
-    # We override to verify BOS is correctly prepended.
-    # =====================================================================
-    def test_tokenizer_defaults(self):
-        if "tokenizer" not in self.processor_class.get_attributes():
-            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
-
-        processor = self.get_processor()
-        tokenizer = self.get_component("tokenizer")
-
-        input_str = ["lower newer"]
-
-        try:
-            encoded_processor = processor(text=input_str, padding=False, return_tensors="pt")
-        except Exception:
-            self.skipTest("Processor does not accept text-only input.")
-        encoded_tok = tokenizer(input_str, padding=False, return_tensors="pt")
-
-        # Molmo2 processor inserts BOS — verify the processor output is BOS + tokenizer output
-        proc_ids = encoded_processor["input_ids"][0].tolist()
-        tok_ids = encoded_tok["input_ids"][0].tolist()
-        bos_id = tokenizer.bos_token_id or tokenizer.eos_token_id
-        self.assertEqual(proc_ids[0], bos_id)
-        self.assertEqual(proc_ids[1:], tok_ids)
-
-    # Molmo2 BOS insertion shifts sequence length by 1, so max_length shape checks
-    # from the base test don't match. The BOS behavior is validated above.
-    def test_tokenizer_defaults_preserved_by_kwargs(self):
-        pass
-
-    def test_tokenizer_defaults_preserved_by_kwargs_video(self):
-        pass
-
-    def test_kwargs_overrides_default_tokenizer_kwargs(self):
-        pass
-
-    def test_kwargs_overrides_default_tokenizer_kwargs_video(self):
-        pass
-
-    # =====================================================================
     # Hub model has auto_map in processor_config.json which is not preserved
     # through save/load cycle. Override to filter auto_map before comparison.
     # =====================================================================
@@ -241,13 +200,4 @@ class Molmo2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         pass
 
     def test_video_processor_defaults_preserved_by_video_kwargs(self):
-        pass
-
-    # =====================================================================
-    # Molmo2 processor inserts BOS which shifts expected lengths by 1.
-    # =====================================================================
-    def test_processor_text_has_no_visual(self):
-        pass
-
-    def test_processor_with_multiple_inputs(self):
         pass

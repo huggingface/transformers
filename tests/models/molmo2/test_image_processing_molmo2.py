@@ -136,12 +136,13 @@ class Molmo2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def _assert_patchified_output(self, outputs, expected_num_images):
         pixel_values = outputs.pixel_values
-        self.assertEqual(pixel_values.ndim, 3)
+        self.assertEqual(pixel_values.ndim, 4)
+        self.assertEqual(pixel_values.shape[0], expected_num_images)
         pixels_per_patch = self.image_processor_tester.patch_size**2 * self.image_processor_tester.num_channels
         self.assertEqual(pixel_values.shape[-1], pixels_per_patch)
         image_num_crops = outputs.image_num_crops
         self.assertEqual(image_num_crops.shape[0], expected_num_images)
-        self.assertEqual(pixel_values.shape[0], int(image_num_crops.sum().item()))
+        self.assertGreaterEqual(pixel_values.shape[1], int(image_num_crops.sum(dim=1).max().item()))
 
     def test_call_pil(self):
         for image_processing_class in [self.image_processing_class]:
@@ -153,7 +154,7 @@ class Molmo2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             outputs = image_processing(image_inputs[0], return_tensors="pt")
             self._assert_patchified_output(outputs, 1)
 
-            outputs = image_processing(image_inputs, return_tensors="pt")
+            outputs = image_processing([[image] for image in image_inputs], return_tensors="pt")
             self._assert_patchified_output(outputs, self.image_processor_tester.batch_size)
 
     def test_call_numpy(self):
@@ -166,7 +167,7 @@ class Molmo2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             outputs = image_processing(image_inputs[0], return_tensors="pt")
             self._assert_patchified_output(outputs, 1)
 
-            outputs = image_processing(image_inputs, return_tensors="pt")
+            outputs = image_processing([[image] for image in image_inputs], return_tensors="pt")
             self._assert_patchified_output(outputs, self.image_processor_tester.batch_size)
 
     @unittest.skip(

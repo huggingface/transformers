@@ -119,8 +119,8 @@ class Molmo2VisionText2TextModelTester(VLMModelTester):
                 (self.batch_size, self.num_image_tokens, 4),
                 device=torch_device,
             ),
-            "image_grids": torch.tensor([[4, 4, 4, 4]] * self.batch_size, device=torch_device),
-            "image_num_crops": torch.ones(self.batch_size, dtype=torch.long, device=torch_device),
+            "image_grids": torch.tensor([[[4, 4, 4, 4]]] * self.batch_size, device=torch_device),
+            "image_num_crops": torch.ones(self.batch_size, 1, dtype=torch.long, device=torch_device),
             "token_type_ids": token_type_ids,
         }
 
@@ -380,6 +380,7 @@ class Molmo2IntegrationTest(unittest.TestCase):
 
     def setUp(self):
         self.processor = Molmo2Processor.from_pretrained(self.model_id)
+        self.prompt = f"{self.processor.tokenizer.bos_token}<|image|>Describe this image."
         self.image = Image.open(requests.get(self.image_url, stream=True).raw)
 
     def tearDown(self):
@@ -387,7 +388,7 @@ class Molmo2IntegrationTest(unittest.TestCase):
 
     def test_preprocessing(self):
         """Test that preprocessing produces expected shapes and values."""
-        prompt = "<|image|>Describe this image."
+        prompt = self.prompt
         inputs = self.processor(images=self.image, text=prompt, return_tensors="pt")
 
         # Check output keys
@@ -399,9 +400,9 @@ class Molmo2IntegrationTest(unittest.TestCase):
         self.assertIn("token_type_ids", inputs)
 
         # Check shapes
-        self.assertEqual(inputs["pixel_values"].shape, torch.Size([7, 729, 588]))
-        self.assertEqual(inputs["image_token_pooling"].shape, torch.Size([955, 4]))
-        self.assertEqual(inputs["image_grids"].shape, torch.Size([1, 4]))
+        self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 7, 729, 588]))
+        self.assertEqual(inputs["image_token_pooling"].shape, torch.Size([1, 955, 4]))
+        self.assertEqual(inputs["image_grids"].shape, torch.Size([1, 1, 4]))
         self.assertEqual(inputs["input_ids"].shape[0], 1)
         self.assertEqual(inputs["input_ids"].shape[1], 987)
 
@@ -415,7 +416,7 @@ class Molmo2IntegrationTest(unittest.TestCase):
             dtype=torch.float32,
         )
         torch.testing.assert_close(
-            inputs["pixel_values"][0, :3, :3],
+            inputs["pixel_values"][0, 0, :3, :3],
             expected_pixel_slice,
             atol=1e-4,
             rtol=1e-4,
@@ -431,7 +432,7 @@ class Molmo2IntegrationTest(unittest.TestCase):
 
     def test_forward_logits(self):
         """Test that forward pass produces expected logits."""
-        prompt = "<|image|>Describe this image."
+        prompt = self.prompt
         inputs = self.processor(images=self.image, text=prompt, return_tensors="pt")
 
         model = Molmo2ForConditionalGeneration.from_pretrained(
@@ -480,7 +481,7 @@ class Molmo2IntegrationTest(unittest.TestCase):
 
     def test_generation(self):
         """Test that generation produces non-empty output."""
-        prompt = "<|image|>Describe this image."
+        prompt = self.prompt
         inputs = self.processor(images=self.image, text=prompt, return_tensors="pt")
 
         model = Molmo2ForConditionalGeneration.from_pretrained(
@@ -513,6 +514,7 @@ class Molmo2O7BIntegrationTest(unittest.TestCase):
 
     def setUp(self):
         self.processor = Molmo2Processor.from_pretrained(self.model_id)
+        self.prompt = f"{self.processor.tokenizer.bos_token}<|image|>Describe this image."
         self.image = Image.open(requests.get(self.image_url, stream=True).raw)
 
     def tearDown(self):
@@ -520,11 +522,11 @@ class Molmo2O7BIntegrationTest(unittest.TestCase):
 
     def test_preprocessing(self):
         """Test that preprocessing produces expected shapes and values for Molmo2-O-7B."""
-        prompt = "<|image|>Describe this image."
+        prompt = self.prompt
         inputs = self.processor(images=self.image, text=prompt, return_tensors="pt")
 
         # Same image produces same pixel_values regardless of model variant
-        self.assertEqual(inputs["pixel_values"].shape, torch.Size([7, 729, 588]))
+        self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 7, 729, 588]))
         self.assertEqual(inputs["input_ids"].shape[1], 987)
 
         # Molmo2-O-7B uses a different tokenizer (OLMo-based, vocab_size ~100k)
@@ -533,7 +535,7 @@ class Molmo2O7BIntegrationTest(unittest.TestCase):
 
     def test_forward_logits(self):
         """Test forward pass logits for Molmo2-O-7B."""
-        prompt = "<|image|>Describe this image."
+        prompt = self.prompt
         inputs = self.processor(images=self.image, text=prompt, return_tensors="pt")
 
         model = Molmo2ForConditionalGeneration.from_pretrained(
@@ -580,7 +582,7 @@ class Molmo2O7BIntegrationTest(unittest.TestCase):
 
     def test_generation(self):
         """Test generation for Molmo2-O-7B."""
-        prompt = "<|image|>Describe this image."
+        prompt = self.prompt
         inputs = self.processor(images=self.image, text=prompt, return_tensors="pt")
 
         model = Molmo2ForConditionalGeneration.from_pretrained(
@@ -611,6 +613,7 @@ class Molmo2_8BIntegrationTest(unittest.TestCase):
 
     def setUp(self):
         self.processor = Molmo2Processor.from_pretrained(self.model_id)
+        self.prompt = f"{self.processor.tokenizer.bos_token}<|image|>Describe this image."
         self.image = Image.open(requests.get(self.image_url, stream=True).raw)
 
     def tearDown(self):
@@ -618,10 +621,10 @@ class Molmo2_8BIntegrationTest(unittest.TestCase):
 
     def test_preprocessing(self):
         """Test that preprocessing produces expected shapes and values for Molmo2-8B."""
-        prompt = "<|image|>Describe this image."
+        prompt = self.prompt
         inputs = self.processor(images=self.image, text=prompt, return_tensors="pt")
 
-        self.assertEqual(inputs["pixel_values"].shape, torch.Size([7, 729, 588]))
+        self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 7, 729, 588]))
         self.assertEqual(inputs["input_ids"].shape[1], 987)
 
         # Molmo2-8B uses the same tokenizer as Molmo2-4B (Qwen-based, vocab_size ~152k)
@@ -630,7 +633,7 @@ class Molmo2_8BIntegrationTest(unittest.TestCase):
 
     def test_forward_logits(self):
         """Test forward pass logits for Molmo2-8B."""
-        prompt = "<|image|>Describe this image."
+        prompt = self.prompt
         inputs = self.processor(images=self.image, text=prompt, return_tensors="pt")
 
         model = Molmo2ForConditionalGeneration.from_pretrained(

@@ -335,8 +335,12 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
         ],
         "molmo2": [
-            WeightRenaming(source_patterns=r"(?<!image_vit\.)transformer\.(?!ln_f\.)", target_patterns="language_model."),
-            WeightRenaming(source_patterns=r"(?<!image_vit\.)transformer\.ln_f\.", target_patterns="language_model.norm."),
+            WeightRenaming(
+                source_patterns=r"(?<!image_vit\.)transformer\.(?!ln_f\.)", target_patterns="language_model."
+            ),
+            WeightRenaming(
+                source_patterns=r"(?<!image_vit\.)transformer\.ln_f\.", target_patterns="language_model.norm."
+            ),
             WeightRenaming(
                 source_patterns=r"vision_backbone\.image_vit\.transformer\.resblocks\.",
                 target_patterns="vision_backbone.image_vit.encoder.layers.",
