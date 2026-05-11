@@ -742,6 +742,16 @@ def is_librosa_available() -> bool:
 
 
 @lru_cache
+def is_nagisa_available() -> bool:
+    return _is_package_available("nagisa")[0]
+
+
+@lru_cache
+def is_soynlp_available() -> bool:
+    return _is_package_available("soynlp")[0]
+
+
+@lru_cache
 def is_multipart_available() -> bool:
     return _is_package_available("multipart")[0]
 

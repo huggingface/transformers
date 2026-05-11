@@ -21,6 +21,7 @@ from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import TextInput
+from ...utils.import_utils import is_nagisa_available, is_soynlp_available
 
 
 class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
@@ -50,6 +51,198 @@ def _get_feat_extract_output_lengths(input_lengths, n_window=50):
     feat_lengths = (input_lengths_leave - 1) // 2 + 1
     output_lengths = ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // chunk_len) * 13
     return output_lengths
+
+
+def _prepare_audio_inputs(audio: AudioInput) -> list:
+    """Normalize audio input(s) into a flat list."""
+    if isinstance(audio, str):
+        return [audio]
+    if isinstance(audio, (list, tuple)) and audio and all(isinstance(a, str) for a in audio):
+        return list(audio)
+    return make_list_of_audio(audio)
+
+
+def _prepare_language_inputs(
+    language: str | list[str] | None, batch_size: int, allow_broadcast: bool = False
+) -> list[str | None]:
+    """Broadcast / validate a language argument to match batch_size."""
+    if language is None:
+        return [None] * batch_size
+    if isinstance(language, str):
+        return [language] * batch_size
+    if isinstance(language, (list, tuple)):
+        if allow_broadcast and len(language) == 1 and batch_size > 1:
+            return list(language) * batch_size
+        if len(language) != batch_size:
+            raise ValueError(f"Got {len(language)} language(s) for {batch_size} sample(s); counts must match.")
+        return list(language)
+    raise TypeError("`language` must be a string, a list of strings, or `None`.")
+
+
+def _audio_content_item(audio_item) -> dict:
+    """Build a chat-template content dict for a single audio item."""
+    if isinstance(audio_item, str):
+        return {"type": "audio", "path": audio_item}
+    return {"type": "audio", "audio": audio_item}
+
+
+def _is_cjk_char(char: str) -> bool:
+    """
+    Return True for Chinese-Japanese-Korean (CJK) ideograph characters.
+    Original: https://github.com/QwenLM/Qwen3-ASR/blob/c17a131fe028b2e428b6e80a33d30bb4fa57b8df/qwen_asr/inference/qwen3_forced_aligner.py#L62
+    """
+    codepoint = ord(char)
+    return (
+        (0x4E00 <= codepoint <= 0x9FFF)
+        or (0x3400 <= codepoint <= 0x4DBF)
+        or (0x20000 <= codepoint <= 0x2A6DF)
+        or (0x2A700 <= codepoint <= 0x2B73F)
+        or (0x2B740 <= codepoint <= 0x2B81F)
+        or (0x2B820 <= codepoint <= 0x2CEAF)
+        or (0xF900 <= codepoint <= 0xFAFF)
+        or (0x2F800 <= codepoint <= 0x2FA1F)
+    )
+
+
+def _is_kept_char(char: str) -> bool:
+    """Return True for characters kept during forced-alignment tokenisation (letters, numbers, apostrophes, CJK)."""
+    if char == "'":
+        return True
+    category = unicodedata.category(char)
+    return category.startswith("L") or category.startswith("N") or _is_cjk_char(char)
+
+
+def _clean_tokens(raw_tokens) -> list[str]:
+    """Filter each raw token to kept characters, dropping empty results."""
+    return [cleaned for token in raw_tokens if (cleaned := "".join(char for char in token if _is_kept_char(char)))]
+
+
+def _parse_single_output(text: str) -> dict:
+    """Parse a single decoded ASR string into language + transcription."""
+    if "assistant\n" in text:
+        text = text.split("assistant\n", 1)[-1]
+    marker = "<asr_text>"
+    if marker not in text:
+        return {"language": None, "transcription": text}
+    prefix, transcription = text.split(marker, 1)
+    prefix = prefix.strip()
+    language = None
+    if prefix.startswith("language "):
+        language = prefix[len("language ") :].strip()
+    elif prefix:
+        language = prefix
+    return {"language": language, "transcription": transcription.strip()}
+
+
+def _fix_timestamps(raw: np.ndarray) -> list[int]:
+    """
+    Ensure predicted timestamps are monotonically increasing.
+
+    The model may predict out-of-order timestamps. This method:
+    1. Finds the longest increasing subsequence (LIS) — these are "good" timestamps.
+    2. Marks everything else as an outlier.
+    3. Fills outlier blocks by snapping short blocks (\u22642) to the nearest
+       good neighbour, or linearly interpolating longer blocks between
+       the surrounding good values.
+
+    Original: https://github.com/QwenLM/Qwen3-ASR/blob/c17a131fe028b2e428b6e80a33d30bb4fa57b8df/qwen_asr/inference/qwen3_forced_aligner.py#L147
+    """
+    data = raw.tolist()
+    num_values = len(data)
+
+    # --- Step 1: find the longest increasing subsequence (LIS) via O(n\u00b2) DP ---
+    # dp[idx]     = length of the LIS ending at index idx
+    # parent[idx] = previous index in that LIS (-1 = start of chain)
+    dp = [1] * num_values
+    parent = [-1] * num_values
+
+    for current in range(1, num_values):
+        for prev in range(current):
+            if data[prev] <= data[current] and dp[prev] + 1 > dp[current]:
+                dp[current] = dp[prev] + 1
+                parent[current] = prev
+
+    # --- Step 2: backtrack to recover LIS indices and mark them as "normal" ---
+    max_length = max(dp)
+    max_idx = dp.index(max_length)
+
+    lis_indices = []
+    idx = max_idx
+    while idx != -1:
+        lis_indices.append(idx)
+        idx = parent[idx]
+    lis_indices.reverse()
+
+    is_normal = [False] * num_values
+    for idx in lis_indices:
+        is_normal[idx] = True
+
+    # --- Step 3: replace outlier blocks with interpolated / snapped values ---
+    result = data.copy()
+    block_start = 0
+
+    while block_start < num_values:
+        if is_normal[block_start]:
+            block_start += 1
+            continue
+
+        # Scan forward to find the end of this contiguous outlier block
+        block_end = block_start
+        while block_end < num_values and not is_normal[block_end]:
+            block_end += 1
+
+        anomaly_count = block_end - block_start
+
+        if anomaly_count <= 2:
+            # Short block: snap each position to the closer good neighbour
+            left_val = None
+            for scan in range(block_start - 1, -1, -1):
+                if is_normal[scan]:
+                    left_val = result[scan]
+                    break
+
+            right_val = None
+            for scan in range(block_end, num_values):
+                if is_normal[scan]:
+                    right_val = result[scan]
+                    break
+
+            for pos in range(block_start, block_end):
+                if left_val is None:
+                    result[pos] = right_val
+                elif right_val is None:
+                    result[pos] = left_val
+                else:
+                    result[pos] = left_val if (pos - (block_start - 1)) <= (block_end - pos) else right_val
+
+        else:
+            # Long block: linearly interpolate between the surrounding good values
+            left_val = None
+            for scan in range(block_start - 1, -1, -1):
+                if is_normal[scan]:
+                    left_val = result[scan]
+                    break
+
+            right_val = None
+            for scan in range(block_end, num_values):
+                if is_normal[scan]:
+                    right_val = result[scan]
+                    break
+
+            if left_val is not None and right_val is not None:
+                step = (right_val - left_val) / (anomaly_count + 1)
+                for pos in range(block_start, block_end):
+                    result[pos] = left_val + step * (pos - block_start + 1)
+            elif left_val is not None:
+                for pos in range(block_start, block_end):
+                    result[pos] = left_val
+            elif right_val is not None:
+                for pos in range(block_start, block_end):
+                    result[pos] = right_val
+
+        block_start = block_end
+
+    return [int(val) for val in result]
 
 
 class Qwen3ASRProcessor(ProcessorMixin):
@@ -138,46 +331,17 @@ class Qwen3ASRProcessor(ProcessorMixin):
 
         if output_labels:
             labels = data["input_ids"].clone()
-            labels[labels == self.audio_token_id] = -100
-            labels[labels == self.tokenizer.pad_token_id] = -100
-            labels[labels == self.audio_bos_token_id] = -100
-            labels[labels == self.audio_eos_token_id] = -100
+            # skip special tokens
+            for token_id in [
+                self.audio_token_id,
+                self.tokenizer.pad_token_id,
+                self.audio_bos_token_id,
+                self.audio_eos_token_id,
+            ]:
+                labels[labels == token_id] = -100
             data["labels"] = labels
 
         return BatchFeature(data=data, tensor_type=return_tensors)
-
-    @staticmethod
-    def _normalize_audio(audio: AudioInput) -> list:
-        """Normalize audio input(s) into a flat list."""
-        if isinstance(audio, str):
-            return [audio]
-        if isinstance(audio, (list, tuple)) and audio and all(isinstance(a, str) for a in audio):
-            return list(audio)
-        return make_list_of_audio(audio)
-
-    @staticmethod
-    def _normalize_languages(
-        language: str | list[str] | None, batch_size: int, allow_broadcast: bool = False
-    ) -> list[str | None]:
-        """Broadcast / validate a language argument to match batch_size."""
-        if language is None:
-            return [None] * batch_size
-        if isinstance(language, str):
-            return [language] * batch_size
-        if isinstance(language, (list, tuple)):
-            if allow_broadcast and len(language) == 1 and batch_size > 1:
-                return list(language) * batch_size
-            if len(language) != batch_size:
-                raise ValueError(f"Got {len(language)} language(s) for {batch_size} sample(s); counts must match.")
-            return list(language)
-        raise TypeError("`language` must be a string, a list of strings, or `None`.")
-
-    @staticmethod
-    def _audio_content_item(audio_item) -> dict:
-        """Build a chat-template content dict for a single audio item."""
-        if isinstance(audio_item, str):
-            return {"type": "audio", "path": audio_item}
-        return {"type": "audio", "audio": audio_item}
 
     def apply_transcription_request(
         self,
@@ -203,18 +367,18 @@ class Qwen3ASRProcessor(ProcessorMixin):
             [`BatchFeature`]: Processor outputs ready to be passed to
             [`Qwen3ASRForConditionalGeneration.generate`].
         """
-        audio_items = self._normalize_audio(audio)
+        audio_items = _prepare_audio_inputs(audio)
         batch_size = len(audio_items)
         if batch_size == 0:
             raise ValueError("`audio` must contain at least one sample.")
-        languages = self._normalize_languages(language, batch_size)
+        languages = _prepare_language_inputs(language, batch_size)
 
         conversations = []
         for lang, audio_item in zip(languages, audio_items):
             messages = []
             if lang is not None:
                 messages.append({"role": "system", "content": [{"type": "text", "text": lang}]})
-            messages.append({"role": "user", "content": [self._audio_content_item(audio_item)]})
+            messages.append({"role": "user", "content": [_audio_content_item(audio_item)]})
             conversations.append(messages)
 
         return self.apply_chat_template(
@@ -254,25 +418,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
             decoded = self.extract_transcription(decoded)
         return decoded
 
-    @staticmethod
-    def _parse_single_output(text: str) -> dict:
-        """Parse a single decoded ASR string into language + transcription."""
-        if "assistant\n" in text:
-            text = text.split("assistant\n", 1)[-1]
-        marker = "<asr_text>"
-        if marker not in text:
-            return {"language": None, "transcription": text}
-        prefix, transcription = text.split(marker, 1)
-        prefix = prefix.strip()
-        language = None
-        if prefix.startswith("language "):
-            language = prefix[len("language ") :].strip()
-        elif prefix:
-            language = prefix
-        return {"language": language, "transcription": transcription.strip()}
-
-    @staticmethod
-    def parse_output(text: str | list[str]) -> dict | list[dict]:
+    def parse_output(self, text: str | list[str]) -> dict | list[dict]:
         """
         Parse Qwen3 ASR raw output into a structured dict.
 
@@ -288,11 +434,10 @@ class Qwen3ASRProcessor(ProcessorMixin):
             Returns the original string as the transcription if parsing fails.
         """
         if isinstance(text, str):
-            return Qwen3ASRProcessor._parse_single_output(text)
-        return [Qwen3ASRProcessor._parse_single_output(raw_text) for raw_text in text]
+            return _parse_single_output(text)
+        return [_parse_single_output(raw_text) for raw_text in text]
 
-    @staticmethod
-    def extract_transcription(text: str | list[str]) -> str | list[str]:
+    def extract_transcription(self, text: str | list[str]) -> str | list[str]:
         """
         Extract transcription text from Qwen3 ASR raw output.
 
@@ -307,46 +452,10 @@ class Qwen3ASRProcessor(ProcessorMixin):
             original string if ``<asr_text>`` is not found.
         """
         if isinstance(text, str):
-            return Qwen3ASRProcessor._parse_single_output(text)["transcription"]
-        return [Qwen3ASRProcessor._parse_single_output(raw_text)["transcription"] for raw_text in text]
+            return _parse_single_output(text)["transcription"]
+        return [_parse_single_output(raw_text)["transcription"] for raw_text in text]
 
-    @staticmethod
-    def _is_cjk_char(char: str) -> bool:
-        """
-        Return True for CJK ideograph characters.
-        Original: https://github.com/QwenLM/Qwen3-ASR/blob/c17a131fe028b2e428b6e80a33d30bb4fa57b8df/qwen_asr/inference/qwen3_forced_aligner.py#L62
-        """
-        codepoint = ord(char)
-        return (
-            (0x4E00 <= codepoint <= 0x9FFF)
-            or (0x3400 <= codepoint <= 0x4DBF)
-            or (0x20000 <= codepoint <= 0x2A6DF)
-            or (0x2A700 <= codepoint <= 0x2B73F)
-            or (0x2B740 <= codepoint <= 0x2B81F)
-            or (0x2B820 <= codepoint <= 0x2CEAF)
-            or (0xF900 <= codepoint <= 0xFAFF)
-            or (0x2F800 <= codepoint <= 0x2FA1F)
-        )
-
-    @staticmethod
-    def _is_kept_char(char: str) -> bool:
-        """Return True for characters kept during forced-alignment tokenisation."""
-        if char == "'":
-            return True
-        category = unicodedata.category(char)
-        return category.startswith("L") or category.startswith("N") or Qwen3ASRProcessor._is_cjk_char(char)
-
-    @staticmethod
-    def _clean_tokens(raw_tokens) -> list[str]:
-        """Filter each raw token to kept characters, dropping empty results."""
-        return [
-            cleaned
-            for token in raw_tokens
-            if (cleaned := "".join(char for char in token if Qwen3ASRProcessor._is_kept_char(char)))
-        ]
-
-    @staticmethod
-    def split_words_for_alignment(text: str | list[str], language: str | None = None) -> list[str]:
+    def split_words_for_alignment(self, text: str | list[str], language: str | None = None) -> list[str]:
         """
         Split text into word-level tokens suitable for forced alignment.
         Original: https://github.com/QwenLM/Qwen3-ASR/blob/c17a131fe028b2e428b6e80a33d30bb4fa57b8df/qwen_asr/inference/qwen3_forced_aligner.py#L101-L145
@@ -375,22 +484,22 @@ class Qwen3ASRProcessor(ProcessorMixin):
         lang = language.lower() if language else ""
 
         if lang == "japanese":
-            try:
-                import nagisa
-            except ImportError:
+            if not is_nagisa_available():
                 raise ImportError(
                     "Japanese forced alignment requires the `nagisa` package. Install it with: pip install nagisa"
                 )
-            return Qwen3ASRProcessor._clean_tokens(nagisa.tagging(text).words)
+            import nagisa
+
+            return _clean_tokens(nagisa.tagging(text).words)
 
         if lang == "korean":
-            try:
-                from soynlp.tokenizer import LTokenizer
-            except ImportError:
+            if not is_soynlp_available():
                 raise ImportError(
                     "Korean forced alignment requires the `soynlp` package. Install it with: pip install soynlp"
                 )
-            return Qwen3ASRProcessor._clean_tokens(LTokenizer().tokenize(text))
+            from soynlp.tokenizer import LTokenizer
+
+            return _clean_tokens(LTokenizer().tokenize(text))
 
         # Default: CJK characters individually, space-delimited words otherwise
         tokens: list[str] = []
@@ -404,77 +513,15 @@ class Qwen3ASRProcessor(ProcessorMixin):
                 char_buffer.clear()
 
         for char in text:
-            if Qwen3ASRProcessor._is_cjk_char(char):
+            if _is_cjk_char(char):
                 flush_buffer()
                 tokens.append(char)
             elif char.isspace():
                 flush_buffer()
-            elif Qwen3ASRProcessor._is_kept_char(char):
+            elif _is_kept_char(char):
                 char_buffer.append(char)
         flush_buffer()
         return tokens
-
-    @staticmethod
-    def _fix_timestamps(raw: np.ndarray) -> list[int]:
-        """
-        Monotonize predicted timestamps using longest increasing subsequence, then interpolate outliers.
-        Original: https://github.com/QwenLM/Qwen3-ASR/blob/c17a131fe028b2e428b6e80a33d30bb4fa57b8df/qwen_asr/inference/qwen3_forced_aligner.py#L147
-        """
-        data = raw.tolist()
-        num_values = len(data)
-        if num_values == 0:
-            return []
-
-        # Find longest increasing subsequence (LIS) via O(n²) DP
-        dp = [1] * num_values
-        parent = [-1] * num_values
-        for current in range(1, num_values):
-            for prev in range(current):
-                if data[prev] <= data[current] and dp[prev] + 1 > dp[current]:
-                    dp[current] = dp[prev] + 1
-                    parent[current] = prev
-
-        # Backtrack to get LIS indices
-        is_normal = [False] * num_values
-        trace_idx = dp.index(max(dp))
-        while trace_idx != -1:
-            is_normal[trace_idx] = True
-            trace_idx = parent[trace_idx]
-
-        # Interpolate non-LIS positions
-        result = data.copy()
-        block_start = 0
-        while block_start < num_values:
-            if is_normal[block_start]:
-                block_start += 1
-                continue
-            # Find contiguous block of outlier values [block_start, block_end)
-            block_end = block_start
-            while block_end < num_values and not is_normal[block_end]:
-                block_end += 1
-            block_len = block_end - block_start
-            left = next((result[pos] for pos in range(block_start - 1, -1, -1) if is_normal[pos]), None)
-            right = next((result[pos] for pos in range(block_end, num_values) if is_normal[pos]), None)
-            if block_len <= 2:
-                for pos in range(block_start, block_end):
-                    if left is None:
-                        result[pos] = right
-                    elif right is None:
-                        result[pos] = left
-                    else:
-                        result[pos] = left if (pos - (block_start - 1)) <= (block_end - pos) else right
-            else:
-                fill = left if left is not None else right
-                if left is not None and right is not None:
-                    step = (right - left) / (block_len + 1)
-                    for pos in range(block_start, block_end):
-                        result[pos] = left + step * (pos - block_start + 1)
-                elif fill is not None:
-                    for pos in range(block_start, block_end):
-                        result[pos] = fill
-            block_start = block_end
-
-        return [int(v) for v in result]
 
     def prepare_forced_aligner_inputs(
         self,
@@ -511,17 +558,17 @@ class Qwen3ASRProcessor(ProcessorMixin):
         if isinstance(transcript, str):
             transcript = [transcript]
 
-        audio_items = self._normalize_audio(audio)
+        audio_items = _prepare_audio_inputs(audio)
         batch_size = len(audio_items)
         if len(transcript) != batch_size:
             raise ValueError(f"Got {len(transcript)} transcript(s) but {batch_size} audio(s); they must match 1:1.")
 
-        languages = self._normalize_languages(language, batch_size, allow_broadcast=True)
+        languages = _prepare_language_inputs(language, batch_size, allow_broadcast=True)
         word_lists = [self.split_words_for_alignment(t, lang) for t, lang in zip(transcript, languages)]
 
         conversations = []
         for wl, audio_item in zip(word_lists, audio_items):
-            content = [self._audio_content_item(audio_item)]
+            content = [_audio_content_item(audio_item)]
             content.extend({"type": "text", "text": word} for word in wl)
             conversations.append([{"role": "user", "content": content}])
 
@@ -531,12 +578,6 @@ class Qwen3ASRProcessor(ProcessorMixin):
             return_dict=True,
             **kwargs,
         )
-
-        attention_mask = inputs.get("attention_mask", None)
-        if attention_mask is not None:
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 0)
-            inputs["position_ids"] = position_ids
 
         return inputs, word_lists
 
@@ -579,7 +620,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
             mask = input_ids[sample_idx] == timestamp_token_id
             masked_pred = pred_ids[sample_idx][mask]
             raw_ms = (masked_pred.float() * timestamp_segment_time).cpu().numpy()
-            fixed_ms = self._fix_timestamps(raw_ms)
+            fixed_ms = _fix_timestamps(raw_ms)
 
             items = [
                 {
