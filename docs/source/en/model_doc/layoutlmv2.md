@@ -17,9 +17,6 @@ rendered properly in your Markdown viewer.
 
 # LayoutLMV2
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -104,6 +101,7 @@ follows:
 ```python
 from PIL import Image
 
+
 image = Image.open(
     "name_of_your_document - can be a png, jpg, etc. of your documents (PDFs must be converted to images)."
 )
@@ -163,7 +161,8 @@ for a multi-modal model like LayoutLMv2. Note that you can still use both separa
 modality.
 
 ```python
-from transformers import LayoutLMv2ImageProcessor, LayoutLMv2TokenizerFast, LayoutLMv2Processor
+from transformers import LayoutLMv2ImageProcessor, LayoutLMv2Processor, LayoutLMv2TokenizerFast
+
 
 image_processor = LayoutLMv2ImageProcessor()  # apply_ocr is set to True by default
 tokenizer = LayoutLMv2TokenizerFast.from_pretrained("microsoft/layoutlmv2-base-uncased")
@@ -194,8 +193,10 @@ This is the simplest case, in which the processor (actually the image processor)
 the words and normalized bounding boxes.
 
 ```python
-from transformers import LayoutLMv2Processor
 from PIL import Image
+
+from transformers import LayoutLMv2Processor
+
 
 processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
@@ -216,8 +217,10 @@ In case one wants to do OCR themselves, one can initialize the image processor w
 the processor.
 
 ```python
-from transformers import LayoutLMv2Processor
 from PIL import Image
+
+from transformers import LayoutLMv2Processor
+
 
 processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased", revision="no_ocr")
 
@@ -226,7 +229,7 @@ image = Image.open(
 ).convert("RGB")
 words = ["hello", "world"]
 boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]  # make sure to normalize your bounding boxes
-encoding = processor(image, words, boxes=boxes, return_tensors="pt")
+encoding = processor(image, words, boxes=boxes, return_tensors="pt").to(model.device)
 print(encoding.keys())
 # dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'bbox', 'image'])
 ```
@@ -240,8 +243,10 @@ will only label the first wordpiece of a word, and label the remaining wordpiece
 initialize the tokenizer with `only_label_first_subword` set to `False`.
 
 ```python
-from transformers import LayoutLMv2Processor
 from PIL import Image
+
+from transformers import LayoutLMv2Processor
+
 
 processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased", revision="no_ocr")
 
@@ -251,7 +256,7 @@ image = Image.open(
 words = ["hello", "world"]
 boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]  # make sure to normalize your bounding boxes
 word_labels = [1, 2]
-encoding = processor(image, words, boxes=boxes, word_labels=word_labels, return_tensors="pt")
+encoding = processor(image, words, boxes=boxes, word_labels=word_labels, return_tensors="pt").to(model.device)
 print(encoding.keys())
 # dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'bbox', 'labels', 'image'])
 ```
@@ -262,8 +267,10 @@ For visual question answering tasks (such as DocVQA), you can provide a question
 processor will apply OCR on the image, and create [CLS] question tokens [SEP] word tokens [SEP].
 
 ```python
-from transformers import LayoutLMv2Processor
 from PIL import Image
+
+from transformers import LayoutLMv2Processor
+
 
 processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
@@ -271,7 +278,7 @@ image = Image.open(
     "name_of_your_document - can be a png, jpg, etc. of your documents (PDFs must be converted to images)."
 ).convert("RGB")
 question = "What's his name?"
-encoding = processor(image, question, return_tensors="pt")
+encoding = processor(image, question, return_tensors="pt").to(model.device)
 print(encoding.keys())
 # dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'bbox', 'image'])
 ```
@@ -282,8 +289,10 @@ For visual question answering tasks (such as DocVQA), you can provide a question
 perform OCR yourself, you can provide your own words and (normalized) bounding boxes to the processor.
 
 ```python
-from transformers import LayoutLMv2Processor
 from PIL import Image
+
+from transformers import LayoutLMv2Processor
+
 
 processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased", revision="no_ocr")
 
@@ -293,7 +302,7 @@ image = Image.open(
 question = "What's his name?"
 words = ["hello", "world"]
 boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]  # make sure to normalize your bounding boxes
-encoding = processor(image, question, words, boxes=boxes, return_tensors="pt")
+encoding = processor(image, question, words, boxes=boxes, return_tensors="pt").to(model.device)
 print(encoding.keys())
 # dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'bbox', 'image'])
 ```

@@ -17,9 +17,6 @@ rendered properly in your Markdown viewer.
 
 # LayoutXLM
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -47,7 +44,8 @@ One can directly plug in the weights of LayoutXLM into a LayoutLMv2 model, like 
 ```python
 from transformers import LayoutLMv2Model
 
-model = LayoutLMv2Model.from_pretrained("microsoft/layoutxlm-base")
+
+model = LayoutLMv2Model.from_pretrained("microsoft/layoutxlm-base", device_map="auto")
 ```
 
 Note that LayoutXLM has its own tokenizer, based on
@@ -56,6 +54,7 @@ follows:
 
 ```python
 from transformers import LayoutXLMTokenizer
+
 
 tokenizer = LayoutXLMTokenizer.from_pretrained("microsoft/layoutxlm-base")
 ```

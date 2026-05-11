@@ -133,7 +133,6 @@ class EomtConfig(ViTConfig):
         raise AttributeError("Not needed for Eomt")
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`EomtForUniversalSegmentationOutput`].
@@ -144,6 +143,7 @@ class EomtConfig(ViTConfig):
     [`~EomtImageProcessor] for details regarding usage.
     """
 )
+@dataclass
 class EomtForUniversalSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.Tensor`, *optional*):

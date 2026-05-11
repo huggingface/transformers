@@ -601,9 +601,12 @@ jobs:
       - name: Create output directory
         run: mkdir warnings_in_ci
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
+        env:
+          ACTIONS_ARTIFACT_MAX_ARTIFACT_COUNT: 2000
         with:
           path: warnings_in_ci
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Show artifacts
         run: echo "$(python3 -c 'import os; d = os.listdir(); print(d)')"
