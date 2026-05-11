@@ -84,7 +84,7 @@ class LlavaNextVisionText2TextModelTester(VLMModelTester):
             ]
         )
 
-    def get_additional_inputs(self, config, input_ids, pixel_values):
+    def get_additional_inputs(self, config, input_ids, modality_inputs):
         """LlavaNext requires image_sizes tensor"""
         return {
             "image_sizes": torch.tensor([[self.image_size, self.image_size]] * self.batch_size),

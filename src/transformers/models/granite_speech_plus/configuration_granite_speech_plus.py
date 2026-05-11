@@ -62,13 +62,19 @@ class GraniteSpeechPlusEncoderConfig(PreTrainedConfig):
     ```"""
 
     model_type = "granite_speech_plus_encoder"
+    attribute_map = {
+        "hidden_size": "hidden_dim",
+        "num_hidden_layers": "num_layers",
+        "num_attention_heads": "num_heads",
+        "num_mel_bins": "input_dim",
+    }
 
     input_dim: int = 160
     num_layers: int = 10
     hidden_dim: int = 1024
     feedforward_mult: int = 4
     num_heads: int = 8
-    dim_head: int = 128
+    dim_head: int | None = None
     output_dim: int = 42
     context_size: int = 200
     max_pos_emb: int = 512
@@ -77,6 +83,11 @@ class GraniteSpeechPlusEncoderConfig(PreTrainedConfig):
     conv_expansion_factor: int = 2
 
     cat_hidden_layers: list[int] | None = None
+
+    def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
+        if self.dim_head is None:
+            self.dim_head = self.hidden_dim // self.num_heads
 
 
 @auto_docstring(checkpoint="ibm-granite/granite-speech-4.1-2b-plus")
