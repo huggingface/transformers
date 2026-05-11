@@ -39,6 +39,7 @@ class DtensorShardOperation:
         - How does saving work in nD ?
         - How does loading work in nD ?
     """
+
     def __init__(self, param: DTensor):
         self.device_mesh = param.device_mesh
         self.placements = tuple(param.placements)
@@ -227,20 +228,26 @@ def _replicate_dtensor(tensor: DTensor) -> DTensor:
         i=0 (fsdp, _StridedShard(0)): [128, 1024] -> [256, 1024]
     """
     mesh = tensor.device_mesh
+    placements = tensor.placements
     replicate_all = tuple(Replicate() for _ in range(mesh.ndim))
 
-    if not any(isinstance(p, _StridedShard) for p in tensor.placements):
+    if not any(isinstance(p, _StridedShard) for p in placements):
         return tensor.redistribute(placements=replicate_all)
 
     with torch.no_grad():
         local = tensor._local_tensor
-        shape = list(local.shape)
         for i in reversed(range(mesh.ndim)):
-            p = tensor.placements[i]
+            p = placements[i]
             if p.is_replicate():
                 continue
-            shape[p.dim] *= mesh.size(i)
-            local = p._to_replicate_tensor(local, mesh, i, shape)
+            logical_shape = list(tensor.shape)
+            for j, pj in enumerate(placements[:i]):
+                if not pj.is_replicate():
+                    size, _ = Shard.local_shard_size_and_offset(
+                        logical_shape[pj.dim], mesh.size(j), mesh.get_local_rank(j)
+                    )
+                    logical_shape[pj.dim] = size
+            local = p._to_replicate_tensor(local, mesh, i, logical_shape)
             local = wait_tensor(local)
         return DTensor.from_local(local, mesh, replicate_all, run_check=False)
 
