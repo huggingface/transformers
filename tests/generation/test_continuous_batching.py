@@ -14,17 +14,13 @@
 
 import functools
 import gc
-import inspect
 import itertools
 import os
-import subprocess
-import tempfile
 import unittest
 from typing import Any
 from unittest.mock import patch
 
 import torch
-import torch.distributed as dist
 from parameterized import parameterized
 
 from transformers import (
@@ -48,6 +44,7 @@ from transformers.generation.continuous_batching.continuous_api import OutputRou
 from transformers.generation.continuous_batching.input_outputs import build_attention_mask
 from transformers.generation.continuous_batching.offloading_manager import OffloadingManager
 from transformers.generation.continuous_batching.requests import GenerationOutput, RequestStatus
+from transformers.generation.continuous_batching.utils import DistributedHelper
 from transformers.testing_utils import (
     require_deterministic_for_xpu,
     require_flash_attn,
@@ -55,6 +52,7 @@ from transformers.testing_utils import (
     require_kernels,
     require_torch_accelerator,
     require_torch_gpu,
+    require_torch_multi_accelerator,
     slow,
     torch_device,
 )
@@ -64,6 +62,8 @@ from transformers.utils import (
     is_torch_xpu_available,
 )
 from transformers.utils.generic import is_flash_attention_requested
+
+from ..test_tensor_parallel_mixin import _init_distributed
 
 
 # Constants for tests
@@ -1399,4 +1399,222 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
             max_cuda_overhead,
             f"CUDA delta ({actual_cuda}) too far from prediction ({predicted}), "
             f"allowed overhead = {max_cuda_overhead} ({num_allocations} allocs × 512B)",
+        )
+
+
+# Worker functions for the TP continuous batching tests, spawned through `_init_distributed`.
+def _tp_continuous_batching_worker(
+    rank: int,
+    model_id: str,
+    attn_implementation: str,
+    max_new_tokens: int,
+    do_sample: bool,
+    seed: int,
+    use_cuda_graph: bool,
+    use_async_batching: bool,
+) -> None:
+    """Loads `model_id` with `tp_plan="auto"`, checks three TP-specific paths in the same process: (a) direct
+    broadcasts via `DistributedHelper`, (b) per-rank parity of CB-generated tokens via `dist.all_gather_object`, and
+    (c) reproducibility across two CB runs sharing the same seed. Rank 0 owns all the assertions; the other ranks
+    only need to participate in the collectives."""
+    import torch
+    import torch.distributed as dist
+
+    from transformers.generation.continuous_batching.utils import DistributedHelper
+
+    tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
+    if not hasattr(tokenizer, "pad_token") and hasattr(tokenizer, "eos_token"):
+        tokenizer.pad_token = tokenizer.eos_token
+
+    model = AutoModelForCausalLM.from_pretrained(
+        model_id, attn_implementation=attn_implementation, tp_plan="auto", dtype=torch.float32
+    ).eval()
+
+    # Direct broadcast tests: only rank 0's value should propagate to every TP rank
+    helper = DistributedHelper(device_mesh=model._device_mesh)
+
+    received_obj = helper.tp_broadcast_object({"src_rank": rank})
+    assert received_obj == {"src_rank": 0}, f"tp_broadcast_object: rank {rank} got {received_obj}"
+
+    sent_tensor = torch.tensor([float(rank)], device=model.device)
+    helper.tp_broadcast_from_rank_0(sent_tensor)
+    assert sent_tensor.item() == 0.0, f"tp_broadcast_from_rank_0: rank {rank} got {sent_tensor.item()}"
+
+    # CB runs: same seed twice, assert reproducibility AND cross-rank parity
+    user_messages = [
+        "A robe takes 2 bolts of blue fiber and half that much white fiber. How many bolts in total does it take?"
+    ]
+    chats = [[{"role": "user", "content": m}] for m in user_messages]
+    tokenized = [tokenizer.apply_chat_template(chat, add_generation_prompt=True) for chat in chats]
+    input_ids = [(x if isinstance(x, list) else x["input_ids"]) for x in tokenized]
+
+    cb_config_kwargs = {"use_cuda_graph": use_cuda_graph, "use_async_batching": use_async_batching, "seed": seed}
+    gen_config = GenerationConfig(do_sample=do_sample, max_new_tokens=max_new_tokens)
+    first_outputs = model.generate_batch(
+        inputs=input_ids,
+        generation_config=gen_config,
+        continuous_batching_config=ContinuousBatchingConfig(**cb_config_kwargs),
+    )
+    second_outputs = model.generate_batch(
+        inputs=input_ids,
+        generation_config=gen_config,
+        continuous_batching_config=ContinuousBatchingConfig(**cb_config_kwargs),
+    )
+
+    # Cross-rank parity: every TP rank must produce the same tokens, otherwise the seed broadcast / TP collectives are
+    # diverging silently. Gather the first run's tokens onto all ranks and let rank 0 compare.
+    local_tokens = [out.generated_tokens for out in first_outputs.values()]
+    gathered_tokens = [None] * helper.tp_size
+    dist.all_gather_object(gathered_tokens, local_tokens, group=helper.tp_group)
+
+    if rank != 0:
+        return
+
+    assert len(first_outputs) == len(input_ids), f"Expected {len(input_ids)} CB outputs, got {len(first_outputs)}"
+    for i, (_, output) in enumerate(first_outputs.items()):
+        assert len(output.generated_tokens) > 0, f"Request {i} got no generated tokens"
+
+    for src_rank, src_tokens in enumerate(gathered_tokens):
+        if src_tokens != gathered_tokens[0]:
+            raise AssertionError(
+                f"TP continuous batching diverges across ranks: rank {src_rank} got {src_tokens}, rank 0 got "
+                f"{gathered_tokens[0]}"
+            )
+
+    second_tokens = [out.generated_tokens for out in second_outputs.values()]
+    if local_tokens != second_tokens:
+        raise AssertionError(
+            f"TP continuous batching is not reproducible across runs with the same seed\n"
+            f"First run : {local_tokens}\n"
+            f"Second run: {second_tokens}"
+        )
+
+
+def _tp_cancellation_worker(
+    rank: int,
+    model_id: str,
+    attn_implementation: str,
+    use_cuda_graph: bool = False,
+    use_async_batching: bool = False,
+) -> None:
+    """Loads `model_id` with `tp_plan="auto"`, submits a long-running streaming request, and cancels it mid-flight.
+    The cancellation goes through the cancel-queue + `tp_broadcast_object` path: if the broadcast were broken, the
+    non-driver rank's scheduler would not learn about the cancellation and the test would hang or crash on the next
+    TP forward pass. Rank 0 owns the assertions."""
+    import time
+
+    import torch
+
+    cb_config = ContinuousBatchingConfig(use_cuda_graph=use_cuda_graph, use_async_batching=use_async_batching)
+
+    tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
+    if not hasattr(tokenizer, "pad_token") and hasattr(tokenizer, "eos_token"):
+        tokenizer.pad_token = tokenizer.eos_token
+
+    model = AutoModelForCausalLM.from_pretrained(
+        model_id, attn_implementation=attn_implementation, tp_plan="auto", dtype=torch.float32
+    ).eval()
+
+    chat = [{"role": "user", "content": "Tell me a long story about a robot exploring the galaxy."}]
+    tokenized = tokenizer.apply_chat_template(chat, add_generation_prompt=True)
+    inputs = tokenized if isinstance(tokenized, list) else tokenized["input_ids"]
+
+    max_new_tokens = 200
+    cancel_after_n_chunks = 3
+
+    manager = model.init_continuous_batching(continuous_batching_config=cb_config)
+    manager.logit_processor.clear()
+    # Warm up synchronously so CUDA-graph capture doesn't eat the streaming-loop deadline below
+    manager.warmup()
+    manager.start()
+    try:
+        request_id = manager.add_request(inputs, max_new_tokens=max_new_tokens, streaming=True)
+        chunks_seen = 0
+        cancelled = False
+        deadline = time.time() + 60
+        while time.time() < deadline:
+            chunk = manager.get_result(request_id=request_id, timeout=2.0)
+            if chunk is None:
+                # No new chunks for 2s after cancel — cancellation took effect on every rank
+                break
+            chunks_seen += 1
+            if chunks_seen >= cancel_after_n_chunks and not cancelled:
+                manager.cancel_request(request_id)
+                cancelled = True
+        if rank == 0:
+            assert cancelled, "Test setup did not reach the cancel call"
+            assert chunks_seen < max_new_tokens, (
+                f"Cancellation did not stop generation early: saw {chunks_seen} chunks "
+                f"for max_new_tokens={max_new_tokens}"
+            )
+    finally:
+        manager.stop(block=True)
+
+
+@require_torch_multi_accelerator
+class ContinuousBatchingTensorParallelTest(unittest.TestCase):
+    """Integration tests for continuous batching with tensor parallelism. Each test spawns a TP-sized process group
+    via `_init_distributed` (see `tests/test_tensor_parallel_mixin.py`) with the NCCL backend."""
+
+    @property
+    def tp_size(self) -> int:
+        return min(torch.cuda.device_count(), 2)
+
+    def _run_cb_worker(self, **worker_kwargs) -> None:
+        """Spawn `_tp_continuous_batching_worker` on `tp_size` NCCL processes with sensible defaults."""
+        defaults = {
+            "model_id": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+            "attn_implementation": "sdpa",
+            "max_new_tokens": 20,
+            "do_sample": False,
+            "seed": 42,
+            "use_cuda_graph": False,
+            "use_async_batching": False,
+        }
+        defaults.update(worker_kwargs)
+        _init_distributed(tp=self.tp_size, backend="nccl")(_tp_continuous_batching_worker)(**defaults)
+
+    @slow
+    def test_continuous_batching_tp_greedy(self) -> None:
+        """Test that continuous batching with `tp_plan="auto"` produces non-empty, reproducible greedy outputs and
+        that all TP ranks agree on the generated tokens."""
+        self._run_cb_worker()
+
+    @slow
+    def test_continuous_batching_tp_with_sampling(self) -> None:
+        """Test that continuous batching with TP and sampling is reproducible across runs with the same seed and that
+        all TP ranks agree on the sampled tokens — implicitly validating the seed broadcast from rank 0."""
+        self._run_cb_worker(do_sample=True, seed=123)
+
+    @slow
+    def test_continuous_batching_tp_with_cuda_graph(self) -> None:
+        """Test that continuous batching with TP and CUDA graphs is reproducible across runs and that all TP ranks
+        agree on the generated tokens — captured-graph collectives must stay in sync across ranks."""
+        self._run_cb_worker(use_cuda_graph=True)
+
+    @slow
+    def test_continuous_batching_tp_with_cuda_graph_and_async(self) -> None:
+        """Test that continuous batching with TP, CUDA graphs, and async batching is reproducible across runs and
+        that all TP ranks agree on the generated tokens — the toughest combination, exercising both captured-graph
+        collectives and the async producer/consumer split."""
+        self._run_cb_worker(use_cuda_graph=True, use_async_batching=True)
+
+    @slow
+    def test_continuous_batching_tp_cancellation(self) -> None:
+        """Test that `cancel_request` propagates across the TP group: the driver enqueues the cancellation, broadcasts
+        it to non-driver ranks via `tp_broadcast_object`, and generation stops well before `max_new_tokens`."""
+        _init_distributed(tp=self.tp_size, backend="nccl")(_tp_cancellation_worker)(
+            model_id="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+            attn_implementation="sdpa",
+        )
+
+    @slow
+    def test_continuous_batching_tp_cancellation_realistic(self) -> None:
+        """Test that `cancel_request` propagates across the TP group: the driver enqueues the cancellation, broadcasts
+        it to non-driver ranks via `tp_broadcast_object`, and generation stops well before `max_new_tokens`."""
+        _init_distributed(tp=self.tp_size, backend="nccl")(_tp_cancellation_worker)(
+            model_id="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+            attn_implementation="sdpa",
+            use_async_batching=True,
+            use_cuda_graph=True,
         )
