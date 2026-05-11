@@ -429,6 +429,45 @@ class PeftAdapterMixin:
     _prepare_peft_hotswap_kwargs: dict | None = None
     peft_config: dict[str, PeftConfigLike]
 
+    def _resolve_adapter_state_dict(
+        self, adapter_state_dict: dict[str, "torch.Tensor"] | None, checkpoint_files
+    ) -> dict[str, torch.Tensor]:
+        # Materialize the adapter state dict from `adapter_state_dict` or `checkpoint_files`. Used by paths
+        # that bypass `self._load_pretrained_model` (which would otherwise read the files itself).
+        from ..modeling_utils import load_state_dict
+
+        all_pointer = set()
+        if adapter_state_dict is not None:
+            merged_state_dict = adapter_state_dict
+        elif (
+            checkpoint_files is not None
+            and checkpoint_files[0].endswith(".safetensors")
+            and adapter_state_dict is None
+        ):
+            merged_state_dict = {}
+            for file in checkpoint_files:
+                file_pointer = safe_open(file, framework="pt", device="cpu")
+                all_pointer.add(file_pointer)
+                for k in file_pointer.keys():
+                    merged_state_dict[k] = file_pointer.get_tensor(k)
+        # Checkpoints are .bin
+        elif checkpoint_files is not None:
+            merged_state_dict = {}
+            for ckpt_file in checkpoint_files:
+                merged_state_dict.update(load_state_dict(ckpt_file))
+        else:
+            raise ValueError("Neither a state dict nor checkpoint files were found.")
+
+        return merged_state_dict
+
+    def _set_peft_inference_mode(self) -> None:
+        from peft.tuners.tuners_utils import BaseTunerLayer
+
+        self.eval()
+        for module in self.modules():
+            if isinstance(module, BaseTunerLayer):
+                module.requires_grad_(False)
+
     def load_adapter(
         self,
         peft_model_id: str | None = None,
@@ -507,10 +546,9 @@ class PeftAdapterMixin:
                 `find_adapter_config_file` method.
         """
         from peft import PeftType
-        from peft.tuners.tuners_utils import BaseTunerLayer
         from peft.utils.save_and_load import _maybe_shard_state_dict_for_tp
 
-        from ..modeling_utils import LoadStateDictConfig, _get_resolved_checkpoint_files, load_state_dict
+        from ..modeling_utils import LoadStateDictConfig, _get_resolved_checkpoint_files
 
         if local_files_only:
             kwargs["local_files_only"] = True
@@ -620,34 +658,6 @@ class PeftAdapterMixin:
 
         device_map = getattr(self, "hf_device_map", {"": self.device})
 
-        def _resolve_adapter_state_dict():
-            # Materialize the adapter state dict from `adapter_state_dict` or `checkpoint_files`. Used by paths
-            # that bypass `self._load_pretrained_model` (which would otherwise read the files itself).
-            all_pointer = set()
-            if adapter_state_dict is not None:
-                return adapter_state_dict
-            if checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors"):
-                merged_state_dict = {}
-                for file in checkpoint_files:
-                    file_pointer = safe_open(file, framework="pt", device="cpu")
-                    all_pointer.add(file_pointer)
-                    for k in file_pointer.keys():
-                        merged_state_dict[k] = file_pointer.get_tensor(k)
-                return merged_state_dict
-            # Checkpoints are .bin
-            if checkpoint_files is not None:
-                merged_state_dict = {}
-                for ckpt_file in checkpoint_files:
-                    merged_state_dict.update(load_state_dict(ckpt_file))
-                return merged_state_dict
-            raise ValueError("Neither a state dict nor checkpoint files were found.")
-
-        def set_inference_mode(model):
-            model.eval()
-            for module in model.modules():
-                if isinstance(module, BaseTunerLayer):
-                    module.requires_grad_(False)
-
         # If the model is tensor parallel, we handle the sharding of the state dict here since the logic in `self._load_pretrained_model`
         # is not compatible with the way PEFT adapter should be sharded.
         has_tp_adapters = False
@@ -658,7 +668,7 @@ class PeftAdapterMixin:
                 break
 
         if has_tp_adapters:
-            adapter_state_dict = _resolve_adapter_state_dict()
+            adapter_state_dict = self._resolve_adapter_state_dict(adapter_state_dict, checkpoint_files)
 
             if any(not isinstance(v, torch.Tensor) for v in adapter_state_dict.values()):
                 raise ValueError("Expected all values in the adapter state dict to be tensors.")
@@ -672,7 +682,7 @@ class PeftAdapterMixin:
             # scaling is updated alongside the weights.
             from peft.utils.hotswap import check_hotswap_configs_compatible, hotswap_adapter_from_state_dict
 
-            adapter_state_dict = _resolve_adapter_state_dict()
+            adapter_state_dict = self._resolve_adapter_state_dict(adapter_state_dict, checkpoint_files)
 
             # need to apply conversions manually as we don't use _load_pretrained_model
             renamings = [r for r in peft_weight_conversions if isinstance(r, WeightRenaming)]
@@ -696,7 +706,7 @@ class PeftAdapterMixin:
                 raise
 
             if peft_config.inference_mode:
-                set_inference_mode(self)
+                self._set_peft_inference_mode()
 
             return LoadStateDictInfo(
                 missing_keys=set(),
@@ -725,7 +735,7 @@ class PeftAdapterMixin:
         )
 
         if peft_config.inference_mode:
-            set_inference_mode(self)
+            self._set_peft_inference_mode()
 
         adapter_key_markers = {adapter_name}
         if peft_config is not None and getattr(peft_config, "peft_type", None) is not None:
