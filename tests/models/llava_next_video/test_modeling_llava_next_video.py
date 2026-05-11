@@ -340,9 +340,6 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
         inputs_dict = {"pixel_values": inputs_dict["pixel_values_videos"]}
         return config, inputs_dict
 
-    def test_reverse_loading_mapping(self):
-        super().test_reverse_loading_mapping(skip_base_model=True)
-
 
 @require_torch
 class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):

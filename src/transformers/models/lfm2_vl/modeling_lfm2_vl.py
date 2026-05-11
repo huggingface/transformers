@@ -88,12 +88,12 @@ class Lfm2VlPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Lfm2Vl causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Lfm2VlCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -118,12 +118,12 @@ class Lfm2VlCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Lfm2Vl outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class Lfm2VlModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
