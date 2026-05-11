@@ -1143,40 +1143,6 @@ def _create_sliding_window_causal_mask(
     block_sequence_ids: torch.Tensor | None = None,
     layer_idx: int | None = None,
 ) -> torch.Tensor | BlockMask | None:
-    """
-    Create a sliding window causal mask based on the attention implementation used (stored in the config). This type
-    of attention pattern was mostly democratized by Mistral. If `past_key_values` has an hybrid cache structure, this
-    function will return the mask corresponding to one of the "sliding_attention" layers (to align to what is needed in the
-    `modeling_xxx.py` files).
-
-    Args:
-        config (`PreTrainedConfig`):
-            The model config.
-        inputs_embeds (`torch.Tensor`):
-            The input embeddings of shape (batch_size, query_length, hidden_dim). This is used only to infer the
-            batch size, query length and dtype.
-        attention_mask (`torch.Tensor`, optional):
-            The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length).
-            It can also be an already prepared 4D mask, in which case it is returned as-is.
-        cache_position (`torch.Tensor`):
-            Deprecated and unused.
-        past_key_values (`Cache`, optional):
-            The past key values, if we use a cache.
-        position_ids (`torch.Tensor`, optional)
-            A 2D tensor of shape (batch_size, query_length) indicating the positions of each token in the sequences.
-        or_mask_function (`Callable`, optional):
-            An optional mask function to combine with the sliding causal mask function (by doing the union of both). This is
-            useful to easily overlay another mask on top of the sliding causal one, for example for image tokens handling.
-        and_mask_function (`Callable`, optional):
-            An optional mask function to combine with the sliding causal mask function (by doing the intersection of both). This is
-            useful to easily overlay another mask on top of the sliding causal one, for example for image tokens handling.
-        block_sequence_ids (`torch.Tensor`, *optional*):
-            A tensor of same shape as input IDs indicating to which block or group each token belongs to. Tokens from
-            the same block will keep a bidirectional mask within the block, attending causally to the past. Index `-1`
-            can be used for blocks that have to keep complete causality within itself.
-        layer_idx (`int`, optional):
-            The layer index to create the mask for.
-    """
     # Power feature: if `is_causal` is False, then fallback to bi-directional mask for bi-directional attention
     # It allows to use decoder-only models with bi-directional attention as well
     if not getattr(config, "is_causal", True):
@@ -1362,36 +1328,6 @@ def _create_chunked_causal_mask(
     and_mask_function: Callable | None = None,
     layer_idx: int | None = None,
 ) -> torch.Tensor | BlockMask | None:
-    """
-    Create a chunked attention causal mask based on the attention implementation used (stored in the config). This type
-    of attention pattern was mostly democratized by Llama4. If `past_key_values` has an hybrid cache structure, this
-    function will return the mask corresponding to one of the "chunked_attention" layers (to align to what is needed in the
-    `modeling_xxx.py` files).
-
-    Args:
-        config (`PreTrainedConfig`):
-            The model config.
-        inputs_embeds (`torch.Tensor`):
-            The input embeddings of shape (batch_size, query_length, hidden_dim). This is used only to infer the
-            batch size, query length and dtype.
-        attention_mask (`torch.Tensor`, optional):
-            The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length).
-            It can also be an already prepared 4D mask, in which case it is returned as-is.
-        cache_position (`torch.Tensor`):
-            Deprecated and unused.
-        past_key_values (`Cache`, optional):
-            The past key values, if we use a cache.
-        position_ids (`torch.Tensor`, optional)
-            A 2D tensor of shape (batch_size, query_length) indicating the positions of each token in the sequences.
-        or_mask_function (`Callable`, optional):
-            An optional mask function to combine with the chunked causal mask function (by doing the union of both). This is
-            useful to easily overlay another mask on top of the chunked causal one, for example for image tokens handling.
-        and_mask_function (`Callable`, optional):
-            An optional mask function to combine with the chunked causal mask function (by doing the intersection of both). This is
-            useful to easily overlay another mask on top of the chunked causal one, for example for image tokens handling.
-        layer_idx (`int`, optional):
-            The layer index to create the mask for.
-    """
     # If we have an hybrid cache structure, here we want to create the mask for the sliding layers
     if layer_idx is None:
         if hasattr(past_key_values, "is_sliding") and True in past_key_values.is_sliding:
@@ -1485,8 +1421,43 @@ def create_sliding_window_causal_mask(
     position_ids: torch.Tensor | None = None,
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
+    block_sequence_ids: torch.Tensor | None = None,
     layer_idx: int | None = None,
 ) -> torch.Tensor | BlockMask | dict[int, torch.Tensor] | dict[int, BlockMask] | None:
+    """
+    Create a sliding window causal mask based on the attention implementation used (stored in the config). This type
+    of attention pattern was mostly democratized by Mistral. If `past_key_values` has an hybrid cache structure, this
+    function will return the mask corresponding to one of the "sliding_attention" layers (to align to what is needed in the
+    `modeling_xxx.py` files).
+
+    Args:
+        config (`PreTrainedConfig`):
+            The model config.
+        inputs_embeds (`torch.Tensor`):
+            The input embeddings of shape (batch_size, query_length, hidden_dim). This is used only to infer the
+            batch size, query length and dtype.
+        attention_mask (`torch.Tensor`, optional):
+            The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length).
+            It can also be an already prepared 4D mask, in which case it is returned as-is.
+        cache_position (`torch.Tensor`):
+            Deprecated and unused.
+        past_key_values (`Cache`, optional):
+            The past key values, if we use a cache.
+        position_ids (`torch.Tensor`, optional)
+            A 2D tensor of shape (batch_size, query_length) indicating the positions of each token in the sequences.
+        or_mask_function (`Callable`, optional):
+            An optional mask function to combine with the sliding causal mask function (by doing the union of both). This is
+            useful to easily overlay another mask on top of the sliding causal one, for example for image tokens handling.
+        and_mask_function (`Callable`, optional):
+            An optional mask function to combine with the sliding causal mask function (by doing the intersection of both). This is
+            useful to easily overlay another mask on top of the sliding causal one, for example for image tokens handling.
+        block_sequence_ids (`torch.Tensor`, *optional*):
+            A tensor of same shape as input IDs indicating to which block or group each token belongs to. Tokens from
+            the same block will keep a bidirectional mask within the block, attending causally to the past. Index `-1`
+            can be used for blocks that have to keep complete causality within itself.
+        layer_idx (`int`, optional):
+            The layer index to create the mask for.
+    """
     attribute_name = "sliding_window"
     if config.is_heterogeneous and attribute_name in config.per_layer_attributes:
         return _create_heterogeneous_mask_dict(
@@ -1500,6 +1471,7 @@ def create_sliding_window_causal_mask(
             position_ids=position_ids,
             or_mask_function=or_mask_function,
             and_mask_function=and_mask_function,
+            block_sequence_ids=block_sequence_ids,
         )
     else:
         return _create_sliding_window_causal_mask(
@@ -1511,6 +1483,7 @@ def create_sliding_window_causal_mask(
             position_ids=position_ids,
             or_mask_function=or_mask_function,
             and_mask_function=and_mask_function,
+            block_sequence_ids=block_sequence_ids,
             layer_idx=layer_idx,
         )
 
@@ -1527,6 +1500,36 @@ def create_chunked_causal_mask(
     and_mask_function: Callable | None = None,
     layer_idx: int | None = None,
 ) -> torch.Tensor | BlockMask | dict[int, torch.Tensor] | dict[int, BlockMask] | None:
+    """
+    Create a chunked attention causal mask based on the attention implementation used (stored in the config). This type
+    of attention pattern was mostly democratized by Llama4. If `past_key_values` has an hybrid cache structure, this
+    function will return the mask corresponding to one of the "chunked_attention" layers (to align to what is needed in the
+    `modeling_xxx.py` files).
+
+    Args:
+        config (`PreTrainedConfig`):
+            The model config.
+        inputs_embeds (`torch.Tensor`):
+            The input embeddings of shape (batch_size, query_length, hidden_dim). This is used only to infer the
+            batch size, query length and dtype.
+        attention_mask (`torch.Tensor`, optional):
+            The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length).
+            It can also be an already prepared 4D mask, in which case it is returned as-is.
+        cache_position (`torch.Tensor`):
+            Deprecated and unused.
+        past_key_values (`Cache`, optional):
+            The past key values, if we use a cache.
+        position_ids (`torch.Tensor`, optional)
+            A 2D tensor of shape (batch_size, query_length) indicating the positions of each token in the sequences.
+        or_mask_function (`Callable`, optional):
+            An optional mask function to combine with the chunked causal mask function (by doing the union of both). This is
+            useful to easily overlay another mask on top of the chunked causal one, for example for image tokens handling.
+        and_mask_function (`Callable`, optional):
+            An optional mask function to combine with the chunked causal mask function (by doing the intersection of both). This is
+            useful to easily overlay another mask on top of the chunked causal one, for example for image tokens handling.
+        layer_idx (`int`, optional):
+            The layer index to create the mask for.
+    """
     attribute_name = "attention_chunk_size"
     if config.is_heterogeneous and attribute_name in config.per_layer_attributes:
         return _create_heterogeneous_mask_dict(
