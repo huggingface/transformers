@@ -971,7 +971,12 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         return f"{self.__class__.__name__} {self.to_json_string()}"
 
     def __iter__(self):
-        yield from self.__dict__
+        per_layer_attributes = self.per_layer_attributes if self.is_heterogeneous else set()
+        for key in self.__dict__:
+            # Per-layer attributes intentionally raise on direct access and should not be exposed by iteration.
+            if key in per_layer_attributes:
+                continue
+            yield key
 
     def to_diff_dict(self) -> dict[str, Any]:
         """

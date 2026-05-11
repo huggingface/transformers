@@ -1309,9 +1309,12 @@ class DynamicCache(Cache):
 
             for layer_idx, layer_type in enumerate(layer_types):
                 cache_cls = LAYER_TYPE_CACHE_MAPPING.get(layer_type, DynamicLayer)
-                if decoder_config.is_heterogeneous:
-                    decoder_config = decoder_config.get_full_layer_config(layer_idx)
-                layers.append(cache_cls(decoder_config))
+                layer_decoder_config = (
+                    decoder_config.get_full_layer_config(layer_idx)
+                    if decoder_config.is_heterogeneous
+                    else decoder_config
+                )
+                layers.append(cache_cls(layer_decoder_config))
 
         # In this case, use the passed data to already fill in the Cache
         if ddp_cache_data is not None:
