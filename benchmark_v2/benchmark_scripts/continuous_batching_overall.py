@@ -38,7 +38,6 @@ def _fmt(val: Any, spec: str = "", missing: str = "X") -> str:
 def _build_gsm8k_platinum_module() -> types.ModuleType:
     """Define the gsm8k_platinum custom task inline so lighteval's Registry can pick it up via `custom_tasks=`."""
 
-
     def gsm8k_platinum_prompt(line, task_name=None):
         return Doc(
             task_name=task_name,
@@ -103,7 +102,9 @@ def _build_lighteval_inputs_scorer(
 
 
 # Data helpers
-def get_tokenized_gms8k(tokenizer: AutoTokenizer, n_fewshot: int = 8) -> tuple[list[list[int]], Callable[[Any], float]]:
+def get_tokenized_gms8k(
+    tokenizer: AutoTokenizer, n_fewshot: int = 8
+) -> tuple[list[list[int]], Callable[[Any], float]]:
     """GSM8K-Platinum few-shot inputs and scorer using the same lighteval extractive_match as the gsm8k task."""
     return _build_lighteval_inputs_scorer(
         tokenizer,
