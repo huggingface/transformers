@@ -21,10 +21,7 @@ from collections.abc import Callable, Iterator, KeysView, ValuesView
 from typing import Any, TypeVar
 
 from ...configuration_utils import PreTrainedConfig
-from ...dynamic_module_utils import (
-    get_class_from_dynamic_module,
-    resolve_trust_remote_code,
-)
+from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...utils import CONFIG_NAME, logging
 from .auto_mappings import CONFIG_MAPPING_NAMES, SPECIAL_MODEL_TYPE_TO_MODULE_NAME
 
