@@ -20,6 +20,7 @@
 
 
 import math
+from functools import lru_cache
 
 import numpy as np
 import torch
@@ -41,11 +42,28 @@ from ...utils import TensorType, auto_docstring
 from .processing_molmo2 import Molmo2ImagesKwargs
 
 
-# ===================== Image Processing =====================
-
-
-# Copied from transformers.models.cohere2_vision.image_processing_cohere2_vision.get_all_supported_aspect_ratios
+@lru_cache(maxsize=10)
 def get_all_supported_aspect_ratios(max_image_tiles: int) -> list[tuple[int, int]]:
+    """
+    Computes all allowed aspect ratios for a given maximum number of input tiles.
+
+    This function calculates all possible arrangements of tiles that can be formed
+    within the constraint of the maximum number of tiles. Each arrangement is
+    represented by its aspect ratio (width/height) and the corresponding tile configuration.
+
+    Args:
+        max_image_tiles (`int`):
+            The maximum number of tiles allowed.
+
+    Returns:
+        `list[tuple[int, int]]`: A list of tuples, each tuple representing a valid (width, height)
+        configuration in terms of number of tiles.
+
+    Example:
+        >>> get_all_supported_aspect_ratios(4)
+        [(1, 1), (1, 2), (1, 3), (1, 4), (2, 1), (2, 2), (3, 1), (4, 1)]
+
+    """
     aspect_ratios = []
     for width in range(1, max_image_tiles + 1):
         for height in range(1, max_image_tiles + 1):
@@ -54,7 +72,6 @@ def get_all_supported_aspect_ratios(max_image_tiles: int) -> list[tuple[int, int
     return aspect_ratios
 
 
-# Copied from transformers.models.cohere2_vision.image_processing_cohere2_vision.get_optimal_tiled_canvas
 def get_optimal_tiled_canvas(
     original_image_size: tuple[int, int],
     target_tile_size: tuple[int, int],
@@ -64,18 +81,24 @@ def get_optimal_tiled_canvas(
     possible_resolutions = get_all_supported_aspect_ratios(max_image_tiles)
     possible_resolutions = sorted(possible_resolutions, key=lambda x: x[0] * x[1])
     image_height, image_width = original_image_size
-    patch_size_height, patch_size_width = target_tile_size
+    patch_size_height, patch_size_width = target_tile_size  # (height == width)
 
     candidate_resolutions = np.array(possible_resolutions) * patch_size_height
+    # tiles following (width, height) order to align with aspect ratio convention
     tile_size = np.stack([image_width, image_height])
     required_scales = candidate_resolutions / tile_size
-    required_scale = np.min(required_scales, axis=-1, keepdims=True)
+    required_scale = np.min(required_scales, axis=-1, keepdims=True)  # [n_resolutions, 1]
     if np.all(required_scale < 1):
+        # We are forced to downscale, so try to minimize the amount of downscaling
         best_grid = possible_resolutions[np.argmax(required_scale)]
     else:
+        # Pick the resolution that required the least upscaling so that it most closely fits the image
         required_scale = np.where(required_scale < 1.0, 10e9, required_scale)
         best_grid = possible_resolutions[np.argmin(required_scale)]
-    return best_grid
+    return best_grid  # (width, height)
+
+
+# ===================== Image Processing =====================
 
 
 def batch_pixels_to_patches(array: torch.Tensor, patch_size: int) -> torch.Tensor:
@@ -156,7 +179,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         )
         chw_float = self.rescale(chw_resized.float(), scale=1.0 / 255.0)
         chw_normalized = self.normalize(chw_float, mean=image_mean, std=image_std)
-        resized = chw_normalized.permute(1, 2, 0).unsqueeze(0)  # → [1, H, W, 3]
+        resized = chw_normalized.permute(1, 2, 0).unsqueeze(0)
         crop_patch_w = base_image_input_size[1] // image_patch_size
         crop_patch_h = base_image_input_size[0] // image_patch_size
         resize_idx = torch.arange(crop_patch_w * crop_patch_h, dtype=torch.int32).reshape(crop_patch_h, crop_patch_w)

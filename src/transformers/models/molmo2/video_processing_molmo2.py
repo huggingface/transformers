@@ -29,6 +29,9 @@ from ...video_processing_utils import BaseVideoProcessor
 from .processing_molmo2 import Molmo2VideosKwargs
 
 
+# ===================== Image Processing =====================
+
+
 def batch_pixels_to_patches(array: torch.Tensor, patch_size: int) -> torch.Tensor:
     """Reshape images of [n_images, h, w, 3] -> [n_images, n_patches, pixels_per_patch]"""
     if len(array.shape) == 3:
@@ -89,7 +92,6 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         if self.size is not None and (self.size.get("height", None) is None or self.size.get("width", None) is None):
             raise ValueError("size must contain 'height' and 'width' keys.")
 
-    # Copied from transformers.models.molmo2.image_processing_molmo2.Molmo2ImageProcessor._build_resized_image
     def _build_resized_image(
         self,
         image_chw: torch.Tensor,
@@ -107,7 +109,7 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         )
         chw_float = self.rescale(chw_resized.float(), scale=1.0 / 255.0)
         chw_normalized = self.normalize(chw_float, mean=image_mean, std=image_std)
-        resized = chw_normalized.permute(1, 2, 0).unsqueeze(0)  # → [1, H, W, 3]
+        resized = chw_normalized.permute(1, 2, 0).unsqueeze(0)
         crop_patch_w = base_image_input_size[1] // image_patch_size
         crop_patch_h = base_image_input_size[0] // image_patch_size
         resize_idx = torch.arange(crop_patch_w * crop_patch_h, dtype=torch.int32).reshape(crop_patch_h, crop_patch_w)
