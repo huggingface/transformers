@@ -427,7 +427,7 @@ class DeepseekV4HCACompressor(nn.Module):
 
         if cache_layer is not None:
             compressed = cache_layer.update_compressor_states("compressor", compressed)
-        return compressed.unsqueeze(1), None
+        return compressed.unsqueeze(1)
 
 
 class DeepseekV4Indexer(nn.Module):
@@ -805,27 +805,17 @@ class DeepseekV4Attention(nn.Module):
         if past_key_values is not None:  # sliding where K==V
             kv = past_key_values.update(kv, kv, self.layer_idx)[0]
 
-        compressed_bias = None
         if self.compressor is not None:  # Compressed KV (CSA or HCA)
-            compressed_kv, compressed_bias = self.compressor(
-                hidden_states, q_residual, position_ids, past_key_values, self.layer_idx
-            )
+            compressed_kv = self.compressor(hidden_states, q_residual, position_ids, past_key_values, self.layer_idx)
             kv = torch.cat([kv, compressed_kv], dim=2)
 
         # The compressor path concatenates extra entries onto the KV axis after the
         # standard sliding-window cache update, so a tensor `attention_mask` (built
-        # for the pre-concat KV length) needs an additive bias covering them.
-        # CSA returns a per-query block bias so query `t` only sees the `k`
-        # compressed entries the indexer picked for `t` (anything else is `-inf`);
-        # HCA returns `None` and falls back to zero padding (all compressed entries
-        # visible to every query). Flex-attention gets a `BlockMask` whose KV-length
-        # axis comes from its own `mask_mod`, so we skip both code paths there.
+        # for the pre-concat KV length) needs to be right-padded to cover them.
+        # Flex-attention passes a `BlockMask` whose KV-length axis comes from its
+        # own `mask_mod`, not from a dense tensor — skip the pad in that case.
         if isinstance(attention_mask, torch.Tensor) and kv.shape[2] > attention_mask.shape[-1]:
-            extra = kv.shape[2] - attention_mask.shape[-1]
-            if compressed_bias is None:
-                attention_mask = F.pad(attention_mask, (0, extra), value=0.0)
-            else:
-                attention_mask = torch.cat([attention_mask, compressed_bias.to(attention_mask.dtype)], dim=-1)
+            attention_mask = F.pad(attention_mask, (0, kv.shape[2] - attention_mask.shape[-1]), value=0.0)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
