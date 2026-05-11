@@ -67,6 +67,10 @@ from ..phi3.modeling_phi3 import (
     Phi3DecoderLayer,
     Phi3MLP,
 )
+from ..cohere2_vision.image_processing_cohere2_vision import (
+    get_all_supported_aspect_ratios,
+    get_optimal_tiled_canvas,
+)
 from ..siglip2.modeling_siglip2 import (
     Siglip2Attention,
     Siglip2EncoderLayer,
@@ -1388,40 +1392,6 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
 # ===================== Image Processing =====================
 
 
-# Copied from transformers.models.cohere2_vision.image_processing_cohere2_vision.get_all_supported_aspect_ratios
-def get_all_supported_aspect_ratios(max_image_tiles: int) -> list[tuple[int, int]]:
-    aspect_ratios = []
-    for width in range(1, max_image_tiles + 1):
-        for height in range(1, max_image_tiles + 1):
-            if width * height <= max_image_tiles:
-                aspect_ratios.append((width, height))
-    return aspect_ratios
-
-
-# Copied from transformers.models.cohere2_vision.image_processing_cohere2_vision.get_optimal_tiled_canvas
-def get_optimal_tiled_canvas(
-    original_image_size: tuple[int, int],
-    target_tile_size: tuple[int, int],
-    min_image_tiles: int,
-    max_image_tiles: int,
-) -> tuple[int, int]:
-    possible_resolutions = get_all_supported_aspect_ratios(max_image_tiles)
-    possible_resolutions = sorted(possible_resolutions, key=lambda x: x[0] * x[1])
-    image_height, image_width = original_image_size
-    patch_size_height, patch_size_width = target_tile_size
-
-    candidate_resolutions = np.array(possible_resolutions) * patch_size_height
-    tile_size = np.stack([image_width, image_height])
-    required_scales = candidate_resolutions / tile_size
-    required_scale = np.min(required_scales, axis=-1, keepdims=True)
-    if np.all(required_scale < 1):
-        best_grid = possible_resolutions[np.argmax(required_scale)]
-    else:
-        required_scale = np.where(required_scale < 1.0, 10e9, required_scale)
-        best_grid = possible_resolutions[np.argmin(required_scale)]
-    return best_grid
-
-
 def batch_pixels_to_patches(array: torch.Tensor, patch_size: int) -> torch.Tensor:
     """Reshape images of [n_images, h, w, 3] -> [n_images, n_patches, pixels_per_patch]"""
     if len(array.shape) == 3:
@@ -1868,7 +1838,6 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         if self.size is not None and (self.size.get("height", None) is None or self.size.get("width", None) is None):
             raise ValueError("size must contain 'height' and 'width' keys.")
 
-    # Copied from transformers.models.molmo2.image_processing_molmo2.Molmo2ImageProcessor._build_resized_image
     def _build_resized_image(
         self,
         image_chw: torch.Tensor,
