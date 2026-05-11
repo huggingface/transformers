@@ -514,14 +514,6 @@ def sdpa_mask(
     ```
 
     """
-    # For BC on `cache_positions` that used to be an arg at the position of `q_length`
-    if isinstance(q_length, torch.Tensor):
-        logger.warning_once(
-            "`cache_position` is deprecated as an arg, and will be removed in Transformers v5.6. Please use `q_length` and "
-            "`q_offset` instead, similarly to `kv_length` and `kv_offset`"
-        )
-        q_length, q_offset = q_length.shape[0], q_length[0].to(device)
-
     # Potentially pad the 2D mask
     padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset)
 
@@ -719,14 +711,6 @@ def flex_attention_mask(
         device (`torch.device` or `str`, optional):
             An optional device to create the mask on.
     """
-    # For BC on `cache_positions` that used to be an arg at the position of `q_length`
-    if isinstance(q_length, torch.Tensor):
-        logger.warning_once(
-            "`cache_position` is deprecated as an arg, and will be removed in Transformers v5.6. Please use `q_length` and "
-            "`q_offset` instead, similarly to `kv_length` and `kv_offset`"
-        )
-        q_length, q_offset = q_length.shape[0], q_length[0].to(device)
-
     # Potentially add the padding 2D mask
     if attention_mask is not None:
         # Older torch (2.5.x) cannot handle sequences not in multiples of 128 (default block size)
@@ -914,8 +898,6 @@ def create_causal_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    cache_position: torch.Tensor | None = None,  # not used anymore but kept for BC
-    *,
     past_key_values: Cache | None,
     position_ids: torch.Tensor | None = None,
     or_mask_function: Callable | None = None,
@@ -1133,8 +1115,6 @@ def create_sliding_window_causal_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    cache_position: torch.Tensor | None = None,  # not used anymore but kept for BC
-    *,
     past_key_values: Cache | None,
     position_ids: torch.Tensor | None = None,
     or_mask_function: Callable | None = None,
@@ -1349,8 +1329,6 @@ def create_chunked_causal_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    cache_position: torch.Tensor | None = None,  # not used anymore but kept for BC
-    *,
     past_key_values: Cache | None,
     position_ids: torch.Tensor | None = None,
     or_mask_function: Callable | None = None,
