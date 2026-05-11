@@ -363,7 +363,7 @@ class DeepseekV4HCACompressor(nn.Module):
 
         if cache_layer is not None:
             compressed = cache_layer.update_compressor_states("compressor", compressed)
-        return compressed.unsqueeze(1)
+        return compressed.unsqueeze(1), None
 
 
 class DeepseekV4Indexer(nn.Module):
@@ -476,7 +476,27 @@ class DeepseekV4Indexer(nn.Module):
         scores = F.relu(scores) * self.softmax_scale
         weights = self.weights_proj(hidden_states).float() * self.weights_scaling  # [B, S, H]
         index_scores = (scores * weights.unsqueeze(-1)).sum(dim=2)  # [B, S, T]
-        topk = min(self.index_topk, compressed_kv.shape[1])
+        T = compressed_kv.shape[1]
+        topk = min(self.index_topk, T)
+
+        # Causal pre-mask: compressed block s covers source positions
+        # `[s*compress_rate, (s+1)*compress_rate)`. A query at absolute position
+        # `p` may only attend to blocks whose tokens are strictly past, i.e.
+        # `(s+1)*compress_rate <= p`, equivalently `s < (p+1) // compress_rate`.
+        # Without this, the top-k can land on blocks containing future tokens
+        # during prefill / training-style forwards. After top-k, any picks that
+        # are still future-pointing (e.g. when every block is masked for an
+        # early query) are replaced with a `-1` sentinel for the gather caller.
+        if T > 0:
+            pos = position_ids if position_ids.dim() == 2 else position_ids.unsqueeze(0).expand(batch, -1)
+            causal_threshold = (pos + 1) // self.compress_rate  # [B, S]
+            block_idx = torch.arange(T, device=index_scores.device)
+            future_mask = block_idx.view(1, 1, -1) >= causal_threshold.unsqueeze(-1)  # [B, S, T]
+            index_scores = index_scores.masked_fill(future_mask, float("-inf"))
+            topk_idxs = index_scores.topk(topk, dim=-1).indices  # [B, S, k]
+            invalid = topk_idxs >= causal_threshold.unsqueeze(-1)
+            return torch.where(invalid, torch.full_like(topk_idxs, -1), topk_idxs)
+
         return index_scores.topk(topk, dim=-1).indices
 
 
@@ -578,10 +598,28 @@ class DeepseekV4CSACompressor(nn.Module):
         compressed_kv = compressed.unsqueeze(1)
 
         # Lightning Indexer: gather top-`index_topk` compressed entries per query.
+        # Indexer may return `-1` sentinels for queries with fewer ready blocks than
+        # `index_topk` (early prefill positions): clamp them to a safe gather index
+        # and remember the validity to build a per-query block mask below.
         topk = self.indexer(hidden_states, q_residual, position_ids, past_key_values, layer_idx)  # [B, S, k]
+        k = topk.shape[-1]
+        valid = topk >= 0  # [B, S, k]
+        safe_topk = topk.clamp(min=0)
         expanded = compressed_kv.unsqueeze(2).expand(-1, -1, seq_len, -1, -1)
-        idx = topk.unsqueeze(1).unsqueeze(-1).expand(-1, 1, -1, -1, self.head_dim)
-        return torch.gather(expanded, 3, idx).reshape(batch, 1, -1, self.head_dim)
+        idx = safe_topk.unsqueeze(1).unsqueeze(-1).expand(-1, 1, -1, -1, self.head_dim)
+        gathered = torch.gather(expanded, 3, idx).reshape(batch, 1, -1, self.head_dim)  # [B, 1, S*k, D]
+
+        # Per-query block bias over the flat `S*k` compressed segment: query `t` may
+        # only see slots `[t*k : (t+1)*k]` (its own gathered entries) and only the
+        # ones marked valid by the indexer. Everything else is `-inf`. Without this
+        # the downstream right-pad with 0.0 would let every query attend to entries
+        # selected for other queries, which is not equivalent to per-query CSA.
+        block_bias = gathered.new_full((batch, 1, seq_len, seq_len, k), float("-inf"))
+        allowed = torch.where(valid, gathered.new_zeros(()), gathered.new_full((), float("-inf")))  # [B, S, k]
+        arange_s = torch.arange(seq_len, device=gathered.device)
+        block_bias[:, 0, arange_s, arange_s, :] = allowed  # diagonal: q_idx == block_idx
+        block_bias = block_bias.view(batch, 1, seq_len, seq_len * k)
+        return gathered, block_bias
 
 
 COMPRESSOR_CLASSES = {
@@ -658,17 +696,27 @@ class DeepseekV4Attention(nn.Module):
         if past_key_values is not None:  # sliding where K==V
             kv = past_key_values.update(kv, kv, self.layer_idx)[0]
 
+        compressed_bias = None
         if self.compressor is not None:  # Compressed KV (CSA or HCA)
-            compressed_kv = self.compressor(hidden_states, q_residual, position_ids, past_key_values, self.layer_idx)
+            compressed_kv, compressed_bias = self.compressor(
+                hidden_states, q_residual, position_ids, past_key_values, self.layer_idx
+            )
             kv = torch.cat([kv, compressed_kv], dim=2)
 
         # The compressor path concatenates extra entries onto the KV axis after the
         # standard sliding-window cache update, so a tensor `attention_mask` (built
-        # for the pre-concat KV length) needs to be right-padded to cover them.
-        # Flex-attention passes a `BlockMask` whose KV-length axis comes from its
-        # own `mask_mod`, not from a dense tensor — skip the pad in that case.
+        # for the pre-concat KV length) needs an additive bias covering them.
+        # CSA returns a per-query block bias so query `t` only sees the `k`
+        # compressed entries the indexer picked for `t` (anything else is `-inf`);
+        # HCA returns `None` and falls back to zero padding (all compressed entries
+        # visible to every query). Flex-attention gets a `BlockMask` whose KV-length
+        # axis comes from its own `mask_mod`, so we skip both code paths there.
         if isinstance(attention_mask, torch.Tensor) and kv.shape[2] > attention_mask.shape[-1]:
-            attention_mask = F.pad(attention_mask, (0, kv.shape[2] - attention_mask.shape[-1]), value=0.0)
+            extra = kv.shape[2] - attention_mask.shape[-1]
+            if compressed_bias is None:
+                attention_mask = F.pad(attention_mask, (0, extra), value=0.0)
+            else:
+                attention_mask = torch.cat([attention_mask, compressed_bias.to(attention_mask.dtype)], dim=-1)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
