@@ -18,7 +18,7 @@ from types import SimpleNamespace
 import torch
 import torch.nn as nn
 
-from transformers import PretrainedConfig
+from transformers import PretrainedConfig, PreTrainedModel
 from transformers.conversion_mapping import (
     get_checkpoint_conversion_mapping,
     get_model_conversion_mapping,
@@ -1169,8 +1169,7 @@ class TestConversionMapping(unittest.TestCase):
         )
 
         def make_mock(class_name):
-            m = type(class_name, (), {})()
-            m.config = SimpleNamespace(model_type="_tst_mtype")
+            m = type(class_name, (PreTrainedModel,), {})(PretrainedConfig(model_type="_tst_mtype"))
             return m
 
         # A module whose class name has a registry entry → class entry wins.
@@ -1196,21 +1195,19 @@ class TestConversionMapping(unittest.TestCase):
             "_tst_shared_type", [WeightRenaming(r"^w", "renamed_w")], overwrite=True
         )
 
-        def make_root_with_siblings(cls_a, cls_b):
-            """Root model with two children of different classes but the same model_type."""
-            child_a = type(cls_a, (), {})()
-            child_a.config = SimpleNamespace(model_type="_tst_shared_type")
+        class _TstEncCls(PreTrainedModel): ...
 
-            child_b = type(cls_b, (), {})()
-            child_b.config = SimpleNamespace(model_type="_tst_shared_type")
+        class _TstDecCls(PreTrainedModel): ...
 
-            root = type("_TstRoot", (), {})()
-            root.config = SimpleNamespace(model_type="_tst_root_only")
-            return root
+        class _TstRoot(PreTrainedModel): ...
 
-        transforms = get_model_conversion_mapping(
-            make_root_with_siblings("_TstEncCls", "_TstDecCls"), add_legacy=False
-        )
+        child_a = _TstEncCls(PretrainedConfig(model_type="_tst_shared_type"))
+        child_b = _TstDecCls(PretrainedConfig(model_type="_tst_shared_type"))
+        root = _TstRoot(PretrainedConfig(model_type="_tst_root_only"))
+        root.encoder = child_a
+        root.decoder = child_b
+
+        transforms = get_model_conversion_mapping(root, add_legacy=False)
         scope_prefixes = [t.scope_prefix for t in transforms]
 
         # Both siblings must be represented with their own scoped transforms.
@@ -1221,14 +1218,15 @@ class TestConversionMapping(unittest.TestCase):
         """Two sibling sub-models of the *same* class must each get their own scoped transforms."""
         register_checkpoint_conversion_mapping("_TstSharedCls", [WeightRenaming(r"^w", "renamed_w")], overwrite=True)
 
-        child_a = type("_TstSharedCls", (), {})()
-        child_a.config = SimpleNamespace(model_type="_tst_shared_cls_mtype")
+        class _TstSharedCls(PreTrainedModel): ...
 
-        child_b = type("_TstSharedCls", (), {})()
-        child_b.config = SimpleNamespace(model_type="_tst_shared_cls_mtype")
+        class _TstRootSharedCls(PreTrainedModel): ...
 
-        root = type("_TstRootSharedCls", (), {})()
-        root.config = SimpleNamespace(model_type="_tst_root_only2")
+        child_a = _TstSharedCls(PretrainedConfig(model_type="_tst_shared_cls_mtype"))
+        child_b = _TstSharedCls(PretrainedConfig(model_type="_tst_shared_cls_mtype"))
+        root = _TstRootSharedCls(PretrainedConfig(model_type="_tst_root_only2"))
+        root.encoder = child_a
+        root.decoder = child_b
 
         transforms = get_model_conversion_mapping(root, add_legacy=False)
         scope_prefixes = [t.scope_prefix for t in transforms]
@@ -1240,15 +1238,18 @@ class TestConversionMapping(unittest.TestCase):
         """When the root model claims a model_type unscoped, a nested child with the
         same model_type must NOT produce a second (incorrectly scoped) copy of those
         transforms — the root's unscoped transforms already cover all keys."""
+
+        class _TstChildSame(PreTrainedModel): ...
+
+        class _TstRootSame(PreTrainedModel): ...
+
         register_checkpoint_conversion_mapping(
             "_tst_root_child_shared", [WeightRenaming(r"^w", "renamed_w")], overwrite=True
         )
 
-        child = type("_TstChildSame", (), {})()
-        child.config = SimpleNamespace(model_type="_tst_root_child_shared")
-
-        root = type("_TstRootSame", (), {})()
-        root.config = SimpleNamespace(model_type="_tst_root_child_shared")
+        child = _TstChildSame(PretrainedConfig(model_type="_tst_root_child_shared"))
+        root = _TstRootSame(PretrainedConfig(model_type="_tst_root_child_shared"))
+        root.submodel = child
 
         transforms = get_model_conversion_mapping(root, add_legacy=False)
         # Only one unscoped transform (from the root); child must be suppressed.

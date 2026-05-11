@@ -1060,6 +1060,8 @@ def get_model_conversion_mapping(
     seen to prevent `XForY` / `XModel` pairs from applying the same mapping
     twice via different lookup paths.
     """
+    from .modeling_utils import PreTrainedModel
+
     # note: this function is used in PEFT, so changing the API requires coordination
     weight_conversions = []
 
