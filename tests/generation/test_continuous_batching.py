@@ -14,12 +14,17 @@
 
 import functools
 import gc
+import inspect
 import itertools
+import os
+import subprocess
+import tempfile
 import unittest
 from typing import Any
 from unittest.mock import patch
 
 import torch
+import torch.distributed as dist
 from parameterized import parameterized
 
 from transformers import (
@@ -485,6 +490,64 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
 
         loop.call_soon_threadsafe.assert_called_once()
         self.assertTrue(router.output_queue.empty())
+
+    def test_distributed_helper_no_dist(self) -> None:
+        """Test that DistributedHelper falls back to a single-rank, TP-driver setup when distributed is not on."""
+        helper = DistributedHelper(device_mesh=None)
+        self.assertFalse(helper.dist_on)
+        self.assertEqual(helper.global_rank, 0)
+        self.assertEqual(helper.world_size, 1)
+        self.assertEqual(helper.tp_size, 1)
+        self.assertEqual(helper.tp_local_rank, 0)
+        self.assertEqual(helper.dp_rank, 0)
+        self.assertEqual(helper.dp_size, 1)
+        self.assertTrue(helper.is_tp_driver)
+        self.assertIsNone(helper.tp_group)
+        self.assertIsNone(helper.ingress_group)
+
+        # Tensor and object broadcasts should be no-ops without a TP group
+        tensor = torch.tensor([1.0, 2.0])
+        self.assertTrue(torch.equal(helper.tp_broadcast_from_rank_0(tensor), tensor))
+        obj = {"some_request": "payload"}
+        self.assertIs(helper.tp_broadcast_object(obj), obj)
+
+    def test_distributed_helper_set_tp_seed_no_dist(self) -> None:
+        """Test that set_tp_seed sets a torch seed without distributed initialized, both with and without a user seed."""
+        helper = DistributedHelper(device_mesh=None)
+
+        # Explicit seed: torch RNG state must be reproducible across calls
+        helper.set_tp_seed(seed=42, model_device=torch.device("cpu"))
+        first = torch.randint(0, 2**31 - 1, (4,))
+        helper.set_tp_seed(seed=42, model_device=torch.device("cpu"))
+        second = torch.randint(0, 2**31 - 1, (4,))
+        self.assertTrue(torch.equal(first, second))
+
+        # No seed: should not raise and should still set a torch seed
+        helper.set_tp_seed(seed=None, model_device=torch.device("cpu"))
+
+    def test_continuous_batching_config_disables_nccl_graph_mixing(self) -> None:
+        """Test that constructing a ContinuousBatchingConfig sets NCCL_GRAPH_MIXING_SUPPORT=0 by default and only sets
+        it when the disable_nccl_graph_mixing flag is on."""
+        original = os.environ.pop("NCCL_GRAPH_MIXING_SUPPORT", None)
+        try:
+            # Default: env var is set to "0"
+            ContinuousBatchingConfig()
+            self.assertEqual(os.environ.get("NCCL_GRAPH_MIXING_SUPPORT"), "0")
+
+            # Explicitly disabled flag: env var is left untouched
+            os.environ.pop("NCCL_GRAPH_MIXING_SUPPORT", None)
+            ContinuousBatchingConfig(disable_nccl_graph_mixing=False)
+            self.assertNotIn("NCCL_GRAPH_MIXING_SUPPORT", os.environ)
+
+            # setdefault semantics: a pre-existing value is preserved
+            os.environ["NCCL_GRAPH_MIXING_SUPPORT"] = "1"
+            ContinuousBatchingConfig()
+            self.assertEqual(os.environ.get("NCCL_GRAPH_MIXING_SUPPORT"), "1")
+        finally:
+            if original is None:
+                os.environ.pop("NCCL_GRAPH_MIXING_SUPPORT", None)
+            else:
+                os.environ["NCCL_GRAPH_MIXING_SUPPORT"] = original
 
 
 @require_torch_accelerator
