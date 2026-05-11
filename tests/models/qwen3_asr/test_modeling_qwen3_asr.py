@@ -22,7 +22,7 @@ from transformers import (
     AutoProcessor,
     Qwen3ASRConfig,
     Qwen3ASRForConditionalGeneration,
-    Qwen3ASRForForcedAlignment,
+    Qwen3ASRForTokenClassification,
     Qwen3ASRModel,
     is_torch_available,
 )
@@ -289,7 +289,7 @@ class Qwen3ForcedAlignerIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     def _load_aligner(self):
-        return Qwen3ASRForForcedAlignment.from_pretrained(
+        return Qwen3ASRForTokenClassification.from_pretrained(
             self.aligner_checkpoint,
             device_map="auto",
             torch_dtype=torch.bfloat16,

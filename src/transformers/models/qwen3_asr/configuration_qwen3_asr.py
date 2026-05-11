@@ -70,8 +70,13 @@ class Qwen3ASREncoderConfig(PreTrainedConfig):
 @strict
 class Qwen3ASRConfig(PreTrainedConfig):
     r"""
+    score_bias (`bool`, *optional*, defaults to False):
+        Whether the token classification head for forced alignment should have a bias term.
     audio_token_id (`int`, *optional*, defaults to 151676):
         The audio token id to encode the audio prompt.
+    timestamp_token_id (`int`, *optional*, defaults to 151705):
+        Token ID of the ``<timestamp>`` marker in the tokenizer vocabulary. These markers
+        delimit word boundaries in the forced-alignment input sequence.
 
     Example:
 
@@ -93,11 +98,17 @@ class Qwen3ASRConfig(PreTrainedConfig):
 
     audio_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
+    score_bias: bool = False
     audio_token_id: int = 151676
+    timestamp_token_id: int = 151705
     pad_token_id: int = 151645
     eos_token_id: list[int] | tuple[int, ...] | int = (151643, 151645)
     initializer_range: float = 0.02
     tie_word_embeddings: bool = True
+
+    @property
+    def hidden_size(self):
+        return self.text_config.hidden_size
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
@@ -124,38 +135,4 @@ class Qwen3ASRConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="bezzam/Qwen3-ForcedAligner-0.6B")
-@strict
-class Qwen3ForcedAlignerConfig(Qwen3ASRConfig):
-    r"""
-    num_timestamp_bins (`int`, *optional*, defaults to 5000):
-        Number of discrete timestamp bins the model can predict. Each bin corresponds
-        to a time offset of ``timestamp_segment_time`` milliseconds (set on the processor),
-        so the maximum representable duration is ``num_timestamp_bins * timestamp_segment_time`` ms
-        (e.g. 5000 * 80 ms = 400 s).
-    timestamp_token_id (`int`, *optional*, defaults to 151705):
-        Token ID of the ``<timestamp>`` marker in the tokenizer vocabulary. These markers
-        delimit word boundaries in the forced-alignment input sequence.
-
-    Example:
-
-    ```python
-    >>> from transformers import Qwen3ASRForForcedAlignment, Qwen3ForcedAlignerConfig
-
-    >>> # Initializing a Qwen3ForcedAligner style configuration
-    >>> configuration = Qwen3ForcedAlignerConfig()
-
-    >>> # Initializing a model from the configuration
-    >>> model = Qwen3ASRForForcedAlignment(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
-
-    model_type = "qwen3_forced_aligner"
-
-    num_timestamp_bins: int = 5000
-    timestamp_token_id: int = 151705
-
-
-__all__ = ["Qwen3ASREncoderConfig", "Qwen3ASRConfig", "Qwen3ForcedAlignerConfig"]
+__all__ = ["Qwen3ASREncoderConfig", "Qwen3ASRConfig"]

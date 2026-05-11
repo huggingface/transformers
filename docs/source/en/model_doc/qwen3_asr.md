@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2026-04-24.*
+*This model was released on 2026-01-29 and added to Hugging Face Transformers on 2026-05-11.*
 
 # Qwen3 ASR
 
@@ -228,7 +228,7 @@ loss.backward()
 
 ### Forced alignment (word-level timestamping)
 
-Use `Qwen3ASRForForcedAlignment` to obtain word-level timestamps from a transcript. First transcribe with the ASR model, then align with the forced aligner.
+Use `Qwen3ASRForTokenClassification` to obtain word-level timestamps from a transcript. First transcribe with the ASR model, then align with the forced aligner.
 
 The following languages are supported: Chinese (zh), English (en), Cantonese (yue), French (fr), German (de), Italian (it), Japanese (ja), Korean (ko), Portuguese (pt), Russian (ru), Spanish (es).
 
@@ -241,7 +241,7 @@ pip install nagisa soynlp
 
 ```python
 import torch
-from transformers import AutoProcessor, AutoModelForMultimodalLM, AutoModelForForcedAlignment
+from transformers import AutoProcessor, AutoModelForMultimodalLM, AutoModelForTokenClassification
 
 asr_model_id = "bezzam/Qwen3-ASR-0.6B"
 aligner_model_id = "bezzam/Qwen3-ForcedAligner-0.6B"
@@ -250,8 +250,8 @@ asr_processor = AutoProcessor.from_pretrained(asr_model_id)
 asr_model = AutoModelForMultimodalLM.from_pretrained(asr_model_id, device_map="auto")
 
 aligner_processor = AutoProcessor.from_pretrained(aligner_model_id)
-aligner_model = AutoModelForForcedAlignment.from_pretrained(
-    aligner_model_id, torch_dtype=torch.bfloat16, device_map="auto"
+aligner_model = AutoModelForTokenClassification.from_pretrained(
+    aligner_model_id, dtype=torch.bfloat16, device_map="auto"
 )
 
 audio_url = "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
@@ -305,17 +305,17 @@ The forced aligner is model-agnostic, meaning the transcripts from any ASR syste
 ```python
 import torch
 from datasets import Audio, load_dataset
-from transformers import AutoModelForCTC, AutoProcessor, AutoModelForForcedAlignment
+from transformers import AutoModelForCTC, AutoProcessor, AutoModelForTokenClassification
 
 parakeet_processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-1.1b")
 parakeet_model = AutoModelForCTC.from_pretrained(
-    "nvidia/parakeet-ctc-1.1b", torch_dtype="auto", device_map="cuda",
+    "nvidia/parakeet-ctc-1.1b", dtype="auto", device_map="cuda",
 )
 
 aligner_model_id = "bezzam/Qwen3-ForcedAligner-0.6B"
 aligner_processor = AutoProcessor.from_pretrained(aligner_model_id)
-aligner_model = AutoModelForForcedAlignment.from_pretrained(
-    aligner_model_id, torch_dtype=torch.bfloat16, device_map="cuda",
+aligner_model = AutoModelForTokenClassification.from_pretrained(
+    aligner_model_id, dtype=torch.bfloat16, device_map="cuda",
 )
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -365,14 +365,14 @@ On an A100, we observed a speed-up of ~2.5 for a batch size of 4 ([script](https
 
 ```python
 import torch
-from transformers import AutoProcessor, AutoModelForForcedAlignment
+from transformers import AutoProcessor, AutoModelForTokenClassification
 
 model_id = "bezzam/Qwen3-ForcedAligner-0.6B"
 num_warmup = 5
 batch_size = 4
 
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForForcedAlignment.from_pretrained(model_id, torch_dtype=torch.bfloat16).to("cuda")
+model = AutoModelForTokenClassification.from_pretrained(model_id, dtype=torch.bfloat16).to("cuda")
 
 # Prepare a batch of 4 samples
 audio_url = "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
@@ -409,7 +409,7 @@ num_warmup = 3
 max_new_tokens = 256
 
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForMultimodalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16).to("cuda").eval()
+model = AutoModelForMultimodalLM.from_pretrained(model_id, dtype=torch.bfloat16).to("cuda").eval()
 
 audio_url = "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
 inputs = processor.apply_transcription_request(
@@ -497,12 +497,7 @@ print(f"Transcription: {transcription}")
     - forward
     - get_audio_features
 
-## Qwen3ForcedAlignerConfig
+## Qwen3ASRForTokenClassification
 
-[[autodoc]] Qwen3ForcedAlignerConfig
-
-## Qwen3ASRForForcedAlignment
-
-[[autodoc]] Qwen3ASRForForcedAlignment
+[[autodoc]] Qwen3ASRForTokenClassification
     - forward
-    - get_audio_features

@@ -255,7 +255,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         # Our configs prev wouldn't save `id2label` for 2 labels because it is the default. In all other
         # cases we expect the config dict to have an `id2label` field if it's a clf model, or not otherwise
         if self.id2label is None:
-            self.num_labels = kwargs.get("num_labels", 2)
+            self.num_labels = kwargs.get("num_labels", self.num_labels if self.num_labels is not None else 2)
         else:
             if kwargs.get("num_labels") is not None and len(self.id2label) != kwargs.get("num_labels"):
                 logger.warning(

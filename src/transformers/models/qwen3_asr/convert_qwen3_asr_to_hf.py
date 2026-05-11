@@ -68,9 +68,8 @@ from transformers import (
     Qwen3ASRConfig,
     Qwen3ASRFeatureExtractor,
     Qwen3ASRForConditionalGeneration,
-    Qwen3ASRForForcedAlignment,
+    Qwen3ASRForTokenClassification,
     Qwen3ASRProcessor,
-    Qwen3ForcedAlignerConfig,
 )
 
 
@@ -86,7 +85,7 @@ STATE_DICT_MAPPING_ASR = {
 
 STATE_DICT_MAPPING_FORCED_ALIGNER = {
     "thinker.model.": "model.language_model.",
-    "thinker.lm_head.": "classifier.",
+    "thinker.lm_head.": "score.",
     "thinker.": "model.",
 }
 # fmt: on
@@ -282,8 +281,13 @@ def write_asr_model(src_root: Path, dst_root: Path):
 def write_forced_aligner_model(src_root: Path, dst_root: Path):
     """Convert and write a Qwen3 Forced Aligner model."""
     config_dict = clean_config(src_root, "forced_aligner")
-    config = Qwen3ForcedAlignerConfig(**config_dict)
-    model = Qwen3ASRForForcedAlignment(config).to(torch.bfloat16)
+
+    # Ensure num_labels is set for token classification
+    # Each bin corresponds to a time offset of ``timestamp_segment_time`` milliseconds (set on the processor), so the
+    # maximum representable duration is ``num_timestamp_bins * timestamp_segment_time`` ms (e.g. 5000 x 80 ms = 400 s).
+    config_dict["num_labels"] = config_dict.get("num_timestamp_bins", 5000)
+    config = Qwen3ASRConfig(**config_dict)
+    model = Qwen3ASRForTokenClassification(config).to(torch.bfloat16)
 
     state = load_state_dict(src_root)
     state = convert_state_dict(state, STATE_DICT_MAPPING_FORCED_ALIGNER)
@@ -361,7 +365,7 @@ def main() -> None:
         if model_type == "asr":
             _ = Qwen3ASRForConditionalGeneration.from_pretrained(args.push_to_hub)
         else:
-            _ = Qwen3ASRForForcedAlignment.from_pretrained(args.push_to_hub)
+            _ = Qwen3ASRForTokenClassification.from_pretrained(args.push_to_hub)
         logger.info("Verification successful!")
 
 

@@ -552,8 +552,8 @@ class Qwen3ASRProcessor(ProcessorMixin):
         Decode forced aligner model outputs into word-level timestamps.
 
         Args:
-            logits (`torch.Tensor` of shape `(batch_size, seq_len, num_timestamp_bins)`):
-                Classification logits from [`Qwen3ASRForForcedAlignment`].
+            logits (`torch.Tensor` of shape `(batch_size, seq_len, num_labels)`):
+                Classification logits from [`Qwen3ASRForTokenClassification`].
             input_ids (`torch.LongTensor` of shape `(batch_size, seq_len)`):
                 Input token IDs used for the forward pass.
             word_lists (`list[list[str]]`):

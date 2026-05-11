@@ -22,7 +22,8 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast, TokenClassifierOutput
+from ...modeling_layers import GenericForTokenClassification
+from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -68,8 +69,13 @@ class Qwen3ASREncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
 @strict
 class Qwen3ASRConfig(PreTrainedConfig):
     r"""
+    score_bias (`bool`, *optional*, defaults to False):
+        Whether the token classification head for forced alignment should have a bias term.
     audio_token_id (`int`, *optional*, defaults to 151676):
         The audio token id to encode the audio prompt.
+    timestamp_token_id (`int`, *optional*, defaults to 151705):
+        Token ID of the ``<timestamp>`` marker in the tokenizer vocabulary. These markers
+        delimit word boundaries in the forced-alignment input sequence.
 
     Example:
 
@@ -91,11 +97,17 @@ class Qwen3ASRConfig(PreTrainedConfig):
 
     audio_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
+    score_bias: bool = False
     audio_token_id: int = 151676
+    timestamp_token_id: int = 151705
     pad_token_id: int = 151645
     eos_token_id: list[int] | tuple[int, ...] | int = (151643, 151645)
     initializer_range: float = 0.02
     tie_word_embeddings: bool = True
+
+    @property
+    def hidden_size(self):
+        return self.text_config.hidden_size
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
@@ -441,122 +453,13 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
         return model_inputs
 
 
-@auto_docstring(checkpoint="bezzam/Qwen3-ForcedAligner-0.6B")
-@strict
-class Qwen3ForcedAlignerConfig(Qwen3ASRConfig):
-    r"""
-    num_timestamp_bins (`int`, *optional*, defaults to 5000):
-        Number of discrete timestamp bins the model can predict. Each bin corresponds
-        to a time offset of ``timestamp_segment_time`` milliseconds (set on the processor),
-        so the maximum representable duration is ``num_timestamp_bins * timestamp_segment_time`` ms
-        (e.g. 5000 * 80 ms = 400 s).
-    timestamp_token_id (`int`, *optional*, defaults to 151705):
-        Token ID of the ``<timestamp>`` marker in the tokenizer vocabulary. These markers
-        delimit word boundaries in the forced-alignment input sequence.
-
-    Example:
-
-    ```python
-    >>> from transformers import Qwen3ASRForForcedAlignment, Qwen3ForcedAlignerConfig
-
-    >>> # Initializing a Qwen3ForcedAligner style configuration
-    >>> configuration = Qwen3ForcedAlignerConfig()
-
-    >>> # Initializing a model from the configuration
-    >>> model = Qwen3ASRForForcedAlignment(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
-
-    model_type = "qwen3_forced_aligner"
-
-    num_timestamp_bins: int = 5000
-    timestamp_token_id: int = 151705
-
-
 @auto_docstring(
     custom_intro="""
-    The Qwen3 Forced Aligner model which consists of an audio encoder, a language model backbone,
-    and a token classification head for forced alignment.
+    The Qwen3 ASR model with a token classification head for timestamp prediction (forced alignment).
     """
 )
-class Qwen3ASRForForcedAlignment(Qwen3ASRPreTrainedModel):
-    config_class = Qwen3ForcedAlignerConfig
-
-    def __init__(self, config: Qwen3ForcedAlignerConfig):
-        super().__init__(config)
-        self.num_timestamp_bins = config.num_timestamp_bins
-        self.model = Qwen3ASRModel(config)
-        self.classifier = nn.Linear(config.text_config.hidden_size, config.num_timestamp_bins, bias=False)
-
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
-    def get_audio_features(
-        self,
-        input_features: torch.FloatTensor,
-        input_features_mask: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_audio_features(
-            input_features=input_features,
-            input_features_mask=input_features_mask,
-            **kwargs,
-        )
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        input_features: torch.FloatTensor | None = None,
-        input_features_mask: torch.Tensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> TokenClassifierOutput:
-        r"""
-        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding feature indices.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the forced alignment loss. Indices should be in `[0, ..., config.num_timestamp_bins - 1]`.
-        """
-
-        outputs = self.model(
-            input_ids=input_ids,
-            input_features=input_features,
-            input_features_mask=input_features_mask,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            **kwargs,
-        )
-
-        hidden_states = outputs[0]
-        logits = self.classifier(hidden_states)
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.num_timestamp_bins)
-
-        return TokenClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+class Qwen3ASRForTokenClassification(GenericForTokenClassification, Qwen3ASRPreTrainedModel):
+    pass
 
 
 __all__ = [
@@ -566,6 +469,5 @@ __all__ = [
     "Qwen3ASRForConditionalGeneration",
     "Qwen3ASRModel",
     "Qwen3ASRPreTrainedModel",
-    "Qwen3ForcedAlignerConfig",
-    "Qwen3ASRForForcedAlignment",
+    "Qwen3ASRForTokenClassification",
 ]

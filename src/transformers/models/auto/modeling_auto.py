@@ -376,7 +376,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("qwen3_5_moe_text", "Qwen3_5MoeTextModel"),
         ("qwen3_5_text", "Qwen3_5TextModel"),
         ("qwen3_asr", "Qwen3ASRModel"),
-        ("qwen3_forced_aligner", "Qwen3ASRForForcedAlignment"),
         ("qwen3_moe", "Qwen3MoeModel"),
         ("qwen3_next", "Qwen3NextModel"),
         ("qwen3_vl", "Qwen3VLModel"),
@@ -1530,6 +1529,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("qwen2", "Qwen2ForTokenClassification"),
         ("qwen2_moe", "Qwen2MoeForTokenClassification"),
         ("qwen3", "Qwen3ForTokenClassification"),
+        ("qwen3_asr", "Qwen3ASRForTokenClassification"),
         ("qwen3_moe", "Qwen3MoeForTokenClassification"),
         ("qwen3_next", "Qwen3NextForTokenClassification"),
         ("rembert", "RemBertForTokenClassification"),
@@ -1839,12 +1839,6 @@ MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
     ]
 )
 
-MODEL_FOR_FORCED_ALIGNMENT_MAPPING_NAMES = OrderedDict(
-    [
-        ("qwen3_forced_aligner", "Qwen3ASRForForcedAlignment"),
-    ]
-)
-
 MODEL_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_MAPPING_NAMES)
 MODEL_FOR_PRETRAINING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_PRETRAINING_MAPPING_NAMES)
 MODEL_FOR_CAUSAL_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_CAUSAL_LM_MAPPING_NAMES)
@@ -1957,8 +1951,6 @@ MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING = _LazyAutoMapping(
 MODEL_FOR_IMAGE_TO_IMAGE_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES)
 
 MODEL_FOR_AUDIO_TOKENIZATION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_TOKENIZATION_NAMES)
-
-MODEL_FOR_FORCED_ALIGNMENT_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_FORCED_ALIGNMENT_MAPPING_NAMES)
 
 
 class AutoModelForMaskGeneration(_BaseAutoModelClass):
@@ -2296,13 +2288,6 @@ AutoModelForAudioTokenization = auto_class_update(
 )
 
 
-class AutoModelForForcedAlignment(_BaseAutoModelClass):
-    _model_mapping = MODEL_FOR_FORCED_ALIGNMENT_MAPPING
-
-
-AutoModelForForcedAlignment = auto_class_update(AutoModelForForcedAlignment, head_doc="forced alignment")
-
-
 __all__ = [
     "MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
     "MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING",
@@ -2312,7 +2297,6 @@ __all__ = [
     "MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING",
     "MODEL_FOR_CAUSAL_LM_MAPPING",
     "MODEL_FOR_CTC_MAPPING",
-    "MODEL_FOR_FORCED_ALIGNMENT_MAPPING",
     "MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING",
     "MODEL_FOR_DEPTH_ESTIMATION_MAPPING",
     "MODEL_FOR_TEXT_RECOGNITION_MAPPING",
@@ -2361,7 +2345,6 @@ __all__ = [
     "AutoModelForAudioXVector",
     "AutoModelForCausalLM",
     "AutoModelForCTC",
-    "AutoModelForForcedAlignment",
     "AutoModelForDepthEstimation",
     "AutoModelForTextRecognition",
     "AutoModelForTableRecognition",
