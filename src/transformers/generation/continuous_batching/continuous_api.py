@@ -25,7 +25,6 @@ from typing import Any
 
 import torch
 from torch import nn
-from torch.distributed.tensor.device_mesh import DeviceMesh
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
@@ -149,7 +148,7 @@ class ContinuousBatchProcessor:
         model_device: torch.device,
         model_dtype: torch.dtype,
         scheduler: Scheduler,
-        device_mesh: DeviceMesh | None,
+        distributed_helper: DistributedHelper,
     ) -> None:
         """Initialize the continuous batch processor.
 
@@ -166,7 +165,7 @@ class ContinuousBatchProcessor:
             model_device: Device for model inputs/outputs
             model_dtype: Data type for model inputs/outputs
             scheduler: The [`Scheduler`] to use
-            device_mesh: The device mesh if there is one
+            distributed_helper: The [`DistributedHelper`] to use
         """
         self.cache = cache
         self.config = config
@@ -179,7 +178,7 @@ class ContinuousBatchProcessor:
         self.model_device = model_device
         self.model_dtype = model_dtype
         self.scheduler = scheduler
-        self.distributed_helper = DistributedHelper(device_mesh=device_mesh)
+        self.distributed_helper = distributed_helper
 
         # Generation-related attributes
         self.do_sample = getattr(generation_config, "do_sample", True)
@@ -268,7 +267,7 @@ class ContinuousBatchProcessor:
             payload = (new_states, cancellations)
         # Otherwise, the payload is None
         else:
-            payload = None
+            payload = ([], [])
 
         # Broadcast within the TP group. No-op when tp_size == 1, returns the driver's payload unchanged.
         payload = self.distributed_helper.tp_broadcast_object(payload)
@@ -522,11 +521,11 @@ class ContinuousBatchingManager:
         self.fatal_error: Exception | None = None
 
         # Infer if this process is the driver of its own TP group
-        helper = DistributedHelper(device_mesh=getattr(self.model, "_device_mesh", None))
-        self.is_tp_driver = helper.is_tp_driver
+        self.distributed_helper = DistributedHelper(device_mesh=getattr(self.model, "_device_mesh", None))
+        self.is_tp_driver = self.distributed_helper.is_tp_driver
         # If TP is on, check if NCCL graph mixing is disabled (helps with performance)
         if continuous_batching_config.disable_nccl_graph_mixing:
-            helper.maybe_warn_nccl_graph_mixing()
+            self.distributed_helper.maybe_warn_nccl_graph_mixing()
 
         # Generation config related arguments
         num_return_sequences = getattr(generation_config, "num_return_sequences", None)
@@ -609,6 +608,7 @@ class ContinuousBatchingManager:
         # If the manager is not being kept for next session, we clear the batch processor
         if not keep_for_next_session:
             self.batch_processor = None
+            self.distributed_helper.destroy_ingress_group()
         # Otherwise, we keep the batch processor and cache the manager as a model attribute
         else:
             logger.info("Continuous batching manager will be kept for next session.")
@@ -804,15 +804,13 @@ class ContinuousBatchingManager:
         self.batch_processor._generation_step(self.model)
 
     def _create_batch_processor(self) -> ContinuousBatchProcessor:
-        # Retrieve the device mesh if there is one
-        device_mesh: DeviceMesh | None = getattr(self.model, "_device_mesh", None)
         # Create the PagedAttentionCache
         paged_attention_cache = PagedAttentionCache(
-            self.model.config,
-            self.continuous_batching_config,
-            self.model.device,
-            self.model.dtype,
-            tp_size=DistributedHelper(device_mesh=device_mesh).tp_size,  # consistent with the batch processor
+            config=self.model.config,
+            continuous_batching_config=self.continuous_batching_config,
+            device=self.model.device,
+            distributed_helper=self.distributed_helper,
+            dtype=self.model.dtype,
         )
         self._use_prefix_sharing = paged_attention_cache.use_prefix_sharing  # update the approximation
 
@@ -841,7 +839,7 @@ class ContinuousBatchingManager:
             model_device=self.model.device,
             model_dtype=self.model.dtype,
             scheduler=scheduler(paged_attention_cache),
-            device_mesh=device_mesh,
+            distributed_helper=self.distributed_helper,
         )
         return batch_processor
 

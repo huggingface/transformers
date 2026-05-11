@@ -17,7 +17,7 @@ from collections import OrderedDict
 from contextlib import contextmanager
 from dataclasses import dataclass
 from math import ceil, log2
-from typing import Any
+from typing import Any, TypeVar
 
 import torch
 import torch.distributed as dist
@@ -27,6 +27,9 @@ from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import is_torch_greater_or_equal
 
 from .requests import FutureRequestState, RequestState, RequestStatus, logger
+
+
+T = TypeVar("T")
 
 
 class CudaGraphBuffer:
@@ -266,13 +269,25 @@ class DistributedHelper:
         self.dp_rank = self.global_rank // self.tp_size
         self.dp_size = self.world_size // self.tp_size
 
+    def destroy_ingress_group(self) -> None:
+        """Destroys the ingress group."""
+        if self.ingress_group is not None:
+            dist.destroy_process_group(self.ingress_group)
+        self.ingress_group = None
+
     def tp_broadcast_from_rank_0(self, value: torch.Tensor) -> torch.Tensor:
         """Inside each TP group, broadcasts the given value from rank 0 to all other ranks."""
         if self.tp_size > 1:
             dist.broadcast(value, src=self.tp_root_global_rank, async_op=False, group=self.tp_group)
         return value
 
-    def tp_broadcast_object(self, obj):
+    def tp_all_reduce_min(self, value: torch.Tensor) -> torch.Tensor:
+        """Inside each TP group, all-reduces a tensor with the MIN op. No-op when TP is off."""
+        if self.tp_size > 1:
+            dist.all_reduce(value, op=dist.ReduceOp.MIN, group=self.tp_group)
+        return value
+
+    def tp_broadcast_object(self, obj: T) -> T:
         """Inside each TP group, broadcasts an arbitrary picklable Python object from TP-rank 0 to all other ranks.
         Used to keep request ingress and cancellations consistent across TP workers without requiring all ranks to
         receive the same external request stream. Uses a dedicated CPU (gloo) `ingress_group` for broadcast."""
@@ -289,8 +304,8 @@ class DistributedHelper:
         happen if the distributed group is created before graph mixing is disabled. Typically, if the model is
         initialized before the ContinousBatchingConfig is created."""
         tp_on = self.tp_size > 1
-        graph_mixing_supported = os.environ.get("NCCL_GRAPH_MIXING_SUPPORT") != "0"
-        if tp_on or graph_mixing_supported:
+        graph_mixing_not_disabled = os.environ.get("NCCL_GRAPH_MIXING_SUPPORT") != "0"
+        if tp_on and graph_mixing_not_disabled:
             logger.warning(
                 "NCCL_GRAPH_MIXING_SUPPORT was not set to '0' before init_process_group: performance will be harmed. "
                 "Construct your `ContinuousBatchingConfig(...)` BEFORE calling `from_pretrained(tp_plan='auto')`, or "
@@ -306,7 +321,7 @@ class DistributedHelper:
         # Broadcast the seed to all ranks from rank 0 and memoize it
         tp_seed_tensor = self.tp_broadcast_from_rank_0(tp_seed_tensor)
         tp_seed = tp_seed_tensor.item()
-        if self.global_rank == 0:
-            logger.warning(f"Found no user-specified seed in the config. Setting the config seed to: {tp_seed}.")
+        if self.global_rank == 0 and seed is None:
+            logger.info(f"Found no user-specified seed in the config. Setting the config seed to: {tp_seed}.")
         # Set the seed while accounting for DP replicas
         torch.manual_seed(tp_seed + self.dp_rank)

@@ -367,6 +367,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
             config=AutoConfig.from_pretrained("HuggingFaceTB/SmolLM-1.7B", attn_implementation="sdpa"),
             continuous_batching_config=ContinuousBatchingConfig(block_size=16, num_blocks=8, max_batch_tokens=8),
             device=torch_device,
+            distributed_helper=DistributedHelper(device_mesh=None),
         )
 
         # Overload cache parameters to match test scenario
@@ -510,6 +511,11 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         self.assertTrue(torch.equal(helper.tp_broadcast_from_rank_0(tensor), tensor))
         obj = {"some_request": "payload"}
         self.assertIs(helper.tp_broadcast_object(obj), obj)
+
+        # All-reduce-min should be a no-op without a TP group
+        reduce_tensor = torch.tensor([7, 3], dtype=torch.int64)
+        self.assertIs(helper.tp_all_reduce_min(reduce_tensor), reduce_tensor)
+        self.assertTrue(torch.equal(reduce_tensor, torch.tensor([7, 3], dtype=torch.int64)))
 
     def test_distributed_helper_set_tp_seed_no_dist(self) -> None:
         """Test that set_tp_seed sets a torch seed without distributed initialized, both with and without a user seed."""

@@ -24,6 +24,7 @@ from ...utils.metrics import attach_tracer, traced
 from .cache_manager import BlockManager, CacheAllocator, FullAttentionCacheAllocator, SlidingAttentionCacheAllocator
 from .initialization import resolve_max_memory_percent
 from .requests import RequestState, RequestStatus, get_device_and_memory_breakdown, logger
+from .utils import DistributedHelper
 
 
 def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]], list[str]]:
@@ -122,8 +123,8 @@ class PagedAttentionCache:
         config: PreTrainedConfig,
         continuous_batching_config: ContinuousBatchingConfig,
         device: torch.device | str,
+        distributed_helper: DistributedHelper,
         dtype: torch.dtype = torch.float16,
-        tp_size: int | None = None,
     ) -> None:
         """Initialize a paged attention cache for efficient memory usage. Also turns in prefix sharing if the model has
         only full attention layers.
@@ -132,8 +133,8 @@ class PagedAttentionCache:
             config: Model configuration
             continuous_batching_config: Continuous batching configuration containing cache parameters
             device: Device for the cache tensors
+            distributed_helper: TP-aware helper. Used to dispatch attention heads and ensure coherent cache size
             dtype: Data type of the cache
-            tp_size: Tensor parallelism size
         """
         self.config = config
         self.dtype = dtype
@@ -165,7 +166,8 @@ class PagedAttentionCache:
 
         # Account for TP: each KV head is dispatched to a different GPU, so the effective number of KV heads per GPU is
         # simply divided by the TP size (number of GPUs)
-        if tp_size is not None and tp_size > 1:
+        tp_size = distributed_helper.tp_size
+        if tp_size > 1:
             if self.num_key_value_heads % tp_size != 0:
                 raise ValueError(
                     f"Number of key value heads {self.num_key_value_heads} must be divisible by tensor parallel size {tp_size}."
@@ -213,6 +215,12 @@ class PagedAttentionCache:
             max_memory_percent=continuous_batching_config.max_memory_percent,
             cache_dtype=self.dtype,
         )
+
+        # For TP, align num_blocks and max_batch_tokens to the minimal value across the TP group
+        if tp_size > 1:
+            sync = torch.tensor([num_blocks, max_batch_tokens], device=self.device, dtype=torch.int64)
+            distributed_helper.tp_all_reduce_min(sync)
+            num_blocks, max_batch_tokens = int(sync[0].item()), int(sync[1].item())
 
         # Add the inferred attributes to the class
         self.num_blocks = num_blocks
