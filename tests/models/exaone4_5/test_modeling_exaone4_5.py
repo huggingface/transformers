@@ -23,6 +23,7 @@ from transformers.image_utils import load_image
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    require_deterministic_for_xpu,
     require_torch,
     slow,
     torch_device,
@@ -164,6 +165,7 @@ class Exaone4_5_IntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+    @require_deterministic_for_xpu
     @slow
     def test_model_logits(self):
         input_ids = [70045, 1109, 115406, 16943, 11697, 115365, 19816, 12137, 375]
@@ -177,6 +179,9 @@ class Exaone4_5_IntegrationTest(unittest.TestCase):
                 ("cuda", (8, 6)): torch.tensor(
                     [[44.8527, 45.7216, 71.1159, 36.9564, 44.3283, 22.0527, 28.3233, 62.5739, 46.0708]]
                 ),
+                ("xpu", None): torch.tensor(
+                    [[45.2173, 45.4939, 71.0896, 37.1218, 44.3504, 22.1194, 28.6795, 62.5956, 45.9839]]
+                ),
             }
         )
         EXPECTED_SLICE = Expectations(
@@ -184,17 +189,25 @@ class Exaone4_5_IntegrationTest(unittest.TestCase):
                 ("cuda", (8, 6)): torch.tensor(
                     [42.2500, 43.0000, 42.5000, 44.7500, 49.5000, 46.0000, 46.5000, 46.5000, 45.7500, 46.2500]
                 ),
+                ("xpu", None): torch.tensor(
+                    [42.7500, 43.5000, 42.7500, 45.2500, 50.0000, 46.5000, 46.7500, 46.7500, 46.0000, 46.5000]
+                ),
             }
         )
 
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN.get_expectation(), atol=1e-2, rtol=1e-2)
         torch.testing.assert_close(out[0, 0, :10], EXPECTED_SLICE.get_expectation(), atol=1e-4, rtol=1e-4)
 
+    @require_deterministic_for_xpu
     @slow
     def test_model_generation_text_only(self):
         EXPECTED_TEXT = Expectations(
             {
                 ("cuda", 8): (
+                    '\nTell me about the Miracle on the Han river.\n\n<think>\n\n</think>\n\nThe **"Miracle on the Han River"**'
+                    " is a term used to describe the rapid economic development and industrialization that South Korea experienced"
+                ),
+                ("xpu", None): (
                     '\nTell me about the Miracle on the Han river.\n\n<think>\n\n</think>\n\nThe **"Miracle on the Han River"**'
                     " is a term used to describe the rapid economic development and industrialization that South Korea experienced"
                 ),
@@ -215,6 +228,7 @@ class Exaone4_5_IntegrationTest(unittest.TestCase):
         text = self.processor.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(text, EXPECTED_TEXT.get_expectation())
 
+    @require_deterministic_for_xpu
     @slow
     def test_model_generation_image_text(self):
         IMAGE_URL = (
@@ -224,6 +238,9 @@ class Exaone4_5_IntegrationTest(unittest.TestCase):
             {
                 ("cuda", 8): (
                     "\n\nDescribe the image.\n\n<think>\n\n</think>\n\nThe image captures a fluffy, young lynx kitten walking across a snowy surface, its thick"
+                ),
+                ("xpu", None): (
+                    "\n\nDescribe the image.\n\n<think>\n\n</think>\n\nThe image captures a young, fluffy wild cat\u2014likely a lynx kitten\u2014walking through a"
                 ),
             }
         )
