@@ -222,9 +222,6 @@ class DummyRoot(nn.Module):
         if with_mlp:
             self.mlp = DummyMLP()
         self.config = PretrainedConfig()
-        # Mirror what PreTrainedModel.post_init() does so that
-        # get_model_conversion_mapping() can be called on DummyRoot.
-        self._named_pretrained_submodules = [("", self)]
 
 
 class TestConvertAndLoadStateDict(unittest.TestCase):
@@ -1174,7 +1171,6 @@ class TestConversionMapping(unittest.TestCase):
         def make_mock(class_name):
             m = type(class_name, (), {})()
             m.config = SimpleNamespace(model_type="_tst_mtype")
-            m._named_pretrained_submodules = [("", m)]
             return m
 
         # A module whose class name has a registry entry → class entry wins.
@@ -1210,7 +1206,6 @@ class TestConversionMapping(unittest.TestCase):
 
             root = type("_TstRoot", (), {})()
             root.config = SimpleNamespace(model_type="_tst_root_only")
-            root._named_pretrained_submodules = [("encoder", child_a), ("decoder", child_b)]
             return root
 
         transforms = get_model_conversion_mapping(
@@ -1234,7 +1229,6 @@ class TestConversionMapping(unittest.TestCase):
 
         root = type("_TstRootSharedCls", (), {})()
         root.config = SimpleNamespace(model_type="_tst_root_only2")
-        root._named_pretrained_submodules = [("encoder", child_a), ("decoder", child_b)]
 
         transforms = get_model_conversion_mapping(root, add_legacy=False)
         scope_prefixes = [t.scope_prefix for t in transforms]
@@ -1255,8 +1249,6 @@ class TestConversionMapping(unittest.TestCase):
 
         root = type("_TstRootSame", (), {})()
         root.config = SimpleNamespace(model_type="_tst_root_child_shared")
-        # Root ("") appears before child ("submodel") — mirrors DFS order.
-        root._named_pretrained_submodules = [("", root), ("submodel", child)]
 
         transforms = get_model_conversion_mapping(root, add_legacy=False)
         # Only one unscoped transform (from the root); child must be suppressed.
