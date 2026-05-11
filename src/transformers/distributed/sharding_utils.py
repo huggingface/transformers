@@ -32,6 +32,13 @@ if is_torch_available():
 
 
 class DtensorShardOperation:
+    """
+    TODO: add explanation of:
+        - Different scenario of different placement
+            - What is StridedShard ?
+        - How does saving work in nD ?
+        - How does loading work in nD ?
+    """
     def __init__(self, param: DTensor):
         self.device_mesh = param.device_mesh
         self.placements = tuple(param.placements)
@@ -202,54 +209,40 @@ class DtensorShardOperation:
 
 
 def _replicate_dtensor(tensor: DTensor) -> DTensor:
-    """All-gather a DTensor to fully Replicate, handling ``_StridedShard``.
+    """All-gather a DTensor to fully Replicate, handling _StridedShard.
 
-    PyTorch's ``redistribute()`` does not support ``_StridedShard`` as a source::
-
+    PyTorch's redistribute() does not support _StridedShard as a source:
         _StridedShard -> redistribute() -> Replicate      ❌ AssertionError
-        _StridedShard -> redistribute() -> Shard           ❌ NotImplementedError
+        _StridedShard -> redistribute() -> Shard          ❌ NotImplementedError
         Shard         -> redistribute() -> Replicate      ✅ works
-        Replicate     -> redistribute() -> Shard           ✅ works
+        Replicate     -> redistribute() -> Shard          ✅ works
         Replicate     -> redistribute() -> _StridedShard  ✅ works
 
-    So we bypass ``redistribute`` and call each placement's low-level
-    ``_to_replicate_tensor`` (manual all-gather + interleaved reorder).
+    During reconstruction, we walk placements right-to-left (innermost mesh dim first),
+    invoke each one's low-level _to_replicate_tensor, and wait for the async collective to finish
+    at each step. Example — global [256, 1024], mesh (fsdp=2, tp=2),
+    placements (_StridedShard(0), Shard(0)), local [64, 1024]:
 
-    We process mesh dims **right-to-left** (innermost first).  Under TP+FSDP
-    the 2D mesh is ``(fsdp, tp)`` and both dims can shard the same tensor dim::
-
-        placements = (_StridedShard(dim=0), Shard(dim=0))
-        local shape = [64, 1024]   (global [256, 1024], fsdp=2, tp=2)
-
-    Right-to-left means TP is gathered first (local grows to [128, 1024]),
-    then FSDP (grows to [256, 1024]).  Each step must pass the correct
-    intermediate logical shape — the global shape divided by the mesh sizes
-    of dims not yet gathered (to the left).
+        i=1 (tp,   Shard(0)):         [64, 1024] -> [128, 1024]
+        i=0 (fsdp, _StridedShard(0)): [128, 1024] -> [256, 1024]
     """
     mesh = tensor.device_mesh
     replicate_all = tuple(Replicate() for _ in range(mesh.ndim))
-    with torch.no_grad():
-        if any(isinstance(p, _StridedShard) for p in tensor.placements):
-            local = tensor._local_tensor
-            placements = tensor.placements
-            for i in reversed(range(mesh.ndim)):
-                p = placements[i]
-                if p.is_replicate():
-                    continue
-                # Compute the logical shape seen at this step: dims to the left
-                # (not yet gathered) still divide their tensor dimension.
-                logical_shape = list(tensor.shape)
-                for j in range(i):
-                    pj = placements[j]
-                    if not pj.is_replicate():
-                        logical_shape[pj.dim] //= mesh.size(j)
-                local = p._to_replicate_tensor(local, mesh, i, logical_shape)
-                # Drain the async functional collective so downstream storage
-                # queries (e.g. tied-weight dedup) don't hit "invalid python storage".
-                local = wait_tensor(local)
-            return DTensor.from_local(local, mesh, replicate_all, run_check=False)
 
+    if not any(isinstance(p, _StridedShard) for p in tensor.placements):
         return tensor.redistribute(placements=replicate_all)
+
+    with torch.no_grad():
+        local = tensor._local_tensor
+        shape = list(local.shape)
+        for i in reversed(range(mesh.ndim)):
+            p = tensor.placements[i]
+            if p.is_replicate():
+                continue
+            shape[p.dim] *= mesh.size(i)
+            local = p._to_replicate_tensor(local, mesh, i, shape)
+            local = wait_tensor(local)
+        return DTensor.from_local(local, mesh, replicate_all, run_check=False)
 
 
 def convert_strided_to_shard(state_dict: dict) -> dict[str, tuple]:
