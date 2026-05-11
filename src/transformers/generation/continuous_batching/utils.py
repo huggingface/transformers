@@ -281,6 +281,12 @@ class DistributedHelper:
             dist.broadcast(value, src=self.tp_root_global_rank, async_op=False, group=self.tp_group)
         return value
 
+    def tp_broadcast_cpu_from_rank_0(self, value: torch.Tensor) -> torch.Tensor:
+        """Inside each TP group, broadcasts a CPU tensor from rank 0 over the gloo ingress group."""
+        if self.tp_size > 1:
+            dist.broadcast(value, src=self.tp_root_global_rank, async_op=False, group=self.ingress_group)
+        return value
+
     def tp_all_reduce_min(self, value: torch.Tensor) -> torch.Tensor:
         """Inside each TP group, all-reduces a tensor with the MIN op. No-op when TP is off."""
         if self.tp_size > 1:
@@ -302,7 +308,7 @@ class DistributedHelper:
     def maybe_warn_nccl_graph_mixing(self) -> None:
         """Throws a warning if TP is on and NCCL's graph mixing support was supposed to be disabled but isn't. That can
         happen if the distributed group is created before graph mixing is disabled. Typically, if the model is
-        initialized before the ContinousBatchingConfig is created."""
+        initialized before the ContinuousBatchingConfig is created."""
         tp_on = self.tp_size > 1
         graph_mixing_not_disabled = os.environ.get("NCCL_GRAPH_MIXING_SUPPORT") != "0"
         if tp_on and graph_mixing_not_disabled:

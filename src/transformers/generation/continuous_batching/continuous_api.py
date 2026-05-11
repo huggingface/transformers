@@ -260,18 +260,19 @@ class ContinuousBatchProcessor:
         """Pull new requests and cancellations from the queues and apply them to the scheduler. If the process is a TP
         driver, the input_queue and cancel_queue are not None and the process will drain them. Otherwise, the process
         will wait for the TP driver to send a payload containing the new requests and cancellations."""
-        # Only drains queues if this process is a TP driver
+        # On the TP driver, drain the queues; non-driver ranks start from an empty tuple that gets overwritten by the
+        # broadcast below.
+        payload: tuple[list[RequestState], list[str]] = ([], [])
         if self.input_queue is not None and self.cancel_queue is not None:
-            new_states = drain_queue(self.input_queue)
-            cancellations = drain_queue(self.cancel_queue)
-            payload = (new_states, cancellations)
-        # Otherwise, the payload is None
-        else:
-            payload = ([], [])
+            payload = (drain_queue(self.input_queue), drain_queue(self.cancel_queue))
 
-        # Broadcast within the TP group. No-op when tp_size == 1, returns the driver's payload unchanged.
-        payload = self.distributed_helper.tp_broadcast_object(payload)
-        new_states, cancellations = payload
+        # Cheap CPU/gloo presence check: skip the (pickled) object broadcast entirely when there is nothing to send.
+        presence = torch.tensor([len(payload[0]) + len(payload[1])], dtype=torch.int64)
+        self.distributed_helper.tp_broadcast_cpu_from_rank_0(presence)
+        if presence.item() == 0:
+            return
+
+        new_states, cancellations = self.distributed_helper.tp_broadcast_object(payload)
 
         # All ranks apply the same updates in the same order.
         for state in new_states:

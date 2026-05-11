@@ -356,7 +356,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         num_free_blocks: int,
         expected_result: bool,
     ) -> None:
-        """Test the will_allocation_be_successful method of PagedAttentionCache, overloading the elevant attributes of
+        """Test the will_allocation_be_successful method of PagedAttentionCache, overloading the relevant attributes of
         a dummy cache."""
 
         if torch_device is None:  # this check which should always pass and helps with type checking
@@ -532,15 +532,21 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         helper.set_tp_seed(seed=None, model_device=torch.device("cpu"))
 
     def test_continuous_batching_config_disables_nccl_graph_mixing(self) -> None:
-        """Test that constructing a ContinuousBatchingConfig sets NCCL_GRAPH_MIXING_SUPPORT=0 by default and only sets
-        it when the disable_nccl_graph_mixing flag is on."""
-        original = os.environ.pop("NCCL_GRAPH_MIXING_SUPPORT", None)
+        """Test that ContinuousBatchingConfig sets NCCL_GRAPH_MIXING_SUPPORT=0 only under a distributed launch
+        (WORLD_SIZE > 1) and respects the disable_nccl_graph_mixing flag."""
+        original_nccl = os.environ.pop("NCCL_GRAPH_MIXING_SUPPORT", None)
+        original_ws = os.environ.pop("WORLD_SIZE", None)
         try:
-            # Default: env var is set to "0"
+            # Single-GPU launch (no WORLD_SIZE): env var is left untouched
+            ContinuousBatchingConfig()
+            self.assertNotIn("NCCL_GRAPH_MIXING_SUPPORT", os.environ)
+
+            # Distributed launch (WORLD_SIZE > 1): env var is set to "0"
+            os.environ["WORLD_SIZE"] = "2"
             ContinuousBatchingConfig()
             self.assertEqual(os.environ.get("NCCL_GRAPH_MIXING_SUPPORT"), "0")
 
-            # Explicitly disabled flag: env var is left untouched
+            # Explicitly disabled flag: env var is left untouched even under a distributed launch
             os.environ.pop("NCCL_GRAPH_MIXING_SUPPORT", None)
             ContinuousBatchingConfig(disable_nccl_graph_mixing=False)
             self.assertNotIn("NCCL_GRAPH_MIXING_SUPPORT", os.environ)
@@ -550,10 +556,14 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
             ContinuousBatchingConfig()
             self.assertEqual(os.environ.get("NCCL_GRAPH_MIXING_SUPPORT"), "1")
         finally:
-            if original is None:
+            if original_nccl is None:
                 os.environ.pop("NCCL_GRAPH_MIXING_SUPPORT", None)
             else:
-                os.environ["NCCL_GRAPH_MIXING_SUPPORT"] = original
+                os.environ["NCCL_GRAPH_MIXING_SUPPORT"] = original_nccl
+            if original_ws is None:
+                os.environ.pop("WORLD_SIZE", None)
+            else:
+                os.environ["WORLD_SIZE"] = original_ws
 
 
 @require_torch_accelerator

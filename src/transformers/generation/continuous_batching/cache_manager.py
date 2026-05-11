@@ -279,6 +279,7 @@ class BlockManager:
         """Computes the hash of a block identified by the (tokens) it contains, its (parent_hash) and the layer
         (group_id) it belong to. If the block has no parent, the parent hash is None. Uses blake2b for a deterministic
         64-bit digest that is stable across processes (unlike Python's salted built-in `hash`)."""
+        # NOTE: blake2b is ~10–20× slower than hash() here; consider gating by tp_size>1 or switching to xxhash.
         h = hashlib.blake2b(digest_size=8)
         if parent_hash is not None:
             h.update(parent_hash.to_bytes(8, "little", signed=False))

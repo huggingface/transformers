@@ -102,7 +102,7 @@ def _build_lighteval_inputs_scorer(
 
 
 # Data helpers
-def get_tokenized_gms8k(
+def get_tokenized_gsm8k(
     tokenizer: AutoTokenizer, n_fewshot: int = 8
 ) -> tuple[list[list[int]], Callable[[Any], float]]:
     """GSM8K-Platinum few-shot inputs and scorer using the same lighteval extractive_match as the gsm8k task."""
@@ -323,7 +323,7 @@ if __name__ == "__main__":
 
     # GSM8K benchmarks (256 max new tokens) — gsm8k_platinum dataset, 8-shot, lighteval extractive_match
     tokenizer = AutoTokenizer.from_pretrained(cli_args.model_id, padding_side="left")
-    gsm8k_data, gsm8k_score_fn = get_tokenized_gms8k(tokenizer)
+    gsm8k_data, gsm8k_score_fn = get_tokenized_gsm8k(tokenizer)
 
     ## No options
     results.add_benchmark(
