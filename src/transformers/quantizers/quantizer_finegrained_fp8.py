@@ -67,8 +67,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             if (
                 not self.pre_quantized
                 and len(device_map) > 1
-                and ("cpu" in device_map.values()
-                or "disk" in device_map.values())
+                and ("cpu" in device_map.values() or "disk" in device_map.values())
             ):
                 raise ValueError(
                     "You are attempting to load an FP8 model with a device_map that contains a cpu/disk device."

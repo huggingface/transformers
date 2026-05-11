@@ -308,6 +308,7 @@ class FP8Linear(nn.Linear):
 
         return output.to(dtype=input.dtype)
 
+
 class FP8GroupedLinear(nn.Module):
     """FP8 block-diagonal grouped linear for DeepSeek-V4's ``o_a_proj``.
 
@@ -341,8 +342,7 @@ class FP8GroupedLinear(nn.Module):
 
         if self.activation_scheme == "static":
             raise NotImplementedError(
-                "FP8GroupedLinear does not support activation_scheme='static'. "
-                "Use activation_scheme='dynamic'."
+                "FP8GroupedLinear does not support activation_scheme='static'. Use activation_scheme='dynamic'."
             )
         if self.activation_scheme != "dynamic":
             raise NotImplementedError(f"Unsupported activation scheme: {self.activation_scheme}")
