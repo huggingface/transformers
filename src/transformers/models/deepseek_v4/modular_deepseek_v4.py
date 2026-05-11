@@ -920,6 +920,7 @@ class DeepseekV4Experts(MixtralExperts):
 
 class DeepseekV4TopKRouter(MixtralTopKRouter):
     def __init__(self, config: DeepseekV4Config):
+        self.config = config
         super().__init__(config)
         self.score_fn = ACT2FN[config.scoring_func]
         self.routed_scaling_factor = config.routed_scaling_factor
@@ -945,6 +946,7 @@ class DeepseekV4HashRouter(MixtralTopKRouter):
     """
 
     def __init__(self, config: DeepseekV4Config):
+        self.config = config
         super().__init__(config)
         self.score_fn = ACT2FN[config.scoring_func]
         self.routed_scaling_factor = config.routed_scaling_factor

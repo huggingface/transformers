@@ -1039,6 +1039,7 @@ class DeepseekV4Experts(nn.Module):
 class DeepseekV4TopKRouter(nn.Module):
     def __init__(self, config: DeepseekV4Config):
         super().__init__()
+        self.config = config
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
@@ -1068,6 +1069,7 @@ class DeepseekV4HashRouter(nn.Module):
 
     def __init__(self, config: DeepseekV4Config):
         super().__init__()
+        self.config = config
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
