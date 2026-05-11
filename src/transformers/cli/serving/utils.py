@@ -623,7 +623,7 @@ class CBGenerateManager(BaseGenerateManager):
     """
 
     def __init__(self, cb_config: "ContinuousBatchingConfig | None" = None):
-        self._cb: "ContinuousBatchingManager | None" = None
+        self._cb: ContinuousBatchingManager | None = None
         self._cb_config = cb_config
 
     def init_cb(self, model: "PreTrainedModel", gen_config: "GenerationConfig") -> None:
