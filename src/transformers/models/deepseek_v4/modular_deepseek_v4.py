@@ -334,7 +334,7 @@ class DeepseekV4HCACompressor(nn.Module):
         position_ids: torch.Tensor,
         past_key_values: Cache | None,
         layer_idx: int,
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, None]:
         batch, _, _ = hidden_states.shape
         cache_layer: DeepseekV4HCACache = past_key_values.layers[layer_idx] if past_key_values is not None else None
         kv = self.kv_proj(hidden_states)
@@ -363,7 +363,9 @@ class DeepseekV4HCACompressor(nn.Module):
 
         if cache_layer is not None:
             compressed = cache_layer.update_compressor_states("compressor", compressed)
-        return compressed.unsqueeze(1)
+        # `None` validity: HCA has no indexer / per-query gather — every query attends to
+        # every entry in the compressor section, so attention just right-pads its mask with 0s.
+        return compressed.unsqueeze(1), None
 
 
 class DeepseekV4Indexer(nn.Module):
@@ -412,6 +414,10 @@ class DeepseekV4Indexer(nn.Module):
         self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.head_dim, bias=False)
         self.weights_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
         self.rotary_emb = DeepseekV4RotaryEmbedding(config)
+        # No-op marker. Under TP it picks up the `"all_reduce"` plan entry, which adds a
+        # forward output hook that sums the (partial, per-rank) `index_scores` across the
+        # TP mesh so every rank picks the same top-k. See `inference/model.py:422-423`.
+        self.scores_sync = nn.Identity()
 
     def forward(
         self,
@@ -420,7 +426,7 @@ class DeepseekV4Indexer(nn.Module):
         position_ids: torch.Tensor,
         past_key_values: Cache | None,
         layer_idx: int,
-    ) -> torch.LongTensor:
+    ) -> tuple[torch.LongTensor, torch.BoolTensor]:
         batch, seq_len, _ = hidden_states.shape
         cache_layer: DeepseekV4CSACache = past_key_values.layers[layer_idx] if past_key_values is not None else None
         kv = self.kv_proj(hidden_states)
@@ -475,9 +481,24 @@ class DeepseekV4Indexer(nn.Module):
         scores = torch.matmul(q.float(), compressed_kv.transpose(-1, -2).float().unsqueeze(1))  # [B, S, H, T]
         scores = F.relu(scores) * self.softmax_scale
         weights = self.weights_proj(hidden_states).float() * self.weights_scaling  # [B, S, H]
-        index_scores = (scores * weights.unsqueeze(-1)).sum(dim=2)  # [B, S, T]
+        index_scores = (scores * weights.unsqueeze(-1)).sum(dim=2)  # [B, S, T] — partial under TP
+        index_scores = self.scores_sync(index_scores)
+        # Causal mask before topk (mirrors `inference/model.py:424-426`): query at absolute
+        # position `p` may only pick compressed entries `i` whose source-token window ends
+        # at or before `p` — i.e. ``i < (p + 1) // compress_rate``. Without this, prefill
+        # queries can score and pick entries that aggregate future source tokens.
+        if compressed_kv.shape[1] > 0:
+            cutoff = (position_ids + 1).div(self.compress_rate, rounding_mode="floor").unsqueeze(-1)  # [B, S, 1]
+            i_idx = torch.arange(compressed_kv.shape[1], device=index_scores.device)
+            index_scores = index_scores.masked_fill(i_idx >= cutoff, float("-inf"))
         topk = min(self.index_topk, compressed_kv.shape[1])
-        return index_scores.topk(topk, dim=-1).indices
+        result = index_scores.topk(topk, dim=-1)
+        # `valid[b, s, j] == False` iff the j-th pick for query `s` was a forced `-inf`
+        # placeholder (the query had fewer than `index_topk` causally-valid entries). The
+        # pick still indexes a real but non-causal entry, so attention has to skip it —
+        # mirrors `inference/model.py:428-430` (`topk_idxs == -1` slots).
+        valid = result.values > float("-inf")
+        return result.indices, valid
 
 
 class DeepseekV4CSACompressor(nn.Module):
@@ -521,7 +542,7 @@ class DeepseekV4CSACompressor(nn.Module):
         position_ids: torch.Tensor,
         past_key_values: Cache | None,
         layer_idx: int,
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, torch.BoolTensor]:
         batch, seq_len, _ = hidden_states.shape
         cache_layer: DeepseekV4CSACache = past_key_values.layers[layer_idx] if past_key_values is not None else None
         kv = self.kv_proj(hidden_states)
@@ -577,11 +598,14 @@ class DeepseekV4CSACompressor(nn.Module):
             compressed = cache_layer.update_compressor_states("compressor", compressed)
         compressed_kv = compressed.unsqueeze(1)
 
-        # Lightning Indexer: gather top-`index_topk` compressed entries per query.
-        topk = self.indexer(hidden_states, q_residual, position_ids, past_key_values, layer_idx)  # [B, S, k]
+        # Lightning Indexer: gather top-`index_topk` compressed entries per query and pass
+        # the per-pick validity mask up so attention can ``-inf``-mask the placeholder picks
+        # (queries with fewer than `index_topk` causally-valid entries).
+        topk_indices, topk_valid = self.indexer(hidden_states, q_residual, position_ids, past_key_values, layer_idx)
         expanded = compressed_kv.unsqueeze(2).expand(-1, -1, seq_len, -1, -1)
-        idx = topk.unsqueeze(1).unsqueeze(-1).expand(-1, 1, -1, -1, self.head_dim)
-        return torch.gather(expanded, 3, idx).reshape(batch, 1, -1, self.head_dim)
+        idx = topk_indices.unsqueeze(1).unsqueeze(-1).expand(-1, 1, -1, -1, self.head_dim)
+        gathered = torch.gather(expanded, 3, idx).reshape(batch, 1, -1, self.head_dim)
+        return gathered, topk_valid.reshape(batch, -1)  # valid: [B, S*k] over the flat-packed KV axis
 
 
 COMPRESSOR_CLASSES = {
@@ -658,17 +682,45 @@ class DeepseekV4Attention(nn.Module):
         if past_key_values is not None:  # sliding where K==V
             kv = past_key_values.update(kv, kv, self.layer_idx)[0]
 
+        compressor_valid = None
         if self.compressor is not None:  # Compressed KV (CSA or HCA)
-            compressed_kv = self.compressor(hidden_states, q_residual, position_ids, past_key_values, self.layer_idx)
+            compressed_kv, compressor_valid = self.compressor(
+                hidden_states, q_residual, position_ids, past_key_values, self.layer_idx
+            )
             kv = torch.cat([kv, compressed_kv], dim=2)
 
         # The compressor path concatenates extra entries onto the KV axis after the
         # standard sliding-window cache update, so a tensor `attention_mask` (built
-        # for the pre-concat KV length) needs to be right-padded to cover them.
+        # for the pre-concat KV length) needs to be extended to cover them.
         # Flex-attention passes a `BlockMask` whose KV-length axis comes from its
-        # own `mask_mod`, not from a dense tensor — skip the pad in that case.
+        # own `mask_mod`, not from a dense tensor — skip the extend in that case.
         if isinstance(attention_mask, torch.Tensor) and kv.shape[2] > attention_mask.shape[-1]:
-            attention_mask = F.pad(attention_mask, (0, kv.shape[2] - attention_mask.shape[-1]), value=0.0)
+            n_compressor = kv.shape[2] - attention_mask.shape[-1]
+            S = q.shape[2]
+            if self.layer_type == "compressed_sparse_attention" and S > 1 and n_compressor == S * (n_compressor // S):
+                # CSA's compressor returns per-query top-`k` entries flat-packed as
+                # `[B, 1, S*k, D]`. The official inference's `sparse_attn` gathers per query
+                # so each query only attends to its own `k` slots; we mirror it with a
+                # block-diagonal mask over the compressor section. `compressor_valid` is
+                # False at slots the indexer flagged as `-inf` placeholders — strip those too.
+                # Decode (S=1) collapses to a no-op block-diagonal so we let the simple
+                # right-pad branch handle it.
+                k_per_query = n_compressor // S
+                q_idx = torch.arange(S, device=q.device).unsqueeze(1)  # [S, 1]
+                kv_idx = torch.arange(n_compressor, device=q.device).div(k_per_query, rounding_mode="floor")  # [S*k]
+                own_q = q_idx == kv_idx  # [S, S*k]
+                if compressor_valid is not None:
+                    allowed = own_q.unsqueeze(0) & compressor_valid.unsqueeze(1)  # [B, S, S*k]
+                    extra = torch.where(allowed, 0.0, float("-inf")).to(attention_mask.dtype).unsqueeze(1)
+                    extra = extra.expand(attention_mask.shape[0], attention_mask.shape[1], -1, -1)
+                else:
+                    extra = torch.where(own_q, 0.0, float("-inf")).to(attention_mask.dtype)
+                    extra = extra.expand(*attention_mask.shape[:-2], S, n_compressor)
+                attention_mask = torch.cat([attention_mask, extra], dim=-1)
+            else:
+                # HCA (every query sees every entry) and CSA decode (single query's k slots
+                # span the whole compressor section): plain 0.0 right-pad is correct.
+                attention_mask = F.pad(attention_mask, (0, n_compressor), value=0.0)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -763,14 +815,18 @@ class DeepseekV4HyperConnection(nn.Module):
         pre_scale, post_scale, comb_scale = self.scale.unbind(0)
         hc = self.hc_mult
         pre = torch.sigmoid(mix[..., :hc] * pre_scale + self.base[:hc]) + self.hc_eps
-        post = torch.sigmoid(mix[..., hc : 2 * hc] * post_scale + self.base[hc : 2 * hc]) + self.hc_eps
-        comb = (
-            torch.sigmoid(
-                mix[..., 2 * hc :].view(*mix.shape[:-1], hc, hc) * comb_scale + self.base[2 * hc :].view(hc, hc)
-            )
-            + self.hc_eps
-        )
-        for _ in range(self.hc_sinkhorn_iters):
+        # `post` is `2 * sigmoid` (range [0, 2], no eps) to match the reference kernel
+        # (`inference/kernel.py:394`). `pre` and `comb` keep the `sigmoid + eps` form
+        # they share with the kernel (lines 392, 408).
+        post = 2 * torch.sigmoid(mix[..., hc : 2 * hc] * post_scale + self.base[hc : 2 * hc])
+        # Sinkhorn init mirrors `inference/kernel.py:401-413`: row-softmax + eps,
+        # then one column-normalisation, then `iters - 1` symmetric (row, col) rounds.
+        # Different positive starting matrix → different doubly-stochastic fixed point
+        # than a `sigmoid+eps` init, so this matters even though row/col count nets out.
+        comb_logits = mix[..., 2 * hc :].view(*mix.shape[:-1], hc, hc) * comb_scale + self.base[2 * hc :].view(hc, hc)
+        comb = torch.softmax(comb_logits, dim=-1) + self.hc_eps
+        comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
+        for _ in range(self.hc_sinkhorn_iters - 1):
             comb = comb / (comb.sum(dim=-1, keepdim=True) + self.hc_eps)
             comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
         # Collapse the `hc_mult` parallel streams down to a single sequence using
@@ -936,16 +992,22 @@ class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
         # `post` / `comb` come out of the HC modules in fp32 (Sinkhorn projection runs
         # in float); the .to(dtype) puts everything back to the input dtype before mixing
         # so both sites stay consistent with `hidden_states`'s entry dtype.
+        # `comb` is consumed transposed: reference `inference/model.py:685` indexes it as
+        # `sum_j comb[j, k] * residual[j, d]` (sum over the FIRST hc axis), which is
+        # equivalent to `comb.T @ residual`. Sinkhorn produces a doubly-stochastic but
+        # non-symmetric matrix, so the direction matters.
         dtype = hidden_states.dtype
         post, comb, collapsed = self.attn_hc(hidden_states)
         attn_output, _ = self.self_attn(self.input_layernorm(collapsed), **kwargs)
         hidden_states = post.to(dtype).unsqueeze(-1) * attn_output.unsqueeze(-2) + torch.matmul(
-            comb.to(dtype), hidden_states
+            comb.to(dtype).transpose(-1, -2), hidden_states
         )
 
         post, comb, collapsed = self.ffn_hc(hidden_states)
         mlp_output = self.mlp(self.post_attention_layernorm(collapsed), input_ids=input_ids)
-        return post.to(dtype).unsqueeze(-1) * mlp_output.unsqueeze(-2) + torch.matmul(comb.to(dtype), hidden_states)
+        return post.to(dtype).unsqueeze(-1) * mlp_output.unsqueeze(-2) + torch.matmul(
+            comb.to(dtype).transpose(-1, -2), hidden_states
+        )
 
 
 class DeepseekV4PreTrainedModel(MixtralPreTrainedModel):
