@@ -456,7 +456,6 @@ class TextGenerationPipeline(Pipeline):
             if return_type == ReturnType.TENSORS:
                 record = {"generated_token_ids": sequence}
             elif return_type in {ReturnType.NEW_TEXT, ReturnType.FULL_TEXT}:
-                # Remove PADDING prompt of the sequence if XLNet or Transfo-XL model is used
                 if input_ids is None:
                     prompt_token_length = 0
                 else:
