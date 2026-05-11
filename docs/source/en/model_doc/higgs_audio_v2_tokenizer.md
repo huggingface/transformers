@@ -31,8 +31,10 @@ rendered properly in your Markdown viewer.
 ## Usage
 
 ```python
-from transformers import HiggsAudioV2TokenizerModel, AutoFeatureExtractor
-from datasets import load_dataset, Audio
+from datasets import Audio, load_dataset
+
+from transformers import AutoFeatureExtractor, HiggsAudioV2TokenizerModel
+
 
 # load model and feature extractor
 model_id = "eustlb/higgs-audio-v2-tokenizer"
@@ -43,7 +45,7 @@ model = HiggsAudioV2TokenizerModel.from_pretrained(model_id, device_map="auto")
 dummy_dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 dummy_dataset = dummy_dataset.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
 audio_sample = dummy_dataset[-1]["audio"]["array"]
-inputs = feature_extractor(raw_audio=audio_sample, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")
+inputs = feature_extractor(raw_audio=audio_sample, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt").to(model.device)
 
 # encode and decode
 encoder_outputs = model.encode(inputs["input_values"])

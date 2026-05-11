@@ -14,7 +14,10 @@
 """Testing suite for the PyTorch Qwen3.5 model."""
 
 import copy
+import tempfile
 import unittest
+
+from parameterized import parameterized
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
@@ -36,6 +39,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        AutoModelForCausalLM,
         Qwen3_5MoeConfig,
         Qwen3_5MoeForCausalLM,
         Qwen3_5MoeForConditionalGeneration,
@@ -300,10 +304,32 @@ class Qwen3_5MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @parameterized.expand([("from_pretrained",), ("from_config",)])
+    def test_automodelforcausallm(self, loader: str) -> None:
+        """`AutoModelForCausalLM` must unwrap the text sub-config for composite-to-text-only mappings."""
+        config = self.model_tester.get_config()
+        self.assertIsInstance(config, Qwen3_5MoeConfig, msg="Test setup expects the composite Qwen3_5MoeConfig.")
+
+        if loader == "from_config":
+            with torch.device("meta"):
+                model = AutoModelForCausalLM.from_config(config)
+        else:
+            full_model = Qwen3_5MoeForConditionalGeneration(config)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                full_model.save_pretrained(tmp_dir)
+                model = AutoModelForCausalLM.from_pretrained(tmp_dir)
+
+        self.assertIsInstance(model, Qwen3_5MoeForCausalLM)
+        self.assertIsInstance(model.config, Qwen3_5MoeTextConfig)
+
     @unittest.skip(
         "Conversion only for the `CausalLM` loading from saved `ConditionalLM`, doesn't apply to simple VLM"
     )
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        pass
+
+    @unittest.skip("Qwen3.5-MoE hybrid linear-attention cache is not compatible with quantized cache yet.")
+    def test_generate_with_quant_cache(self):
         pass
 
     def _get_conv_state_shape(self, batch_size: int, config):

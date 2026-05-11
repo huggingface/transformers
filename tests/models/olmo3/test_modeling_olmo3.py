@@ -38,6 +38,7 @@ if is_torch_available():
 
     from transformers import (
         Olmo3ForCausalLM,
+        Olmo3ForSequenceClassification,
         Olmo3Model,
     )
     from transformers.models.olmo3.modeling_olmo3 import Olmo3RotaryEmbedding
@@ -46,6 +47,7 @@ if is_torch_available():
 class Olmo3ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Olmo3Model
+        sequence_classification_class = Olmo3ForSequenceClassification
 
 
 @require_torch

@@ -1137,11 +1137,17 @@ class RouterParallel(TensorParallelLayer):
         partial outputs across EP ranks to produce the full result.
         """
         ep_rank, ep_size = device_mesh.get_local_rank(), device_mesh.size()
-        if mod.num_experts % ep_size != 0:
+        num_experts = getattr(mod, "num_experts", None)
+        if num_experts is None:
+            num_experts = getattr(getattr(mod, "config", None), "num_experts", None)
+        if num_experts is None:
+            raise AttributeError(f"Router module {type(mod).__name__} is missing num_experts and config.num_experts")
+
+        if num_experts % ep_size != 0:
             raise ValueError(
-                f"The number of experts must be divisible by number of ep_size: {mod.num_experts} % {ep_size} != 0"
+                f"The number of experts must be divisible by number of ep_size: {num_experts} % {ep_size} != 0"
             )
-        num_local_experts = mod.num_experts // ep_size
+        num_local_experts = num_experts // ep_size
         router_logits, router_scores, router_indices = outputs
         non_local_mask = (router_indices // num_local_experts) != ep_rank
         router_scores = router_scores.masked_fill(non_local_mask, 0.0)
@@ -1461,6 +1467,7 @@ def shard_and_distribute_module(
         else:
             logger.info(f"Tensor sharding plan for {param_name}: {current_shard_plan}")
 
+    tp_layer = None
     if current_shard_plan is not None:
         try:
             tp_layer = ALL_PARALLEL_STYLES[current_shard_plan]
@@ -1482,7 +1489,8 @@ def shard_and_distribute_module(
     if not isinstance(param, torch.nn.Parameter):
         param = torch.nn.Parameter(param, requires_grad=empty_param.is_floating_point())
     setattr(module_to_tp, param_type, param)
-    tp_layer.update_module_attributes(module_to_tp)
+    if tp_layer is not None:
+        tp_layer.update_module_attributes(module_to_tp)
     return param
 
 

@@ -56,7 +56,7 @@ CHECKER_CONFIG = {
     "label": "Repository structure",
     # Approximate: the checker also introspects the live transformers module at runtime
     # (e.g. dir(transformers.models), CONFIG_MAPPING_NAMES) and walks tests/ broadly.
-    "file_globs": [
+    "cache_globs": [
         "src/transformers/models/**/*.py",
         "src/transformers/models/auto/*.py",
         "src/transformers/**/__init__.py",
@@ -111,6 +111,8 @@ PRIVATE_MODELS = [
     "Kosmos2_5TextForCausalLM",
     "Kosmos2_5VisionModel",
     "SmolVLMVisionTransformer",
+    "MiniCPMV4_6VisionPreTrainedModel",
+    "MiniCPMV4_6VisionModel",
     "AriaTextForCausalLM",
     "AriaTextModel",
     "Phi4MultimodalAudioModel",
@@ -194,8 +196,12 @@ IGNORE_NON_TESTED = (
         "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
         "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
         "ChameleonVQVAE",  # VQVAE here is used only for encoding (discretizing) and is tested as part of bigger model
+        "SLANetSLAHead",  # Buildinere is used only for encoding (discretizing) and is tested as part of bigger model
+        "SLANetBackbone",  # Buildinere is used only for encoding (discretizing) and is tested as part of bigger model
         "SLANeXtSLAHead",  # Buildinere is used only for encoding (discretizing) and is tested as part of bigger model
         "SLANeXtBackbone",  # Building part of bigger (tested) model. Tested implicitly through SLANeXtForTableRecognition.
+        "PPFormulaNetTextModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
+        "PPFormulaNetVisionModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
         "PPOCRV5MobileDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
         "PPOCRV5ServerDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerDetForObjectDetection.
         "PPDocLayoutV2ReadingOrder",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV2ForObjectDetection.
@@ -247,6 +253,8 @@ IGNORE_NON_TESTED = (
         "GlmOcrTextModel",  # Building part of bigger (tested) model
         "Qwen2VLTextModel",  # Building part of bigger (tested) model
         "Qwen2_5_VLTextModel",  # Building part of bigger (tested) model
+        "MiniCPMV4_6Model",  # Building part of bigger (tested) model. Tested implicitly through MiniCPMV4_6ForConditionalGeneration.
+        "MiniCPMV4_6ForConditionalGeneration",  # Tested in MiniCPMV4_6ModelTest via VLMModelTest; check_repo doesn't detect VLMModelTest.conditional_generation_class.
         "InternVLVisionModel",  # Building part of bigger (tested) model
         "QianfanOCRVisionModel",  # Building part of bigger (tested) model
         "JanusVisionModel",  # Building part of bigger (tested) model
@@ -275,6 +283,8 @@ IGNORE_NON_TESTED = (
         "Gemma4VisionModel",  # Building part of a bigger model, tested implicitly
         "Gemma4AudioModel",  # Building part of a bigger model, tested implicitly
         "Sam3LiteTextTextModel",  # Building part of a bigger model, tested implicitly through Sam3LiteTextModel
+        "Exaone4_5_VisionModel",  # Building part of a bigger model
+        "Granite4VisionTextModel",  # Building part of bigger (tested) model. Tested implicitly through Granite4VisionModel.
     ]
 )
 
@@ -297,6 +307,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/sam3_tracker_video/test_modeling_sam3_tracker_video.py",
     "models/sam3_video/test_modeling_sam3_video.py",
     "models/edgetam_video/test_modeling_edgetam_video.py",
+    "models/gemma4_assistant/test_modeling_gemma4_assistant.py",
 ]
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
@@ -460,8 +471,13 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Emu3TextModel",  # Building part of bigger (tested) model
     "JanusVQVAE",  # no autoclass for VQ-VAE models
     "JanusVisionModel",  # Building part of bigger (tested) model
+    "SLANetSLAHead",  # Building part of bigger (tested) model
+    "SLANetBackbone",  # Building part of bigger (tested) model
     "SLANeXtSLAHead",  # Building part of bigger (tested) model
     "SLANeXtBackbone",  # Building part of bigger (tested) model
+    "PPFormulaNetTextModel",  # Building part of bigger (tested) model
+    "PPFormulaNetVisionModel",  # Building part of bigger (tested) model
+    "PPFormulaNetModel",  # Building part of bigger (tested) model
     "PPOCRV5MobileDetModel",  # Building part of bigger (tested) model
     "PPOCRV5ServerDetModel",  # Building part of bigger (tested) model
     "PPDocLayoutV2Model",  # Building part of bigger (tested) model
@@ -498,6 +514,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Ernie4_5_VL_MoeModel",  # BC Alias
     "Ernie4_5_VL_MoeTextModel",  # BC Alias
     "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
+    "Granite4VisionTextModel",  # Building part of bigger (tested) model.
 ]
 
 
@@ -815,6 +832,24 @@ def find_tested_models(test_file: str) -> set[str]:
             else:
                 continue
             model_tested.add(tested_class)
+
+    # Same as above, but for ALMModelTester. Audio-LMs typically only set `conditional_generation_class`
+    # (no base_model_class). `GraniteSpeechModelTester` is listed because `GraniteSpeechPlusForConditionalGenerationModelTester`
+    # uses `ALMModelTester` indirectly through it; in the future we may want to resolve inheritance properly.
+    audio_class_match = re.search(r"class \w+\((?:ALMModelTester|GraniteSpeechModelTester)\)", content)
+    if audio_class_match is not None:
+        audio_content = content[audio_class_match.start() :]
+        for test_class_type in [
+            "config_class",
+            "conditional_generation_class",
+            "base_model_class",
+            "sequence_classification_class",
+        ]:
+            tested_class = re.findall(rf"{test_class_type}\s+=.*", audio_content)
+            if tested_class:
+                tested_class = tested_class[0].split("=")[1].strip()
+                if tested_class != "None":
+                    model_tested.add(tested_class)
 
     return model_tested
 

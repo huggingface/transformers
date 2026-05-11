@@ -113,12 +113,12 @@ class LightOnOcrMultiModalProjector(nn.Module):
         return hidden_states
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for LightOnOcr outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class LightOnOcrModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -260,12 +260,12 @@ class LightOnOcrModel(LightOnOcrPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for LightOnOcr causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class LightOnOcrCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
