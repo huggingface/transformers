@@ -32,12 +32,63 @@ if is_torch_available():
 
 
 class DtensorShardOperation:
-    """
-    TODO: add explanation of:
-        - Different scenario of different placement
-            - What is StridedShard ?
-        - How does saving work in nD ?
-        - How does loading work in nD ?
+    """Shard-on-read: slice a full checkpoint tensor down to this rank's local
+    DTensor shard, for any combination of placements on a 1-D or n-D mesh.
+
+    Placements primer
+    -----------------
+    Each mesh dim carries one placement describing how it slices the tensor:
+
+    | Placement                | Local data on each rank of the mesh dim         |
+    |--------------------------|-------------------------------------------------|
+    | Replicate                | full tensor (no slicing)                        |
+    | Shard(d)                 | contiguous chunk of dim d (rows r*c .. (r+1)*c) |
+    | _StridedShard(d, sf=N)   | one chunk from each of N groups along dim d,   |
+    |                          | concatenated together (interleaved layout)      |
+
+    Different scenarios of different placements
+    ------------------------------------------
+    Placement tuples are ordered outermost-first; for a 2-D (fsdp, tp) mesh
+    the tuple is (fsdp_placement, tp_placement).
+
+    | Scenario                                          | Placements                            |
+    |---------------------------------------------------|---------------------------------------|
+    | TP-only, non-fused (e.g. q_proj/k_proj/v_proj)    | [Shard(d)]                            |
+    | TP-only, fused QKV                                | [_StridedShard(d, sf=3)]              |
+    | TP-only, fused gate/up                            | [_StridedShard(d, sf=2)]              |
+    | TP + FSDP, same tensor dim                        | [_StridedShard(d, sf=tp_size), Shard(d)] |
+    | TP + FSDP, different dims                         | [Shard(d1), Shard(d2)]                |
+
+    Mesh dimensions are listed outermost-first. For a 2-D (fsdp=F, tp=T) mesh,
+    rank index = fsdp_idx * T + tp_idx.
+
+    Loading (this class)
+    --------------------
+    During `from_pretrained`, each rank reads the full checkpoint tensors,
+    then calls `shard_tensor(source, tensor_idx=...)` to keep only its local
+    DTensor shard. The class encapsulates the placements + mesh so the
+    slicing logic doesn't have to be repeated at every call site.
+
+    Two checkpoint layouts are supported. Running example: an MoE weight
+    stack of param shape [N_experts, in, out]:
+
+    | Checkpoint layout                  | tensor_idx | source.shape  | Returns                     |
+    |------------------------------------|------------|---------------|-----------------------------|
+    | One stacked tensor                 | None       | [N, in, out]  | This rank's slice along     |
+    |                                    |            |               | every sharded dim.          |
+    | N per-expert tensors (called once  | 0..N-1     | [in, out]     | Inner-dim slice if this     |
+    | per expert by the caller)          |            |               | rank owns expert `i`,       |
+    |                                    |            |               | else None (caller drops it).|
+
+    Saving (in utils.py)
+    --------------------
+    During `save_pretrained`, each DTensor parameter must be all-gathered
+    back to a full tensor on rank 0 so it can be written to safetensors.
+
+    | Placements           | Path taken                                          |
+    |----------------------|-----------------------------------------------------|
+    | No _StridedShard     | `redistribute(Replicate)`                           |
+    | Has _StridedShard    | Manual right-to-left `_to_replicate_tensor` walk    |
     """
 
     def __init__(self, param: DTensor):

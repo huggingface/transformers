@@ -86,25 +86,35 @@ def _make_dtensor_shard_op(mesh, placements, param_shape, local_shape):
 class TestDtensorShardOperation(unittest.TestCase):
     """Unit tests for DtensorShardOperation.
 
-    The checkpoint can store the parameter in two layouts. Take a stack
-    of N MoE experts of shape [in, out] as a running example — the
-    param shape is [N, in, out]:
+    See `DtensorShardOperation` in sharding_utils.py for the placement primer
+    and table of checkpoint layouts. The rest of this docstring covers the
+    test-specific conventions you need to write new cases here.
 
-    - Single tensor (tensor_idx is None): the checkpoint holds one
-      [N, in, out] tensor, so source.shape == param.shape. Every
-      sharded dim is sliced here, including axis 0.
+    Running example used throughout these tests: a stack of N MoE experts,
+    each of shape [in, out]. The full parameter shape is [N, in, out].
+    Tests are parameterized so every rank in a (fake) mesh is checked.
 
-    - One tensor per piece (tensor_idx given): the checkpoint holds N
-      separate [in, out] tensors, one per expert. shard_tensor is
-      called once per expert; on each call source is the [in, out]
-      tensor for expert number tensor_idx (so 0 <= tensor_idx < N).
-      Note: source has one fewer dim than the param: the axis-0
-      index lives in tensor_idx, not in source.shape.
-      If this rank does not own tensor_idx along axis 0, return None
-      and the piece is discarded. Otherwise slice only the inner
-      dims; the caller (MergeModulelist / Concatenate) collects the
-      kept pieces and stacks them back along axis 0 to rebuild the
-      full [N, in, out] param.
+    The checkpoint can store this param in two layouts, and shard_tensor
+    behaves differently for each:
+
+    | Layout                       | tensor_idx        | source.shape   |
+    |------------------------------|-------------------|----------------|
+    | Single stacked tensor        | None              | [N, in, out]   |
+    | N separate per-expert files  | 0, 1, ..., N-1    | [in, out]      |
+
+    Single-tensor case: source has the full param shape, including axis 0.
+    shard_tensor returns this rank's slice along every sharded dim.
+
+    Per-piece case: shard_tensor is called once per expert. Each call's
+    source is just that one expert's [in, out] tensor — note source has
+    one fewer dim than the param, because the axis-0 index lives in
+    `tensor_idx`, not in source.shape. shard_tensor returns:
+      - None, if this rank doesn't own expert `tensor_idx` along axis 0
+        (the piece is then dropped by the caller, MergeModulelist /
+        Concatenate),
+      - the inner-dim slice otherwise. After all N calls, the caller
+        stacks the surviving slices along axis 0 to rebuild this rank's
+        local [n_local, in, out].
     """
 
     def test_no_shard_placements_returns_full_copy(self):
