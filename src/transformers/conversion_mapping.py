@@ -108,15 +108,25 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"mm_projector.proj.0", target_patterns="model.mm_projector.in_proj"),
             WeightRenaming(source_patterns=r"mm_projector.proj.2", target_patterns="model.mm_projector.out_proj"),
             WeightRenaming(source_patterns=r"blocks", target_patterns="layers"),
-            WeightRenaming(source_patterns=r"vision_tower.layers.(\d+).norm1", target_patterns=r"vision_tower.layers.\1.norm2"),
-            WeightRenaming(source_patterns=r"vision_tower.layers.(\d+).norm0", target_patterns=r"vision_tower.layers.\1.norm1"),
-            WeightRenaming(source_patterns=r"vision_tower.layers.(\d+).mlp.fc1", target_patterns=r"vision_tower.layers.\1.mlp.fc2"),
-            WeightRenaming(source_patterns=r"vision_tower.layers.(\d+).mlp.fc0", target_patterns=r"vision_tower.layers.\1.mlp.fc1"),
+            WeightRenaming(
+                source_patterns=r"vision_tower.layers.(\d+).norm1", target_patterns=r"vision_tower.layers.\1.norm2"
+            ),
+            WeightRenaming(
+                source_patterns=r"vision_tower.layers.(\d+).norm0", target_patterns=r"vision_tower.layers.\1.norm1"
+            ),
+            WeightRenaming(
+                source_patterns=r"vision_tower.layers.(\d+).mlp.fc1", target_patterns=r"vision_tower.layers.\1.mlp.fc2"
+            ),
+            WeightRenaming(
+                source_patterns=r"vision_tower.layers.(\d+).mlp.fc0", target_patterns=r"vision_tower.layers.\1.mlp.fc1"
+            ),
             WeightRenaming(
                 source_patterns=r"vision_tower.patch_embed.pos_emb.weight",
                 target_patterns="model.vision_tower.patch_embed.pos_emb.position_embeddings",
             ),
-            WeightRenaming(source_patterns=r"vision_tower.layers.(\d+).wo", target_patterns=r"vision_tower.layers.\1.attn.proj"),
+            WeightRenaming(
+                source_patterns=r"vision_tower.layers.(\d+).wo", target_patterns=r"vision_tower.layers.\1.attn.proj"
+            ),
             # Unfuse qkv and apply rope permutation
             WeightConverter(
                 source_patterns=[r"wqkv"],

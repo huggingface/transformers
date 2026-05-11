@@ -204,31 +204,22 @@ class Kimi_K25VisionPatchEmbed(nn.Module):
 # The difference is that gemma4 stcak H/W embeds, while Kimi interleaves them
 class Kimi_K25VisionRotaryEmbedding(Gemma4VisionRotaryEmbedding):
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-
+        position_ids_expanded = position_ids.permute(1, 2, 0)[..., None].float()  # shape (bs, positions, 2, 1)
         inv_freq_expanded = (
-            self.inv_freq[None, None, :, None].float().expand(2, position_ids.shape[1], -1, 1).to(x.device)
-        )
-        position_ids_expanded = position_ids[:, :, None, :].float()  # shape (2, bs, 1, positions)
+            self.inv_freq[None, None, None, :]
+            .float()
+            .expand(position_ids_expanded.shape[0], position_ids_expanded.shape[1], 2, -1)
+            .to(x.device)
+        )  # shape (bs, positions, 2, freq_dim)
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
-            cos = freqs.cos() * self.attention_scaling
-            sin = freqs.sin() * self.attention_scaling
-
-        sin = self.recomposition_to_2d(sin)
-        cos = self.recomposition_to_2d(cos)
+            freqs = (inv_freq_expanded.float() * position_ids_expanded.float()).transpose(2, 3).flatten(2)
+            emb = torch.cat([freqs, freqs], dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
 
         return cos, sin
-
-    def recomposition_to_2d(self, freq):
-        # For each position, interleave H and W frequencies on head-dim:
-        # [2, B, S, num_freqs] → [B, S, num_freqs*2], layout: (h0,w0, h1,w1, ..., hN,wN)
-        seq_length = freq.shape[2]
-        freq_hw = torch.stack([freq[0], freq[1]], dim=0).permute(1, 2, 3, 0).reshape(seq_length, -1)
-        return freq_hw.repeat(1, 1, 2)  # repeat to get full `head-dim`
 
 
 class Kimi_K25VisionMLP(VisionMlp):
@@ -351,9 +342,7 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
         self.patch_embed = Kimi_K25VisionPatchEmbed(config)
 
         self.rotary_emb = Kimi_K25VisionRotaryEmbedding(config)
-        self.layers = nn.ModuleList(
-            [Kimi_K25VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)]
-        )
+        self.layers = nn.ModuleList([Kimi_K25VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.final_layernorm = nn.LayerNorm(config.hidden_size, eps=1e-05)
         self.post_init()
 

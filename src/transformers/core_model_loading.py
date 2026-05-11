@@ -413,6 +413,8 @@ class FuseAndPermuteForRope(ConversionOps):
     """
     Applies the permutation required to convert complex RoPE weights to the split sin/cos format on fused QKV.
     Same as calling `PermuteForRope() + Concatenate()` but lets us call `Permute` only on a subset of chunked tensors.
+
+    NOTE: this conversion applies only to a vision backbone in multimodal models, because it checks `config.vision_config` 
     """
 
     def __init__(self, dim: int = 0, permute_layer_names: list[str] | None = None):
@@ -470,6 +472,8 @@ class UnfuseAndPermuteForRope(ConversionOps):
     """
     Applies the permutation required to convert complex RoPE weights to the split sin/cos format on fused QKV.
     Same as calling `Chunk() + PermuteForRope()` but lets us call `Permute` only on a subset of chunked tensors.
+
+    NOTE: this conversion applies only to a vision backbone in multimodal models, because it checks `config.vision_config`
     """
 
     def __init__(self, dim: int = 0, permute_layer_names: list[str] | None = None):
