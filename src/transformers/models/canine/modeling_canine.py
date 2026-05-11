@@ -915,7 +915,7 @@ class CanineModel(CaninePreTrainedModel):
 
         molecule_attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=init_molecule_encoding[:, 0:1, :],  # force q_len == 1
+            inputs_embeds=init_molecule_encoding[:, 0:1, :],  # force q_len == 1
             attention_mask=molecule_attention_mask.squeeze(1),  # 3D mask at times due to custom fn
         )
 
@@ -945,7 +945,7 @@ class CanineModel(CaninePreTrainedModel):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=sequence_output,
+            inputs_embeds=sequence_output,
             attention_mask=attention_mask,
         )
 

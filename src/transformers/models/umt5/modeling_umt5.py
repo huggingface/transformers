@@ -680,7 +680,7 @@ class UMT5Stack(UMT5PreTrainedModel):
         if self.is_decoder and encoder_attention_mask is not None:
             encoder_extended_attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=inputs_embeds,
+                inputs_embeds=inputs_embeds,
                 attention_mask=encoder_attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
             )

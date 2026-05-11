@@ -590,7 +590,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
 
         extended_attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=descriptors[:, 0:1, :],  # force q_len == 1
+            inputs_embeds=descriptors[:, 0:1, :],  # force q_len == 1
             attention_mask=mask,
         )
 

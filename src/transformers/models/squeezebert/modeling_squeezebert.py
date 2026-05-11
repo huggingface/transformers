@@ -476,7 +476,7 @@ class SqueezeBertModel(SqueezeBertPreTrainedModel):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=embedding_output,
+            inputs_embeds=embedding_output,
             attention_mask=attention_mask,
         )
 

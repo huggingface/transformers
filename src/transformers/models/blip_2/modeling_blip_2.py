@@ -946,7 +946,7 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=embedding_output.to(original_dtype),
+            inputs_embeds=embedding_output.to(original_dtype),
             attention_mask=attention_mask,
         )
 
@@ -958,7 +958,7 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         if encoder_attention_mask is not None:
             encoder_attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=embedding_output.to(original_dtype),
+                inputs_embeds=embedding_output.to(original_dtype),
                 attention_mask=encoder_attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
             )

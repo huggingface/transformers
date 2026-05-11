@@ -632,7 +632,7 @@ class VisualBertModel(VisualBertPreTrainedModel):
 
         extended_attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=embedding_output[:, 0:1, :],  # force q_len == 1
+            inputs_embeds=embedding_output[:, 0:1, :],  # force q_len == 1
             attention_mask=combined_attention_mask,
             # Force mask creation
             and_mask_function=lambda *args: torch.tensor(True, dtype=torch.bool),

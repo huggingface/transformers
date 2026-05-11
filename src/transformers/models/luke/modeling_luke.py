@@ -938,7 +938,7 @@ class LukeModel(LukePreTrainedModel):
         attention_mask = create_bidirectional_mask(
             config=self.config,
             # Simulating fused embeddings which is done later downstream
-            input_embeds=attention_mask[..., None].to(word_embedding_output.dtype),
+            inputs_embeds=attention_mask[..., None].to(word_embedding_output.dtype),
             attention_mask=attention_mask,
         )
 

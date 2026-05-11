@@ -570,14 +570,14 @@ class RemBertModel(RemBertPreTrainedModel):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=embedding_output,
+            inputs_embeds=embedding_output,
             attention_mask=attention_mask,
         )
 
         if encoder_attention_mask is not None:
             encoder_attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=embedding_output,
+                inputs_embeds=embedding_output,
                 attention_mask=encoder_attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
             )
