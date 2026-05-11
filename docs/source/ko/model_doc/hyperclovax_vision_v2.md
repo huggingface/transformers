@@ -265,10 +265,6 @@ processor = HCXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-
     print(tokenizer.decode(output[0], skip_special_tokens=True))
     ```
 
-## HyperCLOVAXConfig
-
-[[autodoc]] HyperCLOVAXConfig
-
 ## HCXVisionV2Config
 
 [[autodoc]] HCXVisionV2Config
@@ -277,21 +273,6 @@ processor = HCXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-
 
 [[autodoc]] HCXVisionV2Processor
     - __call__
-
-## HyperCLOVAXModel
-
-[[autodoc]] HyperCLOVAXModel
-    - forward
-
-## HyperCLOVAXForCausalLM
-
-[[autodoc]] HyperCLOVAXForCausalLM
-    - forward
-
-## HyperCLOVAXForSequenceClassification
-
-[[autodoc]] HyperCLOVAXForSequenceClassification
-    - forward
 
 ## HCXVisionV2Model
 
