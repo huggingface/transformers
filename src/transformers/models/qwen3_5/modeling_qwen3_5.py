@@ -537,6 +537,7 @@ class Qwen3_5GatedDeltaNet(nn.Module):
                 # The chunked FLA kernel takes a single `cu_seqlens` arg; for packed self-attention this matches q-side lengths.
                 cu_seqlens=kwargs.get("cu_seq_lens_q"),
             )
+
         # Update cache
         if cache_params is not None:
             cache_params.update_recurrent_state(last_recurrent_state, self.layer_idx)

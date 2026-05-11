@@ -190,6 +190,7 @@ class Qwen3_5TextRotaryEmbedding(Qwen3VLTextRotaryEmbedding):
         )
         return inv_freq, attention_factor
 
+
 class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
     def __init__(self, config: Qwen3_5Config, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -212,7 +213,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         hidden_states: torch.Tensor,
         cache_params: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs]
+        **kwargs: Unpack[TransformersKwargs],
     ):
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
 
@@ -238,7 +239,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
 
         b = self.in_proj_b(hidden_states)
         a = self.in_proj_a(hidden_states)
-        
+
         if use_precomputed_states and seq_len == 1:
             # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
             mixed_qkv = self.causal_conv1d_update(
@@ -317,6 +318,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                 # The chunked FLA kernel takes a single `cu_seqlens` arg; for packed self-attention this matches q-side lengths.
                 cu_seqlens=kwargs.get("cu_seq_lens_q"),
             )
+
         # Update cache
         if cache_params is not None:
             cache_params.update_recurrent_state(last_recurrent_state, self.layer_idx)

@@ -17,8 +17,9 @@ import copy
 import tempfile
 import unittest
 
-from transformers import AutoProcessor, AutoTokenizer, DataCollatorWithFlattening, is_torch_available
 from parameterized import parameterized
+
+from transformers import AutoProcessor, AutoTokenizer, DataCollatorWithFlattening, is_torch_available
 from transformers.testing_utils import (
     cleanup,
     require_causal_conv1d,
@@ -155,7 +156,6 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
     @require_causal_conv1d
     @require_flash_linear_attention
     @require_torch_gpu
-    @slow
     def test_padding_free_matches_padded_fast_path_regression(self):
         torch.manual_seed(0)
         config = self.model_tester.get_config()
@@ -198,7 +198,7 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
             logits_padfree = res_padfree.logits[0]
 
             torch.testing.assert_close(logits_padded, logits_padfree, atol=1e-5, rtol=1e-5)
-            
+
     def test_linear_attention_multi_token_cached_forward_matches_single_token(self):
         """
         Qwen3.5's gated-delta-net layers must produce the same output for a token regardless of
