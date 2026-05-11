@@ -510,13 +510,27 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         position_embeds = self.wpe(position_ids)
         hidden_states = inputs_embeds + position_embeds.to(inputs_embeds.device)
 
-        attention_mask, encoder_attention_mask = self._create_attention_masks(
-            attention_mask=attention_mask,
-            encoder_attention_mask=encoder_attention_mask,
-            embedding_output=inputs_embeds,
-            encoder_hidden_states=encoder_hidden_states,
-            past_key_values=past_key_values,
-        )
+        if getattr(self.config, "is_decoder", False):
+            attention_mask = create_causal_mask(
+                config=self.config,
+                input_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+            )
+        else:
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+            )
+
+        if encoder_attention_mask is not None:
+            encoder_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=inputs_embeds,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+            )
 
         if token_type_ids is not None:
             token_type_embeds = self.wte(token_type_ids)
@@ -569,38 +583,6 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
             attentions=all_self_attentions,
             cross_attentions=all_cross_attentions,
         )
-
-    def _create_attention_masks(
-        self,
-        attention_mask,
-        encoder_attention_mask,
-        embedding_output,
-        encoder_hidden_states,
-        past_key_values,
-    ):
-        if getattr(self.config, "is_decoder", False):
-            attention_mask = create_causal_mask(
-                config=self.config,
-                input_embeds=embedding_output,
-                attention_mask=attention_mask,
-                past_key_values=past_key_values,
-            )
-        else:
-            attention_mask = create_bidirectional_mask(
-                config=self.config,
-                input_embeds=embedding_output,
-                attention_mask=attention_mask,
-            )
-
-        if encoder_attention_mask is not None:
-            encoder_attention_mask = create_bidirectional_mask(
-                config=self.config,
-                input_embeds=embedding_output,
-                attention_mask=encoder_attention_mask,
-                encoder_hidden_states=encoder_hidden_states,
-            )
-
-        return attention_mask, encoder_attention_mask
 
 
 @auto_docstring(

@@ -536,45 +536,6 @@ class BlipTextModel(BlipTextPreTrainedModel):
         else:
             embedding_output = encoder_embeds
 
-        attention_mask, encoder_attention_mask = self._create_attention_masks(
-            attention_mask=attention_mask,
-            encoder_attention_mask=encoder_attention_mask,
-            embedding_output=embedding_output,
-            encoder_hidden_states=encoder_hidden_states,
-            past_key_values=past_key_values,
-            is_decoder=is_decoder,
-        )
-
-        encoder_outputs: BaseModelOutputWithPastAndCrossAttentions = self.encoder(
-            embedding_output,
-            attention_mask=attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            **kwargs,
-        )
-        sequence_output = encoder_outputs.last_hidden_state
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
-
-        return BaseModelOutputWithPoolingAndCrossAttentions(
-            last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
-            past_key_values=encoder_outputs.past_key_values,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-            cross_attentions=encoder_outputs.cross_attentions,
-        )
-
-    def _create_attention_masks(
-        self,
-        attention_mask,
-        encoder_attention_mask,
-        embedding_output,
-        encoder_hidden_states,
-        past_key_values,
-        is_decoder,
-    ):
         if is_decoder:
             attention_mask = create_causal_mask(
                 config=self.config,
@@ -597,7 +558,26 @@ class BlipTextModel(BlipTextPreTrainedModel):
                 encoder_hidden_states=encoder_hidden_states,
             )
 
-        return attention_mask, encoder_attention_mask
+        encoder_outputs: BaseModelOutputWithPastAndCrossAttentions = self.encoder(
+            embedding_output,
+            attention_mask=attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            **kwargs,
+        )
+        sequence_output = encoder_outputs.last_hidden_state
+        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+
+        return BaseModelOutputWithPoolingAndCrossAttentions(
+            last_hidden_state=sequence_output,
+            pooler_output=pooled_output,
+            past_key_values=encoder_outputs.past_key_values,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+            cross_attentions=encoder_outputs.cross_attentions,
+        )
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L811
