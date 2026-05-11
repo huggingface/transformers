@@ -29,9 +29,6 @@ from ...video_processing_utils import BaseVideoProcessor
 from .processing_molmo2 import Molmo2VideosKwargs
 
 
-# ===================== Image Processing =====================
-
-
 def batch_pixels_to_patches(array: torch.Tensor, patch_size: int) -> torch.Tensor:
     """Reshape images of [n_images, h, w, 3] -> [n_images, n_patches, pixels_per_patch]"""
     if len(array.shape) == 3:

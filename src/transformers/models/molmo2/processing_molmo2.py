@@ -44,9 +44,6 @@ class Molmo2ImagesKwargs(ImagesKwargs, total=False):
     pooling_size: list[int] | None
 
 
-# ===================== Video Processing =====================
-
-
 class Molmo2VideosKwargs(VideosKwargs, total=False):
     """
     patch_size (`int`, *optional*):
@@ -87,9 +84,6 @@ class Molmo2ProcessorKwargs(ProcessingKwargs, total=False):
         },
         "videos_kwargs": {"return_metadata": True},
     }
-
-
-# ===================== Processor =====================
 
 
 IMAGE_PATCH_TOKEN = "<im_patch>"

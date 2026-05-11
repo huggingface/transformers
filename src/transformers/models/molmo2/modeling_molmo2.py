@@ -424,9 +424,6 @@ class Molmo2VisionModel(PreTrainedModel):
         return hidden_states
 
 
-# ===================== Vision Backbone / Adapter =====================
-
-
 class Molmo2ImageProjectorMLP(nn.Module):
     def __init__(self, config: Molmo2AdapterConfig):
         super().__init__()

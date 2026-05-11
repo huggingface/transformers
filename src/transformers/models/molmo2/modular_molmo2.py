@@ -82,7 +82,6 @@ from .configuration_molmo2 import Molmo2AdapterConfig, Molmo2Config, Molmo2TextC
 logger = logging.get_logger(__name__)
 
 
-# ===================== Image Processing =====================
 
 
 def batch_pixels_to_patches(array: torch.Tensor, patch_size: int) -> torch.Tensor:
@@ -494,7 +493,6 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         return resized_h * resized_w + num_patch_rows_high * num_patch_cols_high
 
 
-# ===================== Video Processing =====================
 
 
 class Molmo2VideosKwargs(VideosKwargs, total=False):
@@ -624,7 +622,6 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         return BatchFeature(data, tensor_type=return_tensors)
 
 
-# ===================== Processor =====================
 
 
 IMAGE_PATCH_TOKEN = "<im_patch>"
@@ -881,7 +878,6 @@ class Molmo2Processor(ProcessorMixin):
         )
 
 
-# ===================== Modeling =====================
 
 # Output dataclasses - same structure as LLaVA
 class Molmo2CausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
@@ -892,7 +888,6 @@ class Molmo2ModelOutputWithPast(LlavaModelOutputWithPast):
     pass
 
 
-# ===================== Vision Components (from Siglip2) =====================
 
 
 class Molmo2VisionMLP(Siglip2MLP):
@@ -1143,7 +1138,6 @@ class Molmo2VisionModel(PreTrainedModel):
         return hidden_states
 
 
-# ===================== Vision Backbone / Adapter =====================
 
 
 class Molmo2ImageProjectorMLP(nn.Module):
@@ -1235,7 +1229,6 @@ class Molmo2VisionBackbone(nn.Module):
         return pooled_features.view(-1, pooled_features.shape[-1])[valid_token.flatten()]
 
 
-# ===================== Text Components (from Phi3/Llama) =====================
 
 
 class Molmo2RotaryEmbedding(LlamaRotaryEmbedding):
@@ -1482,7 +1475,6 @@ class Molmo2Embedding(nn.Module):
         return F.embedding(x, torch.cat([self.embedding, self.new_embedding], dim=0))
 
 
-# ===================== PreTrainedModel =====================
 
 
 class Molmo2PreTrainedModel(LlamaPreTrainedModel):
