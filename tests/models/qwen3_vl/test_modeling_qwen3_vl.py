@@ -525,7 +525,7 @@ class Qwen3VLTextModelPositionIdsTest(unittest.TestCase):
 
 
 @require_torch
-class Qwen3VLMRopeCrossDeviceTest(unittest.TestCase):
+class Qwen3VLMRopeBufferMaterializationTest(unittest.TestCase):
     @parameterized.expand(MROPE_CROSS_DEVICE_CASES)
     @require_torch_accelerator
     def test_rotary_embedding_handles_cross_device_buffer(
@@ -545,3 +545,33 @@ class Qwen3VLMRopeCrossDeviceTest(unittest.TestCase):
         cos, sin = rotary(x, position_ids)
         self.assertEqual(cos.device.type, torch.device(torch_device).type)
         self.assertEqual(sin.device.type, torch.device(torch_device).type)
+
+    @parameterized.expand(MROPE_CROSS_DEVICE_CASES)
+    @require_torch_accelerator
+    def test_rotary_embedding_reinitializes_after_to_empty(
+        self,
+        _name: str,
+        config_cls: type[PreTrainedConfig],
+        rotary_cls: type["torch.nn.Module"],
+    ) -> None:
+        config = config_cls()
+        rotary = rotary_cls(config, device="meta")
+        self.assertEqual(rotary.inv_freq.device.type, "meta")
+
+        rotary.to_empty(device=torch_device)
+        self.assertEqual(rotary.inv_freq.device.type, torch.device(torch_device).type)
+
+        # Without the `_apply` re-init, `to_empty` would leave both buffers with uninitialized
+        # storage from the caching allocator's free-list, and `inv_freq * position_id` would
+        # overflow fp32 at the first large position
+        self.assertEqual(rotary.rope_type, "default")
+        canonical, _ = rotary.compute_default_rope_parameters(config, torch.device(torch_device))
+        torch.testing.assert_close(rotary.inv_freq, canonical)
+        torch.testing.assert_close(rotary.original_inv_freq, canonical)
+
+        bsz, seq_len = 1, 8
+        x = torch.randn(bsz, seq_len, config.hidden_size, device=torch_device, dtype=torch.bfloat16)
+        position_ids = torch.arange(seq_len, device=torch_device)[None, :]
+        cos, sin = rotary(x, position_ids)
+        self.assertTrue(torch.isfinite(cos).all())
+        self.assertTrue(torch.isfinite(sin).all())

@@ -32,7 +32,7 @@ from ...image_utils import ImageInput
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -269,6 +269,23 @@ class Qwen3VLTextRotaryEmbedding(LlamaRotaryEmbedding):
         super().__init__(config, device=device)
 
         self.mrope_section = config.rope_parameters.get("mrope_section", [24, 20, 20])
+
+    def _apply(self, fn, recurse=True):
+        # Re-run `rope_init_fn(self.config, new_device)` when `_apply` migrates `inv_freq` /
+        # `original_inv_freq` from `meta` onto a real device, so that the standard
+        # `init_empty_weights()` + `to_empty(device=...)` materialization pattern (also used
+        # by FSDP2 sharding) lands canonical inverse-frequency values on the target device
+        was_meta = self.inv_freq.device.type == "meta"
+        result = super()._apply(fn, recurse=recurse)
+        if was_meta and self.inv_freq.device.type != "meta":
+            rope_init_fn: Callable = self.compute_default_rope_parameters
+            if self.rope_type != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+            inv_freq, self.attention_scaling = rope_init_fn(self.config, self.inv_freq.device)
+            with torch.no_grad():
+                self.inv_freq.copy_(inv_freq)
+                self.original_inv_freq.copy_(inv_freq)
+        return result
 
     def apply_interleaved_mrope(self, freqs, mrope_section):
         """Apply interleaved MRoPE to 3D rotary embeddings.

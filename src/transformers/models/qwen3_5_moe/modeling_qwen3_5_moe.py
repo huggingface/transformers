@@ -157,6 +157,23 @@ class Qwen3_5MoeTextRotaryEmbedding(nn.Module):
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
+    def _apply(self, fn, recurse=True):
+        # Re-run `rope_init_fn(self.config, new_device)` when `_apply` migrates `inv_freq` /
+        # `original_inv_freq` from `meta` onto a real device, so that the standard
+        # `init_empty_weights()` + `to_empty(device=...)` materialization pattern (also used
+        # by FSDP2 sharding) lands canonical inverse-frequency values on the target device
+        was_meta = self.inv_freq.device.type == "meta"
+        result = super()._apply(fn, recurse=recurse)
+        if was_meta and self.inv_freq.device.type != "meta":
+            rope_init_fn: Callable = self.compute_default_rope_parameters
+            if self.rope_type != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+            inv_freq, self.attention_scaling = rope_init_fn(self.config, self.inv_freq.device)
+            with torch.no_grad():
+                self.inv_freq.copy_(inv_freq)
+                self.original_inv_freq.copy_(inv_freq)
+        return result
+
     def apply_interleaved_mrope(self, freqs, mrope_section):
         """Apply interleaved MRoPE to 3D rotary embeddings.
         Reorganizes frequency layout from chunked [TTT...HHH...WWW] to
