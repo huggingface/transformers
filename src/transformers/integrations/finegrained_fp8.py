@@ -1135,8 +1135,9 @@ class Fp8Dequantize(ConversionOps):
         block_n = cols // scale_cols
         # ``ue8m0`` (``float8_e8m0fnu``) scales have no CUDA ``mul`` kernel, and casting
         # the FP8 weight to that dtype loses precision. Promote both sides to fp32 for
-        # the math; emit in the scales' dtype when it's a real float, otherwise bf16.
-        out_dtype = scales.dtype if scales.dtype.is_floating_point and scales.element_size() >= 2 else torch.bfloat16
+        # the math; keep fp16/bf16 output when scales carry that precision, otherwise
+        # emit bf16 to stay compatible with bf16 activations in model forward.
+        out_dtype = scales.dtype if scales.dtype in (torch.float16, torch.bfloat16) else torch.bfloat16
         original_shape = quantized_fp32.shape
         q = quantized_fp32.reshape(-1, scale_rows, block_m, scale_cols, block_n)
         s = scales.to(torch.float32).reshape(-1, scale_rows, scale_cols).unsqueeze(-1).unsqueeze(2)

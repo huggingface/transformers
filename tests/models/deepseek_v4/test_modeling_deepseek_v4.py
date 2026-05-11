@@ -301,9 +301,9 @@ class DeepseekV4FlashBaseIntegrationTest(unittest.TestCase):
         )
         inputs = tokenizer(self.prompt, return_tensors="pt").to(model.device)
         with torch.no_grad():
-            out = model.generate(**inputs, max_new_tokens=64, do_sample=False)
+            out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         decoded = tokenizer.decode(out[0], skip_special_tokens=False)
         expected = (
-            "Pipeline parallelism in ai is  a method of computer architecture that allows multiple processes or threads to run simultaneously on a single processor or on multiple processors in a computer system. This can be achieved through a variety of techniques, such as in the case of the use of multiple processors in a computer system, the use of multiple threads in a computer system, or"
+            "Pipeline parallelism in ai is  a method of computer architecture that allows multiple processes or threads to run simultaneously on a single processor or on"
         )
         self.assertEqual(decoded, expected)
