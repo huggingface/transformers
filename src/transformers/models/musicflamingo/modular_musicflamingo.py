@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import re
-from dataclasses import dataclass
 from math import pi
 
 from huggingface_hub.dataclasses import strict
@@ -23,16 +22,13 @@ from torch import Tensor, broadcast_tensors
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available
-from ...utils.deprecation import forward_base_model_attrs
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, torch_compilable_check
 from ..audioflamingo3.configuration_audioflamingo3 import AudioFlamingo3Config
 from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3ForConditionalGeneration,
-    AudioFlamingo3Model,
-    AudioFlamingo3ModelOutputWithPast,
     AudioFlamingo3PreTrainedModel,
 )
 from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor
@@ -256,16 +252,15 @@ class MusicFlamingoPreTrainedModel(AudioFlamingo3PreTrainedModel):
             init.copy_(module.position_angles, buffer_value)
 
 
-@dataclass
-class MusicFlamingoModelOutputWithPast(AudioFlamingo3ModelOutputWithPast):
-    pass
-
-
-class MusicFlamingoModel(AudioFlamingo3Model):
+@auto_docstring(
+    custom_intro="""
+    The MusicFlamingo model which consists of a fine-tuned Whisper encoder, rotary time embedding, a multi-modal projector, and a Qwen2 language model.
+    """
+)
+class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
     def __init__(self, config: MusicFlamingoConfig):
         super().__init__(config)
         self.pos_emb = MusicFlamingoRotaryEmbedding(config)
-        self.post_init()
 
     def _build_audio_timestamps(
         self,
@@ -278,6 +273,13 @@ class MusicFlamingoModel(AudioFlamingo3Model):
         _, starts = torch.where(diff == 1)
         _, ends = torch.where(diff == -1)
         sample_lengths = (ends - starts).to(torch.long)
+
+        n_audio_tokens = audio_token_mask.sum()
+        n_audio_features = post_lengths.sum()
+        torch_compilable_check(
+            n_audio_tokens == n_audio_features,
+            f"Audio features and audio tokens do not match, tokens: {n_audio_tokens}, features: {n_audio_features}",
+        )
 
         # Account for 4x downsampling in audio encoder (conv2 and avg pooling)
         audio_embed_frame_step = self.config.audio_frame_step * 4
@@ -348,59 +350,92 @@ class MusicFlamingoModel(AudioFlamingo3Model):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> CausalLMOutputWithPast:
+        r"""
+        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Example:
+
+        ```python
+        >>> from transformers import MusicFlamingoForConditionalGeneration, AutoProcessor
+
+        >>> model_id = "nvidia/music-flamingo-2601-hf"
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+        >>> model = MusicFlamingoForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+
+        >>> conversation = [
+        >>>     {
+        >>>         "role": "user",
+        >>>         "content": [
+        >>>             {
+        >>>                 "type": "text",
+        >>>                 "text": "Describe this track in full detail - tell me the genre, tempo, and key, then dive into the instruments, production style, and overall mood it creates.",
+        >>>             },
+        >>>             {
+        >>>                 "type": "audio",
+        >>>                 "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/song_1.mp3",
+        >>>             },
+        >>>         ],
+        >>>     }
+        >>> ]
+
+        >>> inputs = processor.apply_chat_template(
+        >>>     conversation,
+        >>>     tokenize=True,
+        >>>     add_generation_prompt=True,
+        >>>     return_dict=True,
+        >>> ).to(model.device, model.dtype)
+
+        >>> outputs = model.generate(**inputs, max_new_tokens=100)
+
+        >>> decoded_outputs = processor.batch_decode(
+        >>>     outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True
+        >>> )
+        >>> print(decoded_outputs)
+        ["This track is an uplifting Eurodance-style Trance-Pop anthem..."]
+        ```"""
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        audio_embeds = None
         if input_features is not None and input_ids is not None:
             audio_embeds = self.get_audio_features(
                 input_features, input_features_mask, input_ids=input_ids, return_dict=True
             ).pooler_output
 
             # replace text-audio token placeholders with audio embeddings
-            audio_token_mask = (input_ids == self.config.audio_token_id).unsqueeze(-1)
-            inputs_embeds = inputs_embeds.masked_scatter(
-                audio_token_mask.to(inputs_embeds.device), audio_embeds.to(inputs_embeds.device)
+            special_audio_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, audio_features=audio_embeds
             )
+            inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_embeds.to(inputs_embeds.device))
 
-        outputs = self.language_model(
+        outputs: CausalLMOutputWithPast = self.language_model(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
+            labels=labels,
             use_cache=use_cache,
+            logits_to_keep=logits_to_keep,
             **kwargs,
         )
-
-        return MusicFlamingoModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            audio_hidden_states=audio_embeds,
-        )
-
-
-@auto_docstring(
-    custom_intro="""
-    The MusicFlamingo model which consists of a fine-tuned Whisper encoder, rotary time embedding, a multi-modal projector, and a Qwen2 language model.
-    """
-)
-@forward_base_model_attrs(version="5.7")
-class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
-    def __init__(self, config: MusicFlamingoConfig):
-        super().__init__(config)
-        self.model = MusicFlamingoModel(config)
-        self.post_init()
+        return outputs
 
 
 __all__ = [
     "MusicFlamingoConfig",
     "MusicFlamingoProcessor",
     "MusicFlamingoForConditionalGeneration",
-    "MusicFlamingoModel",
     "MusicFlamingoPreTrainedModel",
 ]
