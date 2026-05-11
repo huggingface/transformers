@@ -14,17 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# Contribute to Transformers
+# Contribute to 🤗 Transformers
 
->[!WARNING]
->The Transformers repo is currently being overwhelmed by a large number of PRs and issue comments written by
->code agents. We are currently bottlenecked by our ability to review and respond to them. As a result, 
->**we ask that new users do not submit pure code agent PRs** at this time. 
->You may use code agents in drafting or to help you diagnose issues. We'd also ask autonomous agents
->not to open any PRs or issues for the moment.
+> [!WARNING]
+> The Transformers repo is currently being overwhelmed by a large number of PRs and issue comments written by
+> code agents. We are currently bottlenecked by our ability to review and respond to them. As a result,
+> **we ask that new users do not submit pure code agent PRs** at this time.
+> You may use code agents in drafting or to help you diagnose issues. We'd also ask autonomous agents
+> not to open any PRs or issues for the moment.
 >
->PRs that appear to be fully agent-written will probably be closed without review, and we may block users who do this
->repeatedly or maliciously.
+> PRs that appear to be fully agent-written will probably be closed without review, and we may block users who do this
+> repeatedly or maliciously.
 
 <details>
 
@@ -71,42 +71,62 @@ PRs are closed without review!
 
 Transformers welcomes all contributions whether it is fixing bugs, submitting feature requests, implementing new models, or improving docs.
 
-If you aren't sure where to start, take a look at the [Good First Issues](https://github.com/huggingface/transformers/contribute) for more beginner-friendly issues. For a more challenging issue, check out the [Good Second Issues](https://github.com/huggingface/transformers/labels/Good%20Second%20Issue).
+If you aren't sure where to start, take a look at the [Good First Issues](https://github.com/huggingface/transformers/labels/Good%20First%20Issue) for more beginner-friendly issues. For a more challenging issue, check out the [Good Second Issues](https://github.com/huggingface/transformers/labels/Good%20Second%20Issue). However you choose to contribute, please be mindful and respect our [code of conduct](https://github.com/huggingface/transformers/blob/main/CODE_OF_CONDUCT.md).
 
-However you choose to contribute, please be mindful and respect our [code of conduct](https://github.com/huggingface/transformers/blob/main/CODE_OF_CONDUCT.md).
+If you enjoyed using Transformers, feel free to reference it and let us know how you're using it, shout us out on Twitter, or give the repository a star!
 
 This guide was heavily inspired by the [scikit-learn guide to contributing](https://github.com/scikit-learn/scikit-learn/blob/main/CONTRIBUTING.md).
 
+## Contents
+
+1. [Set up](#set-up)
+   - [Windows](#windows)
+2. [Opening issues](#opening-issues)
+   - [Bug-related issue](#bug-related-issue)
+   - [Feature request](#feature-request)
+3. [Adding a new model](#adding-a-new-model)
+   - [Model addition timeline](#model-addition-timeline)
+4. [Docs](#docs)
+5. [Agentic contributions](#agentic-contributions)
+
 ## Set up
 
-Don't push branches directly to `huggingface/transformers`. Fork [Transformers](https://github.com/huggingface/transformers) with the **Fork** button on GitHub to get a copy under your account, then clone it locally.
+1. Fork [Transformers](https://github.com/huggingface/transformers) with the **Fork** button on GitHub to get a copy under your account, then clone it locally.
 
-```bash
-git clone git@github.com:<your Github handle>/transformers.git
-cd transformers
-```
+  ```bash
+  git clone git@github.com:<your Github handle>/transformers.git
+  cd transformers
+  ```
 
-Add the Transformers repository as a remote named `upstream`. `origin` points at your fork and `upstream` points at the source of truth. That lets you sync your local `main` before pushing to `origin` and opening a PR.
+2. Add the Transformers repository as a remote named `upstream`. `origin` points at your fork and `upstream` points at the source of truth. That lets you sync your local `main` before pushing to `origin` and opening a PR.
 
-```bash
-git remote add upstream https://github.com/huggingface/transformers.git
-```
+  ```bash
+  git remote add upstream https://github.com/huggingface/transformers.git
+  git remote -v
+  # origin    git@github.com:<your Github handle>/transformers.git (fetch)
+  # origin    git@github.com:<your Github handle>/transformers.git (push)
+  # upstream  https://github.com/huggingface/transformers.git (fetch)
+  # upstream  https://github.com/huggingface/transformers.git (push)
+  ```
 
-Keep your fork up to date and start a branch to work on.
+3. Keep your fork up to date and start a branch to work on. You can also sync your fork from the GitHub UI with the **Sync fork** button.
 
-```bash
-git checkout main && git pull upstream main && git push origin main
-git switch -c a-descriptive-name-for-my-branch
-```
+  ```bash
+  git checkout main && git pull upstream main && git push origin main
+  git switch -c a-descriptive-name-for-my-branch
+  ```
 
-Install the library in editable mode. Use `[torch,testing]` for model contributions (includes PyTorch, pytest, and style tools) or `[quality]` for docs and small fixes (style tools only).
+4. Install the library in editable mode. Use `[dev]` for most contributions because it includes the development tools needed for style and quality checks. Use `[torch,testing]` for model contributions, or `[quality]` for docs-only changes and small fixes when the full development dependency set is not needed.
 
-```bash
-pip install -e ".[torch,testing]"
+  ```bash
+  pip install -e ".[dev]"
 
-# for docs and small fixes only
-pip install -e ".[quality]"
-```
+  # for model contributions
+  pip install -e ".[torch,testing]"
+
+  # for docs-only changes and small fixes
+  pip install -e ".[quality]"
+  ```
 
 ### Windows
 
@@ -133,6 +153,8 @@ Use the issue [templates](https://github.com/huggingface/transformers/tree/main/
 
 Make sure the bug wasn't already reported before opening an issue (use the search bar on GitHub under Issues). The issue should be a bug in Transformers, not in your own code.
 
+If you're unsure whether the bug is in your code or the library, ask in the [forum](https://discuss.huggingface.co/) or on [Discord](https://discord.com/invite/hugging-face-879548962464493619) first. That helps keep GitHub focused on actionable library issues.
+
 Include the following so we can resolve it quickly.
 
 * Your *OS type and version* and *Python*, and *PyTorch* versions when applicable.
@@ -157,22 +179,25 @@ Open an issue and describe:
 
 ## Adding a new model
 
-Adding a model to Transformers makes it available for anyone to load and fine-tune it or run inference. Follow the guides below to get started with a model addition.
+Adding a model to Transformers makes it available for anyone to load and fine-tune it or run inference. Before you start the implementation, isolate the differences between your architecture and recent state-of-the-art models that are already in Transformers. Explain those differences in the issue or PR so reviewers can quickly understand what challenges the model brings, what parts can reuse existing patterns, and what should be standardized across models.
+
+Follow the guides below.
 
 1. [Add a model with modular Transformers](docs/source/en/modular_transformers.md) — implement the model using the modular file and generate standalone modeling files.
-2. [Add vision processing components](docs/source/en/add_vision_processing_components.md) — add image processors and other vision-specific components if your model requires image inputs.
-3. [Auto-generate docstrings](docs/source/en/auto_docstring.md) — use the `@auto_docstring` decorator to generate consistent docstrings without boilerplate.
-4. [Convert checkpoints](docs/source/en/modular_transformers.md#checkpoint-conversion) — write a conversion script to translate upstream weights into a Transformers-compatible format and upload to the Hub.
-5. [Dynamic weight loading](docs/source/en/weightconverter.md) — add a runtime mapping if the published checkpoint layout doesn't match your module's parameter names.
-6. [Testing](docs/source/en/testing.md) — write and run model tests to verify correctness and keep the contribution maintainable.
-7. [Model structure rules](docs/source/en/modeling_rules.md) — check your files pass the static model structure rules enforced by `make typing`.
-8. [Pull request checks](docs/source/en/pr_checks.md) — understand the Hugging Face CI checks and how to run them locally before opening a PR.
+2. [Auto-generate docstrings](docs/source/en/auto_docstring.md) — use the `@auto_docstring` decorator to generate consistent docstrings without boilerplate.
+3. [Testing](docs/source/en/testing.md) — write and run model tests to verify correctness and keep the contribution maintainable. For causal language models, inherit from the causal LM tester where possible. Prioritize integration tests because they verify the full processor, tokenizer, and model path against real checkpoints.
+4. [Model structure rules](docs/source/en/modeling_rules.md) — check your files pass the static model structure rules enforced by `make typing`.
+
+Some model additions need extra integration work.
+
+- [Add vision processing components](docs/source/en/add_vision_processing_components.md) if your model requires image or video inputs.
+- [Dynamic weight loading](docs/source/en/weightconverter.md) if published checkpoint parameter names do not match the Transformers implementation.
 
 ### Model addition timeline
 
 There are four timelines for model additions depending on the model contributor and community demand for an architecture.
 
-- Day-0 integration: ship the model in Transformers on release day. We optimize the architecture (quantization, FlashAttention, KV-cache, etc.), review early drafts, and tighten the docs before launch.
+- Day-0 integration: make the model available in Transformers on release day with a new version release. We provide help to support the most important core features (quantization, FlashAttention, KV-cache, etc.), review early drafts, and can also take care of the model implementation depending on timelines.
 
   Email transformers@huggingface.co a few weeks ahead, especially for novel architectures. We'll iterate with you on a private fork until your checkpoint and release are ready.
 
@@ -180,17 +205,17 @@ There are four timelines for model additions depending on the model contributor 
 
   Open an issue with the [new model template](https://github.com/huggingface/transformers/issues/new?assignees=&labels=New+model&projects=&template=new-model-addition.yml) to request one. Issues with more activity move up the queue faster.
 
-- Post-release integratio*: models without strong demand, or that we don't have bandwidth to take on, land after the upstream release.
+- Post-release integration: models without strong demand, or that we don't have bandwidth to take on, land after the upstream release.
 
   Open issues tagged ["New model"](https://github.com/huggingface/transformers/issues?q=is%3Aopen+is%3Aissue+label%3A%22New+model%22) are the entry point for outside contributors. Start with the most-requested architectures to maximize impact. We'll review and guide you through it.
 
-- Hub-first release: ship your model directly on the Hub via Transformers' [remote-code](./models#custom-models) support, with no upstream PR required.
+- Hub-first release: ship your model directly on the Hub via Transformers' [remote-code](./docs/source/en/models#custom-models.md) support, with no upstream PR required.
 
-  Popular Hub-first models often get integrated into Transformers later, which unlocks first-class docs, maintenance, and optimization. Hub-first is the lowest-friction way to add a model.
+  Popular Hub-first models often get integrated into Transformers later, which unlocks first-class docs, maintenance, and optimization. Hub-first is the lowest-friction way to add a model. However, it can be more fragile if a model requires weight conversion or other backward compatibility issues.
 
 ## Docs
 
-Improvements to the docs, like typos, missing content or unclear explanations, are always welcome. For docstrings, use the [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html). Open a pull request directly for any documentation fix.
+Improvements to the docs, like typos, missing content or unclear explanations, are always welcome. For API reference generated from source files, use the [`@auto_docstring`](./docs/source/en/auto_docstring.md) decorator when it applies. Open a pull request directly for meaningful documentation fixes.
 
 Refer to the docs [README](./docs/README.md) for more details about how to edit the docs and the syntax we use.
 
@@ -201,7 +226,7 @@ AI-assisted contributions are welcome. They must be coordinated, scoped, and ver
 - Do not submit "pure agent" PRs. The human submitter is responsible for reviewing all changed lines, validating behavior end-to-end, and running relevant tests.
 - If AI tools were used, disclose this in the PR description and include: coordination link, differentiation from existing PRs (if applicable), and test commands/results.
 - Avoid one-off "busywork" PRs (single typo, isolated style cleanup, one mutable default fix, etc.). Bundle mechanical cleanups into a clear, systematic scope.
-- Coordinate on issues before opening a PR, review similar PRs, and wait for approval. 
+- Coordinate on issues before opening a PR, review similar PRs, and wait for approval.
 
-> [!NOTE] 
-> These topics are outlined for agents in `AGENTS.md` with instruction for how to autonomously implement them. 
+> [!NOTE]
+> These topics are outlined for agents in `AGENTS.md` with instruction for how to autonomously implement them.

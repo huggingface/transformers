@@ -1,3 +1,19 @@
+<!---
+Copyright 2020 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
 # Writing docs
 
 The Transformers docs live under `docs/source/<lang>/` and are built with [doc-builder](https://github.com/huggingface/doc-builder).
@@ -9,7 +25,7 @@ Build locally for a faster iteration loop, or while drafting changes before you 
 
 ## Building and previewing locally
 
-Install the dev dependencies and [doc-builder](https://github.com/huggingface/doc-builder) from the root of the repository:
+Install the quality dependencies and [doc-builder](https://github.com/huggingface/doc-builder) from the root of the repository. The `[quality]` extra is enough for docs-only work. Use `[dev]` if your change also needs the full development dependency set.
 
 ```bash
 pip install -e ".[quality]"
@@ -30,7 +46,7 @@ doc-builder preview transformers docs/source/en/
 ```
 
 > [!WARNING]
-> `preview` only picks up files that exist when it starts. After you add a brand-new page, update `_toctree.yml` and restart `preview`. `preview` does not work on Windows.
+> `preview` only picks up files that exist when it starts. After you add a brand-new page, update `_toctree.yml` and restart `preview`.
 
 Don't commit the built output. Only changes under `docs/source/` are reviewed.
 
@@ -158,95 +174,15 @@ print(pipe("I love this!"))
 
 ## Writing docstrings
 
-Follow the [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html) for writing docstrings.
+Most docstrings are automatically generated in the library source code, especially `modeling_*.py`, `configuration_*.py`, processing, and tokenizer files. For model classes and forward methods, use the [@auto_docstring](./source/en/auto_docstring.md) decorator when it applies. It keeps shared arguments and returns consistent docstrings without repeating full `Args:` blocks in every model file.
 
-### Defining arguments in a method
-
-List arguments under an `Args:` (or `Arguments:` or `Parameters:`) header, indented one level. Each argument starts with its name, followed by the type in backticks (and shape, for tensors), then a colon and the description:
-
-````md
-```py
-Args:
-    n_layers (`int`): The number of layers of the model.
-```
-````
-
-When the description is too long for one line, indent the description on the next line:
-
-````md
-```py
-Args:
-    input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-      Indices of input sequence tokens in the vocabulary.
-
-      Indices can be obtained using [`AlbertTokenizer`]. See [`~PreTrainedTokenizer.encode`] and [`~PreTrainedTokenizer.__call__`] for details.
-
-      [What are input IDs?](../glossary#input-ids)
-```
-````
-
-For optional arguments or arguments with defaults, use the syntax below. Given a function like:
-
-```py
-def my_function(x: str = None, a: float = 1):
-```
-
-the docstring looks like:
-
-````md
-```py
-Args:
-    x (`str`, *optional*):
-        Controls ...
-    a (`float`, *optional*, defaults to 1):
-        Used to ...
-```
-````
-
-Omit `defaults to None` when `None` is the default. The first line (name, type, default) can't break across lines, even when long. The indented description below it can span as many lines as needed (see `input_ids` above).
-
-### Multi-line code blocks
-
-Wrap multi-line code blocks in triple backticks, as in standard Markdown:
-
-````md
-```py
-# first line of code
-# second line
-# etc
-```
-````
-
-### Return block
-
-Introduce the return block with `Returns:`, then put the return type on the next line, indented once. Sub-fields of the return value sit at the same indent level, no further nesting needed.
-
-A single-value return:
-
-```py
-    Returns:
-        `list[int]`: A list of integers in the range [0, 1] --- 1 for a special token, 0 for a sequence token.
-```
-
-A tuple return with several fields:
-
-```py
-    Returns:
-        `tuple(torch.FloatTensor)` comprising various elements depending on the configuration ([`BertConfig`]) and inputs:
-        - **loss** (*optional*, returned when `masked_lm_labels` is provided) `torch.FloatTensor` of shape `(1,)` --
-          Total loss is the sum of the masked language modeling loss and the next sequence prediction (classification) loss.
-        - **prediction_scores** (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`) --
-          Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-```
+Use hand-written docstrings, following the [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html), for objects that are not covered by `@auto_docstring`, or when a method needs model-specific behavior documented.
 
 ### Styling
 
-Run `make style` to:
+Run `make style` to format docstrings and code examples with [Ruff](https://docs.astral.sh/ruff/).
 
-- reflow docstrings to use the full line width
-- format code examples with [Ruff](https://docs.astral.sh/ruff/), the same as the rest of the Transformers source
-
-The script can fail on syntax errors. Commit before running `make style` so you can easily revert if something goes wrong.
+The script can fail on syntax errors. Commit before running `make style` so you can revert if something goes wrong.
 
 ## Adding an image
 
