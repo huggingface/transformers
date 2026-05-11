@@ -408,12 +408,6 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
         acoustic_tokenizer_chunk_size: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VibeVoiceAsrModelOutputWithPast:
-        r"""
-        padding_mask (<fill_type>):
-            <fill_docstring>
-        acoustic_tokenizer_chunk_size (<fill_type>):
-            <fill_docstring>
-        """
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
