@@ -183,15 +183,11 @@ class VibeVoiceAsrForConditionalGenerationModelTest(ModelTesterMixin, Generation
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="Same as test_training_gradient_checkpointing: tokenizer encoders are frozen."
-    )
+    @unittest.skip(reason="Same as test_training_gradient_checkpointing: tokenizer encoders are frozen.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="Same as test_training_gradient_checkpointing: tokenizer encoders are frozen."
-    )
+    @unittest.skip(reason="Same as test_training_gradient_checkpointing: tokenizer encoders are frozen.")
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 

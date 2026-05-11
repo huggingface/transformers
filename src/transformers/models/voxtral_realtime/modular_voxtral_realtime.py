@@ -623,7 +623,9 @@ class VoxtralRealtimeModel(VoxtralRealtimePreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            encoder_past_key_values=audio_outputs.past_key_values if (audio_outputs is not None and use_cache) else None,
+            encoder_past_key_values=audio_outputs.past_key_values
+            if (audio_outputs is not None and use_cache)
+            else None,
             padding_cache=audio_outputs.padding_cache if (audio_outputs is not None and use_cache) else None,
             audio_hidden_states=audio_embeds,
         )

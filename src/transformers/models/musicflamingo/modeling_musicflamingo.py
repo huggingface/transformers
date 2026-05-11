@@ -213,11 +213,11 @@ def apply_rotary_time_emb(hidden_states, cos, sin):
     without a language modeling head.
     """
 )
-class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, GenerationMixin):
-    _keep_in_fp32_modules_strict = None
+class MusicFlamingoModel(MusicFlamingoPreTrainedModel):
     _supports_attention_backend = True
     _tp_plan = None
     _pp_plan = None
+    _keep_in_fp32_modules_strict = None
 
     def __init__(self, config: MusicFlamingoConfig):
         super().__init__(config)

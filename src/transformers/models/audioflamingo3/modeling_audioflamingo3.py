@@ -448,11 +448,10 @@ class AudioFlamingo3MultiModalProjector(nn.Module):
     """
 )
 class AudioFlamingo3Model(AudioFlamingo3PreTrainedModel):
-class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, GenerationMixin):
-    _keep_in_fp32_modules_strict = None
     _supports_attention_backend = True
     _tp_plan = None
     _pp_plan = None
+    _keep_in_fp32_modules_strict = None
 
     def __init__(self, config):
         super().__init__(config)

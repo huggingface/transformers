@@ -23,7 +23,6 @@ from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    CausalLMOutputWithPast,
     ModelOutput,
 )
 from ...processing_utils import Unpack

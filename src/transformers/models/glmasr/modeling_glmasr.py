@@ -370,20 +370,15 @@ class GlmAsrModelOutputWithPast(BaseModelOutputWithPast):
 
 @auto_docstring(
     custom_intro="""
-    The GlmAsr model (fine-tuned Whisper encoder, multi-modal projector, Qwen2 language model),
-    without a language modeling head.
+    The GlmAsr model which consists of a fine-tuned Whisper encoder, a multi-modal projector and a Llama language model.
     """
 )
-<<<<<<< alm-base-model-class
 class GlmAsrModel(GlmAsrPreTrainedModel):
-=======
-class GlmAsrForConditionalGeneration(GlmAsrPreTrainedModel, GenerationMixin):
-    _keep_in_fp32_modules_strict = None
     _supports_attention_backend = True
     _tp_plan = None
     _pp_plan = None
+    _keep_in_fp32_modules_strict = None
 
->>>>>>> main
     def __init__(self, config):
         super().__init__(config)
         self.vocab_size = config.text_config.vocab_size

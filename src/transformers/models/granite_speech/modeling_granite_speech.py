@@ -561,7 +561,9 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
             )
 
         if not return_dict:
-            output = (logits,) + tuple(v for v in (outputs.past_key_values, outputs.hidden_states, outputs.attentions) if v is not None)
+            output = (logits,) + tuple(
+                v for v in (outputs.past_key_values, outputs.hidden_states, outputs.attentions) if v is not None
+            )
             return (loss,) + output if loss is not None else output
 
         return GraniteSpeechCausalLMOutputWithPast(

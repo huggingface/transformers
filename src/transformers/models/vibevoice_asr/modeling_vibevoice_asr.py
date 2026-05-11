@@ -258,11 +258,34 @@ class VibeVoiceAsrPreTrainedModel(PreTrainedModel):
     Base class for VibeVoice ASR outputs, with hidden states and attentions.
     """
 )
-class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, GenerationMixin):
-    _keep_in_fp32_modules_strict = None
-    _supports_attention_backend = True
-    _tp_plan = None
-    _pp_plan = None
+class VibeVoiceAsrModelOutputWithPast(BaseModelOutputWithPast):
+    r"""
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance.
+    audio_hidden_states (`torch.FloatTensor`, *optional*):
+        Projected audio hidden states.
+    """
+
+    audio_hidden_states: torch.FloatTensor | None = None
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for VibeVoice ASR causal language model outputs.
+    """
+)
+class VibeVoiceAsrCausalLMOutputWithPast(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss.
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores.
+    past_key_values (`Cache`, *optional*):
+        Cache instance.
+    audio_hidden_states (`torch.FloatTensor`, *optional*):
+        Projected audio hidden states.
+    """
 
     loss: torch.FloatTensor | None = None
     logits: torch.FloatTensor | None = None
@@ -279,6 +302,8 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
     """
 )
 class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
+    _supports_attention_backend = True
+
     def __init__(self, config: VibeVoiceAsrConfig):
         super().__init__(config)
         self.acoustic_tokenizer_encoder = AutoModel.from_config(config.acoustic_tokenizer_encoder_config)
@@ -383,6 +408,12 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
         acoustic_tokenizer_chunk_size: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VibeVoiceAsrModelOutputWithPast:
+        r"""
+        padding_mask (<fill_type>):
+            <fill_docstring>
+        acoustic_tokenizer_chunk_size (<fill_type>):
+            <fill_docstring>
+        """
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
