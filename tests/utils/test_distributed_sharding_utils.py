@@ -16,7 +16,7 @@ import unittest
 import torch
 from torch.distributed.tensor.placement_types import Replicate, Shard, _StridedShard
 
-from transformers.distributed.model_loading import DtensorShardOperation
+from transformers.distributed.sharding_utils import DtensorShardOperation
 
 
 class FakeMesh:

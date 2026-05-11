@@ -38,7 +38,7 @@ from transformers.modeling_utils import LoadStateDictConfig
 from transformers.utils.import_utils import is_triton_available
 
 from ..test_modeling_common import compare_state_dicts
-from .test_distributed_model_loading import FakeMesh, _make_dtensor_shard_op
+from .test_distributed_sharding_utils import FakeMesh, _make_dtensor_shard_op
 
 
 class TestWeightGlobMatching(unittest.TestCase):

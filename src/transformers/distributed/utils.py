@@ -27,8 +27,9 @@ if TYPE_CHECKING:
 if is_torch_available():
     import torch
     import torch.distributed.checkpoint as dcp
-    from torch.distributed.tensor import DTensor, Replicate, Shard
-    from torch.distributed.tensor.placement_types import _StridedShard
+    from torch.distributed.tensor import DTensor
+
+    from .sharding_utils import _replicate_dtensor, convert_strided_to_shard, restore_strided_from_shard
 
 
 def is_fsdp_enabled() -> bool:
@@ -174,83 +175,6 @@ def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
             result[key] = _to_cpu_fresh(tensor)
 
     return result
-
-
-def _replicate_dtensor(tensor: DTensor) -> DTensor:
-    """All-gather a DTensor to fully Replicate, handling ``_StridedShard``.
-
-    PyTorch's ``redistribute()`` does not support ``_StridedShard`` as a source::
-
-        _StridedShard -> redistribute() -> Replicate      ❌ AssertionError
-        _StridedShard -> redistribute() -> Shard           ❌ NotImplementedError
-        Shard         -> redistribute() -> Replicate      ✅ works
-        Replicate     -> redistribute() -> Shard           ✅ works
-        Replicate     -> redistribute() -> _StridedShard  ✅ works
-
-    So we bypass ``redistribute`` and call each placement's low-level
-    ``_to_replicate_tensor`` (manual all-gather + interleaved reorder).
-
-    We process mesh dims **right-to-left** (innermost first).  Under TP+FSDP
-    the 2D mesh is ``(fsdp, tp)`` and both dims can shard the same tensor dim::
-
-        placements = (_StridedShard(dim=0), Shard(dim=0))
-        local shape = [64, 1024]   (global [256, 1024], fsdp=2, tp=2)
-
-    Right-to-left means TP is gathered first (local grows to [128, 1024]),
-    then FSDP (grows to [256, 1024]).  Each step must pass the correct
-    intermediate logical shape — the global shape divided by the mesh sizes
-    of dims not yet gathered (to the left).
-    """
-    mesh = tensor.device_mesh
-    replicate_all = tuple(Replicate() for _ in range(mesh.ndim))
-    with torch.no_grad():
-        if any(isinstance(p, _StridedShard) for p in tensor.placements):
-            local = tensor._local_tensor
-            placements = tensor.placements
-            for i in reversed(range(mesh.ndim)):
-                p = placements[i]
-                if p.is_replicate():
-                    continue
-                # Compute the logical shape seen at this step: dims to the left
-                # (not yet gathered) still divide their tensor dimension.
-                logical_shape = list(tensor.shape)
-                for j in range(i):
-                    pj = placements[j]
-                    if not pj.is_replicate():
-                        logical_shape[pj.dim] //= mesh.size(j)
-                local = p._to_replicate_tensor(local, mesh, i, logical_shape)
-            return DTensor.from_local(local, mesh, replicate_all, run_check=False)
-
-        return tensor.redistribute(placements=replicate_all)
-
-
-def convert_strided_to_shard(state_dict: dict) -> dict[str, tuple]:
-    # Convert _StridedShard DTensors in a state dict to plain Shard for DCP compatibility.
-    placement_map: dict[str, tuple] = {}
-    for key, value in state_dict.items():
-        if isinstance(value, dict):
-            nested = convert_strided_to_shard(value)
-            for nk, nv in nested.items():
-                placement_map[f"{key}.{nk}"] = nv
-        elif isinstance(value, DTensor) and any(isinstance(p, _StridedShard) for p in value.placements):
-            placement_map[key] = tuple(value.placements)
-            shard_placements = tuple(Shard(p.dim) if isinstance(p, _StridedShard) else p for p in value.placements)
-            state_dict[key] = _replicate_dtensor(value).redistribute(placements=shard_placements)
-    return placement_map
-
-
-def restore_strided_from_shard(state_dict: dict, placement_map: dict[str, tuple]) -> None:
-    # Restore _StridedShard placements after dcp.load.
-    def _resolve(d, dotted_key):
-        parts = dotted_key.split(".", 1)
-        if len(parts) == 2 and parts[0] in d and isinstance(d[parts[0]], dict):
-            return _resolve(d[parts[0]], parts[1])
-        return d, dotted_key
-
-    for key, original_placements in placement_map.items():
-        container, leaf_key = _resolve(state_dict, key)
-        if leaf_key in container and isinstance(container[leaf_key], DTensor):
-            container[leaf_key] = _replicate_dtensor(container[leaf_key]).redistribute(placements=original_placements)
 
 
 def save_optimizer(optimizer, checkpoint_dir: str) -> None:

@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from .distributed.model_loading import DtensorShardOperation
+from .distributed.sharding_utils import DtensorShardOperation
 from .integrations.accelerate import get_device, offload_weight
 from .utils import is_env_variable_true
 from .utils.loading_report import LoadStateDictInfo
