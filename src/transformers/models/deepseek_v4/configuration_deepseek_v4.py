@@ -127,8 +127,7 @@ class DeepseekV4Config(PreTrainedConfig):
         # hidden_states), so head-sharding is well-formed; `q_b_proj` and
         # `weights_proj` go colwise, and `scores_sync` is a `nn.Identity` whose
         # `"all_reduce"` output hook sums the per-rank partial `index_scores` across
-        # the mesh so every rank picks the same top-k. Mirrors the reference
-        # inference (`inference/model.py:393, 394, 422-423`).
+        # the mesh so every rank picks the same top-k.
         "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.gate_up_proj_scale_inv": "grouped_gemm",
@@ -297,12 +296,11 @@ class DeepseekV4Config(PreTrainedConfig):
 
         # `rope_parameters`: split the flat dict (left by `convert_rope_params_to_dict`,
         # which folded any legacy `rope_scaling` block in) into per-rope-type
-        # `{sliding, compress}` sub-dicts. Mirrors reference `inference/model.py:475-481`:
-        # sliding-window attention layers use base RoPE (`rope_theta=10000`, no YaRN —
-        # `original_seq_len=0` disables it); CSA/HCA layers (and their internal
-        # compressors/indexer) use `compress_rope_theta=160000` with YaRN frequency
-        # interpolation. Idempotent: re-loading an already-split config is a no-op via
-        # the `isinstance` short-circuit.
+        # `{sliding, compress}` sub-dicts. Sliding-window attention layers use base RoPE
+        # (`rope_theta=10000`, no YaRN — `original_seq_len=0` disables it); CSA/HCA layers
+        # (and their internal compressors/indexer) use `compress_rope_theta=160000` with
+        # YaRN frequency interpolation. Idempotent: re-loading an already-split config is
+        # a no-op via the `isinstance` short-circuit.
         rp = self.rope_parameters or {}
         if isinstance(rp.get("sliding"), dict) and isinstance(rp.get("compress"), dict):
             # Already nested — drop any leftover top-level keys.

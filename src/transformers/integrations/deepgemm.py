@@ -513,11 +513,8 @@ def deepgemm_fp8_fp4_experts_forward(
 
 
 def _ue8m0_to_fp32(sf: torch.Tensor) -> torch.Tensor:
-    """Reinterpret a UE8M0 SF tensor as fp32 by placing each byte in the float32 exponent
-    field. Matches vllm's `_ue8m0_uint8_to_float`: byte b → 2**(b - 127). Equivalent to
-    `sf.float()` for byte values in [1, 254]; we replicate the bit-shift form so the
-    integration is byte-identical to vllm's known-good Mega MoE setup.
-    """
+    """UE8M0 byte → fp32 (`2**(b - 127)`) via bit-shift into the float32 exponent field.
+    `transform_sf_into_required_layout` requires fp32 input."""
     return (sf.contiguous().view(torch.uint8).to(torch.int32) << 23).view(torch.float32)
 
 
@@ -530,24 +527,19 @@ def _megamoe_setup_weights(
 ) -> None:
     """One-shot pack + permute of the L1/L2 weights into the Mega MoE UTCCP layout.
 
-    1. Cast UE8M0 SF to FP32 (bit-shift, byte-identical to vllm's path) and call
-       `transform_sf_into_required_layout(recipe=(1, 32), num_groups=E_local)` →
-       packed int32 in MN-major TMA-aligned layout.
+    1. Cast UE8M0 SF → FP32 and call `transform_sf_into_required_layout` → packed
+       int32 in MN-major TMA-aligned layout.
     2. Run `transform_weights_for_mega_moe`: interleaves gate/up on L1 and transposes
        both SFs for UTCCP.
-    3. Stash the transformed `(weight, sf)` pairs as plain tensors on `self` (not
-       `nn.Parameter`s, mirroring vllm) and clear the originals.
+    3. Overwrite the loader-side parameters in place; the interleave preserves the
+       `[E_local, 2*I, *]` leading dims so downstream `.size(...)` reads stay valid.
 
     Unwraps any `DTensor` wrappers FSDP2/EP may have placed around the loader-side
-    Parameters — the kernel takes raw pointers, mirroring `fp8_grouped_mm_experts_forward`'s
-    contract.
+    Parameters — the kernel takes raw pointers.
     """
     gate_up_sf_raw = to_local(self.gate_up_proj_scale_inv.data)
     down_sf_raw = to_local(self.down_proj_scale_inv.data)
-    # FP4 weights ship as `torch.float4_e2m1fn_x2`; the mega kernel checks for raw
-    # int8 storage (and `_interleave_l1_weights` does `reshape`/`empty_like`/`copy_`,
-    # which is safest on a plain int8 view). Mirrors vllm's
-    # `self.w13_weight.data.view(torch.int8).contiguous()` pattern.
+    # `_interleave_l1_weights` does `reshape`/`empty_like`/`copy_` and expects plain int8.
     gate_up_w = to_local(self.gate_up_proj.data).view(torch.int8).contiguous()
     down_w = to_local(self.down_proj.data).view(torch.int8).contiguous()
 
@@ -569,11 +561,6 @@ def _megamoe_setup_weights(
         (gate_up_w, gate_up_sf),
         (down_w, down_sf),
     )
-    # Replace the raw FP4 parameters in-place with the transformed views. Interleave +
-    # SF transpose preserve `[E_local, 2*I, *]` leading dims, so subsequent
-    # `self.gate_up_proj.size(...)` reads still give the right `(num_experts, 2*I)`.
-    # `gate_up` / `down` reuse the int8 storage of the originals (`_interleave_l1_weights`
-    # allocates a fresh tensor only when shape changes); the SFs are fresh int32 packs.
     self.gate_up_proj = torch.nn.Parameter(gate_up, requires_grad=False)
     self.gate_up_proj_scale_inv = torch.nn.Parameter(gate_up_sf, requires_grad=False)
     self.down_proj = torch.nn.Parameter(down, requires_grad=False)
@@ -612,7 +599,7 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
     if process_group is None:
         raise ValueError(
             "DeepGEMM Mega MoE requires a `process_group` for the EP group. The TP wrapping "
-            "(MegaMoeExpertsParallel) supplies it automatically; pass it explicitly otherwise."
+            "(MoeTensorParalellExperts) supplies it automatically; pass it explicitly otherwise."
         )
 
     deepgemm = _load_deepgemm_kernel()
@@ -621,23 +608,19 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
     num_experts = self.gate_up_proj.size(0)
     intermediate_hidden = self.gate_up_proj.size(1) // 2
 
-    # First-forward one-shot: cast UE8M0 SFs → packed-int32 layout and interleave/transpose
-    # the L1/L2 weights for UTCCP. The kernel's `_transpose_sf_for_utccp` asserts
-    # `sf.dtype == torch.int`, so the raw loader-side `scale_inv` (UE8M0 / uint8) cannot
-    # be passed directly. After setup the same attribute names hold the transformed views
-    # (interleave + SF transpose preserve `[E_local, 2*I, *]` leading dims, so size reads
-    # above stay valid).
+    # First-forward one-shot: pack UE8M0 SFs and interleave the L1/L2 weights for UTCCP.
+    # The kernel asserts `sf.dtype == torch.int` so the raw loader-side scale_inv (UE8M0)
+    # can't be passed directly; setup overwrites the same attributes with transformed views.
     if not getattr(self, "_megamoe_transformed", False):
         _megamoe_setup_weights(self, deepgemm, num_experts, intermediate_hidden, hidden_dim)
 
-    # Lazily allocate the symmetric buffer (re-allocate if cached one is too small).
+    # Lazily (re)allocate the symmetric buffer when the cached one is too small.
     if getattr(self, "symm_buffer", None) is None or self.symm_buffer.num_max_tokens_per_rank < num_tokens:
-        # `gate_up_w.size(0)` is per-rank after sharding; the buffer needs the GLOBAL count.
         self.symm_buffer = deepgemm.get_symm_buffer_for_mega_moe(
             process_group,
             hidden=hidden_dim,
             num_topk=num_top_k,
-            num_experts=num_experts * process_group.size(),
+            num_experts=num_experts * process_group.size(),  # global count
             num_max_tokens_per_rank=num_tokens,
             intermediate_hidden=intermediate_hidden,
         )
@@ -648,17 +631,14 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
     self.symm_buffer.topk_idx[:num_tokens].copy_(top_k_index)
     self.symm_buffer.topk_weights[:num_tokens].copy_(top_k_weights)
 
+    # `activation_clamp` must match `_apply_gate`'s clamp on the regular path so the kernel's
+    # fused SwiGLU sees the same value range the model was calibrated for.
     y = torch.empty((num_tokens, hidden_dim), dtype=torch.bfloat16, device=hidden_states.device)
-    # `activation_clamp` mirrors what `_apply_gate` does on the regular path: clamp gate/up
-    # at `swiglu_limit` before SiLU+mul. V4-Flash was calibrated with this clamp; passing
-    # None to the kernel skips clamping and produces wildly wrong activations for any token
-    # whose pre-activation exceeds the limit.
-    activation_clamp = getattr(getattr(self, "config", None), "swiglu_limit", None)
     deepgemm.fp8_fp4_mega_moe(
         y,
         (self.gate_up_proj, self.gate_up_proj_scale_inv),
         (self.down_proj, self.down_proj_scale_inv),
         self.symm_buffer,
-        activation_clamp=activation_clamp,
+        activation_clamp=getattr(getattr(self, "config", None), "swiglu_limit", None),
     )
     return y.to(hidden_states.dtype)

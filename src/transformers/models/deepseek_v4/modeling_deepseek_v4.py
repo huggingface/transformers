@@ -45,10 +45,8 @@ from .configuration_deepseek_v4 import DeepseekV4Config
 @use_kernel_forward_from_hub("RMSNorm")
 class DeepseekV4RMSNorm(nn.Module):
     """Like V3's, but the weight·hidden multiply happens in fp32 before the cast
-    back to the input dtype — mirrors reference `inference/model.py:191-196`
-    where `weight` is declared `dtype=torch.float32` and the multiply runs in
-    fp32 before the final `.to(dtype)`. V3 downcasts hidden_states first and
-    multiplies in bf16, which loses precision across the ~5 norms × 43 layers.
+    back to the input dtype. V3 downcasts `hidden_states` first and multiplies
+    in bf16, which loses precision across the ~5 norms × 43 layers.
     """
 
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
@@ -113,10 +111,9 @@ class DeepseekV4RotaryEmbedding(nn.Module):
             rope_init_fn = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            # Reference (`inference/model.py:228`) builds cos/sin via
-            # `torch.polar(torch.ones_like(freqs), freqs)` — unit magnitude, no YaRN
-            # `attention_factor` scaling. We discard `rope_init_fn`'s scaling factor
-            # and emit raw `cos = freqs.cos()` / `sin = freqs.sin()` in `forward`.
+            # V4 emits unit-magnitude cos/sin (no YaRN `attention_factor` scaling) —
+            # discard `rope_init_fn`'s scaling factor and emit raw `freqs.cos()` / `freqs.sin()`
+            # in `forward`.
             inv_freq, _ = rope_init_fn(config, layer_type=layer_type)
             self.register_buffer(f"{layer_type}_inv_freq", inv_freq, persistent=False)
             self.register_buffer(f"{layer_type}_original_inv_freq", inv_freq.clone(), persistent=False)
@@ -489,7 +486,7 @@ class DeepseekV4Indexer(nn.Module):
         self.rotary_emb = DeepseekV4RotaryEmbedding(config)
         # No-op marker. Under TP it picks up the `"all_reduce"` plan entry, which adds a
         # forward output hook that sums the (partial, per-rank) `index_scores` across the
-        # TP mesh so every rank picks the same top-k. See `inference/model.py:422-423`.
+        # TP mesh so every rank picks the same top-k.
         self.scores_sync = nn.Identity()
 
     def forward(
@@ -556,10 +553,10 @@ class DeepseekV4Indexer(nn.Module):
         weights = self.weights_proj(hidden_states).float() * self.weights_scaling  # [B, S, H]
         index_scores = (scores * weights.unsqueeze(-1)).sum(dim=2)  # [B, S, T] — partial under TP
         index_scores = self.scores_sync(index_scores)
-        # Causal mask before topk (mirrors `inference/model.py:424-426`): query at absolute
-        # position `p` may only pick compressed entries `i` whose source-token window ends
-        # at or before `p` — i.e. ``i < (p + 1) // compress_rate``. Without this, prefill
-        # queries can score and pick entries that aggregate future source tokens.
+        # Causal mask before topk: query at absolute position `p` may only pick compressed
+        # entries `i` whose source-token window ends at or before `p` — i.e.
+        # ``i < (p + 1) // compress_rate``. Without this, prefill queries can score and pick
+        # entries that aggregate future source tokens.
         if compressed_kv.shape[1] > 0:
             cutoff = (position_ids + 1).div(self.compress_rate, rounding_mode="floor").unsqueeze(-1)  # [B, S, 1]
             i_idx = torch.arange(compressed_kv.shape[1], device=index_scores.device)
@@ -568,8 +565,7 @@ class DeepseekV4Indexer(nn.Module):
         result = index_scores.topk(topk, dim=-1)
         # `valid[b, s, j] == False` iff the j-th pick for query `s` was a forced `-inf`
         # placeholder (the query had fewer than `index_topk` causally-valid entries). The
-        # pick still indexes a real but non-causal entry, so attention has to skip it —
-        # mirrors `inference/model.py:428-430` (`topk_idxs == -1` slots).
+        # pick still indexes a real but non-causal entry, so attention has to skip it.
         valid = result.values > float("-inf")
         return result.indices, valid
 
@@ -773,12 +769,11 @@ class DeepseekV4Attention(nn.Module):
         self.compressor = (
             COMPRESSOR_CLASSES[self.layer_type](config) if self.layer_type != "sliding_attention" else None
         )
-        # Reference `inference/model.py:475-481` picks `freqs_cis` per attention layer:
-        # sliding layers use base RoPE (`rope_theta=10000`, no YaRN); CSA/HCA layers
-        # use `compress_rope_theta=160000` with YaRN. The compressor inside a CSA/HCA
-        # layer shares its parent attention's `freqs_cis`, so main Q/K and compressor
-        # rotate consistently. We mirror that by selecting from a per-branch dict
-        # built once in `DeepseekV4Model.forward`.
+        # Per-attention-layer RoPE selection: sliding-window layers use base RoPE
+        # (`rope_theta=10000`, no YaRN); CSA/HCA layers use `compress_rope_theta=160000`
+        # with YaRN. The compressor inside a CSA/HCA layer shares its parent attention's
+        # RoPE so main Q/K and compressor rotate consistently — we select from a
+        # per-branch dict built once in `DeepseekV4Model.forward`.
         self.rope_branch = "sliding" if self.layer_type == "sliding_attention" else "compress"
 
     def forward(
@@ -924,14 +919,13 @@ class DeepseekV4HyperConnection(nn.Module):
         pre_scale, post_scale, comb_scale = self.scale.unbind(0)
         hc = self.hc_mult
         pre = torch.sigmoid(mix[..., :hc] * pre_scale + self.base[:hc]) + self.hc_eps
-        # `post` is `2 * sigmoid` (range [0, 2], no eps) to match the reference kernel
-        # (`inference/kernel.py:394`). `pre` and `comb` keep the `sigmoid + eps` form
-        # they share with the kernel (lines 392, 408).
+        # `post` is `2 * sigmoid` (range [0, 2], no eps). `pre` and `comb` keep the
+        # `sigmoid + eps` form.
         post = 2 * torch.sigmoid(mix[..., hc : 2 * hc] * post_scale + self.base[hc : 2 * hc])
-        # Sinkhorn init mirrors `inference/kernel.py:401-413`: row-softmax + eps,
-        # then one column-normalisation, then `iters - 1` symmetric (row, col) rounds.
-        # Different positive starting matrix → different doubly-stochastic fixed point
-        # than a `sigmoid+eps` init, so this matters even though row/col count nets out.
+        # Sinkhorn init: row-softmax + eps, then one column-normalisation, then
+        # `iters - 1` symmetric (row, col) rounds. Different positive starting matrix →
+        # different doubly-stochastic fixed point than a `sigmoid+eps` init, so this
+        # matters even though row/col count nets out.
         comb_logits = mix[..., 2 * hc :].view(*mix.shape[:-1], hc, hc) * comb_scale + self.base[2 * hc :].view(hc, hc)
         comb = torch.softmax(comb_logits, dim=-1) + self.hc_eps
         comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
@@ -965,9 +959,9 @@ class DeepseekV4HyperHead(nn.Module):
 
 
 class DeepseekV4MLP(nn.Module):
-    """Used by the shared expert. Mirrors reference `inference/model.py:587-606`:
-    gate/up promoted to fp32, optionally clamped by `swiglu_limit`, SiLU+mul stay in
-    fp32, then the product is cast back to the input dtype before `down_proj`.
+    """Used by the shared expert. Gate/up promoted to fp32, optionally clamped by
+    `swiglu_limit`, SiLU+mul stay in fp32, then the product is cast back to the input
+    dtype before `down_proj`.
     """
 
     def __init__(self, config):
@@ -1026,8 +1020,7 @@ class DeepseekV4Experts(nn.Module):
         # Lives on the class (like gpt-oss's _apply_gate) so the grouped_mm / batched_mm
         # backends swapped in by `@use_experts_implementation` apply the same clamp +
         # SiLU on top of their packed gate_up output instead of bypassing it. Promote
-        # to fp32 for the clamp + SiLU + mul to mirror reference `Expert.forward`
-        # (`inference/model.py:596-606`); same shape as the shared-expert override in
+        # to fp32 for clamp + SiLU + mul; same shape as the shared-expert override in
         # `DeepseekV4MLP`.
         dtype = gate_up.dtype
         gate, up = gate_up.float().chunk(2, dim=-1)
@@ -1144,10 +1137,9 @@ class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
         # `post` / `comb` come out of the HC modules in fp32 (Sinkhorn projection runs
         # in float); the .to(dtype) puts everything back to the input dtype before mixing
         # so both sites stay consistent with `hidden_states`'s entry dtype.
-        # `comb` is consumed transposed: reference `inference/model.py:685` indexes it as
-        # `sum_j comb[j, k] * residual[j, d]` (sum over the FIRST hc axis), which is
-        # equivalent to `comb.T @ residual`. Sinkhorn produces a doubly-stochastic but
-        # non-symmetric matrix, so the direction matters.
+        # `comb` is consumed transposed: indexed as `sum_j comb[j, k] * residual[j, d]`
+        # (sum over the FIRST hc axis), equivalent to `comb.T @ residual`. Sinkhorn
+        # produces a doubly-stochastic but non-symmetric matrix, so the direction matters.
         dtype = hidden_states.dtype
         post, comb, collapsed = self.attn_hc(hidden_states)
         attn_output, _ = self.self_attn(self.input_layernorm(collapsed), **kwargs)
@@ -1305,9 +1297,8 @@ class DeepseekV4Model(DeepseekV4PreTrainedModel):
             )
         hidden_states = inputs_embeds.unsqueeze(2).expand(-1, -1, self.config.hc_mult, -1).contiguous()
         # Per-layer rope: sliding-attention layers use base RoPE (`rope_theta=10000`,
-        # no YaRN), CSA/HCA layers use `compress_rope_theta=160000` with YaRN —
-        # mirrors reference `inference/model.py:475-481`. Each attention picks the
-        # right branch via `self.rope_branch`.
+        # no YaRN); CSA/HCA layers use `compress_rope_theta=160000` with YaRN. Each
+        # attention picks the right branch via `self.rope_branch`.
         position_embeddings = {
             "sliding": self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type="sliding"),
             "compress": self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type="compress"),
