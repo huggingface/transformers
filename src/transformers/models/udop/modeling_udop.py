@@ -50,13 +50,13 @@ from ...utils import (
 logger = logging.getLogger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for the model's outputs that may also contain a past key/values (to speed up sequential decoding). Includes
     an additional attention mask.
     """
 )
+@dataclass
 class BaseModelOutputWithAttentionMask(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):

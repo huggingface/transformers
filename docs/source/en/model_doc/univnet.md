@@ -17,9 +17,6 @@ rendered properly in your Markdown viewer.
 
 # UnivNet
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -40,13 +37,14 @@ Usage Example:
 
 ```python
 import torch
-from scipy.io.wavfile import write
 from datasets import Audio, load_dataset
+from scipy.io.wavfile import write
 
 from transformers import UnivNetFeatureExtractor, UnivNetModel
 
+
 model_id_or_path = "dg845/univnet-dev"
-model = UnivNetModel.from_pretrained(model_id_or_path)
+model = UnivNetModel.from_pretrained(model_id_or_path, device_map="auto")
 feature_extractor = UnivNetFeatureExtractor.from_pretrained(model_id_or_path)
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")

@@ -258,34 +258,11 @@ class VibeVoiceAsrPreTrainedModel(PreTrainedModel):
     Base class for VibeVoice ASR outputs, with hidden states and attentions.
     """
 )
-class VibeVoiceAsrModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance.
-    audio_hidden_states (`torch.FloatTensor`, *optional*):
-        Projected audio hidden states.
-    """
-
-    audio_hidden_states: torch.FloatTensor | None = None
-
-
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for VibeVoice ASR causal language model outputs.
-    """
-)
-class VibeVoiceAsrCausalLMOutputWithPast(ModelOutput):
-    r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss.
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores.
-    past_key_values (`Cache`, *optional*):
-        Cache instance.
-    audio_hidden_states (`torch.FloatTensor`, *optional*):
-        Projected audio hidden states.
-    """
+class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, GenerationMixin):
+    _keep_in_fp32_modules_strict = None
+    _supports_attention_backend = True
+    _tp_plan = None
+    _pp_plan = None
 
     loss: torch.FloatTensor | None = None
     logits: torch.FloatTensor | None = None

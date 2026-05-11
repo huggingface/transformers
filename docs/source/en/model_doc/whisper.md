@@ -17,7 +17,6 @@ rendered properly in your Markdown viewer.
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -37,14 +36,13 @@ The example below demonstrates how to automatically transcribe speech into text 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="automatic-speech-recognition",
     model="openai/whisper-large-v3-turbo",
-    dtype=torch.float16,
     device=0
 )
 pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
@@ -53,18 +51,18 @@ pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 # pip install datasets
-import torch
 from datasets import load_dataset
+
 from transformers import AutoProcessor, WhisperForConditionalGeneration
+
 
 processor = AutoProcessor.from_pretrained(
     "openai/whisper-large-v3-turbo",
 )
 model = WhisperForConditionalGeneration.from_pretrained(
     "openai/whisper-large-v3-turbo",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -77,7 +75,7 @@ input_features = processor(
     sampling_rate=audio_sample["sampling_rate"],
     return_tensors="pt"
 ).input_features
-input_features = input_features.to(model.device, dtype=torch.float16)
+input_features = input_features.to(model.device)
 
 predicted_ids = model.generate(input_features, cache_implementation="static")
 transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)

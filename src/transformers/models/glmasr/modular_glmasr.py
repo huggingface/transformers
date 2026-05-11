@@ -353,7 +353,14 @@ class GlmAsrMultiModalProjector(AudioFlamingo3MultiModalProjector):
         self.linear_2 = nn.Linear(config.text_config.hidden_size * 2, config.text_config.hidden_size)
 
 
+@auto_docstring(
+    custom_intro="""
+    The GlmAsr model which consists of a fine-tuned Whisper encoder, a multi-modal projector and a Llama language model.
+    """
+)
 class GlmAsrModel(AudioFlamingo3Model):
+    _supports_attention_backend = True
+
     @can_return_tuple
     @auto_docstring(
         custom_intro="Compute audio embeddings from log-mel input features using the audio encoder and multi-modal projector."

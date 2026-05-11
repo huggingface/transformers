@@ -374,7 +374,16 @@ class GlmAsrModelOutputWithPast(BaseModelOutputWithPast):
     without a language modeling head.
     """
 )
+<<<<<<< alm-base-model-class
 class GlmAsrModel(GlmAsrPreTrainedModel):
+=======
+class GlmAsrForConditionalGeneration(GlmAsrPreTrainedModel, GenerationMixin):
+    _keep_in_fp32_modules_strict = None
+    _supports_attention_backend = True
+    _tp_plan = None
+    _pp_plan = None
+
+>>>>>>> main
     def __init__(self, config):
         super().__init__(config)
         self.vocab_size = config.text_config.vocab_size

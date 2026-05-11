@@ -39,12 +39,12 @@ EPSILON_ZERO_DIVISION = 1e-10
 CLOSE_ENOUGH_TO_LOG_ZERO = -10000.0
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`TapasForQuestionAnswering`].
     """
 )
+@dataclass
 class TableQuestionAnsweringOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` (and possibly `answer`, `aggregation_labels`, `numeric_values` and `numeric_values_scale` are provided)):

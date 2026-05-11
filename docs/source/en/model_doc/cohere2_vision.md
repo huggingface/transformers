@@ -18,7 +18,6 @@ rendered properly in your Markdown viewer.
 # Command A Vision
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
@@ -40,15 +39,15 @@ The model and image processor can be loaded as follows:
 <hfoption id="AutoModel">
 
 ```python
-import torch
 
-from transformers import AutoProcessor, AutoModelForImageTextToText
+from transformers import AutoModelForImageTextToText, AutoProcessor
+
 
 model_id = "CohereLabs/command-a-vision-07-2025"
 
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForImageTextToText.from_pretrained(
-    model_id, device_map="auto", dtype=torch.float16
+    model_id, device_map="auto"
 )
 
 # Format message with the Command-A-Vision chat template
@@ -93,6 +92,7 @@ print(
 
 ```python
 from transformers import pipeline
+
 
 pipe = pipeline(model="CohereLabs/command-a-vision-07-2025", task="image-text-to-text", device_map="auto")
 

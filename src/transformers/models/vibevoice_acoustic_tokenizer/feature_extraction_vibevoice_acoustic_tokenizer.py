@@ -73,6 +73,7 @@ class VibeVoiceAcousticTokenizerFeatureExtractor(SequenceFeatureExtractor):
         max_length: int | None = None,
         return_attention_mask: bool | None = True,
         return_tensors: str | None = "pt",
+        **kwargs,
     ) -> BatchFeature:
         """
         Args:

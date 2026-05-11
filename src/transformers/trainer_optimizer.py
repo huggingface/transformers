@@ -230,17 +230,6 @@ def _get_adamw_torch_npu_fused(ctx: OptimizerContext) -> tuple[Any, dict[str, An
         raise ValueError("Trainer failed to import FusedAdamW from torch_npu.")
 
 
-def _get_adamw_apex_fused(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
-    """Get Apex Fused Adam optimizer."""
-    try:
-        from apex.optimizers import FusedAdam
-
-        ctx.optimizer_kwargs.update(ctx.adam_kwargs)
-        return FusedAdam, ctx.optimizer_kwargs
-    except ImportError:
-        raise ValueError("Trainer tried to instantiate apex FusedAdam but apex is not installed!")
-
-
 def _get_bitsandbytes_optimizer(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
     """Get bitsandbytes optimizer (AdamW, Lion, RMSprop variants)."""
     if not is_bitsandbytes_available():
@@ -610,7 +599,6 @@ _OPTIMIZER_HANDLERS: dict[str, OptimizerHandler] = {
     OptimizerNames.ADAMW_TORCH_FUSED: _get_adamw_torch,
     OptimizerNames.ADAMW_TORCH_XLA: _get_adamw_torch_xla,
     OptimizerNames.ADAMW_TORCH_NPU_FUSED: _get_adamw_torch_npu_fused,
-    OptimizerNames.ADAMW_APEX_FUSED: _get_adamw_apex_fused,
     OptimizerNames.ADAMW_ANYPRECISION: _get_adamw_anyprecision,
     OptimizerNames.SGD: _get_sgd,
     OptimizerNames.ADAGRAD: _get_adagrad,
