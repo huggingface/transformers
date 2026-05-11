@@ -67,8 +67,8 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             if (
                 not self.pre_quantized
                 and len(device_map) > 1
-                and "cpu" in device_map.values()
-                or "disk" in device_map.values()
+                and ("cpu" in device_map.values()
+                or "disk" in device_map.values())
             ):
                 raise ValueError(
                     "You are attempting to load an FP8 model with a device_map that contains a cpu/disk device."
@@ -104,6 +104,23 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
+        # DeepSeek-V4-Flash checkpoints mix FP8 and bf16 projections in the attention
+        # compressor/indexer branch: modules below are stored directly in bf16 (no
+        # companion scale tensor), so converting them to FP8Linear would create
+        # missing ``weight_scale_inv`` keys at load and random-init those params.
+        # Use `config.model_type` (not class-name substring) so this still applies
+        # with wrappers / auto classes where `model.__class__.__name__` may differ.
+        if self.pre_quantized and getattr(getattr(model, "config", None), "model_type", None) == "deepseek_v4":
+            self.modules_to_not_convert.extend(
+                [
+                    "self_attn.compressor.kv_proj",
+                    "self_attn.compressor.gate_proj",
+                    "self_attn.compressor.indexer.kv_proj",
+                    "self_attn.compressor.indexer.gate_proj",
+                    "self_attn.compressor.indexer.weights_proj",
+                ]
+            )
+            self.modules_to_not_convert = list(set(self.modules_to_not_convert))
 
         model = replace_with_fp8_linear(
             model,
@@ -186,9 +203,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         :meth:`get_weight_conversions` is still appended at the end as a fallback for
         plain ``nn.Linear`` weights with no model-specific converter.
         """
-        if not (self.pre_quantized and self.quantization_config.dequantize):
-            return weight_conversions + self.get_weight_conversions()
-
         from ..core_model_loading import WeightConverter, WeightRenaming
         from ..integrations.finegrained_fp8 import Fp8Dequantize
 
@@ -198,8 +212,12 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         # keeps the model-side mapping clean — the rename only kicks in when FP8 dequant
         # is actually active, so a non-FP8 save / load round-trip doesn't see a stray
         # rule that ``test_reverse_loading_mapping`` can't match.
-        scale_rename = WeightRenaming(source_patterns=r"^(.+)\.scale$", target_patterns=r"\1.weight_scale_inv")
-        weight_conversions = [scale_rename] + list(weight_conversions)
+        if self.pre_quantized:
+            scale_rename = WeightRenaming(source_patterns=r"^(.+)\.scale$", target_patterns=r"\1.weight_scale_inv")
+            weight_conversions = [scale_rename] + list(weight_conversions)
+
+        if not (self.pre_quantized and self.quantization_config.dequantize):
+            return weight_conversions + self.get_weight_conversions()
 
         updated: list = []
         for conv in weight_conversions:

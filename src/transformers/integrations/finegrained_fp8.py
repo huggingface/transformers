@@ -308,6 +308,124 @@ class FP8Linear(nn.Linear):
 
         return output.to(dtype=input.dtype)
 
+class FP8GroupedLinear(nn.Module):
+    """FP8 block-diagonal grouped linear for DeepSeek-V4's ``o_a_proj``.
+
+    Stores the weight in FP8 format (``float8_e4m3fn``) together with per-block
+    ``weight_scale_inv`` scales, exactly like :class:`FP8Linear`, but keeps the
+    block-diagonal grouped-bmm forward of ``DeepseekV4GroupedLinear``.
+
+    The weight is dequantized on-the-fly in :meth:`forward` before the grouped bmm.
+    This avoids the "UNEXPECTED weight_scale_inv" warning that arises when
+    ``o_a_proj`` stays as a plain ``nn.Linear`` (where no ``weight_scale_inv``
+    parameter exists) while the checkpoint ships one.
+    """
+
+    def __init__(
+        self,
+        in_features_per_group: int,
+        out_features: int,
+        n_groups: int,
+        block_size: tuple[int, int] | None = None,
+        activation_scheme: str = "dynamic",
+        has_bias: bool = False,
+        dtype=_FP8_DTYPE,
+    ):
+        super().__init__()
+        self.in_features_per_group = in_features_per_group
+        self.out_features = out_features
+        self.n_groups = n_groups
+        self.block_size = block_size
+        self.activation_scheme = activation_scheme
+        self.has_bias = has_bias
+
+        if self.activation_scheme not in {"dynamic", "static"}:
+            raise NotImplementedError(f"Unsupported activation scheme: {self.activation_scheme}")
+
+        self.weight = nn.Parameter(torch.empty(out_features, in_features_per_group, dtype=dtype))
+
+        if block_size is None:
+            self.weight_scale_inv = nn.Parameter(torch.tensor(1.0, dtype=torch.float32))
+        else:
+            scale_out = (out_features + block_size[0] - 1) // block_size[0]
+            scale_in = (in_features_per_group + block_size[1] - 1) // block_size[1]
+            self.weight_scale_inv = nn.Parameter(torch.empty(scale_out, scale_in, dtype=torch.float32))
+
+        if self.activation_scheme == "static":
+            self.activation_scale = nn.Parameter(torch.tensor(1.0, dtype=torch.float32))
+        else:
+            self.register_parameter("activation_scale", None)
+
+        if self.has_bias:
+            self.bias = nn.Parameter(torch.empty(out_features))
+        else:
+            self.register_parameter("bias", None)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        w = self.weight
+        s = self.weight_scale_inv
+        if isinstance(w, torch.distributed.tensor.DTensor):
+            w = w.to_local()
+            s = s.to_local()
+
+        input_shape = x.shape[:-2]
+        hidden_dim = x.shape[-1]
+
+        out_per_group = self.out_features // self.n_groups
+        m = x.numel() // (self.n_groups * hidden_dim)
+
+        # (..., n_groups, K) -> (n_groups, M, K) -> (n_groups * M, K)
+        xg = x.reshape(m, self.n_groups, hidden_dim).transpose(0, 1).contiguous().reshape(-1, hidden_dim)
+        # (out, K) -> (n_groups, N_per_group, K)
+        wg = w.view(self.n_groups, out_per_group, hidden_dim)
+        finegrained_fp8 = _load_finegrained_fp8_kernel()
+        if self.activation_scheme == "dynamic":
+            # (scale_out, scale_in) -> (n_groups, scale_out_per_group, scale_in)
+            scale_out_per_group = s.shape[0] // self.n_groups
+            sg = s.view(self.n_groups, scale_out_per_group, s.shape[1])
+
+            tokens_per_expert = torch.full((self.n_groups,), m, device=x.device, dtype=torch.int32)
+            offsets = torch.arange(m, m * (self.n_groups + 1), m, device=x.device, dtype=torch.int32)
+
+            y = finegrained_fp8.grouped_fp8_matmul(
+                xg,
+                wg,
+                sg,
+                tokens_per_expert=tokens_per_expert,
+                block_size=self.block_size,
+                offsets=offsets,
+            )  # (n_groups * M, N_per_group)
+        else:
+            # Static mode: grouped_fp8_matmul has no explicit activation scale input.
+            # Quantize activations once with `activation_scale`, then run per-group matmul.
+            scale = self.activation_scale.to(torch.float32)
+            xg_3d = xg.view(self.n_groups, m, hidden_dim)
+            qxg_3d = (xg_3d / scale).clamp(min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
+
+            if s.ndim == 0:
+                sg = [s] * self.n_groups
+            else:
+                scale_out_per_group = s.shape[0] // self.n_groups
+                sg = s.view(self.n_groups, scale_out_per_group, s.shape[1])
+
+            y_chunks = []
+            for group_idx in range(self.n_groups):
+                group_scale = sg[group_idx] if isinstance(sg, torch.Tensor) else sg[group_idx]
+                y_chunks.append(
+                    finegrained_fp8.fp8_matmul(
+                        qxg_3d[group_idx],
+                        wg[group_idx],
+                        scale,
+                        group_scale,
+                        self.block_size,
+                        x.dtype,
+                    )
+                )
+            y = torch.stack(y_chunks, dim=0).reshape(self.n_groups * m, out_per_group)
+
+        y = y.reshape(self.n_groups, m, out_per_group).transpose(0, 1)
+        return y.reshape(*input_shape, self.n_groups, out_per_group)
+
 
 def fp8_batched_mm_experts_forward(
     self: torch.nn.Module,
@@ -672,6 +790,7 @@ class FP8Experts(nn.Module):
         self.num_experts = _first_attr(config, "num_local_experts", "num_experts")
         self.intermediate_dim = _first_attr(config, "moe_intermediate_size", "intermediate_size")
         self.act_fn = ACT2FN[_first_attr(config, "hidden_activation", "hidden_act")]
+        self.swiglu_limit = getattr(config, "swiglu_limit", None)
 
         if self.has_gate:
             gu_proj_out, gu_proj_in = 2 * self.intermediate_dim, self.hidden_dim
@@ -707,6 +826,9 @@ class FP8Experts(nn.Module):
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up.chunk(2, dim=-1)
+        if self.swiglu_limit is not None:
+            gate = gate.clamp(max=self.swiglu_limit)
+            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
         return self.act_fn(gate) * up
 
     def forward(
@@ -842,14 +964,29 @@ def replace_with_fp8_linear(
                     **module_kwargs,
                 )
             elif isinstance(module, nn.Linear):
-                new_module = FP8Linear(
-                    in_features=module.in_features,
-                    out_features=module.out_features,
-                    block_size=quantization_config.weight_block_size,
-                    activation_scheme=quantization_config.activation_scheme,
-                    has_bias=module.bias is not None,
-                    **module_kwargs,
-                )
+                if hasattr(module, "n_groups") or module.__class__.__name__.endswith("GroupedLinear"):
+                    # Block-diagonal grouped linear (e.g. DeepSeek-V4 o_a_proj): keep the
+                    # grouped-bmm semantics but store the weight in FP8 with a companion
+                    # weight_scale_inv so the checkpoint scale is a proper parameter
+                    # instead of showing as UNEXPECTED at load.
+                    new_module = FP8GroupedLinear(
+                        in_features_per_group=module.in_features,
+                        out_features=module.out_features,
+                        n_groups=module.n_groups,
+                        block_size=quantization_config.weight_block_size,
+                        activation_scheme=quantization_config.activation_scheme,
+                        has_bias=module.bias is not None,
+                        **module_kwargs,
+                    )
+                else:
+                    new_module = FP8Linear(
+                        in_features=module.in_features,
+                        out_features=module.out_features,
+                        block_size=quantization_config.weight_block_size,
+                        activation_scheme=quantization_config.activation_scheme,
+                        has_bias=module.bias is not None,
+                        **module_kwargs,
+                    )
             if new_module is not None:
                 model.set_submodule(module_name, new_module)
                 has_been_replaced = True

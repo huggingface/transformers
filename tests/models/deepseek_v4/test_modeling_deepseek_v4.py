@@ -281,3 +281,29 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
         )
         decoded = tokenizer.decode(output_ids[0], skip_special_tokens=False)
         self.assertEqual(decoded, expected)
+
+
+@require_torch
+@require_torch_accelerator
+@slow
+class DeepseekV4FlashBaseIntegrationTest(unittest.TestCase):
+    model_id = "deepseek-ai/DeepSeek-V4-Flash-Base"
+    prompt = "Pipeline parallelism in ai is "
+
+    def test_v4_flash_base_native_fp8_generation(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_id,
+            dtype="auto",
+            device_map="auto",
+            attn_implementation="eager",
+            quantization_config=FineGrainedFP8Config(dequantize=False),
+        )
+        inputs = tokenizer(self.prompt, return_tensors="pt").to(model.device)
+        with torch.no_grad():
+            out = model.generate(**inputs, max_new_tokens=64, do_sample=False)
+        decoded = tokenizer.decode(out[0], skip_special_tokens=False)
+        expected = (
+            "Pipeline parallelism in ai is  a method of computer architecture that allows multiple processes or threads to run simultaneously on a single processor or on multiple processors in a computer system. This can be achieved through a variety of techniques, such as in the case of the use of multiple processors in a computer system, the use of multiple threads in a computer system, or"
+        )
+        self.assertEqual(decoded, expected)
