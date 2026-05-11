@@ -925,7 +925,6 @@ __all__ = [
     "Qwen2_5_VLConfig",
     "Qwen2_5_VLVisionConfig",
     "Qwen2_5_VLTextConfig",
-    "Qwen2_5_VLVisionConfig",
     "Qwen2_5_VLForConditionalGeneration",
     "Qwen2_5_VLModel",
     "Qwen2_5_VLPreTrainedModel",
