@@ -16,7 +16,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""video processor class for Qwen2-VL."""
+"""video processor class for KimiK2.5."""
 
 import math
 
@@ -36,7 +36,42 @@ from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import group_videos_by_shape, reorder_videos
-from .image_processing_kimi_k25 import navit_resize
+
+
+# Same resize as in image processing
+def navit_resize(
+    width: int,
+    height: int,
+    patch_size: int,
+    merge_kernel_size: int,
+    max_patches: int,
+    max_size_per_side: int,
+):
+    num_patches_w = max(1.0, width // patch_size)
+    num_patches_h = max(1.0, height // patch_size)
+    current_patch_count = num_patches_w * num_patches_h
+
+    # Scale to satisfy total patch budget (affects both dims, hence sqrt)
+    scale_for_total_patches = math.sqrt(max_patches / current_patch_count)
+
+    # Scale to satisfy per-side patch budget
+    scale_for_width_patches = (max_size_per_side * patch_size) / width
+    scale_for_height_patches = (max_size_per_side * patch_size) / height
+
+    # Use the most restrictive scale, never upscale
+    scale = min(1.0, scale_for_total_patches, scale_for_width_patches, scale_for_height_patches)
+
+    # Make sure the resized size doesn't go beyond predefined `max`
+    new_width, new_height = max(1, int(width * scale)), max(1, int(height * scale))
+    new_width = min(new_width, max_size_per_side * patch_size)
+    new_height = min(new_height, max_size_per_side * patch_size)
+
+    # Calculate the padding to make the height and width divisible by the merge kernel size and patch size.
+    factor = merge_kernel_size * patch_size
+    pad_height = (factor - new_height % factor) % factor + new_height
+    pad_width = (factor - new_width % factor) % factor + new_width
+
+    return (new_height, new_width), (pad_height, pad_width)
 
 
 class Kimi_K25VideoProcessorInitKwargs(VideosKwargs, total=False):
@@ -116,7 +151,7 @@ class Kimi_K25VideoProcessor(BaseVideoProcessor):
                 chunked_videos.append(video_chunk)
             num_chunks_per_video.append(math.ceil(video.shape[0] / temporal_patch_size))
 
-        # Group videos by size for batched resizing
+        # Group videos by size for batched resizing and padding
         grouped_videos, grouped_videos_index = group_videos_by_shape(chunked_videos)
         resized_videos_grouped = {}
         for shape, stacked_videos in grouped_videos.items():
@@ -124,8 +159,8 @@ class Kimi_K25VideoProcessor(BaseVideoProcessor):
             resized_height, resized_width = height, width
             if do_resize:
                 (resized_height, resized_width), (pad_height, pad_width) = navit_resize(
-                    300,
-                    300,
+                    height,
+                    width,
                     patch_size=patch_size,
                     merge_kernel_size=merge_size,
                     max_patches=max_patches,

@@ -18,6 +18,7 @@ from collections.abc import Callable
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache
@@ -40,7 +41,7 @@ from ...utils.output_capturing import capture_outputs
 from ...video_utils import VideoInput
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..gemma4.modeling_gemma4 import Gemma4VisionRotaryEmbedding
-from ..glm4v.modeling_glm4v import Glm4VForConditionalGeneration
+from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaModelOutputWithPast
 from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLPreTrainedModel,
@@ -56,6 +57,8 @@ from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="moonshotai/Kimi-K2.6")
+@strict
 class Kimi_K25VisionConfig(PreTrainedConfig):
     r"""
     pos_emb_height (`int`, *optional*):
@@ -83,15 +86,12 @@ class Kimi_K25VisionConfig(PreTrainedConfig):
     rope_parameters: dict | None = None
     max_position_embeddings: int | None = None
 
-    def __post_init__(self, **kwargs):
-        if self.rope_parameters is None:
-            self.rope_parameters = {"rope_theta": 10_000, "rope_type": "default"}
-        super().__post_init__(**kwargs)
 
-
+@auto_docstring(checkpoint="moonshotai/Kimi-K2.6")
+@strict
 class Kimi_K25Config(PreTrainedConfig):
     r"""
-    projection_ln_eps (`float`, *optional*):
+    projection_layer_norm_eps (`float`, *optional*):
         Layer norm epsilon for projector.
     """
 
@@ -102,12 +102,13 @@ class Kimi_K25Config(PreTrainedConfig):
     vision_config: dict | PreTrainedConfig | None = None
     projection_hidden_size: int | None = 1152
     projection_hidden_act: str = "gelu"
-    projection_ln_eps: float = 1e-5
+    projection_layer_norm_eps: float = 1e-5
     image_token_id: int = 163605
     video_token_id: int = 163606
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
+        # BC: load from remote config on the hub where the model-type points to remote config
         if isinstance(self.text_config, dict):
             model_type = self.text_config.get("model_type", "deepseek_v3")
             if model_type == "kimi_k2":
@@ -115,6 +116,10 @@ class Kimi_K25Config(PreTrainedConfig):
             self.text_config = CONFIG_MAPPING[model_type](**self.text_config)
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["deepseek_v3"]()
+        else:
+            model_type = self.text_config.model_type
+            if model_type == "kimi_k2":
+                self.text_config.model_type = "deepseek_v3"
 
         if isinstance(self.vision_config, dict):
             self.vision_config = Kimi_K25VisionConfig(**self.vision_config)
@@ -144,13 +149,10 @@ class Kimi_K25VisionPositionEmbeddings(nn.Module):
         self.register_buffer("time_position_embeddings", time_position_embeddings, persistent=False)
 
     def compute_pos_embed(self):
-        grid_t = torch.arange(self.num_frames, dtype=torch.float32)
-        omega = torch.arange(self.dim // 2, dtype=torch.float32)
-        omega /= self.dim / 2.0
-        omega = 1.0 / 10000**omega  # (D/2,)
-
-        out = torch.outer(grid_t, omega)  # (M, D/2)
-        pos_embed = torch.cat([out.sin(), out.cos()], dim=1)  # (M, D)
+        position_ids = torch.arange(self.num_frames, dtype=torch.float32)
+        inv_freq = 1.0 / (10000 ** (torch.arange(0, self.dim, 2, dtype=torch.int64).to(dtype=torch.float) / self.dim))
+        freqs = torch.outer(position_ids, inv_freq)  # (M, D/2)
+        pos_embed = torch.cat([freqs.sin(), freqs.cos()], dim=1)  # (M, D)
         return pos_embed.unsqueeze(1)
 
     def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
@@ -161,6 +163,7 @@ class Kimi_K25VisionPositionEmbeddings(nn.Module):
                     f"Got an input with {t} frames. Number of frames should be less than config.pos_emb_time=({self.num_frames})"
                 )
 
+            # Apply learned positions on h/w grids with optional interpolation for bigger images
             if (h, w) == self.position_embeddings.shape[:-1]:
                 position_embeddings = self.position_embeddings.flatten(0, 1)
             else:
@@ -173,11 +176,12 @@ class Kimi_K25VisionPositionEmbeddings(nn.Module):
                 position_embeddings = position_embeddings.squeeze(0).permute(1, 2, 0).flatten(0, 1)
 
             position_embeddings = position_embeddings.unsqueeze(0).repeat(t, 1, 1)
+            # Add RoPE positions for time grid if processing videos
             if t > 1:
                 position_embeddings = position_embeddings + self.time_position_embeddings[0:t]
 
             pos_embs.append(position_embeddings.flatten(0, 1))
-        hidden_states = hidden_states + torch.cat(pos_embs)
+        hidden_states = hidden_states + torch.cat(pos_embs, dim=0)
         return hidden_states
 
 
@@ -251,9 +255,9 @@ class Kimi_K25VisionAttention(VisionAttention):
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
 
-        query_states = self.q_proj(hidden_states).reshape(seq_length, self.num_heads, -1)
-        key_states = self.k_proj(hidden_states).reshape(seq_length, self.num_heads, -1)
-        value_states = self.v_proj(hidden_states).reshape(1, seq_length, self.num_heads, -1)
+        query_states = self.q_proj(hidden_states).reshape(1, seq_length, -1, self.head_dim)
+        key_states = self.k_proj(hidden_states).reshape(1, seq_length, -1, self.head_dim)
+        value_states = self.v_proj(hidden_states).reshape(1, seq_length, -1, self.head_dim)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
@@ -347,10 +351,10 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
         self.patch_embed = Kimi_K25VisionPatchEmbed(config)
 
         self.rotary_emb = Kimi_K25VisionRotaryEmbedding(config)
-        self.encoder_blocks = nn.ModuleList(
+        self.layers = nn.ModuleList(
             [Kimi_K25VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)]
         )
-        self.final_layernorm = nn.LayerNorm(config.hidden_size)
+        self.final_layernorm = nn.LayerNorm(config.hidden_size, eps=1e-05)
         self.post_init()
 
     def temporal_patch_merger(
@@ -358,6 +362,28 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
         hidden_states: torch.Tensor,
         grid_thw: torch.Tensor,
     ) -> list[torch.Tensor]:
+        r"""
+        Merges temporal frames by spatially pooling patch embeddings across time.
+
+        For each video clip defined by `grid_thw`, the method reshapes the flat patch sequence
+        into a `(T, H, W)` grid, averages over the temporal dimension, then rearranges spatial
+        patches into groups of `kernel_height * kernel_width` — matching the merged-token layout
+        expected by downstream layers.
+
+        Args:
+            hidden_states (`torch.Tensor` of shape `(total_patches, hidden_dim)`):
+                Concatenated patch embeddings for all clips in the batch. `total_patches` equals
+                the sum of `t * h * w` over all entries in `grid_thw`.
+            grid_thw (`torch.Tensor` of shape `(batch_size, 3)`):
+                Temporal and spatial grid dimensions for each clip, where each row is
+                `(num_frames, grid_height, grid_width)`. `grid_height` and `grid_width` must be
+                divisible by `kernel_height` and `kernel_width` respectively.
+
+        Returns:
+            `torch.Tensor` of shape `(total_merged_patches, kernel_height * kernel_width, hidden_dim)`:
+                Temporally pooled patch embeddings. `total_merged_patches` equals the sum of
+                `(h // kernel_height) * (w // kernel_width)` over all clips.
+        """
         hidden_dim = hidden_states.size(-1)
         kernel_height, kernel_width = self.merge_kernel_size
 
@@ -416,7 +442,7 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
         max_seqlen = lengths.max()
         cu_seqlens = lengths.cumsum(dim=0, dtype=torch.int32)
 
-        for block in self.encoder_blocks:
+        for block in self.layers:
             hidden_states = block(
                 hidden_states,
                 cu_seqlens=cu_seqlens,
@@ -440,7 +466,7 @@ class Kimi_K25MultimodalProjection(nn.Module):
         self.hidden_size = config.vision_config.hidden_size * (
             config.vision_config.merge_kernel_size[0] * config.vision_config.merge_kernel_size[1]
         )
-        self.pre_norm = nn.LayerNorm(config.projection_hidden_size, eps=config.projection_ln_eps)
+        self.pre_norm = nn.LayerNorm(config.projection_hidden_size, eps=config.projection_layer_norm_eps)
 
         self.in_proj = nn.Linear(self.hidden_size, self.hidden_size)
         self.act = nn.GELU()
@@ -553,16 +579,12 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
 
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values, image_grid_thw).pooler_output
-            image_mask_ = self.get_placeholder_mask(
-                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
-            )
+            image_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
             video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw).pooler_output
-            video_mask = self.get_placeholder_mask(
-                input_ids, inputs_embeds=inputs_embeds, image_features=video_embeds
-            )
+            video_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds, image_features=video_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
         outputs = self.language_model(
@@ -582,7 +604,7 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
         )
 
 
-class Kimi_K25ForConditionalGeneration(Glm4VForConditionalGeneration):
+class Kimi_K25ForConditionalGeneration(Glm4vForConditionalGeneration):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

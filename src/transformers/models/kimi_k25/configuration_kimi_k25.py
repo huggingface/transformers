@@ -18,10 +18,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
+@auto_docstring(checkpoint="moonshotai/Kimi-K2.6")
+@strict
 class Kimi_K25VisionConfig(PreTrainedConfig):
     r"""
     pos_emb_height (`int`, *optional*):
@@ -49,15 +54,12 @@ class Kimi_K25VisionConfig(PreTrainedConfig):
     rope_parameters: dict | None = None
     max_position_embeddings: int | None = None
 
-    def __post_init__(self, **kwargs):
-        if self.rope_parameters is None:
-            self.rope_parameters = {"rope_theta": 10_000, "rope_type": "default"}
-        super().__post_init__(**kwargs)
 
-
+@auto_docstring(checkpoint="moonshotai/Kimi-K2.6")
+@strict
 class Kimi_K25Config(PreTrainedConfig):
     r"""
-    projection_ln_eps (`float`, *optional*):
+    projection_layer_norm_eps (`float`, *optional*):
         Layer norm epsilon for projector.
     """
 
@@ -68,12 +70,13 @@ class Kimi_K25Config(PreTrainedConfig):
     vision_config: dict | PreTrainedConfig | None = None
     projection_hidden_size: int | None = 1152
     projection_hidden_act: str = "gelu"
-    projection_ln_eps: float = 1e-5
+    projection_layer_norm_eps: float = 1e-5
     image_token_id: int = 163605
     video_token_id: int = 163606
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
+        # BC: load from remote config on the hub where the model-type points to remote config
         if isinstance(self.text_config, dict):
             model_type = self.text_config.get("model_type", "deepseek_v3")
             if model_type == "kimi_k2":
@@ -81,6 +84,10 @@ class Kimi_K25Config(PreTrainedConfig):
             self.text_config = CONFIG_MAPPING[model_type](**self.text_config)
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["deepseek_v3"]()
+        else:
+            model_type = self.text_config.model_type
+            if model_type == "kimi_k2":
+                self.text_config.model_type = "deepseek_v3"
 
         if isinstance(self.vision_config, dict):
             self.vision_config = Kimi_K25VisionConfig(**self.vision_config)

@@ -148,10 +148,10 @@ class Kimi_K25Processor(ProcessorMixin):
                             (chunk_id * temporal_patch_size) : (chunk_id + 1) * temporal_patch_size
                         ]
                         timestamp = float(current_chunk[0])
+                        current_chunk = metadata.timestamps[chunk_id : chunk_id + temporal_patch_size]
                         timestamp_str = (
                             time.strftime("%H:%M:%S", time.gmtime(timestamp)) + f".{int(timestamp % 1 * 1000):03d}"
                         )
-                        # [0, 120, 239, 359, 478, 598]
                         num_frame_tokens = video_grid_thw[index][chunk_id][1:].prod() // merge_length
                         video_tokens = num_frame_tokens * "<|placeholder|>"  # * len(current_chunk)
                         video_structure += (
@@ -165,6 +165,7 @@ class Kimi_K25Processor(ProcessorMixin):
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
+
         if return_mm_token_type_ids:
             text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
 
@@ -234,6 +235,10 @@ class Kimi_K25Processor(ProcessorMixin):
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
+
+    @property
+    def model_input_names(self):
+        raise [name for name in ProcessorMixin.model_input_names if name not in "num_chunks_per_video"]
 
 
 __all__ = ["Kimi_K25Processor"]

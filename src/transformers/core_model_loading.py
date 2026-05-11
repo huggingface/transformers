@@ -800,8 +800,6 @@ class WeightTransform:
         """
         # Try matching one of the alternation branches
         match_object = self.compiled_sources.search(source_key)
-        if "q_proj" in self.source_patterns:
-            print(self.compiled_sources, match_object)
         if match_object is None:
             return source_key, None
 
