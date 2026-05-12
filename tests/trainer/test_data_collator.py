@@ -266,6 +266,47 @@ class TestDataCollatorWithPadding(DataCollatorTestMixin, unittest.TestCase):
             features = [{"input_ids": [0, 1, 2]}, {"input_ids": [0, 1, 2, 3, 4, 5]}]
             self._check_immutability(collator, features)
 
+    def test_4d_attention_mask_preserved(self):
+        """A 4D per-sample `attention_mask` is stacked into the batch unchanged.
+
+        `tokenizer.pad`'s 1D-per-sample padding logic does not apply to higher-rank
+        masks, so the collator must preserve their shape, dtype, and per-sample
+        contents.
+        """
+        tokenizer = BertTokenizer(self.vocab_file)
+        seq_len = 6
+        batch_size = 3
+
+        for sample_factory, expected_dtype in (
+            (lambda i: torch.full((1, seq_len, seq_len), float(i)), torch.float32),
+            (lambda i: np.full((1, seq_len, seq_len), float(i), dtype=np.float32), torch.float32),
+        ):
+            features = [
+                {"input_ids": list(range(seq_len)), "attention_mask": sample_factory(i)} for i in range(batch_size)
+            ]
+            collator = DataCollatorWithPadding(tokenizer)
+            batch = collator(features)
+
+            self.assertEqual(batch["attention_mask"].shape, torch.Size([batch_size, 1, seq_len, seq_len]))
+            self.assertEqual(batch["attention_mask"].dtype, expected_dtype)
+            for i in range(batch_size):
+                self.assertTrue(torch.all(batch["attention_mask"][i] == float(i)))
+
+    def test_4d_attention_mask_asymmetric_kv(self):
+        """A 4D mask with `kv_len != q_len` (e.g. KV-cache style) is preserved."""
+        tokenizer = BertTokenizer(self.vocab_file)
+        q_len, kv_len, batch_size = 4, 9, 2
+        features = [
+            {
+                "input_ids": list(range(q_len)),
+                "attention_mask": torch.zeros((1, q_len, kv_len), dtype=torch.float32),
+            }
+            for _ in range(batch_size)
+        ]
+        batch = DataCollatorWithPadding(tokenizer)(features)
+
+        self.assertEqual(batch["attention_mask"].shape, torch.Size([batch_size, 1, q_len, kv_len]))
+
 
 # =============================================================================
 # DataCollatorWithFlattening tests
