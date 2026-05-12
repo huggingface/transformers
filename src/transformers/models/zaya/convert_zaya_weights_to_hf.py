@@ -144,7 +144,7 @@ def convert_config(input_dir: Path, output_dir: Path) -> None:
     layer_types = _convert_layer_types(config_dict, old_num_hidden_layers, new_num_hidden_layers)
     partial_rotary_factor = config_dict.get("partial_rotary_factor", ZayaConfig.partial_rotary_factor)
     rope_theta = config_dict.get("rope_theta", ZayaConfig.default_theta)
-    swa_rotary_base = config_dict.get("swa_rotary_base", ZayaConfig.swa_rotary_base)
+    swa_rotary_base = config_dict.get("swa_rotary_base", ZayaConfig.default_swa_theta)
     intermediate_size = config_dict.get(
         "intermediate_size", config_dict.get("ffn_hidden_size", ZayaConfig.intermediate_size)
     )
@@ -173,7 +173,7 @@ def convert_config(input_dir: Path, output_dir: Path) -> None:
         },
     }
 
-    for key in (*_UNUSED_CONFIG_KEYS, "swa_layers", "rope_theta"):
+    for key in (*_UNUSED_CONFIG_KEYS, "swa_layers", "rope_theta", "swa_rotary_base"):
         config_dict.pop(key, None)
 
     config_dict.update(
@@ -184,7 +184,6 @@ def convert_config(input_dir: Path, output_dir: Path) -> None:
             "num_experts_per_tok": num_experts_per_tok,
             "layer_types": layer_types,
             "sliding_window": sliding_window,
-            "swa_rotary_base": swa_rotary_base,
             "rope_parameters": {layer_type: rope_parameters[layer_type] for layer_type in set(layer_types)},
         }
     )

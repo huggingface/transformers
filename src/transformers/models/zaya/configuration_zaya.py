@@ -49,8 +49,6 @@ class ZayaConfig(PreTrainedConfig):
         Second temporal parameter of the CCA projection.
     layer_types (`list[str]`, *optional*):
         Per-layer selector for standard RoPE versus SWA RoPE embeddings.
-    swa_rotary_base (`float`, *optional*):
-        RoPE base used by SWA layers.
 
     ```python
     >>> from transformers import ZayaConfig, ZayaModel
@@ -65,6 +63,7 @@ class ZayaConfig(PreTrainedConfig):
     model_type = "zaya"
     keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 5000000.0
+    default_swa_theta = 10000.0
 
     vocab_size: int = 262272
     hidden_size: int = 2048
@@ -91,7 +90,6 @@ class ZayaConfig(PreTrainedConfig):
     cca_time1: int = 2
     sliding_window: int | None = None
     layer_types: list[str] | None = None
-    swa_rotary_base: float | int = 10000.0
     output_router_logits: bool = False
     pad_token_id: int | None = 0
     bos_token_id: int | None = 2
@@ -110,7 +108,7 @@ class ZayaConfig(PreTrainedConfig):
             },
             "sliding_attention": {
                 "rope_type": "default",
-                "rope_theta": self.swa_rotary_base,
+                "rope_theta": self.default_swa_theta,
                 "partial_rotary_factor": self.partial_rotary_factor,
             },
         }
