@@ -247,11 +247,7 @@ def prepare_img():
 class Sapiens2ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return (
-            AutoImageProcessor.from_pretrained("facebook/sapiens2-pretrain-0.4b")
-            if is_vision_available()
-            else None
-        )
+        return AutoImageProcessor.from_pretrained("facebook/sapiens2-pretrain-0.4b") if is_vision_available() else None
 
     @slow
     def test_inference_no_head(self):
@@ -273,6 +269,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, expected_seq_length, model.config.hidden_size))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
+        # TODO(guarin): Update to Sapiens2 expected values
         last_layer_cls_token = outputs.pooler_output
         expected_slice = torch.tensor([0.4637, -0.4160, 0.4086, -0.1265, -0.2865], device=torch_device)
         torch.testing.assert_close(last_layer_cls_token[0, :5], expected_slice, rtol=1e-4, atol=1e-4)
