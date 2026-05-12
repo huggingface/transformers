@@ -428,6 +428,9 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^encoder", target_patterns="model.encoder"),
             WeightRenaming(source_patterns=r"^projector", target_patterns="model.projector"),
         ],
+        "GraniteSpeechModel": [
+            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
+        ],
         "vibevoice_asr": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
@@ -438,6 +441,9 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"^semantic_tokenizer_encoder", target_patterns="model.semantic_tokenizer_encoder"
             ),
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
+        ],
+        "VibeVoiceAsrModel": [
+            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
         ],
         "llava_next": [
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
