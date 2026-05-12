@@ -398,7 +398,7 @@ class DeepseekV4HCACompressor(nn.Module):
         position_ids: torch.Tensor,
         past_key_values: Cache | None,
         layer_idx: int,
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         batch, _, _ = hidden_states.shape
         cache_layer: DeepseekV4HCACache = past_key_values.layers[layer_idx] if past_key_values is not None else None
         kv = self.kv_proj(hidden_states)
@@ -427,7 +427,18 @@ class DeepseekV4HCACompressor(nn.Module):
 
         if cache_layer is not None:
             compressed = cache_layer.update_compressor_states("compressor", compressed)
-        return compressed.unsqueeze(1)
+        compressed_kv = compressed.unsqueeze(1)
+
+        # Per-query readiness mask: entry `w` summarizes positions `[w*m, (w+1)*m - 1]`,
+        # so query `t` may only see it once its window has closed — i.e., `w < (t+1) // m`.
+        # The Ca/Cb-style padding inside the compressor only handles cross-call continuity;
+        # within-prefill causality (multiple entries emitted at once) still needs this bias.
+        T_total = compressed_kv.shape[2]
+        block_idx = torch.arange(T_total, device=compressed_kv.device)
+        causal_threshold = (position_ids + 1) // self.compress_rate  # [B, S]
+        allowed = block_idx.view(1, 1, 1, -1) < causal_threshold.unsqueeze(1).unsqueeze(-1)  # [B, 1, S, T]
+        block_bias = torch.where(allowed, compressed_kv.new_zeros(()), compressed_kv.new_full((), float("-inf")))
+        return compressed_kv, block_bias
 
 
 class DeepseekV4Indexer(nn.Module):
@@ -803,17 +814,24 @@ class DeepseekV4Attention(nn.Module):
         if past_key_values is not None:  # sliding where K==V
             kv = past_key_values.update(kv, kv, self.layer_idx)[0]
 
+        block_bias = None
         if self.compressor is not None:  # Compressed KV (CSA or HCA)
-            compressed_kv = self.compressor(hidden_states, q_residual, position_ids, past_key_values, self.layer_idx)
+            compressed_kv, block_bias = self.compressor(
+                hidden_states, q_residual, position_ids, past_key_values, self.layer_idx
+            )
             kv = torch.cat([kv, compressed_kv], dim=2)
 
         # The compressor path concatenates extra entries onto the KV axis after the
         # standard sliding-window cache update, so a tensor `attention_mask` (built
-        # for the pre-concat KV length) needs to be right-padded to cover them.
-        # Flex-attention passes a `BlockMask` whose KV-length axis comes from its
-        # own `mask_mod`, not from a dense tensor — skip the pad in that case.
+        # for the pre-concat KV length) needs to be extended to cover them. The
+        # compressor returns a `block_bias` carrying per-query causality + indexer
+        # validity over those new slots — cat it in instead of zero-padding (which
+        # would let every query see every compressed slot).
         if isinstance(attention_mask, torch.Tensor) and kv.shape[2] > attention_mask.shape[-1]:
-            attention_mask = F.pad(attention_mask, (0, kv.shape[2] - attention_mask.shape[-1]), value=0.0)
+            if block_bias is not None:
+                attention_mask = torch.cat([attention_mask, block_bias.to(attention_mask.dtype)], dim=-1)
+            else:
+                attention_mask = F.pad(attention_mask, (0, kv.shape[2] - attention_mask.shape[-1]), value=0.0)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -908,14 +926,17 @@ class DeepseekV4HyperConnection(nn.Module):
         pre_scale, post_scale, comb_scale = self.scale.unbind(0)
         hc = self.hc_mult
         pre = torch.sigmoid(mix[..., :hc] * pre_scale + self.base[:hc]) + self.hc_eps
-        post = torch.sigmoid(mix[..., hc : 2 * hc] * post_scale + self.base[hc : 2 * hc]) + self.hc_eps
-        comb = (
-            torch.sigmoid(
-                mix[..., 2 * hc :].view(*mix.shape[:-1], hc, hc) * comb_scale + self.base[2 * hc :].view(hc, hc)
-            )
-            + self.hc_eps
-        )
-        for _ in range(self.hc_sinkhorn_iters):
+        # `post` is `2 * sigmoid` (range [0, 2], no eps). `pre` and `comb` keep the
+        # `sigmoid + eps` form.
+        post = 2 * torch.sigmoid(mix[..., hc : 2 * hc] * post_scale + self.base[hc : 2 * hc])
+        # Sinkhorn init: row-softmax + eps, then one column-normalisation, then
+        # `iters - 1` symmetric (row, col) rounds. Different positive starting matrix →
+        # different doubly-stochastic fixed point than a `sigmoid+eps` init, so this
+        # matters even though row/col count nets out.
+        comb_logits = mix[..., 2 * hc :].view(*mix.shape[:-1], hc, hc) * comb_scale + self.base[2 * hc :].view(hc, hc)
+        comb = torch.softmax(comb_logits, dim=-1) + self.hc_eps
+        comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
+        for _ in range(self.hc_sinkhorn_iters - 1):
             comb = comb / (comb.sum(dim=-1, keepdim=True) + self.hc_eps)
             comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
         # Collapse the `hc_mult` parallel streams down to a single sequence using
