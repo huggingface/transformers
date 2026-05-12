@@ -767,6 +767,9 @@ class DeepseekV4Attention(nn.Module):
         self.config = config
         self.layer_idx = layer_idx
         self.layer_type = config.layer_types[layer_idx]
+        # Sliding-only layers use the "main" (plain θ=10000) rope; CSA/HCA layers
+        # share the same yarn-scaled "compress" rope as their compressor.
+        self.rope_layer_type = "main" if self.layer_type == "sliding_attention" else "compress"
         self.num_heads = config.num_attention_heads
         self.num_key_value_groups = config.num_attention_heads  # single KV head, broadcast to all
         self.head_dim = config.head_dim
@@ -793,7 +796,7 @@ class DeepseekV4Attention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: dict[str, tuple[torch.Tensor, torch.Tensor]] | tuple[torch.Tensor, torch.Tensor],
         position_ids: torch.Tensor,
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
@@ -801,7 +804,11 @@ class DeepseekV4Attention(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
-        cos, sin = position_embeddings
+        # position_embeddings is a {"main", "compress"} dict from the model; pick the
+        # one that matches this layer's rope type (sliding → main, CSA/HCA → compress).
+        cos, sin = (
+            position_embeddings[self.rope_layer_type] if isinstance(position_embeddings, dict) else position_embeddings
+        )
 
         q_residual = self.q_a_norm(self.q_a_proj(hidden_states))
         q = self.q_b_proj(q_residual).view(*hidden_shape).transpose(1, 2)
@@ -921,19 +928,15 @@ class DeepseekV4HyperConnection(nn.Module):
         into the sublayer); `post` and `comb` are returned for the caller to
         apply on the sublayer output.
         """
-        flat = self.input_norm(hidden_streams.flatten(start_dim=2).float())
-        mix = F.linear(flat, self.fn.float())  # [B, S, (2+H)*H]
-        pre_scale, post_scale, comb_scale = self.scale.unbind(0)
         hc = self.hc_mult
-        pre = torch.sigmoid(mix[..., :hc] * pre_scale + self.base[:hc]) + self.hc_eps
-        # `post` is `2 * sigmoid` (range [0, 2], no eps). `pre` and `comb` keep the
-        # `sigmoid + eps` form.
-        post = 2 * torch.sigmoid(mix[..., hc : 2 * hc] * post_scale + self.base[hc : 2 * hc])
-        # Sinkhorn init: row-softmax + eps, then one column-normalisation, then
-        # `iters - 1` symmetric (row, col) rounds. Different positive starting matrix →
-        # different doubly-stochastic fixed point than a `sigmoid+eps` init, so this
-        # matters even though row/col count nets out.
-        comb_logits = mix[..., 2 * hc :].view(*mix.shape[:-1], hc, hc) * comb_scale + self.base[2 * hc :].view(hc, hc)
+        flat = self.input_norm(hidden_streams.flatten(start_dim=2).float())
+        pre_w, post_w, comb_w = F.linear(flat, self.fn.float()).split([hc, hc, hc * hc], dim=-1)
+        pre_b, post_b, comb_b = self.base.split([hc, hc, hc * hc])
+        pre_scale, post_scale, comb_scale = self.scale.unbind(0)
+
+        pre = torch.sigmoid(pre_w * pre_scale + pre_b) + self.hc_eps
+        post = 2 * torch.sigmoid(post_w * post_scale + post_b)
+        comb_logits = comb_w.view(*comb_w.shape[:-1], hc, hc) * comb_scale + comb_b.view(hc, hc)
         comb = torch.softmax(comb_logits, dim=-1) + self.hc_eps
         comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
         for _ in range(self.hc_sinkhorn_iters - 1):
@@ -966,6 +969,11 @@ class DeepseekV4HyperHead(nn.Module):
 
 
 class DeepseekV4MLP(nn.Module):
+    """Shared-expert SwiGLU MLP. Reference `Expert.forward` casts gate/up to
+    fp32 right after the linear, runs `silu(gate) * up` in fp32, then casts
+    back to input dtype before the down projection. Shared expert has no
+    `swiglu_limit` clamp (only routed experts do)."""
+
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -976,9 +984,11 @@ class DeepseekV4MLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        dtype = x.dtype
+        gate = self.gate_proj(x).float()
+        up = self.up_proj(x).float()
+        return self.down_proj((self.act_fn(gate) * up).to(dtype))
 
 
 @use_experts_implementation
@@ -1282,7 +1292,14 @@ class DeepseekV4Model(DeepseekV4PreTrainedModel):
                 position_ids=position_ids,
             )
         hidden_states = inputs_embeds.unsqueeze(2).expand(-1, -1, self.config.hc_mult, -1).contiguous()
-        position_embeddings = self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type="main")
+        # Per-layer-type RoPE: sliding-only layers use plain θ=10000 ("main");
+        # CSA / HCA layers use yarn-scaled θ=160000 ("compress") for the attention's
+        # own q and kv too — not just the compressor. Build both up front so each
+        # attention layer can pick whichever matches its own `compressor` presence.
+        position_embeddings = {
+            "main": self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type="main"),
+            "compress": self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type="compress"),
+        }
 
         for layer in self.layers:
             hidden_states = layer(

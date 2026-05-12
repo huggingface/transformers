@@ -667,6 +667,9 @@ class DeepseekV4Attention(nn.Module):
         self.config = config
         self.layer_idx = layer_idx
         self.layer_type = config.layer_types[layer_idx]
+        # Sliding-only layers use the "main" (plain θ=10000) rope; CSA/HCA layers
+        # share the same yarn-scaled "compress" rope as their compressor.
+        self.rope_layer_type = "main" if self.layer_type == "sliding_attention" else "compress"
         self.num_heads = config.num_attention_heads
         self.num_key_value_groups = config.num_attention_heads  # single KV head, broadcast to all
         self.head_dim = config.head_dim
@@ -693,7 +696,7 @@ class DeepseekV4Attention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: dict[str, tuple[torch.Tensor, torch.Tensor]] | tuple[torch.Tensor, torch.Tensor],
         position_ids: torch.Tensor,
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
@@ -701,7 +704,9 @@ class DeepseekV4Attention(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
-        cos, sin = position_embeddings
+        # position_embeddings is a {"main", "compress"} dict from the model; pick the
+        # one that matches this layer's rope type (sliding → main, CSA/HCA → compress).
+        cos, sin = position_embeddings[self.rope_layer_type]
 
         q_residual = self.q_a_norm(self.q_a_proj(hidden_states))
         q = self.q_b_proj(q_residual).view(*hidden_shape).transpose(1, 2)
@@ -821,14 +826,15 @@ class DeepseekV4HyperConnection(nn.Module):
         into the sublayer); `post` and `comb` are returned for the caller to
         apply on the sublayer output.
         """
+        hc = self.hc_mult
         flat = self.input_norm(hidden_streams.flatten(start_dim=2).float())
-        pre_w, post_w, comb_w = F.linear(flat, self.fn.float()).split([hc, hc, hc*hc])
-        pre_b, post_b, comb_b = self.base.split([hc, hc, hc*hc])
+        pre_w, post_w, comb_w = F.linear(flat, self.fn.float()).split([hc, hc, hc * hc], dim=-1)
+        pre_b, post_b, comb_b = self.base.split([hc, hc, hc * hc])
         pre_scale, post_scale, comb_scale = self.scale.unbind(0)
 
         pre = torch.sigmoid(pre_w * pre_scale + pre_b) + self.hc_eps
         post = 2 * torch.sigmoid(post_w * post_scale + post_b)
-        comb_logits = comb_w.view(*mix.shape[:-1],  self.hc_mult,  self.hc_mult) * comb_scale + comb_b.view( self.hc_mult,  self.hc_mult)
+        comb_logits = comb_w.view(*comb_w.shape[:-1], hc, hc) * comb_scale + comb_b.view(hc, hc)
         comb = torch.softmax(comb_logits, dim=-1) + self.hc_eps
         comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
         for _ in range(self.hc_sinkhorn_iters - 1):
@@ -1138,7 +1144,10 @@ class DeepseekV4Model(LlamaModel):
                 position_ids=position_ids,
             )
         hidden_states = inputs_embeds.unsqueeze(2).expand(-1, -1, self.config.hc_mult, -1).contiguous()
-        position_embeddings = self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type="main")
+        position_embeddings = {
+            "main": self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type="main"),
+            "compress": self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type="compress"),
+        }
 
         for layer in self.layers:
             hidden_states = layer(
