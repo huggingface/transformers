@@ -131,6 +131,9 @@ def build_resized_image(
     image_chw: torch.Tensor,
     base_image_input_size: list[int],
     resample: PILImageResampling,
+    do_rescale: bool,
+    rescale_factor: float,
+    do_normalize: bool,
     image_mean: list[float],
     image_std: list[float],
     image_patch_size: int,
@@ -143,9 +146,9 @@ def build_resized_image(
     )
     chw_normalized = backend.rescale_and_normalize(
         chw_resized,
-        do_rescale=True,
-        rescale_factor=1.0 / 255.0,
-        do_normalize=True,
+        do_rescale=do_rescale,
+        rescale_factor=rescale_factor,
+        do_normalize=do_normalize,
         image_mean=image_mean,
         image_std=image_std,
     )
@@ -201,6 +204,9 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         overlap_margins: list[int],
         base_image_input_size: list[int],
         resample: PILImageResampling,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
         image_mean: list[float],
         image_std: list[float],
         image_patch_size: int,
@@ -236,9 +242,9 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         )
         chw_normalized = self.rescale_and_normalize(
             chw_resized,
-            do_rescale=True,
-            rescale_factor=1.0 / 255.0,
-            do_normalize=True,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
             image_mean=image_mean,
             image_std=image_std,
         )
@@ -285,6 +291,9 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         overlap_margins: list[int],
         base_image_input_size: list[int],
         resample: PILImageResampling,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
         image_mean: list[float],
         image_std: list[float],
         image_patch_size: int,
@@ -306,6 +315,9 @@ class Molmo2ImageProcessor(TorchvisionBackend):
             overlap_margins,
             base_image_input_size,
             resample,
+            do_rescale,
+            rescale_factor,
+            do_normalize,
             image_mean,
             image_std,
             image_patch_size,
@@ -319,6 +331,9 @@ class Molmo2ImageProcessor(TorchvisionBackend):
             image_chw,
             base_image_input_size,
             resample,
+            do_rescale,
+            rescale_factor,
+            do_normalize,
             image_mean,
             image_std,
             image_patch_size,
@@ -440,6 +455,9 @@ class Molmo2ImageProcessor(TorchvisionBackend):
                     overlap_margins,
                     base_image_input_size,
                     resample,
+                    do_rescale,
+                    rescale_factor,
+                    do_normalize,
                     image_mean,
                     image_std,
                     patch_size,
@@ -583,6 +601,9 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         frame_chw: torch.Tensor,
         base_image_input_size: list[int],
         resample: PILImageResampling,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
         image_mean: list[float],
         image_std: list[float],
         image_patch_size: int,
@@ -590,7 +611,16 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         image_pooling_w: int,
     ) -> tuple[list[int], torch.Tensor, torch.Tensor]:
         hwc, resize_idx = build_resized_image(
-            self, frame_chw, base_image_input_size, resample, image_mean, image_std, image_patch_size
+            self,
+            frame_chw,
+            base_image_input_size,
+            resample,
+            do_rescale,
+            rescale_factor,
+            do_normalize,
+            image_mean,
+            image_std,
+            image_patch_size,
         )
         pooling_idx = arange_for_pooling(resize_idx, image_pooling_h, image_pooling_w)
         num_patch_rows, num_patch_cols = pooling_idx.shape[:2]
@@ -602,6 +632,9 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         videos: list["torch.Tensor"],
         size: SizeDict | None = None,
         resample: PILImageResampling | None = None,
+        do_rescale: bool = True,
+        rescale_factor: float = 1.0 / 255.0,
+        do_normalize: bool = True,
         image_mean: float | list[float] | None = None,
         image_std: float | list[float] | None = None,
         patch_size: int | None = None,
@@ -625,6 +658,9 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
                     frame_chw,
                     base_image_input_size,
                     resample,
+                    do_rescale,
+                    rescale_factor,
+                    do_normalize,
                     image_mean,
                     image_std,
                     patch_size,
@@ -1117,8 +1153,6 @@ class Molmo2ImageProjectorMLP(nn.Module):
 
 class Molmo2VisionBackbone(PreTrainedModel):
     config_class = Molmo2AdapterConfig
-    _supports_sdpa = True
-    _supports_flash_attn = True
 
     def __init__(self, vit_config: Molmo2VitConfig, adapter_config: Molmo2AdapterConfig):
         super().__init__(adapter_config)
@@ -1269,8 +1303,17 @@ class Molmo2Attention(Olmo2Attention):
         self.att_proj = nn.Linear(config.hidden_size, sum(self.fused_dims), bias=config.qkv_bias)
         self.attn_out = nn.Linear(config.num_attention_heads * config.head_dim, config.hidden_size, bias=False)
 
-        self.q_norm = Molmo2RMSNorm(config.head_dim, eps=config.layer_norm_eps)
-        self.k_norm = Molmo2RMSNorm(config.head_dim, eps=config.layer_norm_eps)
+        self.qk_norm_type = config.qk_norm_type
+        if self.qk_norm_type == "qwen3":
+            q_norm_dim = config.head_dim
+            k_norm_dim = config.head_dim
+        elif self.qk_norm_type == "olmo":
+            q_norm_dim = config.num_attention_heads * config.head_dim
+            k_norm_dim = config.num_key_value_heads * config.head_dim
+        else:
+            raise ValueError(f"Unsupported `qk_norm_type`: {self.qk_norm_type}")
+        self.q_norm = Molmo2RMSNorm(q_norm_dim, eps=config.layer_norm_eps)
+        self.k_norm = Molmo2RMSNorm(k_norm_dim, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -1287,9 +1330,18 @@ class Molmo2Attention(Olmo2Attention):
         qkv = self.att_proj(hidden_states)
         query_states, key_states, value_states = qkv.split(self.fused_dims, dim=-1)
 
-        query_states = self.q_norm(query_states.view(q_shape))
-        key_states = self.k_norm(key_states.view(kv_shape))
         value_states = value_states.view(kv_shape)
+
+        if self.qk_norm_type == "olmo":
+            query_states = self.q_norm(query_states)
+            key_states = self.k_norm(key_states)
+
+        query_states = query_states.view(q_shape)
+        key_states = key_states.view(kv_shape)
+
+        if self.qk_norm_type == "qwen3":
+            query_states = self.q_norm(query_states)
+            key_states = self.k_norm(key_states)
 
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)

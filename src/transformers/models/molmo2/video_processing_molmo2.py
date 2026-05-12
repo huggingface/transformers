@@ -82,6 +82,9 @@ def build_resized_image(
     image_chw: torch.Tensor,
     base_image_input_size: list[int],
     resample: PILImageResampling,
+    do_rescale: bool,
+    rescale_factor: float,
+    do_normalize: bool,
     image_mean: list[float],
     image_std: list[float],
     image_patch_size: int,
@@ -94,9 +97,9 @@ def build_resized_image(
     )
     chw_normalized = backend.rescale_and_normalize(
         chw_resized,
-        do_rescale=True,
-        rescale_factor=1.0 / 255.0,
-        do_normalize=True,
+        do_rescale=do_rescale,
+        rescale_factor=rescale_factor,
+        do_normalize=do_normalize,
         image_mean=image_mean,
         image_std=image_std,
     )
@@ -163,6 +166,9 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         frame_chw: torch.Tensor,
         base_image_input_size: list[int],
         resample: PILImageResampling,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
         image_mean: list[float],
         image_std: list[float],
         image_patch_size: int,
@@ -170,7 +176,16 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         image_pooling_w: int,
     ) -> tuple[list[int], torch.Tensor, torch.Tensor]:
         hwc, resize_idx = build_resized_image(
-            self, frame_chw, base_image_input_size, resample, image_mean, image_std, image_patch_size
+            self,
+            frame_chw,
+            base_image_input_size,
+            resample,
+            do_rescale,
+            rescale_factor,
+            do_normalize,
+            image_mean,
+            image_std,
+            image_patch_size,
         )
         pooling_idx = arange_for_pooling(resize_idx, image_pooling_h, image_pooling_w)
         num_patch_rows, num_patch_cols = pooling_idx.shape[:2]
@@ -182,6 +197,9 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         videos: list["torch.Tensor"],
         size: SizeDict | None = None,
         resample: PILImageResampling | None = None,
+        do_rescale: bool = True,
+        rescale_factor: float = 1.0 / 255.0,
+        do_normalize: bool = True,
         image_mean: float | list[float] | None = None,
         image_std: float | list[float] | None = None,
         patch_size: int | None = None,
@@ -205,6 +223,9 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
                     frame_chw,
                     base_image_input_size,
                     resample,
+                    do_rescale,
+                    rescale_factor,
+                    do_normalize,
                     image_mean,
                     image_std,
                     patch_size,

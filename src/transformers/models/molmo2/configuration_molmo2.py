@@ -106,6 +106,11 @@ class Molmo2TextConfig(PreTrainedConfig):
         Number of additional vocabulary tokens beyond the base vocabulary.
     qkv_bias (`bool`, *optional*, defaults to `True`):
         Whether to use bias in query, key, and value projections.
+    use_qk_norm (`bool`, *optional*, defaults to `True`):
+        Serialized compatibility flag for checkpoints that use query/key normalization.
+    qk_norm_type (`str`, *optional*, defaults to `"qwen3"`):
+        Query/key normalization layout used by the checkpoint. `"qwen3"` normalizes per head; `"olmo"` normalizes the
+        full projected query/key tensors.
     embedding_dropout (`float`, *optional*, defaults to 0.0):
         The dropout ratio for the embedding layer.
     residual_dropout (`float`, *optional*, defaults to 0.0):
@@ -142,6 +147,8 @@ class Molmo2TextConfig(PreTrainedConfig):
     vocab_size: int = 152064
     additional_vocab_size: int = 128
     qkv_bias: bool = True
+    use_qk_norm: bool = True
+    qk_norm_type: str = "qwen3"
     num_hidden_layers: int = 48
     intermediate_size: int = 18944
     hidden_act: str = "silu"
@@ -160,12 +167,16 @@ class Molmo2TextConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        self.rope_parameters = self.rope_scaling or self.rope_parameters
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
-        super().__post_init__(**kwargs)
         if self.rope_scaling_layers is None:
             self.rope_scaling_layers = []
+        super().__post_init__(**kwargs)
+
+    def convert_rope_params_to_dict(self, **kwargs):
+        if self.rope_scaling is not None:
+            kwargs["rope_scaling"] = self.rope_scaling
+        return super().convert_rope_params_to_dict(**kwargs)
 
 
 @auto_docstring(checkpoint="allenai/Molmo2-8B")
