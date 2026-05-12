@@ -1190,15 +1190,12 @@ def align_special_tokens(model, processing_class):
     # token.
     tokenizer_has_new_eos = tokenizer.eos_token_id != getattr(model.config, "eos_token_id", None)
     if model_has_generation_config:
-        # `generation_config.eos_token_id` is None: direct comparison
-        if model.generation_config.eos_token_id is None:
-            tokenizer_has_new_eos |= tokenizer.eos_token_id != model.generation_config.eos_token_id
+        gen_eos = model.generation_config.eos_token_id
+        if gen_eos is None or isinstance(gen_eos, int):
+            tokenizer_has_new_eos |= tokenizer.eos_token_id != gen_eos
         else:
-            # `generation_config.eos_token_id` is an `int`: convert it to list (and continue below)
-            if isinstance(model.generation_config.eos_token_id, int):
-                model.generation_config.eos_token_id = [model.generation_config.eos_token_id]
             # `generation_config.eos_token_id` is a `list`: check if the tokenizer's EOS token is in the list
-            tokenizer_has_new_eos |= tokenizer.eos_token_id not in model.generation_config.eos_token_id
+            tokenizer_has_new_eos |= tokenizer.eos_token_id not in gen_eos
 
     if tokenizer_has_new_eos:
         updated_tokens["eos_token_id"] = tokenizer.eos_token_id
@@ -1207,8 +1204,9 @@ def align_special_tokens(model, processing_class):
         # EOS tokens defined here will halt generation.
         if model_has_generation_config:
             all_eos_tokens = [tokenizer.eos_token_id]
-            if model.generation_config.eos_token_id is not None:
-                all_eos_tokens += list(model.generation_config.eos_token_id)
+            existing_eos = model.generation_config.eos_token_id
+            if existing_eos is not None:
+                all_eos_tokens += [existing_eos] if isinstance(existing_eos, int) else list(existing_eos)
             model.generation_config.eos_token_id = [token for token in all_eos_tokens if token is not None]
 
     # 2 - Align BOS

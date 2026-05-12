@@ -1246,3 +1246,81 @@ class TrainerIntegrationTest(TestCasePlus):
         trainer.train()
         model_wrapped_after = trainer.model_wrapped
         self.assertIs(model_wrapped_before, model_wrapped_after, "should be not wrapped twice")
+
+
+@require_torch
+class TrainerAlignSpecialTokensTest(TestCasePlus):
+    """Tests for ``transformers.trainer_utils.align_special_tokens``."""
+
+    def _build_model_and_tokenizer(self):
+        from transformers import GenerationConfig
+
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+        config = LlamaConfig(
+            vocab_size=tokenizer.vocab_size,
+            hidden_size=8,
+            intermediate_size=16,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            bos_token_id=tokenizer.bos_token_id,
+            eos_token_id=tokenizer.eos_token_id,
+            pad_token_id=tokenizer.pad_token_id,
+        )
+        model = LlamaForCausalLM(config)
+        model.generation_config = GenerationConfig(
+            bos_token_id=config.bos_token_id,
+            eos_token_id=config.eos_token_id,
+            pad_token_id=config.pad_token_id,
+        )
+        return model, tokenizer
+
+    def test_already_aligned_eos_is_not_rewrapped_to_list(self):
+        """Regression test for #45584.
+
+        When the tokenizer's EOS token already matches both the model config and the generation config (which
+        stores ``eos_token_id`` as a scalar ``int``), ``align_special_tokens`` must not mutate the generation
+        config. Previously the ``int -> list`` conversion happened unconditionally inside the membership check,
+        which broke downstream code that expected ``eos_token_id`` to remain a scalar (e.g. Whisper's
+        long-form generation loop, which compares ``seek_sequence[-1] == generation_config.eos_token_id``).
+        """
+        from transformers.trainer_utils import align_special_tokens
+
+        model, tokenizer = self._build_model_and_tokenizer()
+        eos_before = model.generation_config.eos_token_id
+        self.assertIsInstance(eos_before, int)
+
+        align_special_tokens(model, tokenizer)
+
+        self.assertEqual(model.generation_config.eos_token_id, eos_before)
+        self.assertIsInstance(model.generation_config.eos_token_id, int)
+
+    def test_new_eos_is_added_as_list(self):
+        """When the tokenizer brings a new EOS, it must be merged with the existing one in a list."""
+        from transformers.trainer_utils import align_special_tokens
+
+        model, tokenizer = self._build_model_and_tokenizer()
+        old_eos = model.generation_config.eos_token_id
+
+        new_eos = old_eos + 1
+        tokenizer.eos_token_id = new_eos
+
+        align_special_tokens(model, tokenizer)
+
+        self.assertEqual(model.config.eos_token_id, new_eos)
+        self.assertIsInstance(model.generation_config.eos_token_id, list)
+        self.assertIn(new_eos, model.generation_config.eos_token_id)
+        self.assertIn(old_eos, model.generation_config.eos_token_id)
+
+    def test_eos_already_a_list_with_tokenizer_match_is_unchanged(self):
+        """If ``eos_token_id`` is already a list that contains the tokenizer's EOS, nothing should change."""
+        from transformers.trainer_utils import align_special_tokens
+
+        model, tokenizer = self._build_model_and_tokenizer()
+        eos = model.generation_config.eos_token_id
+        model.generation_config.eos_token_id = [eos, eos + 100]
+        snapshot = list(model.generation_config.eos_token_id)
+
+        align_special_tokens(model, tokenizer)
+
+        self.assertEqual(model.generation_config.eos_token_id, snapshot)
