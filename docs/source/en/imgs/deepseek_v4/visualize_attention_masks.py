@@ -97,7 +97,7 @@ def _meta_subtitle(meta: dict | None) -> str:
     if meta.get("index_topk") is not None:
         parts.append(f"index_topk (k) = {meta['index_topk']}")
     if meta.get("T_entries"):
-        parts.append(f"T_entries = {meta['T_entries']}")
+        parts.append(f"total compressed entries = {meta['T_entries']}")
     return "   ".join(parts)
 
 
@@ -184,18 +184,19 @@ def _render(
 SVG_CELL = 24
 SVG_GAP = 2
 SVG_PAD_LEFT = 120     # roomy enough for the longest row-label token ("morning") at 11pt
-SVG_PAD_TOP = 132      # title (20) + subtitle (40) + meta (60) + vertical token labels (~60px tall)
+SVG_PAD_TOP = 340      # enough for vertical compressor-token lists (HCA m=8 = ~250px tall)
 SVG_PAD_RIGHT = 48
 SVG_PAD_BOTTOM = 64
 SVG_COLORS = {
-    # Single "visible" green — no diagonal special-case; visible == attended-to.
-    "visible": "#16a34a",       # green-600
-    "masked": "#e5e7eb",        # slate-200 (causally not yet visible / outside sliding window)
-    "indexer_masked": "#dc2626",# red-600 (causally available but the indexer did NOT pick this entry)
-    "compressor": "#16a34a",    # same green for visible compressor entries (no special tint)
-    "separator": "#94a3b8",     # slate-400 (vertical line between sliding and compressor sections)
-    "text": "#0f172a",          # slate-900
-    "muted": "#64748b",         # slate-500
+    # Dark-mode palette: black background, light text.
+    "background": "#0b1220",    # near-black with a hint of blue
+    "visible": "#22c55e",       # green-500, pops against black
+    "masked": "#1e293b",        # slate-800 — dim cells that are visible against bg but recede
+    "indexer_masked": "#ef4444",# red-500, also pops
+    "compressor": "#22c55e",    # same green as visible (single-color attended-to)
+    "separator": "#475569",     # slate-600
+    "text": "#f8fafc",          # slate-50 — main text on black
+    "muted": "#94a3b8",         # slate-400 — secondary text
 }
 
 # Static word list used as token labels on the SVG axes. Real token semantics don't
@@ -248,9 +249,14 @@ def _render_svg(mask_2d: torch.Tensor, title: str, sliding_kv: int, meta: dict |
     h = SVG_PAD_TOP + grid_h + SVG_PAD_BOTTOM
 
     subtitle = _meta_subtitle(meta)
+    # Explicit `width` / `height` (matching viewBox) so renderers don't fall back to the
+    # 150×150 SVG default when the file is embedded without sizing CSS. `preserveAspectRatio`
+    # keeps it sharp when scaled.
     elems: list[str] = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" '
+        f'width="{w}" height="{h}" preserveAspectRatio="xMinYMin meet" '
         f'font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">',
+        f'  <rect x="0" y="0" width="{w}" height="{h}" fill="{SVG_COLORS["background"]}" />',
         f'  <text x="{SVG_PAD_LEFT}" y="20" font-size="15" font-weight="600" fill="{SVG_COLORS["text"]}">{title}</text>',
         f'  <text x="{SVG_PAD_LEFT}" y="40" fill="{SVG_COLORS["muted"]}">'
         f'shape=[{n_q}, {n_kv}]   keys →   queries ↓</text>',
@@ -260,15 +266,15 @@ def _render_svg(mask_2d: torch.Tensor, title: str, sliding_kv: int, meta: dict |
             f'  <text x="{SVG_PAD_LEFT}" y="60" fill="{SVG_COLORS["compressor"]}">{subtitle}</text>'
         )
 
-    # Column headers. Sliding section: numeric index at the very top, then the token
-    # label rotated -90° (vertical) so multi-character tokens fit inside the narrow
-    # `SVG_CELL`-wide column without smearing into neighbours. Compressor section: a
-    # horizontal `C_w` + `pos a–b` label centred over the wide block (a single entry
-    # spans m source positions, so the wide block has plenty of horizontal room).
+    # Column headers, top-down within the SVG_PAD_TOP gutter (above the grid line):
+    #   y = 78  : column-index numeric (sliding) / `C_w` + `pos a–b` (compressor)
+    #   y = 92  : source-token preview for compressor blocks
+    #   y = 96..156 : vertical (rotated -90°) token labels for sliding columns
+    #   y = SVG_PAD_TOP (164) : grid begins
     for j in range(sliding_kv):
         cx = col_x[j] + col_w[j] / 2
         elems.append(
-            f'  <text x="{cx:.1f}" y="{SVG_PAD_TOP - 70}" text-anchor="middle" '
+            f'  <text x="{cx:.1f}" y="78" text-anchor="middle" '
             f'fill="{SVG_COLORS["muted"]}" font-size="10">{j}</text>'
         )
         tok = SVG_TOKENS[j] if j < len(SVG_TOKENS) else f"t{j}"
@@ -282,19 +288,43 @@ def _render_svg(mask_2d: torch.Tensor, title: str, sliding_kv: int, meta: dict |
     for w_idx in range(n_compr):
         j = sliding_kv + w_idx
         cx = col_x[j] + col_w[j] / 2
+        block_w = col_w[j]
         # Source-position range each entry compresses (paper §2.3.1/§2.3.2): C_w covers
         # positions [w*m, (w+1)*m − 1]. (The CSA Ca/Cb overlap is across forward calls,
         # not within a single window; for this within-forward visualization the same
         # range applies.)
         a, b = w_idx * m, (w_idx + 1) * m - 1
         elems.append(
-            f'  <text x="{cx:.1f}" y="{SVG_PAD_TOP - 28}" text-anchor="middle" '
+            f'  <text x="{cx:.1f}" y="78" text-anchor="middle" '
             f'fill="{SVG_COLORS["visible"]}" font-size="13" font-weight="700">C{w_idx}</text>'
         )
         elems.append(
-            f'  <text x="{cx:.1f}" y="{SVG_PAD_TOP - 12}" text-anchor="middle" '
+            f'  <text x="{cx:.1f}" y="92" text-anchor="middle" '
             f'fill="{SVG_COLORS["muted"]}" font-size="10">pos {a}–{b}</text>'
         )
+        # Source tokens the entry compresses — one rotated label per source position,
+        # laid out across the compressor block at the same horizontal stride as the
+        # sliding-column tokens. Dashed vertical separators between adjacent sub-cells
+        # remind the reader that the wide block contains `m` source positions even
+        # though it acts as a single KV slot.
+        baseline_y = SVG_PAD_TOP - 8
+        block_x = col_x[j]
+        for sub_i in range(m):
+            pos = a + sub_i
+            sub_cx = block_x + sub_i * stride + SVG_CELL / 2
+            tok = SVG_TOKENS[pos] if pos < len(SVG_TOKENS) else f"t{pos}"
+            elems.append(
+                f'  <text x="{sub_cx:.1f}" y="{baseline_y}" text-anchor="start" '
+                f'transform="rotate(-90 {sub_cx:.1f} {baseline_y})" '
+                f'fill="{SVG_COLORS["text"]}" font-size="12" font-style="italic">{tok}</text>'
+            )
+            if sub_i > 0:
+                sep_x = block_x + sub_i * stride - SVG_GAP / 2
+                elems.append(
+                    f'  <line x1="{sep_x:.1f}" y1="{SVG_PAD_TOP - 152}" '
+                    f'x2="{sep_x:.1f}" y2="{SVG_PAD_TOP}" '
+                    f'stroke="{SVG_COLORS["separator"]}" stroke-width="0.7" stroke-dasharray="3 3" />'
+                )
 
     # Row labels: query index (small, muted) + token (italic, dark) on the left.
     # `SVG_PAD_LEFT` is sized to fit the longest token in the static word list.
