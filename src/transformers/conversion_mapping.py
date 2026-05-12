@@ -296,6 +296,10 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns=r"layers.\1.self_attn.compressor.indexer.",
             ),
             WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.self_attn\.compressor\.indexer\.weights_proj\.",
+                target_patterns=r"layers.\1.self_attn.compressor.indexer.scorer.weights_proj.",
+            ),
+            WeightRenaming(
                 source_patterns=r"^layers\.(\d+)\.self_attn\.compressor\.norm\.",
                 target_patterns=r"layers.\1.self_attn.compressor.kv_norm.",
             ),
