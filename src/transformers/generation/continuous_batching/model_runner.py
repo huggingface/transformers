@@ -138,7 +138,9 @@ class ModelRunner:
             forward_fn(*args)
         # Capture using a thread-local capture mode to avoid capturing GPU operations from outside the model forward
         graph = torch.cuda.CUDAGraph()
-        with torch.cuda.graph(graph, stream=compute_stream, pool=self.graph_pool_id, capture_error_mode="thread_local"):
+        with torch.cuda.graph(
+            graph, stream=compute_stream, pool=self.graph_pool_id, capture_error_mode="thread_local"
+        ):
             forward_fn(*args)
         # Store
         self.inputs_and_outputs.set_graph(graph)
