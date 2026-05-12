@@ -421,7 +421,7 @@ class Blip2PreTrainedModel(PreTrainedModel):
         "T5Block",
         "OPTDecoderLayer",
     ]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
 
     @torch.no_grad()
     def _init_weights(self, module):
