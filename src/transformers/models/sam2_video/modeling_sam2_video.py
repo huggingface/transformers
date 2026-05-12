@@ -1151,8 +1151,8 @@ class Sam2VideoPositionalEmbedding(nn.Module):
         return torch.cat([torch.sin(coordinates), torch.cos(coordinates)], dim=-1)
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the vision encoder's outputs.")
+@dataclass
 class Sam2VideoVisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, height, width, hidden_size)`):

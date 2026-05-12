@@ -281,7 +281,7 @@ class Gemma3Vision2TextModelTester(VLMModelTester):
         # Gemma3 uses padding mask for bidirectional attention on image tokens
         return input_ids.ne(self.pad_token_id).to(torch_device)
 
-    def get_additional_inputs(self, config, input_ids, pixel_values):
+    def get_additional_inputs(self, config, input_ids, modality_inputs):
         # Gemma3 requires specific token_type_ids for bidirectional attention on image tokens
         token_type_ids = torch.zeros_like(input_ids)
         token_type_ids[input_ids == config.image_token_id] = 1
@@ -426,9 +426,6 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
     @slow
     def test_flash_attn_4_from_config(self):
         self.flash_attn_from_config(attn_implementation="flash_attention_4", test_fwd_in_train=False)
-
-    def test_reverse_loading_mapping(self):
-        super().test_reverse_loading_mapping(skip_base_model=True)
 
 
 @slow

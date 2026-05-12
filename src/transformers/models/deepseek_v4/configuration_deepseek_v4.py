@@ -112,31 +112,20 @@ class DeepseekV4Config(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        # V4 ships EP only (no `base_model_tp_plan` — the runtime picks one plan or
-        # the other, never both, and V4 is MoE so EP is the only sensible config).
-        # MoE parallelism: route on the gate, run the routed experts as a grouped-GEMM
-        # kernel sharded along the expert axis, and wrap the experts module with
-        # `moe_tp_experts` so its output gets all-reduced across ranks. Same shape as
-        # gpt-oss. Main attention stays replicated: V4 is shared-KV MQA + a CSA / HCA
-        # compressor branch — both broadcast a single KV head across all attention
-        # heads via `repeat_kv`, so colwise-sharding `q_b_proj` would leave KV
-        # replicated and `repeat_kv` would no longer match the rank-local query head
-        # count. The shared MLP also stays replicated — it's small and not worth
-        # sharding. The Lightning Indexer is the one carve-out: its keys are
-        # replicated (own compressor at index_head_dim fed by replicated
-        # hidden_states), so head-sharding is well-formed; `q_b_proj` and
-        # `weights_proj` go colwise, and `scores_sync` is a `nn.Identity` whose
-        # `"all_reduce"` output hook sums the per-rank partial `index_scores` across
-        # the mesh so every rank picks the same top-k.
+        # EP-only by default, same shape as gpt-oss: route on the gate, run the
+        # routed experts as a grouped-GEMM kernel sharded along the expert axis,
+        # and wrap the experts module with `moe_tp_experts` so its output gets
+        # all-reduced across ranks. Attention stays replicated (V4 is shared-KV
+        # MQA + a CSA / HCA compressor branch — both broadcast a single KV head
+        # across all attention heads via `repeat_kv`, so colwise-sharding
+        # `q_b_proj` would leave KV replicated and `repeat_kv` would no longer
+        # match the rank-local query head count). The shared MLP also stays
+        # replicated — it's small and not worth TP-ing. There's deliberately
+        # no `base_model_tp_plan` for V4: we don't ship a pure-TP plan, only EP.
         "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
-        "layers.*.mlp.experts.gate_up_proj_scale_inv": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts.down_proj_scale_inv": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
-        "layers.*.self_attn.compressor.indexer.q_b_proj": "colwise",
-        "layers.*.self_attn.compressor.indexer.weights_proj": "colwise",
-        "layers.*.self_attn.compressor.indexer.scores_sync": "all_reduce",
     }
 
     vocab_size: int = 129280
@@ -198,7 +187,7 @@ class DeepseekV4Config(PreTrainedConfig):
     # back to wrapping the whole dict as a single set of params when the subset check
     # fails, which then warns about `main` / `compress` as unrecognized keys. Override
     # to iterate the rope-type-keyed sub-dicts directly.
-    _rope_type_labels = ("sliding", "compress")
+    _rope_type_labels = ("main", "compress")
 
     def validate_rope(self):
         rope_parameters_dict = getattr(self, "rope_parameters", None) or {}
@@ -294,28 +283,31 @@ class DeepseekV4Config(PreTrainedConfig):
             )
         self.qk_rope_head_dim = int(self.head_dim * self.partial_rotary_factor)
 
-        # `rope_parameters`: split the flat dict (left by `convert_rope_params_to_dict`,
-        # which folded any legacy `rope_scaling` block in) into per-rope-type
-        # `{sliding, compress}` sub-dicts. Sliding-window attention layers use base RoPE
-        # (`rope_theta=10000`, no YaRN — `original_seq_len=0` disables it); CSA/HCA layers
-        # (and their internal compressors/indexer) use `compress_rope_theta=160000` with
-        # YaRN frequency interpolation. Idempotent: re-loading an already-split config is
-        # a no-op via the `isinstance` short-circuit.
+        # yarn is applied ONLY to layers with a
+        # compressor (CSA/HCA); pure sliding-window layers use plain RoPE with
+        # `theta=rope_theta` (10000) and no scaling. Compress layers use
+        # `theta=compress_rope_theta` (160000) with yarn factor=16, and the reference
+        # does NOT multiply cos/sin by the yarn mscale — force `attention_factor=1.0`
+        # so transformers' `_compute_yarn_parameters` doesn't apply `0.1·log(16)+1`.
         rp = self.rope_parameters or {}
-        if isinstance(rp.get("sliding"), dict) and isinstance(rp.get("compress"), dict):
+        if isinstance(rp.get("main"), dict) and isinstance(rp.get("compress"), dict):
             # Already nested — drop any leftover top-level keys.
-            self.rope_parameters = {"sliding": rp["sliding"], "compress": rp["compress"]}
+            self.rope_parameters = {"main": rp["main"], "compress": rp["compress"]}
         else:
-            base = {k: v for k, v in rp.items() if k not in ("sliding", "compress")}
-            base.setdefault("rope_type", "default")
-            base["partial_rotary_factor"] = self.partial_rotary_factor
-            sliding = {
-                "rope_theta": self.rope_theta,
+            yarn = {k: v for k, v in rp.items() if k not in ("main", "compress")}
+            main = {
                 "rope_type": "default",
+                "rope_theta": self.rope_theta,
                 "partial_rotary_factor": self.partial_rotary_factor,
             }
-            compress = {**base, "rope_theta": self.compress_rope_theta}
-            self.rope_parameters = {"sliding": sliding, "compress": compress}
+            compress = {
+                **yarn,
+                "rope_theta": self.compress_rope_theta,
+                "partial_rotary_factor": self.partial_rotary_factor,
+                "attention_factor": 1.0,
+            }
+            compress.setdefault("rope_type", "default")
+            self.rope_parameters = {"main": main, "compress": compress}
 
 
 __all__ = ["DeepseekV4Config"]

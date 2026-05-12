@@ -263,8 +263,8 @@ class Sam2ImageProcessor(SamImageProcessor):
         raise NotImplementedError("No need to override resize for SAM 2.")
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the vision encoder's outputs.")
+@dataclass
 class Sam2VisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, height, width, hidden_size)`):
