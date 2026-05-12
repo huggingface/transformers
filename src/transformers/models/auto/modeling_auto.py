@@ -1178,7 +1178,6 @@ MODEL_FOR_TEXT_RECOGNITION_MAPPING_NAMES = OrderedDict(
     [
         ("pp_ocrv5_mobile_rec", "PPOCRV5MobileRecForTextRecognition"),
         ("pp_ocrv5_server_rec", "PPOCRV5ServerRecForTextRecognition"),
-        ("pp_ocrv6_base_rec", "PPOCRV6SmallRecForTextRecognition"),
         ("pp_ocrv6_small_rec", "PPOCRV6SmallRecForTextRecognition"),
         ("pp_ocrv6_tiny_rec", "PPOCRV6TinyRecForTextRecognition"),
     ]

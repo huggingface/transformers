@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-05-09 and added to Hugging Face Transformers on 2026-05-09.*
+*This model was released on 2026-05-12 and added to Hugging Face Transformers on 2026-05-12.*
 
 # PP-OCRv6_base_rec
 
@@ -93,6 +93,3 @@ for result in results:
 </hfoption>
 </hfoptions>
 
-## PPOCRV6BaseRecConfig
-
-[[autodoc]] PPOCRV6BaseRecConfig
