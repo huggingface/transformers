@@ -21,7 +21,7 @@ from ...image_processing_backends import TorchvisionBackend
 from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs
+from ...utils import TransformersKwargs, auto_docstring
 from ..dinov3_vit.configuration_dinov3_vit import DINOv3ViTConfig
 from ..dinov3_vit.modeling_dinov3_vit import (
     DINOv3ViTBackbone,
@@ -41,12 +41,40 @@ from ..dinov3_vit.modeling_dinov3_vit import (
 )
 
 
-# TODO (guarin): Double check if we want this checkpoint as default. Motiviation is that
-# it is the smallest checkpoint which supports all tasks.
-# @auto_docstring(checkpoint="facebook/sapiens2-pretrain-0.4b")
+# TODO(guarin): Double check if we cannot inherit attribute docstrings from parent class.
+@auto_docstring(checkpoint="facebook/sapiens2-pretrain-0.4b")
 @strict
 class Sapiens2Config(DINOv3ViTConfig):
     r"""
+    rope_theta (`float`, *optional*, defaults to 100.0):
+        The base period of the RoPE embeddings.
+    query_bias (`bool`, *optional*, defaults to `True`):
+        Whether to add a bias to the query projection.
+    key_bias (`bool`, *optional*, defaults to `False`):
+        Whether to add a bias to the key projection.
+    value_bias (`bool`, *optional*, defaults to `True`):
+        Whether to add a bias to the value projection.
+    proj_bias (`bool`, *optional*, defaults to `True`):
+        Whether to add a bias to the output projection.
+    layerscale_value (`float`, *optional*, defaults to 1.0):
+        Initial value to use for layer scale.
+    use_gated_mlp (`bool`, *optional*, defaults to `False`):
+        Whether to use the SwiGLU feedforward neural network.
+    num_register_tokens (`int`, *optional*, defaults to 0):
+        The number of register tokens.
+    pos_embed_shift (`float`, *optional*):
+        Amount to randomly shift position embedding coordinates in [-shift, shift],
+        applied only in training mode if not `None`.
+    pos_embed_jitter (`float`, *optional*):
+        Amount to randomly jitter position embedding coordinates in log-uniform value in [1/jitter, jitter],
+        applied only in training mode if not `None`.
+    pos_embed_rescale (`float`, *optional*, defaults to 2.0):
+        Amount to randomly rescale position embedding coordinates in log-uniform value in [1/rescale, rescale],
+        applied only in training mode if not `None`.
+    apply_layernorm (`bool`, *optional*, defaults to `True`):
+        Whether to apply layer normalization to the feature maps when used as backbone.
+    reshape_hidden_states (`bool`, *optional*, defaults to `True`):
+        Whether to reshape the hidden states to spatial dimensions when used as backbone.
     use_qk_norm (`bool`, *optional*, defaults to `True`):
         Whether to apply RMSNorm to queries and keys before RoPE in attention layers.
     num_key_value_heads (`int`, *optional*):
