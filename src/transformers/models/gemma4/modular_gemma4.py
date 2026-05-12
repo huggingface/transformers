@@ -1478,13 +1478,6 @@ class Gemma4TextModel(Gemma3TextModel):
 class Gemma4ForCausalLM(Gemma3ForCausalLM):
     base_model_prefix = "model"
 
-    def __init__(self, config: Gemma4TextConfig):
-        super().__init__(config)
-        # Grab the ones from the child
-        self._keys_to_ignore_on_load_unexpected = [
-            f"model.{name}" for name in self.model._keys_to_ignore_on_load_unexpected
-        ]
-
     @can_return_tuple
     @auto_docstring
     def forward(
