@@ -1357,8 +1357,6 @@
         title: PP-OCRv5_server_det
       - local: model_doc/pp_ocrv5_server_rec
         title: PP-OCRv5_server_rec
-      - local: model_doc/pp_ocrv6_base_rec
-        title: PP-OCRv6_base_rec
       - local: model_doc/pp_ocrv6_small_rec
         title: PP-OCRv6_small_rec
       - local: model_doc/pp_ocrv6_tiny_rec
