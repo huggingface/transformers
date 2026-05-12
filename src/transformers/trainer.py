@@ -3736,8 +3736,10 @@ class Trainer:
     def _issue_warnings_after_load(self, load_result: Any) -> None:
         """Log warnings for missing or unexpected keys after loading a checkpoint."""
         if len(load_result.missing_keys) != 0:
-            if self.model._keys_to_ignore_on_save is not None and set(load_result.missing_keys) == set(
-                self.model._keys_to_ignore_on_save
+            if (
+                self.model._keys_to_ignore_on_save is not None
+                and len(self.model._keys_to_ignore_on_save) > 0
+                and set(load_result.missing_keys) == set(self.model._keys_to_ignore_on_save)
             ):
                 self.model.tie_weights()
             else:
