@@ -981,7 +981,7 @@ class DeepseekV4HyperHead(nn.Module):
 
 
 class DeepseekV4MLP(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: DeepseekV4Config):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
