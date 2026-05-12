@@ -176,7 +176,20 @@ def make_zaya_cache(config: ZayaConfig) -> DynamicCache:
     """
     Create ZAYA's native hybrid cache.
 
-    `config.layer_types` is reserved for full/sliding attention masks and RoPE parameters. Cache layers use the native hybrid layout because every ZAYA decoder layer has attention, convolution, and recurrent states.
+    ZAYA uses `config.layer_types` for the attention mask and RoPE variant of each layer (`"full_attention"` or
+    `"sliding_attention"`). That is separate from the cache layout: every ZAYA decoder layer needs the native
+    `"hybrid"` cache layer because it stores all three states used during decoding:
+
+    - The regular dynamic attention KV cache, updated after the CCA projection and RoPE application.
+    - `conv_states`, the pre-convolution q/k tail used by `ZayaCCAProjection` on the next decoding step. Its channel
+      dimension is `num_attention_heads * head_dim + num_key_value_heads * head_dim`, and its time dimension is
+      `cca_time0 + cca_time1 - 2`.
+    - `recurrent_states`, ZAYA's delayed value state. It stores the previous token's `val_proj2` output (the legacy
+      `prev_h2`/second value projection state), so the next token can build its value from the current `val_proj1`
+      output plus the cached delayed `val_proj2`.
+
+    The copied config only changes `layer_types` to `"hybrid"` so `DynamicCache` instantiates
+    `LinearAttentionAndFullAttentionLayer`; it does not alter the model's mask or RoPE layer types.
     """
     cache_config = copy.copy(config)
     cache_config.layer_types = ["hybrid"] * config.num_hidden_layers
