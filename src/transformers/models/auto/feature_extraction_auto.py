@@ -37,7 +37,6 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
     [
         ("audio-spectrogram-transformer", "ASTFeatureExtractor"),
         ("audioflamingo3", "WhisperFeatureExtractor"),
-        ("audioflamingonext", "WhisperFeatureExtractor"),
         ("clap", "ClapFeatureExtractor"),
         ("clvp", "ClvpFeatureExtractor"),
         ("cohere_asr", "CohereAsrFeatureExtractor"),
