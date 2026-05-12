@@ -27,7 +27,7 @@ if is_torch_available():
 
     from transformers import AutoTokenizer, ZayaConfig, ZayaForCausalLM, ZayaModel
     from transformers.cache_utils import DynamicCache, LinearAttentionAndFullAttentionLayer
-    from transformers.models.zaya.modeling_zaya import CCA, _make_zaya_cache
+    from transformers.models.zaya.modeling_zaya import ZayaCCAProjection, _make_zaya_cache
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -90,8 +90,8 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
                 self.assertEqual(layer.conv_states.shape, conv_shape)
                 self.assertEqual(layer.recurrent_states.shape, recurrent_shape)
             else:
-                self.assertIsNone(layer.keys)
-                self.assertIsNone(layer.values)
+                self.assertIsNone(getattr(layer, "keys", None))
+                self.assertIsNone(getattr(layer, "values", None))
                 self.assertIsNone(layer.conv_states)
                 self.assertIsNone(layer.recurrent_states)
 
@@ -260,11 +260,40 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
             ZayaConfig(moe_router_topk=2)
 
     def test_legacy_swa_layers_translate_to_layer_types(self):
-        config = ZayaConfig(num_hidden_layers=4, swa_layers=[0, 1, 0, 1], swa_rotary_base=10000)
+        config = ZayaConfig(num_hidden_layers=4, swa_layers=[4096, 0, 4096, 0], swa_rotary_base=10000)
 
-        self.assertEqual(config.layer_types, ["full_attention", "sliding_attention", "full_attention", "sliding_attention"])
+        self.assertEqual(
+            config.layer_types, ["sliding_attention", "full_attention", "sliding_attention", "full_attention"]
+        )
+        self.assertEqual(config.sliding_window, 4096)
         self.assertEqual(config.rope_parameters["full_attention"]["rope_theta"], config.default_theta)
         self.assertEqual(config.rope_parameters["sliding_attention"]["rope_theta"], 10000)
+
+    def test_sliding_attention_mask_is_used(self):
+        config = ZayaConfig(
+            vocab_size=128,
+            hidden_size=32,
+            ffn_hidden_size=64,
+            num_hidden_layers=4,
+            num_experts=4,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=8,
+            zaya_mlp_expansion=4,
+            layer_types=["sliding_attention", "full_attention", "full_attention", "full_attention"],
+            sliding_window=3,
+            tie_word_embeddings=False,
+            attn_implementation="eager",
+        )
+        model = ZayaModel(config).to(torch_device)
+        model.eval()
+        input_ids = torch.arange(6, device=torch_device).unsqueeze(0)
+
+        with torch.no_grad():
+            outputs = model(input_ids=input_ids, output_attentions=True)
+
+        sliding_attention = outputs.attentions[0]
+        self.assertTrue(torch.all(sliding_attention[:, :, -1, :3] == 0))
 
     def test_cca_cache_matches_full_forward(self):
         config = ZayaConfig(
@@ -280,14 +309,7 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
             tie_word_embeddings=False,
         )
         torch.manual_seed(0)
-        cca = CCA(
-            config,
-            num_key_value_heads=config.num_key_value_heads,
-            num_attention_heads=config.num_attention_heads,
-            hidden_size=config.hidden_size,
-            head_dim=config.head_dim,
-            layer_number=0,
-        ).to(torch_device)
+        cca = ZayaCCAProjection(config, layer_idx=0).to(torch_device)
         cca.eval()
         hidden_states = torch.randn(1, 5, config.hidden_size, device=torch_device)
 
@@ -314,14 +336,7 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
             tie_word_embeddings=False,
         )
         torch.manual_seed(0)
-        cca = CCA(
-            config,
-            num_key_value_heads=config.num_key_value_heads,
-            num_attention_heads=config.num_attention_heads,
-            hidden_size=config.hidden_size,
-            head_dim=config.head_dim,
-            layer_number=0,
-        ).to(torch_device)
+        cca = ZayaCCAProjection(config, layer_idx=0).to(torch_device)
         cca.eval()
         hidden_states = torch.randn(1, 5, config.hidden_size, device=torch_device)
 
