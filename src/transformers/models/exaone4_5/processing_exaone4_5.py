@@ -73,7 +73,6 @@ class Exaone4_5_Processor(ProcessorMixin):
             - **pixel_values_videos** -- Pixel values of videos to be fed to a model. Returned when `videos` is not `None`.
             - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
             - **video_grid_thw** -- List of video 3D grid in LLM. Returned when `videos` is not `None`.
-            - **second_per_grid_ts** -- List of video seconds per time grid. Returned when `videos` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
             Exaone4_5_ProcessorKwargs,
@@ -90,28 +89,11 @@ class Exaone4_5_Processor(ProcessorMixin):
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             video_grid_thw = videos_inputs["video_grid_thw"]
 
-            # Get video metadata
-            if not kwargs.get("return_metadata"):
-                video_metadata = videos_inputs.pop("video_metadata")
-            else:
-                video_metadata = videos_inputs["video_metadata"]
-
-            fps = [metadata.sampled_fps for metadata in video_metadata]
-
-            if isinstance(fps, (int, float)):
-                second_per_grid_ts = [self.video_processor.temporal_patch_size / fps] * len(video_grid_thw)
-            elif hasattr(fps, "__len__") and len(fps) == len(video_grid_thw):
-                second_per_grid_ts = [self.video_processor.temporal_patch_size / tmp for tmp in fps]
-            else:
-                raise ValueError(
-                    f"The length of fps ({len(fps) if hasattr(fps, '__len__') else fps}) must be equal to the length of video_grid_thw ({len(video_grid_thw)}) or fps should be a single number."
-                )
-            videos_inputs.update({"second_per_grid_ts": second_per_grid_ts})
-
         if not isinstance(text, list):
             text = [text]
 
         text = text.copy()  # below lines change text in-place
+
         if images is not None:
             merge_length = self.image_processor.merge_size**2
             index = 0
@@ -133,12 +115,13 @@ class Exaone4_5_Processor(ProcessorMixin):
                 text[i] = text[i].replace("<|placeholder|>", self.video_token)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", None)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
         self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
 
         if return_mm_token_type_ids:
             text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
+
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
@@ -208,13 +191,7 @@ class Exaone4_5_Processor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        video_processor_input_names = self.video_processor.model_input_names
-        names_from_processor = list(
-            dict.fromkeys(tokenizer_input_names + image_processor_input_names + video_processor_input_names)
-        )
-        return names_from_processor + ["second_per_grid_ts", "mm_token_type_ids"]
+        return super().model_input_names
 
 
 __all__ = ["Exaone4_5_Processor"]
