@@ -17,7 +17,6 @@ rendered properly in your Markdown viewer.
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
 </div>
@@ -38,14 +37,13 @@ The example below demonstrates how to classify text with [`Pipeline`] or the [`A
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 classifier = pipeline(
     task="text-classification",
     model="bhadresh-savani/electra-base-emotion",
-    dtype=torch.float16,
     device=0
 )
 classifier("This restaurant has amazing food!")
@@ -54,18 +52,19 @@ classifier("This restaurant has amazing food!")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "bhadresh-savani/electra-base-emotion",
 )
 model = AutoModelForSequenceClassification.from_pretrained(
-    "bhadresh-savani/electra-base-emotion",
-    dtype=torch.float16
+    "bhadresh-savani/electra-base-emotion", device_map="auto",
 )
-inputs = tokenizer("ELECTRA is more efficient than BERT", return_tensors="pt")
+inputs = tokenizer("ELECTRA is more efficient than BERT", return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)

@@ -72,12 +72,12 @@ class FastVlmPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for FastVlm outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class FastVlmModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -226,12 +226,12 @@ class FastVlmModel(FastVlmPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for FastVlm causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class FastVlmCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

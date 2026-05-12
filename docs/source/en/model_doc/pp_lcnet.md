@@ -17,9 +17,6 @@ rendered properly in your Markdown viewer.
 
 # PP-LCNet
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -43,10 +40,12 @@ The example below demonstrates how to classify image with PP-LCNet using [`Pipel
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import pipeline
+
 
 model_path = "PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors"
 image_classifier = pipeline("image-classification", model=model_path, function_to_apply="none", device_map="auto")
@@ -60,10 +59,12 @@ print(result)
 
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModelForImageClassification
+
 
 model_path = "PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors"
 model = AutoModelForImageClassification.from_pretrained(model_path, device_map="auto")
@@ -86,10 +87,12 @@ Here is how you can do it with PP-LCNet using [`Pipeline`] or the [`AutoModel`]:
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import pipeline
+
 
 model_path = "PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors"
 image_classifier = pipeline("image-classification", model=model_path, function_to_apply="none", device_map="auto")
@@ -103,10 +106,12 @@ print(result)
 
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModelForImageClassification
+
 
 model_path = "PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors"
 model = AutoModelForImageClassification.from_pretrained(model_path, device_map="auto")

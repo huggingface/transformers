@@ -18,7 +18,6 @@ rendered properly in your Markdown viewer.
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -37,13 +36,12 @@ The example below demonstrates how to chat with the model with [`Pipeline`] or t
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 generator = pipeline(
     "image-text-to-text",
     model="google/t5gemma-2-270m-270m",
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 
@@ -58,23 +56,23 @@ generator(
 <hfoption id="AutoModel">
 
 ```python
-import torch
 import requests
 from PIL import Image
-from transformers import AutoProcessor, AutoModelForSeq2SeqLM
+
+from transformers import AutoModelForSeq2SeqLM, AutoProcessor
+
 
 processor = AutoProcessor.from_pretrained("google/t5gemma-2-270m-270m")
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "google/t5gemma-2-270m-270m",
     device_map="auto",
-    dtype=torch.bfloat16,
 )
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 prompt = "<start_of_image> in this image, there is"
 
-model_inputs = processor(text=prompt, images=image, return_tensors="pt")
+model_inputs = processor(text=prompt, images=image, return_tensors="pt").to(model.device)
 generation = model.generate(**model_inputs, max_new_tokens=20, do_sample=False)
 print(processor.decode(generation[0]))
 ```

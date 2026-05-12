@@ -17,7 +17,6 @@ rendered properly in your Markdown viewer.
 # CHMv2
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
@@ -37,16 +36,17 @@ The abstract from the paper is the following:
 Run inference on an image with the following code:
 
 ```python
-from PIL import Image
 import torch
+from PIL import Image
 
-from transformers import AutoModelForDepthEstimation, AutoImageProcessor
+from transformers import AutoImageProcessor, AutoModelForDepthEstimation
+
 
 processor = AutoImageProcessor.from_pretrained("facebook/dinov3-vitl16-chmv2-dpt-head")
-model = AutoModelForDepthEstimation.from_pretrained("facebook/dinov3-vitl16-chmv2-dpt-head")
+model = AutoModelForDepthEstimation.from_pretrained("facebook/dinov3-vitl16-chmv2-dpt-head", device_map="auto")
 
 image = Image.open("image.tif")
-inputs = processor(images=image, return_tensors="pt")
+inputs = processor(images=image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)

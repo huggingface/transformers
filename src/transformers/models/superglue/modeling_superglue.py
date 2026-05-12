@@ -145,7 +145,6 @@ def arange_like(x, dim: int) -> torch.Tensor:
     return x.new_ones(x.shape[dim]).cumsum(0) - 1
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of SuperGlue keypoint matching models. Due to the nature of keypoint detection and matching, the number
@@ -155,6 +154,7 @@ def arange_like(x, dim: int) -> torch.Tensor:
     information.
     """
 )
+@dataclass
 class SuperGlueKeypointMatchingOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*):

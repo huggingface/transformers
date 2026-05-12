@@ -67,7 +67,7 @@ CHECKER_CONFIG = {
     "label": "Docstring formatting",
     # Approximate: at runtime the checker also introspects the live transformers module for
     # @auto_docstring-decorated objects. These globs cover the files it reads via glob.glob().
-    "file_globs": [
+    "cache_globs": [
         "src/transformers/models/**/modeling_*.py",
         "src/transformers/models/**/modular_*.py",
         "src/transformers/models/**/configuration_*.py",
