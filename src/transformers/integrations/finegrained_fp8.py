@@ -309,7 +309,7 @@ class FP8Linear(nn.Linear):
         return output.to(dtype=input.dtype)
 
 
-class FP8GroupedLinear(nn.Module):
+class FP8GroupedLinear(FP8Linear):
     """FP8 block-diagonal grouped linear for DeepSeek-V4's ``o_a_proj``.
 
     Stores the weight in FP8 format (``float8_e4m3fn``) together with per-block
@@ -332,35 +332,22 @@ class FP8GroupedLinear(nn.Module):
         has_bias: bool = False,
         dtype=_FP8_DTYPE,
     ):
-        super().__init__()
-        self.in_features_per_group = in_features_per_group
-        self.out_features = out_features
-        self.n_groups = n_groups
-        self.block_size = block_size
-        self.activation_scheme = activation_scheme
-        self.has_bias = has_bias
-
-        if self.activation_scheme == "static":
+        if activation_scheme == "static":
             raise NotImplementedError(
                 "FP8GroupedLinear does not support activation_scheme='static'. Use activation_scheme='dynamic'."
             )
-        if self.activation_scheme != "dynamic":
-            raise NotImplementedError(f"Unsupported activation scheme: {self.activation_scheme}")
+        if activation_scheme != "dynamic":
+            raise NotImplementedError(f"Unsupported activation scheme: {activation_scheme}")
 
-        self.weight = nn.Parameter(torch.empty(out_features, in_features_per_group, dtype=dtype))
-
-        if block_size is None:
-            self.weight_scale_inv = nn.Parameter(torch.tensor(1.0, dtype=torch.float32))
-        else:
-            scale_out = (out_features + block_size[0] - 1) // block_size[0]
-            scale_in = (in_features_per_group + block_size[1] - 1) // block_size[1]
-            self.weight_scale_inv = nn.Parameter(torch.empty(scale_out, scale_in, dtype=torch.float32))
-        self.register_parameter("activation_scale", None)
-
-        if self.has_bias:
-            self.bias = nn.Parameter(torch.empty(out_features))
-        else:
-            self.register_parameter("bias", None)
+        super().__init__(
+            in_features=in_features_per_group,
+            out_features=out_features,
+            block_size=block_size,
+            activation_scheme=activation_scheme,
+            has_bias=has_bias,
+            dtype=dtype,
+        )
+        self.n_groups = n_groups
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         w = self.weight
