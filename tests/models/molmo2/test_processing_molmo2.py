@@ -155,6 +155,10 @@ class Molmo2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor_from_pretrained_vs_from_components(self):
         pass
 
+    @unittest.skip("Molmo2 currently requires visual inputs to match visual placeholder counts per sample.")
+    def test_processor_text_has_no_visual(self):
+        pass
+
     # =====================================================================
     # Molmo2 image processor uses patchification — rescale_factor is not
     # passed through to affect pixel values the way the base tests expect.

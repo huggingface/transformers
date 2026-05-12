@@ -21,6 +21,7 @@
 
 import torch
 from torch.nn import functional as F
+from torch.nn.utils.rnn import pad_sequence
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
@@ -212,8 +213,8 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
             batch_pooled_patches_idx.append(torch.cat(pooled_patches_idx, 0))
 
         data = {
-            "pixel_values_videos": torch.cat(batch_crops, 0),
-            "video_token_pooling": torch.cat(batch_pooled_patches_idx, 0),
+            "pixel_values_videos": pad_sequence(batch_crops, batch_first=True, padding_value=-1),
+            "video_token_pooling": pad_sequence(batch_pooled_patches_idx, batch_first=True, padding_value=-1),
             "video_grids": torch.stack(batch_grids, 0),
         }
         return BatchFeature(data, tensor_type=return_tensors)

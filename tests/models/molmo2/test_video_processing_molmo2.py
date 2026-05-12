@@ -130,11 +130,13 @@ class Molmo2VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
 
     def _assert_patchified_output(self, outputs, expected_num_videos):
         pixel_values = outputs[self.input_name]
-        self.assertEqual(pixel_values.ndim, 3)
+        self.assertEqual(pixel_values.ndim, 4)
         pixels_per_patch = self.video_processor_tester.patch_size**2 * self.video_processor_tester.num_channels
+        self.assertEqual(pixel_values.shape[0], expected_num_videos)
         self.assertEqual(pixel_values.shape[-1], pixels_per_patch)
         self.assertEqual(outputs["video_grids"].shape[0], expected_num_videos)
         pool_h, pool_w = self.video_processor_tester.pooling_size
+        self.assertEqual(outputs["video_token_pooling"].ndim, 3)
         self.assertEqual(outputs["video_token_pooling"].shape[-1], pool_h * pool_w)
 
     def test_call_numpy(self):
@@ -177,6 +179,16 @@ class Molmo2VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
 
             outputs = video_processing(video_inputs, return_tensors="pt", num_frames=3)
             self._assert_patchified_output(outputs, self.video_processor_tester.batch_size)
+
+    def test_call_sample_frames_short_batched_videos(self):
+        for video_processing_class in self.video_processor_list:
+            video_processing = video_processing_class(**{**self.video_processor_dict, "do_sample_frames": True})
+            videos = [np.zeros((15, 32, 32, 3), dtype=np.uint8), np.zeros((7, 32, 32, 3), dtype=np.uint8)]
+
+            outputs = video_processing(videos, return_tensors="pt", num_frames=384)
+
+            self._assert_patchified_output(outputs, 2)
+            self.assertEqual(outputs["video_grids"][:, 0].tolist(), [15, 7])
 
     def test_nested_input(self):
         for video_processing_class in self.video_processor_list:

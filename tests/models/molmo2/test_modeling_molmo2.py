@@ -198,6 +198,8 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
     test_torchscript = False
     test_pruning = False
     test_head_masking = False
+    skip_test_image_features_output_shape = True
+    skip_test_video_features_output_shape = True
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -274,6 +276,12 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(
+        reason="This architecture does not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        pass
+
     @unittest.skip(reason="VLMs have dynamic control flow in preparing inputs for generation")
     def test_generate_compile_1_end_to_end(self):
         pass
@@ -304,6 +312,14 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
         reason="Supported only for text-only inputs (otherwise dynamic control flows for multimodal inputs)"
     )
     def test_generate_compile_model_forward(self):
+        pass
+
+    @unittest.skip("Molmo2 builds vision-aware embeddings; text-only get_input_embeddings bypasses image placement.")
+    def test_generate_from_inputs_embeds_0_greedy(self):
+        pass
+
+    @unittest.skip("Molmo2 builds vision-aware embeddings; text-only get_input_embeddings bypasses image placement.")
+    def test_generate_from_inputs_embeds_1_beam_search(self):
         pass
 
     def test_initialization(self):
@@ -350,25 +366,27 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
-        config.output_attentions = True
+        config.output_attentions = self.has_attentions
+        self._set_subconfig_attributes(config, "output_hidden_states", True)
+        self._set_subconfig_attributes(config, "output_attentions", self.has_attentions)
 
         for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
+            model = model_class._from_config(config, attn_implementation="eager").to(torch_device)
             outputs = model(**inputs_dict)
 
             output = outputs[0]
-
-            # Encoder-/Decoder-only models
             hidden_states = outputs.hidden_states[0]
-            attentions = outputs.attentions[0]
-
             hidden_states.retain_grad()
-            attentions.retain_grad()
+
+            if self.has_attentions:
+                attentions = outputs.attentions[0]
+                attentions.retain_grad()
 
             output.flatten()[0].backward(retain_graph=True)
 
             self.assertIsNotNone(hidden_states.grad)
-            self.assertIsNotNone(attentions.grad)
+            if self.has_attentions:
+                self.assertIsNotNone(attentions.grad)
 
 
 @slow

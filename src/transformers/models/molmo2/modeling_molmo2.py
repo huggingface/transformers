@@ -36,7 +36,7 @@ from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hu
 from ...masking_utils import create_causal_mask, create_masks_for_generate
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -322,27 +322,32 @@ class Molmo2VisionEncoder(nn.Module):
     [`Molmo2VisionEncoderLayer`].
 
     Args:
-        config: Molmo2VitConfig
+        config: Molmo2VisionConfig
     """
 
     def __init__(self, config: Molmo2VitConfig):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([Molmo2VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
 
+    # Ignore copy
+    @auto_docstring
     def forward(
         self,
-        inputs_embeds: torch.Tensor,
+        inputs_embeds,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> list[torch.Tensor]:
-        """Returns a list of hidden states, one per encoder layer."""
+    ) -> BaseModelOutput:
         hidden_states = inputs_embeds
-        all_hidden_states = []
         for encoder_layer in self.layers:
-            hidden_states = encoder_layer(hidden_states, attention_mask=attention_mask, **kwargs)
-            all_hidden_states.append(hidden_states)
-        return all_hidden_states
+            hidden_states = encoder_layer(
+                hidden_states,
+                attention_mask,
+                **kwargs,
+            )
+
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 class Molmo2VisionModel(PreTrainedModel):
@@ -350,6 +355,10 @@ class Molmo2VisionModel(PreTrainedModel):
     _no_split_modules = ["Molmo2VisionEncoderLayer"]
     _supports_sdpa = True
     _supports_flash_attn = True
+    _can_record_outputs = {
+        "hidden_states": Molmo2VisionEncoderLayer,
+        "attentions": Molmo2VisionAttention,
+    }
 
     def _init_weights(self, module):
         if isinstance(module, Molmo2VisionModel):
@@ -406,22 +415,27 @@ class Molmo2VisionModel(PreTrainedModel):
         x = x + pos_emb[None, :, :].to(x.dtype)
         return x
 
-    def forward(self, x: torch.Tensor, patch_num: int | None = None, **kwargs) -> list[torch.Tensor]:
+    @capture_outputs(tie_last_hidden_states=False)
+    def forward(
+        self, x: torch.Tensor, patch_num: tuple[int, int] | None = None, **kwargs
+    ) -> BaseModelOutputWithPooling:
         """
         : param x: (batch_size, num_patch, n_pixels)
         """
         if patch_num is None:
             patch_num = self.config.image_num_patch
 
-        B, N, D = x.shape
-
         x = self.patch_embedding(x)
 
         # class embeddings and positional embeddings
         x = self.add_pos_emb(x, patch_num)
 
-        hidden_states = self.encoder(x)
-        return hidden_states
+        encoder_outputs = self.encoder(x, **kwargs)
+        last_hidden_state = encoder_outputs.last_hidden_state
+        return BaseModelOutputWithPooling(
+            last_hidden_state=last_hidden_state,
+            pooler_output=last_hidden_state.mean(dim=1),
+        )
 
 
 class Molmo2ImageProjectorMLP(nn.Module):
@@ -463,11 +477,12 @@ class Molmo2VisionBackbone(nn.Module):
         """
         B, T, N, D = images.shape
         images = images.view(B * T, N, D)
-        image_features = self.image_vit(images)
+        image_outputs = self.image_vit(images, output_hidden_states=True)
+        image_features = image_outputs.hidden_states
 
         features = []
         for layer in self.vit_layers:
-            features.append(image_features[layer])
+            features.append(image_features[layer + 1])
         image_features = torch.cat(features, dim=-1)
 
         image_features = image_features.view(B, T, N, -1)
@@ -1064,7 +1079,7 @@ def create_causal_mask_mapping(
         else (past_key_values is None or not past_key_values.is_initialized or has_multimodal_inputs)
     )
     if token_type_ids is not None and is_first_iteration:
-        is_multimodal = (token_type_ids > 0).to(inputs_embeds.device)
+        is_multimodal = token_type_ids > 0
         is_previous_multimodal = nn.functional.pad(is_multimodal, (1, 0), value=0)[:, :-1]
         new_multimodal_start = is_multimodal & ~is_previous_multimodal
         group_ids = torch.cumsum(new_multimodal_start.int(), dim=1) - 1
@@ -1095,121 +1110,12 @@ class Molmo2Model(Molmo2PreTrainedModel):
     def set_input_embeddings(self, value: torch.nn.Module) -> None:
         self.language_model.wte = value
 
-    def build_batched_videos(
-        self,
-        input_ids: torch.LongTensor,
-        pixel_values_videos: torch.Tensor,
-        video_token_pooling: torch.Tensor,
-        video_grids: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        # 1) Count the number of videos in each example
-        if self.config.use_frame_special_tokens:
-            end_token_id = self.config.frame_end_token_id
-        else:
-            end_token_id = self.config.image_end_token_id
-        counts = (input_ids == end_token_id).any(dim=1).long()  # [N]
-        N = counts.size(0)
-        device = input_ids.device
-
-        # Total number of videos in the batch
-        num_videos = int(counts.sum().item())
-
-        # Sanity check
-        assert video_grids.size(0) == num_videos, f"Expected {num_videos} videos, but got {video_grids.size(0)}"
-
-        video_num_frames = video_grids[:, 0]  # [num_videos]
-        num_pooled_patches_per_video = video_grids.prod(dim=1)  # [num_videos]
-
-        # pixel_values_videos: [n_frames, n_patches, pixels_per_patch]
-        n_frames, n_patches, pixels_per_patch = pixel_values_videos.shape
-
-        # 2) Map each video index -> example index
-        # Example: if counts = [2, 1, 3], then this becomes [0,0,1,2,2,2]
-        example_ids_for_video = torch.arange(N, device=device).repeat_interleave(counts)  # [num_videos]
-        assert example_ids_for_video.numel() == num_videos
-
-        # 2-1) Compute frames_per_example by summing per-video frame counts
-        frames_per_example = torch.zeros(
-            N,
-            dtype=video_num_frames.dtype,
-            device=device,
-        )
-        frames_per_example.index_add_(0, example_ids_for_video, video_num_frames)  # [N]
-
-        # 2-2) Compute num_pooled_patches_per_example
-        num_pooled_patches_per_example = torch.zeros(
-            N,
-            dtype=num_pooled_patches_per_video.dtype,
-            device=num_pooled_patches_per_video.device,
-        )
-        num_pooled_patches_per_example.index_add_(
-            0,
-            example_ids_for_video,
-            num_pooled_patches_per_video,
-        )
-
-        # Sanity checks
-        total_frames = int(frames_per_example.sum().item())
-        assert total_frames == n_frames, f"Expected {total_frames} frames, but got {n_frames}"
-
-        total_num_pooled_patches = int(num_pooled_patches_per_example.sum().item())
-        assert total_num_pooled_patches == video_token_pooling.size(0), (
-            f"Expected {total_num_pooled_patches} pooled patches, but got {video_token_pooling.size(0)}"
-        )
-
-        # 3) Build videos tensor filled with -1
-        M = int(frames_per_example.max().item())
-        videos = torch.full(
-            (N, M, n_patches, pixels_per_patch),
-            fill_value=-1,
-            dtype=pixel_values_videos.dtype,
-            device=device,
-        )
-
-        # 4) Fill videos with per-examples slices from pixel_values_videos
-        offset_frame = 0
-        for i in range(N):
-            num = int(frames_per_example[i].item())
-            cur = pixel_values_videos[offset_frame : offset_frame + num]  # [num, n_patches, pixels_per_patch]
-            videos[i, :num] = cur
-            offset_frame += num
-
-        # Sanity check
-        assert offset_frame == n_frames
-
-        # 5) Build new token_pooling tensor filled with -1
-        P = int(num_pooled_patches_per_example.max().item())
-        _, dim = video_token_pooling.shape
-        new_token_pooling = torch.full(
-            (N, P, dim),
-            fill_value=-1,
-            dtype=video_token_pooling.dtype,
-            device=video_token_pooling.device,
-        )
-
-        # 6) Fill new token_pooling with per-examples slices from video_token_pooling
-        patch_offset = 0
-        for i in range(N):
-            num_patches = int(num_pooled_patches_per_example[i].item())
-            cur = video_token_pooling[patch_offset : patch_offset + num_patches]  # [num_patches, dim]
-            new_token_pooling[i, :num_patches] = cur
-            patch_offset += num_patches
-
-        # Final sanity checks
-        assert patch_offset == total_num_pooled_patches
-
-        return videos, new_token_pooling
-
     def merge_visual_inputs(
         self,
-        input_ids: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
         image_token_pooling: torch.Tensor | None = None,
-        image_grids: torch.Tensor | None = None,
-        image_num_crops: torch.Tensor | None = None,
         pixel_values_videos: torch.Tensor | None = None,
         video_token_pooling: torch.Tensor | None = None,
-        video_grids: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
         if pixel_values is not None and pixel_values_videos is not None:
             raise ValueError("pixel_values and pixel_values_videos are provided at the same time")
@@ -1224,19 +1130,14 @@ class Molmo2Model(Molmo2PreTrainedModel):
                 raise ValueError(
                     "`image_token_pooling` must have shape [batch_size, max_num_pooled_patches, pooling_size]."
                 )
-            images, token_pooling = pixel_values, image_token_pooling
+            return pixel_values, image_token_pooling
         elif pixel_values_videos is not None:
-            if input_ids is None:
-                return None, None
-            images, token_pooling = self.build_batched_videos(
-                input_ids=input_ids,
-                pixel_values_videos=pixel_values_videos,
-                video_token_pooling=video_token_pooling,
-                video_grids=video_grids,
-            )
-        else:
-            images, token_pooling = None, None
-        return images, token_pooling
+            if pixel_values_videos.dim() != 4:
+                raise ValueError(
+                    "`pixel_values_videos` must have shape [batch_size, max_num_frames, num_patches, pixels_per_patch]."
+                )
+            return pixel_values_videos, video_token_pooling
+        return None, None
 
     def build_input_embeddings(
         self,
@@ -1285,14 +1186,10 @@ class Molmo2Model(Molmo2PreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         images, token_pooling = self.merge_visual_inputs(
-            input_ids=input_ids,
             pixel_values=pixel_values,
             image_token_pooling=image_token_pooling,
-            image_grids=image_grids,
-            image_num_crops=image_num_crops,
             pixel_values_videos=pixel_values_videos,
             video_token_pooling=video_token_pooling,
-            video_grids=video_grids,
         )
 
         if images is not None and inputs_embeds is not None:
@@ -1436,29 +1333,29 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
             image_hidden_states=outputs.image_hidden_states,
         )
 
+    @can_return_tuple
     def get_image_features(
         self,
-        pixel_values: torch.Tensor | None = None,
+        pixel_values: torch.Tensor,
+        image_token_pooling: torch.Tensor | None = None,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
         if pixel_values.dim() == 4:
             B, T, N, D = pixel_values.shape
             pixel_values = pixel_values.view(B * T, N, D)
-        all_hidden_states = self.model.vision_backbone.image_vit(pixel_values)
-        last_hidden_state = all_hidden_states[-1]
-        return BaseModelOutputWithPooling(
-            last_hidden_state=last_hidden_state,
-            pooler_output=last_hidden_state.mean(dim=1),
-            hidden_states=tuple(all_hidden_states),
-        )
+        return self.model.vision_backbone.image_vit(pixel_values, **kwargs)
 
+    @can_return_tuple
     def get_video_features(
         self,
-        pixel_values_videos: torch.Tensor | None = None,
+        pixel_values_videos: torch.Tensor,
         video_token_pooling: torch.Tensor | None = None,
         **kwargs,
-    ) -> torch.Tensor:
-        return self.model.vision_backbone.image_vit(pixel_values_videos)[-1]
+    ) -> BaseModelOutputWithPooling:
+        if pixel_values_videos.dim() == 4:
+            B, T, N, D = pixel_values_videos.shape
+            pixel_values_videos = pixel_values_videos.view(B * T, N, D)
+        return self.model.vision_backbone.image_vit(pixel_values_videos, **kwargs)
 
     def prepare_inputs_for_generation(
         self,
@@ -1523,7 +1420,7 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
         }
         # Add the token type ids mask for generate as well
         if token_type_ids is not None and inputs_embeds.shape[1] != 1:
-            is_multimodal = (token_type_ids > 0).to(inputs_embeds.device)
+            is_multimodal = token_type_ids > 0
             is_previous_multimodal = nn.functional.pad(is_multimodal, (1, 0), value=0)[:, :-1]
             new_multimodal_start = is_multimodal & ~is_previous_multimodal
             group_ids = torch.cumsum(new_multimodal_start.int(), dim=1) - 1
