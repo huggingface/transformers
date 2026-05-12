@@ -1833,10 +1833,6 @@ class Gemma3nForCausalLM(Gemma3nPreTrainedModel, GenerationMixin):
         self.model = Gemma3nTextModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        # Grab the ones from the child
-        self._keys_to_ignore_on_load_unexpected = [
-            f"model.{name}" for name in self.model._keys_to_ignore_on_load_unexpected
-        ]
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1976,11 +1972,6 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
         self.audio_tower = AutoModel.from_config(config.audio_config)
         self.embed_vision = Gemma3nMultimodalEmbedder(config.vision_config, config.text_config)
         self.embed_audio = Gemma3nMultimodalEmbedder(config.audio_config, config.text_config)
-
-        # Grab the ones from the child
-        self._keys_to_ignore_on_load_unexpected = [
-            f"language_model.{name}" for name in self.language_model._keys_to_ignore_on_load_unexpected
-        ]
         self.post_init()
 
     def get_input_embeddings(self):
@@ -2235,10 +2226,6 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.model = Gemma3nModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        # Grab the ones from the child
-        self._keys_to_ignore_on_load_unexpected = [
-            f"model.{name}" for name in self.model._keys_to_ignore_on_load_unexpected
-        ]
         self.post_init()
 
     @auto_docstring
