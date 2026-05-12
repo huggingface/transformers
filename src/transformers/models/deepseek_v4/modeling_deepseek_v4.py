@@ -53,11 +53,11 @@ class DeepseekV4RMSNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
+        dtype = hidden_states.dtype
+        hidden_states = hidden_states.float()
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
+        return (self.weight.float() * hidden_states).to(dtype)
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
@@ -548,7 +548,7 @@ class DeepseekV4Indexer(nn.Module):
         # to compressed key at position 4, because it compressed info for states at position
         # 12 to 16. Thus we need to make sure that top_k does not land in that range.
         # Picks that still point past `causal_threshold` (early queries with too few ready
-        # blocks) are replaced with a `-1` sentinel that the gather caller treats as invalid.
+        # blocks) are replaced with a `-1` sentinel that the compresser treats as invalid.
         if compressed_kv.shape[1] > 0:
             causal_threshold = (position_ids + 1) // self.compress_rate  # [B, S]
             block_idx = torch.arange(T, device=index_scores.device)
@@ -660,9 +660,9 @@ class DeepseekV4CSACompressor(nn.Module):
 
         # Lightning Indexer: gather top-`index_topk` compressed entries per query.
         # in some cases, the output index can return top-k positions that should not be attended to.
-        # Ex: for query at index 5, m=4, and `index_topk=1024`, 1024 index are return but only 1 should be
-        # attended to. The indexer marks those with `-1`; we clamp before the gather and keep `valid`
-        # to drop them from the per-query block mask below.
+        # Ex: for query at index 5, m=4, and `index_topk=1024`, 1024 index are return but only 2 should be
+        # attended to. The indexer marks the rest with `-1`; we clamp before the gather and keep the `valid`
+        # to drop them from the per-query block mask afterwards.
         topk = self.indexer(hidden_states, q_residual, position_ids, past_key_values, layer_idx)  # [B, S, k]
         k = topk.shape[-1]
         T = compressed_kv.shape[2]
@@ -675,11 +675,9 @@ class DeepseekV4CSACompressor(nn.Module):
         flat_kv = compressed_kv.reshape(batch * T, self.head_dim)
         gathered = flat_kv.index_select(0, flat_idx).view(batch, 1, -1, self.head_dim)  # [B, 1, S*k, D]
 
-        # Per-query block bias over the flat `S*k` compressed segment: query `t` may
-        # only see slots `[t*k : (t+1)*k]` (its own gathered entries) and only the
-        # ones marked valid by the indexer. Everything else is `-inf`. Without this
-        # the downstream right-pad with 0.0 would let every query attend to entries
-        # selected for other queries, which is not equivalent to per-query CSA.
+        # Per-query block bias: query `t` may only see the cache entries that are <= `seq_len // m`
+        # and in these, only the ones marked valid by the indexer. Everything else is `-inf`.
+        # While the above negated the indexer, here we apply the "causal" masking.
         block_bias = gathered.new_full((batch, 1, seq_len, seq_len, k), float("-inf"))
         allowed = torch.where(valid, gathered.new_zeros(()), gathered.new_full((), float("-inf")))  # [B, S, k]
         arange_s = torch.arange(seq_len, device=gathered.device)

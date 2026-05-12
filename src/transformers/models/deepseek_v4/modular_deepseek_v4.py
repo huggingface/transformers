@@ -64,7 +64,12 @@ def apply_rotary_pos_emb(
 
 
 class DeepseekV4RMSNorm(DeepseekV3RMSNorm):
-    pass
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        dtype = hidden_states.dtype
+        hidden_states = hidden_states.float()
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return (self.weight.float() * hidden_states).to(dtype)
 
 
 class DeepseekV4UnweightedRMSNorm(nn.Module):
@@ -611,11 +616,9 @@ class DeepseekV4CSACompressor(nn.Module):
         flat_kv = compressed_kv.reshape(batch * T, self.head_dim)
         gathered = flat_kv.index_select(0, flat_idx).view(batch, 1, -1, self.head_dim)  # [B, 1, S*k, D]
 
-        # Per-query block bias over the flat `S*k` compressed segment: query `t` may
-        # only see slots `[t*k : (t+1)*k]` (its own gathered entries) and only the
-        # ones marked valid by the indexer. Everything else is `-inf`. Without this
-        # the downstream right-pad with 0.0 would let every query attend to entries
-        # selected for other queries, which is not equivalent to per-query CSA.
+        # Per-query block bias: query `t` may only see the cache entries that are <= `seq_len // m`
+        # and in these, only the ones marked valid by the indexer. Everything else is `-inf`.
+        # While the above negated the indexer, here we apply the "causal" masking.
         block_bias = gathered.new_full((batch, 1, seq_len, seq_len, k), float("-inf"))
         allowed = torch.where(valid, gathered.new_zeros(()), gathered.new_full((), float("-inf")))  # [B, S, k]
         arange_s = torch.arange(seq_len, device=gathered.device)
