@@ -36,6 +36,20 @@ RUN_SLOW=1 pytest tests/models/mymodel/ -v
 
 The Hugging Face CI runs model tests without `@slow` on every pull request, and slow tests run on a nightly schedule (see [Pull request checks](./pr_checks) for what the CI validates).
 
+## Pick a base test class
+
+Three base classes cover the most common model families. Pick the one that matches your model's modality.
+
+| Base class | Use for | Mixins |
+|---|---|---|
+| `CausalLMModelTest` | Causal language models | `ModelTesterMixin`, `GenerationTesterMixin`, `PipelineTesterMixin`, `TrainingTesterMixin`, `TensorParallelTesterMixin` |
+| `VLMModelTest` | Vision-language models | `ModelTesterMixin`, `GenerationTesterMixin`, `PipelineTesterMixin` |
+| `ALMModelTest` | Audio-language models | `ModelTesterMixin`, `GenerationTesterMixin`, `PipelineTesterMixin` |
+
+`VLMModelTest` and `ALMModelTest` share a common `MultiModalModelTest` parent that nests sub-configs into a composite top-level config and places modality placeholder tokens in `input_ids` alongside the raw modality features (audio or vision). `CausalLMModelTest` doesn't use the multimodal parent. It builds on the three shared mixins and adds `TrainingTesterMixin` and `TensorParallelTesterMixin` for training and tensor-parallel coverage.
+
+For architectures that don't fit any of the three (encoder-only, encoder-decoder, audio, etc.), build the test infrastructure directly from the [two-class pattern](#modeltester-and-modeltest) and [test mixins](#test-mixins) described below.
+
 ## CausalLMModelTest
 
 `CausalLMModelTest` is the recommended base class for testing causal language models. It inherits from five [test mixins](#test-mixins) and auto-generates tests for save/load, generation, pipelines, training, and tensor parallelism.
