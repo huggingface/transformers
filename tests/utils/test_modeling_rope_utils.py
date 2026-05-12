@@ -136,6 +136,62 @@ class RopeTest(unittest.TestCase):
             self.assertEqual(len(logs.output), 1)
             self.assertIn("implicit factor", logs.output[0])
 
+    def test_rope_validation_with_per_attention_type_nested_rope(self):
+        """Mirrors `test_rope_validation` with `config.layer_types` set, so that
+        `rope_parameters` takes the per-attention-type nested shape."""
+        config = LlamaConfig()
+        all_rope_types = ROPE_INIT_FUNCTIONS.keys()
+        config.layer_types = ["full_attention", "sliding_attention"]
+
+        def nest(full_attention_params):
+            return {
+                "full_attention": full_attention_params,
+                "sliding_attention": {"rope_type": "default", "rope_theta": 10000.0},
+            }
+
+        # Each non-default RoPE type with only `rope_theta` should still raise
+        # KeyError (missing required keys) when wrapped in the nested shape.
+        for rope_type in all_rope_types:
+            if rope_type in ("default", "proportional"):
+                continue
+            config.rope_parameters = nest({"rope_type": rope_type, "rope_theta": 10000.0})
+            with self.assertRaises(KeyError):
+                config.validate_rope()
+
+        # Parameters exclusive to a RoPE type should still raise when passed to
+        # the wrong type while in the nested shape.
+        valid_param_mapping = {
+            "factor": ["linear", "dynamic", "yarn", "longrope"],
+            "attention_factor": ["yarn", "longrope"],
+            "beta_fast": ["yarn"],
+            "beta_slow": ["yarn"],
+            "short_factor": ["longrope"],
+            "long_factor": ["longrope"],
+        }
+        for rope_type in all_rope_types:
+            if rope_type in ("default", "proportional"):
+                continue
+            for param, valid_rope_types in valid_param_mapping.items():
+                config.rope_parameters = nest({"rope_type": rope_type, "rope_theta": 10000.0, param: True})
+                if rope_type in valid_rope_types:
+                    continue
+                with self.assertRaises(KeyError):
+                    config.validate_rope()
+
+        # A complete yarn entry under the nested shape should validate cleanly.
+        # Regression: previously the implicit-factor check inside the yarn
+        # validator dereferenced `self.rope_parameters` (the full nested dict)
+        # rather than its per-type `rope_parameters` argument.
+        config.rope_parameters = nest(
+            {
+                "rope_type": "yarn",
+                "rope_theta": 10000.0,
+                "factor": 2.0,
+                "original_max_position_embeddings": int(config.max_position_embeddings / 2.0),
+            }
+        )
+        config.validate_rope()
+
     def test_default_rope_numerically(self):
         # Note: some RoPE scaling methods start off by calling the default RoPE frequencies. If this test fails, then
         # multiple RoPE strategies will fail.
