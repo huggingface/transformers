@@ -137,6 +137,34 @@ def _build_checkpoint_conversion_mapping():
                 ],
                 operations=[UnfuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"])],
             ),
+            # Quantized MoE layers
+            WeightConverter(
+                source_patterns=[
+                    "mlp.experts.*.gate_proj.weight_packed",
+                    "mlp.experts.*.up_proj.weight_packed",
+                ],
+                target_patterns="mlp.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.*.down_proj.weight_packed",
+                target_patterns="mlp.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+
+            WeightConverter(
+                source_patterns=[
+                    "mlp.experts.*.gate_proj.weight_scale",
+                    "mlp.experts.*.up_proj.weight_scale",
+                ],
+                target_patterns="mlp.experts.up_proj_scale",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.*.down_proj.weight_scale",
+                target_patterns="mlp.experts.down_proj_scale",
+                operations=[MergeModulelist(dim=0)],
+            ),
         ],
         "llava": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),

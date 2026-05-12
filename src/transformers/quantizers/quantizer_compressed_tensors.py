@@ -70,12 +70,30 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         ct_quantization_config = self.compressor.quantization_config
 
         # Always initialize compressed wrappers to match the checkpoint
+        # Always initialize compressed wrappers to match the checkpoint
         apply_quantization_config(model, ct_quantization_config, self.run_compressed)
         if (
             self.quantization_config.is_quantization_compressed
             or self.quantization_config.is_sparsification_compressed
         ):
             self.compressor.compress_model(model=model)
+
+            from torch import nn
+            for name, module in model.named_modules():
+                if name.endswith('.mlp.experts'):
+                    module.gate_up_proj = nn.Parameter(
+                        torch.empty(384, 4096, 896, dtype=torch.int32), requires_grad=False
+                    )
+                    module.down_proj = nn.Parameter(
+                        torch.empty(384, 7168, 256, dtype=torch.int32), requires_grad=False
+                    )
+                    module.register_buffer("up_proj_scale",
+                        torch.empty(384, 4096, 224, dtype=torch.bfloat16)
+                    )
+                    module.register_buffer("down_proj_scale",
+                        torch.empty(384, 7168, 64, dtype=torch.bfloat16)
+                    )
+                    # Match modules -> model.language_model.layers.17.mlp.experts.gate_proj
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         """Decompress loaded model if necessary - need for qat"""
