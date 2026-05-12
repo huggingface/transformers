@@ -397,9 +397,7 @@ class DeepseekV4IndexerScorer(nn.Module):
         self.weights_scaling = config.index_n_heads**-0.5
         self.weights_proj = nn.Linear(config.hidden_size, config.index_n_heads, bias=False)
 
-    def forward(
-        self, q: torch.Tensor, compressed_kv: torch.Tensor, hidden_states: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, q: torch.Tensor, compressed_kv: torch.Tensor, hidden_states: torch.Tensor) -> torch.Tensor:
         scores = torch.matmul(q.float(), compressed_kv.transpose(-1, -2).float().unsqueeze(1))  # [B, S, H, T]
         scores = F.relu(scores) * self.softmax_scale
         weights = self.weights_proj(hidden_states).float() * self.weights_scaling  # [B, S, H]
