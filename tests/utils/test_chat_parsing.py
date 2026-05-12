@@ -677,9 +677,10 @@ class ResponseEventStreamTest(unittest.TestCase):
     def test_events_well_formed_for_every_chunking(self):
         """Every event batch, across every fixture and every chunking, must be
         well-formed: region_open precedes its matching region_close for the
-        same field; region_chunk only appears between open and close; the
-        final event stream ends with stream_end; and the concatenation of all
-        region_chunk payloads for a streamable text-like field equals the final value."""
+        same field; region_chunk only appears between open and close; no
+        region is left open at the end of the stream; and the concatenation
+        of all region_chunk payloads for a streamable text-like field equals
+        the final value."""
         rng = random.Random(0xBEEF)
         for name, tmpl, text in _STREAMING_FIXTURES:
             for trial in range(10):
@@ -693,19 +694,15 @@ class ResponseEventStreamTest(unittest.TestCase):
                     self._assert_event_stream_well_formed(all_events)
 
     def _assert_event_stream_well_formed(self, events: list[dict]) -> None:
-        self.assertTrue(events, "event stream must not be empty")
-        self.assertEqual(events[-1], {"type": "stream_end"})
         open_field: str | None = None
         chunk_accum: dict[str, str] = {}
         close_values: dict[str, object] = {}
-        for ev in events[:-1]:
+        for ev in events:
             t = ev["type"]
             if t == "region_open":
                 self.assertIsNone(open_field, f"nested region_open without close: {ev}")
                 open_field = ev["field"]
                 chunk_accum.setdefault(open_field, "")
-                self.assertIn("meta", ev)
-                self.assertIsInstance(ev["meta"], dict)
             elif t == "region_chunk":
                 self.assertEqual(open_field, ev["field"], f"chunk outside its region: {ev}")
                 chunk_accum[open_field] += ev["text"]
@@ -715,7 +712,7 @@ class ResponseEventStreamTest(unittest.TestCase):
                 open_field = None
             else:
                 self.fail(f"unexpected event type: {ev!r}")
-        self.assertIsNone(open_field, "region left open at stream_end")
+        self.assertIsNone(open_field, "region left open at end of stream")
 
     def test_region_chunks_reconstruct_text_regions(self):
         """For streamable text-like regions, concatenating the region_chunk texts should
@@ -747,20 +744,6 @@ class ResponseEventStreamTest(unittest.TestCase):
         self.assertNotIn("tool_calls", per_field_chunks)
         self.assertIn("tool_calls", per_field_close_value)
 
-    def test_open_event_carries_named_captures(self):
-        """Named groups in open_pattern must land in region_open's `meta`."""
-        text = "<|channel|>analysis<|message|>think<|end|><|channel|>commentary to=functions.foo<|message|>{}<|call|>"
-        streamer = ResponseParser(gpt_oss_template)
-        events: list[dict] = []
-        for ch in text:
-            events.extend(streamer.feed(ch))
-        _, final_events = streamer.finalize()
-        events.extend(final_events)
-
-        tool_opens = [e for e in events if e["type"] == "region_open" and e["field"] == "tool_calls"]
-        self.assertEqual(len(tool_opens), 1)
-        self.assertEqual(tool_opens[0]["meta"], {"name": "foo"})
-
     def test_feed_after_finalize_raises(self):
         streamer = ResponseParser(smollm_template)
         streamer.feed("<think>x</think>")
@@ -776,7 +759,7 @@ class ResponseEventStreamTest(unittest.TestCase):
         result, final_events = streamer.finalize()
         # Only the default fields should remain; nothing else is required.
         self.assertEqual(result, {"role": "assistant"})
-        self.assertEqual(final_events[-1], {"type": "stream_end"})
+        self.assertEqual(final_events, [])
 
 
 # ChatML-style anchor used by Qwen / SmolLM templates: assistant header is
@@ -801,17 +784,19 @@ class PrefixAndTruncationTest(unittest.TestCase):
         )
         generated = "Let me think...</think>"
         stream = ResponseParser(qwen3_template_with_anchor, prefix=prompt)
-        # The stream surfaces a synthetic open so the caller knows the state.
+        # The region_open for `thinking` surfaces via initial_events; the
+        # caller replays it before feeding model output.
         self.assertEqual(
-            stream.initial_event,
-            {"type": "region_open", "field": "thinking", "meta": {}},
+            [(e["type"], e["field"]) for e in stream.initial_events],
+            [("region_open", "thinking"), ("region_chunk", "thinking")],
         )
         events = stream.feed(generated)
         result, _ = stream.finalize()
-        # thinking should capture only the generated body, not the template prefix.
+        # thinking ends up with the prefill + generated body; text parser strips,
+        # so the leading "\n" from the prefix is trimmed in the final value.
         self.assertEqual(result, {"role": "assistant", "thinking": "Let me think..."})
-        # We should see a region_close event for thinking from the generated chunk;
-        # no region_open event for thinking (the silent prefill already opened it).
+        # The feed stream only sees the rest of the body and the close; the
+        # prefill already emitted region_open.
         self.assertEqual([e["type"] for e in events], ["region_chunk", "region_close"])
         self.assertEqual(events[1]["field"], "thinking")
 
@@ -828,22 +813,20 @@ class PrefixAndTruncationTest(unittest.TestCase):
         stream = ResponseParser(qwen3_template_with_anchor, prefix=prompt)
         # We landed inside `thinking` (from the LAST assistant turn's `<think>\n`),
         # not in some earlier-turn artifact.
-        self.assertIsNotNone(stream.initial_event)
-        self.assertEqual(stream.initial_event["field"], "thinking")
+        opens = [e for e in stream.initial_events if e["type"] == "region_open"]
+        self.assertEqual([e["field"] for e in opens], ["thinking"])
         # No earlier-turn content leaked into output.
         stream.feed("done</think>")
         stream.finalize()
         self.assertEqual(stream._output, {"role": "assistant", "thinking": "done"})
 
     def test_prefix_no_anchor_in_spec_keeps_full_prefix(self):
-        """With no `start_anchor` in the spec, the prefix is processed verbatim
-        (silently). Useful when the caller has already pre-cut the prefix."""
+        """With no `start_anchor` in the spec, the prefix is processed verbatim.
+        Useful when the caller has already pre-cut the prefix."""
         prompt = "<think>\n"
         stream = ResponseParser(qwen3_template, prefix=prompt)  # no anchor
-        self.assertEqual(
-            stream.initial_event,
-            {"type": "region_open", "field": "thinking", "meta": {}},
-        )
+        opens = [e for e in stream.initial_events if e["type"] == "region_open"]
+        self.assertEqual([e["field"] for e in opens], ["thinking"])
         stream.feed("hi</think>")
         stream.finalize()
         self.assertEqual(stream._output, {"role": "assistant", "thinking": "hi"})
@@ -853,11 +836,8 @@ class PrefixAndTruncationTest(unittest.TestCase):
         falls back to processing the entire prefix (with a logged warning)."""
         prompt = "<think>\n"  # no <|im_start|>assistant\n
         stream = ResponseParser(qwen3_template_with_anchor, prefix=prompt)
-        # Even without truncation, the prefix opens `thinking` silently.
-        self.assertEqual(
-            stream.initial_event,
-            {"type": "region_open", "field": "thinking", "meta": {}},
-        )
+        opens = [e for e in stream.initial_events if e["type"] == "region_open"]
+        self.assertEqual([e["field"] for e in opens], ["thinking"])
         stream.feed("hi</think>")
         stream.finalize()
         self.assertEqual(stream._output, {"role": "assistant", "thinking": "hi"})
@@ -891,9 +871,9 @@ class PrefixAndTruncationTest(unittest.TestCase):
                     self.assertEqual(message, via_prefix)
 
     def test_prefix_with_open_close_inside_truncated_region(self):
-        """Synthetic spec where the post-truncation prefix opens AND closes a
-        region. The closed region is not surfaced in the output; subsequent
-        feed continues from the implicit region (or default state)."""
+        """Prefix opens AND closes a region. The full open/chunk/close event
+        sequence is surfaced via initial_events, and the closed region lands
+        in the output dict — so renderers can show prefill content."""
         spec = {
             "defaults": {"role": "assistant"},
             "start_anchor": "[BEGIN]",
@@ -904,21 +884,36 @@ class PrefixAndTruncationTest(unittest.TestCase):
         }
         prefix = "noise[BEGIN]<tag>silently consumed</tag>"
         stream = ResponseParser(spec, prefix=prefix)
-        # Closed-and-discarded inside prefix → no initial_event.
-        self.assertIsNone(stream.initial_event)
+        types = [e["type"] for e in stream.initial_events]
+        self.assertEqual(types, ["region_open", "region_chunk", "region_close"])
+        self.assertTrue(all(e["field"] == "tag" for e in stream.initial_events))
+        self.assertEqual(stream.initial_events[-1]["value"], "silently consumed")
         stream.feed("real generated body")
         result, _ = stream.finalize()
-        # `tag` was closed inside the silent prefix, so it does NOT appear.
-        self.assertNotIn("tag", result)
+        self.assertEqual(result["tag"], "silently consumed")
         self.assertEqual(result["body"], "real generated body")
+
+    def test_prefix_lands_inside_implicit_region(self):
+        """Prefix wrote plaintext into the implicit region (e.g. assistant
+        prefill before the model continues). The region_open for the implicit
+        region must surface via initial_events so consumers don't miss it —
+        `_opened` will already be True by the time feed runs."""
+        prompt = "<|im_start|>assistant\nSure, here is "
+        stream = ResponseParser(smollm_template_with_anchor, prefix=prompt)
+        opens = [e for e in stream.initial_events if e["type"] == "region_open"]
+        self.assertEqual([e["field"] for e in opens], ["content"])
+        events = stream.feed("the answer<|im_end|>")
+        # No second region_open from feed — the implicit region was already
+        # opened during prefill and surfaced via initial_events.
+        self.assertNotIn("region_open", [e["type"] for e in events])
 
     def test_prefix_partial_pattern_at_boundary(self):
         """Post-truncation prefix ends mid-delimiter. The first feed completes
-        the match; the synthetic `initial_event` is None (no region opened
-        within the prefix yet) and the open fires from `feed()`."""
+        the match; initial_events is empty (no region opened within the
+        prefix yet) and the open fires from `feed()`."""
         prefix = "<|im_start|>assistant\n<thi"  # incomplete `<think>`
         stream = ResponseParser(qwen3_template_with_anchor, prefix=prefix)
-        self.assertIsNone(stream.initial_event)
+        self.assertEqual(stream.initial_events, [])
         events = stream.feed("nk>real body</think>")
         types = [e["type"] for e in events]
         self.assertIn("region_open", types)  # think opens during feed, not prefill
@@ -943,8 +938,8 @@ class PrefixAndTruncationTest(unittest.TestCase):
         tokenizer.response_template = qwen3_template_with_anchor
         prefix = "<|im_start|>assistant\n<think>\n"
         stream = tokenizer.get_response_parser(prefix=prefix)
-        self.assertIsNotNone(stream.initial_event)
-        self.assertEqual(stream.initial_event["field"], "thinking")
+        opens = [e for e in stream.initial_events if e["type"] == "region_open"]
+        self.assertEqual([e["field"] for e in opens], ["thinking"])
         stream.feed("body</think>")
         result, _ = stream.finalize()
         self.assertEqual(result, {"role": "assistant", "thinking": "body"})
