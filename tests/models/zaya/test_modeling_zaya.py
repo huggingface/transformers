@@ -15,6 +15,7 @@
 
 import unittest
 
+from huggingface_hub.errors import StrictDataclassClassValidationError
 from parameterized import parameterized
 
 from transformers import is_torch_available
@@ -48,7 +49,6 @@ class ZayaModelTester(CausalLMModelTester):
         )
         self.head_dim = 8
         self.ffn_hidden_size = 64
-        self.num_query_groups = 2
         self.num_experts = 4
         self.moe_router_topk = 1
         self.zaya_mlp_expansion = 4
@@ -115,10 +115,94 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     @unittest.skip(
-        "ZAYA uses partial rotary embeddings with CCA, which is not compatible with this generic RoPE test."
+        "RoPE-scaling-from-config test doesn't match ZAYA's nested per-layer-type rope_parameters (same as e.g. Laguna, Gemma3)."
     )
     def test_model_rope_scaling_from_config(self, scaling_type):
         pass
+
+    def test_model_rope_scaling_frequencies(self):
+        """
+        Tests the frequency properties of the different RoPE scaling types on the model RoPE layer.
+        Copied from Laguna to adapt to per-layer-type rope configs.
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.layer_types = ["full_attention", "sliding_attention"]
+        partial_rotary_factor = config.partial_rotary_factor
+
+        def set_rope_params(rope_params):
+            config.rope_parameters = {
+                "full_attention": {**rope_params, "partial_rotary_factor": partial_rotary_factor},
+                "sliding_attention": {**rope_params, "partial_rotary_factor": partial_rotary_factor},
+            }
+
+        set_rope_params({"rope_type": "default", "rope_theta": 10_000.0})
+
+        base_model = self.model_tester.base_model_class(config)
+        possible_rope_attributes = [
+            "pos_emb",
+            "rotary_emb",
+            "global_rotary_emb",
+            "local_rotary_emb",
+        ]
+        for name, module in base_model.named_modules():
+            if any(potential_name in name for potential_name in possible_rope_attributes):
+                rope_class = type(module)
+                break
+
+        scaling_factor = 10
+        short_input_length = 10
+        long_input_length = int(config.max_position_embeddings * 1.5)
+
+        x = torch.randn(1, dtype=torch.float32, device=torch_device)
+        position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device).unsqueeze(0)
+        position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device).unsqueeze(0)
+
+        set_rope_params({"rope_type": "default", "rope_theta": 10_000.0})
+        original_rope = rope_class(config=config).to(torch_device)
+        original_cos_short, original_sin_short = original_rope(x, position_ids_short, layer_type="sliding_attention")
+        original_cos_long, original_sin_long = original_rope(x, position_ids_long, layer_type="sliding_attention")
+        torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
+        torch.testing.assert_close(original_sin_short, original_sin_long[:, :short_input_length, :])
+
+        set_rope_params({"rope_type": "linear", "factor": scaling_factor, "rope_theta": 10_000.0})
+        linear_scaling_rope = rope_class(config=config).to(torch_device)
+        linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short, layer_type="sliding_attention")
+        linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long, layer_type="sliding_attention")
+        torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
+        torch.testing.assert_close(linear_sin_short, linear_sin_long[:, :short_input_length, :])
+        for new_position in range(0, long_input_length, scaling_factor):
+            original_position = int(new_position // scaling_factor)
+            torch.testing.assert_close(linear_cos_long[:, new_position, :], original_cos_long[:, original_position, :])
+            torch.testing.assert_close(linear_sin_long[:, new_position, :], original_sin_long[:, original_position, :])
+
+        set_rope_params({"rope_type": "dynamic", "factor": scaling_factor, "rope_theta": 10_000.0})
+        ntk_scaling_rope = rope_class(config=config).to(torch_device)
+        ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short, layer_type="sliding_attention")
+        ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long, layer_type="sliding_attention")
+        torch.testing.assert_close(ntk_cos_short, original_cos_short)
+        torch.testing.assert_close(ntk_sin_short, original_sin_short)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(ntk_cos_long, original_cos_long)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(ntk_sin_long, original_sin_long)
+        self.assertTrue(
+            (ntk_scaling_rope.sliding_attention_inv_freq <= original_rope.sliding_attention_inv_freq).all()
+        )
+
+        set_rope_params({"rope_type": "yarn", "factor": scaling_factor, "rope_theta": 10_000.0})
+        yarn_scaling_rope = rope_class(config=config).to(torch_device)
+        yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short, layer_type="sliding_attention")
+        yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long, layer_type="sliding_attention")
+        torch.testing.assert_close(yarn_cos_short, yarn_cos_long[:, :short_input_length, :])
+        torch.testing.assert_close(yarn_sin_short, yarn_sin_long[:, :short_input_length, :])
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(yarn_cos_short, original_cos_short)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(yarn_sin_short, original_sin_short)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(yarn_cos_long, original_cos_long)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(yarn_sin_long, original_sin_long)
 
     @unittest.skip("ZAYA needs alternating attention and MoE layers in the tiny test configuration.")
     def test_num_layers_is_small(self):
@@ -153,8 +237,15 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
         )
 
     def test_moe_router_topk_validation(self):
-        with self.assertRaisesRegex(ValueError, "moe_router_topk=1"):
+        with self.assertRaisesRegex(StrictDataclassClassValidationError, "moe_router_topk=1"):
             ZayaConfig(moe_router_topk=2)
+
+    def test_legacy_swa_layers_translate_to_layer_types(self):
+        config = ZayaConfig(num_hidden_layers=4, swa_layers=[0, 1, 0, 1], swa_rotary_base=10000)
+
+        self.assertEqual(config.layer_types, ["full_attention", "sliding_attention", "full_attention", "sliding_attention"])
+        self.assertEqual(config.rope_parameters["full_attention"]["rope_theta"], config.default_theta)
+        self.assertEqual(config.rope_parameters["sliding_attention"]["rope_theta"], 10000)
 
     def test_cca_cache_matches_full_forward(self):
         config = ZayaConfig(
@@ -165,7 +256,6 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
             num_experts=4,
             num_attention_heads=4,
             num_key_value_heads=2,
-            num_query_groups=2,
             head_dim=8,
             zaya_mlp_expansion=4,
             tie_word_embeddings=False,
@@ -201,7 +291,6 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
             num_experts=4,
             num_attention_heads=4,
             num_key_value_heads=2,
-            num_query_groups=2,
             head_dim=8,
             zaya_mlp_expansion=4,
             tie_word_embeddings=False,

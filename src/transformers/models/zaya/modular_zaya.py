@@ -1,4 +1,4 @@
-# Copyright 2025 Zyphra and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 Zyphra and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,8 +14,8 @@
 
 """PyTorch Zaya model."""
 
-import copy
 from collections.abc import Callable
+from typing import Any, Literal
 
 import torch
 import torch.nn.functional as F
@@ -45,7 +45,7 @@ from ...utils import (
 )
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..glm4.modeling_glm4 import Glm4RotaryEmbedding
+from ..laguna.modeling_laguna import LagunaRotaryEmbedding
 from ..qwen3_5_moe.modeling_qwen3_5_moe import (
     apply_rotary_pos_emb,
     eager_attention_forward,
@@ -58,11 +58,9 @@ from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeRMSNorm
 class ZayaConfig(PreTrainedConfig):
     r"""
     ffn_hidden_size (`int`, *optional*, defaults to 4096):
-        Dimension of the feed-forward and expert hidden states.
-    num_query_groups (`int`, *optional*, defaults to 2):
-        Number of query groups. For ZAYA checkpoints this matches `num_key_value_heads`.
-    rope_theta (`float`, *optional*, defaults to 5000000):
-        The base period of the RoPE embeddings.
+        Dimension of the feed-forward and expert hidden states, translate it to `intermediate_size`.
+    num_key_value_heads (`int`, *optional*, defaults to 2):
+        Number of key/value groups.
     partial_rotary_factor (`float`, *optional*, defaults to 0.5):
         Fraction of each attention head dimension using rotary embeddings.
     lm_head_bias (`bool`, *optional*, defaults to `False`):
@@ -75,7 +73,7 @@ class ZayaConfig(PreTrainedConfig):
         First temporal parameter of the CCA projection.
     cca_time1 (`int`, *optional*, defaults to 2):
         Second temporal parameter of the CCA projection.
-    swa_layers (`list[int]`, *optional*):
+    layer_types (`list[str]`, *optional*):
         Per-layer selector for standard RoPE versus SWA RoPE embeddings.
     swa_rotary_base (`float`, *optional*):
         RoPE base used by SWA layers.
@@ -92,6 +90,7 @@ class ZayaConfig(PreTrainedConfig):
 
     model_type = "zaya"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 5000000.0
 
     vocab_size: int = 262272
     hidden_size: int = 2048
@@ -100,7 +99,6 @@ class ZayaConfig(PreTrainedConfig):
     num_experts: int = 16
     num_attention_heads: int = 8
     num_key_value_heads: int | None = 2
-    num_query_groups: int | None = 2
     hidden_act: str = "silu"
     head_dim: int = 128
     max_position_embeddings: int = 131072
@@ -109,7 +107,6 @@ class ZayaConfig(PreTrainedConfig):
     use_cache: bool = True
     tie_word_embeddings: bool = True
     rope_parameters: RopeParameters | dict | None = None
-    rope_theta: float | int = 5000000
     partial_rotary_factor: float = 0.5
     attention_bias: bool = False
     lm_head_bias: bool = False
@@ -118,8 +115,8 @@ class ZayaConfig(PreTrainedConfig):
     zaya_mlp_expansion: int = 256
     cca_time0: int | None = 2
     cca_time1: int | None = 2
-    swa_layers: list[int] | None = None
-    swa_rotary_base: float | int | None = None
+    layer_types: list[str] | None = None
+    swa_rotary_base: float | int = 10000.0
     output_router_logits: bool = False
     pad_token_id: int | None = 0
     bos_token_id: int | None = 2
@@ -128,6 +125,7 @@ class ZayaConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         for unused_checkpoint_kwarg in (
             "cca",
+            "num_query_groups",
             "activation_func",
             "normalization",
             "add_bias_linear",
@@ -149,35 +147,68 @@ class ZayaConfig(PreTrainedConfig):
         ):
             kwargs.pop(unused_checkpoint_kwarg, None)
 
+        self.intermediate_size = self.ffn_hidden_size
+        self.num_experts_per_tok = self.moe_router_topk
+
         self.num_key_value_heads = (
             self.num_attention_heads if self.num_key_value_heads is None else self.num_key_value_heads
         )
-        self.num_query_groups = self.num_key_value_heads if self.num_query_groups is None else self.num_query_groups
-        if self.head_dim is None:
-            raise ValueError("`head_dim` must be set for ZAYA.")
-        if self.num_query_groups != self.num_key_value_heads:
-            raise ValueError("`num_query_groups` must be equal to `num_key_value_heads` for ZAYA.")
-        if self.moe_router_topk != 1:
-            raise ValueError("ZAYA currently supports `moe_router_topk=1` only.")
 
-        self.rope_parameters = (
-            dict(self.rope_parameters) if self.rope_parameters is not None else {"rope_type": "default"}
-        )
-        self.rope_parameters.setdefault("rope_theta", self.rope_theta)
-        self.rope_parameters.setdefault("partial_rotary_factor", self.partial_rotary_factor)
+        legacy_swa_layers = kwargs.pop("swa_layers", None)
+        if self.layer_types is None:
+            if legacy_swa_layers is None:
+                self.layer_types = ["full_attention"] * self.num_hidden_layers
+            else:
+                self.layer_types = [
+                    "full_attention" if layer_type == 0 else "sliding_attention" for layer_type in legacy_swa_layers
+                ]
+        else:
+            self.layer_types = list(self.layer_types)
+
         self.cca_time0 = 2 if self.cca_time0 is None else self.cca_time0
         self.cca_time1 = 2 if self.cca_time1 is None else self.cca_time1
-        if (self.cca_time0, self.cca_time1) != (2, 2):
-            raise ValueError("ZAYA currently supports `cca_time0=2` and `cca_time1=2` only.")
-        if self.swa_layers is not None and len(self.swa_layers) != self.num_hidden_layers:
-            raise ValueError("`swa_layers` must have one entry per hidden layer.")
-        if self.swa_layers is not None and self.swa_rotary_base is None:
-            raise ValueError("`swa_rotary_base` must be set when `swa_layers` is provided.")
 
         super().__post_init__(**kwargs)
 
+    def convert_rope_params_to_dict(self, **kwargs):
+        default_rope_params: dict[Literal["full_attention", "sliding_attention"], dict[str, Any]] = {
+            "full_attention": {
+                "rope_type": "default",
+                "rope_theta": kwargs.pop("rope_theta", self.default_theta),
+                "partial_rotary_factor": self.partial_rotary_factor,
+            },
+            "sliding_attention": {
+                "rope_type": "default",
+                "rope_theta": self.swa_rotary_base,
+                "partial_rotary_factor": self.partial_rotary_factor,
+            },
+        }
+        layer_types = set(self.layer_types)
 
-class ZayaRotaryEmbedding(Glm4RotaryEmbedding):
+        if self.rope_parameters is None:
+            self.rope_parameters = {layer_type: default_rope_params[layer_type] for layer_type in layer_types}
+        else:
+            self.rope_parameters = {
+                layer_type: {**default_rope_params[layer_type], **(self.rope_parameters.get(layer_type) or {})}
+                for layer_type in layer_types
+            }
+
+        return kwargs
+
+    def validate_architecture(self):
+        if self.head_dim is None:
+            raise ValueError("`head_dim` must be set for ZAYA.")
+        if self.num_experts_per_tok != 1:
+            raise ValueError("ZAYA currently supports `moe_router_topk=1` only.")
+        if len(self.layer_types) != self.num_hidden_layers:
+            raise ValueError("`layer_types` must have one entry per hidden layer.")
+        if invalid_layer_types := set(self.layer_types) - {"full_attention", "sliding_attention"}:
+            raise ValueError(f"`layer_types` contains unsupported values: {sorted(invalid_layer_types)}.")
+        if (self.cca_time0, self.cca_time1) != (2, 2):
+            raise ValueError("ZAYA currently supports `cca_time0=2` and `cca_time1=2` only.")
+
+
+class ZayaRotaryEmbedding(LagunaRotaryEmbedding):
     pass
 
 
@@ -204,7 +235,7 @@ class ZayaDynamicCache(DynamicCache):
         self.device = device
         self.conv_kernel_size = (config.cca_time0 - 1) + (config.cca_time1 - 1)
         self.num_layers = config.num_hidden_layers
-        self.key_value_hidden_size = config.num_query_groups * config.head_dim
+        self.key_value_hidden_size = config.num_key_value_heads * config.head_dim
         self.query_hidden_size = config.num_attention_heads * config.head_dim
         self.conv_state_size = self.key_value_hidden_size + self.query_hidden_size
         self.has_previous_state = False
@@ -439,7 +470,7 @@ class ZayaAttention(nn.Module):
         self.qkv = CCA(
             config=self.config,
             num_attention_heads=self.config.num_attention_heads,
-            num_key_value_heads=self.config.num_query_groups,
+            num_key_value_heads=self.config.num_key_value_heads,
             hidden_size=self.hidden_size,
             head_dim=self.config.head_dim,
             cca_time0=self.config.cca_time0,
@@ -639,11 +670,11 @@ class ZayaRouter(nn.Module):
 class ZayaExperts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
-    def __init__(self, config, num_experts: int, ffn_hidden_size: int):
+    def __init__(self, config, num_experts: int, intermediate_size: int):
         super().__init__()
         self.num_experts = num_experts
         self.hidden_dim = config.hidden_size
-        self.intermediate_dim = ffn_hidden_size // 2
+        self.intermediate_dim = intermediate_size // 2
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
@@ -681,7 +712,7 @@ class ZayaBlock(nn.Module):
         config,
         num_moe_experts: int,
         mlp_expansion: int,
-        ffn_hidden_size: int,
+        intermediate_size: int,
         layer_n: int,
     ):
         super().__init__()
@@ -696,7 +727,7 @@ class ZayaBlock(nn.Module):
             mlp_expansion=mlp_expansion,
             hidden_size=self.hidden_dim,
         )
-        self.experts = ZayaExperts(self.config, self.num_moe_experts, ffn_hidden_size=ffn_hidden_size)
+        self.experts = ZayaExperts(self.config, self.num_moe_experts, intermediate_size=intermediate_size)
 
     def forward(
         self,
@@ -720,7 +751,7 @@ class ZayaDecoderMLPLayer(GradientCheckpointingLayer):
         config: ZayaConfig,
         num_moe_experts: int,
         mlp_expansion: int,
-        ffn_hidden_size: int,
+        intermediate_size: int,
         layer_n: int,
     ):
         super().__init__()
@@ -729,7 +760,7 @@ class ZayaDecoderMLPLayer(GradientCheckpointingLayer):
             config,
             num_moe_experts,
             mlp_expansion,
-            ffn_hidden_size,
+            intermediate_size,
             layer_n,
         )
         self.input_norm = ZayaRMSNorm(self.config.hidden_size, eps=self.config.norm_epsilon)
@@ -809,7 +840,7 @@ class ZayaModel(ZayaPreTrainedModel):
                         config,
                         config.num_experts,
                         config.zaya_mlp_expansion,
-                        config.ffn_hidden_size,
+                        config.intermediate_size,
                         layer_n,
                     )
                 )
@@ -823,13 +854,6 @@ class ZayaModel(ZayaPreTrainedModel):
         self.final_norm = ZayaRMSNorm(self.config.hidden_size, eps=self.config.norm_epsilon)
 
         self.rotary_emb = ZayaRotaryEmbedding(config=config)
-        if self.config.swa_layers is not None:
-            swa_config = copy.copy(config)
-            swa_config.rope_parameters = {
-                **config.rope_parameters,
-                "rope_theta": swa_config.swa_rotary_base,
-            }
-            self.swa_rotary_emb = ZayaRotaryEmbedding(config=swa_config)
 
         self.post_init()
 
@@ -896,19 +920,16 @@ class ZayaModel(ZayaPreTrainedModel):
 
         hidden_states = inputs_embeds
 
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-        if self.config.swa_layers is not None:
-            swa_position_embeddings = self.swa_rotary_emb(hidden_states, position_ids)
+        position_embeddings = {
+            layer_type: self.rotary_emb(hidden_states, position_ids, layer_type) for layer_type in set(self.config.layer_types)
+        }
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         prev_router_hidden_states = None
 
         for layer_n, decoder_layer in enumerate(self.layers):
-            if self.config.swa_layers is not None:
-                emb_to_use = position_embeddings if self.config.swa_layers[layer_n] == 0 else swa_position_embeddings
-            else:
-                emb_to_use = position_embeddings
+            emb_to_use = position_embeddings[self.config.layer_types[layer_n]]
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
