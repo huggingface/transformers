@@ -968,7 +968,7 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             model = model_class(copy.deepcopy(config))
             _keys_to_ignore_on_save = getattr(model, "_keys_to_ignore_on_save", None)
-            if _keys_to_ignore_on_save is None:
+            if _keys_to_ignore_on_save is None or len(_keys_to_ignore_on_save) == 0:
                 continue
 
             # check the keys are in the original state_dict

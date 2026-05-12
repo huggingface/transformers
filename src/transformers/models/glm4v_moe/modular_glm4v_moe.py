@@ -224,7 +224,7 @@ class Glm4vMoePreTrainedModel(Glm4MoePreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("text", "image", "video")
     _no_split_modules = ["Glm4vMoeTextDecoderLayer", "Glm4vMoeVisionBlock"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _can_record_outputs = {}
 
     def _init_weights(self, module):
