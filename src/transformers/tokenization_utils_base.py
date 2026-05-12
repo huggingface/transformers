@@ -1682,7 +1682,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         remote_files = []
         if not is_local and not local_files_only:
             try:
-                remote_files = list_repo_files(pretrained_model_name_or_path)
+                remote_files = list_repo_files(pretrained_model_name_or_path, revision=revision)
             except Exception:
                 remote_files = []
         elif pretrained_model_name_or_path and os.path.isdir(pretrained_model_name_or_path):
