@@ -24,6 +24,7 @@ from transformers import (
     AutoProcessor,
     MusicFlamingoConfig,
     MusicFlamingoForConditionalGeneration,
+    MusicFlamingoModel,
     Qwen2Config,
     is_torch_available,
 )
@@ -51,6 +52,7 @@ class MusicFlamingoModelTester(ALMModelTester):
     """
 
     config_class = MusicFlamingoConfig
+    base_model_class = MusicFlamingoModel
     conditional_generation_class = MusicFlamingoForConditionalGeneration
     text_config_class = Qwen2Config
     audio_config_class = AudioFlamingo3EncoderConfig

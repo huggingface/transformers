@@ -19,6 +19,7 @@ from transformers import (
     AutoProcessor,
     GlmAsrConfig,
     GlmAsrForConditionalGeneration,
+    GlmAsrModel,
     LlamaConfig,
     is_torch_available,
 )
@@ -39,6 +40,7 @@ if is_torch_available():
 
 class GlmAsrModelTester(ALMModelTester):
     config_class = GlmAsrConfig
+    base_model_class = GlmAsrModel
     conditional_generation_class = GlmAsrForConditionalGeneration
     text_config_class = LlamaConfig
     audio_config_class = GlmAsrEncoderConfig

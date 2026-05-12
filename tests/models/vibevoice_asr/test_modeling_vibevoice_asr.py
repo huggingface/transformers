@@ -22,6 +22,7 @@ from parameterized import parameterized
 from transformers import (
     VibeVoiceAsrConfig,
     VibeVoiceAsrForConditionalGeneration,
+    VibeVoiceAsrModel,
     is_datasets_available,
     is_torch_available,
 )
@@ -133,7 +134,7 @@ class VibeVoiceAsrModelTester:
 
 @require_torch
 class VibeVoiceAsrForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (VibeVoiceAsrForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (VibeVoiceAsrModel, VibeVoiceAsrForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"audio-text-to-text": VibeVoiceAsrForConditionalGeneration} if is_torch_available() else {}
     )
