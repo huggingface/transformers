@@ -27,10 +27,19 @@ if TYPE_CHECKING:
 if is_torch_available():
     import torch
     import torch.distributed.checkpoint as dcp
-    from torch.distributed.checkpoint.state_dict import get_model_state_dict
+    from torch.distributed.checkpoint.state_dict import (
+        get_model_state_dict,
+        get_optimizer_state_dict,
+        set_optimizer_state_dict,
+    )
     from torch.distributed.tensor import DTensor
 
-    from .sharding_utils import _replicate_dtensor, convert_strided_to_shard, restore_strided_from_shard
+    from .sharding_utils import (
+        _replicate_dtensor,
+        fuse_optimizer_state,
+        get_fusion_metadata,
+        unfuse_optimizer_state,
+    )
 
 
 def is_fsdp_enabled() -> bool:
@@ -152,21 +161,30 @@ def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
     return result
 
 
-def save_optimizer(optimizer, checkpoint_dir: str) -> None:
-    # Save optimizer state via DCP, handling _StridedShard placements transparently.
-    osd = optimizer.state_dict()
-    placement_map = convert_strided_to_shard(osd)
-    dcp.save({"optimizer": osd}, checkpoint_id=checkpoint_dir)
-    if placement_map and torch.distributed.get_rank() == 0:
-        torch.save(placement_map, os.path.join(checkpoint_dir, "placement_map.pt"))
+def save_optimizer(model, optimizer, checkpoint_dir: str) -> None:
+    """Save optimizer state via DCP.
+
+    Params whose DTensors carry a lonely `_StridedShard` placement (e.g. Mixtral
+    `gate_up_proj`) are locally split into plain-`Shard` pieces at the boundary
+    so DCP only ever sees DTensors it can encode as one contiguous chunk per
+    rank.
+    """
+    optimizer_state_dict = get_optimizer_state_dict(model, optimizer)
+    fusion_metadata = get_fusion_metadata(optimizer_state_dict)
+    unfuse_optimizer_state(optimizer_state_dict, fusion_metadata)
+    dcp.save({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
 
 
-def load_optimizer(optimizer, checkpoint_dir: str) -> None:
-    # Load optimizer state via DCP, restoring _StridedShard placements transparently.
-    osd = optimizer.state_dict()
-    dcp.load({"optimizer": osd}, checkpoint_id=checkpoint_dir)
-    pmap_path = os.path.join(checkpoint_dir, "placement_map.pt")
-    if os.path.exists(pmap_path):
-        placement_map = torch.load(pmap_path, weights_only=False)
-        restore_strided_from_shard(osd, placement_map)
-    optimizer.load_state_dict(osd)
+def load_optimizer(model, optimizer, checkpoint_dir: str) -> None:
+    """Load optimizer state via DCP.
+
+    Symmetric to `save_optimizer`: build the unfused template, let DCP fill
+    it, then merge fused params back to their original `_StridedShard` form
+    before handing the state_dict back to the optimizer.
+    """
+    optimizer_state_dict = get_optimizer_state_dict(model, optimizer)
+    fusion_metadata = get_fusion_metadata(optimizer_state_dict)
+    unfuse_optimizer_state(optimizer_state_dict, fusion_metadata)
+    dcp.load({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
+    fuse_optimizer_state(optimizer_state_dict, fusion_metadata)
+    set_optimizer_state_dict(model, optimizer, optimizer_state_dict)

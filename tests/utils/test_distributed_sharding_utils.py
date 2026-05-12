@@ -11,13 +11,31 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
+import shutil
+import tempfile
 import unittest
 
 import torch
 from torch.distributed.tensor.placement_types import Replicate, Shard, _StridedShard
 
-from transformers.distributed.sharding_utils import DtensorShardOperation
+from transformers.distributed.sharding_utils import (
+    DtensorShardOperation,
+    _find_strided_shard_placement_from_fused_params,
+)
 
+
+if torch.distributed.is_available():
+    import torch.distributed as dist
+    import torch.distributed.checkpoint as dcp
+    import torch.multiprocessing as mp
+    from torch.distributed.device_mesh import init_device_mesh
+    from torch.distributed.tensor import DTensor, distribute_tensor
+    from transformers.distributed.sharding_utils import (
+        fuse_optimizer_state,
+        get_fusion_metadata,
+        unfuse_optimizer_state,
+    )
 
 class FakeMesh:
     """Fake multi-dimensional device mesh for testing DtensorShardOperation."""
@@ -358,6 +376,86 @@ class TestDtensorShardOperation(unittest.TestCase):
 
         result = op._slice_and_cat(tensor, [[(0, 4)], [(0, 8)]], None, torch.float16)
         self.assertEqual(result.dtype, torch.float16)
+
+
+class TestFindStridedShardPlacementFromFusedParams(unittest.TestCase):
+
+    def test_find_strided_shard_placement_from_fused_params(self):
+        expected = {
+            # Plain placements — no _StridedShard, nothing to do
+            (Replicate(),):                                                 None,
+            (Shard(0),):                                                    None,
+            (Shard(0), Shard(2)):                                           None,
+            # Uncomposed _StridedShard — TP-only fused gate||up (DCP can't encode)
+            (_StridedShard(0, split_factor=2),):                            _StridedShard(0, split_factor=2),
+            (_StridedShard(1, split_factor=4),):                            _StridedShard(1, split_factor=4),
+            # _StridedShard on a different tensor dim than the other Shard — still uncomposed
+            (Shard(0), _StridedShard(1, split_factor=2)):                   _StridedShard(1, split_factor=2),
+            (_StridedShard(2, split_factor=2), Shard(0)):                   _StridedShard(2, split_factor=2),
+            # _StridedShard composed with another Shard on the SAME tensor dim — DCP-friendly
+            (_StridedShard(0, split_factor=2), Shard(0)):                   None,
+            (Shard(0), _StridedShard(0, split_factor=2)):                   None,
+        }
+        for placements, exp in expected.items():
+            with self.subTest(placements=placements):
+                self.assertEqual(_find_strided_shard_placement_from_fused_params(placements), exp)
+
+
+def _optimizer_state_checkpointing_e2e_worker(rank, world_size, port, ckpt_dir):
+    # 1. Init a 4-rank CPU process group + 2x2 (fsdp, tp) mesh.
+    os.environ["MASTER_ADDR"] = "127.0.0.1"
+    os.environ["MASTER_PORT"] = str(port)
+    dist.init_process_group("gloo", rank=rank, world_size=world_size)
+    mesh = init_device_mesh("cpu", (2, 2), mesh_dim_names=("fsdp", "tp"))
+
+    # 2. Build a fused DTensor with the Mixtral gate_up_proj placement:
+    #    shape (num_experts=4, 2·intermediate=16, hidden=8),
+    #    placements (Shard(0), _StridedShard(1, sf=2)).
+    full = torch.arange(4 * 16 * 8, dtype=torch.float32).reshape(4, 16, 8)
+    dt = distribute_tensor(full, mesh, [Shard(0), Shard(1)])
+    dt = DTensor.from_local(
+        dt._local_tensor.clone(),
+        mesh,
+        (Shard(0), _StridedShard(1, split_factor=2)),
+        run_check=False,
+    )
+
+    # 3. Wrap it the way `get_optimizer_state_dict` would.
+    fqn = "model.layers.0.mlp.experts.gate_up_proj"
+    osd = {
+        "state": {fqn: {"exp_avg": dt, "step": torch.tensor(7.0)}},
+        "param_groups": [{"lr": 1e-4}],
+    }
+
+    # 4. Snapshot the rank-local buffer for later bit-exact comparison.
+    before = dt._local_tensor.clone()
+
+    # 5. unfuse → DCP save → DCP load → fuse.
+    fusion_metadata = get_fusion_metadata(osd)
+    assert set(fusion_metadata) == {fqn}, f"expected one fused param, got {set(fusion_metadata)}"
+    unfuse_optimizer_state(osd, fusion_metadata)
+    dcp.save({"optimizer": osd}, checkpoint_id=ckpt_dir)
+    dist.barrier()
+    dcp.load({"optimizer": osd}, checkpoint_id=ckpt_dir)
+    fuse_optimizer_state(osd, fusion_metadata)
+
+    # 6. Verify the placement is restored and the rank-local data is bit-exact.
+    after = osd["state"][fqn]["exp_avg"]
+    assert tuple(after.placements) == (Shard(0), _StridedShard(1, split_factor=2)), after.placements
+    assert torch.equal(after._local_tensor, before), f"rank {rank}: local data drifted after round-trip"
+
+    dist.destroy_process_group()
+
+
+@unittest.skipUnless(torch.distributed.is_available(), "Requires torch.distributed (gloo backend).")
+class TestOptimizerStateCheckpointing(unittest.TestCase):
+
+    def test_optimizer_state_checkpointing_e2e(self):
+        tmp = tempfile.mkdtemp(prefix="hf_optimizer_state_checkpointing_")
+        try:
+            mp.spawn(_optimizer_state_checkpointing_e2e_worker, args=(4, 29500, tmp), nprocs=4, join=True)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 if __name__ == "__main__":

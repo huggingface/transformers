@@ -88,7 +88,7 @@ if __name__ == "__main__":
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
 
     if args.resume_dir:
-        load_optimizer(optimizer, os.path.join(args.resume_dir, "optimizer"))
+        load_optimizer(model, optimizer, os.path.join(args.resume_dir, "optimizer"))
         if rank == 0:
             print(f"Resumed optimizer from {args.resume_dir}")
 
@@ -120,7 +120,7 @@ if __name__ == "__main__":
 
     # Save model (HF format) and optimizer (DCP)
     model.save_pretrained(args.save_dir)
-    save_optimizer(optimizer, os.path.join(args.save_dir, "optimizer"))
+    save_optimizer(model, optimizer, os.path.join(args.save_dir, "optimizer"))
 
     if rank == 0:
         print(f"Saved to {args.save_dir}")

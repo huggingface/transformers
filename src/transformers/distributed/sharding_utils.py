@@ -54,7 +54,6 @@ class DtensorShardOperation:
     | Scenario                                          | Placements                            |
     |---------------------------------------------------|---------------------------------------|
     | TP-only, non-fused (e.g. q_proj/k_proj/v_proj)    | [Shard(d)]                            |
-    | TP-only, fused QKV                                | [_StridedShard(d, sf=3)]              |
     | TP-only, fused gate/up                            | [_StridedShard(d, sf=2)]              |
     | TP + FSDP, same tensor dim                        | [_StridedShard(d, sf=tp_size), Shard(d)] |
     | TP + FSDP, different dims                         | [Shard(d1), Shard(d2)]                |
@@ -79,16 +78,6 @@ class DtensorShardOperation:
     | N per-expert tensors (called once  | 0..N-1     | [in, out]     | Inner-dim slice if this     |
     | per expert by the caller)          |            |               | rank owns expert `i`,       |
     |                                    |            |               | else None (caller drops it).|
-
-    Saving (in utils.py)
-    --------------------
-    During `save_pretrained`, each DTensor parameter must be all-gathered
-    back to a full tensor on rank 0 so it can be written to safetensors.
-
-    | Placements           | Path taken                                          |
-    |----------------------|-----------------------------------------------------|
-    | No _StridedShard     | `redistribute(Replicate)`                           |
-    | Has _StridedShard    | Manual right-to-left `_to_replicate_tensor` walk    |
     """
 
     def __init__(self, param: DTensor):
@@ -303,30 +292,187 @@ def _replicate_dtensor(tensor: DTensor) -> DTensor:
         return DTensor.from_local(local, mesh, replicate_all, run_check=False)
 
 
-def convert_strided_to_shard(state_dict: dict) -> dict[str, tuple]:
-    # Convert _StridedShard DTensors in a state dict to plain Shard for DCP compatibility.
-    placement_map: dict[str, tuple] = {}
-    for key, value in state_dict.items():
-        if isinstance(value, dict):
-            nested = convert_strided_to_shard(value)
-            for nk, nv in nested.items():
-                placement_map[f"{key}.{nk}"] = nv
-        elif isinstance(value, DTensor) and any(isinstance(p, _StridedShard) for p in value.placements):
-            placement_map[key] = tuple(value.placements)
-            shard_placements = tuple(Shard(p.dim) if isinstance(p, _StridedShard) else p for p in value.placements)
-            state_dict[key] = _replicate_dtensor(value).redistribute(placements=shard_placements)
-    return placement_map
+def _find_strided_shard_placement_from_fused_params(placements):
+    for i, p in enumerate(placements):
+        if not isinstance(p, _StridedShard):
+            continue
+        # We want to find the first _StridedShard placement that is not composed with another placement on the same dim.
+        # Because that means it's a fused parameter. Meanwhile if it's acting on the same dim, that means it comes from composing parallelism together
+        has_partner_on_same_dim = any(
+            j != i and getattr(other, "dim", None) == p.dim for j, other in enumerate(placements)
+        )
+        if not has_partner_on_same_dim:
+            return p
+    return None
 
 
-def restore_strided_from_shard(state_dict: dict, placement_map: dict[str, tuple]) -> None:
-    # Restore _StridedShard placements after dcp.load.
-    def _resolve(d, dotted_key):
-        parts = dotted_key.split(".", 1)
-        if len(parts) == 2 and parts[0] in d and isinstance(d[parts[0]], dict):
-            return _resolve(d[parts[0]], parts[1])
-        return d, dotted_key
+def _split_fused_dtensor(dt, dim, n_pieces):
+    local_pieces = list(dt._local_tensor.chunk(n_pieces, dim=dim))
+    if len(local_pieces) != n_pieces:
+        raise RuntimeError(
+            f"Cannot split DTensor of shape {tuple(dt.shape)} into {n_pieces} pieces along dim {dim}: "
+            f"got {len(local_pieces)} chunks instead."
+        )
+    new_placements = tuple(
+        Shard(p.dim) if (isinstance(p, _StridedShard) and p.dim == dim) else p for p in dt.placements
+    )
+    return [
+        DTensor.from_local(lp.contiguous(), dt.device_mesh, new_placements, run_check=False) for lp in local_pieces
+    ]
 
-    for key, original_placements in placement_map.items():
-        container, leaf_key = _resolve(state_dict, key)
-        if leaf_key in container and isinstance(container[leaf_key], DTensor):
-            container[leaf_key] = _replicate_dtensor(container[leaf_key]).redistribute(placements=original_placements)
+
+def _merge_unfused_dtensors(pieces, dim, target_placements):
+    local_cat = torch.cat([p._local_tensor for p in pieces], dim=dim).contiguous()
+    return DTensor.from_local(local_cat, pieces[0].device_mesh, target_placements, run_check=False)
+
+
+def get_fusion_metadata(optimizer_state_dict):
+    """Inspect the optimizer state dict and return metadata describing every
+    fused param that needs to be split for DCP. Does NOT mutate
+    `optimizer_state_dict`. Pair it with `unfuse_optimizer_state` to apply
+    the split and `fuse_optimizer_state` to undo it on load.
+
+    Args:
+        optimizer_state_dict: as returned by `get_optimizer_state_dict(...)`. For
+            a Mixtral on a (fsdp=2, tp=2) mesh with AdamW and a single MoE layer,
+            it looks like:
+
+                {
+                    "state": {
+                        "model.layers.0.mlp.experts.gate_up_proj": {
+                            "exp_avg":    DTensor(shape=(4, 16, 8),
+                                                  placements=(Shard(0), _StridedShard(1, sf=2))),
+                            "exp_avg_sq": DTensor(shape=(4, 16, 8),
+                                                  placements=(Shard(0), _StridedShard(1, sf=2))),
+                            "step":       tensor(7.0),
+                        },
+                        "model.layers.0.mlp.experts.down_proj": {
+                            "exp_avg":    DTensor(shape=(4, 8, 16),
+                                                  placements=(Shard(0), Shard(2))),
+                            "step":       tensor(7.0),
+                        },
+                    },
+                    "param_groups": [{"lr": 1e-4, ...}],
+                }
+
+    Returns:
+            fusion_metadata = {
+                "model.layers.0.mlp.experts.gate_up_proj": {
+                    "chunk_dim": 1,
+                    "placements": (Shard(0), _StridedShard(1, split_factor=2)),
+                    "unfused_keys": [
+                        "model.layers.0.mlp.experts.gate_up_proj.0",
+                        "model.layers.0.mlp.experts.gate_up_proj.1",
+                    ],
+                },
+            }
+    """
+    optimizer_state = optimizer_state_dict.get("state", {})
+    fusion_metadata: dict[str, dict] = {}
+
+    for param_name, optimizer_fields in optimizer_state.items():
+        dtensor = next((v for v in optimizer_fields.values() if isinstance(v, DTensor)), None)
+        if dtensor is None:
+            continue
+        strided_shard_placement = _find_strided_shard_placement_from_fused_params(dtensor.placements)
+        if strided_shard_placement is None:
+            continue
+        fusion_metadata[param_name] = {
+            "chunk_dim": strided_shard_placement.dim,
+            "placements": tuple(dtensor.placements),
+            "unfused_keys": [f"{param_name}.{i}" for i in range(strided_shard_placement.split_factor)],
+        }
+
+    return fusion_metadata
+
+
+def unfuse_optimizer_state(optimizer_state_dict, fusion_metadata):
+    """Apply `fusion_metadata` to split each fused param into its `sf` plain-Shard
+    pieces in place. After the call, `optimizer_state_dict["state"]` has
+    `<param>.0` .. `<param>.{sf-1}` keys in place of each original fused key;
+    non-fused params (absent from `fusion_metadata`) are untouched.
+
+    Args:
+        optimizer_state_dict: same shape as the input to `get_fusion_metadata`.
+        fusion_metadata: as returned by `get_fusion_metadata(optimizer_state_dict)`.
+    """
+    optimizer_state = optimizer_state_dict.get("state", {})
+
+    for param_name, metadata in fusion_metadata.items():
+        optimizer_fields = optimizer_state[param_name]
+
+        for unfused_key in metadata["unfused_keys"]:
+            optimizer_state[unfused_key] = {}
+
+        for optim_param_name, value in optimizer_fields.items():
+            if isinstance(value, DTensor):
+                chunks = _split_fused_dtensor(value, metadata["chunk_dim"], len(metadata["unfused_keys"]))
+            else:
+                chunks = [value] * len(metadata["unfused_keys"])  # scalar — replicate
+            for unfused_key, chunk in zip(metadata["unfused_keys"], chunks):
+                optimizer_state[unfused_key][optim_param_name] = chunk
+
+        del optimizer_state[param_name]
+
+
+def fuse_optimizer_state(optimizer_state_dict, fusion_metadata):
+    """Fuse the optimizer state dict back in place using the fusion info.
+
+    Inverse of `unfuse_optimizer_state`: concatenates each set of per-piece
+    sub-dicts along `chunk_dim`, rewraps each DTensor field with the original
+    `_StridedShard` placement, then replaces the piece keys with the fused key
+    in `optimizer_state_dict["state"]`.
+
+    Args:
+        optimizer_state_dict: the unfused state dict (e.g. just filled by
+            `dcp.load`). For our Mixtral example, before this call it looks like:
+
+                {
+                    "state": {
+                        "model.layers.0.mlp.experts.gate_up_proj.0": {
+                            "exp_avg":    DTensor(shape=(4, 8, 8),
+                                                  placements=(Shard(0), Shard(1))),
+                            "exp_avg_sq": DTensor(shape=(4, 8, 8),
+                                                  placements=(Shard(0), Shard(1))),
+                            "step":       tensor(7.0),
+                        },
+                        "model.layers.0.mlp.experts.gate_up_proj.1": {
+                            "exp_avg":    DTensor(shape=(4, 8, 8),
+                                                  placements=(Shard(0), Shard(1))),
+                            "exp_avg_sq": DTensor(shape=(4, 8, 8),
+                                                  placements=(Shard(0), Shard(1))),
+                            "step":       tensor(7.0),
+                        },
+                        "model.layers.0.mlp.experts.down_proj": {
+                            "exp_avg":    DTensor(shape=(4, 8, 16),
+                                                  placements=(Shard(0), Shard(2))),
+                            "step":       tensor(7.0),
+                        },
+                    },
+                    "param_groups": [{"lr": 1e-4, ...}],
+                }
+
+            After the call the `.0`/`.1` piece keys are gone and the original
+            fused key is restored with the `_StridedShard` placement.
+
+        fusion_metadata: as returned by `get_fusion_metadata`.
+    """
+    optimizer_state = optimizer_state_dict.get("state", {})
+
+    for param_name, metadata in fusion_metadata.items():
+        first_piece = optimizer_state[metadata["unfused_keys"][0]]
+
+        merged_fields = {}
+        for optim_param_name, value in first_piece.items():
+            chunks = [optimizer_state[unfused_key][optim_param_name] for unfused_key in metadata["unfused_keys"]]
+            if isinstance(value, DTensor):
+                merged_fields[optim_param_name] = _merge_unfused_dtensors(
+                    chunks, metadata["chunk_dim"], metadata["placements"]
+                )
+            else:
+                merged_fields[optim_param_name] = value  # scalar — pick any copy
+
+        optimizer_state[param_name] = merged_fields
+
+        for unfused_key in metadata["unfused_keys"]:
+            del optimizer_state[unfused_key]
