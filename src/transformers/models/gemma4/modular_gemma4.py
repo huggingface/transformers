@@ -1478,13 +1478,6 @@ class Gemma4TextModel(Gemma3TextModel):
 class Gemma4ForCausalLM(Gemma3ForCausalLM):
     base_model_prefix = "model"
 
-    def __init__(self, config: Gemma4TextConfig):
-        super().__init__(config)
-        # Grab the ones from the child
-        self._keys_to_ignore_on_load_unexpected = [
-            f"model.{name}" for name in self.model._keys_to_ignore_on_load_unexpected
-        ]
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1936,6 +1929,7 @@ class Gemma4Model(Gemma3nModel):
 
         if self.config.get_text_config().hidden_size_per_layer_input:
             pad_embedding = self.language_model.embed_tokens.weight[self.config.text_config.pad_token_id, :]
+            multimodal_mask = multimodal_mask.to(inputs_embeds.device)
             llm_inputs_embeds = torch.where(multimodal_mask[..., None], pad_embedding.view(1, 1, -1), inputs_embeds)
             per_layer_inputs = self.language_model.get_per_layer_inputs(llm_input_ids, llm_inputs_embeds)
         else:

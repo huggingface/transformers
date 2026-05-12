@@ -1800,10 +1800,6 @@ class Gemma4ForCausalLM(Gemma4PreTrainedModel, GenerationMixin):
         self.model = Gemma4TextModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        # Grab the ones from the child
-        self._keys_to_ignore_on_load_unexpected = [
-            f"model.{name}" for name in self.model._keys_to_ignore_on_load_unexpected
-        ]
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2108,11 +2104,6 @@ class Gemma4Model(Gemma4PreTrainedModel):
             if config.audio_config is not None
             else None
         )
-
-        # Grab the ones from the child
-        self._keys_to_ignore_on_load_unexpected = [
-            f"language_model.{name}" for name in self.language_model._keys_to_ignore_on_load_unexpected
-        ]
         self.post_init()
 
     def get_input_embeddings(self):
@@ -2232,6 +2223,7 @@ class Gemma4Model(Gemma4PreTrainedModel):
 
         if self.config.get_text_config().hidden_size_per_layer_input:
             pad_embedding = self.language_model.embed_tokens.weight[self.config.text_config.pad_token_id, :]
+            multimodal_mask = multimodal_mask.to(inputs_embeds.device)
             llm_inputs_embeds = torch.where(multimodal_mask[..., None], pad_embedding.view(1, 1, -1), inputs_embeds)
             per_layer_inputs = self.language_model.get_per_layer_inputs(llm_input_ids, llm_inputs_embeds)
         else:
@@ -2416,10 +2408,6 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.model = Gemma4Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        # Grab the ones from the child
-        self._keys_to_ignore_on_load_unexpected = [
-            f"model.{name}" for name in self.model._keys_to_ignore_on_load_unexpected
-        ]
         self.post_init()
 
     @auto_docstring
