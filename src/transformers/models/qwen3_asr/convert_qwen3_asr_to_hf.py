@@ -142,7 +142,7 @@ def clean_config(src_root: Path, model_type: str) -> dict:
             config_dict["initializer_range"] = thinker_config["initializer_range"]
         # Forced aligner specific
         if model_type == "forced_aligner" and "classify_num" in thinker_config:
-            config_dict["num_timestamp_bins"] = thinker_config["classify_num"]
+            config_dict["num_labels"] = thinker_config["classify_num"]
 
     # Audio config: strip non-standard fields
     if "audio_config" in config_dict:
@@ -281,11 +281,6 @@ def write_asr_model(src_root: Path, dst_root: Path):
 def write_forced_aligner_model(src_root: Path, dst_root: Path):
     """Convert and write a Qwen3 Forced Aligner model."""
     config_dict = clean_config(src_root, "forced_aligner")
-
-    # Ensure num_labels is set for token classification
-    # Each bin corresponds to a time offset of ``timestamp_segment_time`` milliseconds (set on the processor), so the
-    # maximum representable duration is ``num_timestamp_bins * timestamp_segment_time`` ms (e.g. 5000 x 80 ms = 400 s).
-    config_dict["num_labels"] = config_dict.get("num_timestamp_bins", 5000)
     config = Qwen3ASRConfig(**config_dict)
     model = Qwen3ASRForTokenClassification(config).to(torch.bfloat16)
 
