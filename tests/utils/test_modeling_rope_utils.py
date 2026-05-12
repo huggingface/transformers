@@ -172,9 +172,7 @@ class RopeTest(unittest.TestCase):
             if rope_type in ("default", "proportional"):
                 continue
             for param, valid_rope_types in valid_param_mapping.items():
-                config.rope_parameters = nest(
-                    {"rope_type": rope_type, "rope_theta": 10000.0, param: True}
-                )
+                config.rope_parameters = nest({"rope_type": rope_type, "rope_theta": 10000.0, param: True})
                 if rope_type in valid_rope_types:
                     continue
                 with self.assertRaises(KeyError):
