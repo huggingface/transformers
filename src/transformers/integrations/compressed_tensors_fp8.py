@@ -114,7 +114,9 @@ class CompressedTensorsFP8Linear(nn.Linear):
             # Per-tensor: (1, 1) → need to expand to (1, out_features)
             scale_b = weight_scale_float32.t()
             if scale_b.shape[-1] == 1 and self.out_features > 1:
-                scale_b = scale_b.expand(1, self.out_features)
+                # expand() creates a stride-0 view; _scaled_mm requires contiguous scales.
+                # The scale tensor is tiny so .contiguous() cost is negligible.
+                scale_b = scale_b.expand(1, self.out_features).contiguous()
 
             output = torch._scaled_mm(
                 x_quantized,
