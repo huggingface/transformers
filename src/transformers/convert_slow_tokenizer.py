@@ -110,13 +110,8 @@ def import_protobuf(error_message=""):
 
 
 def _get_prepend_scheme(add_prefix_space: bool, original_tokenizer) -> str:
-    if add_prefix_space:
-        prepend_scheme = "always"
-        if not getattr(original_tokenizer, "legacy", True):
-            prepend_scheme = "first"
-    else:
-        prepend_scheme = "never"
-    return prepend_scheme
+    # "first" avoids the spurious "▁" prefix on chunks following a user-added token (#28218).
+    return "first" if add_prefix_space else "never"
 
 
 def generate_merges(vocab, vocab_scores, skip_tokens: Collection[str] | None = None):
@@ -1316,7 +1311,8 @@ class PegasusConverter(SpmConverter):
         return proto.trainer_spec.unk_id + self.original_tokenizer.offset
 
     def pre_tokenizer(self, replacement, add_prefix_space):
-        prepend_scheme = _get_prepend_scheme(add_prefix_space, self.original_tokenizer)
+        # WhitespaceSplit + Metaspace needs "always" so each split word gets the "▁" marker.
+        prepend_scheme = "always" if add_prefix_space else "never"
         return pre_tokenizers.Sequence(
             [
                 pre_tokenizers.WhitespaceSplit(),

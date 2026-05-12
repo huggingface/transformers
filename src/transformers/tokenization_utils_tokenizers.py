@@ -488,8 +488,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if self._should_update_post_processor:
             self.update_post_processor()
 
-        self._init_complete = True
-
     @property
     def is_fast(self) -> bool:
         return True
@@ -729,23 +727,18 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if special_tokens:
             return self._tokenizer.add_special_tokens(new_tokens)
 
-        if getattr(self, "_init_complete", False) and any(isinstance(t, str) or not t.special for t in new_tokens):
-            self._align_metaspace_for_added_tokens()
+        # For tokenizers loaded from a .json that bakes in prepend_scheme="always",
+        # swap a standalone Metaspace to "first" once a non-special token enters so
+        # the chunk after the added token does not pick up a spurious "▁" (#28218).
+        if any(isinstance(t, str) or not t.special for t in new_tokens):
+            pre_tokenizer = self._tokenizer.pre_tokenizer
+            if isinstance(pre_tokenizer, pre_tokenizers_fast.Metaspace) and pre_tokenizer.prepend_scheme == "always":
+                self._tokenizer.pre_tokenizer = pre_tokenizers_fast.Metaspace(
+                    replacement=pre_tokenizer.replacement,
+                    prepend_scheme="first",
+                    split=pre_tokenizer.split,
+                )
         return self._tokenizer.add_tokens(new_tokens)
-
-    def _align_metaspace_for_added_tokens(self) -> None:
-        # Mirror `SpmConverter.pre_tokenizer` for non-legacy spm tokenizers: switch a
-        # standalone Metaspace pre_tokenizer from prepend_scheme="always" to "first"
-        # so chunks following a user-added token are not given a spurious "▁" prefix.
-        # Sequence pipelines (eg. WhitespaceSplit + Metaspace) rely on "always"
-        # semantics for whitespace handling and are intentionally skipped.
-        pre_tokenizer = self._tokenizer.pre_tokenizer
-        if isinstance(pre_tokenizer, pre_tokenizers_fast.Metaspace) and pre_tokenizer.prepend_scheme == "always":
-            self._tokenizer.pre_tokenizer = pre_tokenizers_fast.Metaspace(
-                replacement=pre_tokenizer.replacement,
-                prepend_scheme="first",
-                split=pre_tokenizer.split,
-            )
 
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
         """

@@ -218,9 +218,8 @@ class PreTrainedTokenizationFastTest(unittest.TestCase):
             self.assertIsInstance(tokenizer, PreTrainedTokenizerFast)
 
     def test_added_token_does_not_get_metaspace_prefix(self):
-        # Issue #28218: when a non-special token is added to a SentencePiece-style fast
-        # tokenizer, the chunk that follows the added token must not be given a
-        # spurious "▁" prefix from the Metaspace pre_tokenizer.
+        # #28218: a non-special add_tokens call on a SentencePiece-style fast tokenizer
+        # must not leave a spurious "▁" prefix on the chunk after the added token.
         vocab = [
             ("<unk>", 0.0),
             ("▁", -10.0),

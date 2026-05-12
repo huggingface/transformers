@@ -3547,13 +3547,8 @@ if PreTrainedTokenizerBase.push_to_hub.__doc__ is not None:
 
 
 def _get_prepend_scheme(add_prefix_space: bool, original_tokenizer) -> str:
-    if add_prefix_space:
-        prepend_scheme = "always"
-        if not getattr(original_tokenizer, "legacy", True):
-            prepend_scheme = "first"
-    else:
-        prepend_scheme = "never"
-    return prepend_scheme
+    # "first" avoids the spurious "▁" prefix on chunks following a user-added token (#28218).
+    return "first" if add_prefix_space else "never"
 
 
 def generate_merges(vocab, vocab_scores: dict[str, float] | None = None, skip_tokens: Collection[str] | None = None):
