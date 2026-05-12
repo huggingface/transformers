@@ -139,31 +139,43 @@ def _build_checkpoint_conversion_mapping():
             ),
             # Quantized MoE layers
             WeightConverter(
+                source_patterns="mlp.experts.*.down_proj.weight_packed",
+                target_patterns="mlp.experts.down_proj.weight_packed",
+                operations=[MergeModulelist(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.*.down_proj.weight_scale",
+                target_patterns="mlp.experts.down_proj.weight_scale",
+                operations=[MergeModulelist(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.*.down_proj.weight_shape",
+                target_patterns="mlp.experts.down_proj.weight_shape",
+                operations=[MergeModulelist(dim=0)],
+            ),
+            WeightConverter(
                 source_patterns=[
                     "mlp.experts.*.gate_proj.weight_packed",
                     "mlp.experts.*.up_proj.weight_packed",
                 ],
-                target_patterns="mlp.experts.gate_up_proj",
+                target_patterns="mlp.experts.gate_up_proj.weight_packed",
                 operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
             ),
-            WeightConverter(
-                source_patterns="mlp.experts.*.down_proj.weight_packed",
-                target_patterns="mlp.experts.down_proj",
-                operations=[MergeModulelist(dim=0)],
-            ),
-
             WeightConverter(
                 source_patterns=[
                     "mlp.experts.*.gate_proj.weight_scale",
                     "mlp.experts.*.up_proj.weight_scale",
                 ],
-                target_patterns="mlp.experts.up_proj_scale",
+                target_patterns="mlp.experts.gate_up_proj.weight_scale",
                 operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
             ),
             WeightConverter(
-                source_patterns="mlp.experts.*.down_proj.weight_scale",
-                target_patterns="mlp.experts.down_proj_scale",
-                operations=[MergeModulelist(dim=0)],
+                source_patterns=[
+                    "mlp.experts.*.gate_proj.weight_shape",
+                    "mlp.experts.*.up_proj.weight_shape",
+                ],
+                target_patterns="mlp.experts.gate_up_proj.weight_shape",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
             ),
         ],
         "llava": [
@@ -649,7 +661,7 @@ def _build_checkpoint_conversion_mapping():
         ),
     ]
 
-    mapping["kimi_k25"] += mapping["qwen2_moe"].copy()
+    # mapping["kimi_k25"] += mapping["qwen2_moe"].copy()
 
     mapping["ernie4_5_moe"] = mapping["qwen2_moe"].copy()
     mapping["ernie4_5_moe"] += [

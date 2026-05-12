@@ -4213,56 +4213,42 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         model.set_use_kernels(use_kernels, kernel_config)
 
         # Decompress after loading packed weights. Do we support this type of quant on MoE projections, there should be a better way
+        from functools import reduce
+
         from compressed_tensors.compressors.pack_quantized import PackedQuantizationCompressor
-        from compressed_tensors.quantization import QuantizationArgs, QuantizationScheme
 
-        def dequant(model, param_name, packed_parameter, scale):
-            packed_parameter = packed_parameter.to(torch.uint8)
-            weight_args = QuantizationArgs(
-                num_bits=4,
-                type="int",
-                strategy="group",
-                group_size=32,
-                symmetric=True,
-                dynamic=False,
-            )   
-            scheme = QuantizationScheme(weights=weight_args, targets=["Linear"])
-            compressor = PackedQuantizationCompressor()
+        class DummyModule(nn.Module):
+            def __init__(self, p, scale, shape):
+                super().__init__()
+                self.weight_packed = nn.Parameter(p, requires_grad=False)
+                self.weight_scale = nn.Parameter(scale, requires_grad=False)
+                self.weight_shape = nn.Parameter(shape, requires_grad=False)
 
-            #unpacked = [unpack_from_int32(packed, weights.num_bits, original_shape) for packed in packed_parameter]
-            dequant_list = []
-            for param, scale_expert in zip(packed_parameter, scale):
-                #print(param_name, param.shape, scale_expert.shape)
-                original_shape = [4096, 7168] if "up" in param_name else [7168, 2048]
-                sd = {
-                    "weight_packed": param.to(torch.int32),
-                    "weight_scale": scale_expert,
-                    "weight_shape": torch.tensor(original_shape, device=param.device),
-                }
-                decompressed = compressor.decompress(sd, scheme)
-                dequant_list.append(decompressed["weight"])
-                del param
-                del scale_expert
-                del sd
-                torch.cuda.empty_cache()
+        def decompress_module(model, param_name):
+            compressed_module = reduce(getattr, param_name.split("."), model)
+            state_dict = compressed_module.state_dict()
+            weights = []
+            weight, scale, shape = state_dict["weight_packed"], state_dict["weight_scale"], state_dict["weight_shape"]
+            # Compressed-tensors don't operate on 3D packed inputs when decompressing!
+            for w, s, sh in zip(weight, scale, shape):
+                module = DummyModule(w, s, sh)
+                module.quantization_scheme = compressed_module.quantization_scheme
+                PackedQuantizationCompressor.decompress_module(module)
+                weights.append(module.weight)
 
-            dequant_param = torch.stack(dequant_list, dim=0)
-            setattr(model, param_name, nn.Parameter(dequant_param))
-            del dequant_param
-            torch.cuda.empty_cache()
+            # set stacked weights back as nn.parameetr, since MoE kernels expect that
+            path, _, name = param_name.rpartition(".")
+            parent = reduce(getattr, path.split("."), model)
+            delattr(parent, name)
 
-        for name, module in model.named_modules():
-            if name.endswith('.mlp.experts') and os.environ.get("RANK", "0") == "0":
-                scale = getattr(module, "up_proj_scale", None)
-                gate_up_proj = getattr(module, "gate_up_proj", None)
-                if scale is not None:
-                    dequant(module, "gate_up_proj", gate_up_proj, scale)
+            stacked_weights = nn.Parameter(torch.stack(weights, dim=0))
+            del weights
+            setattr(parent, name, stacked_weights)
 
-                down_proj = getattr(module, "down_proj", None)
-                scale = getattr(module, "down_proj_scale", None)
-                if scale is not None:
-                    dequant(module, "down_proj", down_proj, scale)
-        
+        # Needs to iter over all layers with MoE
+        decompress_module(model, "model.language_model.layers.1.mlp.experts.gate_up_proj")
+        decompress_module(model, "model.language_model.layers.1.mlp.experts.down_proj")
+
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)
         if model.can_generate() and hasattr(model, "adjust_generation_fn") and not gguf_file:
