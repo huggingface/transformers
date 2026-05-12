@@ -1194,8 +1194,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     # Loading-specific properties
     # A dictionary `{"target": "source"}` of checkpoint keys that are potentially tied to one another
     _tied_weights_keys: dict[str, str] = None
-    # Used for BC support in VLMs, not meant to be used by new models
-    _checkpoint_conversion_mapping: dict[str, str] = {}
     # A list of `re` patterns describing keys to ignore if they are missing from checkpoints to avoid warnings
     _keys_to_ignore_on_load_missing: set[str] | list[str] | None = None
     # A list of `re` patterns describing keys to ignore if they are unexpected in the checkpoints to avoid warnings
