@@ -4,6 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_sapiens2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# TODO(guarin): Update license header
 # Copyright 2026 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -415,13 +416,11 @@ class Sapiens2Layer(GradientCheckpointingLayer):
 
     def __init__(self, config: Sapiens2Config, layer_idx: int):
         super().__init__()
-
-        self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm1 = nn.RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = Sapiens2Attention(config, layer_idx=layer_idx)
         self.layer_scale1 = Sapiens2LayerScale(config)
         self.drop_path = Sapiens2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
-
-        self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm2 = nn.RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         if config.use_gated_mlp:
             self.mlp = Sapiens2GatedMLP(config)
