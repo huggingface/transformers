@@ -1254,15 +1254,27 @@ class TestConversionMapping(unittest.TestCase):
 
 
 class TestApplyTransformsToMetaModel(unittest.TestCase):
+    class SimpleModel(nn.Module):
+        base_model_prefix = ""
+
+        def __init__(self):
+            super().__init__()
+            self.linear = nn.Linear(4, 4, bias=False)
+
+    class QKVAttn(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.qkv_proj = nn.Linear(2, 6, bias=False)
+
+    class QKVModel(nn.Module):
+        base_model_prefix = ""
+
+        def __init__(self):
+            super().__init__()
+            self.self_attn = TestApplyTransformsToMetaModel.QKVAttn()
+
     def test_weight_renaming_renames_parameter(self):
-        class SimpleModel(nn.Module):
-            base_model_prefix = ""
-
-            def __init__(self):
-                super().__init__()
-                self.linear = nn.Linear(4, 4, bias=False)
-
-        model = SimpleModel()
+        model = TestApplyTransformsToMetaModel.SimpleModel()
         original_weight = model.linear.weight.data.clone()
         self.assertIn("linear.weight", model.state_dict())
 
@@ -1274,14 +1286,7 @@ class TestApplyTransformsToMetaModel(unittest.TestCase):
         torch.testing.assert_close(state_dict["linear.kernel"], original_weight)
 
     def test_weight_renaming_is_idempotent(self):
-        class SimpleModel(nn.Module):
-            base_model_prefix = ""
-
-            def __init__(self):
-                super().__init__()
-                self.linear = nn.Linear(4, 4, bias=False)
-
-        model = SimpleModel()
+        model = TestApplyTransformsToMetaModel.SimpleModel()
         apply_transforms_to_meta_model(model, [WeightRenaming("linear.weight", "linear.kernel")])
         keys_after_first = set(model.state_dict().keys())
 
@@ -1289,14 +1294,7 @@ class TestApplyTransformsToMetaModel(unittest.TestCase):
         self.assertEqual(keys_after_first, set(model.state_dict().keys()))
 
     def test_weight_renaming_no_match_is_noop(self):
-        class SimpleModel(nn.Module):
-            base_model_prefix = ""
-
-            def __init__(self):
-                super().__init__()
-                self.linear = nn.Linear(4, 4, bias=False)
-
-        model = SimpleModel()
+        model = TestApplyTransformsToMetaModel.SimpleModel()
         original_keys = set(model.state_dict().keys())
 
         apply_transforms_to_meta_model(model, [WeightRenaming("non_existent.weight", "something.weight")])
@@ -1304,19 +1302,7 @@ class TestApplyTransformsToMetaModel(unittest.TestCase):
         self.assertEqual(original_keys, set(model.state_dict().keys()))
 
     def test_weight_converter_splits_fused_projection(self):
-        class QKVAttn(nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.qkv_proj = nn.Linear(2, 6, bias=False)
-
-        class QKVModel(nn.Module):
-            base_model_prefix = ""
-
-            def __init__(self):
-                super().__init__()
-                self.self_attn = QKVAttn()
-
-        model = QKVModel()
+        model = TestApplyTransformsToMetaModel.QKVModel()
         model.config = PretrainedConfig()
         qkv_weight = torch.randn(6, 2)
         model.self_attn.qkv_proj.weight.data.copy_(qkv_weight)
@@ -1349,18 +1335,6 @@ class TestApplyTransformsToMetaModel(unittest.TestCase):
         torch.testing.assert_close(state_dict["self_attn.v_proj.weight"], expected_v)
 
     def test_weight_converter_split_is_idempotent(self):
-        class QKVAttn(nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.qkv_proj = nn.Linear(2, 6, bias=False)
-
-        class QKVModel(nn.Module):
-            base_model_prefix = ""
-
-            def __init__(self):
-                super().__init__()
-                self.self_attn = QKVAttn()
-
         def make_mapping():
             return [
                 WeightConverter(
@@ -1370,7 +1344,7 @@ class TestApplyTransformsToMetaModel(unittest.TestCase):
                 )
             ]
 
-        model = QKVModel()
+        model = TestApplyTransformsToMetaModel.QKVModel()
         model.config = PretrainedConfig()
 
         apply_transforms_to_meta_model(model, make_mapping())
@@ -1380,15 +1354,10 @@ class TestApplyTransformsToMetaModel(unittest.TestCase):
         self.assertEqual(keys_after_first, set(model.state_dict().keys()))
 
     def test_weight_converter_splits_across_multiple_layers(self):
-        class QKVAttn(nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.qkv_proj = nn.Linear(2, 6, bias=False)
-
         class QKVLayer(nn.Module):
             def __init__(self):
                 super().__init__()
-                self.self_attn = QKVAttn()
+                self.self_attn = TestApplyTransformsToMetaModel.QKVAttn()
 
         class QKVModel(nn.Module):
             base_model_prefix = "model"
@@ -1484,11 +1453,6 @@ class TestApplyTransformsToMetaModel(unittest.TestCase):
         torch.testing.assert_close(state_dict["self_attn.qkv_proj.weight"], expected_qkv)
 
     def test_multiple_independent_converters_in_single_call(self):
-        class Attn(nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.qkv_proj = nn.Linear(2, 6, bias=False)
-
         class MLP(nn.Module):
             def __init__(self):
                 super().__init__()
@@ -1500,7 +1464,7 @@ class TestApplyTransformsToMetaModel(unittest.TestCase):
 
             def __init__(self):
                 super().__init__()
-                self.self_attn = Attn()
+                self.self_attn = TestApplyTransformsToMetaModel.QKVAttn()
                 self.mlp = MLP()
 
         model = TwoHeadModel()
