@@ -370,15 +370,19 @@ class DeepseekV4HCACompressor(nn.Module):
             compressed = cache_layer.update_compressor_states("compressor", compressed)
         compressed_kv = compressed.unsqueeze(1)
 
-        # Per-query readiness mask: entry `w` summarizes positions `[w*m, (w+1)*m - 1]`,
-        # so query `t` may only see it once its window has closed — i.e., `w < (t+1) // m`.
-        # The Ca/Cb-style padding inside the compressor only handles cross-call continuity;
-        # within-prefill causality (multiple entries emitted at once) still needs this bias.
         T_total = compressed_kv.shape[2]
+        seq_len = position_ids.shape[1]
+        if seq_len == 1 or T_total == 0:
+            return compressed_kv, None
+
+        # query `t` may only see cache entries at pos `w` t > w * compress_rate (ex: t=7, w=2 t does not attend to it).
         block_idx = torch.arange(T_total, device=compressed_kv.device)
         causal_threshold = (position_ids + 1) // self.compress_rate  # [B, S]
-        allowed = block_idx.view(1, 1, 1, -1) < causal_threshold.unsqueeze(1).unsqueeze(-1)  # [B, 1, S, T]
-        block_bias = torch.where(allowed, compressed_kv.new_zeros(()), compressed_kv.new_full((), float("-inf")))
+        block_bias = compressed_kv.new_zeros((batch, 1, seq_len, T_total))
+        block_bias = block_bias.masked_fill(
+            block_idx.view(1, 1, 1, -1) >= causal_threshold.unsqueeze(1).unsqueeze(-1),
+            float("-inf"),
+        )
         return compressed_kv, block_bias
 
 

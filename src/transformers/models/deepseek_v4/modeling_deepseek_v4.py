@@ -433,11 +433,24 @@ class DeepseekV4HCACompressor(nn.Module):
         # so query `t` may only see it once its window has closed — i.e., `w < (t+1) // m`.
         # The Ca/Cb-style padding inside the compressor only handles cross-call continuity;
         # within-prefill causality (multiple entries emitted at once) still needs this bias.
+        # Fast path for S=1 (decode) / empty cache: a window only emits an entry once its
+        # last source token has been seen, so every cached entry is causal for any single
+        # decode query. Return `None` so the caller right-pads with 0.0 instead of building
+        # an all-zero `[B, 1, 1, T]` mask.
         T_total = compressed_kv.shape[2]
+        seq_len = position_ids.shape[1]
+        if seq_len == 1 or T_total == 0:
+            return compressed_kv, None
+
+        # Prefill: in-place `masked_fill_` on a pre-allocated zeros buffer avoids the
+        # bool intermediate + scalar tensors that `torch.where(bool, 0, -inf)` materialises.
         block_idx = torch.arange(T_total, device=compressed_kv.device)
         causal_threshold = (position_ids + 1) // self.compress_rate  # [B, S]
-        allowed = block_idx.view(1, 1, 1, -1) < causal_threshold.unsqueeze(1).unsqueeze(-1)  # [B, 1, S, T]
-        block_bias = torch.where(allowed, compressed_kv.new_zeros(()), compressed_kv.new_full((), float("-inf")))
+        block_bias = compressed_kv.new_zeros((batch, 1, seq_len, T_total))
+        block_bias.masked_fill_(
+            block_idx.view(1, 1, 1, -1) >= causal_threshold.unsqueeze(1).unsqueeze(-1),
+            float("-inf"),
+        )
         return compressed_kv, block_bias
 
 

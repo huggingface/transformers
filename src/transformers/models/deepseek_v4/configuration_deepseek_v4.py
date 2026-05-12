@@ -283,12 +283,7 @@ class DeepseekV4Config(PreTrainedConfig):
             )
         self.qk_rope_head_dim = int(self.head_dim * self.partial_rotary_factor)
 
-        # `rope_parameters`: split the flat dict (left by `convert_rope_params_to_dict`,
-        # which folded any legacy `rope_scaling` block in) into per-rope-type
-        # `{main, compress}` sub-dicts. Idempotent: re-loading an already-split config
-        # is a no-op via the `isinstance` short-circuit.
-        #
-        # Reference (`inference/model.py:475`): yarn is applied ONLY to layers with a
+        # yarn is applied ONLY to layers with a
         # compressor (CSA/HCA); pure sliding-window layers use plain RoPE with
         # `theta=rope_theta` (10000) and no scaling. Compress layers use
         # `theta=compress_rope_theta` (160000) with yarn factor=16, and the reference
