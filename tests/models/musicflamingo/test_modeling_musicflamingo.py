@@ -151,7 +151,7 @@ class MusicFlamingoForConditionalGenerationModelTest(ALMModelTest, unittest.Test
             ]
         )
 
-        inferred = model._build_audio_timestamps(input_ids, post_lengths, max_post_length)
+        inferred = model.model._build_audio_timestamps(input_ids, post_lengths, max_post_length)
         torch.testing.assert_close(inferred, audio_timestamps)
 
     @unittest.skip(

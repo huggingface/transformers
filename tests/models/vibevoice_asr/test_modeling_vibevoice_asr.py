@@ -139,6 +139,9 @@ class VibeVoiceAsrForConditionalGenerationModelTest(ModelTesterMixin, Generation
         {"audio-text-to-text": VibeVoiceAsrForConditionalGeneration} if is_torch_available() else {}
     )
     _is_composite = True
+    # Acoustic/semantic tokenizers run under torch.no_grad() in get_audio_features,
+    # so their params never receive grads — the mixin's force-unfreeze can't change that.
+    test_all_params_have_gradient = False
 
     def setUp(self):
         self.model_tester = VibeVoiceAsrModelTester(self)
