@@ -382,6 +382,30 @@ class DeepseekV4HCACompressor(nn.Module):
         return compressed_kv, block_bias
 
 
+class DeepseekV4IndexerScorer(nn.Module):
+    r"""Lightning-indexer scoring head: `∑_h w_{t,h} · ReLU(q_{t,h} · K^IComp_s)`.
+
+    Owns `weights_proj` and is the boundary the EP plan attaches to. Under TP/EP
+    `weights_proj` is colwise-sharded and the head-sum is a per-rank partial; the
+    plan entry `"...indexer.scorer": "all_reduce"` adds a forward output hook that
+    sums the partials across the EP mesh so every rank picks the same top-k.
+    """
+
+    def __init__(self, config: DeepseekV4Config):
+        super().__init__()
+        self.softmax_scale = config.index_head_dim**-0.5
+        self.weights_scaling = config.index_n_heads**-0.5
+        self.weights_proj = nn.Linear(config.hidden_size, config.index_n_heads, bias=False)
+
+    def forward(
+        self, q: torch.Tensor, compressed_kv: torch.Tensor, hidden_states: torch.Tensor
+    ) -> torch.Tensor:
+        scores = torch.matmul(q.float(), compressed_kv.transpose(-1, -2).float().unsqueeze(1))  # [B, S, H, T]
+        scores = F.relu(scores) * self.softmax_scale
+        weights = self.weights_proj(hidden_states).float() * self.weights_scaling  # [B, S, H]
+        return (scores * weights.unsqueeze(-1)).sum(dim=2)  # [B, S, T]
+
+
 class DeepseekV4Indexer(nn.Module):
     r"""Lightning Indexer (paper §2.3.1, eqs. 13–17). Used by Compressed Sparse
     Attention (CSA) to pick the top-`k` compressed KV blocks per query, with
@@ -419,19 +443,13 @@ class DeepseekV4Indexer(nn.Module):
         self.num_heads = config.index_n_heads
         self.head_dim = config.index_head_dim
         self.index_topk = config.index_topk
-        self.softmax_scale = self.head_dim**-0.5
-        self.weights_scaling = self.num_heads**-0.5
         self.kv_proj = nn.Linear(config.hidden_size, 2 * self.head_dim, bias=False)
         self.gate_proj = nn.Linear(config.hidden_size, 2 * self.head_dim, bias=False)
         self.position_bias = nn.Parameter(torch.empty(self.compress_rate, 2 * self.head_dim))
         self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.head_dim, bias=False)
-        self.weights_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
         self.rotary_emb = DeepseekV4RotaryEmbedding(config)
-        # No-op marker. Under TP it picks up the `"all_reduce"` plan entry, which adds a
-        # forward output hook that sums the (partial, per-rank) `index_scores` across the
-        # TP mesh so every rank picks the same top-k.
-        self.scores_sync = nn.Identity()
+        self.scorer = DeepseekV4IndexerScorer(config)
 
     def forward(
         self,
@@ -491,15 +509,7 @@ class DeepseekV4Indexer(nn.Module):
         q = self.q_b_proj(q_residual).view(batch, seq_len, -1, self.head_dim).transpose(1, 2)
         q = apply_rotary_pos_emb(q, cos_q, sin_q).transpose(1, 2)
 
-        # ReLU(q·kᵀ) * weights, then top-k
-        scores = torch.matmul(q.float(), compressed_kv.transpose(-1, -2).float().unsqueeze(1))  # [B, S, H, T]
-        scores = F.relu(scores) * self.softmax_scale
-        weights = self.weights_proj(hidden_states).float() * self.weights_scaling  # [B, S, H]
-        # Under TP/EP `scores` and `weights` are colwise-sharded over heads, so the
-        # head-sum above is a per-rank partial. `scores_sync` is an Identity whose
-        # `"all_reduce"` output hook sums the partials across the EP mesh — required
-        # so every rank picks the same top-k (otherwise megamoe dispatch diverges).
-        index_scores = self.scores_sync((scores * weights.unsqueeze(-1)).sum(dim=2))  # [B, S, T]
+        index_scores = self.scorer(q, compressed_kv, hidden_states)  # [B, S, T]
         compressed_len = compressed_kv.shape[1]
         top_k = min(self.index_topk, compressed_len)
 
@@ -1085,7 +1095,7 @@ class DeepseekV4PreTrainedModel(MixtralPreTrainedModel):
         "self_attn.compressor.gate_proj",
         "self_attn.compressor.indexer.kv_proj",
         "self_attn.compressor.indexer.gate_proj",
-        "self_attn.compressor.indexer.weights_proj",
+        "self_attn.compressor.indexer.scorer.weights_proj",
     ]
     _keys_to_ignore_on_load_unexpected = [r"(^|\.)mtp\..*"]
     # ``_is_stateful`` opts out of generation modes that need to roll the cache

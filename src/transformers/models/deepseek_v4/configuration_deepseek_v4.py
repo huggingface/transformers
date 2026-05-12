@@ -124,10 +124,9 @@ class DeepseekV4Config(PreTrainedConfig):
         # count. The shared MLP also stays replicated — it's small and not worth
         # sharding. The Lightning Indexer is the one carve-out: its keys are
         # replicated (own compressor at index_head_dim fed by replicated
-        # hidden_states), so head-sharding is well-formed; `q_b_proj` and
-        # `weights_proj` go colwise, and `scores_sync` is a `nn.Identity` whose
-        # `"all_reduce"` output hook sums the per-rank partial `index_scores` across
-        # the mesh so every rank picks the same top-k.
+        # hidden_states), so head-sharding is well-formed; `q_b_proj` and the
+        # `scorer.weights_proj` go colwise, and the `scorer` output is all-reduced
+        # so every rank sees the same `index_scores` and picks the same top-k.
         "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.gate_up_proj_scale_inv": "grouped_gemm",
@@ -135,8 +134,8 @@ class DeepseekV4Config(PreTrainedConfig):
         "layers.*.mlp.experts.down_proj_scale_inv": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.self_attn.compressor.indexer.q_b_proj": "colwise",
-        "layers.*.self_attn.compressor.indexer.weights_proj": "colwise",
-        "layers.*.self_attn.compressor.indexer.scores_sync": "all_reduce",
+        "layers.*.self_attn.compressor.indexer.scorer.weights_proj": "colwise",
+        "layers.*.self_attn.compressor.indexer.scorer": "all_reduce",
     }
 
     vocab_size: int = 129280
