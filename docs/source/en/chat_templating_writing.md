@@ -157,9 +157,12 @@ Templates may be stored in any of the following formats.
 
 - `additional_chat_templates/<name>.jinja`. A directory of standalone Jinja files used when a model ships multiple named templates (for example, a `default` template and a separate `tool_use` template). The `default` template still goes in `chat_template.jinja` at the repo root, but every other named template goes in `additional_chat_templates/<name>.jinja`, where the filename stem is the template name.
 
-- `chat_template` field in `tokenizer_config.json`. The legacy format used before standalone `.jinja` files. The template is embedded as a JSON string in `tokenizer_config.json`. When a model has multiple named templates, the field is a list of `{"name": ..., "template": ...}` dicts instead of a single string. This format is still fully supported on load, and you can opt back into it when saving by passing `save_jinja_files=False` to `save_pretrained`.
+> [!WARNING]
+> The legacy formats below are kept for backward-compatible loading only. Don't write chat templates to either of them.
 
-- `chat_template.json`. The legacy format used by older multimodal processor checkpoints. A JSON file of the form `{"chat_template": "<template string>"}`. This format is read-only for backward compatibility. Don't create new repositories using this format, and convert them to `chat_template.jinja` instead. A processor repository that mixes a legacy `chat_template.json` with modern `.jinja` files raises an error on load.
+- `chat_template` field in `tokenizer_config.json`. A load-only legacy format used before standalone `.jinja` files. The template is embedded as a JSON string in `tokenizer_config.json`. When a model has multiple named templates, the field is a list of `{"name": ..., "template": ...}` dicts instead of a single string. Existing repositories that use this format continue to load, but [`~PreTrainedTokenizer.save_pretrained`] writes the modern `.jinja` format instead.
+
+- `chat_template.json`. A load-only legacy format used by older multimodal processor checkpoints. A JSON file of the form `{"chat_template": "<template string>"}`. Existing repositories that use this format continue to load, but [`~ProcessorMixin.save_pretrained`] writes the modern `.jinja` format instead. A processor repository that mixes a legacy `chat_template.json` with modern `.jinja` files raises an error on load.
 
 ### Loading precedence
 
