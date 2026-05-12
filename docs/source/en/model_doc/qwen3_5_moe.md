@@ -17,8 +17,9 @@ rendered properly in your Markdown viewer.
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">    </div>
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
 [Qwen3.5 MoE](https://qwen.ai/blog?id=qwen3.5) is the sparse-expert variant of Qwen3.5. It keeps the same natively multimodal decoder and 3:1 Gated DeltaNet/Gated Attention backbone, but replaces dense FFNs with a 256-expert sparse mixture — 8 routed experts are activated per token, plus 1 shared expert — so total parameters scale well past the dense checkpoints while active compute per token stays much smaller.
