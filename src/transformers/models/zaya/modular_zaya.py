@@ -26,25 +26,21 @@ from torch import nn
 from torch.nn import init
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, DynamicCache, LinearAttentionAndFullAttentionLayer
 from ...configuration_utils import PreTrainedConfig
-from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import (
-    MoeCausalLMOutputWithPast,
-    MoeModelOutputWithPast,
-)
+from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
-    can_return_tuple,
 )
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..afmoe.modeling_afmoe import AfmoeForCausalLM
 from ..laguna.modeling_laguna import LagunaRotaryEmbedding
 from ..llama.modeling_llama import LlamaAttention, LlamaPreTrainedModel
 from ..qwen3_5_moe.modeling_qwen3_5_moe import (
@@ -234,6 +230,14 @@ def _make_zaya_cache(config: ZayaConfig) -> DynamicCache:
         "hybrid" if layer_idx % 2 == 0 else "moe" for layer_idx in range(config.num_hidden_layers)
     ]
     return DynamicCache(config=cache_config)
+
+
+def _is_zaya_cache(past_key_values: Cache) -> bool:
+    return (
+        isinstance(past_key_values, DynamicCache)
+        and len(past_key_values.layers) > 0
+        and isinstance(past_key_values.layers[0], LinearAttentionAndFullAttentionLayer)
+    )
 
 
 class ZayaCCAProjection(nn.Module):
@@ -771,7 +775,9 @@ class ZayaModel(ZayaPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None:
+        if use_cache and (past_key_values is None or not _is_zaya_cache(past_key_values)):
+            if past_key_values is not None and past_key_values.get_seq_length() > 0:
+                raise ValueError("ZAYA requires a native hybrid cache created from `_make_zaya_cache`.")
             past_key_values = _make_zaya_cache(self.config)
 
         residual = None
@@ -863,8 +869,8 @@ class ZayaModel(ZayaPreTrainedModel):
         return causal_mask_mapping
 
 
-@auto_docstring
-class ZayaForCausalLM(ZayaPreTrainedModel, GenerationMixin):
+@auto_docstring(checkpoint="Zyphra/ZAYA1-8B")
+class ZayaForCausalLM(ZayaPreTrainedModel, AfmoeForCausalLM):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _is_stateful = True
 
@@ -873,111 +879,8 @@ class ZayaForCausalLM(ZayaPreTrainedModel, GenerationMixin):
         self.model = ZayaModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=self.config.lm_head_bias)
-        if self.config.tie_word_embeddings:
-            self.lm_head.weight = self.model.embed_tokens.weight
 
         self.post_init()
-
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
-        output_router_logits: bool | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> MoeCausalLMOutputWithPast:
-        output_router_logits = (
-            output_router_logits if output_router_logits is not None else self.config.output_router_logits
-        )
-
-        outputs = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_router_logits=output_router_logits,
-            **kwargs,
-        )
-
-        hidden_states = outputs.last_hidden_state
-
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(
-                logits=logits,
-                labels=labels,
-                vocab_size=self.config.vocab_size,
-                **kwargs,
-            )
-
-        return MoeCausalLMOutputWithPast(
-            loss=loss,
-            aux_loss=None,
-            logits=logits,
-            past_key_values=outputs.past_key_values if use_cache else None,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            router_logits=outputs.router_logits,
-        )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        position_ids=None,
-        use_cache=True,
-        logits_to_keep=None,
-        **kwargs,
-    ):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids=input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            position_ids=position_ids,
-            use_cache=use_cache,
-            logits_to_keep=logits_to_keep,
-            **kwargs,
-        )
-        return model_inputs
-
-    def _prepare_cache_for_generation(
-        self,
-        generation_config,
-        model_kwargs: dict,
-        generation_mode,
-        batch_size: int,
-        max_cache_length: int,
-    ):
-        if generation_config.use_cache is False:
-            return
-
-        if "past_key_values" not in model_kwargs:
-            model_kwargs["past_key_values"] = _make_zaya_cache(self.config)
-            generation_config.cache_implementation = None
-        return super()._prepare_cache_for_generation(
-            generation_config=generation_config,
-            model_kwargs=model_kwargs,
-            generation_mode=generation_mode,
-            batch_size=batch_size,
-            max_cache_length=max_cache_length,
-        )
 
 
 __all__ = [
