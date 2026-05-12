@@ -806,9 +806,7 @@ class DeepseekV4Attention(nn.Module):
         hidden_shape = (*input_shape, -1, self.head_dim)
         # position_embeddings is a {"main", "compress"} dict from the model; pick the
         # one that matches this layer's rope type (sliding → main, CSA/HCA → compress).
-        cos, sin = (
-            position_embeddings[self.rope_layer_type] if isinstance(position_embeddings, dict) else position_embeddings
-        )
+        cos, sin = position_embeddings[self.rope_layer_type]
 
         q_residual = self.q_a_norm(self.q_a_proj(hidden_states))
         q = self.q_b_proj(q_residual).view(*hidden_shape).transpose(1, 2)
@@ -969,11 +967,6 @@ class DeepseekV4HyperHead(nn.Module):
 
 
 class DeepseekV4MLP(nn.Module):
-    """Shared-expert SwiGLU MLP. Reference `Expert.forward` casts gate/up to
-    fp32 right after the linear, runs `silu(gate) * up` in fp32, then casts
-    back to input dtype before the down projection. Shared expert has no
-    `swiglu_limit` clamp (only routed experts do)."""
-
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -984,11 +977,9 @@ class DeepseekV4MLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        dtype = x.dtype
-        gate = self.gate_proj(x).float()
-        up = self.up_proj(x).float()
-        return self.down_proj((self.act_fn(gate) * up).to(dtype))
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 @use_experts_implementation
@@ -1008,7 +999,10 @@ class DeepseekV4Experts(nn.Module):
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
     ) -> torch.Tensor:
-        final = torch.zeros_like(hidden_states)
+        # Reference `MoE.forward` accumulates routed-expert contributions in fp32
+        # (`y = torch.zeros_like(x, dtype=torch.float32)`) so 6 active experts per
+        # token don't lose precision in bf16. Cast back to input dtype at the end.
+        final = torch.zeros_like(hidden_states, dtype=torch.float32)
         with torch.no_grad():
             mask = F.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
             hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
@@ -1019,17 +1013,21 @@ class DeepseekV4Experts(nn.Module):
             top_k_pos, token_idx = torch.where(mask[expert_idx])
             current = self._apply_gate(F.linear(hidden_states[token_idx], self.gate_up_proj[expert_idx]))
             current = F.linear(current, self.down_proj[expert_idx]) * top_k_weights[token_idx, top_k_pos, None]
-            final.index_add_(0, token_idx, current.to(final.dtype))
-        return final
+            final.index_add_(0, token_idx, current.float())
+        return final.to(hidden_states.dtype)
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         # Lives on the class (like gpt-oss's _apply_gate) so the grouped_mm / batched_mm
         # backends swapped in by `@use_experts_implementation` apply the same clamp +
         # SiLU on top of their packed gate_up output instead of bypassing it.
+        # Reference `Expert.forward` casts gate/up to fp32 right after the matmul and
+        # runs clamp + SiLU(gate) * up in fp32; the .to(dtype) is at the call site
+        # before the down-projection.
+        dtype = gate_up.dtype
         gate, up = gate_up.chunk(2, dim=-1)
-        gate = gate.clamp(max=self.limit)
-        up = up.clamp(min=-self.limit, max=self.limit)
-        return self.act_fn(gate) * up
+        gate = gate.float().clamp(max=self.limit)
+        up = up.float().clamp(min=-self.limit, max=self.limit)
+        return (self.act_fn(gate) * up).to(dtype)
 
 
 class DeepseekV4TopKRouter(nn.Module):
@@ -1101,7 +1099,11 @@ class DeepseekV4SparseMoeBlock(nn.Module):
         else:
             _, weights, indices = self.gate(hidden_states)
         routed = self.experts(flat, indices, weights).view(batch, seq_len, hidden_dim)
-        return routed + self.shared_experts(residual)
+        # Reference `MoE.forward` sums routed + shared in fp32 (its `y = zeros(fp32)`)
+        # and casts to input dtype at the very end. Mirror that here so 6 active
+        # experts + 1 shared expert don't lose precision in bf16 summation.
+        out = routed.float() + self.shared_experts(residual).float()
+        return out.to(hidden_states.dtype)
 
 
 class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
@@ -1138,16 +1140,21 @@ class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
         # `post` / `comb` come out of the HC modules in fp32 (Sinkhorn projection runs
         # in float); the .to(dtype) puts everything back to the input dtype before mixing
         # so both sites stay consistent with `hidden_states`'s entry dtype.
+        # comb is consumed transposed: indexed as sum_j comb[j, k] * residual[j, d]
+        # (sum over the FIRST hc axis), equivalent to comb.T @ residual. Sinkhorn
+        # produces a doubly-stochastic but non-symmetric matrix, so the direction matters.
         dtype = hidden_states.dtype
         post, comb, collapsed = self.attn_hc(hidden_states)
         attn_output, _ = self.self_attn(self.input_layernorm(collapsed), **kwargs)
         hidden_states = post.to(dtype).unsqueeze(-1) * attn_output.unsqueeze(-2) + torch.matmul(
-            comb.to(dtype), hidden_states
+            comb.to(dtype).transpose(-1, -2), hidden_states
         )
 
         post, comb, collapsed = self.ffn_hc(hidden_states)
         mlp_output = self.mlp(self.post_attention_layernorm(collapsed), input_ids=input_ids)
-        return post.to(dtype).unsqueeze(-1) * mlp_output.unsqueeze(-2) + torch.matmul(comb.to(dtype), hidden_states)
+        return post.to(dtype).unsqueeze(-1) * mlp_output.unsqueeze(-2) + torch.matmul(
+            comb.to(dtype).transpose(-1, -2), hidden_states
+        )
 
 
 @auto_docstring
@@ -1292,10 +1299,6 @@ class DeepseekV4Model(DeepseekV4PreTrainedModel):
                 position_ids=position_ids,
             )
         hidden_states = inputs_embeds.unsqueeze(2).expand(-1, -1, self.config.hc_mult, -1).contiguous()
-        # Per-layer-type RoPE: sliding-only layers use plain θ=10000 ("main");
-        # CSA / HCA layers use yarn-scaled θ=160000 ("compress") for the attention's
-        # own q and kv too — not just the compressor. Build both up front so each
-        # attention layer can pick whichever matches its own `compressor` presence.
         position_embeddings = {
             "main": self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type="main"),
             "compress": self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type="compress"),

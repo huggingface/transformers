@@ -378,9 +378,7 @@ class DeepseekV4HCACompressor(nn.Module):
         block_idx = torch.arange(T_total, device=compressed_kv.device)
         causal_threshold = (position_ids + 1) // self.compress_rate  # [B, S]
         allowed = block_idx.view(1, 1, 1, -1) < causal_threshold.unsqueeze(1).unsqueeze(-1)  # [B, 1, S, T]
-        block_bias = torch.where(
-            allowed, compressed_kv.new_zeros(()), compressed_kv.new_full((), float("-inf"))
-        )
+        block_bias = torch.where(allowed, compressed_kv.new_zeros(()), compressed_kv.new_full((), float("-inf")))
         return compressed_kv, block_bias
 
 
@@ -882,15 +880,22 @@ class DeepseekV4Experts(MixtralExperts):
         # Lives on the class (like gpt-oss's _apply_gate) so the grouped_mm / batched_mm
         # backends swapped in by `@use_experts_implementation` apply the same clamp +
         # SiLU on top of their packed gate_up output instead of bypassing it.
+        # Reference `Expert.forward` casts gate/up to fp32 right after the matmul and
+        # runs clamp + SiLU(gate) * up in fp32; the .to(dtype) is at the call site
+        # before the down-projection.
+        dtype = gate_up.dtype
         gate, up = gate_up.chunk(2, dim=-1)
-        gate = gate.clamp(max=self.limit)
-        up = up.clamp(min=-self.limit, max=self.limit)
-        return self.act_fn(gate) * up
+        gate = gate.float().clamp(max=self.limit)
+        up = up.float().clamp(min=-self.limit, max=self.limit)
+        return (self.act_fn(gate) * up).to(dtype)
 
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
     ) -> torch.Tensor:
-        final = torch.zeros_like(hidden_states)
+        # Reference `MoE.forward` accumulates routed-expert contributions in fp32
+        # (`y = torch.zeros_like(x, dtype=torch.float32)`) so 6 active experts per
+        # token don't lose precision in bf16. Cast back to input dtype at the end.
+        final = torch.zeros_like(hidden_states, dtype=torch.float32)
         with torch.no_grad():
             mask = F.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
             hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
@@ -901,8 +906,8 @@ class DeepseekV4Experts(MixtralExperts):
             top_k_pos, token_idx = torch.where(mask[expert_idx])
             current = self._apply_gate(F.linear(hidden_states[token_idx], self.gate_up_proj[expert_idx]))
             current = F.linear(current, self.down_proj[expert_idx]) * top_k_weights[token_idx, top_k_pos, None]
-            final.index_add_(0, token_idx, current.to(final.dtype))
-        return final
+            final.index_add_(0, token_idx, current.float())
+        return final.to(hidden_states.dtype)
 
 
 class DeepseekV4TopKRouter(MixtralTopKRouter):
@@ -966,7 +971,11 @@ class DeepseekV4SparseMoeBlock(nn.Module):
         else:
             _, weights, indices = self.gate(hidden_states)
         routed = self.experts(flat, indices, weights).view(batch, seq_len, hidden_dim)
-        return routed + self.shared_experts(residual)
+        # Reference `MoE.forward` sums routed + shared in fp32 (its `y = zeros(fp32)`)
+        # and casts to input dtype at the very end. Mirror that here so 6 active
+        # experts + 1 shared expert don't lose precision in bf16 summation.
+        out = routed.float() + self.shared_experts(residual).float()
+        return out.to(hidden_states.dtype)
 
 
 class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
@@ -1003,16 +1012,21 @@ class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
         # `post` / `comb` come out of the HC modules in fp32 (Sinkhorn projection runs
         # in float); the .to(dtype) puts everything back to the input dtype before mixing
         # so both sites stay consistent with `hidden_states`'s entry dtype.
+        # comb is consumed transposed: indexed as sum_j comb[j, k] * residual[j, d]
+        # (sum over the FIRST hc axis), equivalent to comb.T @ residual. Sinkhorn
+        # produces a doubly-stochastic but non-symmetric matrix, so the direction matters.
         dtype = hidden_states.dtype
         post, comb, collapsed = self.attn_hc(hidden_states)
         attn_output, _ = self.self_attn(self.input_layernorm(collapsed), **kwargs)
         hidden_states = post.to(dtype).unsqueeze(-1) * attn_output.unsqueeze(-2) + torch.matmul(
-            comb.to(dtype), hidden_states
+            comb.to(dtype).transpose(-1, -2), hidden_states
         )
 
         post, comb, collapsed = self.ffn_hc(hidden_states)
         mlp_output = self.mlp(self.post_attention_layernorm(collapsed), input_ids=input_ids)
-        return post.to(dtype).unsqueeze(-1) * mlp_output.unsqueeze(-2) + torch.matmul(comb.to(dtype), hidden_states)
+        return post.to(dtype).unsqueeze(-1) * mlp_output.unsqueeze(-2) + torch.matmul(
+            comb.to(dtype).transpose(-1, -2), hidden_states
+        )
 
 
 class DeepseekV4PreTrainedModel(MixtralPreTrainedModel):
