@@ -280,6 +280,7 @@ class BlockManager:
         """Computes the hash of a block identified by the (tokens) it contains, its (parent_hash) and the layer
         (group_id) it belong to. If the block has no parent, the parent hash is None."""
         # If TP is on, we cannot use python `hash` because it depends on the process (it's per-process salted)
+        # TODO: figure out if this is really a problem. Even if hashes diverge per-process, does that break anything?
         if self.tp_on:
             h = hashlib.blake2b(digest_size=8)
             if parent_hash is not None:

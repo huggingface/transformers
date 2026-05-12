@@ -53,11 +53,15 @@ class DistributedHelper:
 
         # The TP driver owns the request queue and scheduler decisions for its TP group. Single-process runs are
         # their own driver.
-        self.is_tp_driver = self.tp_local_rank == 0
+        self.is_tp_driver = self.infer_if_tp_driver()
 
         # These attributes depend on the DP state
         self.dp_rank = self.global_rank // self.tp_size
         self.dp_size = self.world_size // self.tp_size
+
+    def infer_if_tp_driver(self) -> bool:
+        """Infer if the current process is the TP driver."""
+        return self.tp_local_rank == 0
 
     def destroy_cpu_comm_group(self) -> None:
         """Destroys the CPU comm group."""

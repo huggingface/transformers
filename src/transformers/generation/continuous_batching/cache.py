@@ -164,10 +164,14 @@ class PagedAttentionCache:
                 self.layer_index_to_group_indices[layer] = (i, j)
                 self.sliding_windows[layer] = sliding_window
 
-        # Account for TP: each KV head is dispatched to a different GPU, so the effective number of KV heads per GPU is
-        # simply divided by the TP size (number of GPUs)
+        # Check if the KV heads are part of the TP plan. If they are not, the cache does not need plan for TP.
+        # TODO: this is fragile. If your model fails to TP properly because of this, please open an issue.
+        kv_is_tp = "layers.*.self_attn.k_proj" in config.tp_plan and "layers.*.self_attn.v_proj" in config.tp_plan
+
+        # If the KV heads are TP'ed, each KV head is dispatched to a different GPU, so the effective number of KV heads
+        # per GPU is simply divided by the TP size
         tp_size = distributed_helper.tp_size
-        if tp_size > 1:
+        if tp_size > 1 and kv_is_tp:
             if self.num_key_value_heads % tp_size != 0:
                 raise ValueError(
                     f"Number of key value heads {self.num_key_value_heads} must be divisible by tensor parallel size {tp_size}."
