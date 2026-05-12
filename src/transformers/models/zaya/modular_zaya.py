@@ -390,14 +390,21 @@ class ZayaAttention(LlamaAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        attention_mask_2d: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | dict[str, torch.Tensor | None] | None = None,
         past_key_values: Cache | None = None,
         output_attentions: bool = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor | None, Cache | None]:
         batch_size, seq_length, _ = hidden_states.shape
-        query_states, key_states, value_states = self.qkv(hidden_states, past_key_values, attention_mask_2d)
+
+        if isinstance(attention_mask, dict):
+            causal_mask = attention_mask.get("causal")
+            padding_mask = attention_mask.get("padding")
+        else:
+            causal_mask = attention_mask
+            padding_mask = None
+
+        query_states, key_states, value_states = self.qkv(hidden_states, past_key_values, padding_mask)
         query_states = query_states.view(batch_size, seq_length, self.config.num_attention_heads, self.head_dim)
         key_states = key_states.view(batch_size, seq_length, self.config.num_key_value_heads, self.head_dim)
         value_states = value_states.view(batch_size, seq_length, self.config.num_key_value_heads, self.head_dim)
@@ -412,8 +419,7 @@ class ZayaAttention(LlamaAttention):
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_n)
 
-        causal_mask = attention_mask
-        if causal_mask is not None:
+        if isinstance(causal_mask, torch.Tensor):
             causal_mask = causal_mask[:, :, : query_states.shape[-2], : key_states.shape[-2]]
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
@@ -452,8 +458,7 @@ class ZayaDecoderATTLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         residual: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        attention_mask_2d: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | dict[str, torch.Tensor | None] | None = None,
         past_key_values: Cache | None = None,
         output_attentions: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
@@ -465,7 +470,6 @@ class ZayaDecoderATTLayer(GradientCheckpointingLayer):
         hidden_states, self_attn_weights, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            attention_mask_2d=attention_mask_2d,
             past_key_values=past_key_values,
             output_attentions=output_attentions,
             position_embeddings=position_embeddings,
@@ -822,9 +826,10 @@ class ZayaModel(ZayaPreTrainedModel):
             )
         # ZAYA's hybrid cache is not compileable, so generation keeps `attention_mask` as the original 2D padding mask.
         # CCA projection only needs it during multi-token prefill; single-token decoding uses the cached convolution state.
-        attention_mask_2d = attention_mask[:, -inputs_embeds.shape[1] :] if attention_mask is not None else None
+        padding_mask = attention_mask[:, -inputs_embeds.shape[1] :] if attention_mask is not None else None
         if inputs_embeds.shape[1] == 1:
-            attention_mask_2d = None
+            padding_mask = None
+        attention_masks = {"causal": causal_mask, "padding": padding_mask}
 
         hidden_states = inputs_embeds
 
@@ -845,13 +850,12 @@ class ZayaModel(ZayaPreTrainedModel):
             layer_outputs = decoder_layer(
                 hidden_states,
                 residual,
-                attention_mask=causal_mask,
+                attention_mask=attention_masks,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 position_embeddings=emb_to_use,
                 prev_router_hidden_states=prev_router_hidden_states,
-                attention_mask_2d=attention_mask_2d,
                 **kwargs,
             )
 
