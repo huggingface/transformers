@@ -526,7 +526,7 @@ class Sapiens2Model(Sapiens2PreTrainedModel):
         self.embeddings = Sapiens2Embeddings(config)
         self.rope_embeddings = Sapiens2RopePositionEmbedding(config)
         self.model = Sapiens2Encoder(config)
-        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm = nn.RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
@@ -566,13 +566,13 @@ class Sapiens2Model(Sapiens2PreTrainedModel):
 
 @auto_docstring
 class Sapiens2Backbone(BackboneMixin, Sapiens2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Sapiens2Config):
         super().__init__(config)
 
         self.embeddings = Sapiens2Embeddings(config)
         self.rope_embeddings = Sapiens2RopePositionEmbedding(config)
         self.model = Sapiens2Encoder(config)
-        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm = nn.RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.gradient_checkpointing = False
 
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
