@@ -1754,6 +1754,9 @@ class ContinuousBatchingConfig:
     def __post_init__(self):
         # Only turn off graph mixing support if TP is on
         if self.disable_nccl_graph_mixing and int(os.environ.get("WORLD_SIZE", "1")) > 1:
+            logger.warning(
+                "Setting NCCL_GRAPH_MIXING_SUPPORT = 0 because disable_nccl_graph_mixing is True and WORLD_SIZE > 1."
+            )
             os.environ.setdefault("NCCL_GRAPH_MIXING_SUPPORT", "0")
 
     def account_for_cb_deprecated_arguments(

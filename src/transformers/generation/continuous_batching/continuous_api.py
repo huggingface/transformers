@@ -244,7 +244,6 @@ class ContinuousBatchProcessor:
 
     def __del__(self) -> None:
         self.inputs_and_outputs = None  # clean up CUDA graphs in priority
-        self.distributed_helper.destroy_cpu_comm_group()
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -608,9 +607,10 @@ class ContinuousBatchingManager:
         if block:
             self.join(stop_trigger_time, timeout)
 
-        # If the manager is not being kept for next session, we clear the batch processor
+        # If the manager is not being kept for next session, we clear the batch processor and destroy the CPU comm group
         if not keep_for_next_session:
             self.batch_processor = None
+            self.distributed_helper.destroy_cpu_comm_group()
         # Otherwise, we keep the batch processor and cache the manager as a model attribute
         else:
             logger.info("Continuous batching manager will be kept for next session.")
@@ -647,8 +647,8 @@ class ContinuousBatchingManager:
         record_timestamps: bool = False,
         eos_token_id: int | list[int] | None = None,
         **logit_processor_kwargs: Any,
-    ) -> str:
-        """Add a new generation request to the queue.
+    ) -> str | None:
+        """Add a new generation request to the queue. If the process is not a TP driver, this is a no-op.
 
         Args:
             input_ids: Input token IDs to use as prompt
@@ -660,7 +660,7 @@ class ContinuousBatchingManager:
             logit_processor_kwargs: Keyword arguments for the logits processor.
 
         Returns:
-            str: The request ID
+            str | None: The request ID if the process is a TP driver, None otherwise.
         """
         if request_id is None:
             with self._request_lock:
@@ -669,7 +669,7 @@ class ContinuousBatchingManager:
 
         # If this process is not a TP driver, it does not enqueue new requests from this entry point
         if not self.is_tp_driver:
-            return request_id
+            return None  # this value should never be used anyway because non-TP drivers do not enqueue requests
 
         max_new_tokens = self.generation_config.max_new_tokens if max_new_tokens is None else max_new_tokens
         eos_token_id = self.generation_config.eos_token_id if eos_token_id is None else eos_token_id
