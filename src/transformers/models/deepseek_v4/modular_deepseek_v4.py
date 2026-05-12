@@ -101,17 +101,17 @@ class DeepseekV4RotaryEmbedding(LagunaRotaryEmbedding):
         # `rope_type` key that ``convert_rope_params_to_dict`` may leave on
         # ``config.rope_parameters`` is a flat-shape leftover, not a layer.
         self.layer_types = [k for k, v in config.rope_parameters.items() if isinstance(v, dict)]
-        self.rope_type: dict[str, str] = {}
-        self.attention_scaling: dict[str, float] = {}
+        self.rope_type = {}
         for layer_type in self.layer_types:
             rope_params = config.rope_parameters[layer_type]
             self.rope_type[layer_type] = rope_params["rope_type"]
             rope_init_fn = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            inv_freq, self.attention_scaling[layer_type] = rope_init_fn(config, layer_type=layer_type)
-            self.register_buffer(f"{layer_type}_inv_freq", inv_freq, persistent=False)
-            self.register_buffer(f"{layer_type}_original_inv_freq", inv_freq.clone(), persistent=False)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(config, layer_type=layer_type)
+            self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
+            self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
+            setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     def forward(self, x, position_ids, layer_type=None):
         # Key difference vs Laguna's forward: no `torch.cat([freqs, freqs], dim=-1)`
@@ -120,14 +120,14 @@ class DeepseekV4RotaryEmbedding(LagunaRotaryEmbedding):
         # the `repeat_interleave(2)` next to the rotation math, where the link between
         # the doubled dim and `rotate_half` is local and obvious.
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
+        attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
         inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        scaling = self.attention_scaling[layer_type]
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            cos = freqs.cos() * scaling
-            sin = freqs.sin() * scaling
+            cos = freqs.cos() * attention_scaling
+            sin = freqs.sin() * attention_scaling
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
@@ -1131,9 +1131,10 @@ class DeepseekV4PreTrainedModel(MixtralPreTrainedModel):
                 rope_init_fn = module.compute_default_rope_parameters
                 if module.rope_type[layer_type] != "default":
                     rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type[layer_type]]
-                curr_inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
+                curr_inv_freq, curr_attention_scaling = rope_init_fn(module.config, layer_type=layer_type)
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
+                setattr(module, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
 
 @auto_docstring
