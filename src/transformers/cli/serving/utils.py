@@ -760,7 +760,7 @@ class CBGenerateManager(BaseGenerateManager):
     def scheduler(self) -> "Scheduler":
         """The CB scheduler (for testing/monitoring)."""
         if self._cb is None or self._cb.batch_processor is None:
-            raise RuntimeError("CB manager not initialized.")
+            raise RuntimeError("Continuous batching processor not initialized.")
         return self._cb.batch_processor.scheduler
 
     def stop(self) -> None:
