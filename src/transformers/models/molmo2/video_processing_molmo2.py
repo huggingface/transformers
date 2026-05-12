@@ -23,6 +23,7 @@ import torch
 from torch.nn import functional as F
 from torch.nn.utils.rnn import pad_sequence
 
+from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
@@ -76,6 +77,36 @@ def arange_for_pooling(
     )
 
 
+def build_resized_image(
+    backend: "TorchvisionBackend",
+    image_chw: torch.Tensor,
+    base_image_input_size: list[int],
+    resample: PILImageResampling,
+    image_mean: list[float],
+    image_std: list[float],
+    image_patch_size: int,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    chw_resized = backend.resize(
+        image_chw,
+        size=SizeDict(height=base_image_input_size[0], width=base_image_input_size[1]),
+        resample=resample,
+        antialias=False,
+    )
+    chw_normalized = backend.rescale_and_normalize(
+        chw_resized,
+        do_rescale=True,
+        rescale_factor=1.0 / 255.0,
+        do_normalize=True,
+        image_mean=image_mean,
+        image_std=image_std,
+    )
+    resized = chw_normalized.permute(1, 2, 0).unsqueeze(0)
+    crop_patch_w = base_image_input_size[1] // image_patch_size
+    crop_patch_h = base_image_input_size[0] // image_patch_size
+    resize_idx = torch.arange(crop_patch_w * crop_patch_h, dtype=torch.int32).reshape(crop_patch_h, crop_patch_w)
+    return resized, resize_idx
+
+
 @auto_docstring
 class Molmo2VideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BILINEAR
@@ -127,29 +158,6 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         num_frames = max(min(num_frames, metadata.total_num_frames), 1)
         return super().sample_frames(metadata=metadata, num_frames=num_frames)
 
-    def _build_resized_image(
-        self,
-        image_chw: torch.Tensor,
-        base_image_input_size: list[int],
-        resample: PILImageResampling,
-        image_mean: list[float],
-        image_std: list[float],
-        image_patch_size: int,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        chw_resized = self.resize(
-            image_chw,
-            size=SizeDict(height=base_image_input_size[0], width=base_image_input_size[1]),
-            resample=resample,
-            antialias=False,
-        )
-        chw_float = self.rescale(chw_resized.float(), scale=1.0 / 255.0)
-        chw_normalized = self.normalize(chw_float, mean=image_mean, std=image_std)
-        resized = chw_normalized.permute(1, 2, 0).unsqueeze(0)
-        crop_patch_w = base_image_input_size[1] // image_patch_size
-        crop_patch_h = base_image_input_size[0] // image_patch_size
-        resize_idx = torch.arange(crop_patch_w * crop_patch_h, dtype=torch.int32).reshape(crop_patch_h, crop_patch_w)
-        return resized, resize_idx
-
     def _build_frame_patches(
         self,
         frame_chw: torch.Tensor,
@@ -161,8 +169,8 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         image_pooling_h: int,
         image_pooling_w: int,
     ) -> tuple[list[int], torch.Tensor, torch.Tensor]:
-        hwc, resize_idx = self._build_resized_image(
-            frame_chw, base_image_input_size, resample, image_mean, image_std, image_patch_size
+        hwc, resize_idx = build_resized_image(
+            self, frame_chw, base_image_input_size, resample, image_mean, image_std, image_patch_size
         )
         pooling_idx = arange_for_pooling(resize_idx, image_pooling_h, image_pooling_w)
         num_patch_rows, num_patch_cols = pooling_idx.shape[:2]

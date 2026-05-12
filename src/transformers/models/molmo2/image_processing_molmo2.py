@@ -139,6 +139,36 @@ def arange_for_pooling(
     )
 
 
+def build_resized_image(
+    backend: "TorchvisionBackend",
+    image_chw: torch.Tensor,
+    base_image_input_size: list[int],
+    resample: PILImageResampling,
+    image_mean: list[float],
+    image_std: list[float],
+    image_patch_size: int,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    chw_resized = backend.resize(
+        image_chw,
+        size=SizeDict(height=base_image_input_size[0], width=base_image_input_size[1]),
+        resample=resample,
+        antialias=False,
+    )
+    chw_normalized = backend.rescale_and_normalize(
+        chw_resized,
+        do_rescale=True,
+        rescale_factor=1.0 / 255.0,
+        do_normalize=True,
+        image_mean=image_mean,
+        image_std=image_std,
+    )
+    resized = chw_normalized.permute(1, 2, 0).unsqueeze(0)
+    crop_patch_w = base_image_input_size[1] // image_patch_size
+    crop_patch_h = base_image_input_size[0] // image_patch_size
+    resize_idx = torch.arange(crop_patch_w * crop_patch_h, dtype=torch.int32).reshape(crop_patch_h, crop_patch_w)
+    return resized, resize_idx
+
+
 @auto_docstring
 class Molmo2ImageProcessor(TorchvisionBackend):
     valid_kwargs = Molmo2ImagesKwargs
@@ -158,29 +188,6 @@ class Molmo2ImageProcessor(TorchvisionBackend):
 
     def __init__(self, **kwargs: Unpack[Molmo2ImagesKwargs]):
         super().__init__(**kwargs)
-
-    def _build_resized_image(
-        self,
-        image_chw: torch.Tensor,
-        base_image_input_size: list[int],
-        resample: PILImageResampling,
-        image_mean: list[float],
-        image_std: list[float],
-        image_patch_size: int,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        chw_resized = self.resize(
-            image_chw,
-            size=SizeDict(height=base_image_input_size[0], width=base_image_input_size[1]),
-            resample=resample,
-            antialias=False,
-        )
-        chw_float = self.rescale(chw_resized.float(), scale=1.0 / 255.0)
-        chw_normalized = self.normalize(chw_float, mean=image_mean, std=image_std)
-        resized = chw_normalized.permute(1, 2, 0).unsqueeze(0)
-        crop_patch_w = base_image_input_size[1] // image_patch_size
-        crop_patch_h = base_image_input_size[0] // image_patch_size
-        resize_idx = torch.arange(crop_patch_w * crop_patch_h, dtype=torch.int32).reshape(crop_patch_h, crop_patch_w)
-        return resized, resize_idx
 
     def _build_overlapping_crops(
         self,
@@ -222,8 +229,14 @@ class Molmo2ImageProcessor(TorchvisionBackend):
             resample=resample,
             antialias=False,
         )
-        chw_float = self.rescale(chw_resized.float(), scale=1.0 / 255.0)
-        chw_normalized = self.normalize(chw_float, mean=image_mean, std=image_std)
+        chw_normalized = self.rescale_and_normalize(
+            chw_resized,
+            do_rescale=True,
+            rescale_factor=1.0 / 255.0,
+            do_normalize=True,
+            image_mean=image_mean,
+            image_std=image_std,
+        )
         src = chw_normalized.permute(1, 2, 0)  # → HWC
 
         n_crops = tiling_h * tiling_w
@@ -296,7 +309,8 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         num_patch_rows, num_patch_cols = pooling_idx.shape[:2]
         pooling_idx = pooling_idx.reshape([-1, pooling_h * pooling_w])
 
-        resized, resize_idx = self._build_resized_image(
+        resized, resize_idx = build_resized_image(
+            self,
             image_chw,
             base_image_input_size,
             resample,

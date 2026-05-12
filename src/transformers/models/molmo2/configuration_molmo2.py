@@ -22,6 +22,7 @@ from typing import Any
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 from ...utils.auto_docstring import auto_docstring
 
@@ -114,7 +115,7 @@ class Molmo2TextConfig(PreTrainedConfig):
     rope_scaling (`dict[str, Any]`, *optional*):
         Dictionary containing the scaling configuration for the RoPE embeddings.
     rope_scaling_layers (`list[int]`, *optional*):
-        List of layer indices where rope scaling is applied.
+        Layer indices where extended RoPE scaling is applied. When unset, all layers use the default RoPE.
     norm_after (`bool`, *optional*, defaults to `False`):
         Whether to apply layer normalization after the attention/FFN blocks instead of before.
     """
@@ -150,6 +151,7 @@ class Molmo2TextConfig(PreTrainedConfig):
     max_position_embeddings: int = 4096
     rope_theta: float = 1000000.0
     rope_scaling: dict[str, Any] | None = None
+    rope_parameters: RopeParameters | dict | None = None
     rope_scaling_layers: list[int] | None = None
     layer_norm_eps: float = 1e-6
     norm_after: bool = False
@@ -158,9 +160,12 @@ class Molmo2TextConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
+        self.rope_parameters = self.rope_scaling or self.rope_parameters
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
         super().__post_init__(**kwargs)
+        if self.rope_scaling_layers is None:
+            self.rope_scaling_layers = []
 
 
 @auto_docstring(checkpoint="allenai/Molmo2-8B")
@@ -187,8 +192,6 @@ class Molmo2Config(PreTrainedConfig):
         Token ID marking the start of a video frame.
     frame_end_token_id (`int`, *optional*):
         Token ID marking the end of a video frame.
-    use_frame_special_tokens (`bool`, *optional*, defaults to `True`):
-        Whether to use special tokens to delineate video frames.
     tie_word_embeddings (`bool`, *optional*, defaults to `False`):
         Whether the model's input and output word embeddings should be tied.
     """
@@ -211,7 +214,6 @@ class Molmo2Config(PreTrainedConfig):
     image_col_id: int | None = None
     frame_start_token_id: int | None = None
     frame_end_token_id: int | None = None
-    use_frame_special_tokens: bool = True
     initializer_range: float = 0.02
     tie_word_embeddings: bool = False
 

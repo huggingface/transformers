@@ -170,6 +170,19 @@ class Molmo2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             outputs = image_processing([[image] for image in image_inputs], return_tensors="pt")
             self._assert_patchified_output(outputs, self.image_processor_tester.batch_size)
 
+    def test_call_nested_images(self):
+        for image_processing_class in [self.image_processing_class]:
+            image_processing = image_processing_class(**self.image_processor_dict)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+            nested_images = [[], [image_inputs[0]], [image_inputs[1], image_inputs[2]]]
+
+            outputs = image_processing(nested_images, return_tensors="pt")
+
+            self._assert_patchified_output(outputs, 3)
+            self.assertEqual(outputs.image_num_crops[0].sum().item(), 0)
+            self.assertGreater(outputs.image_num_crops[1].sum().item(), 0)
+            self.assertGreater(outputs.image_num_crops[2].sum().item(), outputs.image_num_crops[1].sum().item())
+
     @unittest.skip(
         reason="Molmo2ImageProcessor expects channels-last (HWC) numpy input; CHW torch tensors are not supported."
     )

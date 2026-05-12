@@ -183,7 +183,7 @@ class Molmo2VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
     def test_call_sample_frames_short_batched_videos(self):
         for video_processing_class in self.video_processor_list:
             video_processing = video_processing_class(**{**self.video_processor_dict, "do_sample_frames": True})
-            videos = [np.zeros((15, 32, 32, 3), dtype=np.uint8), np.zeros((7, 32, 32, 3), dtype=np.uint8)]
+            videos = [np.zeros((15, 32, 32, 3), dtype=np.uint8), np.zeros((7, 48, 40, 3), dtype=np.uint8)]
 
             outputs = video_processing(videos, return_tensors="pt", num_frames=384)
 

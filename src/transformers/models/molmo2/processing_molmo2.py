@@ -242,10 +242,20 @@ class Molmo2Processor(ProcessorMixin):
 
         if images is not None:
             image_counts = [sample.count(self.image_token) for sample in text]
-            if sum(image_counts) == 0:
-                image_counts = [1] * len(text)
             fetched_images = self.image_processor.fetch_images(images)
             batched_images = make_nested_list_of_images(fetched_images)
+            if sum(image_counts) == 0:
+                if len(batched_images) == len(text):
+                    image_counts = [len(sample_images) for sample_images in batched_images]
+                else:
+                    flat_images = make_flat_list_of_images(fetched_images)
+                    if len(flat_images) != len(text):
+                        raise ValueError(
+                            f"The number of images ({len(flat_images)}) does not match the batch size "
+                            f"({len(text)}). Please provide image placeholder tokens in text or pass a nested "
+                            "list of images per sample."
+                        )
+                    image_counts = [1] * len(text)
             if len(batched_images) != len(text) and len(batched_images) == 1:
                 flat_images = make_flat_list_of_images(fetched_images)
                 if len(flat_images) != sum(image_counts):
