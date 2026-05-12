@@ -23,7 +23,7 @@ from torch.nn import functional as F
 
 from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps
-from ..quantizers.quantizers_utils import should_convert_module
+from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
 from ..utils import logging
 from ..utils.import_utils import get_cuda_runtime_version, is_kernels_available, resolve_internal_import
 from .hub_kernels import lazy_load_kernel
@@ -937,7 +937,7 @@ def replace_with_fp8_linear(
                     **module_kwargs,
                 )
             elif isinstance(module, nn.Linear):
-                if hasattr(module, "n_groups") or module.__class__.__name__.endswith("GroupedLinear"):
+                if hasattr(module, "n_groups"):
                     # Block-diagonal grouped linear (e.g. DeepSeek-V4 o_a_proj): keep the
                     # grouped-bmm semantics but store the weight in FP8 with a companion
                     # weight_scale_inv so the checkpoint scale is a proper parameter
@@ -1087,7 +1087,9 @@ class Fp8Dequantize(ConversionOps):
         unpacked = torch.stack([lut[low], lut[high]], dim=-1)
         return unpacked.reshape(*packed.shape[:-1], 2 * packed.shape[-1])
 
-    def _dequantize_one(self, quantized: torch.Tensor, scales: torch.Tensor) -> torch.Tensor:
+    def _dequantize_one(
+        self, quantized: torch.Tensor, scales: torch.Tensor, output_dtype: torch.dtype | None = None
+    ) -> torch.Tensor:
         # FP4 path: int8 / float4_e2m1fn_x2 stores two nibbles per byte. Unpack to fp32
         # first so the rest of the routine sees a normal (rows, cols) float matrix.
         fp4_dtype = getattr(torch, "float4_e2m1fn_x2", None)
@@ -1108,20 +1110,37 @@ class Fp8Dequantize(ConversionOps):
         block_n = cols // scale_cols
         # ``ue8m0`` (``float8_e8m0fnu``) scales have no CUDA ``mul`` kernel, and casting
         # the FP8 weight to that dtype loses precision. Promote both sides to fp32 for
-        # the math; keep fp16/bf16 output when scales carry that precision, otherwise
-        # emit bf16 to stay compatible with bf16 activations in model forward.
-        out_dtype = scales.dtype if scales.dtype in (torch.float16, torch.bfloat16) else torch.bfloat16
+        # the math; when available, emit in the destination parameter dtype so eager
+        # modules like ``nn.Linear`` keep the model's compute dtype after load.
+        out_dtype = output_dtype
+        if out_dtype is None:
+            out_dtype = (
+                scales.dtype if scales.dtype.is_floating_point and scales.element_size() >= 2 else torch.bfloat16
+            )
         original_shape = quantized_fp32.shape
         q = quantized_fp32.reshape(-1, scale_rows, block_m, scale_cols, block_n)
         s = scales.to(torch.float32).reshape(-1, scale_rows, scale_cols).unsqueeze(-1).unsqueeze(2)
         return (q * s).to(out_dtype).reshape(original_shape)
 
+    def _target_dtype(self, model: torch.nn.Module | None, full_layer_name: str | None) -> torch.dtype | None:
+        if model is None or full_layer_name is None:
+            return None
+
+        module, tensor_name = get_module_from_name(model, full_layer_name)
+        parameter = getattr(module, tensor_name, None)
+        if parameter is None:
+            return None
+        return getattr(parameter, "dtype", None)
+
     def convert(
         self,
         input_dict: dict[str, list[torch.Tensor] | torch.Tensor],
         full_layer_name: str | None = None,
+        model: torch.nn.Module | None = None,
         **kwargs,
     ) -> dict[str, list[torch.Tensor] | torch.Tensor]:
+        output_dtype = self._target_dtype(model, full_layer_name)
+
         # Backward-compatible single-tensor path (the legacy fallback converter declares
         # ``["weight$", "weight_scale_inv", "activation_scale"]`` and produces a single
         # ``weight`` target). Also handles the no-scale case (e.g. RMSNorm weights that
@@ -1132,7 +1151,7 @@ class Fp8Dequantize(ConversionOps):
             if "weight_scale_inv" in input_dict:
                 scales = input_dict["weight_scale_inv"]
                 scales = scales[0] if isinstance(scales, list) else scales
-                return {full_layer_name: self._dequantize_one(quantized, scales)}
+                return {full_layer_name: self._dequantize_one(quantized, scales, output_dtype=output_dtype)}
             return {full_layer_name: quantized}
 
         # Generic chain path: dequantize every weight pattern that has a sibling scale.
@@ -1153,7 +1172,7 @@ class Fp8Dequantize(ConversionOps):
                     f"Fp8Dequantize: weight/scale count mismatch for {key} "
                     f"({len(weights)} weights vs {len(scales)} scales)."
                 )
-            result[key] = [self._dequantize_one(w, s) for w, s in zip(weights, scales)]
+            result[key] = [self._dequantize_one(w, s, output_dtype=output_dtype) for w, s in zip(weights, scales)]
         return result
 
     @property
