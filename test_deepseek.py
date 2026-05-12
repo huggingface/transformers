@@ -59,7 +59,7 @@ def _format_chat(prompt: str) -> str:
 
 # (label, dispatch, min_sm). All entries share one model load.
 _QUANTIZED_DISPATCHES = [
-    # ("quantized + deepgemm",         "deepgemm",         9),
+    ("quantized + deepgemm",         "deepgemm",         9),
     ("quantized + deepgemm_megamoe", "deepgemm_megamoe", 10),
 ]
 

@@ -106,10 +106,12 @@ class DeepseekV4RotaryEmbedding(nn.Module):
             rope_init_fn = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            inv_freq, attention_scaling = rope_init_fn(config, layer_type=layer_type)
+            # V4 emits unit-magnitude cos/sin (no YaRN `attention_factor` scaling) —
+            # discard `rope_init_fn`'s scaling factor and emit raw `freqs.cos()` / `freqs.sin()`
+            # in `forward`.
+            inv_freq, _ = rope_init_fn(config, layer_type=layer_type)
             self.register_buffer(f"{layer_type}_inv_freq", inv_freq, persistent=False)
             self.register_buffer(f"{layer_type}_original_inv_freq", inv_freq.clone(), persistent=False)
-            setattr(self, f"{layer_type}_attention_scaling", attention_scaling)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -157,14 +159,13 @@ class DeepseekV4RotaryEmbedding(nn.Module):
         # the `repeat_interleave(2)` next to the rotation math, where the link between
         # the doubled dim and `rotate_half` is local and obvious.
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
-        attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
         inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            cos = freqs.cos() * attention_scaling
-            sin = freqs.sin() * attention_scaling
+            cos = freqs.cos()
+            sin = freqs.sin()
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
@@ -491,6 +492,10 @@ class DeepseekV4Indexer(nn.Module):
         self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.head_dim, bias=False)
         self.weights_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
         self.rotary_emb = DeepseekV4RotaryEmbedding(config)
+        # No-op marker. Under TP it picks up the `"all_reduce"` plan entry, which adds a
+        # forward output hook that sums the (partial, per-rank) `index_scores` across the
+        # TP mesh so every rank picks the same top-k.
+        self.scores_sync = nn.Identity()
 
     def forward(
         self,
@@ -617,7 +622,7 @@ class DeepseekV4CSACompressor(nn.Module):
         position_ids: torch.Tensor,
         past_key_values: Cache | None,
         layer_idx: int,
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         batch, seq_len, _ = hidden_states.shape
         cache_layer: DeepseekV4CSACache = past_key_values.layers[layer_idx] if past_key_values is not None else None
         kv = self.kv_proj(hidden_states)
@@ -896,10 +901,10 @@ class DeepseekV4HyperConnection(nn.Module):
                         [B, S, H]                 [B, S, H]                                 [B, S, H, H]
                         × scale[0]                × scale[1]                                × scale[2]
                         + base[:H]                + base[H:2H]                              + base[2H:]
-                        σ() + eps                 σ() + eps                                 σ() + eps
+                        σ() + eps                 2·σ()                                     softmax(-1) + eps
                         │                         │                                         │
-                        pre                        post                                     Sinkhorn(iters)
-                        (stream collapse weights)  (block-output placement)                 row/col normalise
+                        pre                       post                                      Sinkhorn(iters)
+                        (stream collapse weights) (block-output placement, range [0, 2])    row/col normalise
                                                                                             │
                                                                                             comb
                                                                                             (stream mixer)
@@ -981,9 +986,14 @@ class DeepseekV4MLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        gate = self.gate_proj(x)
+        up = self.up_proj(x)
+        limit = self.config.swiglu_limit
+        if limit > 0:
+            gate = gate.clamp(max=limit)
+            up = up.clamp(min=-limit, max=limit)
+        return self.down_proj(self.act_fn(gate) * up)
 
 
 @use_experts_implementation
@@ -1030,6 +1040,7 @@ class DeepseekV4Experts(nn.Module):
 class DeepseekV4TopKRouter(nn.Module):
     def __init__(self, config: DeepseekV4Config):
         super().__init__()
+        self.config = config
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
@@ -1059,6 +1070,7 @@ class DeepseekV4HashRouter(nn.Module):
 
     def __init__(self, config: DeepseekV4Config):
         super().__init__()
+        self.config = config
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
