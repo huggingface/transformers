@@ -21,6 +21,7 @@ from torch import nn
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.deprecation import forward_base_model_attrs
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..granite_speech.configuration_granite_speech import GraniteSpeechConfig, GraniteSpeechEncoderConfig
@@ -160,6 +161,7 @@ class GraniteSpeechPlusCTCEncoder(GraniteSpeechCTCEncoder):
     encoder's final hidden states with an arbitrary subset of its intermediate hidden states.
     """
 )
+@forward_base_model_attrs(version="5.7")
 class GraniteSpeechPlusForConditionalGeneration(GraniteSpeechForConditionalGeneration): ...
 
 

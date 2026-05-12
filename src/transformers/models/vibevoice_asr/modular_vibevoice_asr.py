@@ -325,6 +325,12 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
         acoustic_tokenizer_chunk_size: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VibeVoiceAsrModelOutputWithPast:
+        r"""
+        padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing operations on padding feature indices.
+        acoustic_tokenizer_chunk_size (`int`, *optional*):
+            Size of audio chunks processed by the acoustic and semantic tokenizers.
+        """
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
