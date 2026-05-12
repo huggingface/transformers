@@ -57,12 +57,14 @@ want to parse partial messages as they are generated, especially in user-facing 
 display a static page for a minute or two until the model is finished.
 
 When you want streaming parsing, call `tokenizer.get_response_parser()`, which returns a [`~utils.chat_parsing.ResponseParser`].
-As with `parse_response`, pass the chat prompt as `prefix=` so the parser starts in the right state — this matters for
-templates that emit assistant-side opening tokens (like `<think>\n`) before generation begins. The returned object is a
+As with `parse_response`, pass the chat prompt as `prefix=` so the parser knows about any parts of the message that 
+were prefilled by the chat template. The returned object is a
 stateful parser that you can feed text into as the model generates it:
 
 ```python
 parser = tokenizer.get_response_parser(prefix=input_ids[0])
+for event in parser.initial_events:
+    handle(event)
 for chunk in model_output:
     for event in parser.feed(chunk):
         handle(event)
@@ -74,6 +76,39 @@ for event in final_events:
 The parser will emit **events** as text is fed in, which indicate which region is currently being parsed. When
 the region is complete, it will be emitted in a separate event with the fully parsed content. At the end of generation,
 the `finalize()` method flushes any remaining text and emits any final events, as well as the complete message dict.
+
+## Streaming events
+
+Each streamed parsing event is a dict with a `type` key. There are three kinds:
+
+| Type           | Description                                                                         | Contents                                                                                                                                                                                                           |
+|----------------|-------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `region_open`  | Indicates that the model has started a new region, such as `content` or `thinking`. | `field` (str): the field name.                                                                                                                                                                                     |
+| `region_chunk` | A chunk of text for the current region. Not all regions will stream text.           | `field` (str): the field name. `text` (str): the new chunk.  |
+| `region_close` | Indicates that a region has finished, and that key is now finalized.                | `field` (str): the field name. `value` (any): the fully parsed value for the region                                                                                      |
+
+In general, `region_chunk` will only be emitted in text regions. Incremental parsing for structured regions
+may be added in future! Any `region_chunk` events are only useful for live-updating the UI, because the
+content in that region will always be finalized and included in a `region_close` event later. 
+
+If the chat `prefix` wrote anything into the message (e.g. the template opened a thinking block, or an
+assistant prefill started a response before handing off to the model), the parser exposes those events as
+`parser.initial_events` — a list you can replay into your renderer before feeding any model output. Regions
+that were opened *and* closed inside the prefix produce a full `region_open` / `region_chunk` / `region_close`
+sequence and their parsed value lands in the output dict, exactly as if the model itself had written them.
+
+A typical event stream for the SmolLM example above looks like:
+
+```python
+{"type": "region_open",  "field": "thinking"}
+{"type": "region_chunk", "field": "thinking", "text": "Some chain "}
+{"type": "region_chunk", "field": "thinking", "text": "of thought..."}
+{"type": "region_close", "field": "thinking", "value": "Some chain of thought..."}
+{"type": "region_open",  "field": "tool_calls"}
+{"type": "region_close", "field": "tool_calls",
+ "value": {"type": "function", "function": {"name": "greet_user", "arguments": {"greeting": "Hi!"}}}}
+```
+
 
 ## Advanced: Writing a response template
 
@@ -127,6 +162,18 @@ output dict. Fields also include information for parsing the text inside their d
 `content` field has no `open`, because in SmolLM (and several other models), it's not marked by a special token. Instead,
 `content` is stored in the space after the other regions, but before the end of the sequence. In our template, we
 represent this as an **implicit / leftover** field that picks up any text not claimed by another region.
+
+In addition to `fields`, the template supports two optional top-level keys:
+
+- `defaults` — A dict of values pre-populated in the output (e.g. `{"role": "assistant"}`). Keys here are always
+  retained in the parsed output, even if no field wrote to them; other keys are dropped when their field captured
+  nothing.
+- `start_anchor` (str) / `start_anchor_pattern` (str regex) — Marks where the current assistant message begins
+  inside a chat prompt. When you pass `prefix=` to `parse_response` or `get_response_parser`, the parser
+  right-truncates the prefix past the **last** occurrence of this anchor before processing it, so earlier
+  turns in a multi-turn conversation don't pollute the current message's state. For ChatML-style models this
+  is typically `"<|im_start|>assistant\n"`. If a template has no anchor, the whole prefix is processed
+  verbatim (which still works for single-turn prompts).
 
 As with chat templates, response templates are stored as tokenizer attributes and saved with the tokenizer. Unlike
 chat templates, we save them inside `tokenizer_config.json` and not as a separate file, because their format fits
@@ -188,8 +235,8 @@ The available parsers are:
 | `float`      | float         | `strip` (default `true`)                                                                       |
 | `bool`       | bool          | `strip` (default `true`); accepts `"true"`/`"1"` (case-insensitive) as true                    |
 | `json`       | any           | `transform` (jmespath), `allow_non_json`, `unquoted_keys`, `string_delims: [[open, close],...]`|
-| `xml-inline` | dict          | `tag_pattern` (regex w/ named groups `key`/`value`), `value_parser`                            |
-| `kv-lines`   | dict          | `line_sep`, `kv_sep`, `value_parser`                                                           |
+| `xml-inline` | dict          | `tag_pattern` (regex w/ named groups `key`/`value`), `value_parser`, `merge_duplicates`        |
+| `kv-lines`   | dict          | `line_sep`, `kv_sep`, `value_parser`, `strip` (default `true`)                                 |
 
 The `json` parser also accepts dialect arguments (`unquoted_keys`, `string_delims`) for models that emit JSON with cute
 quirks that completely break the standard parser. The model
