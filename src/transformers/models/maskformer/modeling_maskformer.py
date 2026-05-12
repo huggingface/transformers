@@ -1471,7 +1471,44 @@ class MaskFormerPixelDecoder(nn.Module):
         )
 
 
-# copied and adapted from original implementation, also practically equal to DetrSinePositionEmbedding
+def build_sine_position_embedding(
+    shape: torch.Size,
+    device: torch.device | str,
+    dtype: torch.dtype,
+    num_position_features: int,
+    normalize: bool = False,
+    scale: float | None = None,
+    temperature: int = 10000,
+    mask: torch.Tensor | None = None,
+) -> torch.Tensor:
+    if mask is None:
+        mask = torch.ones((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
+    y_embed = mask.cumsum(1, dtype=dtype)
+    x_embed = mask.cumsum(2, dtype=dtype)
+    if normalize:
+        eps = 1e-6
+        y_embed = y_embed / (y_embed[:, -1:, :] + eps) * scale
+        x_embed = x_embed / (x_embed[:, :, -1:] + eps) * scale
+
+    dim_t = torch.arange(num_position_features, dtype=torch.int64, device=device).to(dtype)
+    dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_position_features)
+
+    pos_x = x_embed[:, :, :, None] / dim_t
+    pos_y = y_embed[:, :, :, None] / dim_t
+    pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
+    pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
+    pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
+    # Flatten spatial dimensions and permute to (batch_size, sequence_length, hidden_size) format
+    # expected by the encoder
+    pos = pos.flatten(2).permute(0, 2, 1)
+    return pos
+
+
+@compile_compatible_method_lru_cache(maxsize=1)
+def _cached_build_sine_position_embedding(*args, **kwargs) -> torch.Tensor:
+    return build_sine_position_embedding(*args, **kwargs)
+
+
 class MaskFormerSinePositionEmbedding(nn.Module):
     """
     This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
@@ -1479,43 +1516,30 @@ class MaskFormerSinePositionEmbedding(nn.Module):
     """
 
     def __init__(
-        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: float | None = None
+        self,
+        num_position_features: int = 64,
+        temperature: int = 10000,
+        normalize: bool = False,
+        scale: float | None = None,
     ):
         super().__init__()
         if scale is not None and normalize is False:
             raise ValueError("normalize should be True if scale is passed")
-        self.num_pos_feats = num_pos_feats
+        self.num_position_features = num_position_features
         self.temperature = temperature
         self.normalize = normalize
         self.scale = 2 * math.pi if scale is None else scale
 
-    @compile_compatible_method_lru_cache(maxsize=1)
     def forward(
         self,
         shape: torch.Size,
         device: torch.device | str,
         dtype: torch.dtype,
-        mask: Tensor | None = None,
-    ) -> Tensor:
-        if mask is None:
-            mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
-        not_mask = (~mask).to(dtype)
-        y_embed = not_mask.cumsum(1)
-        x_embed = not_mask.cumsum(2)
-        if self.normalize:
-            eps = 1e-6
-            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
-
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=device).to(dtype)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
-
-        pos_x = x_embed[:, :, :, None] / dim_t
-        pos_y = y_embed[:, :, :, None] / dim_t
-        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
-        return pos
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        return _cached_build_sine_position_embedding(
+            shape, device, dtype, self.num_position_features, self.normalize, self.scale, self.temperature, mask
+        )
 
 
 class PredictionBlock(nn.Module):
@@ -1632,7 +1656,9 @@ class MaskFormerTransformerModule(nn.Module):
         super().__init__()
         hidden_size = config.decoder_config.hidden_size
         should_project = in_features != hidden_size
-        self.position_embedder = MaskFormerSinePositionEmbedding(num_pos_feats=hidden_size // 2, normalize=True)
+        self.position_embedder = MaskFormerSinePositionEmbedding(
+            num_position_features=hidden_size // 2, normalize=True
+        )
         self.queries_embedder = nn.Embedding(config.decoder_config.num_queries, hidden_size)
         self.input_projection = nn.Conv2d(in_features, hidden_size, kernel_size=1) if should_project else None
         self.decoder = MaskFormerDetrDecoder(config=config.decoder_config)
@@ -1646,7 +1672,6 @@ class MaskFormerTransformerModule(nn.Module):
     ) -> DetrDecoderOutput:
         if self.input_projection is not None:
             image_features = self.input_projection(image_features)
-        object_queries = self.position_embedder(image_features.shape, image_features.device, image_features.dtype)
         # repeat the queries "q c -> b q c"
         batch_size = image_features.shape[0]
         queries_embeddings = self.queries_embedder.weight.unsqueeze(0).repeat(batch_size, 1, 1)
@@ -1656,10 +1681,10 @@ class MaskFormerTransformerModule(nn.Module):
         if self.training:
             inputs_embeds.requires_grad_(True)
 
+        object_queries = self.position_embedder(image_features.shape, image_features.device, image_features.dtype)
         batch_size, num_channels, height, width = image_features.shape
-        # rearrange both image_features and object_queries "b c h w -> b (h w) c"
+        # rearrange image_features "b c h w -> b (h w) c" (object_queries are already in this format)
         image_features = image_features.view(batch_size, num_channels, height * width).permute(0, 2, 1)
-        object_queries = object_queries.view(batch_size, num_channels, height * width).permute(0, 2, 1)
 
         decoder_output: DetrDecoderOutput = self.decoder(
             inputs_embeds=inputs_embeds,

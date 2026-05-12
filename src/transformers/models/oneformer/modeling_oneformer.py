@@ -1251,7 +1251,9 @@ class OneFormerPixelDecoder(nn.Module):
         self.config = config
 
         #  positional encoding
-        self.position_embedding = OneFormerSinePositionEmbedding(num_pos_feats=config.conv_dim // 2, normalize=True)
+        self.position_embedding = OneFormerSinePositionEmbedding(
+            num_position_features=config.conv_dim // 2, normalize=True
+        )
         self.num_feature_levels = 3
         transformer_in_channels = feature_channels[-self.num_feature_levels :]
         self.transformer_feature_strides = config.strides[-self.num_feature_levels :]
@@ -1374,7 +1376,6 @@ class OneFormerPixelDecoder(nn.Module):
             spatial_shapes.append(spatial_shape)
             source = source.flatten(2).transpose(1, 2)
             mask = mask.flatten(1)
-            pos_embed = pos_embed.flatten(2).transpose(1, 2)
             lvl_pos_embed = pos_embed + self.level_embed[level].view(1, 1, -1)
             lvl_pos_embed_flatten.append(lvl_pos_embed)
             source_flatten.append(source)
@@ -2283,7 +2284,7 @@ class OneFormerTransformerModule(nn.Module):
         super().__init__()
         hidden_dim = config.hidden_dim
         self.num_feature_levels = 3
-        self.position_embedder = OneFormerSinePositionEmbedding(num_pos_feats=hidden_dim // 2, normalize=True)
+        self.position_embedder = OneFormerSinePositionEmbedding(num_position_features=hidden_dim // 2, normalize=True)
         self.queries_embedder = nn.Embedding(config.num_queries, hidden_dim)
         self.input_projections = []
 
@@ -2317,15 +2318,14 @@ class OneFormerTransformerModule(nn.Module):
             multi_stage_positional_embeddings.append(
                 self.position_embedder(
                     multi_scale_features[i].shape, multi_scale_features[i].device, multi_scale_features[i].dtype, None
-                ).flatten(2)
+                )
             )
             multi_stage_features.append(
                 self.input_projections[i](multi_scale_features[i]).flatten(2)
                 + self.level_embed.weight[i][None, :, None]
             )
 
-            # flatten NxCxHxW to HWxNxC
-            multi_stage_positional_embeddings[-1] = multi_stage_positional_embeddings[-1].permute(2, 0, 1)
+            # flatten NxCxHxW to HWxNxC (position embeddings are already in this format)
             multi_stage_features[-1] = multi_stage_features[-1].permute(2, 0, 1)
 
         _, batch_size, _ = multi_stage_features[0].shape
@@ -2349,6 +2349,44 @@ class OneFormerTransformerModule(nn.Module):
         )
 
 
+def build_sine_position_embedding(
+    shape: torch.Size,
+    device: torch.device | str,
+    dtype: torch.dtype,
+    num_position_features: int,
+    normalize: bool = False,
+    scale: float | None = None,
+    temperature: int = 10000,
+    mask: torch.Tensor | None = None,
+) -> torch.Tensor:
+    if mask is None:
+        mask = torch.ones((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
+    y_embed = mask.cumsum(1, dtype=dtype)
+    x_embed = mask.cumsum(2, dtype=dtype)
+    if normalize:
+        eps = 1e-6
+        y_embed = y_embed / (y_embed[:, -1:, :] + eps) * scale
+        x_embed = x_embed / (x_embed[:, :, -1:] + eps) * scale
+
+    dim_t = torch.arange(num_position_features, dtype=torch.int64, device=device).to(dtype)
+    dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_position_features)
+
+    pos_x = x_embed[:, :, :, None] / dim_t
+    pos_y = y_embed[:, :, :, None] / dim_t
+    pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
+    pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
+    pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
+    # Flatten spatial dimensions and permute to (batch_size, sequence_length, hidden_size) format
+    # expected by the encoder
+    pos = pos.flatten(2).permute(0, 2, 1)
+    return pos
+
+
+@compile_compatible_method_lru_cache(maxsize=1)
+def _cached_build_sine_position_embedding(*args, **kwargs) -> torch.Tensor:
+    return build_sine_position_embedding(*args, **kwargs)
+
+
 # Copied from transformers.models.maskformer.modeling_maskformer.MaskFormerSinePositionEmbedding with Mask->One
 class OneFormerSinePositionEmbedding(nn.Module):
     """
@@ -2357,43 +2395,30 @@ class OneFormerSinePositionEmbedding(nn.Module):
     """
 
     def __init__(
-        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: float | None = None
+        self,
+        num_position_features: int = 64,
+        temperature: int = 10000,
+        normalize: bool = False,
+        scale: float | None = None,
     ):
         super().__init__()
         if scale is not None and normalize is False:
             raise ValueError("normalize should be True if scale is passed")
-        self.num_pos_feats = num_pos_feats
+        self.num_position_features = num_position_features
         self.temperature = temperature
         self.normalize = normalize
         self.scale = 2 * math.pi if scale is None else scale
 
-    @compile_compatible_method_lru_cache(maxsize=1)
     def forward(
         self,
         shape: torch.Size,
         device: torch.device | str,
         dtype: torch.dtype,
-        mask: Tensor | None = None,
-    ) -> Tensor:
-        if mask is None:
-            mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
-        not_mask = (~mask).to(dtype)
-        y_embed = not_mask.cumsum(1)
-        x_embed = not_mask.cumsum(2)
-        if self.normalize:
-            eps = 1e-6
-            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
-
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=device).to(dtype)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
-
-        pos_x = x_embed[:, :, :, None] / dim_t
-        pos_y = y_embed[:, :, :, None] / dim_t
-        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
-        return pos
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        return _cached_build_sine_position_embedding(
+            shape, device, dtype, self.num_position_features, self.normalize, self.scale, self.temperature, mask
+        )
 
 
 # Copied from transformers.models.maskformer.modeling_maskformer.PredictionBlock

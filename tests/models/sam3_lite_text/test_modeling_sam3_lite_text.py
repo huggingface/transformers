@@ -1307,7 +1307,7 @@ class Sam3LiteTextModelIntegrationTest(unittest.TestCase):
         text_prompt = "handle"
         text_inputs = self.processor(text=text_prompt, return_tensors="pt").to(torch_device)
         with torch.no_grad():
-            text_embeds = self.model.get_text_features(**text_inputs).pooler_output
+            text_embeds = self.model.get_text_features(**text_inputs)
 
         # Run inference on multiple images reusing text embeddings
         # Note: attention_mask must be passed along with text_embeds for proper masking

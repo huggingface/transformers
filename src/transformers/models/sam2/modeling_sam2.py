@@ -35,12 +35,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    can_return_tuple,
-    logging,
-)
+from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
 from ...utils.generic import TransformersKwargs, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
@@ -149,7 +144,44 @@ class Sam2PatchEmbeddings(nn.Module):
         return embeddings
 
 
-# copied and adapted from original implementation, also practically equal to DetrSinePositionEmbedding
+def build_sine_position_embedding(
+    shape: torch.Size,
+    device: torch.device | str,
+    dtype: torch.dtype,
+    num_position_features: int,
+    normalize: bool = False,
+    scale: float | None = None,
+    temperature: int = 10000,
+    mask: torch.Tensor | None = None,
+) -> torch.Tensor:
+    if mask is None:
+        mask = torch.ones((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
+    y_embed = mask.cumsum(1, dtype=dtype)
+    x_embed = mask.cumsum(2, dtype=dtype)
+    if normalize:
+        eps = 1e-6
+        y_embed = y_embed / (y_embed[:, -1:, :] + eps) * scale
+        x_embed = x_embed / (x_embed[:, :, -1:] + eps) * scale
+
+    dim_t = torch.arange(num_position_features, dtype=torch.int64, device=device).to(dtype)
+    dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_position_features)
+
+    pos_x = x_embed[:, :, :, None] / dim_t
+    pos_y = y_embed[:, :, :, None] / dim_t
+    pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
+    pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
+    pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
+    # Flatten spatial dimensions and permute to (batch_size, sequence_length, hidden_size) format
+    # expected by the encoder
+    pos = pos.flatten(2).permute(0, 2, 1)
+    return pos
+
+
+@compile_compatible_method_lru_cache(maxsize=1)
+def _cached_build_sine_position_embedding(*args, **kwargs) -> torch.Tensor:
+    return build_sine_position_embedding(*args, **kwargs)
+
+
 class Sam2SinePositionEmbedding(nn.Module):
     """
     This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
@@ -157,43 +189,30 @@ class Sam2SinePositionEmbedding(nn.Module):
     """
 
     def __init__(
-        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: float | None = None
+        self,
+        num_position_features: int = 64,
+        temperature: int = 10000,
+        normalize: bool = False,
+        scale: float | None = None,
     ):
         super().__init__()
         if scale is not None and normalize is False:
             raise ValueError("normalize should be True if scale is passed")
-        self.num_pos_feats = num_pos_feats
+        self.num_position_features = num_position_features
         self.temperature = temperature
         self.normalize = normalize
         self.scale = 2 * math.pi if scale is None else scale
 
-    @compile_compatible_method_lru_cache(maxsize=1)
     def forward(
         self,
         shape: torch.Size,
         device: torch.device | str,
         dtype: torch.dtype,
-        mask: Tensor | None = None,
-    ) -> Tensor:
-        if mask is None:
-            mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
-        not_mask = (~mask).to(dtype)
-        y_embed = not_mask.cumsum(1)
-        x_embed = not_mask.cumsum(2)
-        if self.normalize:
-            eps = 1e-6
-            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
-
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=device).to(dtype)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
-
-        pos_x = x_embed[:, :, :, None] / dim_t
-        pos_y = y_embed[:, :, :, None] / dim_t
-        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
-        return pos
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        return _cached_build_sine_position_embedding(
+            shape, device, dtype, self.num_position_features, self.normalize, self.scale, self.temperature, mask
+        )
 
 
 class Sam2VisionNeck(nn.Module):
@@ -201,7 +220,9 @@ class Sam2VisionNeck(nn.Module):
         super().__init__()
         self.config = config
 
-        self.position_encoding = Sam2SinePositionEmbedding(num_pos_feats=config.fpn_hidden_size // 2, normalize=True)
+        self.position_encoding = Sam2SinePositionEmbedding(
+            num_position_features=config.fpn_hidden_size // 2, normalize=True
+        )
         self.convs = nn.ModuleList()
         for in_channels in config.backbone_channel_list:
             self.convs.append(
@@ -1593,12 +1614,8 @@ class Sam2Model(Sam2PreTrainedModel):
         feature_maps[0] = self.mask_decoder.conv_s0(feature_maps[0])
         feature_maps[1] = self.mask_decoder.conv_s1(feature_maps[1])
 
-        # flatten NxCxHxW to HWxNxC
+        # flatten NxCxHxW to HWxNxC (position embeddings are already in this format)
         feature_maps = [feature_map.flatten(2).permute(2, 0, 1) for feature_map in feature_maps]
-        feature_maps_position_embeddings = [
-            feature_map_position_embedding.flatten(2).permute(2, 0, 1)
-            for feature_map_position_embedding in feature_maps_position_embeddings
-        ]
         vision_outputs.fpn_hidden_states = feature_maps
         vision_outputs.fpn_position_encoding = feature_maps_position_embeddings
 

@@ -849,6 +849,44 @@ class Sam3ViTModel(Sam3PreTrainedModel):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
+def build_sine_position_embedding(
+    shape: torch.Size,
+    device: torch.device | str,
+    dtype: torch.dtype,
+    num_position_features: int,
+    normalize: bool = False,
+    scale: float | None = None,
+    temperature: int = 10000,
+    mask: torch.Tensor | None = None,
+) -> torch.Tensor:
+    if mask is None:
+        mask = torch.ones((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
+    y_embed = mask.cumsum(1, dtype=dtype)
+    x_embed = mask.cumsum(2, dtype=dtype)
+    if normalize:
+        eps = 1e-6
+        y_embed = y_embed / (y_embed[:, -1:, :] + eps) * scale
+        x_embed = x_embed / (x_embed[:, :, -1:] + eps) * scale
+
+    dim_t = torch.arange(num_position_features, dtype=torch.int64, device=device).to(dtype)
+    dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_position_features)
+
+    pos_x = x_embed[:, :, :, None] / dim_t
+    pos_y = y_embed[:, :, :, None] / dim_t
+    pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
+    pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
+    pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
+    # Flatten spatial dimensions and permute to (batch_size, sequence_length, hidden_size) format
+    # expected by the encoder
+    pos = pos.flatten(2).permute(0, 2, 1)
+    return pos
+
+
+@compile_compatible_method_lru_cache(maxsize=4)
+def _cached_build_sine_position_embedding(*args, **kwargs) -> torch.Tensor:
+    return build_sine_position_embedding(*args, **kwargs)
+
+
 class Sam3SinePositionEmbedding(nn.Module):
     """
     This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
@@ -856,12 +894,16 @@ class Sam3SinePositionEmbedding(nn.Module):
     """
 
     def __init__(
-        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: float | None = None
+        self,
+        num_position_features: int = 64,
+        temperature: int = 10000,
+        normalize: bool = False,
+        scale: float | None = None,
     ):
         super().__init__()
         if scale is not None and normalize is False:
             raise ValueError("normalize should be True if scale is passed")
-        self.num_pos_feats = num_pos_feats
+        self.num_position_features = num_position_features
         self.temperature = temperature
         self.normalize = normalize
         self.scale = 2 * math.pi if scale is None else scale
@@ -880,8 +922,8 @@ class Sam3SinePositionEmbedding(nn.Module):
         x_embed = x * self.scale
         y_embed = y * self.scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=x.device).to(x.dtype)
-        dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_pos_feats)
+        dim_t = torch.arange(self.num_position_features, dtype=torch.int64, device=x.device).to(x.dtype)
+        dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_position_features)
 
         pos_x = x_embed[:, None] / dim_t
         pos_y = y_embed[:, None] / dim_t
@@ -897,11 +939,11 @@ class Sam3SinePositionEmbedding(nn.Module):
             boxes: Box coordinates [batch_size, num_queries, 4] in (x, y, w, h) format
 
         Returns:
-            Position embeddings [batch_size, num_queries, num_pos_feats*4]
+            Position embeddings [batch_size, num_queries, num_position_features*4]
         """
         assert boxes.size(-1) == 4, f"Expected 4D box coordinates (x, y, w, h), got shape {boxes.shape}"
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=boxes.device).to(boxes.dtype)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
+        dim_t = torch.arange(self.num_position_features, dtype=torch.int64, device=boxes.device).to(boxes.dtype)
+        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_position_features)
 
         x_embed = boxes[:, :, 0] * self.scale
         y_embed = boxes[:, :, 1] * self.scale
@@ -930,25 +972,9 @@ class Sam3SinePositionEmbedding(nn.Module):
         dtype: torch.dtype,
         mask: Tensor | None = None,
     ) -> Tensor:
-        if mask is None:
-            mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
-        not_mask = (~mask).to(dtype)
-        y_embed = not_mask.cumsum(1)
-        x_embed = not_mask.cumsum(2)
-        if self.normalize:
-            eps = 1e-6
-            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
-
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=device).to(dtype)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
-
-        pos_x = x_embed[:, :, :, None] / dim_t
-        pos_y = y_embed[:, :, :, None] / dim_t
-        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
-        return pos
+        return _cached_build_sine_position_embedding(
+            shape, device, dtype, self.num_position_features, self.normalize, self.scale, self.temperature, mask
+        )
 
 
 class Sam3FPNLayer(nn.Module):
@@ -994,7 +1020,9 @@ class Sam3VisionNeck(nn.Module):
         super().__init__()
         self.config = config
 
-        self.position_encoding = Sam3SinePositionEmbedding(num_pos_feats=config.fpn_hidden_size // 2, normalize=True)
+        self.position_encoding = Sam3SinePositionEmbedding(
+            num_position_features=config.fpn_hidden_size // 2, normalize=True
+        )
 
         # Create one FPN layer per scale factor
         self.fpn_layers = nn.ModuleList(
@@ -1126,7 +1154,9 @@ class Sam3GeometryEncoder(nn.Module):
         self.hidden_size = config.hidden_size
         self.roi_size = config.roi_size
 
-        self.position_encoding = Sam3SinePositionEmbedding(num_pos_feats=config.hidden_size // 2, normalize=True)
+        self.position_encoding = Sam3SinePositionEmbedding(
+            num_position_features=config.hidden_size // 2, normalize=True
+        )
         self.label_embed = nn.Embedding(2, self.hidden_size)
         self.cls_embed = nn.Embedding(1, self.hidden_size)
 
@@ -1227,8 +1257,7 @@ class Sam3GeometryEncoder(nn.Module):
         # Prepare vision features for cross-attention: flatten spatial dimensions
         vision_feats = img_feats[-1]  # [B, C, H, W]
         vision_pos_embeds = img_pos_embeds[-1] if img_pos_embeds is not None else torch.zeros_like(vision_feats)
-        vision_feats_flat = vision_feats.flatten(2).transpose(1, 2)  # [B, H*W, C]
-        vision_pos_embeds_flat = vision_pos_embeds.flatten(2).transpose(1, 2)  # [B, H*W, C]
+        vision_feats = vision_feats.flatten(2).transpose(1, 2)  # [B, H*W, C]
 
         # Normalize image features for pooling operations
         img_feats_last = img_feats[-1]  # [B, C, H, W]
@@ -1258,8 +1287,8 @@ class Sam3GeometryEncoder(nn.Module):
         for layer in self.layers:
             prompt_embeds = layer(
                 prompt_feats=prompt_embeds,
-                vision_feats=vision_feats_flat,
-                vision_pos_encoding=vision_pos_embeds_flat,
+                vision_feats=vision_feats,
+                vision_pos_encoding=vision_pos_embeds,
                 prompt_mask=prompt_attention_mask,
             )
 
@@ -1389,7 +1418,6 @@ class Sam3DetrEncoder(Sam3PreTrainedModel):
 
             # Flatten spatial dimensions: [batch_size, channels, height, width] -> [batch_size, height*width, channels]
             features = features.flatten(2).transpose(1, 2)
-            pos_embed = pos_embed.flatten(2).transpose(1, 2)
 
             features_flattened.append(features)
             pos_embeds_flattened.append(pos_embed)
@@ -1437,7 +1465,6 @@ class Sam3DetrEncoder(Sam3PreTrainedModel):
             for i, (height, width) in enumerate(spatial_sizes):
                 # Reshape from [height*width, batch_size, channels] to [batch_size, channels, height, width]
                 vision_features[i] = vision_features[i].reshape(height, width, batch_size, -1).permute(2, 3, 0, 1)
-                vision_pos_embeds[i] = vision_pos_embeds[i].reshape(height, width, batch_size, -1).permute(2, 3, 0, 1)
 
         # Flatten multi-level features for encoder processing
         (
@@ -1642,7 +1669,9 @@ class Sam3DetrDecoder(Sam3PreTrainedModel):
         self.box_rpb_embed_x = Sam3DecoderMLP(2, config.hidden_size, config.num_attention_heads, 2)
         self.box_rpb_embed_y = Sam3DecoderMLP(2, config.hidden_size, config.num_attention_heads, 2)
 
-        self.position_encoding = Sam3SinePositionEmbedding(num_pos_feats=config.hidden_size // 2, normalize=False)
+        self.position_encoding = Sam3SinePositionEmbedding(
+            num_position_features=config.hidden_size // 2, normalize=False
+        )
 
         self.post_init()
 
@@ -2300,12 +2329,9 @@ class Sam3Model(Sam3PreTrainedModel):
         fpn_position_encoding = vision_outputs.fpn_position_encoding[:-1]
 
         if text_embeds is None:
-            text_features = self.get_text_features(
-                input_ids=input_ids, attention_mask=attention_mask, return_dict=True
-            ).pooler_output
-        else:
-            text_features = text_embeds
+            text_embeds = self.get_text_features(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)
 
+        text_features = text_embeds.pooler_output
         text_mask = attention_mask.bool() if attention_mask is not None else None
         has_geometry_prompts = input_boxes is not None and input_boxes.numel() > 0
 

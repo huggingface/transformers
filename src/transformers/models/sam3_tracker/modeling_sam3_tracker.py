@@ -1091,12 +1091,8 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
         feature_maps[0] = self.mask_decoder.conv_s0(feature_maps[0])
         feature_maps[1] = self.mask_decoder.conv_s1(feature_maps[1])
 
-        # flatten NxCxHxW to HWxNxC
+        # flatten NxCxHxW to HWxNxC (position embeddings are already in this format)
         feature_maps = [feature_map.flatten(2).permute(2, 0, 1) for feature_map in feature_maps]
-        feature_maps_position_embeddings = [
-            feature_map_position_embedding.flatten(2).permute(2, 0, 1)
-            for feature_map_position_embedding in feature_maps_position_embeddings
-        ]
         vision_outputs.fpn_hidden_states = feature_maps
         vision_outputs.fpn_position_encoding = feature_maps_position_embeddings
 

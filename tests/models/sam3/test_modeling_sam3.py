@@ -1511,7 +1511,7 @@ class Sam3ModelIntegrationTest(unittest.TestCase):
             img_inputs = self.processor(images=image, return_tensors="pt").to(torch_device)
             with torch.no_grad():
                 outputs = self.model(
-                    text_embeds=text_embeds,
+                    text_embeds=text_embeds.pooler_output,
                     attention_mask=text_inputs.attention_mask,
                     **img_inputs,
                 )
@@ -1531,7 +1531,7 @@ class Sam3ModelIntegrationTest(unittest.TestCase):
         img_inputs = self.processor(images=raw_image2, return_tensors="pt").to(torch_device)
         with torch.no_grad():
             outputs_with_embeds = self.model(
-                text_embeds=text_embeds,
+                text_embeds=text_embeds.pooler_output,
                 attention_mask=text_inputs.attention_mask,
                 **img_inputs,
             )
