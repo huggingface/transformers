@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
+from ..core_model_loading import ConversionOps, WeightConverter, MergeModulelist, Concatenate
 from ..utils import is_compressed_tensors_available, is_torch_available, logging
 from ..utils.quantization_config import CompressedTensorsConfig
 from .base import HfQuantizer
@@ -65,41 +65,9 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         return dtype
 
     def _process_model_before_weight_loading(self, model, **kwargs):
-        from functools import reduce
-
-        from compressed_tensors.compressors.pack_quantized import PackedQuantizationCompressor
         from compressed_tensors.quantization import apply_quantization_config
-        from torch import nn
 
         ct_quantization_config = self.compressor.quantization_config
-
-        def compress_moe_layers_stacked(model, param_name, param_scale: torch.Tensor, quantization_scheme):
-            class DummyModule(nn.Module):
-                def __init__(self, p, scale):
-                    super().__init__()
-                    self.weight = nn.Parameter(p)
-                    self.weight_scale = nn.Parameter(scale)
-
-            path, _, name = param_name.rpartition(".")
-            parent = reduce(getattr, path.split("."), model)
-            param = reduce(getattr, param_name.split("."), model)
-
-            module = DummyModule(param, param_scale)
-            module.quantization_scheme = quantization_scheme
-            PackedQuantizationCompressor.compress_module(module)
-            delattr(parent, name)
-            parent.register_module(name, module)
-
-        quantization_scheme = list(ct_quantization_config.config_groups.values())[0]
-        dummy_scale = torch.zeros(384, 4096, 224)  # should be converted/stacked from ckpt
-        compress_moe_layers_stacked(
-            model, "model.language_model.layers.1.mlp.experts.gate_up_proj", dummy_scale, quantization_scheme
-        )
-
-        dummy_scale = torch.zeros(384, 7168, 64)  # should be converted/stacked from ckpt
-        compress_moe_layers_stacked(
-            model, "model.language_model.layers.1.mlp.experts.down_proj", dummy_scale, quantization_scheme
-        )
 
         # Always initialize compressed wrappers to match the checkpoint
         apply_quantization_config(model, ct_quantization_config, self.run_compressed)
@@ -144,3 +112,119 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     def is_serializable(self) -> bool:
         """Models quantized using compressed tensors can be saved to disk"""
         return True
+
+    def get_weight_conversions(self):
+        # FIXME: can't always just add conversions blindly!
+        dequant_conversions = [
+            WeightConverter(
+                source_patterns=[
+                    r"mlp.experts.\d+.down_proj.weight_packed",
+                    r"mlp.experts.\d+.down_proj.weight_scale",
+                    r"mlp.experts.\d+.down_proj.weight_shape",
+                ],
+                target_patterns=r"mlp.experts.down_proj",
+                operations=[DecompressExperts(self)],
+            ),
+            WeightConverter(
+                source_patterns=[
+                    r"mlp.experts.\d+.gate_proj.weight_packed",
+                    r"mlp.experts.\d+.gate_proj.weight_scale",
+                    r"mlp.experts.\d+.gate_proj.weight_shape",
+                    r"mlp.experts.\d+.up_proj.weight_packed",
+                    r"mlp.experts.\d+.up_proj.weight_scale",
+                    r"mlp.experts.\d+.up_proj.weight_shape",
+                ],
+                target_patterns=r"mlp.experts.gate_up_proj",
+                operations=[DecompressExperts(self)],
+            ),
+        ]
+
+        # MoE conversion should happen AFTER decompression!
+        # FIXME: this won't work if model is NOT compressed when saved, and needs only MoE conversion 
+        return dequant_conversions
+
+
+class DecompressExperts(ConversionOps):
+    """
+    Dequantize MoE layers when they are in new layout, because they aren't `nn.Module` anymore!
+
+    Takes packed weights and scales from the loaded state dict, creates a dummy Module
+    to take advantage of higher-lvl API `decompress_module` and dequantizes all weights.
+
+    Requires MoE conversion to be defined on conversion mapping, so that decompressed weights
+    are stacked/merged for all experts.
+    """
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(
+        self,
+        input_dict: dict[str, torch.Tensor],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        full_layer_name: str | None = None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        # TODO: infer compression-type from config and use the scheme with `target` names/modules
+        from compressed_tensors.compressors.pack_quantized import PackedQuantizationCompressor
+        from torch import nn
+
+        ct_quantization_config = self.hf_quantizer.compressor.quantization_config
+        quantization_scheme = list(ct_quantization_config.config_groups.values())[0]
+        input_dict = self.group_input_dict(input_dict)
+
+        class DummyModule(nn.Module):
+            def __init__(self, weight, scale, shape):
+                super().__init__()
+                self.weight_packed = nn.Parameter(weight, requires_grad=False)
+                self.weight_scale = nn.Parameter(scale, requires_grad=False)
+                self.weight_shape = nn.Parameter(shape, requires_grad=False)
+
+        # Per-expert compressed projections of size (input-dim; output-dim)
+        quantized, scales, shapes = [], [], []
+        processed_out = []
+        for layername, value in input_dict.items():
+            quantized, scales, shapes = (value["weight_packed"],
+                value["weight_scale"],
+                value["weight_shape"],
+            )
+
+            if any(tensor is None for tensor in (quantized, scales, shapes)):
+                raise ValueError("Couldn't find quantized tensors in state dict")
+
+            # Create a dummy module to not rely on low-lvl API and iter over each expert
+            decompessed_tensors = []
+            for quant, scale, shape in zip(quantized, scales, shapes):
+                module = DummyModule(quant, scale, shape)
+
+                module.quantization_scheme = quantization_scheme
+                PackedQuantizationCompressor.decompress_module(module)
+                decompessed_tensors.append(module.weight)
+
+            del quantized, scales, shapes, module
+            torch.cuda.empty_cache()
+            processed_out.append(torch.stack(decompessed_tensors, dim=0))
+
+        processed_out = torch.cat(processed_out, dim=1)
+        return {target_patterns[0]: processed_out}
+
+    def group_input_dict(self, input_dict: dict) -> dict:
+        # Group keys by weight type
+        weight_grouped = {}
+        for key in input_dict:
+            if "weight_packed" in key:
+                # Extract the type identifier: e.g. "weight" or "weight_type2"
+                layername = key.replace(".weight_packed", "")
+                weight_grouped.setdefault(layername, {})["weight_packed"] = input_dict[key]
+            elif "weight_scale" in key:
+                layername = key.replace(".weight_scale", "")
+                weight_grouped.setdefault(layername, {})["weight_scale"] = input_dict[key]
+            elif "weight_shape" in key:
+                layername = key.replace(".weight_shape", "")
+                weight_grouped.setdefault(layername, {})["weight_shape"] = input_dict[key]
+
+        return weight_grouped
+
+    @property
+    def reverse_op(self) -> "ConversionOps":
+        return None  # TODO

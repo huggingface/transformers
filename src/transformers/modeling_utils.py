@@ -4212,43 +4212,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         model.eval()  # Set model in evaluation mode to deactivate Dropout modules by default
         model.set_use_kernels(use_kernels, kernel_config)
 
-        # Decompress after loading packed weights. Do we support this type of quant on MoE projections, there should be a better way
-        from functools import reduce
-
-        from compressed_tensors.compressors.pack_quantized import PackedQuantizationCompressor
-
-        class DummyModule(nn.Module):
-            def __init__(self, p, scale, shape):
-                super().__init__()
-                self.weight_packed = nn.Parameter(p, requires_grad=False)
-                self.weight_scale = nn.Parameter(scale, requires_grad=False)
-                self.weight_shape = nn.Parameter(shape, requires_grad=False)
-
-        def decompress_module(model, param_name):
-            compressed_module = reduce(getattr, param_name.split("."), model)
-            state_dict = compressed_module.state_dict()
-            weights = []
-            weight, scale, shape = state_dict["weight_packed"], state_dict["weight_scale"], state_dict["weight_shape"]
-            # Compressed-tensors don't operate on 3D packed inputs when decompressing!
-            for w, s, sh in zip(weight, scale, shape):
-                module = DummyModule(w, s, sh)
-                module.quantization_scheme = compressed_module.quantization_scheme
-                PackedQuantizationCompressor.decompress_module(module)
-                weights.append(module.weight)
-
-            # set stacked weights back as nn.parameetr, since MoE kernels expect that
-            path, _, name = param_name.rpartition(".")
-            parent = reduce(getattr, path.split("."), model)
-            delattr(parent, name)
-
-            stacked_weights = nn.Parameter(torch.stack(weights, dim=0))
-            del weights
-            setattr(parent, name, stacked_weights)
-
-        # Needs to iter over all layers with MoE
-        decompress_module(model, "model.language_model.layers.1.mlp.experts.gate_up_proj")
-        decompress_module(model, "model.language_model.layers.1.mlp.experts.down_proj")
-
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)
         if model.can_generate() and hasattr(model, "adjust_generation_fn") and not gguf_file:
