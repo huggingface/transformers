@@ -18,71 +18,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="facebook/dinov3-vits16-pretrain-lvd1689m")
 @strict
 class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     r"""
-    rope_theta (`float`, *optional*, defaults to 100.0):
-        The base period of the RoPE embeddings.
-    query_bias (`bool`, *optional*, defaults to `True`):
-        Whether to add a bias to the query projection.
-    key_bias (`bool`, *optional*, defaults to `False`):
-        Whether to add a bias to the key projection.
-    value_bias (`bool`, *optional*, defaults to `True`):
-        Whether to add a bias to the value projection.
-    proj_bias (`bool`, *optional*, defaults to `True`):
-        Whether to add a bias to the output projection.
-    layerscale_value (`float`, *optional*, defaults to 1.0):
-        Initial value to use for layer scale.
-    use_gated_mlp (`bool`, *optional*, defaults to `False`):
-        Whether to use the SwiGLU feedforward neural network.
-    num_register_tokens (`int`, *optional*, defaults to 0):
-        The number of register tokens.
-    pos_embed_shift (`float`, *optional*):
-        Amount to randomly shift position embedding coordinates in [-shift, shift],
-        applied only in training mode if not `None`.
-    pos_embed_jitter (`float`, *optional*):
-        Amount to randomly jitter position embedding coordinates in log-uniform value in [1/jitter, jitter],
-        applied only in training mode if not `None`.
-    pos_embed_rescale (`float`, *optional*, defaults to 2.0):
-        Amount to randomly rescale position embedding coordinates in log-uniform value in [1/rescale, rescale],
-        applied only in training mode if not `None`.
-    apply_layernorm (`bool`, *optional*, defaults to `True`):
-        Whether to apply layer normalization to the feature maps when used as backbone.
-    reshape_hidden_states (`bool`, *optional*, defaults to `True`):
-        Whether to reshape the hidden states to spatial dimensions when used as backbone.
-
-    Example:
-
-    ```python
-    >>> from transformers import Sapiens2Config, Sapiens2Model
-
-    >>> # Initializing a DINOv3 ViT-small style configuration
-    >>> config = Sapiens2Config()
-
-    >>> # Initializing a model (with random weights) from the config
-    >>> model = Sapiens2Model(config)
-
-    >>> # Accessing the model config
-    >>> config = model.config
-    ```"""
+    use_qk_norm (`bool`, *optional*, defaults to `True`):
+        Whether to apply RMSNorm to queries and keys before RoPE in attention layers.
+    num_key_value_heads (`int`, *optional*):
+        Number of key/value heads for GQA layers. Defaults to `num_attention_heads // 2`.
+        Set to `None` to disable GQA and use full multi-head attention everywhere.
+    first_k_full_attention_layers (`int`, *optional*, defaults to 8):
+        Number of initial transformer layers that use full multi-head attention.
+        Layers at or after this index switch to GQA with `num_key_value_heads`.
+    last_k_full_attention_layers (`int`, *optional*, defaults to 8):
+        Number of final transformer layers that use full multi-head attention.
+        Layers before `num_hidden_layers - last_k_full_attention_layers` use GQA with `num_key_value_heads`.
+    """
 
     model_type = "sapiens2"
 
     patch_size: int | list[int] | tuple[int, int] = 16
-    hidden_size: int = 384
-    intermediate_size: int = 1536
-    num_hidden_layers: int = 12
-    num_attention_heads: int = 6
-    hidden_act: str = "gelu"
+
+    hidden_size: int = 1024
+    intermediate_size: int = 2816
+    num_hidden_layers: int = 24
+    num_attention_heads: int = 16
+    hidden_act: str = "silu"
     attention_dropout: float | int = 0.0
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-5
@@ -96,8 +62,8 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     mlp_bias: bool = True
     layerscale_value: float = 1.0
     drop_path_rate: float | int = 0.0
-    use_gated_mlp: bool = False
-    num_register_tokens: int = 0
+    use_gated_mlp: bool = True
+    num_register_tokens: int = 8
     pos_embed_shift: float | None = None
     pos_embed_jitter: float | None = None
     pos_embed_rescale: float | None = 2.0
@@ -105,8 +71,14 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     _out_indices: list[int] | None = None
     apply_layernorm: bool = True
     reshape_hidden_states: bool = True
+    use_qk_norm: bool = True
+    num_key_value_heads: int | None = None
+    first_k_full_attention_layers: int = 8
+    last_k_full_attention_layers: int = 8
 
     def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads // 2
         self.stage_names = ["stem"] + [f"stage{i}" for i in range(1, self.num_hidden_layers + 1)]
         self.set_output_features_output_indices(
             out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)

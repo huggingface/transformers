@@ -269,27 +269,33 @@ def apply_rotary_pos_emb(
 
 
 class Sapiens2Attention(nn.Module):
-    """
-    Multi-headed attention compatible with ALL_ATTENTION_FUNCTIONS.
-    """
-
-    def __init__(self, config: Sapiens2Config):
+    def __init__(self, config: Sapiens2Config, layer_idx: int):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
         self.is_causal = False
-
         self.scaling = self.head_dim**-0.5
-        self.is_causal = False
-
         self.dropout = config.attention_dropout
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.key_bias)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.value_bias)
+        self.use_qk_norm = config.use_qk_norm
+
+        is_full_attention = (
+            config.num_key_value_heads is None
+            or layer_idx < config.first_k_full_attention_layers
+            or layer_idx >= config.num_hidden_layers - config.last_k_full_attention_layers
+        )
+        self.num_kv_heads = self.num_heads if is_full_attention else config.num_key_value_heads
+        kv_dim = self.num_kv_heads * self.head_dim
 
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.query_bias)
+        self.k_proj = nn.Linear(self.embed_dim, kv_dim, bias=config.key_bias)
+        self.v_proj = nn.Linear(self.embed_dim, kv_dim, bias=config.value_bias)
         self.o_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.proj_bias)
+
+        if self.use_qk_norm:
+            self.q_norm = nn.RMSNorm(self.head_dim, eps=config.layer_norm_eps)
+            self.k_norm = nn.RMSNorm(self.head_dim, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -298,8 +304,6 @@ class Sapiens2Attention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        """Input shape: Batch x Time x Channel"""
-
         batch_size, patches, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
@@ -307,11 +311,20 @@ class Sapiens2Attention(nn.Module):
         value_states = self.v_proj(hidden_states)
 
         query_states = query_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(batch_size, patches, self.num_kv_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(batch_size, patches, self.num_kv_heads, self.head_dim).transpose(1, 2)
+
+        if self.use_qk_norm:
+            query_states = self.q_norm(query_states)
+            key_states = self.k_norm(key_states)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if self.num_kv_heads != self.num_heads:
+            factor = self.num_heads // self.num_kv_heads
+            key_states = key_states.repeat_interleave(factor, dim=1)
+            value_states = value_states.repeat_interleave(factor, dim=1)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -373,30 +386,6 @@ class Sapiens2GatedMLP(nn.Module):
         return down_proj
 
 
-class Dinov3ViTDropPath(nn.Module):
-    """Stochastic depth (DropPath) per sample, for residual blocks.
-
-    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
-    <https://arxiv.org/abs/1603.09382>`_.
-    """
-
-    def __init__(self, drop_prob: float = 0.0) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        if self.drop_prob == 0.0 or not self.training:
-            return hidden_states
-        keep_prob = 1 - self.drop_prob
-        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
-        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
-        random_tensor = torch.floor(random_tensor + keep_prob)
-        return hidden_states.div(keep_prob) * random_tensor
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
-
-
 class Sapiens2DropPath(nn.Module):
     """Stochastic depth (DropPath) per sample, for residual blocks.
 
@@ -424,11 +413,11 @@ class Sapiens2DropPath(nn.Module):
 class Sapiens2Layer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the original implementation."""
 
-    def __init__(self, config: Sapiens2Config):
+    def __init__(self, config: Sapiens2Config, layer_idx: int):
         super().__init__()
 
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = Sapiens2Attention(config)
+        self.attention = Sapiens2Attention(config, layer_idx=layer_idx)
         self.layer_scale1 = Sapiens2LayerScale(config)
         self.drop_path = Sapiens2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
@@ -506,12 +495,14 @@ class Sapiens2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, Sapiens2RopePositionEmbedding):
             inv_freq = 1 / module.base ** torch.arange(0, 1, 4 / module.head_dim, dtype=torch.float32)
             init.copy_(module.inv_freq, inv_freq)
+        if isinstance(module, nn.RMSNorm):
+            init.ones_(module.weight)
 
 
 class Sapiens2Encoder(Sapiens2PreTrainedModel):
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
-        self.layer = nn.ModuleList([Sapiens2Layer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([Sapiens2Layer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
         # Initialize weights and apply final processing
         self.post_init()
 
