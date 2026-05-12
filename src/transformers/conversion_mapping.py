@@ -1079,7 +1079,7 @@ def get_model_conversion_mapping(
 
     for module_name, submodule in model.named_modules():
         # Skip if it's not a submodel
-        if not isinstance(model, PreTrainedModel):
+        if not isinstance(submodule, PreTrainedModel):
             continue
 
         class_name = type(submodule).__name__
