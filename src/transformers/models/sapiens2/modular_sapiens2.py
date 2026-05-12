@@ -194,6 +194,8 @@ class Sapiens2Layer(DINOv3ViTLayer):
     def __init__(self, config: Sapiens2Config, layer_idx: int):
         super().__init__(config)
         self.attention = Sapiens2Attention(config, layer_idx=layer_idx)
+        self.norm1 = nn.RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm2 = nn.RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
 
 
 class Sapiens2PreTrainedModel(DINOv3ViTPreTrainedModel):
