@@ -274,6 +274,26 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             [tokenizer.tokenize(t) for t in ["Test", "\xad", "test"]], [["[UNK]"], ["[EMPTY]"], ["[UNK]"]]
         )
 
+    def test_add_numeric_table_values_with_pyarrow_string_dtype(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/45901: in pandas
+        # 3.x string columns default to a pyarrow-backed StringDtype that rejects writes of
+        # arbitrary Python objects (it calls len() on the value), breaking the Cell insertion
+        # inside add_numeric_table_values. Simulate that default with future.infer_string.
+        from transformers.models.tapas.tokenization_tapas import Cell, add_numeric_table_values
+
+        data = {"Actors": ["Brad Pitt", "Leonardo Di Caprio"], "Number of movies": ["87", "53"]}
+        original = pd.get_option("future.infer_string")
+        pd.set_option("future.infer_string", True)
+        try:
+            table = pd.DataFrame.from_dict(data)
+            result = add_numeric_table_values(table)
+        finally:
+            pd.set_option("future.infer_string", original)
+
+        self.assertIsInstance(result.iloc[0, 0], Cell)
+        self.assertEqual(result.iloc[1, 1].text, "53")
+        self.assertEqual(result.iloc[1, 1].numeric_value.float_value, 53.0)
+
     @slow
     def test_sequence_builders(self):
         tokenizer = self.tokenizer_class.from_pretrained("google/tapas-base-finetuned-wtq")

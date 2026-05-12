@@ -2764,7 +2764,10 @@ def add_numeric_table_values(table, min_consolidation_fraction=0.7, debug_info=N
     # First, filter table on invalid unicode
     filter_invalid_unicode_from_table(table)
 
-    # Second, replace cell values by Cell objects
+    # Second, replace cell values by Cell objects. Cast to object dtype first: in pandas 3.x string
+    # columns default to the pyarrow-backed StringDtype, which rejects writes of arbitrary Python
+    # objects (it calls len(value) on the assignee, raising TypeError on the Cell dataclass).
+    table = table.astype(object)
     for row_index, row in table.iterrows():
         for col_index, cell in enumerate(row):
             table.iloc[row_index, col_index] = Cell(text=cell)
