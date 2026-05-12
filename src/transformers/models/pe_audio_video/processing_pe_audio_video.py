@@ -15,10 +15,8 @@ from ...processing_utils import ProcessorMixin
 
 
 class PeAudioVideoProcessor(ProcessorMixin):
-    attributes = ["feature_extractor", "video_processor", "tokenizer"]
-    feature_extractor_class = "PeAudioFeatureExtractor"
-    tokenizer_class = "AutoTokenizer"
-    video_processor_class = "PeVideoVideoProcessor"
+    def __init__(self, feature_extractor=None, video_processor=None, tokenizer=None, **kwargs):
+        super().__init__(feature_extractor, video_processor, tokenizer, **kwargs)
 
 
 __all__ = ["PeAudioVideoProcessor"]
