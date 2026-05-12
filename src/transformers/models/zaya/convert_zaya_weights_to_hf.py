@@ -156,7 +156,9 @@ def convert_config(input_dir: Path, output_dir: Path) -> None:
     sliding_window = config_dict.get("sliding_window")
     if sliding_window is None:
         positive_windows = [int(window_size) for window_size in swa_layers if int(window_size) > 0]
-        sliding_window = max(positive_windows) if positive_windows else None
+        # Original ZAYA stores the number of previous tokens attended by SWA layers. Transformers' sliding window
+        # is the total local attention span, including the current token.
+        sliding_window = max(positive_windows) + 1 if positive_windows else None
 
     rope_parameters = {
         "full_attention": {

@@ -877,9 +877,11 @@ class ZayaModel(ZayaPreTrainedModel):
             "past_key_values": past_key_values,
             "position_ids": position_ids,
         }
+        # Original ZAYA SWA only applies the local causal pattern; padding tokens are zeroed before the CCA projection.
+        sliding_mask_kwargs = {**mask_kwargs, "attention_mask": None}
         mask_creation_functions = {
             "full_attention": lambda: create_causal_mask(**mask_kwargs),
-            "sliding_attention": lambda: create_sliding_window_causal_mask(**mask_kwargs),
+            "sliding_attention": lambda: create_sliding_window_causal_mask(**sliding_mask_kwargs),
         }
         causal_mask_mapping = {}
         for layer_type in set(self.config.layer_types):
