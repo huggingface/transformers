@@ -27,7 +27,7 @@ if is_torch_available():
 
     from transformers import AutoTokenizer, ZayaConfig, ZayaForCausalLM, ZayaModel
     from transformers.cache_utils import DynamicCache, LinearAttentionAndFullAttentionLayer
-    from transformers.models.zaya.modeling_zaya import ZayaCCAProjection, _make_zaya_cache
+    from transformers.models.zaya.modeling_zaya import ZayaCCAProjection, make_zaya_cache
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -49,14 +49,16 @@ class ZayaModelTester(CausalLMModelTester):
             intermediate_size=64,
         )
         self.head_dim = 8
-        self.ffn_hidden_size = 64
         self.num_experts = 4
-        self.moe_router_topk = 1
+        self.num_experts_per_tok = 1
         self.zaya_mlp_expansion = 4
         self.tie_word_embeddings = False
         self.rope_parameters = {
-            "rope_theta": 10000,
-            "rope_type": "default",
+            "full_attention": {
+                "rope_theta": 10000,
+                "rope_type": "default",
+                "partial_rotary_factor": 0.5,
+            },
         }
 
 
@@ -82,18 +84,12 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
         conv_shape = self._get_conv_state_shape(batch_size, config)
         recurrent_shape = self._get_recurrent_state_shape(batch_size, config)
 
-        for layer_idx, layer in enumerate(past_key_values.layers):
-            if layer_idx % 2 == 0:
-                self.assertIs(type(layer), LinearAttentionAndFullAttentionLayer)
-                self.assertEqual(layer.keys.shape, attention_shape)
-                self.assertEqual(layer.values.shape, attention_shape)
-                self.assertEqual(layer.conv_states.shape, conv_shape)
-                self.assertEqual(layer.recurrent_states.shape, recurrent_shape)
-            else:
-                self.assertIsNone(getattr(layer, "keys", None))
-                self.assertIsNone(getattr(layer, "values", None))
-                self.assertIsNone(layer.conv_states)
-                self.assertIsNone(layer.recurrent_states)
+        for layer in past_key_values.layers:
+            self.assertIs(type(layer), LinearAttentionAndFullAttentionLayer)
+            self.assertEqual(layer.keys.shape, attention_shape)
+            self.assertEqual(layer.values.shape, attention_shape)
+            self.assertEqual(layer.conv_states.shape, conv_shape)
+            self.assertEqual(layer.recurrent_states.shape, recurrent_shape)
 
     def is_pipeline_test_to_skip(
         self,
@@ -132,7 +128,7 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class({**inputs_dict, "output_attentions": True}, model_class))
 
-            expected_attn_layers = (config.num_hidden_layers + 1) // 2
+            expected_attn_layers = config.num_hidden_layers
             self.assertEqual(len(outputs.attentions), expected_attn_layers)
             self.assertEqual(
                 outputs.attentions[0].shape,
@@ -248,32 +244,22 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs_dict, output_router_logits=True)
 
-        expected_moe_layers = config.num_hidden_layers // 2
+        expected_moe_layers = config.num_hidden_layers
         self.assertEqual(len(outputs.router_logits), expected_moe_layers)
         self.assertEqual(
             outputs.router_logits[0].shape,
             (self.model_tester.batch_size * self.model_tester.seq_length, config.num_experts + 1),
         )
 
-    def test_moe_router_topk_validation(self):
-        with self.assertRaisesRegex(StrictDataclassClassValidationError, "moe_router_topk=1"):
-            ZayaConfig(moe_router_topk=2)
-
-    def test_legacy_swa_layers_translate_to_layer_types(self):
-        config = ZayaConfig(num_hidden_layers=4, swa_layers=[4096, 0, 4096, 0], swa_rotary_base=10000)
-
-        self.assertEqual(
-            config.layer_types, ["sliding_attention", "full_attention", "sliding_attention", "full_attention"]
-        )
-        self.assertEqual(config.sliding_window, 4096)
-        self.assertEqual(config.rope_parameters["full_attention"]["rope_theta"], config.default_theta)
-        self.assertEqual(config.rope_parameters["sliding_attention"]["rope_theta"], 10000)
+    def test_num_experts_per_tok_validation(self):
+        with self.assertRaisesRegex(StrictDataclassClassValidationError, "num_experts_per_tok=1"):
+            ZayaConfig(num_experts_per_tok=2)
 
     def test_sliding_attention_mask_is_used(self):
         config = ZayaConfig(
             vocab_size=128,
             hidden_size=32,
-            ffn_hidden_size=64,
+            intermediate_size=64,
             num_hidden_layers=4,
             num_experts=4,
             num_attention_heads=4,
@@ -299,7 +285,7 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
         config = ZayaConfig(
             vocab_size=128,
             hidden_size=32,
-            ffn_hidden_size=64,
+            intermediate_size=64,
             num_hidden_layers=1,
             num_experts=4,
             num_attention_heads=4,
@@ -315,7 +301,7 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
 
         with torch.no_grad():
             full = cca(hidden_states, None, None)
-            cache = _make_zaya_cache(config)
+            cache = make_zaya_cache(config)
             cca(hidden_states[:, :4], cache, None)
             cached = cca(hidden_states[:, 4:], cache, None)
 
@@ -326,7 +312,7 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
         config = ZayaConfig(
             vocab_size=128,
             hidden_size=32,
-            ffn_hidden_size=64,
+            intermediate_size=64,
             num_hidden_layers=1,
             num_experts=4,
             num_attention_heads=4,
@@ -342,7 +328,7 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
 
         with torch.no_grad():
             full = cca(hidden_states, None, None)
-            cache = _make_zaya_cache(config)
+            cache = make_zaya_cache(config)
             cca(hidden_states[:, :3], cache, None)
             cached = cca(hidden_states[:, 3:], cache, None)
 
@@ -351,7 +337,7 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
 
     def test_zaya_cache_reorder_and_reset(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        cache = _make_zaya_cache(config)
+        cache = make_zaya_cache(config)
         conv_state_size = config.num_key_value_heads * config.head_dim + config.num_attention_heads * config.head_dim
         cache.update_conv_state(
             torch.arange(2 * conv_state_size * 2, device=torch_device, dtype=torch.float32).view(

@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_zaya.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 Zyphra and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 Zyphra and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Any, Literal
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -29,17 +31,15 @@ from ...utils import auto_docstring
 @strict
 class ZayaConfig(PreTrainedConfig):
     r"""
-    ffn_hidden_size (`int`, *optional*, defaults to 4096):
+    intermediate_size (`int`, *optional*, defaults to 4096):
         Dimension of the feed-forward and expert hidden states.
-    num_query_groups (`int`, *optional*, defaults to 2):
-        Number of query groups. For ZAYA checkpoints this matches `num_key_value_heads`.
-    rope_theta (`float`, *optional*, defaults to 5000000):
-        The base period of the RoPE embeddings.
+    num_key_value_heads (`int`, *optional*, defaults to 2):
+        Number of key/value groups.
     partial_rotary_factor (`float`, *optional*, defaults to 0.5):
         Fraction of each attention head dimension using rotary embeddings.
     lm_head_bias (`bool`, *optional*, defaults to `False`):
         Whether to add a bias to the language modeling head.
-    moe_router_topk (`int`, *optional*, defaults to 1):
+    num_experts_per_tok (`int`, *optional*, defaults to 1):
         Number of selected experts per token. ZAYA checkpoints use top-1 routing.
     zaya_mlp_expansion (`int`, *optional*, defaults to 256):
         Expansion size used by the dense ZAYA blocks.
@@ -47,7 +47,7 @@ class ZayaConfig(PreTrainedConfig):
         First temporal parameter of the CCA projection.
     cca_time1 (`int`, *optional*, defaults to 2):
         Second temporal parameter of the CCA projection.
-    swa_layers (`list[int]`, *optional*):
+    layer_types (`list[str]`, *optional*):
         Per-layer selector for standard RoPE versus SWA RoPE embeddings.
     swa_rotary_base (`float`, *optional*):
         RoPE base used by SWA layers.
@@ -64,15 +64,15 @@ class ZayaConfig(PreTrainedConfig):
 
     model_type = "zaya"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 5000000.0
 
     vocab_size: int = 262272
     hidden_size: int = 2048
-    ffn_hidden_size: int = 4096
-    num_hidden_layers: int = 80
+    intermediate_size: int = 4096
+    num_hidden_layers: int = 40
     num_experts: int = 16
     num_attention_heads: int = 8
-    num_key_value_heads: int | None = 2
-    num_query_groups: int | None = 2
+    num_key_value_heads: int = 2
     hidden_act: str = "silu"
     head_dim: int = 128
     max_position_embeddings: int = 131072
@@ -81,72 +81,64 @@ class ZayaConfig(PreTrainedConfig):
     use_cache: bool = True
     tie_word_embeddings: bool = True
     rope_parameters: RopeParameters | dict | None = None
-    rope_theta: float | int = 5000000
     partial_rotary_factor: float = 0.5
     attention_bias: bool = False
     lm_head_bias: bool = False
     attention_dropout: float | int = 0.0
-    moe_router_topk: int = 1
+    num_experts_per_tok: int = 1
     zaya_mlp_expansion: int = 256
-    cca_time0: int | None = 2
-    cca_time1: int | None = 2
-    swa_layers: list[int] | None = None
-    swa_rotary_base: float | int | None = None
+    cca_time0: int = 2
+    cca_time1: int = 2
+    sliding_window: int | None = None
+    layer_types: list[str] | None = None
+    swa_rotary_base: float | int = 10000.0
     output_router_logits: bool = False
     pad_token_id: int | None = 0
     bos_token_id: int | None = 2
     eos_token_id: int | list[int] | None = 106
 
     def __post_init__(self, **kwargs):
-        for unused_checkpoint_kwarg in (
-            "cca",
-            "activation_func",
-            "normalization",
-            "add_bias_linear",
-            "gated_linear_unit",
-            "fused_add_norm",
-            "apply_rope_fusion",
-            "bias_activation_fusion",
-            "activation_func_fp8_input_store",
-            "clamp_temp",
-            "kv_channels",
-            "mamba_cache_dtype",
-            "residual_in_fp32",
-            "rope_scaling",
-            "scale_residual_merge",
-            "sliding_window",
-            "zaya_high_prec",
-            "zaya_use_mod",
-            "zaya_use_eda",
-        ):
-            kwargs.pop(unused_checkpoint_kwarg, None)
-
-        self.num_key_value_heads = (
-            self.num_attention_heads if self.num_key_value_heads is None else self.num_key_value_heads
+        self.layer_types = (
+            ["full_attention"] * self.num_hidden_layers if self.layer_types is None else list(self.layer_types)
         )
-        self.num_query_groups = self.num_key_value_heads if self.num_query_groups is None else self.num_query_groups
-        if self.head_dim is None:
-            raise ValueError("`head_dim` must be set for ZAYA.")
-        if self.num_query_groups != self.num_key_value_heads:
-            raise ValueError("`num_query_groups` must be equal to `num_key_value_heads` for ZAYA.")
-        if self.moe_router_topk != 1:
-            raise ValueError("ZAYA currently supports `moe_router_topk=1` only.")
 
-        self.rope_parameters = (
-            dict(self.rope_parameters) if self.rope_parameters is not None else {"rope_type": "default"}
-        )
-        self.rope_parameters.setdefault("rope_theta", self.rope_theta)
-        self.rope_parameters.setdefault("partial_rotary_factor", self.partial_rotary_factor)
-        self.cca_time0 = 2 if self.cca_time0 is None else self.cca_time0
-        self.cca_time1 = 2 if self.cca_time1 is None else self.cca_time1
-        if (self.cca_time0, self.cca_time1) != (2, 2):
-            raise ValueError("ZAYA currently supports `cca_time0=2` and `cca_time1=2` only.")
-        if self.swa_layers is not None and len(self.swa_layers) != self.num_hidden_layers:
-            raise ValueError("`swa_layers` must have one entry per hidden layer.")
-        if self.swa_layers is not None and self.swa_rotary_base is None:
-            raise ValueError("`swa_rotary_base` must be set when `swa_layers` is provided.")
+        default_rope_params: dict[Literal["full_attention", "sliding_attention"], dict[str, Any]] = {
+            "full_attention": {
+                "rope_type": "default",
+                "rope_theta": self.default_theta,
+                "partial_rotary_factor": self.partial_rotary_factor,
+            },
+            "sliding_attention": {
+                "rope_type": "default",
+                "rope_theta": self.swa_rotary_base,
+                "partial_rotary_factor": self.partial_rotary_factor,
+            },
+        }
+        if self.rope_parameters is None:
+            self.rope_parameters = {
+                layer_type: default_rope_params[layer_type] for layer_type in set(self.layer_types)
+            }
 
         super().__post_init__(**kwargs)
+
+    def convert_rope_params_to_dict(self, **kwargs):
+        # ZAYA uses nested RoPE parameters keyed by layer type. Keep the base RoPE BC conversion from treating them
+        # like a single flat RoPE dict and injecting top-level keys such as `rope_theta`.
+        return kwargs
+
+    def validate_architecture(self):
+        if self.num_experts_per_tok != 1:
+            raise ValueError("ZAYA currently supports `num_experts_per_tok=1` only.")
+        if self.num_attention_heads % self.num_key_value_heads != 0:
+            raise ValueError("`num_attention_heads` must be a multiple of `num_key_value_heads`.")
+        if len(self.layer_types) != self.num_hidden_layers:
+            raise ValueError("`layer_types` must have one entry per hidden layer.")
+        if invalid_layer_types := set(self.layer_types) - {"full_attention", "sliding_attention"}:
+            raise ValueError(f"`layer_types` contains unsupported values: {sorted(invalid_layer_types)}.")
+        if "sliding_attention" in self.layer_types and self.sliding_window is None:
+            raise ValueError("`sliding_window` must be set when `layer_types` contains `sliding_attention`.")
+        if self.sliding_window is not None and self.sliding_window <= 0:
+            raise ValueError("`sliding_window` must be a strictly positive integer.")
 
 
 __all__ = ["ZayaConfig"]

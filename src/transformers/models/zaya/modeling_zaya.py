@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_zaya.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 Zyphra and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 Zyphra and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@
 
 import copy
 from collections.abc import Callable
-from typing import Optional
+from typing import Any, Optional
 
 import torch
 import torch.nn.functional as F
@@ -29,10 +29,10 @@ from torch import nn
 from torch.nn import init
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, DynamicCache, LinearAttentionAndFullAttentionLayer
 from ...generation import GenerationMixin
-from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
-from ...masking_utils import create_causal_mask
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -47,27 +47,33 @@ from .configuration_zaya import ZayaConfig
 class ZayaRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: ZayaConfig, device=None):
+    def __init__(self, config: ZayaConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
-
         self.config = config
+        self.layer_types = list(set(config.layer_types))
+        self.rope_type = {}
+        for layer_type in self.layer_types:
+            rope_params = self.config.rope_parameters[layer_type]
+            if rope_params is None:
+                continue
 
-        self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
-
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+            self.rope_type[layer_type] = rope_params["rope_type"]
+            rope_init_fn: Callable = self.compute_default_rope_parameters
+            if self.rope_type[layer_type] != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, layer_type=layer_type)
+            self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
+            self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
+            setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
     def compute_default_rope_parameters(
         config: ZayaConfig | None = None,
         device: Optional["torch.device"] = None,
         seq_len: int | None = None,
+        layer_type: str | None = None,
     ) -> tuple["torch.Tensor", float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -78,12 +84,16 @@ class ZayaRotaryEmbedding(nn.Module):
                 The device to use for initialization of the inverse frequencies.
             seq_len (`int`, *optional*):
                 The current sequence length. Unused for this type of RoPE.
+            layer_type (`str`, *optional*):
+                The current layer type if the model has different RoPE parameters per type.
+                Should not be used unless `config.layer_types is not None`
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
-        base = config.rope_parameters["rope_theta"]
-        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
+        base = config.rope_parameters[layer_type]["rope_theta"]
+        # key difference to gemma3: partial rope
+        partial_rotary_factor = config.rope_parameters[layer_type].get("partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
 
@@ -97,16 +107,19 @@ class ZayaRotaryEmbedding(nn.Module):
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+    def forward(self, x, position_ids, layer_type=None):
+        inv_freq = getattr(self, f"{layer_type}_inv_freq")
+        attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
+
+        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+            cos = emb.cos() * attention_scaling
+            sin = emb.sin() * attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -132,129 +145,36 @@ class ZayaRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class ZayaDynamicCache(DynamicCache):
+class ZayaCCAProjection(nn.Module):
     """
-    Cache that includes both the KV cache and the CCA cache.
+    Projects hidden states into attention q/k/v states with ZAYA's CCA path.
+
+    `linear_q` and `linear_k` produce the residual q/k states and are concatenated into `qk_states`. The causal
+    `conv_qk_depthwise` + `conv_qk_grouped` stack mixes the current q/k stream with the cached pre-convolution tail;
+    for example, decoding token `t` uses the cached q/k states from previous tokens plus the current `qk_states[:, t]`.
+    Values are built from `val_proj1(hidden_states[:, t])` and a delayed `val_proj2`: during prefill token `t` uses
+    `val_proj2(hidden_states[:, t - 1])`, while decoding reads the previous `val_proj2` from **the recurrent cache**.
+
+    Final q/k states are L2-normalized to sqrt(head_dim). `temp` is the learned per-KV-head scale applied to keys.
     """
 
-    def __init__(
-        self,
-        config: ZayaConfig,
-        batch_size: int,
-        dtype: torch.dtype = torch.float16,
-        device: str | None = None,
-    ):
+    def __init__(self, config: ZayaConfig, layer_idx: int):
         super().__init__()
         self.config = config
-        self.batch_size = batch_size
-        self.dtype = dtype
-        self.device = device
-        self.conv_kernel_size = (config.cca_time0 - 1) + (config.cca_time1 - 1)
-        self.num_layers = config.num_hidden_layers
-        self.key_value_hidden_size = config.num_query_groups * config.head_dim
-        self.query_hidden_size = config.num_attention_heads * config.head_dim
-        self.conv_state_size = self.key_value_hidden_size + self.query_hidden_size
-        self.has_previous_state = False
+        self.layer_idx = layer_idx
 
-        self.conv_states = [None for _ in range(self.num_layers)]
-        self.prev_v2 = [None for _ in range(self.num_layers)]
+        self.hidden_size = config.hidden_size
 
-    def update_conv_state(self, layer_idx: int, new_conv_state: torch.Tensor) -> torch.Tensor:
-        if new_conv_state.shape[1] < self.conv_kernel_size:
-            new_conv_state = F.pad(
-                new_conv_state.transpose(1, 2), (self.conv_kernel_size - new_conv_state.shape[1], 0)
-            )
-        else:
-            new_conv_state = new_conv_state[:, -self.conv_kernel_size :, :].transpose(1, 2)
-
-        if self.conv_states[layer_idx] is None:
-            self.conv_states[layer_idx] = torch.zeros_like(new_conv_state)
-
-        if not self.has_previous_state:
-            self.conv_states[layer_idx].copy_(new_conv_state)
-        else:
-            conv_state = torch.cat([self.conv_states[layer_idx], new_conv_state], dim=-1)[
-                :, :, -self.conv_kernel_size :
-            ]
-            self.conv_states[layer_idx].copy_(conv_state)
-        return self.conv_states[layer_idx]
-
-    def update_prev_v2(self, layer_idx: int, new_prev_v2: torch.Tensor) -> torch.Tensor:
-        if self.prev_v2[layer_idx] is None:
-            self.prev_v2[layer_idx] = torch.zeros_like(new_prev_v2)
-        self.prev_v2[layer_idx].copy_(new_prev_v2)
-        return self.prev_v2[layer_idx]
-
-    def reset(self):
-        super().reset()
-        for conv_state in self.conv_states:
-            if conv_state is not None:
-                conv_state.zero_()
-        for prev_v2 in self.prev_v2:
-            if prev_v2 is not None:
-                prev_v2.zero_()
-        self.has_previous_state = False
-
-    def _reorder_auxiliary_states(self, indices: torch.LongTensor):
-        for layer_idx, conv_state in enumerate(self.conv_states):
-            if conv_state is not None:
-                self.conv_states[layer_idx] = conv_state.index_select(0, indices.to(conv_state.device))
-        for layer_idx, prev_v2 in enumerate(self.prev_v2):
-            if prev_v2 is not None:
-                self.prev_v2[layer_idx] = prev_v2.index_select(0, indices.to(prev_v2.device))
-        self.batch_size = indices.shape[0]
-
-    def reorder_cache(self, beam_idx: torch.LongTensor):
-        super().reorder_cache(beam_idx)
-        self._reorder_auxiliary_states(beam_idx)
-
-    def batch_repeat_interleave(self, repeats: int):
-        super().batch_repeat_interleave(repeats)
-        for layer_idx, conv_state in enumerate(self.conv_states):
-            if conv_state is not None:
-                self.conv_states[layer_idx] = conv_state.repeat_interleave(repeats, dim=0)
-        for layer_idx, prev_v2 in enumerate(self.prev_v2):
-            if prev_v2 is not None:
-                self.prev_v2[layer_idx] = prev_v2.repeat_interleave(repeats, dim=0)
-        self.batch_size *= repeats
-
-    def batch_select_indices(self, indices: torch.Tensor):
-        super().batch_select_indices(indices)
-        self._reorder_auxiliary_states(indices)
-
-
-class CCA(nn.Module):
-    def __init__(
-        self,
-        config: ZayaConfig,
-        num_key_value_heads: int = 2,
-        num_attention_heads: int = 8,
-        hidden_size: int | None = None,
-        head_dim: int = 128,
-        cca_time0: int = 2,
-        cca_time1: int = 2,
-        layer_number: int = 0,
-    ):
-        super().__init__()
-        self.config = config
-        self.layer_number = layer_number
-
-        self.hidden_size = int(hidden_size or config.hidden_size)
-
-        self.depthwise_kernel_size = cca_time0
-        self.grouped_kernel_size = cca_time1
+        self.depthwise_kernel_size = config.cca_time0
+        self.grouped_kernel_size = config.cca_time1
         self.total_padding = (self.depthwise_kernel_size - 1) + (self.grouped_kernel_size - 1)
 
-        self.num_key_value_heads = int(num_key_value_heads)
-        self.num_attention_heads = int(num_attention_heads)
-
-        self.head_dim = int(head_dim)
+        self.num_key_value_heads = config.num_key_value_heads
+        self.num_attention_heads = config.num_attention_heads
+        self.head_dim = config.head_dim
         self.key_value_hidden_size = self.num_key_value_heads * self.head_dim
         self.query_hidden_size = self.num_attention_heads * self.head_dim
-        self.sqrt_head_dim = self.head_dim**0.5
         self.num_key_value_groups = self.num_attention_heads // self.num_key_value_heads
-        if self.num_attention_heads % self.num_key_value_heads != 0:
-            raise ValueError("`num_attention_heads` must be a multiple of `num_key_value_heads`.")
 
         self.linear_q = nn.Linear(self.hidden_size, self.query_hidden_size, bias=self.config.attention_bias)
         self.linear_k = nn.Linear(self.hidden_size, self.key_value_hidden_size, bias=self.config.attention_bias)
@@ -262,23 +182,21 @@ class CCA(nn.Module):
         self.val_proj2 = nn.Linear(self.hidden_size, self.key_value_hidden_size // 2, bias=self.config.attention_bias)
 
         conv_channels = self.key_value_hidden_size + self.query_hidden_size
-        self.conv_qk = nn.Sequential(
-            nn.Conv1d(
-                in_channels=conv_channels,
-                out_channels=conv_channels,
-                kernel_size=self.depthwise_kernel_size,
-                groups=conv_channels,
-                padding=0,
-                stride=1,
-            ),
-            nn.Conv1d(
-                in_channels=conv_channels,
-                out_channels=conv_channels,
-                kernel_size=self.grouped_kernel_size,
-                groups=(self.num_key_value_heads + self.num_attention_heads),
-                padding=0,
-                stride=1,
-            ),
+        self.conv_qk_depthwise = nn.Conv1d(
+            in_channels=conv_channels,
+            out_channels=conv_channels,
+            kernel_size=self.depthwise_kernel_size,
+            groups=conv_channels,
+            padding=0,
+            stride=1,
+        )
+        self.conv_qk_grouped = nn.Conv1d(
+            in_channels=conv_channels,
+            out_channels=conv_channels,
+            kernel_size=self.grouped_kernel_size,
+            groups=(self.num_key_value_heads + self.num_attention_heads),
+            padding=0,
+            stride=1,
         )
 
         self.temp = nn.Parameter(torch.zeros(self.num_key_value_heads))
@@ -286,51 +204,55 @@ class CCA(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        past_key_values: ZayaDynamicCache | None,
-        attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None,
+        padding_mask: torch.Tensor | None = None,
     ):
-        if attention_mask is not None:
-            hidden_states = hidden_states * attention_mask[:, :, None].to(hidden_states.dtype)
+        if padding_mask is not None:
+            hidden_states = hidden_states * padding_mask[:, :, None].to(hidden_states.dtype)
 
-        batch_size, seq_length, _ = hidden_states.shape
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
         projected_queries = self.linear_q(hidden_states)
         projected_keys = self.linear_k(hidden_states)
         qk_states = torch.cat([projected_queries, projected_keys], dim=-1)
 
-        query_residual = projected_queries.view(batch_size, seq_length, self.num_attention_heads, self.head_dim)
-        key_residual = projected_keys.view(batch_size, seq_length, self.num_key_value_heads, self.head_dim)
+        query_residual = projected_queries.view(*hidden_shape)
+        key_residual = projected_keys.view(*input_shape, self.num_key_value_heads, self.head_dim)
 
-        key_residual = key_residual.unsqueeze(-2).expand(-1, -1, -1, self.num_key_value_groups, -1)
-        key_residual = key_residual.reshape(batch_size, seq_length, self.num_attention_heads, self.head_dim)
+        key_residual = key_residual.repeat_interleave(self.num_key_value_groups, dim=-2)
         query_residual = (query_residual + key_residual) * 0.5
         key_residual = query_residual.view(
-            batch_size, seq_length, self.num_key_value_heads, self.num_key_value_groups, self.head_dim
+            *input_shape, self.num_key_value_heads, self.num_key_value_groups, self.head_dim
         ).mean(dim=-2)
 
         qk_states = qk_states.transpose(1, 2)
-        use_precomputed_states = past_key_values is not None and past_key_values.has_previous_state
+        use_precomputed_states = past_key_values is not None and past_key_values.has_previous_state(self.layer_idx)
         if use_precomputed_states:
-            cached_qk_states = past_key_values.conv_states[self.layer_number]
+            cached_qk_states = past_key_values.layers[self.layer_idx].conv_states
             conv_input = torch.cat([cached_qk_states, qk_states], dim=-1)
         else:
             conv_input = F.pad(qk_states, (self.total_padding, 0))
 
         if past_key_values is not None:
-            past_key_values.update_conv_state(layer_idx=self.layer_number, new_conv_state=qk_states.transpose(1, 2))
+            new_conv_state = qk_states[..., -self.total_padding :]
+            if new_conv_state.shape[-1] < self.total_padding:
+                new_conv_state = F.pad(new_conv_state, (self.total_padding - new_conv_state.shape[-1], 0))
+            past_key_values.update_conv_state(new_conv_state, self.layer_idx)
 
-        convolved_qk_states = self.conv_qk(conv_input).transpose(1, 2)
+        convolved_qk_states = self.conv_qk_depthwise(conv_input)
+        convolved_qk_states = self.conv_qk_grouped(convolved_qk_states).transpose(1, 2)
 
         query = (
             convolved_qk_states[..., : self.query_hidden_size].view(
-                batch_size, seq_length, self.num_attention_heads, self.head_dim
+                *input_shape, self.num_attention_heads, self.head_dim
             )
             + query_residual
         )
 
         key = (
             convolved_qk_states[..., self.query_hidden_size :].view(
-                batch_size, seq_length, self.num_key_value_heads, self.head_dim
+                *input_shape, self.num_key_value_heads, self.head_dim
             )
             + key_residual
         )
@@ -338,28 +260,18 @@ class CCA(nn.Module):
         value_current = self.val_proj1(hidden_states)
         projected_v2 = self.val_proj2(hidden_states)
         if use_precomputed_states:
-            first_v2 = past_key_values.prev_v2[self.layer_number].unsqueeze(1)
+            first_v2 = past_key_values.layers[self.layer_idx].recurrent_states.unsqueeze(1)
         else:
-            first_v2 = self.val_proj2(hidden_states.new_zeros(batch_size, 1, self.hidden_size))
+            first_v2 = self.val_proj2(hidden_states.new_zeros(input_shape[0], 1, self.hidden_size))
         value_delayed = torch.cat([first_v2, projected_v2[:, :-1]], dim=1)
 
         if past_key_values is not None:
-            past_key_values.update_prev_v2(self.layer_number, projected_v2[:, -1, :])
+            past_key_values.update_recurrent_state(projected_v2[:, -1, :], self.layer_idx)
 
         value = torch.cat([value_current, value_delayed], dim=-1).view(
-            batch_size, seq_length, self.num_key_value_heads, self.head_dim
+            *input_shape, self.num_key_value_heads, self.head_dim
         )
 
-        norm_eps = torch.finfo(query.dtype).eps
-        query_norm = query.norm(p=2, dim=-1, keepdim=True).clamp_min(norm_eps)
-        key_norm = key.norm(p=2, dim=-1, keepdim=True).clamp_min(norm_eps)
-
-        key = (key * (self.sqrt_head_dim / key_norm)) * self.temp[None, None].unsqueeze(-1)
-        query = query * (self.sqrt_head_dim / query_norm)
-
-        query = query.reshape(batch_size, seq_length, self.query_hidden_size)
-        key = key.reshape(batch_size, seq_length, self.key_value_hidden_size)
-        value = value.reshape(batch_size, seq_length, self.key_value_hidden_size)
         return query, key, value
 
 
@@ -446,51 +358,56 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class ZayaAttention(nn.Module):
-    def __init__(self, config: ZayaConfig, layer_n):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config: ZayaConfig, layer_idx: int):
         super().__init__()
         self.config = config
-        self.layer_n = layer_n
-        self.layer_idx = layer_n
+        self.layer_idx = layer_idx
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = True
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
+        self.layer_n = layer_idx
+        self.layer_type = config.layer_types[layer_idx]
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
         self.hidden_size = config.hidden_size
         self.num_attention_heads = config.num_attention_heads
         self.num_key_value_heads = config.num_key_value_heads
-        self.num_key_value_groups = self.num_attention_heads // self.num_key_value_heads
-        self.is_causal = True
-        self.attention_dropout = config.attention_dropout
-        self.head_dim = config.head_dim
-        self.scaling = self.head_dim**-0.5
-
-        self.o_proj = nn.Linear(
-            self.num_attention_heads * self.head_dim,
-            self.hidden_size,
-            bias=self.config.attention_bias,
-        )
-        self.qkv = CCA(
+        self.qkv = ZayaCCAProjection(
             config=self.config,
-            num_attention_heads=self.config.num_attention_heads,
-            num_key_value_heads=self.config.num_query_groups,
-            hidden_size=self.hidden_size,
-            head_dim=self.config.head_dim,
-            cca_time0=self.config.cca_time0,
-            cca_time1=self.config.cca_time1,
-            layer_number=layer_n,
+            layer_idx=layer_idx,
         )
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        attention_mask_2d: torch.Tensor | None = None,
+        attention_mask: dict[str, Any] | None = None,
         past_key_values: Cache | None = None,
-        output_attentions: bool = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, Cache | None]:
         batch_size, seq_length, _ = hidden_states.shape
-        query_states, key_states, value_states = self.qkv(hidden_states, past_key_values, attention_mask_2d)
-        query_states = query_states.view(batch_size, seq_length, self.config.num_attention_heads, self.head_dim)
-        key_states = key_states.view(batch_size, seq_length, self.config.num_key_value_heads, self.head_dim)
-        value_states = value_states.view(batch_size, seq_length, self.config.num_key_value_heads, self.head_dim)
+
+        mask_mapping = attention_mask or {}
+        causal_mask = mask_mapping.get("causal")
+        padding_mask = mask_mapping.get("padding")
+
+        query_states, key_states, value_states = self.qkv(hidden_states, past_key_values, padding_mask)
+
+        norm_eps = torch.finfo(query_states.dtype).eps
+        head_dim_scale = self.scaling**-1
+        query_states = query_states * (
+            head_dim_scale / query_states.norm(p=2, dim=-1, keepdim=True).clamp_min(norm_eps)
+        )
+        key_states = key_states * (head_dim_scale / key_states.norm(p=2, dim=-1, keepdim=True).clamp_min(norm_eps))
+        key_states = key_states * self.qkv.temp[None, None, :, None]
 
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
@@ -502,8 +419,7 @@ class ZayaAttention(nn.Module):
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_n)
 
-        causal_mask = attention_mask
-        if causal_mask is not None:
+        if isinstance(causal_mask, torch.Tensor):
             causal_mask = causal_mask[:, :, : query_states.shape[-2], : key_states.shape[-2]]
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
@@ -517,14 +433,12 @@ class ZayaAttention(nn.Module):
             causal_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            output_attentions=output_attentions,
+            sliding_window=self.sliding_window,
+            **kwargs,
         )
 
         attn_output = attn_output.view(batch_size, seq_length, self.num_attention_heads * self.head_dim)
         attn_output = self.o_proj(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
 
         return attn_output, attn_weights, past_key_values
 
@@ -541,57 +455,85 @@ def _apply_residual_scaling(
     return hidden_states, residual
 
 
-class ZayaDecoderATTLayer(GradientCheckpointingLayer):
-    def __init__(self, config: ZayaConfig, layer_n: int):
+class ZayaDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: ZayaConfig, layer_idx: int):
         super().__init__()
         self.config = config
-        self.self_attn = ZayaAttention(config, layer_n)
-
+        self.self_attn = ZayaAttention(config, layer_idx)
         self.input_norm = ZayaRMSNorm(self.config.hidden_size, eps=self.config.norm_epsilon)
-        self.res_scale = ResidualScaling(config, layer_n)
+        self.res_scale = ResidualScaling(config.hidden_size, has_residual_scale=layer_idx != 0)
+        self.zaya_block = ZayaSparseMoeBlock(
+            config,
+            config.num_experts,
+            config.zaya_mlp_expansion,
+            config.intermediate_size,
+            layer_idx,
+        )
+        self.post_attention_norm = ZayaRMSNorm(self.config.hidden_size, eps=self.config.norm_epsilon)
+        self.post_attention_res_scale = ResidualScaling(config.hidden_size)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        residual: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        attention_mask_2d: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
-        output_attentions: bool | None = False,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        residual: torch.Tensor | None,
         prev_router_hidden_states: torch.Tensor | None = None,
-        **kwargs,
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
+        attention_mask: dict[str, Any] | None = None,
+        past_key_values: Cache | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor, torch.Tensor | None]:
         hidden_states, residual = _apply_residual_scaling(hidden_states, residual, self.res_scale, self.input_norm)
 
         hidden_states, self_attn_weights, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            attention_mask_2d=attention_mask_2d,
             past_key_values=past_key_values,
-            output_attentions=output_attentions,
             position_embeddings=position_embeddings,
+            **kwargs,
         )
 
-        return hidden_states, self_attn_weights if output_attentions else None, residual, prev_router_hidden_states
+        hidden_states, residual = _apply_residual_scaling(
+            hidden_states, residual, self.post_attention_res_scale, self.post_attention_norm
+        )
+
+        hidden_states, prev_router_hidden_states, _ = self.zaya_block(
+            hidden_states,
+            prev_router_hidden_states,
+        )
+
+        return hidden_states, self_attn_weights, residual, prev_router_hidden_states
 
 
 class ResidualScaling(nn.Module):
-    def __init__(self, config, layer_n):
+    def __init__(self, hidden_size: int, has_residual_scale: bool = True):
         super().__init__()
-        self.not_first_layer = layer_n != 0
-        self.hidden_states_scale = torch.nn.Parameter(torch.ones(config.hidden_size))
-        self.hidden_states_bias = torch.nn.Parameter(torch.zeros(config.hidden_size))
+        self.has_residual_scale = has_residual_scale
+        self.hidden_states_scale = nn.Parameter(torch.ones(hidden_size))
+        self.hidden_states_bias = nn.Parameter(torch.zeros(hidden_size))
 
-        if self.not_first_layer:
-            self.residual_scale = torch.nn.Parameter(torch.ones(config.hidden_size))
-            self.residual_bias = torch.nn.Parameter(torch.zeros(config.hidden_size))
+        if self.has_residual_scale:
+            self.residual_scale = nn.Parameter(torch.ones(hidden_size))
+            self.residual_bias = nn.Parameter(torch.zeros(hidden_size))
 
     def forward(self, residual: torch.Tensor, hidden_states: torch.Tensor):
         hidden_states = (hidden_states + self.hidden_states_bias) * self.hidden_states_scale
-        if self.not_first_layer:
+        if self.has_residual_scale:
             residual = (residual + self.residual_bias) * self.residual_scale
         return residual, hidden_states
+
+
+class ZayaRouterMLP(nn.Module):
+    def __init__(self, hidden_size: int, num_experts: int):
+        super().__init__()
+        self.fc1 = nn.Linear(hidden_size, hidden_size, bias=True)
+        self.fc2 = nn.Linear(hidden_size, hidden_size, bias=True)
+        self.out_proj = nn.Linear(hidden_size, num_experts, bias=False)
+        self.act_fn = nn.GELU()
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.act_fn(self.fc1(hidden_states))
+        hidden_states = self.act_fn(self.fc2(hidden_states))
+        return self.out_proj(hidden_states)
 
 
 class ZayaRouter(nn.Module):
@@ -600,7 +542,7 @@ class ZayaRouter(nn.Module):
         config,
         layer_idx: int,
         num_moe_experts: int,
-        moe_router_topk: int,
+        num_experts_per_tok: int,
         mlp_expansion: int,
         hidden_size: int | None = None,
     ) -> None:
@@ -611,27 +553,18 @@ class ZayaRouter(nn.Module):
         self.layer_idx = layer_idx
 
         self.num_experts = num_moe_experts + 1
-        self.topk = int(moe_router_topk)
+        self.topk = int(num_experts_per_tok)
         self.mlp_expansion = int(mlp_expansion)
 
         self.down_proj = nn.Linear(self.hidden_size, self.mlp_expansion, bias=True)
 
-        zaya_first_layer = 1
-        self.use_eda = self.layer_idx != zaya_first_layer
+        self.use_eda = self.layer_idx != 0
 
-        ln_eps = float(getattr(config, "norm_epsilon", 1e-5))
-        self.rmsnorm_eda = ZayaRMSNorm(self.mlp_expansion, eps=ln_eps)
+        self.rmsnorm_eda = ZayaRMSNorm(self.mlp_expansion, eps=config.norm_epsilon)
         if self.use_eda:
             self.router_states_scale = nn.Parameter(torch.ones(self.mlp_expansion))
 
-        self.non_linearity = nn.GELU()
-        self.router_mlp = nn.Sequential(
-            nn.Linear(self.mlp_expansion, self.mlp_expansion, bias=True),
-            self.non_linearity,
-            nn.Linear(self.mlp_expansion, self.mlp_expansion, bias=True),
-            self.non_linearity,
-            nn.Linear(self.mlp_expansion, self.num_experts, bias=False),
-        )
+        self.router_mlp = ZayaRouterMLP(self.mlp_expansion, self.num_experts)
 
         self.register_buffer("balancing_biases", torch.zeros(self.num_experts, dtype=torch.float32))
         self.balancing_biases[-1] = -1.0
@@ -669,11 +602,11 @@ class ZayaRouter(nn.Module):
 class ZayaExperts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
-    def __init__(self, config, num_experts: int, ffn_hidden_size: int):
+    def __init__(self, config, num_experts: int, intermediate_size: int):
         super().__init__()
         self.num_experts = num_experts
         self.hidden_dim = config.hidden_size
-        self.intermediate_dim = ffn_hidden_size // 2
+        self.intermediate_dim = intermediate_size // 2
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
@@ -686,7 +619,7 @@ class ZayaExperts(nn.Module):
     ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
         with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
             expert_mask = expert_mask.permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
@@ -705,14 +638,14 @@ class ZayaExperts(nn.Module):
         return final_hidden_states
 
 
-class ZayaBlock(nn.Module):
+class ZayaSparseMoeBlock(nn.Module):
     def __init__(
         self,
         config,
         num_moe_experts: int,
         mlp_expansion: int,
-        ffn_hidden_size: int,
-        layer_n: int,
+        intermediate_size: int,
+        layer_idx: int,
     ):
         super().__init__()
         self.config = config
@@ -720,13 +653,13 @@ class ZayaBlock(nn.Module):
         self.num_moe_experts = num_moe_experts
         self.router = ZayaRouter(
             config=self.config,
-            layer_idx=layer_n,
+            layer_idx=layer_idx,
             num_moe_experts=self.num_moe_experts,
-            moe_router_topk=getattr(self.config, "moe_router_topk", 1),
+            num_experts_per_tok=self.config.num_experts_per_tok,
             mlp_expansion=mlp_expansion,
             hidden_size=self.hidden_dim,
         )
-        self.experts = ZayaExperts(self.config, self.num_moe_experts, ffn_hidden_size=ffn_hidden_size)
+        self.experts = ZayaExperts(self.config, self.num_moe_experts, intermediate_size=intermediate_size)
 
     def forward(
         self,
@@ -736,6 +669,13 @@ class ZayaBlock(nn.Module):
         route_prob, expert_choice, prev_router_hidden_states, router_logits = self.router(
             hidden_states, router_states=prev_router_hidden_states
         )
+
+        # if the router outputs num_moe_experts, just skip the tokens
+        # by masking them with id=0 and prob=0 to reuse the expert code
+        skip_expert = expert_choice == self.num_moe_experts
+        route_prob = route_prob.masked_fill(skip_expert, 0)
+        expert_choice = expert_choice.masked_fill(skip_expert, 0)
+
         batch_size, seq_length, emb_dim = hidden_states.shape
         hidden_states_flat = hidden_states.view(batch_size * seq_length, emb_dim)
         expert_output = self.experts(hidden_states_flat, expert_choice, route_prob)
@@ -744,64 +684,25 @@ class ZayaBlock(nn.Module):
         return expert_output, prev_router_hidden_states, router_logits
 
 
-class ZayaDecoderMLPLayer(GradientCheckpointingLayer):
-    def __init__(
-        self,
-        config: ZayaConfig,
-        num_moe_experts: int,
-        mlp_expansion: int,
-        ffn_hidden_size: int,
-        layer_n: int,
-    ):
-        super().__init__()
-        self.config = config
-        self.zaya_block = ZayaBlock(
-            config,
-            num_moe_experts,
-            mlp_expansion,
-            ffn_hidden_size,
-            layer_n,
-        )
-        self.input_norm = ZayaRMSNorm(self.config.hidden_size, eps=self.config.norm_epsilon)
-        self.res_scale = ResidualScaling(config, layer_n)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        residual: torch.Tensor | None,
-        prev_router_hidden_states: torch.Tensor | None = None,
-        output_router_logits: bool = False,
-        **kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor, torch.Tensor | None]:
-        hidden_states, residual = _apply_residual_scaling(hidden_states, residual, self.res_scale, self.input_norm)
-
-        hidden_states, prev_router_hidden_states, router_logits = self.zaya_block(
-            hidden_states,
-            prev_router_hidden_states,
-        )
-
-        return (
-            hidden_states,
-            router_logits if output_router_logits else None,
-            residual,
-            prev_router_hidden_states,
-        )
-
-
+@auto_docstring
 class ZayaPreTrainedModel(PreTrainedModel):
     config: ZayaConfig
-    config_class = ZayaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["ZayaDecoderATTLayer", "ZayaDecoderMLPLayer"]
+    _no_split_modules = ["ZayaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
+    # ZAYA generation uses the native hybrid dynamic cache, which is not a compileable cache.
+    _can_compile_fullgraph = False
     _supports_attention_backend = True
     _can_record_outputs = {
         "router_logits": OutputRecorder(ZayaRouter, index=3),
+        "hidden_states": ZayaDecoderLayer,
+        "attentions": ZayaAttention,
     }
+    config_class = ZayaConfig
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -809,7 +710,7 @@ class ZayaPreTrainedModel(PreTrainedModel):
         if isinstance(module, ResidualScaling):
             init.ones_(module.hidden_states_scale)
             init.zeros_(module.hidden_states_bias)
-            if module.not_first_layer:
+            if module.has_residual_scale:
                 init.ones_(module.residual_scale)
                 init.zeros_(module.residual_bias)
         elif isinstance(module, ZayaRouter):
@@ -821,6 +722,33 @@ class ZayaPreTrainedModel(PreTrainedModel):
             std = self.config.initializer_range
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.down_proj, mean=0.0, std=std)
+        elif isinstance(module, ZayaRotaryEmbedding):
+            for layer_type in module.layer_types:
+                rope_init_fn = module.compute_default_rope_parameters
+                if module.rope_type[layer_type] != "default":
+                    rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type[layer_type]]
+                curr_inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
+                getattr(module, f"{layer_type}_inv_freq").copy_(curr_inv_freq)
+                getattr(module, f"{layer_type}_original_inv_freq").copy_(curr_inv_freq)
+
+
+def make_zaya_cache(config: ZayaConfig) -> DynamicCache:
+    """
+    Create ZAYA's native hybrid cache.
+
+    `config.layer_types` is reserved for full/sliding attention masks and RoPE parameters. Cache layers use the native hybrid layout because every ZAYA decoder layer has attention, convolution, and recurrent states.
+    """
+    cache_config = copy.copy(config)
+    cache_config.layer_types = ["hybrid"] * config.num_hidden_layers
+    return DynamicCache(config=cache_config)
+
+
+def _is_zaya_cache(past_key_values: Cache) -> bool:
+    return (
+        isinstance(past_key_values, DynamicCache)
+        and len(past_key_values.layers) > 0
+        and isinstance(past_key_values.layers[0], LinearAttentionAndFullAttentionLayer)
+    )
 
 
 @auto_docstring
@@ -830,36 +758,16 @@ class ZayaModel(ZayaPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = []
-
-        for layer_n in range(config.num_hidden_layers):
-            if layer_n % 2 == 1:
-                self.layers.append(
-                    ZayaDecoderMLPLayer(
-                        config,
-                        config.num_experts,
-                        config.zaya_mlp_expansion,
-                        config.ffn_hidden_size,
-                        layer_n,
-                    )
-                )
-            else:
-                self.layers.append(ZayaDecoderATTLayer(config, layer_n))
-        self.layers = nn.ModuleList(self.layers)
+        self.layers = nn.ModuleList(
+            [ZayaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
         self.gradient_checkpointing = False
-        self.res_scale = ResidualScaling(config, config.num_hidden_layers)
+        self.res_scale = ResidualScaling(config.hidden_size)
 
         self.final_norm = ZayaRMSNorm(self.config.hidden_size, eps=self.config.norm_epsilon)
 
         self.rotary_emb = ZayaRotaryEmbedding(config=config)
-        if self.config.swa_layers is not None:
-            swa_config = copy.copy(config)
-            swa_config.rope_parameters = {
-                **config.rope_parameters,
-                "rope_theta": swa_config.swa_rotary_base,
-            }
-            self.swa_rotary_emb = ZayaRotaryEmbedding(config=swa_config)
 
         self.post_init()
 
@@ -880,25 +788,18 @@ class ZayaModel(ZayaPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        output_router_logits: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None:
-            past_key_values = ZayaDynamicCache(
-                self.config, inputs_embeds.shape[0], dtype=self.dtype, device=self.device
-            )
+        if use_cache and (past_key_values is None or not _is_zaya_cache(past_key_values)):
+            if past_key_values is not None and past_key_values.get_seq_length() > 0:
+                raise ValueError("ZAYA requires a native hybrid cache created from `make_zaya_cache`.")
+            past_key_values = make_zaya_cache(self.config)
 
         residual = None
 
@@ -910,48 +811,44 @@ class ZayaModel(ZayaPreTrainedModel):
                 device=inputs_embeds.device,
             ).unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(
+        if attention_mask is not None and attention_mask.ndim != 2:
+            raise ValueError(
+                "ZAYA CCA projection requires a 2D `attention_mask` to mask padding tokens before convolution."
+            )
+
+        causal_mask_mapping = self._update_causal_mask(
             attention_mask,
             inputs_embeds,
             position_ids,
             past_key_values,
         )
-        if attention_mask is not None and attention_mask.ndim != 2:
-            raise ValueError("ZAYA CCA requires a 2D `attention_mask` to mask padding tokens before convolution.")
-        # ZayaDynamicCache is not compileable, so generation keeps `attention_mask` as the original 2D padding mask.
-        # CCA only needs it during multi-token prefill; single-token decoding uses the cached convolution state.
-        attention_mask_2d = attention_mask[:, -inputs_embeds.shape[1] :] if attention_mask is not None else None
+        padding_mask = attention_mask[:, -inputs_embeds.shape[1] :] if attention_mask is not None else None
+
+        # ZAYA's hybrid cache is not compileable, so generation keeps `attention_mask` as the original 2D padding mask.
+        # CCA projection only needs it during multi-token prefill; single-token decoding uses the cached convolution state.
         if inputs_embeds.shape[1] == 1:
-            attention_mask_2d = None
+            padding_mask = None
 
         hidden_states = inputs_embeds
 
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-        if self.config.swa_layers is not None:
-            swa_position_embeddings = self.swa_rotary_emb(hidden_states, position_ids)
+        position_embeddings = {
+            layer_type: self.rotary_emb(hidden_states, position_ids, layer_type)
+            for layer_type in set(self.config.layer_types)
+        }
 
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
         prev_router_hidden_states = None
 
         for layer_n, decoder_layer in enumerate(self.layers):
-            if self.config.swa_layers is not None:
-                emb_to_use = position_embeddings if self.config.swa_layers[layer_n] == 0 else swa_position_embeddings
-            else:
-                emb_to_use = position_embeddings
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
+            layer_type = self.config.layer_types[layer_n]
+            emb_to_use = position_embeddings[layer_type]
+            mask_mapping = {"causal": causal_mask_mapping[layer_type], "padding": padding_mask}
             layer_outputs = decoder_layer(
                 hidden_states,
                 residual,
-                attention_mask=causal_mask,
-                position_ids=position_ids,
+                prev_router_hidden_states,
+                attention_mask=mask_mapping,
                 past_key_values=past_key_values,
-                output_attentions=output_attentions,
                 position_embeddings=emb_to_use,
-                prev_router_hidden_states=prev_router_hidden_states,
-                attention_mask_2d=attention_mask_2d,
                 **kwargs,
             )
 
@@ -959,23 +856,11 @@ class ZayaModel(ZayaPreTrainedModel):
             residual = layer_outputs[2]
             prev_router_hidden_states = layer_outputs[3]
 
-            if isinstance(decoder_layer, ZayaDecoderATTLayer):
-                if output_attentions:
-                    all_self_attns += (layer_outputs[1],)
-
         hidden_states, residual = _apply_residual_scaling(hidden_states, residual, self.res_scale, self.final_norm)
-
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
-        if past_key_values and not past_key_values.has_previous_state:
-            past_key_values.has_previous_state = True
 
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
         )
 
     def _update_causal_mask(
@@ -985,32 +870,36 @@ class ZayaModel(ZayaPreTrainedModel):
         position_ids: torch.Tensor,
         past_key_values: Cache,
     ):
-        return create_causal_mask(
-            config=self.config,
-            inputs_embeds=input_tensor,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
+        mask_kwargs = {
+            "config": self.config,
+            "inputs_embeds": input_tensor,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+        }
+        mask_creation_functions = {
+            "full_attention": lambda: create_causal_mask(**mask_kwargs),
+            "sliding_attention": lambda: create_sliding_window_causal_mask(**mask_kwargs),
+        }
+        causal_mask_mapping = {}
+        for layer_type in set(self.config.layer_types):
+            causal_mask_mapping[layer_type] = mask_creation_functions[layer_type]()
+        return causal_mask_mapping
 
 
-@auto_docstring
+@auto_docstring(checkpoint="Zyphra/ZAYA1-8B")
 class ZayaForCausalLM(ZayaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _is_stateful = True
 
     def __init__(self, config, **kwargs):
-        super().__init__(config, **kwargs)
+        super().__init__(config)
         self.model = ZayaModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=self.config.lm_head_bias)
-        if self.config.tie_word_embeddings:
-            self.lm_head.weight = self.model.embed_tokens.weight
-
         self.post_init()
-
-    def set_decoder(self, decoder):
-        self.model = decoder
 
     @can_return_tuple
     @auto_docstring
@@ -1027,11 +916,28 @@ class ZayaForCausalLM(ZayaPreTrainedModel, GenerationMixin):
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeCausalLMOutputWithPast:
+        r"""
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, ZayaForCausalLM
+
+        >>> model = ZayaForCausalLM.from_pretrained("meta-zaya/Zaya-2-7b-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("meta-zaya/Zaya-2-7b-hf")
+
+        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        ```"""
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.output_router_logits
         )
 
-        outputs = self.model(
+        outputs: MoeModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1043,79 +949,20 @@ class ZayaForCausalLM(ZayaPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
+
         loss = None
         if labels is not None:
-            loss = self.loss_function(
-                logits=logits,
-                labels=labels,
-                vocab_size=self.config.vocab_size,
-                **kwargs,
-            )
+            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
         return MoeCausalLMOutputWithPast(
             loss=loss,
-            aux_loss=None,
             logits=logits,
-            past_key_values=outputs.past_key_values if use_cache else None,
+            past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
-        )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        position_ids=None,
-        use_cache=True,
-        logits_to_keep=None,
-        **kwargs,
-    ):
-        if past_key_values is not None and not isinstance(past_key_values, ZayaDynamicCache):
-            raise ValueError(
-                f"Zaya uses cache of its own and is not compatible with `past_key_values` of type {type(past_key_values)}."
-            )
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids=input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            position_ids=position_ids,
-            use_cache=use_cache,
-            logits_to_keep=logits_to_keep,
-            **kwargs,
-        )
-        return model_inputs
-
-    def _prepare_cache_for_generation(
-        self,
-        generation_config,
-        model_kwargs: dict,
-        generation_mode,
-        batch_size: int,
-        max_cache_length: int,
-    ):
-        if generation_config.use_cache is False:
-            return
-
-        if "past_key_values" not in model_kwargs:
-            cache_batch_size = batch_size * max(generation_config.num_beams, generation_config.num_return_sequences)
-            model_kwargs["past_key_values"] = ZayaDynamicCache(
-                self.config, cache_batch_size, dtype=self.dtype, device=self.device
-            )
-            generation_config.cache_implementation = None
-        return super()._prepare_cache_for_generation(
-            generation_config=generation_config,
-            model_kwargs=model_kwargs,
-            generation_mode=generation_mode,
-            batch_size=batch_size,
-            max_cache_length=max_cache_length,
         )
 
 

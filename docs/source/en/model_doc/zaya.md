@@ -27,6 +27,14 @@ and Zyphra's technical reports.
 
 This model was contributed by [JJJYmmm](https://github.com/JJJYmmm).
 
+<Tip>
+
+When building a manual generation loop with `past_key_values`, use [`~models.zaya.modeling_zaya.make_zaya_cache`] to
+create ZAYA's cache. ZAYA uses `config.layer_types` for full/sliding attention masks and RoPE parameters, while its
+cache uses the native hybrid layout needed by the attention, convolution, and recurrent states.
+
+</Tip>
+
 ## Usage examples
 
 ```python
