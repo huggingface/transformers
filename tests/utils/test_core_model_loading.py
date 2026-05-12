@@ -18,7 +18,7 @@ from types import SimpleNamespace
 import torch
 import torch.nn as nn
 
-from transformers import PretrainedConfig
+from transformers import PretrainedConfig, PreTrainedModel
 from transformers.conversion_mapping import (
     get_checkpoint_conversion_mapping,
     get_model_conversion_mapping,
@@ -152,14 +152,14 @@ class TestWeightGlobMatching(unittest.TestCase):
         ]
 
         self.assertEqual(
-            rename_source_key("foo.block_sparse_moe.experts.3.w1.weight", renamings)[0],
+            rename_source_key("foo.block_sparse_moe.experts.3.w1.weight", renamings, [])[0],
             "foo.mlp.experts.gate_up_proj",
         )
         self.assertEqual(
-            rename_source_key("foo.block_sparse_moe.experts.3.w2.weight", renamings)[0],
+            rename_source_key("foo.block_sparse_moe.experts.3.w2.weight", renamings, [])[0],
             "foo.mlp.experts.down_proj",
         )
-        self.assertEqual(rename_source_key("model.language_model.lm_head.weight", renamings)[0], "language_model")
+        self.assertEqual(rename_source_key("model.language_model.lm_head.weight", renamings, [])[0], "language_model")
 
     def test_sub_key_no_match_returns_original(self):
         renamings = [
@@ -167,7 +167,7 @@ class TestWeightGlobMatching(unittest.TestCase):
         ]
 
         key = "unrelated.key"
-        renamed_key, _ = rename_source_key(key, renamings)
+        renamed_key, _ = rename_source_key(key, renamings, [])
         self.assertEqual(renamed_key, key)
 
 
@@ -213,25 +213,21 @@ class DummyMLP(nn.Module):
         self.down_proj = DummyParamModule((2, 2))
 
 
-class DummyRoot(nn.Module):
+class DummyRoot(PreTrainedModel):
     base_model_prefix = "model"
     config: PretrainedConfig
 
-    def __init__(self, add_extra_moe=False, with_mlp=True):
-        super().__init__()
+    def __init__(self, config, add_extra_moe=False, with_mlp=True):
+        super().__init__(config)
         self.model = DummyTopModel(add_extra_moe)
         if with_mlp:
             self.mlp = DummyMLP()
-        self.config = PretrainedConfig()
-        # Mirror what PreTrainedModel.post_init() does so that
-        # get_model_conversion_mapping() can be called on DummyRoot.
-        self._named_pretrained_submodules = [("", self)]
+        self.post_init()
 
 
 class TestConvertAndLoadStateDict(unittest.TestCase):
     def test_moe_and_qkv_conversion(self):
-        model = DummyRoot()
-        model.config = PretrainedConfig()
+        model = DummyRoot(PretrainedConfig())
 
         raw_tensors = {
             "model.layers.0.experts.0.w1.weight": torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
@@ -347,8 +343,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         torch.testing.assert_close(model_state["mlp.down_proj.weight"], raw_tensors["mlp.w2.weight"])
 
     def test_moe_and_qkv_conversion_reversed(self):
-        model = DummyRoot()
-        model.config = PretrainedConfig()
+        model = DummyRoot(PretrainedConfig())
 
         raw_tensors = {
             "model.layers.0.experts.0.w1.weight": torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
@@ -444,16 +439,17 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
                 super().__init__()
                 self.self_attn = RopeSelfAttn()
 
-        class RopeModel(nn.Module):
+        class RopeModel(PreTrainedModel):
             base_model_prefix = "model"
 
-            def __init__(self):
-                super().__init__()
+            def __init__(self, config):
+                super().__init__(config)
                 self.layers = nn.ModuleList([RopeLayer()])
+                self.post_init()
 
-        model = RopeModel()
-        model.config = PretrainedConfig()
-        model.config.num_attention_heads = n_heads
+        config = PretrainedConfig()
+        config.num_attention_heads = n_heads
+        model = RopeModel(config)
 
         raw_q = torch.tensor(
             [
@@ -551,17 +547,17 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
                 super().__init__()
                 self.q = DummyParamModule((1, 2))
 
-        class _CompositeModel(nn.Module):
+        class _CompositeModel(PreTrainedModel):
             base_model_prefix = ""
 
-            def __init__(self):
-                super().__init__()
+            def __init__(self, config):
+                super().__init__(config)
                 self.vision_model = _Submodel()
                 self.language_model = _Submodel()
                 self.q = DummyParamModule((1, 2))  # root-level weight with the same name
+                self.post_init()
 
-        model = _CompositeModel()
-        model.config = PretrainedConfig()
+        model = _CompositeModel(PretrainedConfig())
 
         vision_val = torch.tensor([[1.0, 2.0]])
         checkpoint = {
@@ -621,16 +617,16 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
                 super().__init__()
                 self.attn = _Attn()
 
-        class _InterleavedModel(nn.Module):
+        class _InterleavedModel(PreTrainedModel):
             base_model_prefix = ""
 
-            def __init__(self):
-                super().__init__()
+            def __init__(self, config):
+                super().__init__(config)
                 self.encoder = _Encoder()
+                self.post_init()
 
         qkv = torch.arange(24, dtype=torch.float32).reshape(6, 4)
-        model = _InterleavedModel()
-        model.config = PretrainedConfig()
+        model = _InterleavedModel(PretrainedConfig())
 
         # Checkpoint uses a "decoder" prefix and stores QKV packed together.
         checkpoint = {"decoder.attn.qkv_proj.weight": qkv.clone()}
@@ -672,8 +668,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         self.assertTrue(compare_state_dicts(saved, checkpoint))
 
     def test_ernie4_5_vl_moe_conversion(self):
-        model = DummyRoot(add_extra_moe=True)
-        model.config = PretrainedConfig()
+        model = DummyRoot(PretrainedConfig(), add_extra_moe=True)
 
         raw_tensors = {
             "model.layers.0.experts.0.w1.weight": torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
@@ -794,8 +789,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         torch.testing.assert_close(model_state["model.layers.1.extra_experts.down_proj.weight"], moe_2)
 
     def test_ernie4_5_vl_moe_conversion_reversed(self):
-        model = DummyRoot(add_extra_moe=True)
-        model.config = PretrainedConfig()
+        model = DummyRoot(PretrainedConfig(), add_extra_moe=True)
 
         raw_tensors = {
             "model.layers.0.experts.0.w1.weight": torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
@@ -927,8 +921,7 @@ class TestConversionMapping(unittest.TestCase):
         self.assertEqual(len(get_checkpoint_conversion_mapping("foobarbaz")), 2)
 
     def test_can_remove_prefix(self):
-        model = DummyRoot()
-        model.config = PretrainedConfig()
+        model = DummyRoot(PretrainedConfig())
 
         bad_serialized_checkpoints = {f"bad_name.{k}": v.clone() for k, v in model.state_dict().items()}
         weight_mapping = [PrefixChange(prefix_to_remove="bad_name")]
@@ -977,7 +970,7 @@ class TestConversionMapping(unittest.TestCase):
 
         # Now, use a fresh model, without going trough loading first, so the model won't have `_weight_conversions` attached
         # and the prefix should not be added when saving directly (i.e. the conversion should be dropped)
-        model = DummyRoot()
+        model = DummyRoot(PretrainedConfig())
         saved_state_dict = revert_weight_conversion(model, model.state_dict())
         model_state_dict = model.state_dict()
         self.assertEqual(set(model_state_dict.keys()), set(saved_state_dict.keys()))
@@ -987,8 +980,7 @@ class TestConversionMapping(unittest.TestCase):
     def test_can_add_prefix(self):
         # we cannot have another param next to the model, otherwise the prefix adding will already be added even with correct
         # checkpoints starting with the prefix
-        model = DummyRoot(with_mlp=False)
-        model.config = PretrainedConfig()
+        model = DummyRoot(PretrainedConfig(), with_mlp=False)
 
         bad_serialized_checkpoints = {k.removeprefix("model."): v.clone() for k, v in model.state_dict().items()}
         weight_mapping = [PrefixChange(prefix_to_add="model")]
@@ -1037,7 +1029,7 @@ class TestConversionMapping(unittest.TestCase):
 
         # Now, use a fresh model, without going trough loading first, so the model won't have `_weight_conversions` attached
         # and the prefix should not be removed when saving directly (i.e. the conversion should be dropped)
-        model = DummyRoot()
+        model = DummyRoot(PretrainedConfig())
         saved_state_dict = revert_weight_conversion(model, model.state_dict())
         model_state_dict = model.state_dict()
         self.assertEqual(set(model_state_dict.keys()), set(saved_state_dict.keys()))
@@ -1045,8 +1037,7 @@ class TestConversionMapping(unittest.TestCase):
             self.assertTrue((v == model_state_dict[k]).all())
 
     def test_can_remove_prefix_submodule(self):
-        model = DummyRoot()
-        model.config = PretrainedConfig()
+        model = DummyRoot(PretrainedConfig())
 
         bad_serialized_checkpoints = {
             f"model.layers.bad_name.{k.replace('model.layers.', '')}" if "model.layers." in k else k: v.clone()
@@ -1098,7 +1089,7 @@ class TestConversionMapping(unittest.TestCase):
 
         # Now, use a fresh model, without going trough loading first, so the model won't have `_weight_conversions` attached
         # and the prefix should not be added when saving directly (i.e. the conversion should be dropped)
-        model = DummyRoot()
+        model = DummyRoot(PretrainedConfig())
         saved_state_dict = revert_weight_conversion(model, model.state_dict())
         model_state_dict = model.state_dict()
         self.assertEqual(set(model_state_dict.keys()), set(saved_state_dict.keys()))
@@ -1108,8 +1099,7 @@ class TestConversionMapping(unittest.TestCase):
     def test_can_add_prefix_submodule(self):
         # we cannot have another param next to the model, otherwise the prefix adding will already be added even with correct
         # checkpoints starting with the prefix
-        model = DummyRoot(with_mlp=False)
-        model.config = PretrainedConfig()
+        model = DummyRoot(PretrainedConfig(), with_mlp=False)
 
         bad_serialized_checkpoints = {k.replace(".layers.", "."): v.clone() for k, v in model.state_dict().items()}
         weight_mapping = [PrefixChange(prefix_to_add="layers", model_prefix="model")]
@@ -1158,7 +1148,7 @@ class TestConversionMapping(unittest.TestCase):
 
         # Now, use a fresh model, without going trough loading first, so the model won't have `_weight_conversions` attached
         # and the prefix should not be removed when saving directly (i.e. the conversion should be dropped)
-        model = DummyRoot()
+        model = DummyRoot(PretrainedConfig())
         saved_state_dict = revert_weight_conversion(model, model.state_dict())
         model_state_dict = model.state_dict()
         self.assertEqual(set(model_state_dict.keys()), set(saved_state_dict.keys()))
@@ -1172,20 +1162,20 @@ class TestConversionMapping(unittest.TestCase):
             "_tst_mtype", [WeightRenaming(r"^type_key", "type_renamed")], overwrite=True
         )
 
-        def make_mock(class_name):
-            m = type(class_name, (), {})()
-            m.config = SimpleNamespace(model_type="_tst_mtype")
-            m._named_pretrained_submodules = [("", m)]
-            return m
+        class _TstCls(PreTrainedModel): ...
+
+        class _TstOther(PreTrainedModel): ...
 
         # A module whose class name has a registry entry → class entry wins.
-        transforms = get_model_conversion_mapping(make_mock("_TstCls"), add_legacy=False)
+        transforms = get_model_conversion_mapping(_TstCls(PretrainedConfig(model_type="_tst_mtype")), add_legacy=False)
         patterns = [t.source_patterns for t in transforms]
         self.assertIn(["^cls_key"], patterns)
         self.assertNotIn(["^type_key"], patterns)
 
         # A module with no class entry falls through to the model_type entry.
-        transforms = get_model_conversion_mapping(make_mock("_TstOther"), add_legacy=False)
+        transforms = get_model_conversion_mapping(
+            _TstOther(PretrainedConfig(model_type="_tst_mtype")), add_legacy=False
+        )
         patterns = [t.source_patterns for t in transforms]
         self.assertIn(["^type_key"], patterns)
         self.assertNotIn(["^cls_key"], patterns)
@@ -1201,22 +1191,19 @@ class TestConversionMapping(unittest.TestCase):
             "_tst_shared_type", [WeightRenaming(r"^w", "renamed_w")], overwrite=True
         )
 
-        def make_root_with_siblings(cls_a, cls_b):
-            """Root model with two children of different classes but the same model_type."""
-            child_a = type(cls_a, (), {})()
-            child_a.config = SimpleNamespace(model_type="_tst_shared_type")
+        class _TstEncCls(PreTrainedModel): ...
 
-            child_b = type(cls_b, (), {})()
-            child_b.config = SimpleNamespace(model_type="_tst_shared_type")
+        class _TstDecCls(PreTrainedModel): ...
 
-            root = type("_TstRoot", (), {})()
-            root.config = SimpleNamespace(model_type="_tst_root_only")
-            root._named_pretrained_submodules = [("encoder", child_a), ("decoder", child_b)]
-            return root
+        class _TstRoot(PreTrainedModel): ...
 
-        transforms = get_model_conversion_mapping(
-            make_root_with_siblings("_TstEncCls", "_TstDecCls"), add_legacy=False
-        )
+        child_a = _TstEncCls(PretrainedConfig(model_type="_tst_shared_type"))
+        child_b = _TstDecCls(PretrainedConfig(model_type="_tst_shared_type"))
+        root = _TstRoot(PretrainedConfig(model_type="_tst_root_only"))
+        root.encoder = child_a
+        root.decoder = child_b
+
+        transforms = get_model_conversion_mapping(root, add_legacy=False)
         scope_prefixes = [t.scope_prefix for t in transforms]
 
         # Both siblings must be represented with their own scoped transforms.
@@ -1227,15 +1214,15 @@ class TestConversionMapping(unittest.TestCase):
         """Two sibling sub-models of the *same* class must each get their own scoped transforms."""
         register_checkpoint_conversion_mapping("_TstSharedCls", [WeightRenaming(r"^w", "renamed_w")], overwrite=True)
 
-        child_a = type("_TstSharedCls", (), {})()
-        child_a.config = SimpleNamespace(model_type="_tst_shared_cls_mtype")
+        class _TstSharedCls(PreTrainedModel): ...
 
-        child_b = type("_TstSharedCls", (), {})()
-        child_b.config = SimpleNamespace(model_type="_tst_shared_cls_mtype")
+        class _TstRootSharedCls(PreTrainedModel): ...
 
-        root = type("_TstRootSharedCls", (), {})()
-        root.config = SimpleNamespace(model_type="_tst_root_only2")
-        root._named_pretrained_submodules = [("encoder", child_a), ("decoder", child_b)]
+        child_a = _TstSharedCls(PretrainedConfig(model_type="_tst_shared_cls_mtype"))
+        child_b = _TstSharedCls(PretrainedConfig(model_type="_tst_shared_cls_mtype"))
+        root = _TstRootSharedCls(PretrainedConfig(model_type="_tst_root_only2"))
+        root.encoder = child_a
+        root.decoder = child_b
 
         transforms = get_model_conversion_mapping(root, add_legacy=False)
         scope_prefixes = [t.scope_prefix for t in transforms]
@@ -1247,17 +1234,18 @@ class TestConversionMapping(unittest.TestCase):
         """When the root model claims a model_type unscoped, a nested child with the
         same model_type must NOT produce a second (incorrectly scoped) copy of those
         transforms — the root's unscoped transforms already cover all keys."""
+
+        class _TstChildSame(PreTrainedModel): ...
+
+        class _TstRootSame(PreTrainedModel): ...
+
         register_checkpoint_conversion_mapping(
             "_tst_root_child_shared", [WeightRenaming(r"^w", "renamed_w")], overwrite=True
         )
 
-        child = type("_TstChildSame", (), {})()
-        child.config = SimpleNamespace(model_type="_tst_root_child_shared")
-
-        root = type("_TstRootSame", (), {})()
-        root.config = SimpleNamespace(model_type="_tst_root_child_shared")
-        # Root ("") appears before child ("submodel") — mirrors DFS order.
-        root._named_pretrained_submodules = [("", root), ("submodel", child)]
+        child = _TstChildSame(PretrainedConfig(model_type="_tst_root_child_shared"))
+        root = _TstRootSame(PretrainedConfig(model_type="_tst_root_child_shared"))
+        root.submodel = child
 
         transforms = get_model_conversion_mapping(root, add_legacy=False)
         # Only one unscoped transform (from the root); child must be suppressed.
