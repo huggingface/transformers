@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..core_model_loading import ConversionOps, WeightConverter, MergeModulelist, Concatenate
+from ..core_model_loading import ConversionOps, WeightConverter
 from ..utils import is_compressed_tensors_available, is_torch_available, logging
 from ..utils.quantization_config import CompressedTensorsConfig
 from .base import HfQuantizer
@@ -140,7 +140,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         ]
 
         # MoE conversion should happen AFTER decompression!
-        # FIXME: this won't work if model is NOT compressed when saved, and needs only MoE conversion 
+        # FIXME: this won't work if model is NOT compressed when saved, and needs only MoE conversion
         return dequant_conversions
 
 
@@ -154,6 +154,7 @@ class DecompressExperts(ConversionOps):
     Requires MoE conversion to be defined on conversion mapping, so that decompressed weights
     are stacked/merged for all experts.
     """
+
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
@@ -165,13 +166,16 @@ class DecompressExperts(ConversionOps):
         full_layer_name: str | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
-        # TODO: infer compression-type from config and use the scheme with `target` names/modules
-        from compressed_tensors.compressors.pack_quantized import PackedQuantizationCompressor
+        # FIXME: should we check that loaded scheme's `target` matched param names/classes?
+        from compressed_tensors.compressors import BaseCompressor
+        from compressed_tensors.compressors.format import infer_module_format
         from torch import nn
 
         ct_quantization_config = self.hf_quantizer.compressor.quantization_config
+
         quantization_scheme = list(ct_quantization_config.config_groups.values())[0]
-        input_dict = self.group_input_dict(input_dict)
+        format = quantization_scheme.format or infer_module_format(nn.Linear, quantization_scheme)
+        compressor = BaseCompressor.get_value_from_registry(format)
 
         class DummyModule(nn.Module):
             def __init__(self, weight, scale, shape):
@@ -181,16 +185,14 @@ class DecompressExperts(ConversionOps):
                 self.weight_shape = nn.Parameter(shape, requires_grad=False)
 
         # Per-expert compressed projections of size (input-dim; output-dim)
-        quantized, scales, shapes = [], [], []
         processed_out = []
-        for layername, value in input_dict.items():
-            quantized, scales, shapes = (value["weight_packed"],
+        input_dict = self.group_input_dict(input_dict)
+        for value in input_dict.values():
+            quantized, scales, shapes = (
+                value["weight_packed"],
                 value["weight_scale"],
                 value["weight_shape"],
             )
-
-            if any(tensor is None for tensor in (quantized, scales, shapes)):
-                raise ValueError("Couldn't find quantized tensors in state dict")
 
             # Create a dummy module to not rely on low-lvl API and iter over each expert
             decompessed_tensors = []
@@ -198,7 +200,7 @@ class DecompressExperts(ConversionOps):
                 module = DummyModule(quant, scale, shape)
 
                 module.quantization_scheme = quantization_scheme
-                PackedQuantizationCompressor.decompress_module(module)
+                compressor.decompress_module(module)
                 decompessed_tensors.append(module.weight)
 
             del quantized, scales, shapes, module
@@ -227,4 +229,4 @@ class DecompressExperts(ConversionOps):
 
     @property
     def reverse_op(self) -> "ConversionOps":
-        return None  # TODO
+        return None  # FIXME
