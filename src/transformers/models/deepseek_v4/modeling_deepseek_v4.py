@@ -559,7 +559,11 @@ class DeepseekV4Indexer(nn.Module):
         scores = torch.matmul(q.float(), compressed_kv.transpose(-1, -2).float().unsqueeze(1))  # [B, S, H, T]
         scores = F.relu(scores) * self.softmax_scale
         weights = self.weights_proj(hidden_states).float() * self.weights_scaling  # [B, S, H]
-        index_scores = (scores * weights.unsqueeze(-1)).sum(dim=2)  # [B, S, T]
+        # Under TP/EP `scores` and `weights` are colwise-sharded over heads, so the
+        # head-sum above is a per-rank partial. `scores_sync` is an Identity whose
+        # `"all_reduce"` output hook sums the partials across the EP mesh — required
+        # so every rank picks the same top-k (otherwise megamoe dispatch diverges).
+        index_scores = self.scores_sync((scores * weights.unsqueeze(-1)).sum(dim=2))  # [B, S, T]
         compressed_len = compressed_kv.shape[1]
         top_k = min(self.index_topk, compressed_len)
 
