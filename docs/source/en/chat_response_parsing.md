@@ -41,7 +41,7 @@ messages = [{"role": "user", "content": "Summarize the end of the Cold War, very
 input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt").to(model.device)
 outputs = model.generate(input_ids, max_new_tokens=1024)[0, input_ids.shape[1]:]
 out_text = tokenizer.decode(outputs)
-print(tokenizer.parse_response(out_text, prefix=input_ids))
+print(tokenizer.parse_response(out_text, prefix=input_ids[0]))
 # → {"role": "assistant", "thinking": "...", "content": "..."}
 ```
 
@@ -57,10 +57,12 @@ want to parse partial messages as they are generated, especially in user-facing 
 display a static page for a minute or two until the model is finished.
 
 When you want streaming parsing, call `tokenizer.get_response_parser()`, which returns a [`~utils.chat_parsing.ResponseParser`].
-This is a stateful parser that you can feed text into as the model generates it:
+As with `parse_response`, pass the chat prompt as `prefix=` so the parser starts in the right state — this matters for
+templates that emit assistant-side opening tokens (like `<think>\n`) before generation begins. The returned object is a
+stateful parser that you can feed text into as the model generates it:
 
 ```python
-parser = tokenizer.get_response_parser()
+parser = tokenizer.get_response_parser(prefix=input_ids[0])
 for chunk in model_output:
     for event in parser.feed(chunk):
         handle(event)
