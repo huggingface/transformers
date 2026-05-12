@@ -281,3 +281,116 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
         )
         decoded = tokenizer.decode(output_ids[0], skip_special_tokens=False)
         self.assertEqual(decoded, expected)
+
+    def test_v4_flash_fp8_chat_seven_prompts(self):
+        """Chat-templated greedy generation across 7 prompts of varying length.
+
+        Covers: short factual recall (1, 2), translation (3), code generation (4),
+        out-of-distribution recall (5), open-ended creative writing (6), and a
+        long-context summarisation (7, 234 input tokens — exercises the HCA path
+        since input >> ``compress_rates['heavily_compressed_attention']`` = 128).
+        Each completion is a fixed snapshot of the current greedy output. If any
+        snapshot drifts, something changed in: per-layer-type RoPE selection
+        (sliding ``main`` vs CSA / HCA ``compress``), the CSA / HCA per-query
+        ``block_bias`` causal mask, the Hyper-Connection Sinkhorn projection or
+        the residual mixing direction, or the fp32 promotion in the MoE path.
+        """
+
+        def _chat(prompt: str) -> str:
+            # V4-Flash chat-mode template (canonical form in ``encoding/encoding_dsv4.py``
+            # on the model repo). ``</think>`` after ``<｜Assistant｜>`` skips the
+            # reasoning block and goes straight to the answer.
+            return f"<｜begin▁of▁sentence｜><｜User｜>{prompt}<｜Assistant｜></think>"
+
+        long_prompt = (
+            "Please read the following extended passage carefully and then provide a concise "
+            "three-sentence summary that captures the main themes and the most important details. "
+            'Be precise and avoid restating the wording; paraphrase. Passage: "It is a truth '
+            "universally acknowledged, that a single man in possession of a good fortune, must be "
+            "in want of a wife. However little known the feelings or views of such a man may be "
+            "on his first entering a neighbourhood, this truth is so well fixed in the minds of "
+            "the surrounding families, that he is considered the rightful property of some one or "
+            "other of their daughters. 'My dear Mr. Bennet,' said his lady to him one day, 'have "
+            "you heard that Netherfield Park is let at last?' Mr. Bennet replied that he had not. "
+            "'But it is,' returned she; 'for Mrs. Long has just been here, and she told me all "
+            "about it.' Mr. Bennet made no answer. 'Do not you want to know who has taken it?' "
+            "cried his wife impatiently. 'You want to tell me, and I have no objection to hearing "
+            "it.' This was invitation enough.\""
+        )
+
+        cases: list[tuple[str, str]] = [
+            (
+                "The capital of France is",
+                "The capital of France is Paris.",
+            ),
+            (
+                "List the first ten prime numbers:",
+                "The first ten prime numbers are:\n\n2, 3, 5, 7, 11, 13, 17, 19, 23, 29",
+            ),
+            (
+                "Translate to French: 'The quick brown fox jumps over the lazy dog.'",
+                '"Le rapide renard brun saute par-dessus le chien paresseux."',
+            ),
+            (
+                "Write a Python function fibonacci(n) that returns the nth Fibonacci number.",
+                (
+                    "Here's a Python function that returns the nth Fibonacci number:\n\n"
+                    "## Method 1: Iterative (Most Efficient)\n\n"
+                    '```python\ndef fibonacci(n):\n    """\n    Returns the nth Fibonacci number.\n    \n'
+                    "    Args:\n        n: Non-negative integer (0-indexed: fib(0)=0, fib(1)="
+                ),
+            ),
+            (
+                "What are the three properties of the UE8M0 scale factor format?",
+                (
+                    "Based on the standard naming convention for fixed-point data types "
+                    '(where "U" stands for unsigned, "E" for exponent, and "M" for mantissa), '
+                    "the **UE8M0** format has the following three properties:\n\n"
+                    "1.  **Unsigned (U):** The value is always non-negative"
+                ),
+            ),
+            (
+                'Write a short story that begins with: "Once upon a time, in a forest far away, there lived a..."',
+                (
+                    "Once upon a time, in a forest far away, there lived a squirrel named Pip who was "
+                    "terrified of the dark. While other squirrels slept soundly in their dreys as the "
+                    "moon rose, Pip would lie awake, his tiny heart hammering against his ribs. The "
+                    "rustle of leaves was a monster’s breath"
+                ),
+            ),
+            (
+                long_prompt,
+                (
+                    "The opening establishes a societal assumption that wealthy single men are naturally "
+                    "seeking wives, making them prime targets for local families with eligible daughters. "
+                    "Mrs. Bennet eagerly informs her indifferent husband that Netherfield Park has been "
+                    "leased, hoping to spark his interest in the new tenant. Mr. Bennet’s dry, reluctant engagement"
+                ),
+            ),
+        ]
+
+        quantization_config = FineGrainedFP8Config(dequantize=True)
+        config = AutoConfig.from_pretrained(self.model_id)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_id,
+            config=config,
+            dtype="auto",
+            device_map="auto",
+            attn_implementation="eager",
+            quantization_config=quantization_config,
+        )
+
+        for i, (prompt, expected) in enumerate(cases, start=1):
+            with self.subTest(prompt_index=i):
+                inputs = tokenizer(_chat(prompt), return_tensors="pt", add_special_tokens=False).to(model.device)
+                with torch.no_grad():
+                    output_ids = model.generate(
+                        **inputs,
+                        max_new_tokens=64,
+                        do_sample=False,
+                        pad_token_id=tokenizer.eos_token_id,
+                    )
+                new_tokens = output_ids[0, inputs.input_ids.size(1) :]
+                completion = tokenizer.decode(new_tokens, skip_special_tokens=True)
+                self.assertEqual(completion, expected)

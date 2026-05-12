@@ -283,21 +283,31 @@ class DeepseekV4Config(PreTrainedConfig):
             )
         self.qk_rope_head_dim = int(self.head_dim * self.partial_rotary_factor)
 
-        # `rope_parameters`: split the flat dict (left by `convert_rope_params_to_dict`,
-        # which folded any legacy `rope_scaling` block in) into per-rope-type
-        # `{main, compress}` sub-dicts. Idempotent: re-loading an already-split config
-        # is a no-op via the `isinstance` short-circuit. The two sub-dicts differ only
-        # in `rope_theta` (main: 10000, compress: 160000).
+        # yarn is applied ONLY to layers with a
+        # compressor (CSA/HCA); pure sliding-window layers use plain RoPE with
+        # `theta=rope_theta` (10000) and no scaling. Compress layers use
+        # `theta=compress_rope_theta` (160000) with yarn factor=16, and the reference
+        # does NOT multiply cos/sin by the yarn mscale — force `attention_factor=1.0`
+        # so transformers' `_compute_yarn_parameters` doesn't apply `0.1·log(16)+1`.
         rp = self.rope_parameters or {}
         if isinstance(rp.get("main"), dict) and isinstance(rp.get("compress"), dict):
             # Already nested — drop any leftover top-level keys.
             self.rope_parameters = {"main": rp["main"], "compress": rp["compress"]}
         else:
-            base = {k: v for k, v in rp.items() if k not in ("main", "compress")}
-            base.setdefault("rope_theta", self.rope_theta)
-            base.setdefault("rope_type", "default")
-            base["partial_rotary_factor"] = self.partial_rotary_factor
-            self.rope_parameters = {"main": dict(base), "compress": {**base, "rope_theta": self.compress_rope_theta}}
+            yarn = {k: v for k, v in rp.items() if k not in ("main", "compress")}
+            main = {
+                "rope_type": "default",
+                "rope_theta": self.rope_theta,
+                "partial_rotary_factor": self.partial_rotary_factor,
+            }
+            compress = {
+                **yarn,
+                "rope_theta": self.compress_rope_theta,
+                "partial_rotary_factor": self.partial_rotary_factor,
+                "attention_factor": 1.0,
+            }
+            compress.setdefault("rope_type", "default")
+            self.rope_parameters = {"main": main, "compress": compress}
 
 
 __all__ = ["DeepseekV4Config"]
