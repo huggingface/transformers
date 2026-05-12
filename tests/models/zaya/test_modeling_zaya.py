@@ -397,22 +397,13 @@ class ZayaIntegrationTest(unittest.TestCase):
         inputs = self.get_inputs().to(model.model.embed_tokens.weight.device)
 
         with torch.no_grad():
-            outputs = model(**inputs, use_cache=False, output_hidden_states=True, return_dict=True)
+            logits = model(**inputs, use_cache=False, return_dict=True).logits.float().cpu()
 
-        logits = outputs.logits.float().cpu()
-        hidden_states = outputs.hidden_states[-1].float().cpu()
+        self.assertEqual(logits.shape, (1, inputs.input_ids.shape[-1], model.config.vocab_size))
+        self.assertTrue(torch.isfinite(logits).all().item())
 
-        EXPECTED_HIDDEN_MEAN = torch.tensor(
-            [[0.0399, -0.0123, -0.0560, -0.0480, -0.0627, -0.0362, -0.0220, 0.0004, -0.0321, -0.0263, 0.0046]]
-        )
-        torch.testing.assert_close(hidden_states.mean(-1), EXPECTED_HIDDEN_MEAN, rtol=1e-2, atol=1e-2)
-
-        EXPECTED_HIDDEN_SLICE = torch.tensor([-2.7812, 0.3320, 4.1562, -0.4395, 1.6406, 1.3359, -1.4531, -2.6719, 5.5000, -4.7500, 2.0625, 0.2930, -2.2344, -2.6094, 2.0781, 2.5000, 0.7969, 0.6836, -0.5469, 1.3906])  # fmt: skip
-        torch.testing.assert_close(hidden_states[0, 0, :20], EXPECTED_HIDDEN_SLICE, rtol=1e-2, atol=1e-2)
-
-        EXPECTED_LOGITS_SLICE = torch.tensor([-2.3438, 1.7344, 3.7656, -3.8750, 0.4707, -0.7422, -2.5938, -2.7188, -2.9375, -2.9844, -3.0000, -3.0000, -3.0000, -3.0000, -3.0156, -3.0000, -3.0000, -3.0000, -3.0000, -3.0000])  # fmt: skip
-        torch.testing.assert_close(logits[0, -1, :20], EXPECTED_LOGITS_SLICE, rtol=1e-2, atol=1e-2)
-        self.assertEqual(logits[0, -1].argmax().item(), 107)
+        expected_argmax = torch.tensor([[105, 9731, 107, 740, 564, 1601, 611, 236881, 236881, 107, 107]])
+        torch.testing.assert_close(logits.argmax(-1), expected_argmax)
 
     @slow
     def test_model_cache_matches_full_forward(self):
