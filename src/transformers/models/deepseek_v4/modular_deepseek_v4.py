@@ -879,9 +879,6 @@ class DeepseekV4Experts(MixtralExperts):
         # Lives on the class (like gpt-oss's _apply_gate) so the grouped_mm / batched_mm
         # backends swapped in by `@use_experts_implementation` apply the same clamp +
         # SiLU on top of their packed gate_up output instead of bypassing it.
-        # The reference inference upcasts gate/up to fp32 before the clamp; we leave
-        # them in input dtype after Cyril's review. Measured impact (see SparseMoeBlock):
-        # token-level identical on prompts 1-4, ≤0.02 similarity drift on 5/6/7.
         gate, up = gate_up.chunk(2, dim=-1)
         gate = gate.clamp(max=self.limit)
         up = up.clamp(min=-self.limit, max=self.limit)
@@ -1051,15 +1048,7 @@ class DeepseekV4PreTrainedModel(MixtralPreTrainedModel):
     # keeps generation tests on the dynamic cache build that does dispatch to
     # V4's own cache layers.
     _can_compile_fullgraph = False
-    # Norm weights stay in fp32 (substring match against module name); this is what
-    # lets :class:`DeepseekV4RMSNorm` inherit V3's forward as-is — the upcast lives
-    # in the parameter dtype rather than in the forward pass.
-    _keep_in_fp32_modules_strict = [
-        "attn_hc",
-        "ffn_hc",
-        "e_score_correction_bias",
-        "norm",  # matches `q_a_norm`, `q_b_norm`, `kv_norm`, `input_layernorm`, `post_attention_layernorm`, top-level `norm`
-    ]
+    _keep_in_fp32_modules_strict = ["attn_hc", "ffn_hc", "e_score_correction_bias", "norm"]
     _keys_to_ignore_on_load_unexpected = [r"(^|\.)mtp\..*"]
     # ``_is_stateful`` opts out of generation modes that need to roll the cache
     # back across drafts (assisted generation, prompt lookup, contrastive search).
