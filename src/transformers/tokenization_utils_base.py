@@ -2652,6 +2652,14 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             # Call .keys() explicitly for compatibility with TensorDict and other Mapping subclasses
             encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0].keys()}
 
+        # Pop 4D nested-list attention masks and stack
+        # them at the end to avoid slow `to_py_obj`
+        preserved_attention_mask = None
+        if "attention_mask" in encoded_inputs:
+            mask = encoded_inputs["attention_mask"]
+            if isinstance(mask, list) and mask and getattr(mask[0], "ndim", 0) > 1:
+                preserved_attention_mask = encoded_inputs.pop("attention_mask")
+
         # The model's main input name, usually `input_ids`, has been passed for padding
         if self.model_input_names[0] not in encoded_inputs:
             raise ValueError(
@@ -2734,6 +2742,17 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 if key not in batch_outputs:
                     batch_outputs[key] = []
                 batch_outputs[key].append(value)
+
+        if preserved_attention_mask is not None:
+            sample = preserved_attention_mask[0]
+            if is_torch_tensor(sample):
+                import torch
+
+                batch_outputs["attention_mask"] = torch.stack(preserved_attention_mask)
+            elif isinstance(sample, np.ndarray):
+                batch_outputs["attention_mask"] = np.stack(preserved_attention_mask)
+            else:
+                batch_outputs["attention_mask"] = np.array(preserved_attention_mask)
 
         return BatchEncoding(batch_outputs, tensor_type=return_tensors)
 
