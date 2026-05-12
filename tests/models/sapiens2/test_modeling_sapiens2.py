@@ -136,6 +136,73 @@ class Sapiens2ModelTester:
             self.parent.assertGreater(h, 0)
             self.parent.assertGreater(w, 0)
 
+    def create_and_check_model(self, config, pixel_values, labels):
+        model = Sapiens2Model(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        (
+            config,
+            pixel_values,
+            labels,
+        ) = config_and_inputs
+        inputs_dict = {"pixel_values": pixel_values}
+        return config, inputs_dict
+
+
+@require_torch
+class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    """
+    Here we also overwrite some of the tests of test_modeling_common.py, as Sapiens2 does not use input_ids,
+    inputs_embeds, attention_mask and seq_length.
+    """
+
+    all_model_classes = (Sapiens2Model, Sapiens2Backbone) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "image-feature-extraction": Sapiens2Model,
+        }
+        if is_torch_available()
+        else {}
+    )
+
+    test_resize_embeddings = False
+
+    def setUp(self):
+        self.model_tester = Sapiens2ModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=Sapiens2Config, has_text_modality=False, hidden_size=32)
+
+    def test_backbone(self):
+        config, pixel_values, labels = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_backbone(config, pixel_values, labels)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    @unittest.skip(reason="Sapiens2 does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
+
+    def test_model_get_set_embeddings(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
+            x = model.get_output_embeddings()
+            self.assertTrue(x is None or isinstance(x, nn.Linear))
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
     def test_output_hidden_states(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -159,87 +226,17 @@ class Sapiens2ModelTester:
                 )
                 self.assertEqual(hidden_state.shape, expected_shape)
 
-    def create_and_check_model(self, config, pixel_values, labels):
-        model = Sapiens2Model(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values)
-        self.parent.assertEqual(
-            result.last_hidden_state.shape,
-            (self.batch_size, self.seq_length, self.hidden_size),
-        )
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            pixel_values,
-            labels,
-        ) = config_and_inputs
-        inputs_dict = {"pixel_values": pixel_values}
-        return config, inputs_dict
-
-
-@require_torch
-class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    """
-    Here we also overwrite some of the tests of test_modeling_common.py, as Dinov3 does not use input_ids, inputs_embeds,
-    attention_mask and seq_length.
-    """
-
-    all_model_classes = (Sapiens2Model, Sapiens2Backbone) if is_torch_available() else ()
-    pipeline_model_mapping = (
-        {
-            "image-feature-extraction": Sapiens2Model,
-        }
-        if is_torch_available()
-        else {}
-    )
-
-    test_resize_embeddings = False
-
-    test_attention_outputs = False
-
-    def setUp(self):
-        self.model_tester = Sapiens2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Sapiens2Config, has_text_modality=False, hidden_size=32)
-
-    def test_backbone(self):
-        config, pixel_values, labels = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_backbone(config, pixel_values, labels)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    @unittest.skip(reason="Dinov3 does not use inputs_embeds")
-    def test_inputs_embeds(self):
-        pass
-
-    def test_model_get_set_embeddings(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
-            x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, nn.Linear))
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @unittest.skip(reason="Dinov3 does not support feedforward chunking yet")
+    @unittest.skip(reason="Sapiens2 does not support feedforward chunking")
     def test_feed_forward_chunking(self):
         pass
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "facebook/dinov3-vits16-pretrain-lvd1689m"
+        model_name = "facebook/sapiens2-pretrain-0.4b"
         model = Sapiens2Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
 
-# We will verify our results on an image of cute cats
 def prepare_img():
     image = Image.open("./tests/fixtures/tests_samples/COCO/000000004016.png")
     return image
@@ -251,14 +248,14 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            AutoImageProcessor.from_pretrained("facebook/dinov3-vits16-pretrain-lvd1689m")
+            AutoImageProcessor.from_pretrained("facebook/sapiens2-pretrain-0.4b")
             if is_vision_available()
             else None
         )
 
     @slow
     def test_inference_no_head(self):
-        model = Sapiens2Model.from_pretrained("facebook/dinov3-vits16-pretrain-lvd1689m").to(torch_device)
+        model = Sapiens2Model.from_pretrained("facebook/sapiens2-pretrain-0.4b").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -269,7 +266,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         # verify the last hidden states
-        # in DINOv3 with Registers, the seq length equals the number of patches + 1 + num_register_tokens (we add 1 for the [CLS] token)
+        # seq length = num_patches + 1 (CLS token) + num_register_tokens
         _, _, height, width = inputs["pixel_values"].shape
         num_patches = (height // model.config.patch_size) * (width // model.config.patch_size)
         expected_seq_length = num_patches + 1 + model.config.num_register_tokens
