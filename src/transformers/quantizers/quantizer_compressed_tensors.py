@@ -114,7 +114,15 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         return True
 
     def get_weight_conversions(self):
-        # FIXME: can't always just add conversions blindly!
+        # FIXME: can't always just add conversions blindly! Should check that loaded scheme's `target`
+        # matches param names/classes (i.e. `is_moe_proj_in_config_scheme`) and that model already has simple
+        # MoE conversion in the mapping (i.e. `has_moe_conversion(self)`). Then we remove simple MoE and replace it
+        # with `DecompressExperts` below
+
+        # Only models that have already been quantized can be loaded atm, so we can
+        # assume that if `hasattr(self, hf_quantizer)` and `has_moe_conversion(self)` and `is_moe_proj_in_config_scheme`
+        # then it needs special dequantization for MoE projections
+        # NOTE: MoE conversion should happen AFTER decompression! Already hardcoded in convesion
         dequant_conversions = [
             WeightConverter(
                 source_patterns=[
@@ -139,8 +147,6 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             ),
         ]
 
-        # MoE conversion should happen AFTER decompression!
-        # FIXME: this won't work if model is NOT compressed when saved, and needs only MoE conversion
         return dequant_conversions
 
 
@@ -166,7 +172,6 @@ class DecompressExperts(ConversionOps):
         full_layer_name: str | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
-        # FIXME: should we check that loaded scheme's `target` matched param names/classes?
         from compressed_tensors.compressors import BaseCompressor
         from compressed_tensors.compressors.format import infer_module_format
         from torch import nn
@@ -204,18 +209,15 @@ class DecompressExperts(ConversionOps):
                 decompessed_tensors.append(module.weight)
 
             del quantized, scales, shapes, module
-            torch.cuda.empty_cache()
             processed_out.append(torch.stack(decompessed_tensors, dim=0))
 
         processed_out = torch.cat(processed_out, dim=1)
         return {target_patterns[0]: processed_out}
 
     def group_input_dict(self, input_dict: dict) -> dict:
-        # Group keys by weight type
         weight_grouped = {}
         for key in input_dict:
             if "weight_packed" in key:
-                # Extract the type identifier: e.g. "weight" or "weight_type2"
                 layername = key.replace(".weight_packed", "")
                 weight_grouped.setdefault(layername, {})["weight_packed"] = input_dict[key]
             elif "weight_scale" in key:
