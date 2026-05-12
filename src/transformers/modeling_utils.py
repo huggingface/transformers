@@ -1393,8 +1393,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Record `_no_split_modules` from the children
             if no_split := getattr(module, "_no_split_modules", None):
                 self._no_split_modules.update(no_split)
-            # Record `_keys_to_ignore_on_load_unexpected/missing` from the children - note that we do not add the
-            # name of the module to te key, as this is match by regex anyway and adding prefix could break the regex
+            # Record `_keys_to_ignore_on_load_unexpected/missing` from the children - note that we do not add the name (prefix)
+            # of the current module to the child's key, as this is matched by regex anyway and adding prefix could break the regex
             if ignore_unexpected := getattr(module, "_keys_to_ignore_on_load_unexpected", None):
                 self._keys_to_ignore_on_load_unexpected.update(ignore_unexpected)
             if ignore_missing := getattr(module, "_keys_to_ignore_on_load_missing", None):
