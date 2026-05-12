@@ -597,46 +597,42 @@ class TestKernelMappingDeviceFiltering(TestCasePlus):
 class TestKernelFusions(TestCasePlus):
     _MODEL_TYPE = "kernel_fusion_test_model"
 
+    # Define dummy model structure to test the kernel fusion utilities.
+    class Norm(nn.Module):
+        kernel_layer_name = "RMSNorm"
+
+        def __init__(self):
+            super().__init__()
+            self.weight = nn.Parameter(torch.ones(4))
+
+    class MLP(nn.Module):
+        kernel_layer_name = "MLP"
+
+        def __init__(self):
+            super().__init__()
+            self.gate_proj = nn.Linear(4, 8, bias=False)
+            self.up_proj = nn.Linear(4, 8, bias=False)
+            self.down_proj = nn.Linear(8, 4, bias=False)
+
+    class Layer(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.post_attention_layernorm = TestKernelFusions.Norm()
+            self.mlp = TestKernelFusions.MLP()
+
+    class Model(nn.Module):
+        class config_class:
+            model_type = "kernel_fusion_test_model"
+
+        def __init__(self, config=None):
+            super().__init__()
+            self.layers = nn.ModuleList([TestKernelFusions.Layer(), TestKernelFusions.Layer()])
+
     def tearDown(self):
         import transformers.conversion_mapping as _cm
 
         if _cm._checkpoint_conversion_mapping_cache is not None:
             _cm._checkpoint_conversion_mapping_cache.pop(self._MODEL_TYPE, None)
-
-    def _make_layer_and_model(self):
-        class Norm(nn.Module):
-            kernel_layer_name = "RMSNorm"
-
-            def __init__(self):
-                super().__init__()
-                self.weight = nn.Parameter(torch.ones(4))
-
-        class MLP(nn.Module):
-            kernel_layer_name = "MLP"
-
-            def __init__(self):
-                super().__init__()
-                self.gate_proj = nn.Linear(4, 8, bias=False)
-                self.up_proj = nn.Linear(4, 8, bias=False)
-                self.down_proj = nn.Linear(8, 4, bias=False)
-
-        class Layer(nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.post_attention_layernorm = Norm()
-                self.mlp = MLP()
-
-        class Config:
-            model_type = self._MODEL_TYPE
-
-        class Model(nn.Module):
-            config_class = Config
-
-            def __init__(self, config=None):
-                super().__init__()
-                self.layers = nn.ModuleList([Layer(), Layer()])
-
-        return Layer, Model, Config
 
     def test_infer_kernel_fusion_transforms(self):
         transforms = infer_kernel_fusion_transforms(
@@ -659,9 +655,8 @@ class TestKernelFusions(TestCasePlus):
         )
 
     def test_make_fused_parent_class(self):
-        Layer, _, _ = self._make_layer_and_model()
         FusedLayer = make_fused_parent_class(
-            Layer,
+            TestKernelFusions.Layer,
             child_names=["post_attention_layernorm", "mlp"],
             source_names=["RMSNorm", "MLP"],
             kernel_layer_name="RMSNormMLP",
@@ -674,7 +669,6 @@ class TestKernelFusions(TestCasePlus):
         self.assertIn("MLP", layer.post_attention_layernorm._modules)
 
     def test_register_kernel_fusions_replaces_tuple_key(self):
-        _, Model, Config = self._make_layer_and_model()
         kernel_config = KernelConfig(
             {
                 (
@@ -688,14 +682,13 @@ class TestKernelFusions(TestCasePlus):
             patch("transformers.integrations.hub_kernels._try_load_kernel_class", return_value=None),
             patch("transformers.integrations.hub_kernels.register_patch_mapping"),
         ):
-            register_kernel_fusions(Model, Config(), kernel_config)
+            register_kernel_fusions(TestKernelFusions.Model, None, kernel_config)
 
         self.assertIn("RMSNormMLP", kernel_config.kernel_mapping)
         self.assertFalse(any(isinstance(k, tuple) for k in kernel_config.kernel_mapping))
 
     def test_register_kernel_fusions_merges_kernel_conversion_mapping(self):
         """WeightRenaming from structure + WeightConverter from kernel.conversion_mapping are both registered."""
-        _, Model, Config = self._make_layer_and_model()
 
         class FakeKernel:
             conversion_mapping = [
@@ -715,7 +708,7 @@ class TestKernelFusions(TestCasePlus):
             patch("transformers.integrations.hub_kernels._try_load_kernel_class", return_value=FakeKernel),
             patch("transformers.integrations.hub_kernels.register_patch_mapping"),
         ):
-            register_kernel_fusions(Model, Config(), kernel_config)
+            register_kernel_fusions(TestKernelFusions.Model, None, kernel_config)
 
         mapping = get_checkpoint_conversion_mapping(self._MODEL_TYPE)
         self.assertIsNotNone(mapping)
