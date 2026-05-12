@@ -93,12 +93,12 @@ def _meta_subtitle(meta: dict | None) -> str:
         return ""
     parts: list[str] = []
     if meta.get("compress_rate") is not None:
-        parts.append(f"compress_rate (m) = {meta['compress_rate']}")
+        parts.append(f"m={meta['compress_rate']}")
     if meta.get("index_topk") is not None:
-        parts.append(f"index_topk (k) = {meta['index_topk']}")
+        parts.append(f"k={meta['index_topk']}")
     if meta.get("T_entries"):
-        parts.append(f"total compressed entries = {meta['T_entries']}")
-    return "   ".join(parts)
+        parts.append(f"{meta['T_entries']} entries")
+    return " · ".join(parts)
 
 
 def _render(
@@ -184,7 +184,7 @@ def _render(
 SVG_CELL = 24
 SVG_GAP = 2
 SVG_PAD_LEFT = 120     # roomy enough for the longest row-label token ("morning") at 11pt
-SVG_PAD_TOP = 340      # enough for vertical compressor-token lists (HCA m=8 = ~250px tall)
+SVG_PAD_TOP = 180      # title/shape/meta (60px) + C_w + pos + rotated tokens (~60px) + a touch.
 SVG_PAD_RIGHT = 48
 SVG_PAD_BOTTOM = 64
 SVG_COLORS = {
