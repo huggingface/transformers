@@ -120,10 +120,18 @@ and 1 (covers `8..15`) only become visible at `t ≥ 7` and `t ≥ 15` respectiv
 
 <img alt="DeepSeek-V4 HCA attention mask" src="../imgs/deepseek_v4/deepseek_v4_mask_layer2_heavily_compressed_attention.svg" />
 
-These diagrams are reproducible end-to-end via `python visualize_deepseek_v4_masks.py --svg
-docs/source/en/imgs/deepseek_v4` (root of the repo): it runs a forward pass on this tiny config, intercepts
-each attention layer's post-`cat([attention_mask, block_bias])` mask, and writes the SVGs above (and also
-prints the ANSI grid to stdout for quick terminal inspection).
+These diagrams are reproducible end-to-end via:
+
+```bash
+python docs/source/en/imgs/deepseek_v4/visualize_attention_masks.py \
+    --svg docs/source/en/imgs/deepseek_v4
+```
+
+The script runs a forward pass on this tiny config, wraps each attention layer to capture the exact
+post-`cat([attention_mask, block_bias])` mask, remaps CSA's `[S, S·k]` flat-slot mask back to a
+`[S, T_entries]` entry-visibility view (so each `C_w` column is a compressed *entry*, not a gather slot),
+and writes the three SVGs above. It also prints an ANSI grid to stdout for quick terminal inspection and
+dumps the indexer's per-query top-k picks so warm-up sentinels and pick choices are auditable.
 
 ### Cache layers
 
