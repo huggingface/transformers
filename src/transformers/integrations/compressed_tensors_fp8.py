@@ -15,8 +15,8 @@
 Compressed-tensors FP8 integration for transformers.
 
 Supports loading compressed-tensors FP8 checkpoints (per-channel and per-tensor)
-via dequantization to BF16 followed by standard matmul. The primary benefit is
-memory savings (FP8 weights use half the memory of BF16).
+and running inference with hardware-accelerated FP8 matmul kernels. Weights are
+kept in FP8 format and activations are dynamically quantized per-row.
 
 Supported models:
   - Per-channel dynamic: e.g. RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8-dynamic
@@ -30,6 +30,7 @@ from torch.nn import functional as F
 from ..core_model_loading import ConversionOps, _IdentityOp
 from ..quantizers.quantizers_utils import should_convert_module
 from ..utils import logging
+from .hub_kernels import lazy_load_kernel
 
 
 logger = logging.get_logger(__name__)
@@ -51,13 +52,17 @@ def _use_fp8_kernel():
 
 
 def _get_quantize_fp8_per_row():
-    """Get the quantize_fp8_per_row function from kernels-community (Triton)."""
-    from .hub_kernels import get_kernel
+    """Get the quantize_fp8_per_row function from kernels-community (Triton), with caching."""
+    kernel = lazy_load_kernel("fp8-fbgemm")
+    if kernel is None:
+        raise ImportError(
+            "Failed to load the fp8-fbgemm kernel. Install the `kernels` package with "
+            "`pip install -U kernels` and ensure `kernels-community/fp8-fbgemm` is available."
+        )
+    return kernel.quantize_fp8_per_row
 
-    return get_kernel("kernels-community/fp8-fbgemm").quantize_fp8_per_row
 
-
-class CTFP8Linear(nn.Linear):
+class CompressedTensorsFP8Linear(nn.Linear):
     """Linear layer for compressed-tensors FP8 models.
 
     Stores weights in FP8 format and uses torch._scaled_mm for FP8 matmul.
@@ -73,7 +78,6 @@ class CTFP8Linear(nn.Linear):
         has_bias: bool = False,
         dtype=_FP8_DTYPE,
         use_fp8_kernel: bool = True,
-        quantize_fp8_per_row=None,
     ):
         super().__init__(in_features, out_features)
 
@@ -84,9 +88,6 @@ class CTFP8Linear(nn.Linear):
 
         # Weight scale: per-channel (out_features, 1) or per-tensor (scalar → expanded at load)
         self.weight_scale_inv = nn.Parameter(torch.zeros((out_features, 1), dtype=torch.float32))
-
-        if use_fp8_kernel:
-            self.quantize_fp8_per_row = quantize_fp8_per_row
 
         if self.has_bias:
             self.bias = nn.Parameter(torch.empty(self.out_features))
@@ -103,7 +104,8 @@ class CTFP8Linear(nn.Linear):
 
         if self.use_fp8_kernel:
             # XPU or CUDA SM89+: FP8 kernel path (quantize activation + scaled_mm)
-            x_quantized, x_scale = self.quantize_fp8_per_row(input.view(-1, input.shape[-1]).contiguous())
+            x = input.reshape(-1, input.shape[-1])
+            x_quantized, x_scale = _get_quantize_fp8_per_row()(x)
 
             weight_scale_float32 = self.weight_scale_inv.to(torch.float32)
 
@@ -112,7 +114,7 @@ class CTFP8Linear(nn.Linear):
             # Per-tensor: (1, 1) → need to expand to (1, out_features)
             scale_b = weight_scale_float32.t()
             if scale_b.shape[-1] == 1 and self.out_features > 1:
-                scale_b = scale_b.expand(1, self.out_features).contiguous()
+                scale_b = scale_b.expand(1, self.out_features)
 
             output = torch._scaled_mm(
                 x_quantized,
@@ -132,15 +134,14 @@ class CTFP8Linear(nn.Linear):
         return output
 
 
-def replace_with_ct_fp8_linear(
+def replace_with_compressed_tensors_fp8_linear(
     model, modules_to_not_convert=None, activation_scheme="dynamic", dequantize=False, pre_quantized=False
 ):
-    """Replace all nn.Linear modules with CTFP8Linear for compressed-tensors FP8 loading."""
+    """Replace all nn.Linear modules with CompressedTensorsFP8Linear for compressed-tensors FP8 loading."""
     if dequantize:
         return model
 
     use_fp8_kernel = _use_fp8_kernel()
-    quantize_fp8_per_row = _get_quantize_fp8_per_row() if use_fp8_kernel else None
     has_been_replaced = False
     for module_name, module in model.named_modules():
         if not should_convert_module(module_name, modules_to_not_convert):
@@ -149,13 +150,12 @@ def replace_with_ct_fp8_linear(
         module_kwargs = {} if pre_quantized else {"dtype": None}
         if isinstance(module, nn.Linear):
             with torch.device("meta"):
-                new_module = CTFP8Linear(
+                new_module = CompressedTensorsFP8Linear(
                     in_features=module.in_features,
                     out_features=module.out_features,
                     activation_scheme=activation_scheme,
                     has_bias=module.bias is not None,
                     use_fp8_kernel=use_fp8_kernel,
-                    quantize_fp8_per_row=quantize_fp8_per_row,
                     **module_kwargs,
                 )
             model.set_submodule(module_name, new_module)
@@ -178,8 +178,9 @@ class CompressedTensorsScaleConvert(ConversionOps):
     In compressed-tensors, `weight_scale` is the dequantization multiplier:
         bf16_weight = fp8_weight * weight_scale
 
-    In our CTFP8Linear, `weight_scale_inv` has the same semantics (it's multiplied
-    with the FP8 weight to get the dequantized value), so no inversion is needed.
+    In our CompressedTensorsFP8Linear, `weight_scale_inv` has the same semantics (it's
+    multiplied with the FP8 weight to get the dequantized value), so no inversion is needed.
+    The conversion also reshapes the scale: scalar → (1, 1), 1D (N,) → (N, 1).
     """
 
     def __init__(self, hf_quantizer):
@@ -260,7 +261,7 @@ class CompressedTensorsFp8Dequantize(ConversionOps):
         return _IdentityOp()
 
 
-class CTFP8PerRowQuantize(ConversionOps):
+class CompressedTensorsFP8PerRowQuantize(ConversionOps):
     """Online quantization: convert BF16 weight to FP8 per-row.
 
     For each row of the weight matrix, computes:

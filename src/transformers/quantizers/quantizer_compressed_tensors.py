@@ -43,7 +43,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     quantized state with compressed_tensors.
 
     When FP8 quantization is detected and a GPU/XPU is available, uses row-wise
-    FP8 matmul kernels (torch._scaled_mm on XPU, fbgemm on CUDA) for acceleration.
+    FP8 matmul kernels (torch._scaled_mm) for acceleration.
     Otherwise falls back to the default compressed-tensors dequantize path.
     """
 
@@ -118,10 +118,10 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     def param_needs_quantization(self, model, param_name: str, **kwargs) -> bool:
         if not self._use_fp8_kernel:
             return False
-        from ..integrations.compressed_tensors_fp8 import CTFP8Linear
+        from ..integrations.compressed_tensors_fp8 import CompressedTensorsFP8Linear
 
         module, tensor_name = get_module_from_name(model, param_name)
-        if isinstance(module, CTFP8Linear):
+        if isinstance(module, CompressedTensorsFP8Linear):
             if self.pre_quantized or tensor_name == "bias":
                 return False
             return True
@@ -152,13 +152,13 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             self.compressor.compress_model(model=model)
 
     def _process_model_before_weight_loading_fp8(self, model, **kwargs):
-        from ..integrations.compressed_tensors_fp8 import replace_with_ct_fp8_linear
+        from ..integrations.compressed_tensors_fp8 import replace_with_compressed_tensors_fp8_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(model, None, model._keep_in_fp32_modules)
         if self._modules_to_not_convert_ct:
             self.modules_to_not_convert = list(set(self.modules_to_not_convert + self._modules_to_not_convert_ct))
 
-        replace_with_ct_fp8_linear(
+        replace_with_compressed_tensors_fp8_linear(
             model,
             modules_to_not_convert=self.modules_to_not_convert,
             activation_scheme=self._activation_scheme,
@@ -215,9 +215,9 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     def get_quantize_ops(self):
         if not self._use_fp8_kernel or self.pre_quantized:
             return None
-        from ..integrations.compressed_tensors_fp8 import CTFP8PerRowQuantize
+        from ..integrations.compressed_tensors_fp8 import CompressedTensorsFP8PerRowQuantize
 
-        return CTFP8PerRowQuantize(self)
+        return CompressedTensorsFP8PerRowQuantize(self)
 
     def get_weight_conversions(self):
         if not self._use_fp8_kernel:
