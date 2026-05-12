@@ -47,6 +47,7 @@ from ...utils import (
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..laguna.modeling_laguna import LagunaRotaryEmbedding
+from ..llama.modeling_llama import LlamaAttention
 from ..qwen3_5_moe.modeling_qwen3_5_moe import (
     apply_rotary_pos_emb,
     eager_attention_forward,
@@ -201,6 +202,8 @@ class ZayaConfig(PreTrainedConfig):
             raise ValueError("`head_dim` must be set for ZAYA.")
         if self.num_experts_per_tok != 1:
             raise ValueError("ZAYA currently supports `moe_router_topk=1` only.")
+        if self.num_attention_heads % self.num_key_value_heads != 0:
+            raise ValueError("`num_attention_heads` must be a multiple of `num_key_value_heads`.")
         if len(self.layer_types) != self.num_hidden_layers:
             raise ValueError("`layer_types` must have one entry per hidden layer.")
         if invalid_layer_types := set(self.layer_types) - {"full_attention", "sliding_attention"}:
@@ -221,42 +224,43 @@ def _make_zaya_cache(config: ZayaConfig) -> DynamicCache:
     cache_config = copy.copy(config)
     # layer_types is used to distinct the rope_type (full or swa)
     # so need to construct a new layer_types to construct cache
-    cache_config.layer_types = ["hybrid" if layer_idx % 2 == 0 else "moe" for layer_idx in range(config.num_hidden_layers)]
+    cache_config.layer_types = [
+        "hybrid" if layer_idx % 2 == 0 else "moe" for layer_idx in range(config.num_hidden_layers)
+    ]
     return DynamicCache(config=cache_config)
 
 
-class CCA(nn.Module):
-    def __init__(
-        self,
-        config: ZayaConfig,
-        num_key_value_heads: int = 2,
-        num_attention_heads: int = 8,
-        hidden_size: int | None = None,
-        head_dim: int = 128,
-        cca_time0: int = 2,
-        cca_time1: int = 2,
-        layer_number: int = 0,
-    ):
+class ZayaCCAProjection(nn.Module):
+    """
+    Projects hidden states into attention q/k/v states with ZAYA's CCA path.
+
+    `linear_q` and `linear_k` produce the residual q/k states and are concatenated into `qk_states`. The causal
+    `conv_qk_depthwise` + `conv_qk_grouped` stack mixes the current q/k stream with the cached pre-convolution tail;
+    for example, decoding token `t` uses the cached q/k states from previous tokens plus the current `qk_states[:, t]`.
+    Values are built from `val_proj1(hidden_states[:, t])` and a delayed `val_proj2`: during prefill token `t` uses
+    `val_proj2(hidden_states[:, t - 1])`, while decoding reads the previous `val_proj2` from **the recurrent cache**.
+
+    The final q/k states are L2-normalized. `temp` is the learned per-KV-head scale applied to keys.
+    """
+
+    def __init__(self, config: ZayaConfig, layer_idx: int):
         super().__init__()
         self.config = config
-        self.layer_number = layer_number
+        self.layer_idx = layer_idx
 
-        self.hidden_size = int(hidden_size or config.hidden_size)
+        self.hidden_size = config.hidden_size
 
-        self.depthwise_kernel_size = cca_time0
-        self.grouped_kernel_size = cca_time1
+        self.depthwise_kernel_size = config.cca_time0
+        self.grouped_kernel_size = config.cca_time1
         self.total_padding = (self.depthwise_kernel_size - 1) + (self.grouped_kernel_size - 1)
 
-        self.num_key_value_heads = int(num_key_value_heads)
-        self.num_attention_heads = int(num_attention_heads)
-
-        self.head_dim = int(head_dim)
+        self.num_key_value_heads = config.num_key_value_heads
+        self.num_attention_heads = config.num_attention_heads
+        self.head_dim = config.head_dim
         self.key_value_hidden_size = self.num_key_value_heads * self.head_dim
         self.query_hidden_size = self.num_attention_heads * self.head_dim
         self.sqrt_head_dim = self.head_dim**0.5
         self.num_key_value_groups = self.num_attention_heads // self.num_key_value_heads
-        if self.num_attention_heads % self.num_key_value_heads != 0:
-            raise ValueError("`num_attention_heads` must be a multiple of `num_key_value_heads`.")
 
         self.linear_q = nn.Linear(self.hidden_size, self.query_hidden_size, bias=self.config.attention_bias)
         self.linear_k = nn.Linear(self.hidden_size, self.key_value_hidden_size, bias=self.config.attention_bias)
@@ -264,23 +268,21 @@ class CCA(nn.Module):
         self.val_proj2 = nn.Linear(self.hidden_size, self.key_value_hidden_size // 2, bias=self.config.attention_bias)
 
         conv_channels = self.key_value_hidden_size + self.query_hidden_size
-        self.conv_qk = nn.Sequential(
-            nn.Conv1d(
-                in_channels=conv_channels,
-                out_channels=conv_channels,
-                kernel_size=self.depthwise_kernel_size,
-                groups=conv_channels,
-                padding=0,
-                stride=1,
-            ),
-            nn.Conv1d(
-                in_channels=conv_channels,
-                out_channels=conv_channels,
-                kernel_size=self.grouped_kernel_size,
-                groups=(self.num_key_value_heads + self.num_attention_heads),
-                padding=0,
-                stride=1,
-            ),
+        self.conv_qk_depthwise = nn.Conv1d(
+            in_channels=conv_channels,
+            out_channels=conv_channels,
+            kernel_size=self.depthwise_kernel_size,
+            groups=conv_channels,
+            padding=0,
+            stride=1,
+        )
+        self.conv_qk_grouped = nn.Conv1d(
+            in_channels=conv_channels,
+            out_channels=conv_channels,
+            kernel_size=self.grouped_kernel_size,
+            groups=(self.num_key_value_heads + self.num_attention_heads),
+            padding=0,
+            stride=1,
         )
 
         self.temp = nn.Parameter(torch.zeros(self.num_key_value_heads))
@@ -311,9 +313,9 @@ class CCA(nn.Module):
         ).mean(dim=-2)
 
         qk_states = qk_states.transpose(1, 2)
-        use_precomputed_states = past_key_values is not None and past_key_values.has_previous_state(self.layer_number)
+        use_precomputed_states = past_key_values is not None and past_key_values.has_previous_state(self.layer_idx)
         if use_precomputed_states:
-            cached_qk_states = past_key_values.layers[self.layer_number].conv_states
+            cached_qk_states = past_key_values.layers[self.layer_idx].conv_states
             conv_input = torch.cat([cached_qk_states, qk_states], dim=-1)
         else:
             conv_input = F.pad(qk_states, (self.total_padding, 0))
@@ -322,9 +324,10 @@ class CCA(nn.Module):
             new_conv_state = qk_states[..., -self.total_padding :]
             if new_conv_state.shape[-1] < self.total_padding:
                 new_conv_state = F.pad(new_conv_state, (self.total_padding - new_conv_state.shape[-1], 0))
-            past_key_values.update_conv_state(new_conv_state, self.layer_number)
+            past_key_values.update_conv_state(new_conv_state, self.layer_idx)
 
-        convolved_qk_states = self.conv_qk(conv_input).transpose(1, 2)
+        convolved_qk_states = self.conv_qk_depthwise(conv_input)
+        convolved_qk_states = self.conv_qk_grouped(convolved_qk_states).transpose(1, 2)
 
         query = (
             convolved_qk_states[..., : self.query_hidden_size].view(
@@ -343,13 +346,13 @@ class CCA(nn.Module):
         value_current = self.val_proj1(hidden_states)
         projected_v2 = self.val_proj2(hidden_states)
         if use_precomputed_states:
-            first_v2 = past_key_values.layers[self.layer_number].recurrent_states.unsqueeze(1)
+            first_v2 = past_key_values.layers[self.layer_idx].recurrent_states.unsqueeze(1)
         else:
             first_v2 = self.val_proj2(hidden_states.new_zeros(batch_size, 1, self.hidden_size))
         value_delayed = torch.cat([first_v2, projected_v2[:, :-1]], dim=1)
 
         if past_key_values is not None:
-            past_key_values.update_recurrent_state(projected_v2[:, -1, :], self.layer_number)
+            past_key_values.update_recurrent_state(projected_v2[:, -1, :], self.layer_idx)
 
         value = torch.cat([value_current, value_delayed], dim=-1).view(
             batch_size, seq_length, self.num_key_value_heads, self.head_dim
@@ -368,35 +371,20 @@ class CCA(nn.Module):
         return query, key, value
 
 
-class ZayaAttention(nn.Module):
-    def __init__(self, config: ZayaConfig, layer_n):
-        super().__init__()
-        self.config = config
-        self.layer_n = layer_n
-        self.layer_idx = layer_n
+class ZayaAttention(LlamaAttention):
+    def __init__(self, config: ZayaConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.layer_n = layer_idx
         self.hidden_size = config.hidden_size
         self.num_attention_heads = config.num_attention_heads
         self.num_key_value_heads = config.num_key_value_heads
-        self.num_key_value_groups = self.num_attention_heads // self.num_key_value_heads
-        self.is_causal = True
-        self.attention_dropout = config.attention_dropout
-        self.head_dim = config.head_dim
-        self.scaling = self.head_dim**-0.5
 
-        self.o_proj = nn.Linear(
-            self.num_attention_heads * self.head_dim,
-            self.hidden_size,
-            bias=self.config.attention_bias,
-        )
-        self.qkv = CCA(
+        del self.q_proj
+        del self.k_proj
+        del self.v_proj
+        self.qkv = ZayaCCAProjection(
             config=self.config,
-            num_attention_heads=self.config.num_attention_heads,
-            num_key_value_heads=self.config.num_key_value_heads,
-            hidden_size=self.hidden_size,
-            head_dim=self.config.head_dim,
-            cca_time0=self.config.cca_time0,
-            cca_time1=self.config.cca_time1,
-            layer_number=layer_n,
+            layer_idx=layer_idx,
         )
 
     def forward(
@@ -541,8 +529,7 @@ class ZayaRouter(nn.Module):
         zaya_first_layer = 1
         self.use_eda = self.layer_idx != zaya_first_layer
 
-        ln_eps = float(getattr(config, "norm_epsilon", 1e-5))
-        self.rmsnorm_eda = ZayaRMSNorm(self.mlp_expansion, eps=ln_eps)
+        self.rmsnorm_eda = ZayaRMSNorm(self.mlp_expansion, eps=config.norm_epsilon)
         if self.use_eda:
             self.router_states_scale = nn.Parameter(torch.ones(self.mlp_expansion))
 
@@ -830,9 +817,11 @@ class ZayaModel(ZayaPreTrainedModel):
             past_key_values,
         )
         if attention_mask is not None and attention_mask.ndim != 2:
-            raise ValueError("ZAYA CCA requires a 2D `attention_mask` to mask padding tokens before convolution.")
+            raise ValueError(
+                "ZAYA CCA projection requires a 2D `attention_mask` to mask padding tokens before convolution."
+            )
         # ZAYA's hybrid cache is not compileable, so generation keeps `attention_mask` as the original 2D padding mask.
-        # CCA only needs it during multi-token prefill; single-token decoding uses the cached convolution state.
+        # CCA projection only needs it during multi-token prefill; single-token decoding uses the cached convolution state.
         attention_mask_2d = attention_mask[:, -inputs_embeds.shape[1] :] if attention_mask is not None else None
         if inputs_embeds.shape[1] == 1:
             attention_mask_2d = None
@@ -840,7 +829,8 @@ class ZayaModel(ZayaPreTrainedModel):
         hidden_states = inputs_embeds
 
         position_embeddings = {
-            layer_type: self.rotary_emb(hidden_states, position_ids, layer_type) for layer_type in set(self.config.layer_types)
+            layer_type: self.rotary_emb(hidden_states, position_ids, layer_type)
+            for layer_type in set(self.config.layer_types)
         }
 
         all_hidden_states = () if output_hidden_states else None

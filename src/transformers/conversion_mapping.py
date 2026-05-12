@@ -562,6 +562,8 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "zaya": [
+            WeightRenaming(r"self_attn\.qkv\.conv_qk\.0\.", "self_attn.qkv.conv_qk_depthwise."),
+            WeightRenaming(r"self_attn\.qkv\.conv_qk\.1\.", "self_attn.qkv.conv_qk_grouped."),
             WeightConverter(
                 source_patterns="zaya_block.experts.local_experts.*.linear_fc1.weight",
                 target_patterns="zaya_block.experts.gate_up_proj",
