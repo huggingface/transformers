@@ -282,24 +282,24 @@ class TestHubKernels(TestCasePlus):
 @require_kernels
 class TestKernelsEnv(TestCasePlus):
     def test_disable_hub_kernels(self):
+        import importlib
+
+        from transformers.integrations import hub_kernels
+
         with patch.dict(os.environ, {"USE_HUB_KERNELS": "OFF"}):
-            import importlib
-
-            from transformers.integrations import hub_kernels
-
             importlib.reload(hub_kernels)
-
             self.assertFalse(hub_kernels._kernels_enabled)
+        importlib.reload(hub_kernels)
 
     def test_enable_hub_kernels(self):
+        import importlib
+
+        from transformers.integrations import hub_kernels
+
         with patch.dict(os.environ, {"USE_HUB_KERNELS": "ON"}):
-            import importlib
-
-            from transformers.integrations import hub_kernels
-
             importlib.reload(hub_kernels)
-
             self.assertTrue(hub_kernels._kernels_enabled)
+        importlib.reload(hub_kernels)
 
 
 @require_kernels
@@ -669,7 +669,7 @@ class TestKernelFusions(TestCasePlus):
         )
         layer = FusedLayer()
 
-        self.assertIsInstance(layer.post_attention_layernorm, FusedModuleBase)
+        self.assertIsInstance(layer.post_attention_layernorm, hub_kernels_pkg.FusedModuleBase)
         self.assertIsInstance(layer.mlp, nn.Identity)
         self.assertIn("RMSNorm", layer.post_attention_layernorm._modules)
         self.assertIn("MLP", layer.post_attention_layernorm._modules)
