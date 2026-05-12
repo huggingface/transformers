@@ -30,7 +30,6 @@ from ...utils import (
     extract_commit_hash,
     is_g2p_en_available,
     is_sentencepiece_available,
-    is_tiktoken_available,
     is_tokenizers_available,
     logging,
 )
