@@ -45,8 +45,8 @@ class ResponseParser:
 
     Usage:
         parser = ResponseParser(response_template, prefix=chat_prompt)
-        if parser.initial_event:
-            handle(parser.initial_event)
+        for event in parser.initial_events:
+            handle(event)
         for chunk in model_text_stream:
             for event in parser.feed(chunk):
                 handle(event)
@@ -54,11 +54,13 @@ class ResponseParser:
         for event in final_events:
             handle(event)
 
-    Events can be either "region_open", "region_chunk", "region_close", or "stream_end".
+    Events can be either "region_open", "region_chunk", or "region_close".
 
     ResponseParser requires the chat `prefix` (i.e. the chat history, the prefill before the current generation).
     This is because chat templates or assistant prefills can sometimes write part of the message, and if we
     only see the model output, and not the template, then we can't reliably parse the message in those cases.
+    Any events produced while consuming the prefix are exposed as `initial_events`, so renderers can show
+    prefill regions before the model writes anything; closed prefill regions also land in the output dict.
     """
 
     def __init__(self, response_template: dict | ResponseTemplate, prefix: str | None = None):
@@ -76,14 +78,15 @@ class ResponseParser:
         self._body: str = ""
         self._opened: bool = False
         self._finalized: bool = False
-        self._prefill_mode: bool = False
-        self.initial_event: dict | None = None
+        self.initial_events: list[dict] = []
         if prefix:
             self._consume_prefix(prefix)
 
     def _consume_prefix(self, prefix: str) -> None:
         """Loads the prefix (the chat prefill sent to the model), right-truncates it to the start of the
         assistant message (as determined by start_anchor) and then runs the remainder through the parser.
+        Events produced while processing the prefix are stashed on `initial_events` so callers can replay
+        them into a renderer before feeding model output.
 
         Think of this as the "get the parser up to speed on the story so far" method.
         """
@@ -91,17 +94,7 @@ class ResponseParser:
         if not truncated:
             return
         self._buffer = truncated
-        self._prefill_mode = True
-        try:
-            self._process([], eos=False)
-        finally:
-            self._prefill_mode = False
-        if self._current is not None and self._current != self._implicit_name and self._opened:
-            self.initial_event = {
-                "type": "region_open",
-                "field": self._current,
-                "meta": dict(self._captures),
-            }
+        self._process(self.initial_events, eos=False)
 
     def feed(self, text: str) -> list[dict]:
         """Feeds more text/tokens from the model output into the tokenizer, and returns any events that result
@@ -133,7 +126,6 @@ class ResponseParser:
         defaults = self._spec.defaults
         self._output = {k: v for k, v in self._output.items() if k in defaults or not _is_empty(v)}
         self._finalized = True
-        events.append({"type": "stream_end"})
         return self._output, events
 
     # Matt: The private methods below cover the internals of the class and are mostly agent-written.
@@ -239,19 +231,15 @@ class ResponseParser:
     def _accumulate(self, events: list[dict], text: str) -> None:
         """Route `text` into the currently active region. When the current
         region is the null sink (no implicit declared, no explicit open), we
-        silently discard. In `_prefill_mode` the body still accumulates --
-        so a region opened in the prefix and closed across the boundary
-        emits the right value -- but `region_open` / `region_chunk` events
-        are suppressed."""
+        silently discard."""
         if not text or self._current is None:
             return
         fld = self._spec.fields[self._current]
         if not self._opened:
-            if not self._prefill_mode:
-                events.append({"type": "region_open", "field": self._current, "meta": dict(self._captures)})
+            events.append({"type": "region_open", "field": self._current})
             self._opened = True
         self._body += text
-        if fld.content in STREAMABLE_PARSERS and not self._prefill_mode:
+        if fld.content in STREAMABLE_PARSERS:
             events.append({"type": "region_chunk", "field": self._current, "text": text})
 
     def _open_explicit(self, events: list[dict], fld: ResponseTemplateField, m: re.Match) -> None:
@@ -259,19 +247,13 @@ class ResponseParser:
         self._captures = {k: v for k, v in m.groupdict().items() if v is not None}
         self._body = ""
         self._opened = True
-        if not self._prefill_mode:
-            events.append({"type": "region_open", "field": fld.name, "meta": dict(self._captures)})
+        events.append({"type": "region_open", "field": fld.name})
 
     def _close_current(self, events: list[dict]) -> None:
         """Close the current region and reset to the implicit/null region.
         Skipped (aside from the reset) when the current region never opened --
-        avoids vacuous open/close pairs at every explicit boundary. In
-        `_prefill_mode` we drop the body without parsing or writing to
-        output, since prefix material isn't part of the model's response."""
+        avoids vacuous open/close pairs at every explicit boundary."""
         if self._current is None or not self._opened:
-            self._reset_to_implicit()
-            return
-        if self._prefill_mode:
             self._reset_to_implicit()
             return
         fld = self._spec.fields[self._current]
