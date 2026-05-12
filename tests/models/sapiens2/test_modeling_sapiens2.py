@@ -20,6 +20,7 @@ from transformers import Sapiens2Config
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -277,3 +278,12 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         last_layer_patch_tokens = outputs.last_hidden_state[:, model.config.num_register_tokens + 1 :]
         expected_slice = torch.tensor([-0.0386, -0.2509, -0.0161, -0.4556, 0.5716], device=torch_device)
         torch.testing.assert_close(last_layer_patch_tokens[0, 0, :5], expected_slice, rtol=1e-4, atol=1e-4)
+
+
+@require_torch
+class Sapiens2BackboneTest(unittest.TestCase, BackboneTesterMixin):
+    all_model_classes = (Sapiens2Backbone,) if is_torch_available() else ()
+    config_class = Sapiens2Config
+
+    def setUp(self):
+        self.model_tester = Sapiens2ModelTester(self)
