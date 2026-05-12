@@ -21,7 +21,6 @@ limitations under the License.
 # GLM-OCR
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 </div>
 
@@ -42,15 +41,15 @@ The original code can be found [here](https://github.com/zai-org/GLM-OCR).
 ### Single image inference
 
 ```python
+
 from transformers import AutoProcessor, GlmOcrForConditionalGeneration
-import torch
+
 
 model_id = "zai-org/GLM-OCR"
 
 processor = AutoProcessor.from_pretrained(model_id)
 model = GlmOcrForConditionalGeneration.from_pretrained(
     model_id,
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 
@@ -81,15 +80,15 @@ print(processor.decode(output[0], skip_special_tokens=True))
 The model supports batching multiple images for efficient processing.
 
 ```python
+
 from transformers import AutoProcessor, GlmOcrForConditionalGeneration
-import torch
+
 
 model_id = "zai-org/GLM-OCR"
 
 processor = AutoProcessor.from_pretrained(model_id)
 model = GlmOcrForConditionalGeneration.from_pretrained(
     model_id,
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 
@@ -141,12 +140,12 @@ pip install -U flash-attn --no-build-isolation
 Then load the model with one of the supported kernels of the [kernels-community](https://huggingface.co/kernels-community):
 
 ```python
+
 from transformers import GlmOcrForConditionalGeneration
-import torch
+
 
 model = GlmOcrForConditionalGeneration.from_pretrained(
     "zai-org/GLM-OCR",
-    dtype=torch.bfloat16,
     attn_implementation="kernels-community/flash-attn2",  # other options: kernels-community/vllm-flash-attn3, kernels-community/paged-attention
     device_map="auto",
 )

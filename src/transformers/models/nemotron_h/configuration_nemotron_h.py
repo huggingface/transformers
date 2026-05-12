@@ -27,7 +27,7 @@ logger = logging.get_logger(__name__)
 class NemotronHConfig(PreTrainedConfig):
     r"""
     layers_block_type (`list`, *optional*):
-        Explicit list of layer types for each layer. Each element must be one of: "mamba", "attention", or "moe".
+        Explicit list of layer types for each layer. Each element must be one of: "mlp", "mamba", "attention", or "moe".
         The number of layers is determined by the length of this list.
     num_logits_to_keep (`int`, *optional*, defaults to 1):
         Number of prompt logits to calculate during generation. If `None`, all logits will be calculated.
@@ -158,20 +158,20 @@ class NemotronHConfig(PreTrainedConfig):
         # Always pop hybrid_override_pattern from kwargs to prevent it from being set as an attribute
         if "hybrid_override_pattern" in kwargs:
             pattern = kwargs.pop("hybrid_override_pattern")
-            if self.layers_block_type is None:
-                self.layers_block_type = self._pattern_to_list(pattern)
-        elif self.layers_block_type is None:
+            if self.layer_types is None:
+                self.layer_types = self._pattern_to_list(pattern)
+        elif self.layer_types is None:
             # Default layers_block_type if not provided
-            self.layers_block_type = ["mamba", "moe", "attention", "moe"]
+            self.layer_types = ["mamba", "moe", "attention", "mlp"]
 
         # Note: num_hidden_layers is deprecated and ignored if layers_block_type is explicitly provided
         # It's only kept for backward compatibility when loading old configs
         if self.num_hidden_layers is not None:
             # Warn if num_hidden_layers is provided but doesn't match layers_block_type
-            if len(self.layers_block_type) != self.num_hidden_layers:
+            if len(self.layer_types) != self.num_hidden_layers:
                 logger.warning(
                     f"num_hidden_layers ({self.num_hidden_layers}) is deprecated and doesn't match "
-                    f"layers_block_type length ({len(self.layers_block_type)}). Using layers_block_type length."
+                    f"layer_types length ({len(self.layer_types)}). Using layers_block_type length."
                 )
 
         # Backward compatibility: convert mtp_hybrid_override_pattern to mtp_layers_block_type
@@ -191,18 +191,16 @@ class NemotronHConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
     @staticmethod
-    def validate_layers_block_type(self):
+    def validate_layer_type(self):
         """
         Validate layers_block_type list.
         """
-        if not isinstance(self.layers_block_type, list):
-            raise ValueError(
-                f"`layers_block_type` must be a list of strings. Got type: {type(self.layers_block_type)}"
-            )
+        if not isinstance(self.layer_types, list):
+            raise ValueError(f"`layers_block_type` must be a list of strings. Got type: {type(self.layer_types)}")
 
-        valid_types = {"mamba", "attention", "moe"}
-        if not all(block_type in valid_types for block_type in self.layers_block_type):
-            invalid = set(self.layers_block_type) - valid_types
+        valid_types = {"mamba", "attention", "moe", "mlp"}
+        if not all(block_type in valid_types for block_type in self.layer_types):
+            invalid = set(self.layer_types) - valid_types
             raise ValueError(f"`layers_block_type` contains invalid types: {invalid}. Must be one of: {valid_types}")
 
         if self.num_nextn_predict_layers > 0:
@@ -218,7 +216,6 @@ class NemotronHConfig(PreTrainedConfig):
                     f"`mtp_layers_block_type` must be a list of strings. Got type: {type(self.mtp_layers_block_type)}"
                 )
 
-            valid_types = {"mamba", "attention", "moe"}
             if not all(block_type in valid_types for block_type in self.mtp_layers_block_type):
                 invalid = set(self.mtp_layers_block_type) - valid_types
                 raise ValueError(
@@ -261,13 +258,13 @@ class NemotronHConfig(PreTrainedConfig):
     @staticmethod
     def _list_to_pattern(layers_list: list) -> str:
         """Convert list of layer types back to pattern string (for backward compatibility)."""
-        reverse_mapping = {"mamba": "M", "moe": "E", "attention": "*"}
+        reverse_mapping = {"mamba": "M", "moe": "E", "attention": "*", "mlp": "-"}
         return "".join(reverse_mapping[layer_type] for layer_type in layers_list)
 
     @staticmethod
     def _pattern_to_list(pattern: str) -> list:
         """Convert pattern string to list of layer types (for backward compatibility)."""
-        pattern_mapping = {"M": "mamba", "E": "moe", "*": "attention"}
+        pattern_mapping = {"M": "mamba", "E": "moe", "*": "attention", "-": "mlp"}
         return [pattern_mapping[char] for char in pattern]
 
 

@@ -24,7 +24,6 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch import Tensor
 
 from ...activations import ACT2FN
 from ...backbone_utils import load_backbone
@@ -195,11 +194,11 @@ class PPOCRV5ServerRecConvLayer(nn.Module):
         self.normalization = nn.BatchNorm2d(out_channels)
         self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
 
-    def forward(self, input: Tensor) -> Tensor:
-        hidden_state = self.convolution(input)
-        hidden_state = self.normalization(hidden_state)
-        hidden_state = self.activation(hidden_state)
-        return hidden_state
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.convolution(hidden_states)
+        hidden_states = self.normalization(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        return hidden_states
 
 
 @auto_docstring
@@ -343,8 +342,8 @@ class PPOCRV5ServerRecModel(PPOCRV5ServerRecPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class PPOCRV5ServerRecForTextRecognitionOutput(BaseModelOutputWithNoAttention):
     r"""
     head_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):

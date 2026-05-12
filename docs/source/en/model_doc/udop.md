@@ -13,9 +13,6 @@ specific language governing permissions and limitations under the License.
 
 # UDOP
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -54,6 +51,7 @@ occurs. Those can be obtained using the Python Image Library (PIL) library for e
 
 ```python
 from PIL import Image
+
 
 # Document can be a png, jpg, etc. PDFs must be converted to images.
 image = Image.open(name_of_your_document).convert("RGB")

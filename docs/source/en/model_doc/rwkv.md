@@ -17,9 +17,6 @@ rendered properly in your Markdown viewer.
 
 # RWKV
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -34,14 +31,16 @@ The original code can be found [here](https://github.com/BlinkDL/RWKV-LM).
 
 ## Usage example
 
-```py
+```python
 import torch
-from transformers import AutoTokenizer, RwkvConfig, RwkvModel
 
-model = RwkvModel.from_pretrained("sgugger/rwkv-430M-pile")
+from transformers import AutoTokenizer, RwkvModel
+
+
+model = RwkvModel.from_pretrained("sgugger/rwkv-430M-pile", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("sgugger/rwkv-430M-pile")
 
-inputs = tokenizer("This is an example.", return_tensors="pt")
+inputs = tokenizer("This is an example.", return_tensors="pt").to(model.device)
 # Feed everything to the model
 outputs = model(inputs["input_ids"])
 output_whole = outputs.last_hidden_state
@@ -60,6 +59,7 @@ If you want to make sure the model stops generating when `'\n\n'` is detected, w
 
 ```python
 from transformers import StoppingCriteria
+
 
 class RwkvStoppingCriteria(StoppingCriteria):
     def __init__(self, eos_sequence = [187,187], eos_token_id = 537):

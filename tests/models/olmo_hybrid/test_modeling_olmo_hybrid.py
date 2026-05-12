@@ -26,6 +26,7 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_modeling_common import ids_tensor
 
 
 if is_torch_available():
@@ -67,6 +68,40 @@ class OlmoHybridModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("Float8 quantization + TP numerical noise exceeds match threshold")
     def test_tp_generation_quantized(self):
         pass
+
+    def test_linear_attention_multi_token_cached_forward_matches_single_token(self):
+        """
+        OLMo-Hybrid's GatedDeltaNet layers must produce the same output for a token regardless of
+        whether it's fed as a single-token cached forward or as the first token of a multi-token chunk
+        after the cache has been populated (chunked-prefill continuation / speculative verification).
+        A causal LM's logits at position `i` cannot depend on tokens at positions > `i`, even across
+        separate forward calls with a shared cache.
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config._attn_implementation = "eager"
+        model = OlmoHybridModel._from_config(config)
+        model.to(torch_device)
+        model.eval()
+
+        prefill_len = 8
+        prompt = ids_tensor((1, prefill_len), config.vocab_size).to(torch_device)
+        next_token = ids_tensor((1, 1), config.vocab_size).to(torch_device)
+
+        cache_single = OlmoHybridDynamicCache(config=config)
+        with torch.no_grad():
+            model(input_ids=prompt, past_key_values=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, past_key_values=cache_single, use_cache=True)
+        ref_first = single_out.last_hidden_state[:, 0, :]
+
+        distractors = ids_tensor((1, 7), config.vocab_size).to(torch_device)
+        multi_input = torch.cat([next_token, distractors], dim=1)
+        cache_multi = OlmoHybridDynamicCache(config=config)
+        with torch.no_grad():
+            model(input_ids=prompt, past_key_values=cache_multi, use_cache=True)
+            multi_out = model(input_ids=multi_input, past_key_values=cache_multi, use_cache=True)
+        under_test_first = multi_out.last_hidden_state[:, 0, :]
+
+        torch.testing.assert_close(under_test_first, ref_first, rtol=1e-4, atol=1e-4)
 
     # === Cache helper methods (same pattern as Qwen3Next) ===
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
