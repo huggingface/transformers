@@ -26,7 +26,8 @@ if is_torch_available():
     import torch
 
     from transformers import AutoTokenizer, ZayaConfig, ZayaForCausalLM, ZayaModel
-    from transformers.models.zaya.modeling_zaya import CCA, ZayaDynamicCache
+    from transformers.cache_utils import DynamicCache, LinearAttentionAndFullAttentionLayer
+    from transformers.models.zaya.modeling_zaya import CCA, _make_zaya_cache
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -63,6 +64,36 @@ class ZayaModelTester(CausalLMModelTester):
 class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = ZayaModelTester
     test_all_params_have_gradient = False
+
+    def _get_conv_state_shape(self, batch_size: int, config):
+        conv_state_size = config.num_key_value_heads * config.head_dim + config.num_attention_heads * config.head_dim
+        return (batch_size, conv_state_size, config.cca_time0 + config.cca_time1 - 2)
+
+    def _get_recurrent_state_shape(self, batch_size: int, config):
+        return (batch_size, config.num_key_value_heads * config.head_dim // 2)
+
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        if not isinstance(past_key_values, DynamicCache):
+            raise ValueError("The cache does not use the correct Cache")
+
+        config = config.get_text_config(decoder=True)
+        self.assertEqual(config.num_hidden_layers, len(past_key_values))
+        attention_shape = (batch_size, config.num_key_value_heads, seq_length, config.head_dim)
+        conv_shape = self._get_conv_state_shape(batch_size, config)
+        recurrent_shape = self._get_recurrent_state_shape(batch_size, config)
+
+        for layer_idx, layer in enumerate(past_key_values.layers):
+            if layer_idx % 2 == 0:
+                self.assertIs(type(layer), LinearAttentionAndFullAttentionLayer)
+                self.assertEqual(layer.keys.shape, attention_shape)
+                self.assertEqual(layer.values.shape, attention_shape)
+                self.assertEqual(layer.conv_states.shape, conv_shape)
+                self.assertEqual(layer.recurrent_states.shape, recurrent_shape)
+            else:
+                self.assertIsNone(layer.keys)
+                self.assertIsNone(layer.values)
+                self.assertIsNone(layer.conv_states)
+                self.assertIsNone(layer.recurrent_states)
 
     def is_pipeline_test_to_skip(
         self,
@@ -208,18 +239,6 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
     def test_num_layers_is_small(self):
         pass
 
-    @unittest.skip("ZAYA uses a custom cache carrying CCA convolution state in addition to KV tensors.")
-    def test_past_key_values_format(self):
-        pass
-
-    @unittest.skip("ZAYA's custom CCA cache is not a standard per-layer KV cache.")
-    def test_greedy_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("ZAYA's custom CCA cache is not a standard per-layer KV cache.")
-    def test_beam_search_generate_dict_outputs_use_cache(self):
-        pass
-
     def test_moe_router_logits(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = self.model_tester.causal_lm_class(config)
@@ -274,9 +293,8 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
 
         with torch.no_grad():
             full = cca(hidden_states, None, None)
-            cache = ZayaDynamicCache(config, batch_size=1, dtype=hidden_states.dtype, device=torch_device)
+            cache = _make_zaya_cache(config)
             cca(hidden_states[:, :4], cache, None)
-            cache.has_previous_state = True
             cached = cca(hidden_states[:, 4:], cache, None)
 
         for full_states, cached_states in zip(full, cached):
@@ -309,47 +327,38 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
 
         with torch.no_grad():
             full = cca(hidden_states, None, None)
-            cache = ZayaDynamicCache(config, batch_size=1, dtype=hidden_states.dtype, device=torch_device)
+            cache = _make_zaya_cache(config)
             cca(hidden_states[:, :3], cache, None)
-            cache.has_previous_state = True
             cached = cca(hidden_states[:, 3:], cache, None)
 
         for full_states, cached_states in zip(full, cached):
             torch.testing.assert_close(full_states[:, 3:], cached_states, rtol=1e-5, atol=1e-5)
 
-    def test_zaya_cache_batch_methods(self):
+    def test_zaya_cache_reorder_and_reset(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        cache = ZayaDynamicCache(config, batch_size=2, dtype=torch.float32, device=torch_device)
+        cache = _make_zaya_cache(config)
+        conv_state_size = config.num_key_value_heads * config.head_dim + config.num_attention_heads * config.head_dim
         cache.update_conv_state(
-            0,
-            torch.arange(2 * 2 * cache.conv_state_size, device=torch_device, dtype=torch.float32).view(
-                2, 2, cache.conv_state_size
+            torch.arange(2 * conv_state_size * 2, device=torch_device, dtype=torch.float32).view(
+                2, conv_state_size, 2
             ),
-        )
-        cache.update_prev_v2(
             0,
+        )
+        cache.update_recurrent_state(
             torch.arange(
                 2 * config.num_key_value_heads * config.head_dim // 2, device=torch_device, dtype=torch.float32
             ).view(2, config.num_key_value_heads * config.head_dim // 2),
+            0,
         )
-        self.assertEqual(cache.prev_v2[0].shape[-1], config.num_key_value_heads * config.head_dim // 2)
-
-        cache.batch_repeat_interleave(2)
-        self.assertEqual(cache.conv_states[0].shape[0], 4)
-        self.assertEqual(cache.prev_v2[0].shape[0], 4)
-
-        cache.batch_select_indices(torch.tensor([3, 1], device=torch_device))
-        self.assertEqual(cache.conv_states[0].shape[0], 2)
-        self.assertEqual(cache.prev_v2[0].shape[0], 2)
+        self.assertEqual(cache.layers[0].recurrent_states.shape[-1], config.num_key_value_heads * config.head_dim // 2)
 
         cache.reorder_cache(torch.tensor([1, 0], device=torch_device))
-        self.assertEqual(cache.batch_size, 2)
+        self.assertEqual(cache.layers[0].conv_states.shape[0], 2)
 
-        cache.has_previous_state = True
         cache.reset()
-        self.assertFalse(cache.has_previous_state)
-        self.assertEqual(cache.conv_states[0].sum().item(), 0)
-        self.assertEqual(cache.prev_v2[0].sum().item(), 0)
+        self.assertFalse(cache.has_previous_state(0))
+        self.assertEqual(cache.layers[0].conv_states.sum().item(), 0)
+        self.assertEqual(cache.layers[0].recurrent_states.sum().item(), 0)
 
 
 @require_torch

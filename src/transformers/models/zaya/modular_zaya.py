@@ -14,6 +14,7 @@
 
 """PyTorch Zaya model."""
 
+import copy
 from collections.abc import Callable
 from typing import Any, Literal
 
@@ -216,95 +217,12 @@ class ZayaRMSNorm(Qwen3MoeRMSNorm):
     pass
 
 
-class ZayaDynamicCache(DynamicCache):
-    """
-    Cache that includes both the KV cache and the CCA cache.
-    """
-
-    def __init__(
-        self,
-        config: ZayaConfig,
-        batch_size: int,
-        dtype: torch.dtype = torch.float16,
-        device: str | None = None,
-    ):
-        super().__init__()
-        self.config = config
-        self.batch_size = batch_size
-        self.dtype = dtype
-        self.device = device
-        self.conv_kernel_size = (config.cca_time0 - 1) + (config.cca_time1 - 1)
-        self.num_layers = config.num_hidden_layers
-        self.key_value_hidden_size = config.num_key_value_heads * config.head_dim
-        self.query_hidden_size = config.num_attention_heads * config.head_dim
-        self.conv_state_size = self.key_value_hidden_size + self.query_hidden_size
-        self.has_previous_state = False
-
-        self.conv_states = [None for _ in range(self.num_layers)]
-        self.prev_v2 = [None for _ in range(self.num_layers)]
-
-    def update_conv_state(self, layer_idx: int, new_conv_state: torch.Tensor) -> torch.Tensor:
-        if new_conv_state.shape[1] < self.conv_kernel_size:
-            new_conv_state = F.pad(
-                new_conv_state.transpose(1, 2), (self.conv_kernel_size - new_conv_state.shape[1], 0)
-            )
-        else:
-            new_conv_state = new_conv_state[:, -self.conv_kernel_size :, :].transpose(1, 2)
-
-        if self.conv_states[layer_idx] is None:
-            self.conv_states[layer_idx] = torch.zeros_like(new_conv_state)
-
-        if not self.has_previous_state:
-            self.conv_states[layer_idx].copy_(new_conv_state)
-        else:
-            conv_state = torch.cat([self.conv_states[layer_idx], new_conv_state], dim=-1)[
-                :, :, -self.conv_kernel_size :
-            ]
-            self.conv_states[layer_idx].copy_(conv_state)
-        return self.conv_states[layer_idx]
-
-    def update_prev_v2(self, layer_idx: int, new_prev_v2: torch.Tensor) -> torch.Tensor:
-        if self.prev_v2[layer_idx] is None:
-            self.prev_v2[layer_idx] = torch.zeros_like(new_prev_v2)
-        self.prev_v2[layer_idx].copy_(new_prev_v2)
-        return self.prev_v2[layer_idx]
-
-    def reset(self):
-        super().reset()
-        for conv_state in self.conv_states:
-            if conv_state is not None:
-                conv_state.zero_()
-        for prev_v2 in self.prev_v2:
-            if prev_v2 is not None:
-                prev_v2.zero_()
-        self.has_previous_state = False
-
-    def _reorder_auxiliary_states(self, indices: torch.LongTensor):
-        for layer_idx, conv_state in enumerate(self.conv_states):
-            if conv_state is not None:
-                self.conv_states[layer_idx] = conv_state.index_select(0, indices.to(conv_state.device))
-        for layer_idx, prev_v2 in enumerate(self.prev_v2):
-            if prev_v2 is not None:
-                self.prev_v2[layer_idx] = prev_v2.index_select(0, indices.to(prev_v2.device))
-        self.batch_size = indices.shape[0]
-
-    def reorder_cache(self, beam_idx: torch.LongTensor):
-        super().reorder_cache(beam_idx)
-        self._reorder_auxiliary_states(beam_idx)
-
-    def batch_repeat_interleave(self, repeats: int):
-        super().batch_repeat_interleave(repeats)
-        for layer_idx, conv_state in enumerate(self.conv_states):
-            if conv_state is not None:
-                self.conv_states[layer_idx] = conv_state.repeat_interleave(repeats, dim=0)
-        for layer_idx, prev_v2 in enumerate(self.prev_v2):
-            if prev_v2 is not None:
-                self.prev_v2[layer_idx] = prev_v2.repeat_interleave(repeats, dim=0)
-        self.batch_size *= repeats
-
-    def batch_select_indices(self, indices: torch.Tensor):
-        super().batch_select_indices(indices)
-        self._reorder_auxiliary_states(indices)
+def _make_zaya_cache(config: ZayaConfig) -> DynamicCache:
+    cache_config = copy.copy(config)
+    # layer_types is used to distinct the rope_type (full or swa)
+    # so need to construct a new layer_types to construct cache
+    cache_config.layer_types = ["hybrid" if layer_idx % 2 == 0 else "moe" for layer_idx in range(config.num_hidden_layers)]
+    return DynamicCache(config=cache_config)
 
 
 class CCA(nn.Module):
@@ -370,7 +288,7 @@ class CCA(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        past_key_values: ZayaDynamicCache | None,
+        past_key_values: Cache | None,
         attention_mask: torch.Tensor | None = None,
     ):
         if attention_mask is not None:
@@ -393,15 +311,18 @@ class CCA(nn.Module):
         ).mean(dim=-2)
 
         qk_states = qk_states.transpose(1, 2)
-        use_precomputed_states = past_key_values is not None and past_key_values.has_previous_state
+        use_precomputed_states = past_key_values is not None and past_key_values.has_previous_state(self.layer_number)
         if use_precomputed_states:
-            cached_qk_states = past_key_values.conv_states[self.layer_number]
+            cached_qk_states = past_key_values.layers[self.layer_number].conv_states
             conv_input = torch.cat([cached_qk_states, qk_states], dim=-1)
         else:
             conv_input = F.pad(qk_states, (self.total_padding, 0))
 
         if past_key_values is not None:
-            past_key_values.update_conv_state(layer_idx=self.layer_number, new_conv_state=qk_states.transpose(1, 2))
+            new_conv_state = qk_states[..., -self.total_padding :]
+            if new_conv_state.shape[-1] < self.total_padding:
+                new_conv_state = F.pad(new_conv_state, (self.total_padding - new_conv_state.shape[-1], 0))
+            past_key_values.update_conv_state(new_conv_state, self.layer_number)
 
         convolved_qk_states = self.conv_qk(conv_input).transpose(1, 2)
 
@@ -422,13 +343,13 @@ class CCA(nn.Module):
         value_current = self.val_proj1(hidden_states)
         projected_v2 = self.val_proj2(hidden_states)
         if use_precomputed_states:
-            first_v2 = past_key_values.prev_v2[self.layer_number].unsqueeze(1)
+            first_v2 = past_key_values.layers[self.layer_number].recurrent_states.unsqueeze(1)
         else:
             first_v2 = self.val_proj2(hidden_states.new_zeros(batch_size, 1, self.hidden_size))
         value_delayed = torch.cat([first_v2, projected_v2[:, :-1]], dim=1)
 
         if past_key_values is not None:
-            past_key_values.update_prev_v2(self.layer_number, projected_v2[:, -1, :])
+            past_key_values.update_recurrent_state(projected_v2[:, -1, :], self.layer_number)
 
         value = torch.cat([value_current, value_delayed], dim=-1).view(
             batch_size, seq_length, self.num_key_value_heads, self.head_dim
@@ -890,9 +811,7 @@ class ZayaModel(ZayaPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            past_key_values = ZayaDynamicCache(
-                self.config, inputs_embeds.shape[0], dtype=self.dtype, device=self.device
-            )
+            past_key_values = _make_zaya_cache(self.config)
 
         residual = None
 
@@ -912,7 +831,7 @@ class ZayaModel(ZayaPreTrainedModel):
         )
         if attention_mask is not None and attention_mask.ndim != 2:
             raise ValueError("ZAYA CCA requires a 2D `attention_mask` to mask padding tokens before convolution.")
-        # ZayaDynamicCache is not compileable, so generation keeps `attention_mask` as the original 2D padding mask.
+        # ZAYA's hybrid cache is not compileable, so generation keeps `attention_mask` as the original 2D padding mask.
         # CCA only needs it during multi-token prefill; single-token decoding uses the cached convolution state.
         attention_mask_2d = attention_mask[:, -inputs_embeds.shape[1] :] if attention_mask is not None else None
         if inputs_embeds.shape[1] == 1:
@@ -958,9 +877,6 @@ class ZayaModel(ZayaPreTrainedModel):
 
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
-
-        if past_key_values and not past_key_values.has_previous_state:
-            past_key_values.has_previous_state = True
 
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
@@ -1067,11 +983,6 @@ class ZayaForCausalLM(ZayaPreTrainedModel, GenerationMixin):
         logits_to_keep=None,
         **kwargs,
     ):
-        if past_key_values is not None and not isinstance(past_key_values, ZayaDynamicCache):
-            raise ValueError(
-                f"Zaya uses cache of its own and is not compatible with `past_key_values` of type {type(past_key_values)}."
-            )
-
         model_inputs = super().prepare_inputs_for_generation(
             input_ids=input_ids,
             past_key_values=past_key_values,
@@ -1096,10 +1007,7 @@ class ZayaForCausalLM(ZayaPreTrainedModel, GenerationMixin):
             return
 
         if "past_key_values" not in model_kwargs:
-            cache_batch_size = batch_size * max(generation_config.num_beams, generation_config.num_return_sequences)
-            model_kwargs["past_key_values"] = ZayaDynamicCache(
-                self.config, cache_batch_size, dtype=self.dtype, device=self.device
-            )
+            model_kwargs["past_key_values"] = _make_zaya_cache(self.config)
             generation_config.cache_implementation = None
         return super()._prepare_cache_for_generation(
             generation_config=generation_config,
