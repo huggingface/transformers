@@ -30,7 +30,6 @@ from transformers.core_model_loading import Concatenate, WeightConverter, Weight
 from transformers.integrations.hub_kernels import (
     _HUB_KERNEL_MAPPING,
     _KERNEL_MODULE_MAPPING,
-    FusedModuleBase,
     infer_kernel_fusion_transforms,
     is_kernel,
     lazy_load_kernel,
