@@ -103,7 +103,7 @@ the query is allowed to attend to. Columns past the dashed line are appended by 
 sliding-window-causal mask of shape `[S, S]` (window = 8). For `i ≥ window` the lower-left triangle is cut
 off, recovering the local-only attention pattern.
 
-<img alt="DeepSeek-V4 sliding attention mask" src="../imgs/deepseek_v4/deepseek_v4_mask_layer0_sliding_attention.svg" />
+<img alt="DeepSeek-V4 sliding attention mask" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/deepseek_v4/deepseek_v4_mask_layer0_sliding_attention.svg" />
 
 **CSA layer (`"compressed_sparse_attention"`).** The compressor flattens its per-query gathered output to
 `[B, 1, S·k, D]` and right-pads the mask by `S·k` columns. For query `t`, only the `k` slots at columns
@@ -111,14 +111,14 @@ off, recovering the local-only attention pattern.
 the first window has closed (`t < m − 1`) get nothing — the indexer's `-1` sentinel propagates straight to
 the mask. As `t` grows, more compressed entries are ready and the indexer can fill all `k` slots.
 
-<img alt="DeepSeek-V4 CSA attention mask" src="../imgs/deepseek_v4/deepseek_v4_mask_layer1_compressed_sparse_attention.svg" />
+<img alt="DeepSeek-V4 CSA attention mask" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/deepseek_v4/deepseek_v4_mask_layer1_compressed_sparse_attention.svg" />
 
 **HCA layer (`"heavily_compressed_attention"`).** No indexer — every cached compressed entry is potentially
 visible. Right-padded by `T_total = entry_count["compressor"]` columns. Query `t` may only see entry `w` once
 its source window has closed, i.e. `w < (t + 1) // m`. With `m=8` here, entries 0 (covers positions `0..7`)
 and 1 (covers `8..15`) only become visible at `t ≥ 7` and `t ≥ 15` respectively.
 
-<img alt="DeepSeek-V4 HCA attention mask" src="../imgs/deepseek_v4/deepseek_v4_mask_layer2_heavily_compressed_attention.svg" />
+<img alt="DeepSeek-V4 HCA attention mask" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/deepseek_v4/deepseek_v4_mask_layer2_heavily_compressed_attention.svg" />
 
 These diagrams are reproducible end-to-end via:
 
