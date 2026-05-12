@@ -383,6 +383,11 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "step3_vl",
     "vipllava",
     "cohere_asr",
+    "ernie",
+    "granite",
+    "granitemoehybrid",
+    "hyperclovax",
+    "olmo2",
 }
 
 for model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS:
