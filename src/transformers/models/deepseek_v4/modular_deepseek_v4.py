@@ -874,13 +874,10 @@ class DeepseekV4HyperHead(nn.Module):
 
 
 class DeepseekV4MLP(LlamaMLP):
-    def __init__(self, config: DeepseekV4Config):
-        super().__init__(config)
-        self.limit = config.swiglu_limit
-
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        gate = self.gate_proj(x).clamp(max=self.limit)
-        up = self.up_proj(x).clamp(min=-self.limit, max=self.limit)
+        limit = self.config.swiglu_limit
+        gate = self.gate_proj(x).clamp(max=limit)
+        up = self.up_proj(x).clamp(min=-limit, max=limit)
         return self.down_proj(self.act_fn(gate) * up)
 
 
@@ -921,8 +918,8 @@ class DeepseekV4Experts(MixtralExperts):
 
 class DeepseekV4TopKRouter(MixtralTopKRouter):
     def __init__(self, config: DeepseekV4Config):
-        self.config = config
         super().__init__(config)
+        self.config = config
         self.score_fn = ACT2FN[config.scoring_func]
         self.routed_scaling_factor = config.routed_scaling_factor
         self.register_buffer("e_score_correction_bias", torch.zeros(self.num_experts), persistent=True)
@@ -947,8 +944,8 @@ class DeepseekV4HashRouter(MixtralTopKRouter):
     """
 
     def __init__(self, config: DeepseekV4Config):
-        self.config = config
         super().__init__(config)
+        self.config = config
         self.score_fn = ACT2FN[config.scoring_func]
         self.routed_scaling_factor = config.routed_scaling_factor
         self.register_buffer("tid2eid", torch.zeros(config.vocab_size, self.top_k, dtype=torch.long), persistent=True)

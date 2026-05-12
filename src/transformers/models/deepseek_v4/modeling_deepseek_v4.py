@@ -990,11 +990,11 @@ class DeepseekV4MLP(nn.Module):
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
         self.act_fn = ACT2FN[config.hidden_act]
-        self.limit = config.swiglu_limit
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        gate = self.gate_proj(x).clamp(max=self.limit)
-        up = self.up_proj(x).clamp(min=-self.limit, max=self.limit)
+        limit = self.config.swiglu_limit
+        gate = self.gate_proj(x).clamp(max=limit)
+        up = self.up_proj(x).clamp(min=-limit, max=limit)
         return self.down_proj(self.act_fn(gate) * up)
 
 
