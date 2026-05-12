@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Callable
+
 import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
@@ -24,10 +26,11 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GenericForTokenClassification
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
 from ..qwen2_audio.modeling_qwen2_audio import Qwen2AudioPreTrainedModel
 from ..qwen3_omni_moe.configuration_qwen3_omni_moe import Qwen3OmniMoeAudioEncoderConfig
 from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
@@ -35,7 +38,7 @@ from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     SinusoidsPositionEmbedding,
     _get_feat_extract_output_lengths,
 )
-from ..whisper.modeling_whisper import WhisperAttention, WhisperEncoderLayer
+from ..whisper.modeling_whisper import WhisperEncoderLayer
 
 
 @auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B")
@@ -57,20 +60,27 @@ class Qwen3ASREncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
     """
 
     model_type = "qwen3_asr_audio_encoder"
+    attribute_map = {
+        "d_model": "hidden_size",
+        "encoder_attention_heads": "num_attention_heads",
+        "encoder_ffn_dim": "intermediate_size",
+    }
     encoder_layers: int = 24
-    encoder_attention_heads: int = 16
-    encoder_ffn_dim: int = 4096
-    d_model: int = 1024
+    num_attention_heads: int = 16
+    num_key_value_heads: int = 16
+    intermediate_size: int = 4096
+    hidden_size: int = 1024
     attention_bias: bool = True
     conv_chunksize = AttributeError()
+    encoder_attention_heads = AttributeError()
+    d_model = AttributeError()
+    encoder_ffn_dim = AttributeError()
 
 
 @auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B")
 @strict
 class Qwen3ASRConfig(PreTrainedConfig):
     r"""
-    score_bias (`bool`, *optional*, defaults to False):
-        Whether the token classification head for forced alignment should have a bias term.
     audio_token_id (`int`, *optional*, defaults to 151676):
         The audio token id to encode the audio prompt.
     timestamp_token_id (`int`, *optional*, defaults to 151705):
@@ -97,7 +107,6 @@ class Qwen3ASRConfig(PreTrainedConfig):
 
     audio_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
-    score_bias: bool = False
     audio_token_id: int = 151676
     timestamp_token_id: int = 151705
     pad_token_id: int = 151645
@@ -147,21 +156,48 @@ class Qwen3ASRPreTrainedModel(Qwen2AudioPreTrainedModel):
             init.copy_(module.positional_embedding, position_embeddings)
 
 
-class Qwen3ASRAttention(WhisperAttention):
+class Qwen3ASRAttention(LlamaAttention):
+    """Bidirectional multi-head attention with no RoPE"""
+
     def __init__(self, config: Qwen3ASREncoderConfig, layer_idx: int | None = None):
-        nn.Module.__init__(self)
-        self.config = config
-        self.layer_idx = layer_idx
-        self.num_heads = config.encoder_attention_heads
-        self.head_dim = config.d_model // self.num_heads
-        self.scaling = self.head_dim**-0.5
-        self.dropout = config.attention_dropout
+        super().__init__(config, layer_idx)
         self.is_causal = False
 
-        self.k_proj = nn.Linear(config.d_model, config.d_model, bias=config.attention_bias)
-        self.v_proj = nn.Linear(config.d_model, config.d_model, bias=config.attention_bias)
-        self.q_proj = nn.Linear(config.d_model, config.d_model, bias=config.attention_bias)
-        self.out_proj = nn.Linear(config.d_model, config.d_model, bias=config.attention_bias)
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        if past_key_values is not None:
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
 
 
 class Qwen3ASREncoderLayer(WhisperEncoderLayer):
@@ -462,14 +498,8 @@ class Qwen3ASRForTokenClassification(GenericForTokenClassification, Qwen3ASRPreT
     def __init__(self, config):
         super().__init__(config)
         self.model = Qwen3ASRModel(config)
-        if getattr(config, "classifier_dropout", None) is not None:
-            classifier_dropout = config.classifier_dropout
-        elif getattr(config, "hidden_dropout", None) is not None:
-            classifier_dropout = config.hidden_dropout
-        else:
-            classifier_dropout = 0.1
-        self.dropout = nn.Dropout(classifier_dropout)
-        self.score = nn.Linear(config.text_config.hidden_size, config.num_labels, bias=True)
+        self.dropout = nn.Dropout(getattr(config, "classifier_dropout", 0.1))
+        self.score = nn.Linear(config.text_config.hidden_size, config.num_labels, bias=False)
         self.post_init()
 
 

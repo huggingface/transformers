@@ -44,13 +44,14 @@ class Qwen3ASREncoderConfig(PreTrainedConfig):
     """
 
     model_type = "qwen3_asr_audio_encoder"
-    attribute_map = {"num_hidden_layers": "encoder_layers"}
+    attribute_map = {
+        "d_model": "hidden_size",
+        "encoder_attention_heads": "num_attention_heads",
+        "encoder_ffn_dim": "intermediate_size",
+    }
 
     num_mel_bins: int = 128
     encoder_layers: int = 24
-    encoder_attention_heads: int = 16
-    encoder_ffn_dim: int = 4096
-    d_model: int = 1024
     dropout: float | int = 0.0
     attention_dropout: float | int = 0.0
     activation_function: str = "gelu"
@@ -63,6 +64,10 @@ class Qwen3ASREncoderConfig(PreTrainedConfig):
     output_dim: int = 3584
     n_window_infer: int = 800
     downsample_hidden_size: int = 480
+    num_attention_heads: int = 16
+    num_key_value_heads: int = 16
+    intermediate_size: int = 4096
+    hidden_size: int = 1024
     attention_bias: bool = True
 
 
@@ -70,8 +75,6 @@ class Qwen3ASREncoderConfig(PreTrainedConfig):
 @strict
 class Qwen3ASRConfig(PreTrainedConfig):
     r"""
-    score_bias (`bool`, *optional*, defaults to False):
-        Whether the token classification head for forced alignment should have a bias term.
     audio_token_id (`int`, *optional*, defaults to 151676):
         The audio token id to encode the audio prompt.
     timestamp_token_id (`int`, *optional*, defaults to 151705):
@@ -98,7 +101,6 @@ class Qwen3ASRConfig(PreTrainedConfig):
 
     audio_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
-    score_bias: bool = False
     audio_token_id: int = 151676
     timestamp_token_id: int = 151705
     pad_token_id: int = 151645

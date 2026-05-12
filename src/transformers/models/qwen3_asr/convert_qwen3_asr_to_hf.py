@@ -81,12 +81,14 @@ STATE_DICT_MAPPING_ASR = {
     "thinker.model.": "model.language_model.",
     "thinker.lm_head.": "lm_head.",
     "thinker.": "model.",
+    ".out_proj.": ".o_proj.",
 }
 
 STATE_DICT_MAPPING_FORCED_ALIGNER = {
     "thinker.model.": "model.language_model.",
     "thinker.lm_head.": "score.",
     "thinker.": "model.",
+    ".out_proj.": ".o_proj.",
 }
 # fmt: on
 
@@ -143,6 +145,22 @@ def clean_config(src_root: Path, model_type: str) -> dict:
         # Forced aligner specific
         if model_type == "forced_aligner" and "classify_num" in thinker_config:
             config_dict["num_labels"] = thinker_config["classify_num"]
+
+    # Audio config: rename Whisper-style field names to canonical names used by Qwen3ASREncoderConfig.
+    # attribute_map only handles attribute access, not constructor kwargs, so we must rename here.
+    if "audio_config" in config_dict:
+        audio_renames = {
+            "d_model": "hidden_size",
+            "encoder_attention_heads": "num_attention_heads",
+            "encoder_ffn_dim": "intermediate_size",
+        }
+        for old_name, new_name in audio_renames.items():
+            if old_name in config_dict["audio_config"]:
+                config_dict["audio_config"][new_name] = config_dict["audio_config"].pop(old_name)
+
+        # Also set num_key_value_heads = num_attention_heads (MHA, no GQA in the encoder)
+        if "num_key_value_heads" not in config_dict["audio_config"] and "num_attention_heads" in config_dict["audio_config"]:
+            config_dict["audio_config"]["num_key_value_heads"] = config_dict["audio_config"]["num_attention_heads"]
 
     # Audio config: strip non-standard fields
     if "audio_config" in config_dict:
