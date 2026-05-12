@@ -46,7 +46,14 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import (
+    TensorType,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_torchdynamo_compiling,
+    logging,
+)
 from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoInput, VideoMetadata
@@ -68,7 +75,6 @@ from ..phi3.modeling_phi3 import (
     Phi3MLP,
 )
 from ..siglip2.modeling_siglip2 import (
-    Siglip2Attention,
     Siglip2Encoder,
     Siglip2EncoderLayer,
     Siglip2MLP,
@@ -77,8 +83,6 @@ from .configuration_molmo2 import Molmo2AdapterConfig, Molmo2Config, Molmo2TextC
 
 
 logger = logging.get_logger(__name__)
-
-
 
 
 def batch_pixels_to_patches(array: torch.Tensor, patch_size: int) -> torch.Tensor:
@@ -115,7 +119,41 @@ def arange_for_pooling(
         value=-1,
     )
     num_rows, num_cols = idx_arr.shape[0] // pool_h, idx_arr.shape[1] // pool_w
-    return idx_arr.reshape(num_rows, pool_h, num_cols, pool_w).permute(0, 2, 1, 3).reshape(num_rows, num_cols, pool_h * pool_w)
+    return (
+        idx_arr.reshape(num_rows, pool_h, num_cols, pool_w)
+        .permute(0, 2, 1, 3)
+        .reshape(num_rows, num_cols, pool_h * pool_w)
+    )
+
+
+def build_resized_image(
+    backend: "TorchvisionBackend",
+    image_chw: torch.Tensor,
+    base_image_input_size: list[int],
+    resample: PILImageResampling,
+    image_mean: list[float],
+    image_std: list[float],
+    image_patch_size: int,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    chw_resized = backend.resize(
+        image_chw,
+        size=SizeDict(height=base_image_input_size[0], width=base_image_input_size[1]),
+        resample=resample,
+        antialias=False,
+    )
+    chw_normalized = backend.rescale_and_normalize(
+        chw_resized,
+        do_rescale=True,
+        rescale_factor=1.0 / 255.0,
+        do_normalize=True,
+        image_mean=image_mean,
+        image_std=image_std,
+    )
+    resized = chw_normalized.permute(1, 2, 0).unsqueeze(0)
+    crop_patch_w = base_image_input_size[1] // image_patch_size
+    crop_patch_h = base_image_input_size[0] // image_patch_size
+    resize_idx = torch.arange(crop_patch_w * crop_patch_h, dtype=torch.int32).reshape(crop_patch_h, crop_patch_w)
+    return resized, resize_idx
 
 
 class Molmo2ImagesKwargs(ImagesKwargs, total=False):
@@ -155,29 +193,6 @@ class Molmo2ImageProcessor(TorchvisionBackend):
 
     def __init__(self, **kwargs: Unpack[Molmo2ImagesKwargs]):
         super().__init__(**kwargs)
-
-    def _build_resized_image(
-        self,
-        image_chw: torch.Tensor,
-        base_image_input_size: list[int],
-        resample: PILImageResampling,
-        image_mean: list[float],
-        image_std: list[float],
-        image_patch_size: int,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        chw_resized = self.resize(
-            image_chw,
-            size=SizeDict(height=base_image_input_size[0], width=base_image_input_size[1]),
-            resample=resample,
-            antialias=False,
-        )
-        chw_float = self.rescale(chw_resized.float(), scale=1.0 / 255.0)
-        chw_normalized = self.normalize(chw_float, mean=image_mean, std=image_std)
-        resized = chw_normalized.permute(1, 2, 0).unsqueeze(0)
-        crop_patch_w = base_image_input_size[1] // image_patch_size
-        crop_patch_h = base_image_input_size[0] // image_patch_size
-        resize_idx = torch.arange(crop_patch_w * crop_patch_h, dtype=torch.int32).reshape(crop_patch_h, crop_patch_w)
-        return resized, resize_idx
 
     def _build_overlapping_crops(
         self,
@@ -219,8 +234,14 @@ class Molmo2ImageProcessor(TorchvisionBackend):
             resample=resample,
             antialias=False,
         )
-        chw_float = self.rescale(chw_resized.float(), scale=1.0 / 255.0)
-        chw_normalized = self.normalize(chw_float, mean=image_mean, std=image_std)
+        chw_normalized = self.rescale_and_normalize(
+            chw_resized,
+            do_rescale=True,
+            rescale_factor=1.0 / 255.0,
+            do_normalize=True,
+            image_mean=image_mean,
+            image_std=image_std,
+        )
         src = chw_normalized.permute(1, 2, 0)  # → HWC
 
         n_crops = tiling_h * tiling_w
@@ -293,7 +314,8 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         num_patch_rows, num_patch_cols = pooling_idx.shape[:2]
         pooling_idx = pooling_idx.reshape([-1, pooling_h * pooling_w])
 
-        resized, resize_idx = self._build_resized_image(
+        resized, resize_idx = build_resized_image(
+            self,
             image_chw,
             base_image_input_size,
             resample,
@@ -490,8 +512,6 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         return resized_h * resized_w + num_patch_rows_high * num_patch_cols_high
 
 
-
-
 class Molmo2VideosKwargs(VideosKwargs, total=False):
     """
     patch_size (`int`, *optional*):
@@ -558,29 +578,6 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         num_frames = max(min(num_frames, metadata.total_num_frames), 1)
         return super().sample_frames(metadata=metadata, num_frames=num_frames)
 
-    def _build_resized_image(
-        self,
-        image_chw: torch.Tensor,
-        base_image_input_size: list[int],
-        resample: PILImageResampling,
-        image_mean: list[float],
-        image_std: list[float],
-        image_patch_size: int,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        chw_resized = self.resize(
-            image_chw,
-            size=SizeDict(height=base_image_input_size[0], width=base_image_input_size[1]),
-            resample=resample,
-            antialias=False,
-        )
-        chw_float = self.rescale(chw_resized.float(), scale=1.0 / 255.0)
-        chw_normalized = self.normalize(chw_float, mean=image_mean, std=image_std)
-        resized = chw_normalized.permute(1, 2, 0).unsqueeze(0)
-        crop_patch_w = base_image_input_size[1] // image_patch_size
-        crop_patch_h = base_image_input_size[0] // image_patch_size
-        resize_idx = torch.arange(crop_patch_w * crop_patch_h, dtype=torch.int32).reshape(crop_patch_h, crop_patch_w)
-        return resized, resize_idx
-
     def _build_frame_patches(
         self,
         frame_chw: torch.Tensor,
@@ -592,8 +589,8 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         image_pooling_h: int,
         image_pooling_w: int,
     ) -> tuple[list[int], torch.Tensor, torch.Tensor]:
-        hwc, resize_idx = self._build_resized_image(
-            frame_chw, base_image_input_size, resample, image_mean, image_std, image_patch_size
+        hwc, resize_idx = build_resized_image(
+            self, frame_chw, base_image_input_size, resample, image_mean, image_std, image_patch_size
         )
         pooling_idx = arange_for_pooling(resize_idx, image_pooling_h, image_pooling_w)
         num_patch_rows, num_patch_cols = pooling_idx.shape[:2]
@@ -649,8 +646,6 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
             "video_grids": torch.stack(batch_grids, 0),
         }
         return BatchFeature(data, tensor_type=return_tensors)
-
-
 
 
 IMAGE_PATCH_TOKEN = "<im_patch>"
@@ -833,10 +828,20 @@ class Molmo2Processor(ProcessorMixin):
 
         if images is not None:
             image_counts = [sample.count(self.image_token) for sample in text]
-            if sum(image_counts) == 0:
-                image_counts = [1] * len(text)
             fetched_images = self.image_processor.fetch_images(images)
             batched_images = make_nested_list_of_images(fetched_images)
+            if sum(image_counts) == 0:
+                if len(batched_images) == len(text):
+                    image_counts = [len(sample_images) for sample_images in batched_images]
+                else:
+                    flat_images = make_flat_list_of_images(fetched_images)
+                    if len(flat_images) != len(text):
+                        raise ValueError(
+                            f"The number of images ({len(flat_images)}) does not match the batch size "
+                            f"({len(text)}). Please provide image placeholder tokens in text or pass a nested "
+                            "list of images per sample."
+                        )
+                    image_counts = [1] * len(text)
             if len(batched_images) != len(text) and len(batched_images) == 1:
                 flat_images = make_flat_list_of_images(fetched_images)
                 if len(flat_images) != sum(image_counts):
@@ -900,7 +905,9 @@ class Molmo2Processor(ProcessorMixin):
                             f"provided or could not be inferred. Defaulting to `fps={metadata.fps}`. Please provide "
                             "`video_metadata` for more accurate timestamps."
                         )
-                    text[i] = text[i].replace(self.video_token, self.get_video_string(video_grid, metadata.timestamps), 1)
+                    text[i] = text[i].replace(
+                        self.video_token, self.get_video_string(video_grid, metadata.timestamps), 1
+                    )
                 index += num_videos
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
@@ -916,7 +923,6 @@ class Molmo2Processor(ProcessorMixin):
         )
 
 
-
 # Output dataclasses - same structure as LLaVA
 class Molmo2CausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
     pass
@@ -926,51 +932,66 @@ class Molmo2ModelOutputWithPast(LlavaModelOutputWithPast):
     pass
 
 
-
-
 class Molmo2VisionMLP(Siglip2MLP):
     pass
 
 
-class Molmo2VisionAttention(Siglip2Attention):
-    """Vision attention with GQA support."""
-
-    def __init__(self, config):
-        nn.Module.__init__(self)
+class Molmo2GQAAttention(nn.Module):
+    def __init__(
+        self,
+        hidden_size: int,
+        num_heads: int,
+        num_key_value_heads: int,
+        head_dim: int,
+        input_dim: int | None = None,
+        attention_dropout: float = 0.0,
+        attn_implementation: str | None = None,
+        config: PreTrainedConfig | None = None,
+    ):
+        super().__init__()
         self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.num_key_value_heads = config.num_key_value_heads
+        self.hidden_size = hidden_size
+        self.embed_dim = hidden_size
+        self.num_heads = num_heads
+        self.head_dim = head_dim
+        self.num_key_value_heads = num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.head_dim = config.head_dim
         self.scale = self.head_dim**-0.5
-        self.dropout = config.attention_dropout
+        self.dropout = attention_dropout
+        self.attention_dropout = attention_dropout
+        self.attn_implementation = attn_implementation
         self.is_causal = False
 
-        self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim)
-        self.k_proj = nn.Linear(self.embed_dim, self.num_key_value_heads * self.head_dim)
-        self.v_proj = nn.Linear(self.embed_dim, self.num_key_value_heads * self.head_dim)
-        self.out_proj = nn.Linear(self.num_heads * self.head_dim, self.embed_dim)
+        input_dim = hidden_size if input_dim is None else input_dim
+        self.q_proj = nn.Linear(input_dim, self.num_heads * self.head_dim)
+        self.k_proj = nn.Linear(input_dim, self.num_key_value_heads * self.head_dim)
+        self.v_proj = nn.Linear(input_dim, self.num_key_value_heads * self.head_dim)
+        self.out_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
+        key_value_states: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        batch_size, seq_length, _ = hidden_states.shape
+        key_states = hidden_states if key_value_states is None else key_value_states
+        value_states = hidden_states if key_value_states is None else key_value_states
 
+        batch_size = hidden_states.shape[0]
         queries = self.q_proj(hidden_states)
-        keys = self.k_proj(hidden_states)
-        values = self.v_proj(hidden_states)
+        keys = self.k_proj(key_states)
+        values = self.v_proj(value_states)
 
-        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        keys = keys.view(batch_size, seq_length, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        values = values.view(batch_size, seq_length, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        queries = queries.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        keys = keys.view(batch_size, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        values = values.view(batch_size, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
+        attn_implementation = self.config._attn_implementation if self.config is not None else self.attn_implementation
+        if attn_implementation is None or attn_implementation == "eager":
+            attention_interface: Callable = eager_attention_forward
+        else:
+            attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(attn_implementation, eager_attention_forward)
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -983,7 +1004,7 @@ class Molmo2VisionAttention(Siglip2Attention):
             dropout=0.0 if not self.training else self.dropout,
         )
 
-        attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
+        attn_output = attn_output.reshape(batch_size, -1, self.num_heads * self.head_dim).contiguous()
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights
@@ -992,80 +1013,16 @@ class Molmo2VisionAttention(Siglip2Attention):
 class Molmo2VisionEncoderLayer(Siglip2EncoderLayer):
     def __init__(self, config: Molmo2VitConfig):
         super().__init__(config)
-        self.self_attn = Molmo2VisionAttention(config)
+        self.self_attn = Molmo2GQAAttention(
+            hidden_size=config.hidden_size,
+            num_heads=config.num_attention_heads,
+            num_key_value_heads=config.num_key_value_heads,
+            head_dim=config.head_dim,
+            attention_dropout=config.attention_dropout,
+            attn_implementation=config._attn_implementation,
+            config=config,
+        )
         self.mlp = Molmo2VisionMLP(config)
-
-
-class Molmo2PoolingAttention(nn.Module):
-    """Cross-attention module used for image feature pooling in the vision adapter."""
-
-    def __init__(
-        self,
-        hidden_size: int,
-        num_heads: int,
-        num_key_value_heads: int,
-        head_dim: int,
-        input_dim: int,
-        attention_dropout: float = 0.0,
-        attn_implementation: str = "eager",
-    ):
-        super().__init__()
-        self.hidden_size = hidden_size
-        self.num_heads = num_heads
-        self.head_dim = head_dim
-        self.num_key_value_heads = num_key_value_heads
-        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.scale = self.head_dim**-0.5
-        self.attn_implementation = attn_implementation
-        self.is_causal = False
-
-        self.q_proj = nn.Linear(input_dim, self.num_heads * self.head_dim, bias=True)
-        self.k_proj = nn.Linear(input_dim, self.num_key_value_heads * self.head_dim, bias=True)
-        self.v_proj = nn.Linear(input_dim, self.num_key_value_heads * self.head_dim, bias=True)
-        self.out_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size)
-        self.attention_dropout = attention_dropout
-
-    def forward(
-        self,
-        inputs_q: torch.Tensor,
-        inputs_kv: torch.Tensor | None = None,
-        attn_mask: torch.Tensor | None = None,
-    ) -> torch.Tensor:
-        if inputs_kv is not None:
-            inputs_k = inputs_kv
-            inputs_v = inputs_kv
-        else:
-            inputs_k = inputs_q
-            inputs_v = inputs_q
-
-        batch_size = inputs_q.shape[0]
-        queries = self.q_proj(inputs_q)
-        keys = self.k_proj(inputs_k)
-        values = self.v_proj(inputs_v)
-
-        queries = queries.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        keys = keys.view(batch_size, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        values = values.view(batch_size, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.attn_implementation, eager_attention_forward
-        )
-
-        attn_output, _ = attention_interface(
-            self,
-            queries,
-            keys,
-            values,
-            attn_mask,
-            is_causal=self.is_causal,
-            scaling=self.scale,
-            dropout=0.0 if not self.training else self.attention_dropout,
-        )
-
-        attn_output = attn_output.reshape(batch_size, -1, self.num_heads * self.head_dim).contiguous()
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output
 
 
 class Molmo2VisionEncoder(Siglip2Encoder):
@@ -1081,7 +1038,7 @@ class Molmo2VisionModel(PreTrainedModel):
     _supports_flash_attn = True
     _can_record_outputs = {
         "hidden_states": Molmo2VisionEncoderLayer,
-        "attentions": Molmo2VisionAttention,
+        "attentions": Molmo2GQAAttention,
     }
 
     def _init_weights(self, module):
@@ -1140,14 +1097,17 @@ class Molmo2VisionModel(PreTrainedModel):
         return x
 
     @capture_outputs(tie_last_hidden_states=False)
-    def forward(self, x: torch.Tensor, patch_num: tuple[int, int] | None = None, **kwargs) -> BaseModelOutputWithPooling:
+    def forward(
+        self, x: torch.Tensor, patch_num: tuple[int, int] | None = None, **kwargs
+    ) -> BaseModelOutputWithPooling:
         """
         : param x: (batch_size, num_patch, n_pixels)
         """
         if patch_num is None:
             patch_num = self.config.image_num_patch
 
-        x = self.patch_embedding(x)
+        target_dtype = self.patch_embedding.weight.dtype
+        x = self.patch_embedding(x.to(dtype=target_dtype))
 
         # class embeddings and positional embeddings
         x = self.add_pos_emb(x, patch_num)
@@ -1158,8 +1118,6 @@ class Molmo2VisionModel(PreTrainedModel):
             last_hidden_state=last_hidden_state,
             pooler_output=last_hidden_state.mean(dim=1),
         )
-
-
 
 
 class Molmo2ImageProjectorMLP(nn.Module):
@@ -1183,14 +1141,15 @@ class Molmo2VisionBackbone(nn.Module):
         self.image_vit = Molmo2VisionModel(vit_config)
 
         pool_dim = vit_config.hidden_size * len(adapter_config.vit_layers)
-        self.image_pooling_2d = Molmo2PoolingAttention(
+        self.image_pooling_2d = Molmo2GQAAttention(
             hidden_size=adapter_config.hidden_size,
             num_heads=adapter_config.num_attention_heads,
             num_key_value_heads=adapter_config.num_key_value_heads,
             head_dim=adapter_config.head_dim,
             input_dim=pool_dim,
             attention_dropout=adapter_config.attention_dropout,
-            attn_implementation=adapter_config._attn_implementation or "eager",
+            attn_implementation=adapter_config._attn_implementation,
+            config=adapter_config,
         )
         self.image_projector = Molmo2ImageProjectorMLP(adapter_config)
         self.image_feature_dropout = nn.Dropout(adapter_config.image_feature_dropout)
@@ -1244,14 +1203,12 @@ class Molmo2VisionBackbone(nn.Module):
         else:
             attn_mask = None
             query = to_pool.mean(-2, keepdim=True)
-        pooled_features = self.image_pooling_2d(query, to_pool, attn_mask=attn_mask)
+        pooled_features, _ = self.image_pooling_2d(query, to_pool, attention_mask=attn_mask)
         pooled_features = pooled_features.reshape([batch_size, -1, pooled_features.shape[-1]])
 
         # MLP layer to map the feature.
         pooled_features = self.image_projector(pooled_features)
         return pooled_features.view(-1, pooled_features.shape[-1])[valid_token.flatten()]
-
-
 
 
 class Molmo2RotaryEmbedding(LlamaRotaryEmbedding):
@@ -1367,9 +1324,9 @@ class Molmo2Attention(Olmo2Attention):
             cache_kwargs = {"sin": sin, "cos": cos}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attention_interface: Callable = eager_attention_forward
-        if (self.config._attn_implementation or "eager") != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -1498,8 +1455,6 @@ class Molmo2Embedding(nn.Module):
         return F.embedding(x, torch.cat([self.embedding, self.new_embedding], dim=0))
 
 
-
-
 class Molmo2PreTrainedModel(LlamaPreTrainedModel):
     config: Molmo2Config
     base_model_prefix = "model"
@@ -1508,7 +1463,7 @@ class Molmo2PreTrainedModel(LlamaPreTrainedModel):
         "Molmo2DecoderLayer",
         "Molmo2PostNormDecoderLayer",
         "Molmo2VisionEncoderLayer",
-        "Molmo2VisionAttention",
+        "Molmo2GQAAttention",
     ]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
@@ -1573,15 +1528,9 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
             [decoder_layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = Molmo2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
-        if config.rope_scaling_layers is not None:
-            self.rotary_embs = nn.ModuleDict(
-                {
-                    "default": Molmo2RotaryEmbedding(config, rope_type="default"),
-                    "scaling": Molmo2RotaryEmbedding(config),
-                }
-            )
-        else:
-            self.rotary_emb = Molmo2RotaryEmbedding(config)
+        self.rotary_embs = nn.ModuleDict({"default": Molmo2RotaryEmbedding(config, rope_type="default")})
+        if config.rope_scaling_layers:
+            self.rotary_embs["scaling"] = Molmo2RotaryEmbedding(config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -1637,32 +1586,17 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
 
         hidden_states = inputs_embeds
 
-        # create position embeddings to be shared across the decoder layers
-        if self.config.rope_scaling_layers is not None:
-            position_embeddings_mapping = {
-                "default": self.rotary_embs["default"](hidden_states, position_ids),
-                "scaling": self.rotary_embs["scaling"](hidden_states, position_ids),
-            }
-        else:
-            position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = {key: self.rotary_embs[key](hidden_states, position_ids) for key in self.rotary_embs}
 
         for layer_idx, decoder_block in enumerate(self.blocks[: self.config.num_hidden_layers]):
-            if self.config.rope_scaling_layers is not None:
-                position_embeddings_i = (
-                    position_embeddings_mapping["scaling"]
-                    if layer_idx in self.config.rope_scaling_layers
-                    else position_embeddings_mapping["default"]
-                )
-            else:
-                position_embeddings_i = position_embeddings
-
+            rope_key = "scaling" if layer_idx in self.config.rope_scaling_layers else "default"
             hidden_states = decoder_block(
                 hidden_states,
                 attention_mask=causal_mask_mapping,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                position_embeddings=position_embeddings_i,
+                position_embeddings=position_embeddings[rope_key],
                 **kwargs,
             )
 
@@ -1810,7 +1744,11 @@ class Molmo2Model(Molmo2PreTrainedModel):
         if images is not None:
             image_features = self.vision_backbone(images, token_pooling)
             is_image_patch = input_ids.view(-1) == self.config.image_patch_id
-            assert is_image_patch.sum() == len(image_features)
+            if not is_torchdynamo_compiling() and is_image_patch.sum() != len(image_features):
+                raise ValueError(
+                    f"Image features and image tokens do not match: tokens: {is_image_patch.sum()}, "
+                    f"features: {len(image_features)}"
+                )
             x.view(-1, x.shape[-1])[is_image_patch] += image_features
 
         # shape: (batch_size, seq_len, d_model)
@@ -1894,7 +1832,6 @@ class Molmo2Model(Molmo2PreTrainedModel):
 
 
 class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {"lm_head.weight": "model.language_model.wte.weight"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
