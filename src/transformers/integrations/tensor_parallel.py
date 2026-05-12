@@ -781,12 +781,9 @@ class ReplicatedWithGradAllReduce(TensorParallelLayer):
 
 
 class AllReduceParallel(TensorParallelLayer):
-    """
-    Marker layer: parameters (if any) are replicated; the forward output is all-reduced
-    across the TP mesh. Use as a no-op `nn.Identity` placed at a sync point after a
-    colwise-sharded compute that ends in a head-axis (or similar) reduction, so each
-    rank holds only a partial sum and needs to share it before the next dependent op
-    (e.g. the lightning indexer's score sum before its top-k).
+    """All-reduce a module's forward output across the TP mesh. Use as a declarative
+    sync point at the boundary of a multi-arg module whose compute ends in a partial
+    sum (e.g. the lightning indexer's score sum before its top-k).
     """
 
     def _prepare_input_fn(self, mod, inputs, device_mesh):

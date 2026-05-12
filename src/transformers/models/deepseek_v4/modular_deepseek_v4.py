@@ -101,17 +101,15 @@ class DeepseekV4RotaryEmbedding(LagunaRotaryEmbedding):
         # `rope_type` key that ``convert_rope_params_to_dict`` may leave on
         # ``config.rope_parameters`` is a flat-shape leftover, not a layer.
         self.layer_types = [k for k, v in config.rope_parameters.items() if isinstance(v, dict)]
-        self.rope_type = {}
+        self.rope_type: dict[str, str] = {}
+        self.attention_scaling: dict[str, float] = {}
         for layer_type in self.layer_types:
             rope_params = config.rope_parameters[layer_type]
             self.rope_type[layer_type] = rope_params["rope_type"]
             rope_init_fn = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            # V4 emits unit-magnitude cos/sin (no YaRN `attention_factor` scaling) —
-            # discard `rope_init_fn`'s scaling factor and emit raw `freqs.cos()` / `freqs.sin()`
-            # in `forward`.
-            inv_freq, _ = rope_init_fn(config, layer_type=layer_type)
+            inv_freq, self.attention_scaling[layer_type] = rope_init_fn(config, layer_type=layer_type)
             self.register_buffer(f"{layer_type}_inv_freq", inv_freq, persistent=False)
             self.register_buffer(f"{layer_type}_original_inv_freq", inv_freq.clone(), persistent=False)
 
@@ -125,10 +123,11 @@ class DeepseekV4RotaryEmbedding(LagunaRotaryEmbedding):
         inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        scaling = self.attention_scaling[layer_type]
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            cos = freqs.cos()
-            sin = freqs.sin()
+            cos = freqs.cos() * scaling
+            sin = freqs.sin() * scaling
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
@@ -383,13 +382,7 @@ class DeepseekV4HCACompressor(nn.Module):
 
 
 class DeepseekV4IndexerScorer(nn.Module):
-    r"""Lightning-indexer scoring head: `∑_h w_{t,h} · ReLU(q_{t,h} · K^IComp_s)`.
-
-    Owns `weights_proj` and is the boundary the EP plan attaches to. Under TP/EP
-    `weights_proj` is colwise-sharded and the head-sum is a per-rank partial; the
-    plan entry `"...indexer.scorer": "all_reduce"` adds a forward output hook that
-    sums the partials across the EP mesh so every rank picks the same top-k.
-    """
+    r"""Lightning-indexer scoring head: `∑_h w_{t,h} · ReLU(q_{t,h} · K^IComp_s)`."""
 
     def __init__(self, config: DeepseekV4Config):
         super().__init__()
@@ -881,14 +874,17 @@ class DeepseekV4HyperHead(nn.Module):
 
 
 class DeepseekV4MLP(LlamaMLP):
+    def __init__(self, config: DeepseekV4Config):
+        super().__init__(config)
+        self.limit = config.swiglu_limit
+
+    def _apply_gate(self, gate: torch.Tensor, up: torch.Tensor) -> torch.Tensor:
+        gate = gate.clamp(max=self.limit)
+        up = up.clamp(min=-self.limit, max=self.limit)
+        return self.act_fn(gate) * up
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        gate = self.gate_proj(x)
-        up = self.up_proj(x)
-        limit = self.config.swiglu_limit
-        if limit > 0:
-            gate = gate.clamp(max=limit)
-            up = up.clamp(min=-limit, max=limit)
-        return self.down_proj(self.act_fn(gate) * up)
+        return self.down_proj(self._apply_gate(self.gate_proj(x), self.up_proj(x)))
 
 
 @use_experts_implementation
