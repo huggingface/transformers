@@ -129,9 +129,7 @@ class DeepseekV4Config(PreTrainedConfig):
         # so every rank sees the same `index_scores` and picks the same top-k.
         "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
-        "layers.*.mlp.experts.gate_up_proj_scale_inv": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts.down_proj_scale_inv": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.self_attn.compressor.indexer.q_b_proj": "colwise",
         "layers.*.self_attn.compressor.indexer.scorer.weights_proj": "colwise",

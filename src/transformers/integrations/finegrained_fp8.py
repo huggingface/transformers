@@ -743,10 +743,10 @@ def replace_with_fp8_linear(
                     has_bias=module.bias is not None,
                     **module_kwargs,
                 )
-            elif isinstance(module, nn.Linear) and hasattr(module, "n_groups"):
-                # Block-diagonal grouped linear (DSv4's `DeepseekV4GroupedLinear` —
+            elif isinstance(module, nn.Linear) and "GroupedLinear" in type(module).__name__:
+                # Block-diagonal grouped linear (e.g. DSv4's `DeepseekV4GroupedLinear`):
                 # one underlying weight conceptually split into `n_groups` independent
-                # sub-matmuls fed by disjoint input slices). Vanilla `FP8Linear` would
+                # sub-matmuls fed by disjoint input slices. Vanilla `FP8Linear` would
                 # collapse those groups into one giant linear and yield the wrong
                 # output dim, so swap to `FP8GroupedLinear` which keeps the per-group
                 # bmm contract and runs each block as its own FP8 matmul.

@@ -992,13 +992,10 @@ class DeepseekV4MLP(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
         self.limit = config.swiglu_limit
 
-    def _apply_gate(self, gate: torch.Tensor, up: torch.Tensor) -> torch.Tensor:
-        gate = gate.clamp(max=self.limit)
-        up = up.clamp(min=-self.limit, max=self.limit)
-        return self.act_fn(gate) * up
-
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.down_proj(self._apply_gate(self.gate_proj(x), self.up_proj(x)))
+        gate = self.gate_proj(x).clamp(max=self.limit)
+        up = self.up_proj(x).clamp(min=-self.limit, max=self.limit)
+        return self.down_proj(self.act_fn(gate) * up)
 
 
 @use_experts_implementation
