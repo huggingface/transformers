@@ -53,11 +53,11 @@ class DeepseekV4RMSNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        dtype = hidden_states.dtype
-        hidden_states = hidden_states.float()
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return (self.weight.float() * hidden_states).to(dtype)
+        return self.weight * hidden_states.to(input_dtype)
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
@@ -429,26 +429,20 @@ class DeepseekV4HCACompressor(nn.Module):
             compressed = cache_layer.update_compressor_states("compressor", compressed)
         compressed_kv = compressed.unsqueeze(1)
 
-        # Per-query readiness mask: entry `w` summarizes positions `[w*m, (w+1)*m - 1]`,
-        # so query `t` may only see it once its window has closed — i.e., `w < (t+1) // m`.
-        # The Ca/Cb-style padding inside the compressor only handles cross-call continuity;
-        # within-prefill causality (multiple entries emitted at once) still needs this bias.
-        # Fast path for S=1 (decode) / empty cache: a window only emits an entry once its
-        # last source token has been seen, so every cached entry is causal for any single
-        # decode query. Return `None` so the caller right-pads with 0.0 instead of building
-        # an all-zero `[B, 1, 1, T]` mask.
-        T_total = compressed_kv.shape[2]
+        compressed_len = compressed_kv.shape[2]
         seq_len = position_ids.shape[1]
-        if seq_len == 1 or T_total == 0:
+        if seq_len == 1 or compressed_len == 0:
             return compressed_kv, None
 
-        # Prefill: in-place `masked_fill_` on a pre-allocated zeros buffer avoids the
-        # bool intermediate + scalar tensors that `torch.where(bool, 0, -inf)` materialises.
-        block_idx = torch.arange(T_total, device=compressed_kv.device)
-        causal_threshold = (position_ids + 1) // self.compress_rate  # [B, S]
-        block_bias = compressed_kv.new_zeros((batch, 1, seq_len, T_total))
-        block_bias.masked_fill_(
-            block_idx.view(1, 1, 1, -1) >= causal_threshold.unsqueeze(1).unsqueeze(-1),
+        # Query at absolute position `t` may only attend to compressed entry `w` once
+        # that entry's source window has closed, i.e. `w * compress_rate + (compress_rate - 1) <= t`,
+        # equivalently `w < (t + 1) // compress_rate`. Build the additive bias straight
+        # from that comparison.
+        entry_indices = torch.arange(compressed_len, device=compressed_kv.device)
+        causal_threshold = (position_ids + 1) // self.compress_rate  # [batch, seq_len]
+        block_bias = compressed_kv.new_zeros((batch, 1, seq_len, compressed_len))
+        block_bias = block_bias.masked_fill(
+            entry_indices.view(1, 1, 1, -1) >= causal_threshold.unsqueeze(1).unsqueeze(-1),
             float("-inf"),
         )
         return compressed_kv, block_bias
@@ -560,29 +554,34 @@ class DeepseekV4Indexer(nn.Module):
         q = apply_rotary_pos_emb(q, cos_q, sin_q).transpose(1, 2)
 
         # ReLU(q·kᵀ) * weights, then top-k
-        scores = torch.matmul(q.float(), compressed_kv.transpose(-1, -2).float().unsqueeze(1))  # [B, S, H, T]
+        scores = torch.matmul(
+            q.float(), compressed_kv.transpose(-1, -2).float().unsqueeze(1)
+        )  # [batch, seq_len, n_heads, compressed_len]
         scores = F.relu(scores) * self.softmax_scale
-        weights = self.weights_proj(hidden_states).float() * self.weights_scaling  # [B, S, H]
-        index_scores = (scores * weights.unsqueeze(-1)).sum(dim=2)  # [B, S, T]
-        T = compressed_kv.shape[1]
-        topk = min(self.index_topk, T)
+        weights = self.weights_proj(hidden_states).float() * self.weights_scaling  # [batch, seq_len, n_heads]
+        index_scores = (scores * weights.unsqueeze(-1)).sum(dim=2)  # [batch, seq_len, compressed_len]
+        compressed_len = compressed_kv.shape[1]
+        top_k = min(self.index_topk, compressed_len)
 
-        # not all queries can attend to the compressed entries. If a query's position
-        # is small than the relative position of the key (say m=4, query 2 cannot attend
-        # to compressed key at position 4, because it compressed info for states at position
-        # 12 to 16. Thus we need to make sure that top_k does not land in that range.
-        # Picks that still point past `causal_threshold` (early queries with too few ready
-        # blocks) are replaced with a `-1` sentinel that the compresser treats as invalid.
-        if compressed_kv.shape[1] > 0:
-            causal_threshold = (position_ids + 1) // self.compress_rate  # [B, S]
-            block_idx = torch.arange(T, device=index_scores.device)
-            future_mask = block_idx.view(1, 1, -1) >= causal_threshold.unsqueeze(-1)  # [B, S, T]
+        # Not every query can causally attend to every compressed entry: with m=4, query
+        # 2 may not see compressed entry 1 (which summarises source positions 4..7 — those
+        # are future tokens for q2). The causal-readiness rule is `w < (t + 1) // m`. We
+        # first mask future entries with -inf so top-k can't pick them, then post-filter
+        # the picks: anything still >= the threshold gets a -1 sentinel that the gather
+        # path in :class:`DeepseekV4CSACompressor` treats as invalid (its `block_bias`
+        # marks the slot as `-inf` and the cell appears red in the visualiser).
+        if compressed_len > 0:
+            causal_threshold = (position_ids + 1) // self.compress_rate  # [batch, seq_len]
+            entry_indices = torch.arange(compressed_len, device=index_scores.device)
+            future_mask = entry_indices.view(1, 1, -1) >= causal_threshold.unsqueeze(
+                -1
+            )  # [batch, seq_len, compressed_len]
             index_scores = index_scores.masked_fill(future_mask, float("-inf"))
-            topk_idxs = index_scores.topk(topk, dim=-1).indices  # [B, S, k]
-            invalid = topk_idxs >= causal_threshold.unsqueeze(-1)
-            return torch.where(invalid, torch.full_like(topk_idxs, -1), topk_idxs)
+            top_k_indices = index_scores.topk(top_k, dim=-1).indices  # [batch, seq_len, top_k]
+            invalid = top_k_indices >= causal_threshold.unsqueeze(-1)
+            return torch.where(invalid, torch.full_like(top_k_indices, -1), top_k_indices)
 
-        return index_scores.topk(topk, dim=-1).indices
+        return index_scores.topk(top_k, dim=-1).indices
 
 
 class DeepseekV4CSACompressor(nn.Module):
@@ -683,30 +682,36 @@ class DeepseekV4CSACompressor(nn.Module):
         compressed_kv = compressed.unsqueeze(1)
 
         # Lightning Indexer: gather top-`index_topk` compressed entries per query.
-        # in some cases, the output index can return top-k positions that should not be attended to.
-        # Ex: for query at index 5, m=4, and `index_topk=1024`, 1024 index are return but only 2 should be
-        # attended to. The indexer marks the rest with `-1`; we clamp before the gather and keep the `valid`
-        # to drop them from the per-query block mask afterwards.
-        topk = self.indexer(hidden_states, q_residual, position_ids, past_key_values, layer_idx)  # [B, S, k]
-        k = topk.shape[-1]
-        T = compressed_kv.shape[2]
-        valid = topk >= 0  # [B, S, k]
-        # Flatten (B, T) into one row axis and shift picks by `b * T`, then index_select once.
-        # Same kernel as an embedding lookup — cheaper than `gather` over an expanded view.
-        safe_topk = topk.clamp(min=0)
-        offsets = (torch.arange(batch, device=compressed_kv.device) * T).view(batch, 1, 1)
-        flat_idx = (safe_topk + offsets).view(-1)  # [B*S*k]
-        flat_kv = compressed_kv.reshape(batch * T, self.head_dim)
-        gathered = flat_kv.index_select(0, flat_idx).view(batch, 1, -1, self.head_dim)  # [B, 1, S*k, D]
+        # The indexer can return slots that aren't causally usable yet — for query t=5
+        # with m=4 and index_topk=1024, only 2 of the 1024 picks are valid. The indexer
+        # has marked the rest with `-1`; here we clamp those to 0 for the gather and use
+        # the original sign as the `valid` mask, which feeds the per-query block_bias.
+        top_k_indices = self.indexer(
+            hidden_states, q_residual, position_ids, past_key_values, layer_idx
+        )  # [batch, seq_len, top_k]
+        top_k = top_k_indices.shape[-1]
+        compressed_len = compressed_kv.shape[2]
+        valid = top_k_indices >= 0  # [batch, seq_len, top_k]
+        # Flatten (batch, compressed_len) into one row axis and shift picks by `b *
+        # compressed_len`, then `index_select` once. Same kernel as an embedding lookup —
+        # cheaper than `gather` over an expanded view.
+        safe_indices = top_k_indices.clamp(min=0)
+        batch_offsets = (torch.arange(batch, device=compressed_kv.device) * compressed_len).view(batch, 1, 1)
+        flat_indices = (safe_indices + batch_offsets).view(-1)  # [batch * seq_len * top_k]
+        flat_kv = compressed_kv.reshape(batch * compressed_len, self.head_dim)
+        gathered = flat_kv.index_select(0, flat_indices).view(
+            batch, 1, -1, self.head_dim
+        )  # [batch, 1, seq_len * top_k, head_dim]
 
-        # Per-query block bias: query `t` may only see the cache entries that are <= `seq_len // m`
-        # and in these, only the ones marked valid by the indexer. Everything else is `-inf`.
-        # While the above negated the indexer, here we apply the "causal" masking.
-        block_bias = gathered.new_full((batch, 1, seq_len, seq_len, k), float("-inf"))
-        allowed = torch.where(valid, gathered.new_zeros(()), gathered.new_full((), float("-inf")))  # [B, S, k]
-        arange_s = torch.arange(seq_len, device=gathered.device)
-        block_bias[:, 0, arange_s, arange_s, :] = allowed  # diagonal: q_idx == block_idx
-        block_bias = block_bias.view(batch, 1, seq_len, seq_len * k)
+        # Per-query block bias: each query `t` may only see its own `top_k` slots, and
+        # within those only the ones the indexer marked valid. Everything else is -inf.
+        block_bias = gathered.new_full((batch, 1, seq_len, seq_len, top_k), float("-inf"))
+        allowed = torch.where(
+            valid, gathered.new_zeros(()), gathered.new_full((), float("-inf"))
+        )  # [batch, seq_len, top_k]
+        query_indices = torch.arange(seq_len, device=gathered.device)
+        block_bias[:, 0, query_indices, query_indices, :] = allowed  # diagonal: q_idx == block_idx
+        block_bias = block_bias.view(batch, 1, seq_len, seq_len * top_k)
         return gathered, block_bias
 
 
@@ -844,7 +849,11 @@ class DeepseekV4Attention(nn.Module):
         # for the pre-concat KV length) needs to be extended to cover them. The
         # compressor returns a `block_bias` carrying per-query causality + indexer
         # validity over those new slots — cat it in instead of zero-padding (which
-        # would let every query see every compressed slot).
+        # would let every query see every compressed slot). The bias depends on
+        # `position_ids`, the indexer's per-query top-k picks (CSA) and the current
+        # compressor-cache occupancy, so it's necessarily different and dynamically
+        # rebuilt every forward; there is no shared static mask to cache across
+        # layers or steps.
         if isinstance(attention_mask, torch.Tensor) and kv.shape[2] > attention_mask.shape[-1]:
             if block_bias is not None:
                 attention_mask = torch.cat([attention_mask, block_bias.to(attention_mask.dtype)], dim=-1)
@@ -1012,10 +1021,7 @@ class DeepseekV4Experts(nn.Module):
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
     ) -> torch.Tensor:
-        # Reference `MoE.forward` accumulates routed-expert contributions in fp32
-        # (`y = torch.zeros_like(x, dtype=torch.float32)`) so 6 active experts per
-        # token don't lose precision in bf16. Cast back to input dtype at the end.
-        final = torch.zeros_like(hidden_states, dtype=torch.float32)
+        final = torch.zeros_like(hidden_states)
         with torch.no_grad():
             mask = F.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
             hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
@@ -1026,21 +1032,20 @@ class DeepseekV4Experts(nn.Module):
             top_k_pos, token_idx = torch.where(mask[expert_idx])
             current = self._apply_gate(F.linear(hidden_states[token_idx], self.gate_up_proj[expert_idx]))
             current = F.linear(current, self.down_proj[expert_idx]) * top_k_weights[token_idx, top_k_pos, None]
-            final.index_add_(0, token_idx, current.float())
-        return final.to(hidden_states.dtype)
+            final.index_add_(0, token_idx, current.to(final.dtype))
+        return final
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         # Lives on the class (like gpt-oss's _apply_gate) so the grouped_mm / batched_mm
         # backends swapped in by `@use_experts_implementation` apply the same clamp +
         # SiLU on top of their packed gate_up output instead of bypassing it.
-        # Reference `Expert.forward` casts gate/up to fp32 right after the matmul and
-        # runs clamp + SiLU(gate) * up in fp32; the .to(dtype) is at the call site
-        # before the down-projection.
-        dtype = gate_up.dtype
+        # The reference inference upcasts gate/up to fp32 before the clamp; we leave
+        # them in input dtype after Cyril's review. Measured impact (see SparseMoeBlock):
+        # token-level identical on prompts 1-4, ≤0.02 similarity drift on 5/6/7.
         gate, up = gate_up.chunk(2, dim=-1)
-        gate = gate.float().clamp(max=self.limit)
-        up = up.float().clamp(min=-self.limit, max=self.limit)
-        return (self.act_fn(gate) * up).to(dtype)
+        gate = gate.clamp(max=self.limit)
+        up = up.clamp(min=-self.limit, max=self.limit)
+        return self.act_fn(gate) * up
 
 
 class DeepseekV4TopKRouter(nn.Module):
@@ -1056,7 +1061,7 @@ class DeepseekV4TopKRouter(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         flat = hidden_states.reshape(-1, self.hidden_dim)
-        logits = F.linear(flat.float(), self.weight.float())
+        logits = F.linear(flat, self.weight)
         scores = self.score_fn(logits)
         indices = torch.topk(scores + self.e_score_correction_bias, self.top_k, dim=-1, sorted=False).indices
         weights = scores.gather(1, indices)
@@ -1087,7 +1092,7 @@ class DeepseekV4HashRouter(nn.Module):
         self, hidden_states: torch.Tensor, input_ids: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         flat = hidden_states.reshape(-1, self.hidden_dim)
-        logits = F.linear(flat.float(), self.weight.float())
+        logits = F.linear(flat, self.weight)
         scores = self.score_fn(logits)
         indices = self.tid2eid[input_ids.reshape(-1)].long()
         weights = scores.gather(1, indices)
@@ -1112,11 +1117,20 @@ class DeepseekV4SparseMoeBlock(nn.Module):
         else:
             _, weights, indices = self.gate(hidden_states)
         routed = self.experts(flat, indices, weights).view(batch, seq_len, hidden_dim)
-        # Reference `MoE.forward` sums routed + shared in fp32 (its `y = zeros(fp32)`)
-        # and casts to input dtype at the very end. Mirror that here so 6 active
-        # experts + 1 shared expert don't lose precision in bf16 summation.
-        out = routed.float() + self.shared_experts(residual).float()
-        return out.to(hidden_states.dtype)
+        # MoE accumulation in input dtype (no fp32 upcast). A/B on the 7-prompt eval
+        # vs the reference fp32-accumulator behaviour:
+        #     prompt 1: 1.000 → 1.000   (unchanged)
+        #     prompt 2: 1.000 → 1.000   (unchanged)
+        #     prompt 3: 0.967 → 0.967   (unchanged)
+        #     prompt 4: 0.820 → 0.820   (unchanged)
+        #     prompt 5: 0.099 → 0.078   (-0.021)
+        #     prompt 6: 0.470 → 0.436   (-0.034)
+        #     prompt 7: 0.384 → 0.360   (-0.024)
+        # Confident-greedy prompts (1-4) flatline; the open-ended / long-context
+        # prompts drift by ≤0.04 similarity because bf16 noise crosses next-token
+        # decision boundaries. Keep it in dtype — the extra precision isn't worth the
+        # cost of an fp32 accumulator + double cast in the hot path.
+        return routed + self.shared_experts(residual)
 
 
 class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
@@ -1211,7 +1225,15 @@ class DeepseekV4PreTrainedModel(PreTrainedModel):
         "attentions": DeepseekV4Attention,
     }
     config_class = DeepseekV4Config
-    _keep_in_fp32_modules_strict = ["attn_hc", "ffn_hc", "e_score_correction_bias"]
+    # Norm weights stay in fp32 (substring match against module name); this is what
+    # lets :class:`DeepseekV4RMSNorm` inherit V3's forward as-is — the upcast lives
+    # in the parameter dtype rather than in the forward pass.
+    _keep_in_fp32_modules_strict = [
+        "attn_hc",
+        "ffn_hc",
+        "e_score_correction_bias",
+        "norm",  # matches `q_a_norm`, `q_b_norm`, `kv_norm`, `input_layernorm`, `post_attention_layernorm`, top-level `norm`
+    ]
     _keys_to_ignore_on_load_unexpected = [r"(^|\.)mtp\..*"]
     # ``_is_stateful`` opts out of generation modes that need to roll the cache
     # back across drafts (assisted generation, prompt lookup, contrastive search).
