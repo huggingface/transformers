@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Convert AudioFlamingoNext checkpoints into a Hugging Face repository layout."""
+"""Convert AudioFlamingoNext checkpoints into the MusicFlamingo Hugging Face layout."""
 
 from __future__ import annotations
 
@@ -28,11 +28,11 @@ import torch
 from safetensors.torch import safe_open
 
 from transformers import (
-    AudioFlamingoNextConfig,
-    AudioFlamingoNextForConditionalGeneration,
-    AudioFlamingoNextProcessor,
     AutoTokenizer,
     GenerationConfig,
+    MusicFlamingoConfig,
+    MusicFlamingoForConditionalGeneration,
+    MusicFlamingoProcessor,
     Qwen2Config,
     WhisperFeatureExtractor,
 )
@@ -103,10 +103,11 @@ def write_processor(src_root: Path, dst_root: Path):
     )
     # fmt: on
 
-    processor = AudioFlamingoNextProcessor(
+    processor = MusicFlamingoProcessor(
         feature_extractor=WhisperFeatureExtractor(feature_size=128, return_attention_mask=True),
         tokenizer=AutoTokenizer.from_pretrained(str(llm_dir), chat_template=tokenizer_chat_template, use_fast=True),
         chat_template=processor_chat_template,
+        max_audio_len=1800,
     )
     processor.tokenizer.model_max_length = 131072
     processor.save_pretrained(str(dst_root))
@@ -139,7 +140,7 @@ def _resolve_component_dir(dirpath: Path):
     return ("file", cands[0]) if len(cands) == 1 else None
 
 
-def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: AudioFlamingoNextProcessor):
+def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: MusicFlamingoProcessor):
     state: dict[str, Any] = {}
     for tag in PREFIX_MAP.keys():
         comp = _resolve_component_dir(src_root / tag)
@@ -185,13 +186,13 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: AudioFlam
     )
 
     vocab = tok.get_vocab()
-    config = AudioFlamingoNextConfig(
+    config = MusicFlamingoConfig(
         text_config=text_config,
         audio_token_id=vocab["<sound>"],
         audio_bos_token_id=vocab.get("<|sound_bos|>"),
         audio_eos_token_id=vocab.get("<|sound_eos|>"),
     )
-    model = AudioFlamingoNextForConditionalGeneration(config).to(dtype=torch.bfloat16)
+    model = MusicFlamingoForConditionalGeneration(config).to(dtype=torch.bfloat16)
 
     # Update state dict to new key names if necessary
     projector_key_mapping = {
@@ -263,7 +264,7 @@ python src/transformers/models/audioflamingonext/convert_audioflamingonext_to_hf
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Convert AudioFlamingoNext to Hugging Face format.")
+    ap = argparse.ArgumentParser(description="Convert AudioFlamingoNext to the MusicFlamingo Hugging Face format.")
     ap.add_argument("--src_dir", required=True, help="Source model root directory")
     ap.add_argument("--dst_dir", required=True, help="Destination directory for converted model")
     ap.add_argument(
