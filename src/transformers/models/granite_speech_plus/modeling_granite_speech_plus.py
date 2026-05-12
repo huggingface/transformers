@@ -556,6 +556,7 @@ class GraniteSpeechPlusForConditionalGeneration(GraniteSpeechPlusPreTrainedModel
     def get_audio_features(self, *args, **kwargs):
         return self.model.get_audio_features(*args, **kwargs)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
