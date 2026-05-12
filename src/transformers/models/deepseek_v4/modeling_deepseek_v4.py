@@ -1191,7 +1191,16 @@ class DeepseekV4PreTrainedModel(PreTrainedModel):
         "attentions": DeepseekV4Attention,
     }
     config_class = DeepseekV4Config
-    _keep_in_fp32_modules_strict = ["attn_hc", "ffn_hc", "e_score_correction_bias", "norm"]
+    _keep_in_fp32_modules_strict = [
+        "attn_hc",
+        "ffn_hc",
+        "e_score_correction_bias",
+        "q_a_norm",
+        "kv_norm",
+        "input_layernorm",
+        "post_attention_layernorm",
+        "norm",
+    ]
     _keys_to_ignore_on_load_unexpected = [r"(^|\.)mtp\..*"]
     # ``_is_stateful`` opts out of generation modes that need to roll the cache
     # back across drafts (assisted generation, prompt lookup, contrastive search).
