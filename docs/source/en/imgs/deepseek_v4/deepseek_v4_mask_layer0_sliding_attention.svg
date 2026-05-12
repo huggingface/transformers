@@ -2,37 +2,37 @@
   <rect x="0" y="0" width="558.0" height="818" fill="#0b1220" />
   <text x="120" y="20" font-size="15" font-weight="600" fill="#f8fafc">Layer 0: sliding_attention</text>
   <text x="120" y="40" fill="#94a3b8">shape=[16, 16]   keys →   queries ↓</text>
-  <text x="132.0" y="78" text-anchor="middle" fill="#94a3b8" font-size="10">0</text>
+  <text x="132.0" y="270" text-anchor="middle" fill="#94a3b8" font-size="10">0</text>
   <text x="132.0" y="332" text-anchor="start" transform="rotate(-90 132.0 332)" fill="#f8fafc" font-size="12" font-style="italic">The</text>
-  <text x="158.0" y="78" text-anchor="middle" fill="#94a3b8" font-size="10">1</text>
+  <text x="158.0" y="270" text-anchor="middle" fill="#94a3b8" font-size="10">1</text>
   <text x="158.0" y="332" text-anchor="start" transform="rotate(-90 158.0 332)" fill="#f8fafc" font-size="12" font-style="italic">quick</text>
-  <text x="184.0" y="78" text-anchor="middle" fill="#94a3b8" font-size="10">2</text>
+  <text x="184.0" y="270" text-anchor="middle" fill="#94a3b8" font-size="10">2</text>
   <text x="184.0" y="332" text-anchor="start" transform="rotate(-90 184.0 332)" fill="#f8fafc" font-size="12" font-style="italic">brown</text>
-  <text x="210.0" y="78" text-anchor="middle" fill="#94a3b8" font-size="10">3</text>
+  <text x="210.0" y="270" text-anchor="middle" fill="#94a3b8" font-size="10">3</text>
   <text x="210.0" y="332" text-anchor="start" transform="rotate(-90 210.0 332)" fill="#f8fafc" font-size="12" font-style="italic">fox</text>
-  <text x="236.0" y="78" text-anchor="middle" fill="#94a3b8" font-size="10">4</text>
+  <text x="236.0" y="270" text-anchor="middle" fill="#94a3b8" font-size="10">4</text>
   <text x="236.0" y="332" text-anchor="start" transform="rotate(-90 236.0 332)" fill="#f8fafc" font-size="12" font-style="italic">jumps</text>
-  <text x="262.0" y="78" text-anchor="middle" fill="#94a3b8" font-size="10">5</text>
+  <text x="262.0" y="270" text-anchor="middle" fill="#94a3b8" font-size="10">5</text>
   <text x="262.0" y="332" text-anchor="start" transform="rotate(-90 262.0 332)" fill="#f8fafc" font-size="12" font-style="italic">over</text>
-  <text x="288.0" y="78" text-anchor="middle" fill="#94a3b8" font-size="10">6</text>
+  <text x="288.0" y="270" text-anchor="middle" fill="#94a3b8" font-size="10">6</text>
   <text x="288.0" y="332" text-anchor="start" transform="rotate(-90 288.0 332)" fill="#f8fafc" font-size="12" font-style="italic">the</text>
-  <text x="314.0" y="78" text-anchor="middle" fill="#94a3b8" font-size="10">7</text>
+  <text x="314.0" y="270" text-anchor="middle" fill="#94a3b8" font-size="10">7</text>
   <text x="314.0" y="332" text-anchor="start" transform="rotate(-90 314.0 332)" fill="#f8fafc" font-size="12" font-style="italic">lazy</text>
-  <text x="340.0" y="78" text-anchor="middle" fill="#94a3b8" font-size="10">8</text>
+  <text x="340.0" y="270" text-anchor="middle" fill="#94a3b8" font-size="10">8</text>
   <text x="340.0" y="332" text-anchor="start" transform="rotate(-90 340.0 332)" fill="#f8fafc" font-size="12" font-style="italic">dog</text>
-  <text x="366.0" y="78" text-anchor="middle" fill="#94a3b8" font-size="10">9</text>
+  <text x="366.0" y="270" text-anchor="middle" fill="#94a3b8" font-size="10">9</text>
   <text x="366.0" y="332" text-anchor="start" transform="rotate(-90 366.0 332)" fill="#f8fafc" font-size="12" font-style="italic">ate</text>
-  <text x="392.0" y="78" text-anchor="middle" fill="#94a3b8" font-size="10">10</text>
+  <text x="392.0" y="270" text-anchor="middle" fill="#94a3b8" font-size="10">10</text>
   <text x="392.0" y="332" text-anchor="start" transform="rotate(-90 392.0 332)" fill="#f8fafc" font-size="12" font-style="italic">a</text>
-  <text x="418.0" y="78" text-anchor="middle" fill="#94a3b8" font-size="10">11</text>
+  <text x="418.0" y="270" text-anchor="middle" fill="#94a3b8" font-size="10">11</text>
   <text x="418.0" y="332" text-anchor="start" transform="rotate(-90 418.0 332)" fill="#f8fafc" font-size="12" font-style="italic">small</text>
-  <text x="444.0" y="78" text-anchor="middle" fill="#94a3b8" font-size="10">12</text>
+  <text x="444.0" y="270" text-anchor="middle" fill="#94a3b8" font-size="10">12</text>
   <text x="444.0" y="332" text-anchor="start" transform="rotate(-90 444.0 332)" fill="#f8fafc" font-size="12" font-style="italic">red</text>
-  <text x="470.0" y="78" text-anchor="middle" fill="#94a3b8" font-size="10">13</text>
+  <text x="470.0" y="270" text-anchor="middle" fill="#94a3b8" font-size="10">13</text>
   <text x="470.0" y="332" text-anchor="start" transform="rotate(-90 470.0 332)" fill="#f8fafc" font-size="12" font-style="italic">fish</text>
-  <text x="496.0" y="78" text-anchor="middle" fill="#94a3b8" font-size="10">14</text>
+  <text x="496.0" y="270" text-anchor="middle" fill="#94a3b8" font-size="10">14</text>
   <text x="496.0" y="332" text-anchor="start" transform="rotate(-90 496.0 332)" fill="#f8fafc" font-size="12" font-style="italic">this</text>
-  <text x="522.0" y="78" text-anchor="middle" fill="#94a3b8" font-size="10">15</text>
+  <text x="522.0" y="270" text-anchor="middle" fill="#94a3b8" font-size="10">15</text>
   <text x="522.0" y="332" text-anchor="start" transform="rotate(-90 522.0 332)" fill="#f8fafc" font-size="12" font-style="italic">morning</text>
   <text x="6" y="356.0" fill="#94a3b8" font-size="10">q 0</text>
   <text x="112" y="356.0" text-anchor="end" fill="#f8fafc" font-size="12" font-style="italic">The</text>

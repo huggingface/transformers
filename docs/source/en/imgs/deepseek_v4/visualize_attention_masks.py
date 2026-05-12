@@ -266,62 +266,62 @@ def _render_svg(mask_2d: torch.Tensor, title: str, sliding_kv: int, meta: dict |
             f'  <text x="{SVG_PAD_LEFT}" y="60" fill="{SVG_COLORS["compressor"]}">{subtitle}</text>'
         )
 
-    # Column headers, top-down within the SVG_PAD_TOP gutter (above the grid line):
-    #   y = 78  : column-index numeric (sliding) / `C_w` + `pos a–b` (compressor)
-    #   y = 92  : source-token preview for compressor blocks
-    #   y = 96..156 : vertical (rotated -90°) token labels for sliding columns
-    #   y = SVG_PAD_TOP (164) : grid begins
+    # Column headers, top-down within the `SVG_PAD_TOP` gutter (above the grid line):
+    #   y =  78  : `C_w` (centered over the compressor block, bold green)
+    #   y =  92  : `pos a–b` source-position range for the compressor block
+    #   y = SVG_PAD_TOP - 70 = 270 : numeric column index (sliding) — just above the
+    #                                tallest rotated token so it reads as a tick label.
+    #   y = SVG_PAD_TOP - 60 .. SVG_PAD_TOP : rotated (-90°) per-position token labels
+    #                                          (sliding + per-source-position inside blocks)
+    #   y = SVG_PAD_TOP                       : grid begins.
+    idx_y = SVG_PAD_TOP - 70
+    token_baseline_y = SVG_PAD_TOP - 8
+    # Vertical extent of the rotated-token area we want the dashed separators to span —
+    # just the token region, not the full title/subtitle gutter.
+    token_top_y = SVG_PAD_TOP - 60
     for j in range(sliding_kv):
         cx = col_x[j] + col_w[j] / 2
         elems.append(
-            f'  <text x="{cx:.1f}" y="78" text-anchor="middle" '
+            f'  <text x="{cx:.1f}" y="{idx_y}" text-anchor="middle" '
             f'fill="{SVG_COLORS["muted"]}" font-size="10">{j}</text>'
         )
         tok = SVG_TOKENS[j] if j < len(SVG_TOKENS) else f"t{j}"
-        # Vertical, anchor at the baseline near the grid top so the text reads bottom-up
-        # right above the column it labels.
         elems.append(
-            f'  <text x="{cx:.1f}" y="{SVG_PAD_TOP - 8}" text-anchor="start" '
-            f'transform="rotate(-90 {cx:.1f} {SVG_PAD_TOP - 8})" '
+            f'  <text x="{cx:.1f}" y="{token_baseline_y}" text-anchor="start" '
+            f'transform="rotate(-90 {cx:.1f} {token_baseline_y})" '
             f'fill="{SVG_COLORS["text"]}" font-size="12" font-style="italic">{tok}</text>'
         )
     for w_idx in range(n_compr):
         j = sliding_kv + w_idx
         cx = col_x[j] + col_w[j] / 2
-        block_w = col_w[j]
-        # Source-position range each entry compresses (paper §2.3.1/§2.3.2): C_w covers
-        # positions [w*m, (w+1)*m − 1]. (The CSA Ca/Cb overlap is across forward calls,
-        # not within a single window; for this within-forward visualization the same
-        # range applies.)
+        block_x = col_x[j]
         a, b = w_idx * m, (w_idx + 1) * m - 1
+        # `C_w` + `pos a–b` sit on the same row as the sliding-section indices, hugging
+        # the top of the rotated-token area — same vertical band as the column ticks.
         elems.append(
-            f'  <text x="{cx:.1f}" y="78" text-anchor="middle" '
+            f'  <text x="{cx:.1f}" y="{idx_y - 14}" text-anchor="middle" '
             f'fill="{SVG_COLORS["visible"]}" font-size="13" font-weight="700">C{w_idx}</text>'
         )
         elems.append(
-            f'  <text x="{cx:.1f}" y="92" text-anchor="middle" '
+            f'  <text x="{cx:.1f}" y="{idx_y}" text-anchor="middle" '
             f'fill="{SVG_COLORS["muted"]}" font-size="10">pos {a}–{b}</text>'
         )
-        # Source tokens the entry compresses — one rotated label per source position,
-        # laid out across the compressor block at the same horizontal stride as the
-        # sliding-column tokens. Dashed vertical separators between adjacent sub-cells
-        # remind the reader that the wide block contains `m` source positions even
-        # though it acts as a single KV slot.
-        baseline_y = SVG_PAD_TOP - 8
-        block_x = col_x[j]
+        # One rotated label per source position, dashed vertical separators between
+        # sub-cells inside the block (only as tall as the rotated-token area, not the
+        # whole gutter — they're a hint that the wide green block bundles m positions).
         for sub_i in range(m):
             pos = a + sub_i
             sub_cx = block_x + sub_i * stride + SVG_CELL / 2
             tok = SVG_TOKENS[pos] if pos < len(SVG_TOKENS) else f"t{pos}"
             elems.append(
-                f'  <text x="{sub_cx:.1f}" y="{baseline_y}" text-anchor="start" '
-                f'transform="rotate(-90 {sub_cx:.1f} {baseline_y})" '
+                f'  <text x="{sub_cx:.1f}" y="{token_baseline_y}" text-anchor="start" '
+                f'transform="rotate(-90 {sub_cx:.1f} {token_baseline_y})" '
                 f'fill="{SVG_COLORS["text"]}" font-size="12" font-style="italic">{tok}</text>'
             )
             if sub_i > 0:
                 sep_x = block_x + sub_i * stride - SVG_GAP / 2
                 elems.append(
-                    f'  <line x1="{sep_x:.1f}" y1="{SVG_PAD_TOP - 152}" '
+                    f'  <line x1="{sep_x:.1f}" y1="{token_top_y}" '
                     f'x2="{sep_x:.1f}" y2="{SVG_PAD_TOP}" '
                     f'stroke="{SVG_COLORS["separator"]}" stroke-width="0.7" stroke-dasharray="3 3" />'
                 )
