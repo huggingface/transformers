@@ -2908,7 +2908,9 @@ class GenerationIntegrationTests(unittest.TestCase):
             )
         self.assertEqual(outputs_with_repetition_warning.shape[0], inputs["input_ids"].shape[0])
 
-        with self.assertWarnsRegex(UserWarning, "n-gram constraints only to newly generated tokens, not to the prompt"):
+        with self.assertWarnsRegex(
+            UserWarning, "n-gram constraints only to newly generated tokens, not to the prompt"
+        ):
             outputs_with_ngram_warning = model.generate(inputs_embeds=embeds, max_new_tokens=5, no_repeat_ngram_size=2)
         self.assertEqual(outputs_with_ngram_warning.shape[0], inputs["input_ids"].shape[0])
 
@@ -2920,7 +2922,9 @@ class GenerationIntegrationTests(unittest.TestCase):
             )
         self.assertIn("RepetitionPenaltyLogitsProcessor", [processor.__class__.__name__ for processor in processors])
 
-        with self.assertWarnsRegex(UserWarning, "n-gram constraints only to newly generated tokens, not to the prompt"):
+        with self.assertWarnsRegex(
+            UserWarning, "n-gram constraints only to newly generated tokens, not to the prompt"
+        ):
             processors = model._get_logits_processor(
                 generation_config=GenerationConfig(no_repeat_ngram_size=2),
                 input_ids_seq_length=0,
