@@ -214,6 +214,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         hidden_states: torch.Tensor,
         cache_params: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
 
@@ -265,7 +266,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                     weight=self.conv1d.weight.squeeze(1),
                     bias=self.conv1d.bias,
                     activation=self.activation,
-                    seq_idx=None,
+                    seq_idx=kwargs.get("seq_idx"),
                 )
             else:
                 mixed_qkv = F.silu(self.conv1d(mixed_qkv)[:, :, : mixed_qkv.shape[-1]])
@@ -305,7 +306,6 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
             )
-
         else:
             core_attn_out, last_recurrent_state = self.chunk_gated_delta_rule(
                 query,
@@ -316,6 +316,8 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                 initial_state=recurrent_state if use_precomputed_states else None,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
+                # The chunked FLA kernel takes a single `cu_seqlens` arg; for packed self-attention this matches q-side lengths.
+                cu_seqlens=kwargs.get("cu_seq_lens_q"),
             )
 
         # Update cache
@@ -378,6 +380,7 @@ class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
                 hidden_states=hidden_states,
                 cache_params=past_key_values,
                 attention_mask=attention_mask,
+                **kwargs,
             )
         elif self.layer_type == "full_attention":
             # Self Attention

@@ -398,7 +398,9 @@ class TestDataCollatorWithFlattening(DataCollatorTestMixin, unittest.TestCase):
         batch = collator(self._get_features())
 
         self.assertEqual(batch["cu_seq_lens_k"].tolist(), [0, 3, 9, 16])
+        self.assertEqual(batch["cu_seq_lens_q"].tolist(), [0, 3, 9, 16])
         self.assertEqual(batch["max_length_k"], 7)
+        self.assertEqual(batch["max_length_q"], 7)
 
     def test_immutability(self):
         """Test that flattening does not mutate input data."""
