@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import math
+from collections import UserDict
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cached_property
@@ -1447,8 +1448,10 @@ class Gemma4TextModel(Gemma3TextModel):
         for layer_type in self.unique_layer_types:
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
-        # Initialize as empty dict - it will be filled in the right layers, or use passed ones
-        shared_kv_states = kwargs.pop("shared_kv_states", {})
+        # Initialize as empty dict, or reuse past shared states. We use a UserDict instead of built-in dict (it behaves
+        # the same) for fsdp2 support (otherwise, `_apply_to_tensors` rebuilds every dict it recurses into, and `shared_kv_states`
+        # is not correctly shared, see https://github.com/pytorch/pytorch/blob/v2.10.0/torch/distributed/utils.py#L223-L255)
+        shared_kv_states = kwargs.pop("shared_kv_states", UserDict())
 
         # decoder layers
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
@@ -1477,13 +1480,6 @@ class Gemma4TextModel(Gemma3TextModel):
 @auto_docstring(custom_intro="The base Gemma 4 language model with a language modeling head.")
 class Gemma4ForCausalLM(Gemma3ForCausalLM):
     base_model_prefix = "model"
-
-    def __init__(self, config: Gemma4TextConfig):
-        super().__init__(config)
-        # Grab the ones from the child
-        self._keys_to_ignore_on_load_unexpected = [
-            f"model.{name}" for name in self.model._keys_to_ignore_on_load_unexpected
-        ]
 
     @can_return_tuple
     @auto_docstring
@@ -1936,6 +1932,7 @@ class Gemma4Model(Gemma3nModel):
 
         if self.config.get_text_config().hidden_size_per_layer_input:
             pad_embedding = self.language_model.embed_tokens.weight[self.config.text_config.pad_token_id, :]
+            multimodal_mask = multimodal_mask.to(inputs_embeds.device)
             llm_inputs_embeds = torch.where(multimodal_mask[..., None], pad_embedding.view(1, 1, -1), inputs_embeds)
             per_layer_inputs = self.language_model.get_per_layer_inputs(llm_input_ids, llm_inputs_embeds)
         else:
