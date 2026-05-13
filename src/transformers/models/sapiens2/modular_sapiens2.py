@@ -27,14 +27,10 @@ from ...utils.generic import maybe_autocast
 from ..dinov3_vit.configuration_dinov3_vit import DINOv3ViTConfig
 from ..dinov3_vit.modeling_dinov3_vit import (
     DINOv3ViTBackbone,
-    DINOv3ViTBackboneOutput,
-    Dinov3ViTDropPath,
     DINOv3ViTEmbeddings,
     DINOv3ViTEncoder,
-    DINOv3ViTGatedMLP,
     DINOv3ViTLayer,
     DINOv3ViTLayerScale,
-    DINOv3ViTMLP,
     DINOv3ViTModel,
     DINOv3ViTPreTrainedModel,
     apply_rotary_pos_emb,
@@ -44,7 +40,6 @@ from ..dinov3_vit.modeling_dinov3_vit import (
 )
 
 
-# TODO(guarin): Double check if we cannot inherit attribute docstrings from parent class.
 @auto_docstring(checkpoint="facebook/sapiens2-pretrain-0.4b")
 @strict
 class Sapiens2Config(DINOv3ViTConfig):
@@ -118,10 +113,6 @@ class Sapiens2Config(DINOv3ViTConfig):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads // 2
         super().__post_init__(**kwargs)
-
-
-class Sapiens2BackboneOutput(DINOv3ViTBackboneOutput):
-    pass
 
 
 class Sapiens2Embeddings(DINOv3ViTEmbeddings):
@@ -265,18 +256,6 @@ class Sapiens2Attention(nn.Module):
 
 
 class Sapiens2LayerScale(DINOv3ViTLayerScale):
-    pass
-
-
-class Sapiens2MLP(DINOv3ViTMLP):
-    pass
-
-
-class Sapiens2GatedMLP(DINOv3ViTGatedMLP):
-    pass
-
-
-class Sapiens2DropPath(Dinov3ViTDropPath):
     pass
 
 

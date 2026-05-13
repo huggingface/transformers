@@ -38,23 +38,6 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_sapiens2 import Sapiens2Config
 
 
-@auto_docstring(
-    custom_intro="""
-    Output type of [`Sapiens2Backbone`], extending [`BackboneOutput`] with optional CLS tokens from
-    each selected feature stage (used when `config.return_class_token=True`).
-    """
-)
-@dataclass
-class Sapiens2BackboneOutput(BackboneOutput):
-    r"""
-    cls_tokens (`tuple(torch.FloatTensor)`, *optional*):
-        CLS token from each selected feature stage, each of shape `(batch_size, hidden_size)`.
-        Only present when `config.return_class_token=True`.
-    """
-
-    cls_tokens: tuple[torch.FloatTensor] | None = None
-
-
 class Sapiens2Embeddings(nn.Module):
     """
     Construct the CLS token, mask token, position and patch embeddings.
@@ -565,6 +548,23 @@ class Sapiens2Model(Sapiens2PreTrainedModel):
             hidden_states=output.hidden_states,
             attentions=output.attentions,
         )
+
+
+@auto_docstring(
+    custom_intro="""
+    Output type of [`Sapiens2Backbone`], extending [`BackboneOutput`] with optional CLS tokens from
+    each selected feature stage (used when `config.return_class_token=True`).
+    """
+)
+@dataclass
+class Sapiens2BackboneOutput(BackboneOutput):
+    r"""
+    cls_tokens (`tuple(torch.FloatTensor)`, *optional*):
+        CLS token from each selected feature stage, each of shape `(batch_size, hidden_size)`.
+        Only present when `config.return_class_token=True`.
+    """
+
+    cls_tokens: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring
