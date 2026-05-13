@@ -414,7 +414,7 @@ class MusicFlamingoCausalLMOutputWithPast(ModelOutput):
     The MusicFlamingo model which consists of a fine-tuned Whisper encoder, rotary time embedding, a multi-modal projector, and a Qwen2 language model.
     """
 )
-@forward_base_model_attrs(version="5.7")
+@forward_base_model_attrs(version="5.15")
 class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, GenerationMixin):
     _keep_in_fp32_modules_strict = None
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}

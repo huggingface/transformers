@@ -395,7 +395,7 @@ class GlmAsrModel(AudioFlamingo3Model):
     The GlmAsr model which consists of a fine-tuned Whisper encoder, a multi-modal projector and a Llama language model.
     """
 )
-@forward_base_model_attrs(version="5.7")
+@forward_base_model_attrs(version="5.15")
 class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
     def __init__(self, config):
         super().__init__(config)

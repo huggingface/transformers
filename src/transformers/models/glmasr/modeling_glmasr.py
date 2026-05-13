@@ -528,7 +528,7 @@ class GlmAsrCausalLMOutputWithPast(ModelOutput):
     The GlmAsr model which consists of a fine-tuned Whisper encoder, a multi-modal projector and a Llama language model.
     """
 )
-@forward_base_model_attrs(version="5.7")
+@forward_base_model_attrs(version="5.15")
 class GlmAsrForConditionalGeneration(GlmAsrPreTrainedModel, GenerationMixin):
     _keep_in_fp32_modules_strict = None
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}

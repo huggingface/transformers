@@ -521,7 +521,7 @@ class GraniteSpeechPlusCausalLMOutputWithPast(ModelOutput):
     encoder's final hidden states with an arbitrary subset of its intermediate hidden states.
     """
 )
-@forward_base_model_attrs(version="5.7")
+@forward_base_model_attrs(version="5.15")
 class GraniteSpeechPlusForConditionalGeneration(GraniteSpeechPlusPreTrainedModel, GenerationMixin):
     _supports_attention_backend = True
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}

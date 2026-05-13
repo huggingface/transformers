@@ -165,7 +165,7 @@ class GraniteSpeechPlusCTCEncoder(GraniteSpeechCTCEncoder):
     encoder's final hidden states with an arbitrary subset of its intermediate hidden states.
     """
 )
-@forward_base_model_attrs(version="5.7")
+@forward_base_model_attrs(version="5.15")
 class GraniteSpeechPlusForConditionalGeneration(GraniteSpeechForConditionalGeneration): ...
 
 

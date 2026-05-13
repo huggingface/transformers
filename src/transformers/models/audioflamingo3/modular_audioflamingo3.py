@@ -274,7 +274,7 @@ class AudioFlamingo3Model(VoxtralModel):
     The AudioFlamingo3 model which consists of a fine-tuned Whisper encoder, a multi-modal projector and a Qwen2 language model.
     """
 )
-@forward_base_model_attrs(version="5.7")
+@forward_base_model_attrs(version="5.15")
 class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
     _tp_plan = None
     _pp_plan = None

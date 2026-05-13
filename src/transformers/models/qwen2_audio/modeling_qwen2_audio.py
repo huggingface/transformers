@@ -773,7 +773,7 @@ class Qwen2AudioModel(Qwen2AudioPreTrainedModel):
     The QWEN2AUDIO model which consists of an audio backbone and a language model.
     """
 )
-@forward_base_model_attrs(version="5.7")
+@forward_base_model_attrs(version="5.15")
 class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 

@@ -500,7 +500,7 @@ class GraniteSpeechModel(GraniteSpeechPreTrainedModel):
     The Granite Speech model, which consists of an audio encoder, projector, and language model.
     """
 )
-@forward_base_model_attrs(version="5.7")
+@forward_base_model_attrs(version="5.15")
 class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, GenerationMixin):
     _supports_attention_backend = True
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
