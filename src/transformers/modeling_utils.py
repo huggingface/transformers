@@ -52,7 +52,7 @@ from .core_model_loading import (
     revert_weight_conversion,
 )
 from .distributed import DistributedConfig
-from .distributed.utils import gather_full_state_dict, init_device_mesh, is_fsdp_enabled
+from .distributed.utils import gather_full_state_dict, init_device_mesh, is_fsdp_enabled, save_model_checkpoint
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, hub_kernels, is_deepspeed_zero3_enabled
@@ -1948,6 +1948,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """Detect whether the class supports setting its attention implementation dynamically. It is an ugly check based on
         opening the file, but avoids maintaining yet another property flag.
         """
+        # Skip dynamic wrappers like FSDP2's FSDP<ModelName>, whose __module__ is inside torch.*
+        cls = next((k for k in cls.__mro__ if not k.__module__.startswith("torch.")), cls)
         class_module = sys.modules[cls.__module__]
         # This can happen for a custom model in a jupyter notebook or repl for example - simply do not allow to set it then
         if not hasattr(class_module, "__file__"):
@@ -1967,6 +1969,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """Detect whether the class supports setting its experts implementation dynamically. It is an ugly check based on
         opening the file, but avoids maintaining yet another property flag.
         """
+        # Skip dynamic wrappers like FSDP2's FSDP<ModelName>, whose __module__ is inside torch.*
+        cls = next((k for k in cls.__mro__ if not k.__module__.startswith("torch.")), cls)
         class_module = sys.modules[cls.__module__]
         # This can happen for a custom model in a jupyter notebook or repl for example - simply do not allow to set it then
         if not hasattr(class_module, "__file__"):
@@ -3176,6 +3180,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         token: str | bool | None = None,
         save_peft_format: bool = True,
         save_original_format: bool = True,
+        distributed_checkpoint: bool = False,
         **kwargs,
     ):
         """
@@ -3324,6 +3329,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         finally:
             if distributed_config is not None:
                 model_to_save.config.distributed_config = distributed_config
+
+        if distributed_checkpoint:
+            if torch.distributed.is_initialized() and getattr(self, "device_mesh", None) is None:
+                raise ValueError(
+                    "save_pretrained(distributed_checkpoint=True) requires the model to have been "
+                    "initialized with a distributed_config (device_mesh is None)."
+                )
+            save_model_checkpoint(self, save_directory)
+            return
 
         # Get the model state_dict (handles FSDP unshard + TP gather in one call)
         if state_dict is None:

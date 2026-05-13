@@ -17,7 +17,13 @@ import os
 from typing import TYPE_CHECKING
 
 from ..utils import is_torch_available, is_torch_greater_or_equal, strtobool
-
+from .sharding_utils import (
+    _find_strided_shard_placement_from_fused_params,
+    _replicate_dtensor,
+    fuse_optimizer_state,
+    get_fusion_metadata,
+    unfuse_optimizer_state,
+)
 
 if TYPE_CHECKING:
     import torch.nn as nn
@@ -33,13 +39,7 @@ if is_torch_available():
         set_optimizer_state_dict,
     )
     from torch.distributed.tensor import DTensor
-
-    from .sharding_utils import (
-        _replicate_dtensor,
-        fuse_optimizer_state,
-        get_fusion_metadata,
-        unfuse_optimizer_state,
-    )
+    from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
 
 
 def is_fsdp_enabled() -> bool:
@@ -145,7 +145,6 @@ def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
     is_rank0 = torch.distributed.get_rank() == 0
     state_dict = get_model_state_dict(model)
 
-    # Stream: gather one param at a time, only rank 0 keeps the CPU copy
     result = {}
     for key, tensor in state_dict.items():
         if not isinstance(tensor, DTensor):
@@ -161,7 +160,36 @@ def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
     return result
 
 
-def save_optimizer(model, optimizer, checkpoint_dir: str) -> None:
+def save_model_checkpoint(model, checkpoint_dir: str) -> None:
+    """Save model parameters as standard HF-format sharded safetensors using
+    DCP + HuggingFaceStorageWriter with consolidation enabled.
+
+    Every rank first writes its own shard in parallel under
+    `<checkpoint_dir>/sharded/`, then a consolidation pass reads those shards
+    and emits HF-compatible `model-*-of-N.safetensors` (+ index) at
+    `<checkpoint_dir>/`. The result is a directory `from_pretrained` reads
+    through its normal path — no special flag needed at load time.
+
+    DTensors carrying an uncomposed `_StridedShard` placement (e.g. fused
+    gate||up MoE weights) are replicated to a full tensor on every rank
+    before the save, otherwise DCP cannot encode that placement.
+    """
+    state_dict = get_model_state_dict(model)
+    for key, value in list(state_dict.items()):
+        if isinstance(value, DTensor) and _find_strided_shard_placement_from_fused_params(value.placements) is not None:
+            state_dict[key] = _replicate_dtensor(value)
+
+    dcp.save(
+        state_dict,
+        storage_writer=HuggingFaceStorageWriter(
+            path=checkpoint_dir,
+            save_distributed=True,
+            enable_consolidation=True,
+        ),
+    )
+
+
+def save_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     """Save optimizer state via DCP.
 
     Params whose DTensors carry a lonely `_StridedShard` placement (e.g. Mixtral
@@ -174,11 +202,10 @@ def save_optimizer(model, optimizer, checkpoint_dir: str) -> None:
     unfuse_optimizer_state(optimizer_state_dict, fusion_metadata)
     dcp.save({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
 
-
-def load_optimizer(model, optimizer, checkpoint_dir: str) -> None:
+def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     """Load optimizer state via DCP.
 
-    Symmetric to `save_optimizer`: build the unfused template, let DCP fill
+    Symmetric to `save_optimizer_distributed`: build the unfused template, let DCP fill
     it, then merge fused params back to their original `_StridedShard` form
     before handing the state_dict back to the optimizer.
     """
