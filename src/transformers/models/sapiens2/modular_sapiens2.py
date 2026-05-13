@@ -33,10 +33,10 @@ from ..dinov3_vit.modeling_dinov3_vit import (
     DINOv3ViTLayerScale,
     DINOv3ViTModel,
     DINOv3ViTPreTrainedModel,
-    apply_rotary_pos_emb,
     augment_patches_center_coordinates,
     eager_attention_forward,
     get_patches_center_coordinates,
+    rotate_half,
 )
 
 
@@ -86,6 +86,8 @@ class Sapiens2Config(DINOv3ViTConfig):
     last_k_full_attention_layers (`int`, *optional*, defaults to 8):
         Number of final transformer layers that use full multi-head attention.
         Layers before `num_hidden_layers - last_k_full_attention_layers` use GQA with `num_key_value_heads`.
+    pos_embed_dtype (`str`, *optional*, defaults to `"bfloat16"`):
+        Dtype used for positional embedding computations (RoPE angles, cos/sin).
     """
 
     model_type = "sapiens2"
@@ -106,6 +108,7 @@ class Sapiens2Config(DINOv3ViTConfig):
     num_key_value_heads: int | None = None
     first_k_full_attention_layers: int = 8
     last_k_full_attention_layers: int = 8
+    pos_embed_dtype: str = "bfloat16"
 
     # TODO(guarin): Rename use_layernorm and layer_norm_eps to match the fact that we use RMSNorm.
 
@@ -139,8 +142,11 @@ class Sapiens2RopePositionEmbedding(nn.Module):
         self.pos_embed_rescale = config.pos_embed_rescale
         self.base = config.rope_theta
         self.head_dim = config.hidden_size // config.num_attention_heads
+        self.pos_embed_dtype = getattr(torch, config.pos_embed_dtype)
 
-        periods = self.base ** (2 * torch.arange(self.head_dim // 4, dtype=torch.float32) / (self.head_dim // 2))
+        periods = self.base ** (
+            2 * torch.arange(self.head_dim // 4, dtype=self.pos_embed_dtype) / (self.head_dim // 2)
+        )
         self.register_buffer("periods", periods, persistent=True)  # persistent=True to match original checkpoints
 
     def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -152,9 +158,8 @@ class Sapiens2RopePositionEmbedding(nn.Module):
         device_type = device.type if isinstance(device.type, str) and device.type != "mps" else "cpu"
 
         with maybe_autocast(device_type=device_type, enabled=False):
-            # TODO(guarin): Double check, the original uses bf16 by default. I followed DINOv3 implementation instead.
             patch_coords = get_patches_center_coordinates(
-                num_patches_h, num_patches_w, dtype=torch.float32, device=device
+                num_patches_h, num_patches_w, dtype=self.pos_embed_dtype, device=device
             )
             if self.training:
                 patch_coords = augment_patches_center_coordinates(
@@ -165,15 +170,46 @@ class Sapiens2RopePositionEmbedding(nn.Module):
                 )
 
             # (height * width, 2, head_dim / 4) -> (height * width, head_dim / 2) -> (height * width, head_dim)
-            angles = 2 * math.pi * patch_coords[:, :, None] / self.periods[None, None, :]
+            angles = 2 * math.pi * patch_coords[:, :, None] / self.periods[None, None, :].to(self.pos_embed_dtype)
             angles = angles.flatten(1, 2)
             angles = angles.tile(2)
 
             cos = torch.cos(angles)
             sin = torch.sin(angles)
 
-        dtype = pixel_values.dtype
-        return cos.to(dtype=dtype), sin.to(dtype=dtype)
+        return cos, sin
+
+
+def apply_rotary_pos_emb(
+    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, **kwargs
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Applies Rotary Position Embedding to the query and key tensors, but only to the patch tokens,
+    ignoring the prefix tokens (cls token and register tokens).
+
+    Casts q/k patch tokens to the rope dtype before applying the rotation and casts back afterwards.
+    """
+    num_tokens = q.shape[-2]
+    num_patches = sin.shape[-2]
+    num_prefix_tokens = num_tokens - num_patches
+
+    q_prefix_tokens, q_patches = q.split((num_prefix_tokens, num_patches), dim=-2)
+    k_prefix_tokens, k_patches = k.split((num_prefix_tokens, num_patches), dim=-2)
+
+    q_dtype, k_dtype = q_patches.dtype, k_patches.dtype
+    rope_dtype = cos.dtype
+    q_patches = q_patches.to(rope_dtype)
+    k_patches = k_patches.to(rope_dtype)
+
+    q_patches = (q_patches * cos) + (rotate_half(q_patches) * sin)
+    k_patches = (k_patches * cos) + (rotate_half(k_patches) * sin)
+
+    q_patches = q_patches.to(q_dtype)
+    k_patches = k_patches.to(k_dtype)
+
+    q = torch.cat((q_prefix_tokens, q_patches), dim=-2)
+    k = torch.cat((k_prefix_tokens, k_patches), dim=-2)
+
+    return q, k
 
 
 class Sapiens2Attention(nn.Module):
@@ -290,7 +326,7 @@ class Sapiens2PreTrainedModel(DINOv3ViTPreTrainedModel):
             init.constant_(module.lambda1, self.config.layerscale_value)
         elif isinstance(module, Sapiens2RopePositionEmbedding):
             periods = module.base ** (
-                2 * torch.arange(module.head_dim // 4, dtype=torch.float32) / (module.head_dim // 2)
+                2 * torch.arange(module.head_dim // 4, dtype=module.pos_embed_dtype) / (module.head_dim // 2)
             )
             init.copy_(module.periods, periods)
 

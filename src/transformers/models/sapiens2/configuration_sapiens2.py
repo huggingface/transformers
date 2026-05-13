@@ -69,6 +69,8 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     last_k_full_attention_layers (`int`, *optional*, defaults to 8):
         Number of final transformer layers that use full multi-head attention.
         Layers before `num_hidden_layers - last_k_full_attention_layers` use GQA with `num_key_value_heads`.
+    pos_embed_dtype (`str`, *optional*, defaults to `"bfloat16"`):
+        Dtype used for positional embedding computations (RoPE angles, cos/sin).
     """
 
     model_type = "sapiens2"
@@ -110,6 +112,7 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     num_key_value_heads: int | None = None
     first_k_full_attention_layers: int = 8
     last_k_full_attention_layers: int = 8
+    pos_embed_dtype: str = "bfloat16"
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
