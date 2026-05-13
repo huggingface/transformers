@@ -496,9 +496,9 @@ class StaticSlidingWindowLayer(StaticLayer):
         # Not yet full, but becoming full on this update
         elif self.cumulative_length_int + query_length > sliding_window:
             kv_length = self.cumulative_length_int + query_length
-        # Here the Cache is still smaller than the local size, but we return the local size as it's static
+        # Cache is still smaller than the sliding window; use the actual number of tokens
         else:
-            kv_length = sliding_window
+            kv_length = self.cumulative_length_int + query_length
 
         return kv_length, kv_offset
 
