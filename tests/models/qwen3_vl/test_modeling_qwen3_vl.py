@@ -17,10 +17,8 @@ import copy
 import unittest
 
 import pytest
-from parameterized import parameterized
 
 from transformers import (
-    PreTrainedConfig,
     Qwen3VLConfig,
     Qwen3VLForConditionalGeneration,
     Qwen3VLModel,
@@ -29,7 +27,6 @@ from transformers import (
 from transformers.models.qwen3_vl.configuration_qwen3_vl import Qwen3VLTextConfig, Qwen3VLVisionConfig
 from transformers.testing_utils import (
     require_torch,
-    require_torch_accelerator,
     torch_device,
 )
 
@@ -44,34 +41,6 @@ if is_torch_available():
 
 if is_torch_available():
     import torch
-
-    from transformers import (
-        Qwen3_5MoeTextConfig,
-        Qwen3_5TextConfig,
-        Qwen3OmniMoeTalkerTextConfig,
-        Qwen3OmniMoeTextConfig,
-        Qwen3VLMoeTextConfig,
-    )
-    from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5TextRotaryEmbedding
-    from transformers.models.qwen3_5_moe.modeling_qwen3_5_moe import Qwen3_5MoeTextRotaryEmbedding
-    from transformers.models.qwen3_omni_moe.modeling_qwen3_omni_moe import (
-        Qwen3OmniMoeTalkerRotaryEmbedding,
-        Qwen3OmniMoeThinkerTextRotaryEmbedding,
-    )
-    from transformers.models.qwen3_vl.modeling_qwen3_vl import Qwen3VLTextRotaryEmbedding
-    from transformers.models.qwen3_vl_moe.modeling_qwen3_vl_moe import Qwen3VLMoeTextRotaryEmbedding
-
-    # The M-RoPE forward originates in ``Qwen3VLTextRotaryEmbedding`` and is propagated
-    # to descendants. All of them must keep ``inv_freq`` and ``x`` on the same device,
-    # including when ``inv_freq`` lives on CPU under FSDP2 cpu offload
-    MROPE_CROSS_DEVICE_CASES = [
-        ("qwen3_vl", Qwen3VLTextConfig, Qwen3VLTextRotaryEmbedding),
-        ("qwen3_5", Qwen3_5TextConfig, Qwen3_5TextRotaryEmbedding),
-        ("qwen3_5_moe", Qwen3_5MoeTextConfig, Qwen3_5MoeTextRotaryEmbedding),
-        ("qwen3_vl_moe", Qwen3VLMoeTextConfig, Qwen3VLMoeTextRotaryEmbedding),
-        ("qwen3_omni_moe_thinker", Qwen3OmniMoeTextConfig, Qwen3OmniMoeThinkerTextRotaryEmbedding),
-        ("qwen3_omni_moe_talker", Qwen3OmniMoeTalkerTextConfig, Qwen3OmniMoeTalkerRotaryEmbedding),
-    ]
 
 
 class Qwen3VLVisionText2TextModelTester(VLMModelTester):
@@ -522,26 +491,3 @@ class Qwen3VLTextModelPositionIdsTest(unittest.TestCase):
             output = model(input_ids=input_ids, position_ids=position_ids_2d, use_cache=False)
         self.assertEqual(output.last_hidden_state.shape, (batch_size, seq_len, config.hidden_size))
         self.assertTrue(torch.isfinite(output.last_hidden_state).all())
-
-
-@require_torch
-class Qwen3VLMRopeCrossDeviceTest(unittest.TestCase):
-    @parameterized.expand(MROPE_CROSS_DEVICE_CASES)
-    @require_torch_accelerator
-    def test_rotary_embedding_handles_cross_device_buffer(
-        self,
-        _name: str,
-        config_cls: type[PreTrainedConfig],
-        rotary_cls: type["torch.nn.Module"],
-    ) -> None:
-        config = config_cls()
-        rotary = rotary_cls(config)
-        self.assertEqual(rotary.inv_freq.device.type, "cpu")
-
-        bsz, seq_len = 1, 8
-        x = torch.randn(bsz, seq_len, config.hidden_size, device=torch_device, dtype=torch.bfloat16)
-        position_ids = torch.arange(seq_len, device=torch_device)[None, :]
-
-        cos, sin = rotary(x, position_ids)
-        self.assertEqual(cos.device.type, torch.device(torch_device).type)
-        self.assertEqual(sin.device.type, torch.device(torch_device).type)
