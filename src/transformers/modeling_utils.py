@@ -277,7 +277,12 @@ def get_state_dict_dtype(state_dict):
     """
     for t in state_dict.values():
         # We cannot instantiate a whole model under float4/8_xxx dtypes (torch does not allow setting them as default dtype)
-        if t.is_floating_point() and "float8_" not in str(t.dtype) and "float4_" not in str(t.dtype):
+        if (
+            hasattr(t, "is_floating_point")
+            and t.is_floating_point()
+            and "float8_" not in str(t.dtype)
+            and "float4_" not in str(t.dtype)
+        ):
             return t.dtype
 
     # if no floating dtype was found return whatever the first dtype is
@@ -4191,24 +4196,21 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             tqdm_class=tqdm_class,
         )
 
+        if gguf_file:
+            from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
+            from .quantizers.quantizer_gguf import GGUFQuantizer
+
+            gguf_parsed = load_gguf_checkpoint(checkpoint_files[0], return_tensors=True)
+            state_dict = gguf_parsed["tensors"]  # {gguf_name: GGUFQuantizedTensor}
+            # GGUFQuantizer takes precedence for materialization & weight-conversion injection.
+            hf_quantizer = GGUFQuantizer(weight_mapping=gguf_parsed.get("weight_mapping", []))
+
         is_quantized = hf_quantizer is not None
 
         # Find the correct dtype based on current state
         config, dtype = _get_dtype(
             dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only, hf_quantizer
         )
-
-        if gguf_file:
-            from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
-
-            # we need a dummy model to get the state_dict - for this reason, we keep the state_dict as if it was
-            # passed directly as a kwarg from now on
-            with torch.device("meta"):
-                dummy_model = cls(config)
-
-            state_dict = load_gguf_checkpoint(
-                checkpoint_files[0], return_tensors=True, model_to_load=dummy_model, torch_dtype=dtype
-            )["tensors"]
 
         config.name_or_path = pretrained_model_name_or_path
 
@@ -4243,7 +4245,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # instantiated model, as the flags can be modified by instances sometimes)
         dtype_plan = model._get_dtype_plan(dtype)
 
-        # Obtain the weight conversion mapping for this model if any are registered and apply to all submodels recursively
+        # Obtain the weight conversion mapping for this model if any are registered.
+        # The quantizer (incl. GGUFQuantizer) gets the final say on how to update them.
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
         if _torch_distributed_available and device_mesh is not None:  # add hooks to nn.Modules: no weights
@@ -4322,12 +4325,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         expected_keys: list[str] | None = None,
     ) -> tuple[LoadStateDictInfo, dict]:
         """Perform the actual loading of some checkpoints into a `model`, by reading them from disk and dispatching them accordingly."""
-        hf_quantizer = load_config.hf_quantizer
         is_quantized = load_config.is_quantized
-        is_hqq_or_quark = hf_quantizer is not None and hf_quantizer.quantization_config.quant_method in {
-            QuantizationMethod.HQQ,
-            QuantizationMethod.QUARK,
-        }
+        is_hqq_or_quark = (
+            is_quantized
+            and load_config.hf_quantizer.quantization_config is not None
+            and load_config.hf_quantizer.quantization_config.quant_method
+            in {
+                QuantizationMethod.HQQ,
+                QuantizationMethod.QUARK,
+            }
+        )
 
         # Model's definition arriving here is final (TP hooks added, quantized layers replaces)
         expected_keys = list(model.state_dict().keys()) if expected_keys is None else expected_keys

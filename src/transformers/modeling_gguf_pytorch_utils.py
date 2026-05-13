@@ -13,12 +13,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import re
-from typing import NamedTuple
-
-import numpy as np
-from tqdm.auto import tqdm
-
+from .core_model_loading import (
+    Concatenate,
+    GGUFQuantizedTensor,
+    Transpose,
+)
+from .gguf_conversion_ops import (
+    BloomReshapeQKVBias,
+    BloomReshapeQKVWeight,
+    LogNegate,
+    ReversePermuteAttnK,
+    ReversePermuteAttnQ,
+    SubtractOne,
+    Unsqueeze,
+    gguf_rename,
+)
 from .integrations import (
     GGUF_CONFIG_DEFAULTS_MAPPING,
     GGUF_CONFIG_MAPPING,
@@ -29,9 +38,6 @@ from .utils import is_torch_available
 from .utils.import_utils import is_gguf_available
 from .utils.logging import get_logger
 
-
-if is_torch_available():
-    import torch
 
 logger = get_logger(__name__)
 
@@ -53,422 +59,313 @@ GGUF_TO_TRANSFORMERS_MAPPING = {
 GGUF_SUPPORTED_ARCHITECTURES = list(GGUF_TO_TRANSFORMERS_MAPPING["config"].keys())
 
 
-class GGUFTensor(NamedTuple):
-    weights: np.ndarray
-    name: str
-    metadata: dict
-
-
-class TensorProcessor:
-    def __init__(self, config=None):
-        self.config = config or {}
-
-    def preprocess_name(self, hf_name: str) -> str:
-        """
-        Preprocesses the tensor name to ease loading the GGUF tensors.
-        """
-        return hf_name
-
-    def perform_fallback_tensor_mapping(
-        self, gguf_to_hf_name_map: dict[str, str], suffix: str, qual_name: str, hf_name: str
-    ):
-        """
-        Called when get_gguf_hf_weights_map fails to map a HF parameter
-        (tensor) and corresponding GGUF one.
-
-        This is particularly useful to resolve one-to-many
-        HF-GGUF mappings sometimes appear in some MoE models.
-        """
-        pass
-
-    def process(self, weights, name, **kwargs):
-        return GGUFTensor(weights, name, {})
-
-
-class LlamaTensorProcessor(TensorProcessor):
-    def __init__(self, config=None):
-        super().__init__(config=config)
-
-    def process(self, weights, name, **kwargs):
-        if ".attn_k." in name or ".attn_q." in name:
-            num_heads = self.config.get("num_attention_heads")
-            num_kv_heads = self.config.get("num_key_value_heads")
-
-            if None in (num_heads, num_kv_heads):
-                return GGUFTensor(weights, name, {})
-            if ".attn_q." in name:
-                weights = self._reverse_permute_weights(weights, num_heads, num_heads)
-            elif ".attn_k." in name:
-                weights = self._reverse_permute_weights(weights, num_heads, num_kv_heads)
-        return GGUFTensor(weights, name, {})
-
-    def _reverse_permute_weights(
-        self, weights: np.ndarray, n_head: int, num_kv_heads: int | None = None
-    ) -> np.ndarray:
-        # Original permutation implementation
-        # https://github.com/ggerganov/llama.cpp/blob/a38b884c6c4b0c256583acfaaabdf556c62fabea/convert_hf_to_gguf.py#L1402-L1408
-        if num_kv_heads is not None and n_head != num_kv_heads:
-            n_head = num_kv_heads
-
-        dim = weights.shape[0] // n_head // 2
-        w = weights.reshape(n_head, dim, 2, *weights.shape[1:])
-        return w.swapaxes(2, 1).reshape(weights.shape)
-
-
-class Qwen2MoeTensorProcessor(TensorProcessor):
-    HF_EXPERT_RENAME_PATTERN = re.compile(r"mlp.experts.\d+.")
-    HF_MOE_W13_PATTERN = re.compile(r"model\.layers\.(?P<bid>\d+)\.mlp\.experts\.gate_up_proj")
-    GGUF_MOE_WEIGHTS_PATTERN = re.compile(r"(?P<name>.*\.ffn_(?P<w>gate|down|up)_exps)\.weight$")
-
-    def __init__(self, config=None):
-        super().__init__(config=config)
-
-    def preprocess_name(self, hf_name: str) -> str:
-        return re.sub(self.HF_EXPERT_RENAME_PATTERN, "mlp.experts.", hf_name)
-
-    def perform_fallback_tensor_mapping(
-        self, gguf_to_hf_name_map: dict[str, str], suffix: str, qual_name: str, hf_name: str
-    ):
-        # Map merged MoE weights (w1 (gate) and w3 (up)) separately.
-        if m := re.fullmatch(self.HF_MOE_W13_PATTERN, hf_name):
-            full_hf_name = qual_name + hf_name
-            gguf_to_hf_name_map[f"blk.{m['bid']}.ffn_gate_exps{suffix}"] = full_hf_name
-            gguf_to_hf_name_map[f"blk.{m['bid']}.ffn_up_exps{suffix}"] = full_hf_name
-
-    def process(self, weights, name: str, **kwargs):
-        if m := re.fullmatch(self.GGUF_MOE_WEIGHTS_PATTERN, name):
-            tensor_key_mapping = kwargs.get("tensor_key_mapping")
-            parsed_parameters = kwargs.get("parsed_parameters")
-            if tensor_key_mapping:
-                self._set_moe_expert_tensor(weights, parsed_parameters, tensor_key_mapping[m["name"]], m["w"])
-                return GGUFTensor(weights, None, {})
-        if "ffn_gate_inp_shexp" in name:
-            # for compatibility tensor shared_expert_gate must be (1, 2048) dim,
-            # quantized one is (2048)
-            weights = np.expand_dims(weights, axis=0)
-        return GGUFTensor(weights, name, {})
-
-    def _set_moe_expert_tensor(self, weights: np.ndarray, parsed_parameters: dict[str, dict], hf_name: str, w: str):
-        torch_weights = torch.from_numpy(np.copy(weights))
-        if w == "down":
-            parsed_parameters["tensors"][hf_name] = torch_weights
-        else:
-            # Double the size of the second dimension to interleave w1 (gate) and w3 (up)
-            # weights per expert (which is the first dimension).
-            # w1 (gate) comes first and w3 (up) comes second.
-            # ref: https://github.com/vllm-project/vllm/blob/8f8fda261a620234fdeea338f44093d5d8072879/vllm/model_executor/layers/fused_moe/layer.py#L988-L1015
-            shape = list(weights.shape)
-            shard_dim = 1
-            shard_size = shape[shard_dim]
-            shape[shard_dim] = shard_size * 2
-            if hf_name not in parsed_parameters["tensors"]:
-                parsed_parameters["tensors"][hf_name] = torch.zeros(shape, dtype=torch_weights.dtype)
-            out: torch.Tensor = parsed_parameters["tensors"][hf_name]
-            if w == "gate":
-                out = out.narrow(shard_dim, 0, shard_size)
-            else:  # w == "up"
-                out = out.narrow(shard_dim, shard_size, shard_size)
-            out.copy_(torch_weights)
-
-
-class GptOssTensorProcessor(TensorProcessor):
-    """
-    Tensor processor for GPT-OSS models (MoE with 128 experts).
-    Handles:
-    - Splitting stacked expert tensors (down_proj, gate_proj, up_proj) into individual experts.
-    - Interleaving gate and up projections if stored in a combined tensor (gate_up_projs).
-    - Bias tensors (1D) are passed through without transpose.
-    """
-
-    # Regex for separate expert tensors: e.g., blk.0.ffn_down_projs.weight
-    GGUF_MOE_WEIGHTS_PATTERN = re.compile(r"blk\.(?P<bid>\d+)\.ffn_(?P<proj>down|gate|up)_projs\.weight$")
-    # Regex for combined gate+up tensor: e.g., blk.0.ffn_gate_up_projs.weight
-    GGUF_MOE_COMBINED_PATTERN = re.compile(r"blk\.(?P<bid>\d+)\.ffn_gate_up_projs\.weight$")
-
-    def __init__(self, config=None):
-        super().__init__(config=config)
-
-    def process(self, weights, name: str, **kwargs):
-        # 1. Handle separate MoE expert tensors (down, gate, up)
-        if m := self.GGUF_MOE_WEIGHTS_PATTERN.match(name):
-            tensor_key_mapping = kwargs.get("tensor_key_mapping")
-            parsed_parameters = kwargs.get("parsed_parameters")
-            if tensor_key_mapping and parsed_parameters:
-                self._split_moe_expert_tensor(weights, parsed_parameters, m["bid"], m["proj"], tensor_key_mapping)
-                return GGUFTensor(weights, None, {})  # signal handled
-
-        # 2. Handle combined gate+up tensor
-        if m := self.GGUF_MOE_COMBINED_PATTERN.match(name):
-            tensor_key_mapping = kwargs.get("tensor_key_mapping")
-            parsed_parameters = kwargs.get("parsed_parameters")
-            if tensor_key_mapping and parsed_parameters:
-                self._interleave_gate_up_tensor(weights, parsed_parameters, m["bid"], tensor_key_mapping)
-                return GGUFTensor(weights, None, {})
-
-        # 3. Bias tensors (1D) → no transpose
-        if ".bias" in name and len(weights.shape) == 1:
-            return GGUFTensor(weights, name, {})
-
-        # 4. Default handling for all other tensors
-        return GGUFTensor(weights, name, {})
-
-    def _split_moe_expert_tensor(
-        self,
-        weights: np.ndarray,
-        parsed_parameters: dict,
-        bid: str,
-        proj: str,
-        tensor_key_mapping: dict,
-    ):
-        """Split a stacked MoE tensor into individual expert tensors."""
-        num_experts = self.config.get("num_local_experts", 128)
-        # Expected shape: [num_experts, hidden_size, intermediate_size] (or swapped).
-        # We assume the stored order is correct for the projection after splitting.
-        for i in range(min(num_experts, weights.shape[0])):
-            expert_weight = weights[i]  # shape: [hidden, inter] or [inter, hidden]
-            # Build HF parameter name
-            hf_name = f"model.layers.{bid}.block_sparse_moe.experts.{i}.{proj}_proj.weight"
-            # Apply any user‑provided tensor key mapping
-            for key, mapped_key in tensor_key_mapping.items():
-                if key in hf_name:
-                    hf_name = hf_name.replace(key, mapped_key)
-            # Store the tensor
-            parsed_parameters["tensors"][hf_name] = torch.tensor(expert_weight, copy=True)
-
-    def _interleave_gate_up_tensor(
-        self,
-        weights: np.ndarray,
-        parsed_parameters: dict,
-        bid: str,
-        tensor_key_mapping: dict,
-    ):
-        """
-        Process a combined gate+up tensor.
-        Expected shape: [num_experts, intermediate_size, hidden_size].
-        Interleaving: gate occupies first half of intermediate dimension,
-        up occupies second half. Transpose to [hidden, half_inter] per expert.
-        """
-        num_experts = self.config.get("num_local_experts", 128)
-        inter_size = weights.shape[1]
-        half_inter = inter_size // 2
-        gate_part = weights[:, :half_inter, :]  # [E, half_inter, hidden]
-        up_part = weights[:, half_inter:, :]  # [E, half_inter, hidden]
-
-        for i in range(min(num_experts, weights.shape[0])):
-            gate_weight = gate_part[i].T  # [hidden, half_inter]
-            up_weight = up_part[i].T  # [hidden, half_inter]
-
-            gate_name = f"model.layers.{bid}.block_sparse_moe.experts.{i}.gate_proj.weight"
-            up_name = f"model.layers.{bid}.block_sparse_moe.experts.{i}.up_proj.weight"
-
-            # Apply mapping
-            for key, mapped_key in tensor_key_mapping.items():
-                if key in gate_name:
-                    gate_name = gate_name.replace(key, mapped_key)
-                if key in up_name:
-                    up_name = up_name.replace(key, mapped_key)
-
-            parsed_parameters["tensors"][gate_name] = torch.tensor(gate_weight, copy=True)
-            parsed_parameters["tensors"][up_name] = torch.tensor(up_weight, copy=True)
-
-
-class BloomTensorProcessor(TensorProcessor):
-    def __init__(self, config=None):
-        super().__init__(config=config)
-
-    def process(self, weights, name, **kwargs):
-        if "attn_qkv" in name:
-            num_heads = self.config["n_head"]
-            n_embed = self.config["hidden_size"]
-            if "weight" in name:
-                weights = self._reverse_reshape_weights(weights, num_heads, n_embed)
-            else:
-                weights = self._reverse_reshape_bias(weights, num_heads, n_embed)
-        return GGUFTensor(weights, name, {})
-
-    def _reverse_reshape_weights(self, weights: np.ndarray, n_head: int, n_embed: int):
-        # Original reshape implementation
-        # https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L972-L985
-        q, k, v = np.array_split(weights, 3, axis=0)
-
-        q = q.reshape(n_head, n_embed // n_head, n_embed)
-        k = k.reshape(n_head, n_embed // n_head, n_embed)
-        v = v.reshape(n_head, n_embed // n_head, n_embed)
-        qkv_weights = np.stack([q, k, v], axis=1)
-
-        return qkv_weights.reshape(n_head * 3 * (n_embed // n_head), n_embed)
-
-    def _reverse_reshape_bias(self, weights: np.ndarray, n_head: int, n_embed: int):
-        # Original reshape implementation
-        # https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L986-L998
-        q_bias, k_bias, v_bias = np.array_split(weights, 3)
-
-        q_bias = q_bias.reshape(n_head, n_embed // n_head)
-        k_bias = k_bias.reshape(n_head, n_embed // n_head)
-        v_bias = v_bias.reshape(n_head, n_embed // n_head)
-
-        qkv_bias = np.stack([q_bias, k_bias, v_bias], axis=1).flatten()
-        return qkv_bias
-
-
-class T5TensorProcessor(TensorProcessor):
-    def __init__(self, config=None):
-        super().__init__(config=config)
-
-    def process(self, weights, name, **kwargs):
-        bid = None
-        for chunk in name.split("."):
-            if chunk.isdigit():
-                bid = int(chunk)
-                break
-        return GGUFTensor(weights, name, {"bid": bid})
-
-
-class GPT2TensorProcessor(TensorProcessor):
-    def __init__(self, config=None):
-        super().__init__(config=config)
-
-    def process(self, weights, name, **kwargs):
-        # Original transpose implementation
-        # https://github.com/ggerganov/llama.cpp/blob/a38b884c6c4b0c256583acfaaabdf556c62fabea/convert_hf_to_gguf.py#L2060-L2061
-        if (
-            "attn_qkv.weight" in name
-            or "ffn_down.weight" in name
-            or "ffn_up.weight" in name
-            or "attn_output.weight" in name
-        ):
-            weights = weights.T
-
-        # Handle special case for output.weight
-        if name == "output.weight":
-            # output.weight has conflicts with attn_output.weight in name checking
-            # Store the tensor directly and signal to skip further processing
-            name = "lm_head.weight"
-            parsed_parameters = kwargs.get("parsed_parameters", {})
-            parsed_parameters["tensors"][name] = torch.from_numpy(np.copy(weights))
-            name = None  # Signal to skip further processing
-        return GGUFTensor(weights, name, {})
-
-
-class MambaTensorProcessor(TensorProcessor):
-    def __init__(self, config=None):
-        super().__init__(config=config)
-
-    def process(self, weights, name, **kwargs):
-        if "ssm_conv1d.weight" in name:
-            # for compatibility tensor ssm_conv1d must be (5120, 1, 4]) dim,
-            # quantized one is (5120, 4)
-            weights = np.expand_dims(weights, axis=1)
-        if "ssm_a" in name:
-            # Original exponential implementation
-            # https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L2975-L2977
-            weights = np.log(-weights)
-        return GGUFTensor(weights, name, {})
-
-
-class NemotronTensorProcessor(TensorProcessor):
-    def __init__(self, config=None):
-        super().__init__(config=config)
-
-    # ref : https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L4666
-    def process(self, weights, name, **kwargs):
-        if "norm.weight" in name:
-            weights = weights - 1
-        return GGUFTensor(weights, name, {})
-
-
-class Gemma2TensorProcessor(TensorProcessor):
-    def __init__(self, config=None):
-        super().__init__(config=config)
-
-    # ref: https://github.com/ggerganov/llama.cpp/blob/d79d8f39b4da6deca4aea8bf130c6034c482b320/convert_hf_to_gguf.py#L3191
-    # ref: https://github.com/huggingface/transformers/blob/fc37f38915372c15992b540dfcbbe00a916d4fc6/src/transformers/models/gemma/modeling_gemma.py#L89
-    def process(self, weights, name, **kwargs):
-        if "norm.weight" in name:
-            weights = weights - 1
-        return GGUFTensor(weights, name, {})
-
-
-class Lfm2TensorProcessor(TensorProcessor):
-    def __init__(self, config=None):
-        super().__init__(config=config)
-
-    def process(self, weights, name, **kwargs):
-        if "shortconv.conv.weight" in name:
-            ## GGUF shape is [hidden_dim, L_cache], HF expects [hidden_dim, 1, L_cache]
-            weights = np.expand_dims(weights, axis=1)  ## equivalent to unsqueeze(1)
-        return GGUFTensor(weights, name, {})
-
-
-class MiniMaxM2TensorProcessor(TensorProcessor):
-    HF_EXPERT_RENAME_PATTERN = re.compile(r"mlp\.experts\.\d+\.")
-    HF_MOE_W13_PATTERN = re.compile(r"(?:model\.)?layers\.(?P<bid>\d+)\.mlp\.experts\.gate_up_proj")
-    GGUF_MOE_WEIGHTS_PATTERN = re.compile(r"(?P<name>.*\.ffn_(?P<w>gate|down|up)_exps)\.weight$")
-    HF_BIAS_PATTERN = re.compile(r"(?:model\.)?layers\.(?P<bid>\d+)\.mlp\.e_score_correction_bias")
-
-    def __init__(self, config=None):
-        super().__init__(config=config)
-
-    def preprocess_name(self, hf_name: str) -> str:
-        return re.sub(self.HF_EXPERT_RENAME_PATTERN, "mlp.experts.", hf_name)
-
-    def perform_fallback_tensor_mapping(
-        self, gguf_to_hf_name_map: dict[str, str], suffix: str, qual_name: str, hf_name: str
-    ):
-        # Map merged gate_up_proj to both ffn_gate_exps and ffn_up_exps GGUF tensors.
-        if m := re.fullmatch(self.HF_MOE_W13_PATTERN, hf_name):
-            full_hf_name = qual_name + hf_name
-            gguf_to_hf_name_map[f"blk.{m['bid']}.ffn_gate_exps{suffix}"] = full_hf_name
-            gguf_to_hf_name_map[f"blk.{m['bid']}.ffn_up_exps{suffix}"] = full_hf_name
-        # Map e_score_correction_bias to GGUF exp_probs_b.bias.
-        elif m := re.fullmatch(self.HF_BIAS_PATTERN, hf_name):
-            gguf_to_hf_name_map[f"blk.{m['bid']}.exp_probs_b.bias"] = qual_name + hf_name
-
-    def process(self, weights, name: str, **kwargs):
-        if m := re.fullmatch(self.GGUF_MOE_WEIGHTS_PATTERN, name):
-            tensor_key_mapping = kwargs.get("tensor_key_mapping")
-            parsed_parameters = kwargs.get("parsed_parameters")
-            if tensor_key_mapping:
-                self._set_moe_expert_tensor(weights, parsed_parameters, tensor_key_mapping[m["name"]], m["w"])
-            return GGUFTensor(weights, None, {})
-        return GGUFTensor(weights, name, {})
-
-    def _set_moe_expert_tensor(self, weights: np.ndarray, parsed_parameters: dict[str, dict], hf_name: str, w: str):
-        torch_weights = torch.from_numpy(np.copy(weights))
-        if w == "down":
-            parsed_parameters["tensors"][hf_name] = torch_weights
-        else:
-            # Merge gate and up into gate_up_proj [num_experts, 2*intermediate, hidden]
-            shape = list(weights.shape)
-            shard_dim = 1
-            shard_size = shape[shard_dim]
-            shape[shard_dim] = shard_size * 2
-            if hf_name not in parsed_parameters["tensors"]:
-                parsed_parameters["tensors"][hf_name] = torch.zeros(shape, dtype=torch_weights.dtype)
-            out: torch.Tensor = parsed_parameters["tensors"][hf_name]
-            if w == "gate":
-                out = out.narrow(shard_dim, 0, shard_size)
-            else:  # w == "up"
-                out = out.narrow(shard_dim, shard_size, shard_size)
-            out.copy_(torch_weights)
-
-
-TENSOR_PROCESSORS = {
-    "llama": LlamaTensorProcessor,
-    "qwen2moe": Qwen2MoeTensorProcessor,
-    "gpt_oss": GptOssTensorProcessor,
-    "qwen3moe": Qwen2MoeTensorProcessor,
-    "bloom": BloomTensorProcessor,
-    "t5": T5TensorProcessor,
-    "t5encoder": T5TensorProcessor,
-    "gpt2": GPT2TensorProcessor,
-    "mamba": MambaTensorProcessor,
-    "nemotron": NemotronTensorProcessor,
-    "gemma2": Gemma2TensorProcessor,
-    "gemma3": Gemma2TensorProcessor,
-    "lfm2": Lfm2TensorProcessor,
-    "minimax-m2": MiniMaxM2TensorProcessor,
+# ---------------------------------------------------------------------------
+# Static per-architecture GGUF→HF converter tables
+# ---------------------------------------------------------------------------
+# Each entry is a list of WeightRenaming / WeightConverter rules built via ``gguf_rename``.
+# `*` in source patterns becomes `(\d+)` (layer-index capture group).
+# `*` in target patterns becomes `\1`  (backreference, resolved at rename time).
+
+# Shared building blocks
+_ROPE_ATTN_CONVERTERS = [
+    gguf_rename("blk.*.attn_q.weight", "model.layers.*.self_attn.q_proj.weight", [ReversePermuteAttnQ()]),
+    gguf_rename("blk.*.attn_k.weight", "model.layers.*.self_attn.k_proj.weight", [ReversePermuteAttnK()]),
+]
+
+_NORM_SUBTRACT_ONE_CONVERTERS = [
+    gguf_rename("blk.*.attn_norm.weight", "model.layers.*.input_layernorm.weight", [SubtractOne()]),
+    gguf_rename("blk.*.ffn_norm.weight", "model.layers.*.post_attention_layernorm.weight", [SubtractOne()]),
+]
+
+_NORM_CONVERTERS = [
+    gguf_rename("blk.*.attn_norm.weight", "model.layers.*.input_layernorm.weight"),
+    gguf_rename("blk.*.ffn_norm.weight", "model.layers.*.post_attention_layernorm.weight"),
+]
+
+_LLAMA_SHARED = [
+    gguf_rename("blk.*.attn_v.weight", "model.layers.*.self_attn.v_proj.weight"),
+    gguf_rename("blk.*.attn_output.weight", "model.layers.*.self_attn.o_proj.weight"),
+    gguf_rename("blk.*.ffn_gate.weight", "model.layers.*.mlp.gate_proj.weight"),
+    gguf_rename("blk.*.ffn_up.weight", "model.layers.*.mlp.up_proj.weight"),
+    gguf_rename("blk.*.ffn_down.weight", "model.layers.*.mlp.down_proj.weight"),
+    gguf_rename("token_embd.weight", "model.embed_tokens.weight"),
+    gguf_rename("output_norm.weight", "model.norm.weight"),
+    gguf_rename("output.weight", "lm_head.weight"),
+]
+
+_LLAMA_CONVERTERS = _ROPE_ATTN_CONVERTERS + _NORM_CONVERTERS + _LLAMA_SHARED
+_NEMOTRON_CONVERTERS = _ROPE_ATTN_CONVERTERS + _NORM_SUBTRACT_ONE_CONVERTERS + _LLAMA_SHARED
+_GEMMA_CONVERTERS = _ROPE_ATTN_CONVERTERS + _NORM_SUBTRACT_ONE_CONVERTERS + _LLAMA_SHARED
+
+# T5 / UMT5 (encoder–decoder; encoder uses layer.0/1, decoder uses layer.0/1/2)
+_T5_CONVERTERS = [
+    # ── encoder ────────────────────────────────────────────────────────
+    gguf_rename("enc.blk.*.attn_norm.weight", "encoder.block.*.layer.0.layer_norm.weight"),
+    gguf_rename("enc.blk.*.attn_q.weight", "encoder.block.*.layer.0.SelfAttention.q.weight"),
+    gguf_rename("enc.blk.*.attn_k.weight", "encoder.block.*.layer.0.SelfAttention.k.weight"),
+    gguf_rename("enc.blk.*.attn_v.weight", "encoder.block.*.layer.0.SelfAttention.v.weight"),
+    gguf_rename("enc.blk.*.attn_o.weight", "encoder.block.*.layer.0.SelfAttention.o.weight"),
+    gguf_rename(
+        "enc.blk.*.attn_rel_b.weight",
+        "encoder.block.*.layer.0.SelfAttention.relative_attention_bias.weight",
+    ),
+    gguf_rename("enc.blk.*.ffn_norm.weight", "encoder.block.*.layer.1.layer_norm.weight"),
+    gguf_rename("enc.blk.*.ffn_gate.weight", "encoder.block.*.layer.1.DenseReluDense.wi_0.weight"),
+    gguf_rename("enc.blk.*.ffn_up.weight", "encoder.block.*.layer.1.DenseReluDense.wi_1.weight"),
+    gguf_rename("enc.blk.*.ffn_down.weight", "encoder.block.*.layer.1.DenseReluDense.wo.weight"),
+    gguf_rename("enc.output_norm.weight", "encoder.final_layer_norm.weight"),
+    # ── decoder ────────────────────────────────────────────────────────
+    gguf_rename("dec.blk.*.attn_norm.weight", "decoder.block.*.layer.0.layer_norm.weight"),
+    gguf_rename("dec.blk.*.attn_q.weight", "decoder.block.*.layer.0.SelfAttention.q.weight"),
+    gguf_rename("dec.blk.*.attn_k.weight", "decoder.block.*.layer.0.SelfAttention.k.weight"),
+    gguf_rename("dec.blk.*.attn_v.weight", "decoder.block.*.layer.0.SelfAttention.v.weight"),
+    gguf_rename("dec.blk.*.attn_o.weight", "decoder.block.*.layer.0.SelfAttention.o.weight"),
+    gguf_rename(
+        "dec.blk.*.attn_rel_b.weight",
+        "decoder.block.*.layer.0.SelfAttention.relative_attention_bias.weight",
+    ),
+    gguf_rename("dec.blk.*.cross_attn_norm.weight", "decoder.block.*.layer.1.layer_norm.weight"),
+    gguf_rename("dec.blk.*.cross_attn_q.weight", "decoder.block.*.layer.1.EncDecAttention.q.weight"),
+    gguf_rename("dec.blk.*.cross_attn_k.weight", "decoder.block.*.layer.1.EncDecAttention.k.weight"),
+    gguf_rename("dec.blk.*.cross_attn_v.weight", "decoder.block.*.layer.1.EncDecAttention.v.weight"),
+    gguf_rename("dec.blk.*.cross_attn_o.weight", "decoder.block.*.layer.1.EncDecAttention.o.weight"),
+    gguf_rename("dec.blk.*.ffn_norm.weight", "decoder.block.*.layer.2.layer_norm.weight"),
+    gguf_rename("dec.blk.*.ffn_gate.weight", "decoder.block.*.layer.2.DenseReluDense.wi_0.weight"),
+    gguf_rename("dec.blk.*.ffn_up.weight", "decoder.block.*.layer.2.DenseReluDense.wi_1.weight"),
+    gguf_rename("dec.blk.*.ffn_down.weight", "decoder.block.*.layer.2.DenseReluDense.wo.weight"),
+    gguf_rename("dec.output_norm.weight", "decoder.final_layer_norm.weight"),
+    # ── shared ─────────────────────────────────────────────────────────
+    gguf_rename("token_embd.weight", "shared.weight"),
+    gguf_rename("output.weight", "lm_head.weight"),
+]
+
+# StableLM (Llama-like + optional q_norm/k_norm)
+_STABLELM_CONVERTERS = [
+    *_ROPE_ATTN_CONVERTERS,
+    *_NORM_CONVERTERS,
+    *_LLAMA_SHARED,
+    # Newer stablelm variants have q_norm/k_norm
+    gguf_rename("blk.*.attn_q_norm.weight", "model.layers.*.self_attn.q_layernorm.weight"),
+    gguf_rename("blk.*.attn_k_norm.weight", "model.layers.*.self_attn.k_layernorm.weight"),
+    # Older variants ship attn biases
+    gguf_rename("blk.*.attn_q.bias", "model.layers.*.self_attn.q_proj.bias"),
+    gguf_rename("blk.*.attn_k.bias", "model.layers.*.self_attn.k_proj.bias"),
+    gguf_rename("blk.*.attn_v.bias", "model.layers.*.self_attn.v_proj.bias"),
+]
+
+# Starcoder2 (Llama-style attention + single-layer c_fc/c_proj MLP, with biases)
+_STARCODER2_CONVERTERS = [
+    *_ROPE_ATTN_CONVERTERS,
+    *_NORM_CONVERTERS,
+    gguf_rename("blk.*.attn_v.weight", "model.layers.*.self_attn.v_proj.weight"),
+    gguf_rename("blk.*.attn_output.weight", "model.layers.*.self_attn.o_proj.weight"),
+    gguf_rename("blk.*.attn_q.bias", "model.layers.*.self_attn.q_proj.bias"),
+    gguf_rename("blk.*.attn_k.bias", "model.layers.*.self_attn.k_proj.bias"),
+    gguf_rename("blk.*.attn_v.bias", "model.layers.*.self_attn.v_proj.bias"),
+    gguf_rename("blk.*.attn_output.bias", "model.layers.*.self_attn.o_proj.bias"),
+    gguf_rename("blk.*.ffn_up.weight", "model.layers.*.mlp.c_fc.weight"),
+    gguf_rename("blk.*.ffn_up.bias", "model.layers.*.mlp.c_fc.bias"),
+    gguf_rename("blk.*.ffn_down.weight", "model.layers.*.mlp.c_proj.weight"),
+    gguf_rename("blk.*.ffn_down.bias", "model.layers.*.mlp.c_proj.bias"),
+    gguf_rename("blk.*.attn_norm.bias", "model.layers.*.input_layernorm.bias"),
+    gguf_rename("blk.*.ffn_norm.bias", "model.layers.*.post_attention_layernorm.bias"),
+    gguf_rename("token_embd.weight", "model.embed_tokens.weight"),
+    gguf_rename("output_norm.weight", "model.norm.weight"),
+    gguf_rename("output_norm.bias", "model.norm.bias"),
+    gguf_rename("output.weight", "lm_head.weight"),
+]
+
+# Falcon (merged QKV + dense_h_to_4h/dense_4h_to_h MLP; biases vary by variant)
+_FALCON_CONVERTERS = [
+    gguf_rename(
+        "blk.*.attn_qkv.weight",
+        "transformer.h.*.self_attention.query_key_value.weight",
+    ),
+    gguf_rename("blk.*.attn_output.weight", "transformer.h.*.self_attention.dense.weight"),
+    gguf_rename("blk.*.ffn_up.weight", "transformer.h.*.mlp.dense_h_to_4h.weight"),
+    gguf_rename("blk.*.ffn_down.weight", "transformer.h.*.mlp.dense_4h_to_h.weight"),
+    # 7B style: parallel attn+mlp shares one input_layernorm
+    gguf_rename("blk.*.attn_norm.weight", "transformer.h.*.input_layernorm.weight"),
+    gguf_rename("blk.*.attn_norm.bias", "transformer.h.*.input_layernorm.bias"),
+    # 40B style: separate ln_attn / ln_mlp
+    gguf_rename("blk.*.attn_norm_2.weight", "transformer.h.*.ln_mlp.weight"),
+    gguf_rename("blk.*.attn_norm_2.bias", "transformer.h.*.ln_mlp.bias"),
+    gguf_rename("token_embd.weight", "transformer.word_embeddings.weight"),
+    gguf_rename("output_norm.weight", "transformer.ln_f.weight"),
+    gguf_rename("output_norm.bias", "transformer.ln_f.bias"),
+    gguf_rename("output.weight", "lm_head.weight"),
+]
+
+# GPT-OSS (MoE with router, post-attention norm, merged gate_up_proj)
+_GPT_OSS_CONVERTERS = [
+    *_ROPE_ATTN_CONVERTERS,
+    *_NORM_CONVERTERS,
+    gguf_rename("blk.*.attn_v.weight", "model.layers.*.self_attn.v_proj.weight"),
+    gguf_rename("blk.*.attn_output.weight", "model.layers.*.self_attn.o_proj.weight"),
+    gguf_rename("blk.*.post_attention_norm.weight", "model.layers.*.post_attention_layernorm.weight"),
+    gguf_rename("blk.*.ffn_gate_inp.weight", "model.layers.*.mlp.router.weight"),
+    gguf_rename(
+        ["blk.*.ffn_gate_exps.weight", "blk.*.ffn_up_exps.weight"],
+        "model.layers.*.mlp.experts.gate_up_proj",
+        [Concatenate(dim=1)],
+    ),
+    gguf_rename("blk.*.ffn_down_exps.weight", "model.layers.*.mlp.experts.down_proj"),
+    gguf_rename("token_embd.weight", "model.embed_tokens.weight"),
+    gguf_rename("output_norm.weight", "model.norm.weight"),
+    gguf_rename("output.weight", "lm_head.weight"),
+]
+
+# MiniMax-M2 (Qwen3-MoE-style + per-expert score correction bias)
+_MINIMAX_M2_CONVERTERS = [
+    *_ROPE_ATTN_CONVERTERS,
+    *_NORM_CONVERTERS,
+    gguf_rename("blk.*.attn_v.weight", "model.layers.*.self_attn.v_proj.weight"),
+    gguf_rename("blk.*.attn_q_norm.weight", "model.layers.*.self_attn.q_norm.weight"),
+    gguf_rename("blk.*.attn_k_norm.weight", "model.layers.*.self_attn.k_norm.weight"),
+    gguf_rename("blk.*.attn_output.weight", "model.layers.*.self_attn.o_proj.weight"),
+    gguf_rename("blk.*.ffn_gate_inp.weight", "model.layers.*.mlp.gate.weight"),
+    gguf_rename("blk.*.exp_probs_b.bias", "model.layers.*.mlp.e_score_correction_bias"),
+    gguf_rename(
+        ["blk.*.ffn_gate_exps.weight", "blk.*.ffn_up_exps.weight"],
+        "model.layers.*.mlp.experts.gate_up_proj",
+        [Concatenate(dim=1)],
+    ),
+    gguf_rename("blk.*.ffn_down_exps.weight", "model.layers.*.mlp.experts.down_proj"),
+    gguf_rename("token_embd.weight", "model.embed_tokens.weight"),
+    gguf_rename("output_norm.weight", "model.norm.weight"),
+    gguf_rename("output.weight", "lm_head.weight"),
+]
+
+_QWEN2_MOE_CONVERTERS = [
+    *_ROPE_ATTN_CONVERTERS,
+    *_NORM_CONVERTERS,
+    gguf_rename("blk.*.attn_v.", "model.layers.*.self_attn.v_proj."),
+    gguf_rename("blk.*.attn_k.bias", "model.layers.*.self_attn.k_proj.bias"),
+    gguf_rename("blk.*.attn_q.bias", "model.layers.*.self_attn.q_proj.bias"),
+    gguf_rename("blk.*.attn_output.weight", "model.layers.*.self_attn.o_proj.weight"),
+    gguf_rename("blk.*.ffn_down_shexp.weight", "model.layers.*.mlp.shared_expert.down_proj.weight"),
+    gguf_rename("blk.*.ffn_gate_shexp.weight", "model.layers.*.mlp.shared_expert.gate_proj.weight"),
+    gguf_rename("blk.*.ffn_up_shexp.weight", "model.layers.*.mlp.shared_expert.up_proj.weight"),
+    gguf_rename("blk.*.ffn_gate_inp.weight", "model.layers.*.mlp.gate.weight"),
+    gguf_rename("blk.*.ffn_gate_inp_shexp", "model.layers.*.mlp.shared_expert_gate", [Unsqueeze(0)]),
+    gguf_rename(
+        ["blk.*.ffn_gate_exps.weight", "blk.*.ffn_up_exps.weight"],
+        "model.layers.*.mlp.experts.gate_up_proj",
+        [Concatenate(dim=1)],
+    ),
+    gguf_rename("blk.*.ffn_down_exps.weight", "model.layers.*.mlp.experts.down_proj"),
+    gguf_rename("token_embd.weight", "model.embed_tokens.weight"),
+    gguf_rename("output_norm.weight", "model.norm.weight"),
+    gguf_rename("output.weight", "lm_head.weight"),
+]
+
+_GGUF_ARCH_CONVERTERS: dict[str, list] = {
+    # RoPE llama-family
+    "llama": _LLAMA_CONVERTERS,
+    "mistral": _LLAMA_CONVERTERS,
+    "phi3": _LLAMA_CONVERTERS,
+    "cohere": _LLAMA_CONVERTERS,
+    "qwen2": _LLAMA_CONVERTERS,
+    "qwen3": _LLAMA_CONVERTERS,
+    # Norm subtract-one variants
+    "nemotron": _NEMOTRON_CONVERTERS,
+    "gemma2": _GEMMA_CONVERTERS,
+    "gemma3_text": _GEMMA_CONVERTERS,
+    # Bloom
+    "bloom": [
+        gguf_rename("blk.*.attn_norm.weight", "transformer.h.*.ln_attn.weight"),
+        gguf_rename("blk.*.attn_norm.bias", "transformer.h.*.ln_attn.bias"),
+        gguf_rename(
+            "blk.*.attn_qkv.weight", "transformer.h.*.self_attention.query_key_value.weight", [BloomReshapeQKVWeight()]
+        ),
+        gguf_rename(
+            "blk.*.attn_qkv.bias", "transformer.h.*.self_attention.query_key_value.bias", [BloomReshapeQKVBias()]
+        ),
+        gguf_rename("blk.*.attn_output.weight", "transformer.h.*.self_attention.dense.weight"),
+        gguf_rename("blk.*.attn_output.bias", "transformer.h.*.self_attention.dense.bias"),
+        gguf_rename("blk.*.ffn_norm.weight", "transformer.h.*.ln_mlp.weight"),
+        gguf_rename("blk.*.ffn_norm.bias", "transformer.h.*.ln_mlp.bias"),
+        gguf_rename("blk.*.ffn_up.weight", "transformer.h.*.mlp.dense_h_to_4h.weight"),
+        gguf_rename("blk.*.ffn_up.bias", "transformer.h.*.mlp.dense_h_to_4h.bias"),
+        gguf_rename("blk.*.ffn_down.weight", "transformer.h.*.mlp.dense_4h_to_h.weight"),
+        gguf_rename("blk.*.ffn_down.bias", "transformer.h.*.mlp.dense_4h_to_h.bias"),
+        gguf_rename("token_embd.weight", "transformer.word_embeddings.weight"),
+        gguf_rename("token_embd.bias", "transformer.word_embeddings.bias"),
+        gguf_rename("token_embd_norm.weight", "transformer.word_embeddings_layernorm.weight"),
+        gguf_rename("token_embd_norm.bias", "transformer.word_embeddings_layernorm.bias"),
+        gguf_rename("output_norm.weight", "transformer.ln_f.weight"),
+        gguf_rename("output_norm.bias", "transformer.ln_f.bias"),
+    ],
+    # GPT2
+    "gpt2": [
+        gguf_rename("blk.*.attn_qkv.weight", "transformer.h.*.attn.c_attn.weight", [Transpose()]),
+        gguf_rename("blk.*.attn_qkv.bias", "transformer.h.*.attn.c_attn.bias"),
+        gguf_rename("blk.*.attn_output.weight", "transformer.h.*.attn.c_proj.weight", [Transpose()]),
+        gguf_rename("blk.*.attn_output.bias", "transformer.h.*.attn.c_proj.bias"),
+        gguf_rename("blk.*.ffn_up.weight", "transformer.h.*.mlp.c_fc.weight", [Transpose()]),
+        gguf_rename("blk.*.ffn_up.bias", "transformer.h.*.mlp.c_fc.bias"),
+        gguf_rename("blk.*.ffn_down.weight", "transformer.h.*.mlp.c_proj.weight", [Transpose()]),
+        gguf_rename("blk.*.ffn_down.bias", "transformer.h.*.mlp.c_proj.bias"),
+        gguf_rename("blk.*.attn_norm.weight", "transformer.h.*.ln_1.weight"),
+        gguf_rename("blk.*.attn_norm.bias", "transformer.h.*.ln_1.bias"),
+        gguf_rename("blk.*.ffn_norm.weight", "transformer.h.*.ln_2.weight"),
+        gguf_rename("blk.*.ffn_norm.bias", "transformer.h.*.ln_2.bias"),
+        gguf_rename("token_embd.weight", "transformer.wte.weight"),
+        gguf_rename("position_embd.weight", "transformer.wpe.weight"),
+        gguf_rename("output_norm.weight", "transformer.ln_f.weight"),
+        gguf_rename("output_norm.bias", "transformer.ln_f.bias"),
+        gguf_rename("output.weight", "lm_head.weight"),
+    ],
+    # Mamba
+    "mamba": [
+        gguf_rename("blk.*.ssm_in.weight", "backbone.layers.*.mixer.in_proj.weight"),
+        gguf_rename("blk.*.ssm_conv1d.weight", "backbone.layers.*.mixer.conv1d.weight", [Unsqueeze(1)]),
+        gguf_rename("blk.*.ssm_conv1d.bias", "backbone.layers.*.mixer.conv1d.bias"),
+        gguf_rename("blk.*.ssm_x.weight", "backbone.layers.*.mixer.x_proj.weight"),
+        gguf_rename("blk.*.ssm_dt.weight", "backbone.layers.*.mixer.dt_proj.weight"),
+        gguf_rename("blk.*.ssm_dt.bias", "backbone.layers.*.mixer.dt_proj.bias"),
+        gguf_rename("blk.*.ssm_a", "backbone.layers.*.mixer.A_log", [LogNegate()]),
+        gguf_rename("blk.*.ssm_d", "backbone.layers.*.mixer.D"),
+        gguf_rename("blk.*.ssm_out.weight", "backbone.layers.*.mixer.out_proj.weight"),
+        gguf_rename("blk.*.attn_norm.weight", "backbone.layers.*.norm.weight"),
+        gguf_rename("token_embd.weight", "backbone.embedding.weight"),
+        gguf_rename("output_norm.weight", "backbone.norm_f.weight"),
+        gguf_rename("output.weight", "lm_head.weight"),
+    ],
+    # LFM2
+    "lfm2": [
+        *_ROPE_ATTN_CONVERTERS,
+        *_NORM_CONVERTERS,
+        *_LLAMA_SHARED,
+        gguf_rename("blk.*.shortconv.conv.weight", "model.layers.*.conv.weight", [Unsqueeze(1)]),
+    ],
+    # Qwen2MoE / Qwen3MoE
+    "qwen2_moe": _QWEN2_MOE_CONVERTERS,
+    "qwen3_moe": _QWEN2_MOE_CONVERTERS,
+    # MiniMax-M2
+    "minimax_m2": _MINIMAX_M2_CONVERTERS,
+    # Deci (Llama-like)
+    "deci": _LLAMA_CONVERTERS,
+    # StableLM (Llama-like + q_norm/k_norm and attn biases)
+    "stablelm": _STABLELM_CONVERTERS,
+    # Starcoder2 (single-layer MLP c_fc/c_proj, biases everywhere)
+    "starcoder2": _STARCODER2_CONVERTERS,
+    # Falcon (merged QKV, dense_h_to_4h MLP, 7B vs 40B norm variants)
+    "falcon": _FALCON_CONVERTERS,
+    # GPT-OSS (MoE with router + post_attention_norm)
+    "gpt_oss": _GPT_OSS_CONVERTERS,
+    # Gemma3 (multimodal — text layers same as gemma3_text)
+    "gemma3": _GEMMA_CONVERTERS,
+    # T5 / UMT5 / T5-encoder share the same encoder–decoder mapping
+    "t5": _T5_CONVERTERS,
+    "t5encoder": _T5_CONVERTERS,
+    "umt5": _T5_CONVERTERS,
 }
+
+
+def get_gguf_converters(model_type: str) -> list:
+    """Return the GGUF→HF rename rules (``WeightRenaming`` / ``WeightConverter``) for a given HF model type."""
+    return list(_GGUF_ARCH_CONVERTERS.get(model_type, []))
 
 
 def read_field(reader, field):
@@ -478,96 +375,7 @@ def read_field(reader, field):
     return [_gguf_parse_value(value.parts[_data_index], value.types) for _data_index in value.data]
 
 
-# modified from https://github.com/vllm-project/vllm/blob/v0.6.4.post1/vllm/model_executor/model_loader/loader.py#L1115-L1147
-def get_gguf_hf_weights_map(
-    hf_model,
-    processor: TensorProcessor,
-    model_type: str | None = None,
-    num_layers: int | None = None,
-    qual_name: str = "",
-):
-    """
-    GGUF uses this naming convention for their tensors from HF checkpoint:
-    `blk.N.BB.weight` and `blk.N.BB.bias`
-    where N signifies the block number of a layer, and BB signifies the
-    attention/mlp layer components.
-    See "Standardized tensor names" in
-    https://github.com/ggerganov/ggml/blob/master/docs/gguf.md for details.
-    """
-    if is_gguf_available() and is_torch_available():
-        from gguf import MODEL_ARCH_NAMES, get_tensor_name_map
-    else:
-        logger.error(
-            "Loading a GGUF checkpoint in PyTorch, requires both PyTorch and GGUF>=0.10.0 to be installed. Please see "
-            "https://pytorch.org/ and https://github.com/ggerganov/llama.cpp/tree/master/gguf-py for installation instructions."
-        )
-        raise ImportError("Please install torch and gguf>=0.10.0 to load a GGUF checkpoint in PyTorch.")
-
-    model_type = hf_model.config.model_type if model_type is None else model_type
-    num_layers = hf_model.config.num_hidden_layers if num_layers is None else num_layers
-    # hack: ggufs have a different name for cohere
-    if model_type == "cohere":
-        model_type = "command-r"
-    elif model_type == "qwen2_moe":
-        model_type = "qwen2moe"
-    elif model_type == "qwen3_moe":
-        model_type = "qwen3moe"
-    elif model_type == "gemma3_text":
-        model_type = "gemma3"
-    elif model_type == "umt5":
-        model_type = "t5"
-    elif model_type == "minimax_m2":
-        model_type = "minimax-m2"
-    elif model_type == "gpt_oss":
-        model_type = "gpt-oss"
-    arch = None
-    for key, value in MODEL_ARCH_NAMES.items():
-        if value == model_type:
-            arch = key
-            break
-    if arch is None:
-        raise NotImplementedError(
-            f"Unknown gguf model_type: {model_type} in gguf-py. "
-            "This might because you're using an outdated version of gguf-py package, "
-            "you can install `gguf` package from source refer to "
-            "https://github.com/ggerganov/llama.cpp/tree/master/gguf-py#development"
-        )
-    name_map = get_tensor_name_map(arch, num_layers)
-
-    # Use a dummy conversion to get the mapping, because
-    # hf => gguf and gguf => hf mappings are reversed
-    gguf_to_hf_name_map = {}
-    state_dict = hf_model.state_dict()
-    for hf_name in state_dict:
-        hf_name = processor.preprocess_name(hf_name)
-
-        name, suffix = hf_name, ""
-        if hf_name.endswith(".weight") or hf_name.endswith(".bias"):
-            name, suffix = hf_name.rsplit(".", 1)
-            suffix = "." + suffix
-
-        gguf_name = name_map.get_name(name)
-        if gguf_name is None:
-            processor.perform_fallback_tensor_mapping(gguf_to_hf_name_map, suffix, qual_name, hf_name)
-            continue
-
-        gguf_to_hf_name_map[gguf_name + suffix] = qual_name + hf_name
-
-    # Some model like Bloom converted from BloomModel instead of BloomForCausalLM
-    # Therefore, we need to check submodule as well to get a correct mapping
-    if named_children := hf_model.named_children():
-        for name, child in named_children:
-            sub_map = get_gguf_hf_weights_map(
-                child, processor, model_type, num_layers, qual_name=f"{qual_name}{name}."
-            )
-            # Ignore the keys that are already in the main map to avoid overwriting
-            sub_map = {k: v for k, v in sub_map.items() if k not in gguf_to_hf_name_map}
-            gguf_to_hf_name_map.update(sub_map)
-
-    return gguf_to_hf_name_map
-
-
-def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_load=None, torch_dtype=None):
+def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
     """
     Load a GGUF file and return a dictionary of parsed parameters containing tensors, the parsed
     tokenizer and config attributes.
@@ -578,15 +386,9 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
         return_tensors (`bool`, defaults to `False`):
             Whether to read the tensors from the file and return them. Not doing so is faster
             and only loads the metadata in memory.
-        model_to_load (`nn.Module`, *optional*):
-            The model to load the weights into. This is used to map GGUF tensor names to
-            Transformers parameter names.
-        torch_dtype (`torch.dtype`, *optional*):
-            The desired `torch.dtype` for the loaded tensors. If provided, tensors will be
-            converted to this dtype immediately after dequantization to save memory.
     """
     if is_gguf_available() and is_torch_available():
-        from gguf import GGUFReader, dequantize
+        from gguf import GGUFReader
     else:
         logger.error(
             "Loading a GGUF checkpoint in PyTorch, requires both PyTorch and GGUF>=0.10.0 to be installed. Please see "
@@ -626,12 +428,8 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
 
     if "qwen2moe" in architecture:
         updated_architecture = "qwen2_moe"
-    elif "gpt_oss" in architecture or "gpt-oss" in architecture:
-        updated_architecture = "gpt_oss"
     elif "qwen3moe" in architecture:
         updated_architecture = "qwen3_moe"
-    elif "minimax-m2" in architecture:
-        updated_architecture = "minimax_m2"
 
     # For stablelm architecture, we need to set qkv_bias and use_parallel_residual from tensors
     # If `qkv_bias=True`, qkv_proj with bias will be present in the tensors
@@ -695,13 +493,6 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     if parsed_parameters["config"]["model_type"] == "gemma3":
         parsed_parameters["config"]["model_type"] = "gemma3_text"
 
-    # MiniMax-M2: convert expert_gating_func integer to scoring_func string
-    if parsed_parameters["config"].get("model_type") == "minimax_m2":
-        _gating_func_map = {0: "none", 1: "softmax", 2: "sigmoid"}
-        _scoring = parsed_parameters["config"].get("scoring_func")
-        if isinstance(_scoring, int):
-            parsed_parameters["config"]["scoring_func"] = _gating_func_map.get(_scoring, "softmax")
-
     if parsed_parameters["config"]["model_type"] == "lfm2":
         gguf_num_key_value_heads = parsed_parameters["config"]["num_key_value_heads"]
         # LFM2 GGUF checkpoint defines num_key_value_heads as a list of integers .e.g [0, 0, 8, 0, 0, 8, 0, 0, 8, 0, 8, 0, 8, 0, 8, 0] but we need to set it to the max value for HF
@@ -714,45 +505,6 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
         parsed_parameters["config"]["full_attn_idxs"] = [
             i for i, num_kv_heads in enumerate(gguf_num_key_value_heads) if num_kv_heads > 0
         ]
-
-    if updated_architecture == "gpt_oss":
-        # Helper to read keys with the correct prefix
-        def read_gpt_key(reader, suffix, default=None):
-            key = f"gpt-oss.{suffix}"
-            if key in reader.fields:
-                val = reader.fields[key].parts[0]
-                if isinstance(val, bytes):
-                    val = val.decode("utf-8")
-                return val
-            return default
-
-        #  Reconstruct rope_scaling from GGUF metadata
-        rope_type = read_gpt_key(reader, "rope.scaling.type")
-        if rope_type is not None:
-            rope_scaling = {"rope_type": rope_type}
-
-            # Collect all rope.scaling keys dynamically
-            for key in reader.fields:
-                if not key.startswith("gpt-oss.rope.scaling."):
-                    continue
-                suffix = key[len("gpt-oss.rope.scaling.") :]
-                if suffix == "type":
-                    continue
-                value = reader.fields[key].parts[0]
-                if isinstance(value, bytes):
-                    value = value.decode("utf-8")
-                # Convert to appropriate type
-                if suffix in ("factor", "attention_factor", "beta_fast", "beta_slow"):
-                    value = float(value)
-                elif suffix in ("original_context_length", "original_max_position_embeddings"):
-                    # Map GGUF's original_context_length to HF's original_max_position_embeddings
-                    suffix = "original_max_position_embeddings"
-                    value = int(value)
-                else:
-                    pass
-                rope_scaling[suffix] = value
-
-            parsed_parameters["config"]["rope_scaling"] = rope_scaling
 
     # retrieve config vocab_size from tokenizer
     # Please refer to https://github.com/huggingface/transformers/issues/32526 for more details
@@ -767,38 +519,13 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
             )
 
     if return_tensors:
-        parsed_parameters["tensors"] = {}
-
         config = parsed_parameters.get("config", {})
+        model_type = config.get("model_type", architecture)
 
-        ProcessorClass = TENSOR_PROCESSORS.get(architecture, TensorProcessor)
-        processor = ProcessorClass(config=config)
-
-        tensor_key_mapping = get_gguf_hf_weights_map(model_to_load, processor)
-
-        for tensor in tqdm(reader.tensors, desc="Converting and de-quantizing GGUF tensors..."):
-            name = tensor.name
-            weights = dequantize(tensor.data, tensor.tensor_type)
-
-            result = processor.process(
-                weights=weights,
-                name=name,
-                tensor_key_mapping=tensor_key_mapping,
-                parsed_parameters=parsed_parameters,
-            )
-
-            weights = result.weights
-            name = result.name
-
-            if name not in tensor_key_mapping:
-                continue
-
-            name = tensor_key_mapping[name]
-
-            tensor = torch.from_numpy(np.copy(weights))
-            if torch_dtype is not None:
-                tensor = tensor.to(torch_dtype)
-            parsed_parameters["tensors"][name] = tensor
+        parsed_parameters["tensors"] = {
+            tensor.name: GGUFQuantizedTensor(tensor.data, tensor.tensor_type) for tensor in reader.tensors
+        }
+        parsed_parameters["weight_mapping"] = get_gguf_converters(model_type)
 
     if len(reader_keys) > 0:
         logger.info(f"Some keys of the GGUF file were not considered: {reader_keys}")
