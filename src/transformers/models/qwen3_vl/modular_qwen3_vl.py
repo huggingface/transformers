@@ -269,47 +269,6 @@ class Qwen3VLTextRotaryEmbedding(LlamaRotaryEmbedding):
         super().__init__(config, device=device)
 
         self.mrope_section = config.rope_parameters.get("mrope_section", [24, 20, 20])
-        # Sentinel: snapshot of `id(self.inv_freq)`, refreshed by `_apply` and
-        # `_ensure_inv_freq_initialized` whenever the buffer is legitimately replaced
-        self._inv_freq_id = id(self.inv_freq)
-
-    def _apply(self, fn, recurse=True):
-        # Re-run `rope_init_fn(self.config, new_device)` when `_apply` migrates `inv_freq` /
-        # `original_inv_freq` from `meta` onto a real device, so that the standard
-        # `init_empty_weights()` + `to_empty(device=...)` materialization pattern (also used
-        # by FSDP2 sharding) lands canonical inverse-frequency values on the target device
-        was_meta = self.inv_freq.device.type == "meta"
-        result = super()._apply(fn, recurse=recurse)
-        if was_meta and self.inv_freq.device.type != "meta":
-            rope_init_fn: Callable = self.compute_default_rope_parameters
-            if self.rope_type != "default":
-                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-            inv_freq, self.attention_scaling = rope_init_fn(self.config, self.inv_freq.device)
-            with torch.no_grad():
-                self.inv_freq.copy_(inv_freq)
-                self.original_inv_freq.copy_(inv_freq)
-        self._inv_freq_id = id(self.inv_freq)
-        return result
-
-    def _ensure_inv_freq_initialized(self, target_device: torch.device) -> None:
-        # `dynamic` and `longrope` rope types swap `inv_freq` for a seq-len-scaled
-        # variant on the fly via `register_buffer`, changing its `id()` -- skip to avoid stomping that
-        if "dynamic" in self.rope_type or self.rope_type == "longrope":
-            return
-        # A mismatch here means `_buffers["inv_freq"]` was rewritten via a path that
-        # bypasses `_apply` / `register_buffer`, leaving `inv_freq` with uninitialized
-        # bytes that overflow fp32 in `inv_freq * position_id`
-        if id(self.inv_freq) == self._inv_freq_id:
-            return
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, target_device)
-        # Replace (not `copy_`) because the externally-assigned tensor may have wrong
-        # device or dtype; direct assignment mirrors the `register_buffer` method
-        self._buffers["inv_freq"] = inv_freq
-        self._buffers["original_inv_freq"] = inv_freq.clone()
-        self._inv_freq_id = id(self.inv_freq)
 
     def apply_interleaved_mrope(self, freqs, mrope_section):
         """Apply interleaved MRoPE to 3D rotary embeddings.
@@ -331,14 +290,23 @@ class Qwen3VLTextRotaryEmbedding(LlamaRotaryEmbedding):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        self._ensure_inv_freq_initialized(x.device)
+        if "dynamic" in self.rope_type or self.rope_type == "longrope":
+            # The `@dynamic_rope_update` decorator on this forward re-registers
+            # `inv_freq` from the current `position_ids` before the body runs
+            inv_freq = self.inv_freq
+        else:
+            # Recompute on `x.device` to bypass any prior state of `self.inv_freq`,
+            # whether uninit from `to_empty`, swapped via direct `_buffers[k] = ...`,
+            # or host-pinned under FSDP non-persistent buffer offload
+            rope_init_fn: Callable = self.compute_default_rope_parameters
+            if self.rope_type != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+            inv_freq, _ = rope_init_fn(self.config, x.device)
         # In contrast to other models, Qwen3VL has different position ids for the grids
         # So we expand the inv_freq to shape (3, ...)
         if position_ids.ndim == 2:
             position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
-        inv_freq_expanded = (
-            self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1).to(x.device)
-        )
+        inv_freq_expanded = inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"

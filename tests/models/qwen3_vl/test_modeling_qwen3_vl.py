@@ -548,60 +548,36 @@ class Qwen3VLMRopeBufferMaterializationTest(unittest.TestCase):
 
     @parameterized.expand(MROPE_CROSS_DEVICE_CASES)
     @require_torch_accelerator
-    def test_rotary_embedding_reinitializes_after_to_empty(
+    def test_rotary_forward_is_canonical_for_uninitialized_buffer_states(
         self,
         _name: str,
         config_cls: type[PreTrainedConfig],
         rotary_cls: type["torch.nn.Module"],
     ) -> None:
         config = config_cls()
-        rotary = rotary_cls(config, device="meta")
-        self.assertEqual(rotary.inv_freq.device.type, "meta")
-
-        rotary.to_empty(device=torch_device)
-        self.assertEqual(rotary.inv_freq.device.type, torch.device(torch_device).type)
-
-        # Without the `_apply` re-init, `to_empty` would leave both buffers with uninitialized
-        # storage from the caching allocator's free-list, and `inv_freq * position_id` would
-        # overflow fp32 at the first large position
-        self.assertEqual(rotary.rope_type, "default")
-        canonical, _ = rotary.compute_default_rope_parameters(config, torch.device(torch_device))
-        torch.testing.assert_close(rotary.inv_freq, canonical)
-        torch.testing.assert_close(rotary.original_inv_freq, canonical)
-
         bsz, seq_len = 1, 8
         x = torch.randn(bsz, seq_len, config.hidden_size, device=torch_device, dtype=torch.bfloat16)
         position_ids = torch.arange(seq_len, device=torch_device)[None, :]
+
+        # Reference: forward output from a freshly-constructed-on-device rotary
+        ref_cos, ref_sin = rotary_cls(config, device=torch_device)(x, position_ids)
+
+        # State 1: meta -> to_empty(target_device) leaves buffer storage uninitialized
+        rotary = rotary_cls(config, device="meta")
+        rotary.to_empty(device=torch_device)
         cos, sin = rotary(x, position_ids)
         self.assertTrue(torch.isfinite(cos).all())
-        self.assertTrue(torch.isfinite(sin).all())
+        torch.testing.assert_close(cos, ref_cos)
+        torch.testing.assert_close(sin, ref_sin)
 
-    @parameterized.expand(MROPE_CROSS_DEVICE_CASES)
-    @require_torch_accelerator
-    def test_rotary_embedding_recovers_from_direct_buffers_reassignment(
-        self,
-        _name: str,
-        config_cls: type[PreTrainedConfig],
-        rotary_cls: type["torch.nn.Module"],
-    ) -> None:
-        config = config_cls()
+        # State 2: direct `_buffers[...] = empty(cpu)` -- the FSDP2 helper pattern used by
+        # SkyRL's `_sync_non_persistent_buffers` that bypassing the standard buffer-registration paths
+        # SEE: https://github.com/NovaSky-AI/SkyRL/blob/skyrl-v0.2.0/skyrl/backends/skyrl_train/distributed/fsdp_utils.py#L261-L279
         rotary = rotary_cls(config)
-
-        # Simulates the FSDP2 helper pattern used by SkyRL's `_sync_non_persistent_buffers`
-        # (https://github.com/NovaSky-AI/SkyRL/blob/skyrl-v0.2.0/skyrl/backends/skyrl_train/distributed/fsdp_utils.py#L261-L279):
-        # direct dict assignment into `_buffers` that bypasses the standard buffer-registration paths
         shape = rotary.inv_freq.shape
         rotary._buffers["inv_freq"] = torch.empty(shape, dtype=torch.float32, device="cpu")
         rotary._buffers["original_inv_freq"] = torch.empty(shape, dtype=torch.float32, device="cpu")
-
-        bsz, seq_len = 1, 8
-        x = torch.randn(bsz, seq_len, config.hidden_size, device=torch_device, dtype=torch.bfloat16)
-        position_ids = torch.arange(seq_len, device=torch_device)[None, :]
         cos, sin = rotary(x, position_ids)
         self.assertTrue(torch.isfinite(cos).all())
-        self.assertTrue(torch.isfinite(sin).all())
-
-        self.assertEqual(rotary.rope_type, "default")
-        canonical, _ = rotary.compute_default_rope_parameters(config, torch.device(torch_device))
-        torch.testing.assert_close(rotary.inv_freq, canonical)
-        torch.testing.assert_close(rotary.original_inv_freq, canonical)
+        torch.testing.assert_close(cos, ref_cos)
+        torch.testing.assert_close(sin, ref_sin)
