@@ -1072,9 +1072,11 @@ def spawn_gguf_materialize(
         from .integrations.gguf_dequant import dequantize_gguf_tensor
 
         compute_dtype = dtype if (dtype is not None and dtype.is_floating_point) else torch.float32
-        w = dequantize_gguf_tensor(tensor.data, tensor.tensor_type, dtype=compute_dtype)
-        if device is not None or (dtype is not None and dtype != compute_dtype):
-            w = w.to(device=device, dtype=dtype)
+        # Move the small uint8 input to the target device first, then dequant on-device —
+        # avoids transferring the much larger fp32 output across the CPU↔accelerator bus.
+        w = dequantize_gguf_tensor(tensor.data, tensor.tensor_type, dtype=compute_dtype, device=device)
+        if dtype is not None and dtype != compute_dtype:
+            w = w.to(dtype=dtype)
         return w
 
     if thread_pool is not None:

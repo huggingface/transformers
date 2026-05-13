@@ -335,23 +335,29 @@ def supported_quant_types():
     return set(_DISPATCH.keys())
 
 
-def dequantize_gguf_tensor(data, quant_type, dtype=None) -> torch.Tensor:
+def dequantize_gguf_tensor(data, quant_type, dtype=None, device=None) -> torch.Tensor:
     """Dequantize a GGUF tensor to a ``torch.Tensor`` using torch ops.
 
     Args:
         data: the ``ReaderTensor.data`` numpy array from ``gguf.GGUFReader``.
             For quantized types this is shaped as the **byte** shape
-            (rows × byte-cols, uint8); for F16/F32/F64/I* it is already the
+            (rows × byte-cols, uint8); for F16/F32 it is already the
             logical shape with the matching dtype.
         quant_type: ``gguf.GGMLQuantizationType`` enum value.
         dtype: target floating-point dtype for the dequantized output
             (defaults to ``torch.float32``).
+        device: device to run the dequant kernel on. The raw uint8 input is
+            transferred to ``device`` *before* the kernel runs so the big
+            float output is produced on-device — this is dramatically faster
+            on MPS / CUDA than dequantizing on CPU and copying the
+            fully-expanded tensor afterwards.
 
     Returns:
         Tensor with the **logical** shape recovered from the byte shape
-        (matching what ``gguf.dequantize`` returns). Falls back to gguf-py's
-        NumPy dequant for quant types without a torch kernel (uncommon IQ
-        formats).
+        (matching what ``gguf.dequantize`` returns).
+
+    Raises:
+        NotImplementedError: when ``quant_type`` has no torch kernel.
     """
     import gguf
     import numpy as np
@@ -365,23 +371,36 @@ def dequantize_gguf_tensor(data, quant_type, dtype=None) -> torch.Tensor:
         dtype = torch.float32
 
     arr = np.ascontiguousarray(data)  # materialise any mmap view → contiguous RAM
+    target_device = torch.device(device) if device is not None else None
 
     # Already-float types: ``data`` carries the logical shape with the right dtype.
     if quant_type == gguf.GGMLQuantizationType.F32:
-        return torch.from_numpy(arr).to(dtype) if dtype != torch.float32 else torch.from_numpy(arr)
+        out = torch.from_numpy(arr)
+        if target_device is not None:
+            out = out.to(target_device)
+        return out.to(dtype) if dtype != torch.float32 else out
     if quant_type == gguf.GGMLQuantizationType.F16:
-        return torch.from_numpy(arr).to(dtype) if dtype != torch.float16 else torch.from_numpy(arr)
+        out = torch.from_numpy(arr)
+        if target_device is not None:
+            out = out.to(target_device)
+        return out.to(dtype) if dtype != torch.float16 else out
 
     kernel = _DISPATCH.get(quant_type)
     if kernel is None:
-        # Fallback: numpy dequant for quant types we have not ported (rare IQ formats).
-        return torch.from_numpy(np.ascontiguousarray(gguf.dequantize(arr, quant_type))).to(dtype)
+        raise NotImplementedError(
+            f"No torch dequant kernel for GGUF quant type {quant_type!r}. "
+            f"Supported types: {sorted(t.name for t in _DISPATCH)}"
+        )
 
     block_size, type_size = gguf.GGML_QUANT_SIZES[quant_type]
     byte_shape = arr.shape  # e.g. (out_features, n_block_cols * type_size)
     logical_shape = (*byte_shape[:-1], byte_shape[-1] // type_size * block_size)
 
-    flat = torch.from_numpy(arr.reshape(-1))
-    blocks = flat.reshape((-1, type_size))
+    blocks = torch.from_numpy(arr.reshape(-1)).reshape((-1, type_size))
+    # Move the small uint8 input to the target device *before* dequant so the
+    # large float output is produced on-device. For a 4096x4096 Q4_0 tile this
+    # transfers ~9 MB instead of ~64 MB of fp32 over the bus.
+    if target_device is not None:
+        blocks = blocks.to(target_device, non_blocking=True)
     out = kernel(blocks, block_size, type_size, dtype=dtype)
     return out.reshape(logical_shape)
