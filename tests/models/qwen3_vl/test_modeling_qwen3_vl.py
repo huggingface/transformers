@@ -575,3 +575,33 @@ class Qwen3VLMRopeBufferMaterializationTest(unittest.TestCase):
         cos, sin = rotary(x, position_ids)
         self.assertTrue(torch.isfinite(cos).all())
         self.assertTrue(torch.isfinite(sin).all())
+
+    @parameterized.expand(MROPE_CROSS_DEVICE_CASES)
+    @require_torch_accelerator
+    def test_rotary_embedding_recovers_from_direct_buffers_reassignment(
+        self,
+        _name: str,
+        config_cls: type[PreTrainedConfig],
+        rotary_cls: type["torch.nn.Module"],
+    ) -> None:
+        config = config_cls()
+        rotary = rotary_cls(config)
+
+        # Simulates the FSDP2 helper pattern used by SkyRL's `_sync_non_persistent_buffers`
+        # (https://github.com/NovaSky-AI/SkyRL/blob/skyrl-v0.2.0/skyrl/backends/skyrl_train/distributed/fsdp_utils.py#L261-L279):
+        # direct dict assignment into `_buffers` that bypasses the standard buffer-registration paths
+        shape = rotary.inv_freq.shape
+        rotary._buffers["inv_freq"] = torch.empty(shape, dtype=torch.float32, device="cpu")
+        rotary._buffers["original_inv_freq"] = torch.empty(shape, dtype=torch.float32, device="cpu")
+
+        bsz, seq_len = 1, 8
+        x = torch.randn(bsz, seq_len, config.hidden_size, device=torch_device, dtype=torch.bfloat16)
+        position_ids = torch.arange(seq_len, device=torch_device)[None, :]
+        cos, sin = rotary(x, position_ids)
+        self.assertTrue(torch.isfinite(cos).all())
+        self.assertTrue(torch.isfinite(sin).all())
+
+        self.assertEqual(rotary.rope_type, "default")
+        canonical, _ = rotary.compute_default_rope_parameters(config, torch.device(torch_device))
+        torch.testing.assert_close(rotary.inv_freq, canonical)
+        torch.testing.assert_close(rotary.original_inv_freq, canonical)
