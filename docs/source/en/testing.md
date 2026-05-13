@@ -48,7 +48,7 @@ Three base classes cover the most common model families. Pick the one that match
 
 `VLMModelTest` and `ALMModelTest` share a common `MultiModalModelTest` parent that nests sub-configs into a composite top-level config and places modality placeholder tokens in `input_ids` alongside the raw modality features (audio or vision). `CausalLMModelTest` doesn't use the multimodal parent. It builds on the three shared mixins and adds `TrainingTesterMixin` and `TensorParallelTesterMixin` for training and tensor-parallel coverage.
 
-For architectures that don't fit any of the three (encoder-only, encoder-decoder, audio, etc.), build the test infrastructure directly from the [two-class pattern](#modeltester-and-modeltest) and [test mixins](#test-mixins) described below.
+For architectures that don't fit any of the three (encoder-only, encoder-decoder, etc.), build the test infrastructure directly from the [two-class pattern](#modeltester-and-modeltest) and [test mixins](#test-mixins) described below.
 
 ## CausalLMModelTest
 
@@ -80,7 +80,7 @@ These two classes give full test coverage for `MyModel` and all its head classes
 
 `CausalLMModelTester` only requires `base_model_class`. The tester strips the `Model` suffix to get a base name (`LlamaModel` becomes `Llama`), then appends suffixes like `Config` or `ForCausalLM` to discover related classes. If a class doesn't exist in the module, the attribute stays `None` and the tester skips the corresponding tests.
 
-### Overriding defaults[[clmtest]]
+### Overriding defaults in the CausalLMTester
 
 If your model doesn't follow standard naming, or you need to customize behavior, override attributes on the tester or test class.
 
@@ -148,7 +148,7 @@ class MyVLMTest(VLMModelTest, unittest.TestCase):
     model_tester_class = MyVLMTester
 ```
 
-### Overriding defaults[[vlmtest]]
+### Overriding defaults in the VLMModelTester
 
 When the VLM needs custom vision parameters or non-default config values, override `__init__`. Set defaults with `setdefault` before calling `super().__init__(parent, **kwargs)`. The example below shows the first few defaults from [tests/models/qianfan_ocr/test_modeling_qianfan_ocr.py](https://github.com/huggingface/transformers/blob/main/tests/models/qianfan_ocr/test_modeling_qianfan_ocr.py).
 
@@ -193,14 +193,14 @@ class MyALMTest(ALMModelTest, unittest.TestCase):
     model_tester_class = MyALMTester
 ```
 
-### Overriding defaults[[almtest]]
+### Overriding defaults in the ALMModelTester
 
 The tester's `__init__` sets ALM-specific defaults (`feat_seq_length=128`, `num_mel_bins=80`, `audio_token_id=0`). Override them with `setdefault` before calling `super().__init__(parent, **kwargs)`.
 
 Two class attributes tell the tester how your model names things.
 
 - `audio_mask_key`: the kwarg name your model expects for the audio mask (`"feature_attention_mask"`, `"input_features_mask"`, etc.). Leave it `None` if your model doesn't consume a separate audio mask.
-- `audio_config_key`: the attribute name your top-level config uses to nest the audio sub-config. Defaults to `"audio_config"` but models like GraniteSpeech uses `"encoder_config"`.
+- `audio_config_key`: the attribute name your top-level config uses to nest the audio sub-config. Defaults to `"audio_config"` but models like GraniteSpeech use `"encoder_config"`.
 
 ```py
 class Qwen2AudioModelTester(ALMModelTester):
@@ -210,9 +210,9 @@ class Qwen2AudioModelTester(ALMModelTester):
         super().__init__(parent, **kwargs)
 ```
 
-`ALMModelTester` requires you to override one hook and exposes a few more for customization.
+`ALMModelTester` requires you to override one hook, `get_audio_embeds_mask(audio_mask)`, and exposes a few more optional ones for customization.
 
-- `get_audio_embeds_mask(audio_mask)`: returns the per-batch mask of audio embedding positions after the encoder's downsampling. The tester uses its row-wise sum to decide how many `audio_token_id` placeholders to insert into `input_ids`, so the count must match what your encoder emits. This is required.
+- `get_audio_embeds_mask(audio_mask)`: returns the per-batch mask of audio embedding positions after the encoder's downsampling. The tester uses its row-wise sum to decide how many `audio_token_id` placeholders to insert into `input_ids`, so the count must match what your encoder emits.
 - `create_audio_features()`: returns the audio feature tensor. Default shape is `[batch_size, num_mel_bins, feat_seq_length]`. Override when your model, like GraniteSpeech, expects time-first features (`[batch_size, feat_seq_length, num_mel_bins]`).
 - `create_audio_mask()`: returns the audio-level attention mask. The default builds a random contiguous valid region per row in the batch. Override with a deterministic full-length mask if your tests compare two `prepare_config_and_inputs_for_common()` invocations against each other, or if your audio encoder dispatches to a backend that rejects non-null masks.
 - `place_audio_tokens(input_ids, config, num_audio_tokens)`: places audio placeholder tokens contiguously after `BOS`. Override only if your model needs a different layout.
