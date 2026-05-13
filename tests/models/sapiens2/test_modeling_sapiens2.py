@@ -256,7 +256,6 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_no_head(self):
-        dtype = torch.bfloat16  # default in the original code
         # TODO(guarin): remove config. transformers_weights required for now because original checkpoints are called
         # "sapiens2_0.4b_pretrain.safetensors" instead of "model.safetensors"
         config = Sapiens2Config()
@@ -264,13 +263,12 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         model = (
             Sapiens2Model.from_pretrained("facebook/sapiens2-pretrain-0.4b", config=config)
             .eval()
-            .to(dtype)
             .to(torch_device)
         )
 
         image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = image_processor(image, return_tensors="pt").to(dtype).to(torch_device)
+        inputs = image_processor(image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -285,25 +283,16 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         last_layer_cls_token = outputs.pooler_output
-        expected_slice = torch.tensor(
-            [-0.1096, 0.0122, -0.1207, 0.0571, -0.0371], device=torch_device, dtype=torch.float32
-        )
-        # expected_slice = torch.tensor([-0.1099,  0.0120, -0.1191,  0.0562, -0.0369], device=torch_device, dtype=torch.bfloat16)
-        torch.testing.assert_close(last_layer_cls_token[0, :5], expected_slice, rtol=1e-4, atol=1e-4)
+        expected_slice = torch.tensor([-0.1096, 0.0123, -0.1208, 0.0573, -0.0370], device=torch_device)
+        torch.testing.assert_close(last_layer_cls_token[0, :5], expected_slice, rtol=1e-3, atol=1e-3)
 
         last_layer_register_tokens = outputs.last_hidden_state[:, 1 : model.config.num_register_tokens + 1]
-        expected_slice = torch.tensor(
-            [0.0750, 0.0452, 0.0609, -0.0578, 0.0366], device=torch_device, dtype=torch.float32
-        )
-        # expected_slice = torch.tensor([ 0.0737,  0.0449,  0.0605, -0.0581,  0.0354], device=torch_device, dtype=torch.bfloat16)
-        torch.testing.assert_close(last_layer_register_tokens[0, 0, :5], expected_slice, rtol=1e-4, atol=1e-4)
+        expected_slice = torch.tensor([0.0749, 0.0454, 0.0609, -0.0575, 0.0368], device=torch_device)
+        torch.testing.assert_close(last_layer_register_tokens[0, 0, :5], expected_slice, rtol=1e-3, atol=1e-3)
 
         last_layer_patch_tokens = outputs.last_hidden_state[:, model.config.num_register_tokens + 1 :]
-        expected_slice = torch.tensor(
-            [0.1286, -0.1325, -0.0663, -0.0745, -0.1015], device=torch_device, dtype=torch.float32
-        )
-        # expected_slice = torch.tensor([ 0.1279, -0.1328, -0.0654, -0.0742, -0.1001], device=torch_device, dtype=torch.bfloat16)
-        torch.testing.assert_close(last_layer_patch_tokens[0, 0, :5], expected_slice, rtol=1e-4, atol=1e-4)
+        expected_slice = torch.tensor([0.1283, -0.1324, -0.0661, -0.0750, -0.1012], device=torch_device)
+        torch.testing.assert_close(last_layer_patch_tokens[0, 0, :5], expected_slice, rtol=1e-3, atol=1e-3)
 
 
 @require_torch

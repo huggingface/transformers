@@ -187,8 +187,15 @@ def apply_rotary_pos_emb(
     """Applies Rotary Position Embedding to the query and key tensors, but only to the patch tokens,
     ignoring the prefix tokens (cls token and register tokens).
 
-    Casts q/k patch tokens to the rope dtype before applying the rotation and casts back afterwards.
+    Casts all q/k tokens to the rope dtype before applying the rotation and casts back afterwards.
+    This matches the original model behavior where all tokens are cast to rope_dtype before the
+    prefix/patch split, even though RoPE is only applied to patch tokens.
     """
+    q_dtype, k_dtype = q.dtype, k.dtype
+    rope_dtype = cos.dtype
+    q = q.to(rope_dtype)
+    k = k.to(rope_dtype)
+
     num_tokens = q.shape[-2]
     num_patches = sin.shape[-2]
     num_prefix_tokens = num_tokens - num_patches
@@ -196,19 +203,14 @@ def apply_rotary_pos_emb(
     q_prefix_tokens, q_patches = q.split((num_prefix_tokens, num_patches), dim=-2)
     k_prefix_tokens, k_patches = k.split((num_prefix_tokens, num_patches), dim=-2)
 
-    q_dtype, k_dtype = q_patches.dtype, k_patches.dtype
-    rope_dtype = cos.dtype
-    q_patches = q_patches.to(rope_dtype)
-    k_patches = k_patches.to(rope_dtype)
-
     q_patches = (q_patches * cos) + (rotate_half(q_patches) * sin)
     k_patches = (k_patches * cos) + (rotate_half(k_patches) * sin)
 
-    q_patches = q_patches.to(q_dtype)
-    k_patches = k_patches.to(k_dtype)
-
     q = torch.cat((q_prefix_tokens, q_patches), dim=-2)
     k = torch.cat((k_prefix_tokens, k_patches), dim=-2)
+
+    q = q.to(q_dtype)
+    k = k.to(k_dtype)
 
     return q, k
 
