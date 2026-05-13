@@ -182,9 +182,94 @@ model(torch.ones(1, 5, dtype=int), a_new_kwargs=..., another_new_kwargs=...)
 
 Check a model's [modeling code](https://github.com/huggingface/transformers/tree/main/src/transformers/models) to confirm what arguments and kwargs it sends to the attention function.
 
-### AttentionMaskInterface
+## Build an attention mask
 
-Configure which key and value tokens queries attend to with [`AttentionMaskInterface`]. Some attention functions require this configuration. Customize the attention mask function and add it to the registry with [`AttentionMaskInterface.register`].
+Build attention masks with the `create_*_mask` functions in [transformers.masking_utils](https://github.com/huggingface/transformers/blob/main/src/transformers/masking_utils.py#L894). Each function reads the active attention backend from the model config, looks up the backend's mask formatter in [`AttentionMaskInterface`], and returns the format that backend expects, like a 4D tensor for SDPA or a [BlockMask](https://docs.pytorch.org/docs/stable/nn.attention.flex_attention.html#torch.nn.attention.flex_attention.BlockMask) for FlexAttention. You don't need to invert, expand, or cast the mask yourself.
+
+Pick the function that matches the attention pattern.
+
+| function | use case |
+|---|---|
+| [`create_causal_mask`] | decoder-only models where each token attends to itself and earlier tokens |
+| [`create_bidirectional_mask`] | encoder models, or cross-attention from a decoder to encoder states |
+| [`create_sliding_window_causal_mask`] | decoder models with a sliding-window attention pattern |
+| [`create_chunked_causal_mask`] | decoder models that chunk the sequence into fixed-size blocks |
+| [`create_bidirectional_sliding_window_mask`] | encoder models with a sliding-window attention pattern |
+
+> [!WARNING]
+> The legacy callable mask helpers - `get_extended_attention_mask`, `create_extended_attention_mask_for_decoder`, `invert_attention_mask` - emit a deprecation warning and will be removed in a future release. Use the `create_*_mask` functions instead.
+
+<hfoptions id="build-mask">
+<hfoption id="causal attention">
+
+Call [`create_causal_mask`] inside a decoder forward pass. Pass the config, the input embeddings, the user-provided 2D `attention_mask`, and the cache. The function uses the embeddings to read the batch size, query length, dtype, and device, and uses the cache to compute the key length.
+
+```py
+from transformers.masking_utils import create_causal_mask
+
+attention_mask = create_causal_mask(
+    config=self.config,
+    inputs_embeds=inputs_embeds,
+    attention_mask=attention_mask,
+    past_key_values=past_key_values,
+)
+```
+
+</hfoption>
+<hfoption id="encoder self-attention">
+
+Call [`create_bidirectional_mask`] for encoder self-attention. Drop `past_key_values` because encoders don't cache.
+
+```py
+from transformers.masking_utils import create_bidirectional_mask
+
+attention_mask = create_bidirectional_mask(
+    config=self.config,
+    inputs_embeds=embedding_output,
+    attention_mask=attention_mask,
+)
+```
+
+</hfoption>
+<hfoption id="cross-attention">
+
+For cross-attention, pass the encoder states as `encoder_hidden_states` so the mask uses the encoder's key and value length instead of the decoder's query length.
+
+```py
+encoder_attention_mask = create_bidirectional_mask(
+    config=self.config,
+    inputs_embeds=embedding_output,
+    attention_mask=encoder_attention_mask,
+    encoder_hidden_states=encoder_hidden_states,
+)
+```
+
+</hfoption>
+</hfoptions>
+
+Add extra constraints on top of the base mask with the `or_mask_function` and `and_mask_function` arguments. Use `or_mask_function` to let additional positions attend, and `and_mask_function` to restrict the base pattern further. Both follow the 4-index `mask_function` signature described in [AttentionMaskInterface](#attentionmaskinterface), they take `(batch_idx, head_idx, q_idx, kv_idx)` and return a boolean.
+
+For example, Gemma 3 uses `or_mask_function` to flip a causal mask into a fully bidirectional one when `config.use_bidirectional_attention` is enabled. The overlay returns `True` for every position, so the union with the causal pattern lets every token attend to every other token.
+
+```py
+mask_kwargs = {
+    "config": self.config,
+    "inputs_embeds": inputs_embeds,
+    "attention_mask": attention_mask,
+    "past_key_values": past_key_values,
+    "position_ids": position_ids,
+}
+if self.config.use_bidirectional_attention:
+    mask_kwargs["or_mask_function"] = lambda *args: torch.tensor(True, dtype=torch.bool)
+
+attention_mask = create_causal_mask(**mask_kwargs)
+```
+
+During generation, [`~GenerationMixin.generate`] builds masks through [`create_masks_for_generate`], which dispatches to the right `create_*_mask` based on the model config. Override it on a model class to plug in a custom masking strategy for generation.
+
+## AttentionMaskInterface
+
+[`AttentionMaskInterface`] is the registry the `create_*_mask` functions consult to convert a mask into the format the active attention backend expects. FlexAttention needs a [BlockMask](https://docs.pytorch.org/docs/stable/nn.attention.flex_attention.html#torch.nn.attention.flex_attention.BlockMask), SDPA needs a 4D tensor, and FlashAttention doesn't need a mask. Register a custom backend, or override the formatter for an existing one, with [`AttentionMaskInterface.register`].
 
 ```python
 import torch
@@ -198,9 +283,9 @@ def my_new_sdpa_mask(*args, **kwargs):
 AttentionMaskInterface.register("my_new_sdpa_mask", my_new_sdpa_mask)
 ```
 
-Registered attention masks automatically correct the mask format for the attention implementation. For example, FlexAttention uses a [BlockMask](https://docs.pytorch.org/docs/stable/nn.attention.flex_attention.html?utm_source=chatgpt.com#torch.nn.attention.flex_attention.BlockMask) format, while SDPA uses a 4D tensor. Without a registered attention mask function, mask creation is skipped and `attention_mask=None` passes to the model's attention layers.
+Without a registered formatter for the active `attn_implementation`, mask creation is skipped and `attention_mask=None` passes to the attention layers.
 
-This is the default signature for an attention mask function.
+Registered functions must match this signature.
 
 ```python
 def custom_attention_mask(
@@ -215,7 +300,7 @@ def custom_attention_mask(
 ) -> Optional[torch.Tensor]:
 ```
 
-The `mask_function` argument is a `Callable` that mimics PyTorch's [mask_mod](https://pytorch.org/blog/flexattention/) functions. It takes 4 indices as input and returns a boolean. This boolean indicates if the position contributes to the attention computation.
+The `mask_function` argument is a `Callable` that mimics PyTorch's [mask_mod](https://pytorch.org/blog/flexattention/) functions. It takes 4 indices `(batch_idx, head_idx, q_idx, kv_idx)` and returns a boolean indicating whether that position contributes to the attention computation. This is the same primitive shape used by `or_mask_function` and `and_mask_function` in [Build an attention mask](#build-an-attention-mask).
 
 Use this [workaround](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/executorch.py) for torch export if `mask_function` fails to create a mask.
 
