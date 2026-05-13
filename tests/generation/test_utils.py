@@ -2893,6 +2893,45 @@ class GenerationIntegrationTests(unittest.TestCase):
         finally:
             logger.removeHandler(warningHandler)
 
+    def test_inputs_embeds_warn_without_ids_for_token_based_logit_processors(self):
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2", device_map=torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        inputs = tokenizer("Hello world", return_tensors="pt").to(torch_device)
+        ids = inputs["input_ids"]
+        embeds = model.get_input_embeddings()(ids)
+
+        # Check that it raises with only embeds
+        with self.assertWarnsRegex(UserWarning, "apply the penalty only to newly generated tokens, not to the prompt"):
+            _ = model.generate(inputs_embeds=embeds, max_new_tokens=5, repetition_penalty=1.1)
+
+        # Check that it does NOT raise with both ids and embeds
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            _ = model.generate(input_ids=ids, inputs_embeds=embeds, max_new_tokens=5, repetition_penalty=1.1)
+            self.assertFalse(
+                any(
+                    "apply the penalty only to newly generated tokens, not to the prompt" in str(warn.message)
+                    for warn in w
+                )
+            )
+
+        # Check that it raises with only embeds
+        with self.assertWarnsRegex(
+            UserWarning, "n-gram constraints only to newly generated tokens, not to the prompt"
+        ):
+            _ = model.generate(inputs_embeds=embeds, max_new_tokens=5, no_repeat_ngram_size=2)
+
+        # Check that it does NOT raise with both ids and embeds
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            _ = model.generate(input_ids=ids, inputs_embeds=embeds, max_new_tokens=5, no_repeat_ngram_size=2)
+            self.assertFalse(
+                any(
+                    "n-gram constraints only to newly generated tokens, not to the prompt" in str(warn.message)
+                    for warn in w
+                )
+            )
+
     @slow
     def test_beam_search_early_stop_heuristic(self):
         """Regression test for #38778 (early stopping needs to be tracked at a batch level)"""
