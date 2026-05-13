@@ -17,8 +17,7 @@ rendered properly in your Markdown viewer.
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-            <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-            <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+                <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
             <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
 </div>
@@ -37,14 +36,13 @@ The example below demonstrates how to generate biomedical text with [`Pipeline`]
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 generator = pipeline(
     task="text-generation",
     model="microsoft/biogpt",
-    dtype=torch.float16,
     device=0,
 )
 result = generator("Ibuprofen is best used for", truncation=True, max_length=50, do_sample=True)[0]["generated_text"]
@@ -54,14 +52,15 @@ print(result)
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("microsoft/biogpt")
 model = AutoModelForCausalLM.from_pretrained(
     "microsoft/biogpt",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -77,35 +76,29 @@ print(output)
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Ibuprofen is best used for" | transformers run --task text-generation --model microsoft/biogpt --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bit precision.
 
-```py
+```python
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
 
 bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_quant_type="nf4",
     bnb_4bit_compute_dtype=torch.bfloat16,
-    bnb_4bit_use_double_quant=True
+    bit_use_double_quant=True
 )
 
 tokenizer = AutoTokenizer.from_pretrained("microsoft/BioGPT-Large")
 model = AutoModelForCausalLM.from_pretrained(
     "microsoft/BioGPT-Large",
     quantization_config=bnb_config,
-    dtype=torch.bfloat16,
     device_map="auto"
 )
 
@@ -121,14 +114,6 @@ print(output)
 
 - Pad inputs on the right because BioGPT uses absolute position embeddings.
 - BioGPT can reuse previously computed key-value attention pairs. Access this feature with the [past_key_values](https://huggingface.co/docs/transformers/main/en/model_doc/biogpt#transformers.BioGptModel.forward.past_key_values) parameter in [`BioGPTModel.forward`].
-
-   ```py
-   from transformers import AutoModelForCausalLM
-
-   model = AutoModelForCausalLM.from_pretrained(
-      "microsoft/biogpt",
-      attn_implementation="eager"
-   )
 
 ## BioGptConfig
 

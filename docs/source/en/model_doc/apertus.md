@@ -19,7 +19,6 @@ rendered properly in your Markdown viewer.
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
@@ -38,14 +37,13 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`A
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="text-generation",
     model="swiss-ai/Apertus-8B",
-    dtype=torch.bfloat16,
     device=0
 )
 pipeline("Plants create energy through a process known as")
@@ -54,30 +52,22 @@ pipeline("Plants create energy through a process known as")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "swiss-ai/Apertus-8B",
 )
 model = AutoModelForCausalLM.from_pretrained(
     "swiss-ai/Apertus-8B",
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
-input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plants create energy through a process known as" | transformers run --task text-generation --model swiss-ai/Apertus-8B --device 0
 ```
 
 </hfoption>

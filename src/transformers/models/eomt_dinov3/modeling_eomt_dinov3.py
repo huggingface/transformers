@@ -219,35 +219,6 @@ class EomtDinov3Embeddings(nn.Module):
         return embeddings
 
 
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-class EomtDinov3DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: float | None = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
-
-
 class EomtDinov3MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -278,6 +249,30 @@ class EomtDinov3GatedMLP(nn.Module):
         return down_proj
 
 
+class EomtDinov3DropPath(nn.Module):
+    """Stochastic depth (DropPath) per sample, for residual blocks.
+
+    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
+    <https://arxiv.org/abs/1603.09382>`_.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor = torch.floor(random_tensor + keep_prob)
+        return hidden_states.div(keep_prob) * random_tensor
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
+
+
 class EomtDinov3Layer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the original implementation."""
 
@@ -302,6 +297,7 @@ class EomtDinov3Layer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         # Attention with residual connection
         residual = hidden_states
@@ -310,6 +306,7 @@ class EomtDinov3Layer(GradientCheckpointingLayer):
             hidden_states,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
+            **kwargs,
         )
         hidden_states = self.layer_scale1(hidden_states)
         hidden_states = self.drop_path(hidden_states) + residual
@@ -1021,7 +1018,6 @@ class EomtDinov3Loss(nn.Module):
         return num_masks
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`EomtDinov3ForUniversalSegmentationOutput`].
@@ -1032,6 +1028,7 @@ class EomtDinov3Loss(nn.Module):
     [`~EomtDinov3ImageProcessor] for details regarding usage.
     """
 )
+@dataclass
 class EomtDinov3ForUniversalSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.Tensor`, *optional*):

@@ -63,6 +63,7 @@ if is_torch_available():
 class PatchTSMixerModelTester:
     def __init__(
         self,
+        parent,
         context_length: int = 32,
         patch_length: int = 8,
         num_input_channels: int = 3,
@@ -101,9 +102,9 @@ class PatchTSMixerModelTester:
         batch_size=13,
         is_training=True,
         seed_number=42,
-        post_init=True,
         num_parallel_samples=4,
     ):
+        self.parent = parent
         self.num_input_channels = num_input_channels
         self.context_length = context_length
         self.patch_length = patch_length
@@ -143,7 +144,6 @@ class PatchTSMixerModelTester:
         self.batch_size = batch_size
         self.is_training = is_training
         self.seed_number = seed_number
-        self.post_init = post_init
         self.num_parallel_samples = num_parallel_samples
 
     def get_config(self):
@@ -178,7 +178,6 @@ class PatchTSMixerModelTester:
             num_targets=self.num_targets,
             output_range=self.output_range,
             head_aggregation=self.head_aggregation,
-            post_init=self.post_init,
         )
         self.num_patches = config_.num_patches
         return config_
@@ -230,7 +229,7 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     has_attentions = False
 
     def setUp(self):
-        self.model_tester = PatchTSMixerModelTester()
+        self.model_tester = PatchTSMixerModelTester(self)
         self.config_tester = ConfigTester(
             self,
             config_class=PatchTSMixerConfig,

@@ -42,7 +42,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ConditionalDetrImageProcessor
+    from transformers import ConditionalDetrImageProcessorPil
 
 
 class DabDetrModelTester:
@@ -758,7 +758,7 @@ def prepare_img():
 class DabDetrModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return ConditionalDetrImageProcessor.from_pretrained(CHECKPOINT) if is_vision_available() else None
+        return ConditionalDetrImageProcessorPil.from_pretrained(CHECKPOINT) if is_vision_available() else None
 
     def test_inference_no_head(self):
         model = DabDetrModel.from_pretrained(CHECKPOINT).to(torch_device)

@@ -10,6 +10,7 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import FineGrainedFP8Config
 
 logger = logging.get_logger(__name__)
 
@@ -21,6 +22,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
+    quantization_config: "FineGrainedFP8Config"
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -75,10 +77,10 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                 )
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
-        from ..integrations.finegrained_fp8 import FP8Expert, FP8Linear
+        from ..integrations.finegrained_fp8 import FP8Experts, FP8Linear
 
         module, tensor_name = get_module_from_name(model, param_name)
-        if isinstance(module, (FP8Linear, FP8Expert)):
+        if isinstance(module, (FP8Linear, FP8Experts)):
             if self.pre_quantized or tensor_name == "bias":
                 return False
             else:
@@ -140,6 +142,10 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     def is_trainable(self) -> bool:
         return False
 
+    @property
+    def is_compileable(self) -> bool:
+        return True
+
     def get_quantize_ops(self):
         from ..integrations.finegrained_fp8 import Fp8Quantize
 
@@ -160,3 +166,61 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                 )
             ]
         return []
+
+    def update_weight_conversions(self, weight_conversions):
+        """When loading with ``dequantize=True``, attach an :class:`Fp8Dequantize` op to
+        every existing :class:`WeightConverter` so that per-block scales are folded into
+        the weight *before* any later merge/concat ops collapse the per-expert structure.
+
+        For each model-supplied converter that has a ``.weight`` source, we:
+          1. anchor the existing weight patterns with ``$`` so they don't accidentally
+             also match the ``.weight_scale_inv`` keys (the regex is searched, so the
+             unanchored prefix would match both, sending scales to the wrong bucket);
+          2. add anchored ``*.weight_scale_inv`` sources next to each weight pattern so
+             the loader collects scale tensors alongside the weight tensors into the
+             *same* converter bucket (both keys rewrite to the same target);
+          3. prepend a fresh :class:`Fp8Dequantize` op so dequant runs first, before
+             any merge/concat collapses the per-expert structure.
+
+        The generic ``weight$ + weight_scale_inv → weight`` converter from
+        :meth:`get_weight_conversions` is still appended at the end as a fallback for
+        plain ``nn.Linear`` weights with no model-specific converter.
+        """
+        if not (self.pre_quantized and self.quantization_config.dequantize):
+            return weight_conversions + self.get_weight_conversions()
+
+        from ..core_model_loading import WeightConverter, WeightRenaming
+        from ..integrations.finegrained_fp8 import Fp8Dequantize
+
+        # Some upstream FP8 checkpoints (e.g. DeepSeek-V4-Flash) ship per-block scales
+        # under a ``.scale`` suffix instead of HF's canonical ``.weight_scale_inv``.
+        # Prepending the rename here (instead of in each model's conversion_mapping)
+        # keeps the model-side mapping clean — the rename only kicks in when FP8 dequant
+        # is actually active, so a non-FP8 save / load round-trip doesn't see a stray
+        # rule that ``test_reverse_loading_mapping`` can't match.
+        scale_rename = WeightRenaming(source_patterns=r"^(.+)\.scale$", target_patterns=r"\1.weight_scale_inv")
+        weight_conversions = [scale_rename] + list(weight_conversions)
+
+        updated: list = []
+        for conv in weight_conversions:
+            # Only WeightConverter has ``.operations`` to extend with the dequant op;
+            # WeightRenaming (e.g. the ``scale_rename`` we prepended) just passes through.
+            if not isinstance(conv, WeightConverter):
+                updated.append(conv)
+                continue
+            weight_sources = [p for p in conv.source_patterns if p.endswith(".weight")]
+            if weight_sources:
+                anchored_weight = [p + "$" for p in weight_sources]
+                scale_sources = [p[: -len(".weight")] + ".weight_scale_inv$" for p in weight_sources]
+                other = [p for p in conv.source_patterns if not p.endswith(".weight")]
+                new_sources = anchored_weight + scale_sources + other
+                new_ops = [Fp8Dequantize(self)] + list(conv.operations)
+                conv = WeightConverter(
+                    source_patterns=new_sources,
+                    target_patterns=conv._original_target_patterns,
+                    operations=new_ops,
+                )
+            updated.append(conv)
+        # Generic fallback for plain ``nn.Linear`` weights with no model-specific converter.
+        updated.extend(self.get_weight_conversions())
+        return updated

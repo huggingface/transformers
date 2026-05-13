@@ -17,7 +17,6 @@ rendered properly in your Markdown viewer.
 *This model was released on 2024-07-31 and added to Hugging Face Transformers on 2024-06-27.*
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
@@ -41,13 +40,12 @@ The example below demonstrates how to chat with the model with [`Pipeline`] or t
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="text-generation",
     model="google/gemma-2-9b",
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 
@@ -58,13 +56,12 @@ pipe("Explain quantum computing simply. ", max_new_tokens=50)
 <hfoption id="AutoModel">
 
 ```python
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b")
 model = AutoModelForCausalLM.from_pretrained(
     "google/gemma-2-9b",
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -74,14 +71,6 @@ input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 outputs = model.generate(**input_ids, max_new_tokens=32, cache_implementation="static")
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Explain quantum computing simply." | transformers run --task text-generation --model google/gemma-2-2b --device 0
 ```
 
 </hfoption>
@@ -92,14 +81,13 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to int4.
 
 ```python
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
 
 quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-27b")
 model = AutoModelForCausalLM.from_pretrained(
     "google/gemma-2-27b",
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -115,6 +103,8 @@ Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/bl
 
 ```python
 from transformers.utils.attention_visualizer import AttentionMaskVisualizer
+
+
 visualizer = AttentionMaskVisualizer("google/gemma-2b")
 visualizer("You are an assistant. Make sure you print me")
 ```

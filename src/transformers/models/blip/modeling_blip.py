@@ -46,20 +46,20 @@ def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
 
 
-# Copied from transformers.models.clip.modeling_clip.clip_loss with clip->blip
-def blip_loss(similarity: torch.Tensor) -> torch.Tensor:
+# Copied from transformers.models.clip.modeling_clip.image_text_contrastive_loss
+def image_text_contrastive_loss(similarity: torch.Tensor) -> torch.Tensor:
     caption_loss = contrastive_loss(similarity)
-    image_loss = contrastive_loss(similarity.t())
+    image_loss = contrastive_loss(similarity.T)
     return (caption_loss + image_loss) / 2.0
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Adapted from the base class for vision model's outputs that also contains image embeddings of the pooling of the
     last hidden states. This class also adds the loss term from the text decoder.
     """
 )
+@dataclass
 class BlipForConditionalGenerationModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
@@ -89,13 +89,13 @@ class BlipForConditionalGenerationModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Adapted from the base class for vision model's outputs that also contains image embeddings of the pooling of the
     last hidden states. This class also adds the loss term from the text decoder.
     """
 )
+@dataclass
 class BlipTextVisionModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -111,7 +111,6 @@ class BlipTextVisionModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Adapted from the base class for vision model's outputs that also contains image embeddings of the pooling of the
@@ -119,6 +118,7 @@ class BlipTextVisionModelOutput(ModelOutput):
     scores.
     """
 )
+@dataclass
 class BlipImageTextMatchingModelOutput(ModelOutput):
     r"""
     itm_score (`torch.FloatTensor`):
@@ -143,8 +143,8 @@ class BlipImageTextMatchingModelOutput(ModelOutput):
     question_embeds: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class BlipOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
@@ -758,7 +758,7 @@ class BlipModel(BlipPreTrainedModel):
 
         loss = None
         if return_loss:
-            loss = blip_loss(logits_per_text)
+            loss = image_text_contrastive_loss(logits_per_text)
 
         return BlipOutput(
             loss=loss,

@@ -65,7 +65,7 @@ class XcodecDecoderOutput(ModelOutput):
     audio_values: torch.FloatTensor | None = None
 
 
-class ResidualUnit(nn.Module):
+class XcodecResidualUnit(nn.Module):
     """Residual block for SemanticEncoder and SemanticDecoder used in Xcodec."""
 
     def __init__(self, config: XcodecConfig, in_channels: int, out_channels: int, dilation: int):
@@ -92,11 +92,11 @@ class ResidualUnit(nn.Module):
         return hidden_state + output_tensor
 
 
-class SemanticEncoderBlock(nn.Module):
+class XcodecSemanticEncoderBlock(nn.Module):
     def __init__(self, config: XcodecConfig, in_channels: int, out_channels: int, stride: int):
         super().__init__()
         self.res_units = nn.ModuleList(
-            [ResidualUnit(config, in_channels, in_channels, dilation) for dilation in config.block_dilations]
+            [XcodecResidualUnit(config, in_channels, in_channels, dilation) for dilation in config.block_dilations]
         )
 
         # special case: stride=1, do not use kernel=2
@@ -129,7 +129,7 @@ class SemanticEncoder(nn.Module):
         conv_blocks = []
         for i, stride in enumerate(config.strides):
             out_channels = int(config.semantic_hidden_size * config.channel_ratios[i])
-            conv_blocks += [SemanticEncoderBlock(config, in_channels, out_channels, stride)]
+            conv_blocks += [XcodecSemanticEncoderBlock(config, in_channels, out_channels, stride)]
             in_channels = out_channels
 
         self.conv_blocks = nn.ModuleList(conv_blocks)
@@ -162,7 +162,7 @@ class SemanticDecoderBlock(nn.Module):
             )
 
         self.res_units = nn.ModuleList(
-            [ResidualUnit(config, out_channels, out_channels, dilation) for dilation in config.block_dilations]
+            [XcodecResidualUnit(config, out_channels, out_channels, dilation) for dilation in config.block_dilations]
         )
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
@@ -240,7 +240,7 @@ class XcodecEuclideanCodebook(nn.Module):
         return embed_ind
 
     def decode(self, embed_ind):
-        quantized = F.embedding(embed_ind, self.embed)
+        quantized = F.embedding(embed_ind.to(self.embed.device), self.embed)
         return quantized
 
 
@@ -312,7 +312,7 @@ class XcodecResidualVectorQuantization(nn.Module):
         for i, indices in enumerate(codes):
             quantizer = self.quantizers[i]
             quantized = quantizer.decode(indices)
-            quantized_out = quantized_out + quantized
+            quantized_out = quantized_out + quantized.to(codes.device)
         return quantized_out
 
 
@@ -327,6 +327,7 @@ class XcodecPreTrainedModel(PreTrainedAudioTokenizerBase):
     base_model_prefix = "xcodec"
     main_input_name = "input_values"
     input_modalities = "audio"
+    _no_split_modules = ["XcodecResidualVectorQuantization"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -521,7 +522,7 @@ class XcodecModel(XcodecPreTrainedModel):
         else:
             e_acoustic = self.acoustic_encoder(input_values)
 
-        embeddings = torch.cat([e_acoustic, e_semantic], dim=1)
+        embeddings = torch.cat([e_acoustic.to(e_semantic.device), e_semantic], dim=1)
         embeddings = self.fc(embeddings.transpose(1, 2)).transpose(1, 2)
         audio_codes = self.quantizer.encode(embeddings, bandwidth)
         audio_codes = audio_codes.transpose(0, 1)

@@ -36,7 +36,7 @@ class Glm4vProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding": False,
             "return_token_type_ids": False,
-            "return_mm_token_type_ids": False,
+            "return_mm_token_type_ids": True,
         },
         "videos_kwargs": {"return_metadata": True},
     }
@@ -58,6 +58,8 @@ class Glm4vProcessor(ProcessorMixin):
             else tokenizer.convert_tokens_to_ids(self.video_token)
         )
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
+        self.video_start_id = tokenizer.convert_tokens_to_ids("<|begin_of_video|>")
+        self.video_end_id = tokenizer.convert_tokens_to_ids("<|end_of_video|>")
 
     @auto_docstring
     def __call__(
@@ -166,10 +168,7 @@ class Glm4vProcessor(ProcessorMixin):
         self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
 
         if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[array_ids == self.image_token_id] = 1
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
@@ -236,6 +235,33 @@ class Glm4vProcessor(ProcessorMixin):
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
+
+    @property
+    def model_input_names(self):
+        model_input_names = super().model_input_names
+        model_input_names.append("mm_token_type_ids")
+        return model_input_names
+
+    def create_mm_token_type_ids(self, input_ids: list) -> list[list[int]]:
+        # We have to iterate for each list separately because inputs
+        # might be non-padded lists and we can't cast numpy on that!
+        # Then cast numpy as each input for faster indexing
+        mm_token_type_ids = []
+        for input in input_ids:
+            array_ids = np.array(input)
+            mm_token_types = np.zeros_like(input)
+
+            # Replace 0 -> 2 only inside video segments because GLM4v
+            # uses the same special token to denote images and video
+            # Otherwise replace 0 -> 1 for image modality
+            starts = np.cumsum(array_ids == self.video_start_id, axis=0)
+            ends = np.cumsum(array_ids == self.video_end_id, axis=0)
+            is_video_modality = starts > ends
+
+            mm_token_types[(array_ids == self.image_token_id) & is_video_modality] = 2
+            mm_token_types[(array_ids == self.image_token_id) & (~is_video_modality)] = 1
+            mm_token_type_ids.append(mm_token_types.tolist())
+        return mm_token_type_ids
 
     def replace_frame_token_id(self, timestamp_sec):
         return f"<|begin_of_image|>{self.image_token}<|end_of_image|>{int(timestamp_sec)}"

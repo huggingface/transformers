@@ -89,7 +89,7 @@ See [causal language modeling](#causal-language-modeling) and [decoder models](#
 
 ### backbone
 
-The backbone is the network (embeddings and layers) that outputs the raw hidden states or features. It is usually connected to a [head](#head) which accepts the features as its input to make a prediction. For example, [`ViTModel`] is a backbone without a specific head on top. Other models can also use [`VitModel`] as a backbone such as [DPT](model_doc/dpt).
+The backbone is the network (embeddings and layers) that outputs the raw hidden states or features. It is usually connected to a [head](#head) which accepts the features as its input to make a prediction. For example, [`ViTModel`] is a backbone without a specific head on top. Other models can also use [`ViTModel`] as a backbone such as [DPT](model_doc/dpt).
 
 ## C
 

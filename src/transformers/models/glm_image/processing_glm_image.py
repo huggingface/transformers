@@ -20,17 +20,13 @@
 
 import math
 
-import numpy as np
+import torch
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_torch_available
-
-
-if is_torch_available():
-    import torch
+from ...utils.import_utils import requires
 
 
 class GlmImageImagesKwargs(ImagesKwargs, total=False):
@@ -59,6 +55,7 @@ class GlmImageProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: GlmImageImagesKwargs
 
 
+@requires(backends=("torch",))
 class GlmImageProcessor(ProcessorMixin):
     r"""
     Constructs a GLM-Image processor which wraps a GLM-Image image processor and a GLM-Image tokenizer into a single processor.
@@ -208,10 +205,7 @@ class GlmImageProcessor(ProcessorMixin):
         self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
         if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[array_ids == self.image_token_id] = 1
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def _build_prompt_with_target_shape(

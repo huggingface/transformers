@@ -17,30 +17,42 @@ rendered properly in your Markdown viewer.
 # Image Processor
 
 An image processor is in charge of loading images (optionally), preparing input features for vision models and post processing their outputs. This includes transformations such as resizing, normalization, and conversion to PyTorch and Numpy tensors. It may also include model specific post-processing such as converting logits to segmentation masks.
-Fast image processors are available for a few models and more will be added in the future. They are based on the [torchvision](https://pytorch.org/vision/stable/index.html) library and provide a significant speed-up, especially when processing on GPU.
-They have the same API as the base image processors and can be used as drop-in replacements.
-To use a fast image processor, you need to install the `torchvision` library, and set the `use_fast` argument to `True` when instantiating the image processor:
+
+Image processors use a backend-based architecture. The class hierarchy is:
+
+- [`BaseImageProcessor`] — abstract base class (for backward compatibility only; do not instantiate directly)
+  - [`TorchvisionBackend`] — the **default** [torchvision-backed](https://pytorch.org/vision/stable/index.html) backend. GPU-accelerated and significantly faster than the PIL backend. All models expose a `<Model>ImageProcessor` class that inherits from it.
+  - [`PilBackend`] — the PIL/NumPy alternative backend. Portable, CPU-only. Only available for older models via a `<Model>ImageProcessorPil` class; useful when exact numerical parity with the original implementation is required.
+
+Both backends expose the same API. Use the `backend` attribute to inspect which backend a loaded processor uses (e.g. `processor.backend == "torchvision"`).
+
+Use [`AutoImageProcessor.from_pretrained`] with the `backend` argument to select a backend. When `backend` is omitted (the default), torchvision is picked when it is installed and PIL is used otherwise. Pass an explicit string to override that choice:
 
 ```python
 from transformers import AutoImageProcessor
 
-processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50", use_fast=True)
+# Default: picks torchvision if available, otherwise pil
+processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50")
+
+# Explicitly request torchvision
+processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50", backend="torchvision")
+
+# Explicitly request PIL
+processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50", backend="pil")
 ```
 
-Note that `use_fast` will be set to `True` by default in a future release.
-
-When using a fast image processor, you can also set the `device` argument to specify the device on which the processing should be done. By default, the processing is done on the same device as the inputs if the inputs are tensors, or on the CPU otherwise.
+When using the torchvision backend, you can set the `device` argument to specify the device on which the processing should be done. By default, the processing is done on the same device as the inputs if the inputs are tensors, or on the CPU otherwise.
 
 ```python
 from torchvision.io import read_image
-from transformers import DetrImageProcessorFast
+from transformers import DetrImageProcessor
 
 images = read_image("image.jpg")
-processor = DetrImageProcessorFast.from_pretrained("facebook/detr-resnet-50")
+processor = DetrImageProcessor.from_pretrained("facebook/detr-resnet-50")
 images_processed = processor(images, return_tensors="pt", device="cuda")
 ```
 
-Here are some speed comparisons between the base and fast image processors for the `DETR` and `RT-DETR` models, and how they impact overall inference time:
+Here are some speed comparisons between the torchvision and PIL backends for the `DETR` and `RT-DETR` models, and how they impact overall inference time:
 
 <div class="flex">
   <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/benchmark_results_full_pipeline_detr_fast_padded.png" />
@@ -72,6 +84,10 @@ These benchmarks were run on an [AWS EC2 g5.2xlarge instance](https://aws.amazon
 
 [[autodoc]] image_processing_utils.BaseImageProcessor
 
-## BaseImageProcessorFast
+## TorchvisionBackend
 
-[[autodoc]] image_processing_utils_fast.BaseImageProcessorFast
+[[autodoc]] image_processing_backends.TorchvisionBackend
+
+## PilBackend
+
+[[autodoc]] image_processing_backends.PilBackend

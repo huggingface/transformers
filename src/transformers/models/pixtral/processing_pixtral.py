@@ -27,6 +27,7 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_vision_available, logging
+from ...utils.import_utils import requires
 
 
 if is_vision_available():
@@ -59,6 +60,7 @@ def is_image_or_image_url(elem):
 
 
 @auto_docstring
+@requires(backends=("torchvision", "torch"))
 class PixtralProcessor(ProcessorMixin):
     def __init__(
         self,
@@ -84,6 +86,8 @@ class PixtralProcessor(ProcessorMixin):
         image_end_token (`str`, *optional*, defaults to `"[IMG_END]"`):
             Special token used to denote the end of an image input.
         """
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+
         self.patch_size = patch_size
         self.spatial_merge_size = spatial_merge_size
         self.image_token = image_token
@@ -94,7 +98,6 @@ class PixtralProcessor(ProcessorMixin):
         self.image_break_token_id = tokenizer.convert_tokens_to_ids(self.image_break_token)
         self.image_end_token_id = tokenizer.convert_tokens_to_ids(self.image_end_token)
         self.image_ids = [self.image_token_id, self.image_break_token_id, self.image_end_token_id]
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     @auto_docstring
     def __call__(
@@ -169,11 +172,7 @@ class PixtralProcessor(ProcessorMixin):
         self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
 
         if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[np.isin(array_ids, self.image_ids)] = 1
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
-
+            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):

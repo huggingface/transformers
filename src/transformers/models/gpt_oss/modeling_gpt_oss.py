@@ -27,7 +27,12 @@ from torch.nn import functional as F
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
+from ...integrations import (
+    use_experts_implementation,
+    use_kernel_forward_from_hub,
+    use_kernel_func_from_hub,
+    use_kernelized_func,
+)
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import (
     GenericForSequenceClassification,
@@ -65,7 +70,7 @@ class GptOssRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-@use_experts_implementation(is_transposed=True, has_bias=True)
+@use_experts_implementation(is_concatenated=False, is_transposed=True, has_bias=True)
 class GptOssExperts(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -234,6 +239,7 @@ def _apply_rotary_emb(
     return torch.cat((first_, second_), dim=-1)
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
@@ -249,7 +255,7 @@ def eager_attention_forward(
     value: torch.Tensor,
     attention_mask: torch.Tensor | None,
     scaling: float,
-    dropout: float = 0.0,
+    dropout: float | int = 0.0,
     **kwargs,
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
@@ -308,7 +314,6 @@ class GptOssAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -322,8 +327,7 @@ class GptOssAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            cache_kwargs = {"cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -355,7 +359,6 @@ class GptOssDecoderLayer(GradientCheckpointingLayer):
         self.mlp = GptOssMLP(config)
         self.input_layernorm = GptOssRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GptOssRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.attention_type = config.layer_types[layer_idx]
 
     def forward(
         self,
@@ -364,7 +367,6 @@ class GptOssDecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -377,7 +379,6 @@ class GptOssDecoderLayer(GradientCheckpointingLayer):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -410,6 +411,7 @@ class GptOssPreTrainedModel(PreTrainedModel):
         "attentions": GptOssAttention,
     }
     _keep_in_fp32_modules = ["post_attention_layernorm", "input_layernorm", "norm"]
+    _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -429,8 +431,6 @@ class GptOssPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class GptOssModel(GptOssPreTrainedModel):
-    _no_split_modules = ["GptOssDecoderLayer"]
-
     def __init__(self, config: GptOssConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -458,7 +458,6 @@ class GptOssModel(GptOssPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -470,21 +469,17 @@ class GptOssModel(GptOssPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "cache_position": cache_position,
                 "past_key_values": past_key_values,
             }
             causal_mask_mapping = {
@@ -495,15 +490,14 @@ class GptOssModel(GptOssPreTrainedModel):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for decoder_layer in self.layers:
+        for i, decoder_layer in enumerate(self.layers):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 **kwargs,
             )
         hidden_states = self.norm(hidden_states)
@@ -625,7 +619,6 @@ class GptOssForCausalLM(GptOssPreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         output_router_logits: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeCausalLMOutputWithPast:
@@ -665,7 +658,6 @@ class GptOssForCausalLM(GptOssPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_router_logits=output_router_logits,
-            cache_position=cache_position,
             **kwargs,
         )
 

@@ -411,7 +411,7 @@ class MobileBertLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
+    ) -> torch.Tensor:
         if self.use_bottleneck:
             query_tensor, key_tensor, value_tensor, layer_input = self.bottleneck(hidden_states)
         else:
@@ -558,12 +558,12 @@ class MobileBertPreTrainedModel(PreTrainedModel):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`MobileBertForPreTraining`].
     """
 )
+@dataclass
 class MobileBertForPreTrainingOutput(ModelOutput):
     r"""
     loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
@@ -636,7 +636,7 @@ class MobileBertModel(MobileBertPreTrainedModel):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=embedding_output,
+            inputs_embeds=embedding_output,
             attention_mask=attention_mask,
         )
 

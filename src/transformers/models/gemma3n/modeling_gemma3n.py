@@ -19,6 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
+from collections import UserDict
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Optional
@@ -31,7 +32,6 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
@@ -43,6 +43,7 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    is_accelerate_available,
     torch_compilable_check,
 )
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
@@ -51,23 +52,27 @@ from ..auto import AutoModel
 from .configuration_gemma3n import Gemma3nAudioConfig, Gemma3nConfig, Gemma3nTextConfig, Gemma3nVisionConfig
 
 
-@dataclass
+if is_accelerate_available():
+    from accelerate.hooks import add_hook_to_module
+
+
 @auto_docstring
+@dataclass
 class Gemma3nAudioEncoderModelOutput(BaseModelOutputWithPooling):
     r"""
-    audio_mel_mask (`torch.FloatTensor`, *optional*):
+    audio_mel_mask (`torch.BoolTensor`, *optional*):
         A torch.BoolTensor of shape `(batch_size, num_frames)`
     """
 
     audio_mel_mask: torch.BoolTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Gemma3n outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class Gemma3nModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -88,12 +93,12 @@ class Gemma3nModelOutputWithPast(BaseModelOutputWithPast):
     audio_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Gemma3n causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Gemma3nCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -130,21 +135,18 @@ class Gemma3nRMSNorm(nn.Module):
         self.with_scale = with_scale
 
         if self.with_scale:
-            self.weight = nn.Parameter(torch.ones(dim))
-        else:
-            self.register_buffer("weight", torch.tensor(1.0), persistent=False)
+            self.weight = nn.Parameter(torch.ones(dim), requires_grad=True)
 
-    def _norm(self, x):
-        return x / torch.sqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+    def _norm(self, hidden_states: torch.Tensor):
+        mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.eps
+        # Use torch.pow() (over torch.sqrt() or torch.rsqrt()) to addess compiler differences between Torch and JAX
+        return hidden_states * torch.pow(mean_squared, -0.5)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Llama does x.to(float16) * w whilst Gemma2 is (x * w).to(float16)
-        # See https://github.com/huggingface/transformers/pull/29402
-        output = self._norm(x.float()) * self.weight.float()
-        return output.type_as(x)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.eps}"
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        normed_output = self._norm(hidden_states.float())
+        if self.with_scale:
+            normed_output = normed_output * self.weight.float()
+        return normed_output.type_as(hidden_states)
 
 
 # ==== Audio Encoder ====
@@ -922,87 +924,6 @@ class Gemma3nAudioConformerBlock(nn.Module):
         return output
 
 
-class Gemma3nAudioEncoder(PreTrainedModel):
-    """
-    An audio encoder based on the [Universal Speech Model](https://huggingface.co/papers/2303.01037) architecture.
-    """
-
-    config: Gemma3nAudioConfig
-
-    main_input_name = "audio_mel"
-    input_modalities = "audio"
-
-    def __init__(self, config: Gemma3nAudioConfig):
-        super().__init__(config)
-        self.config = config
-
-        self.subsample_conv_projection = Gemma3nAudioSubSampleConvProjection(config)
-        self.conformer = nn.ModuleList(
-            [Gemma3nAudioConformerBlock(config) for _ in range(config.conf_num_hidden_layers)]
-        )
-        self.post_init()
-
-    @merge_with_config_defaults
-    @capture_outputs
-    def forward(
-        self, audio_mel: torch.Tensor, audio_mel_mask: torch.BoolTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | Gemma3nAudioEncoderModelOutput:
-        """Encodes a batch of MELs.
-
-        Args:
-            audio_mel: a torch.Tensor of shape [batch, num_frames, num_channels,
-              mel_bins].
-
-        Returns:
-            audio_encodings: a torch.Tensor of shape
-                `[batch_size, self.config.audio_soft_tokens_per_image,
-                self.config.audio_config.hidden_size]`
-            audio_mel_mask: a torch.BoolTensor of shape [batch, num_frames].
-        """
-        audio_encodings = self.subsample_conv_projection(audio_mel)  # audio_encodings: [B, T_sub, D]
-
-        # Subsample the input audio_mel_mask to match the time dimension of audio_encodings (T_sub)
-        t_sub = audio_encodings.shape[1]
-
-        time_stride_product = 1
-        for stride_pair_idx in range(len(self.config.sscp_conv_stride_size)):
-            time_stride_product *= self.config.sscp_conv_stride_size[stride_pair_idx][0]
-
-        # Create indices for gathering from the original mask.
-        # These indices map to original time steps corresponding to the start of each
-        # receptive field in the subsampled output.
-        indices = torch.arange(t_sub, device=audio_mel_mask.device) * time_stride_product
-        indices = torch.clamp(indices, max=audio_mel_mask.shape[1] - 1)  # Ensure indices are valid
-
-        # Expand indices for batch compatibility if B > 1 and indices is 1D.
-        if audio_mel_mask.ndim > 1 and indices.ndim == 1:
-            indices = indices.unsqueeze(0).expand(audio_mel_mask.shape[0], -1)  # [B, T_sub]
-        elif (
-            audio_mel_mask.ndim == indices.ndim
-            and audio_mel_mask.shape[0] == 1
-            and indices.shape[0] != 1
-            and t_sub == indices.shape[0]
-        ):
-            # Handle case where B=1 but indices became [T_sub] instead of [1, T_sub]
-            indices = indices.unsqueeze(0)
-
-        current_mask = torch.gather(audio_mel_mask, 1, indices)  # [B, T_sub]
-
-        for block in self.conformer:
-            audio_encodings = block(audio_encodings, current_mask)  # Pass the processed mask
-
-        if self.config.conf_reduction_factor > 1:
-            audio_encodings = audio_encodings[:, :: self.config.conf_reduction_factor]
-            # Reduce the mask as well
-            current_mask = current_mask[:, :: self.config.conf_reduction_factor]
-
-        audio_encodings = audio_encodings.masked_fill(current_mask.unsqueeze(-1), 0.0)
-        return Gemma3nAudioEncoderModelOutput(
-            last_hidden_state=audio_encodings,
-            audio_mel_mask=current_mask,
-        )
-
-
 class Gemma3nTextScaledWordEmbedding(nn.Embedding):
     """
     This module overrides nn.Embeddings' forward by multiplying with embeddings scale.
@@ -1145,12 +1066,14 @@ class Gemma3nTextAltUp(nn.Module):
         innovation = innovation.repeat(self.config.altup_num_inputs, 1, 1, 1)  # Repeat on dim0 to match predictions
 
         if self.training and self.config.altup_coef_clip is not None:
-            self.correction_coefs.weight.data.clamp_(-self.config.altup_coef_clip, self.config.altup_coef_clip)
+            weight = self.correction_coefs.weight.clamp(-self.config.altup_coef_clip, self.config.altup_coef_clip)
+            all_coefs = torch.nn.functional.linear(modalities, weight, bias=None) + 1.0
+        else:
+            all_coefs = self.correction_coefs(modalities) + 1.0
 
         # all_coefs adapted from jax.numpy.einsum("...p,pi->...i", ...)
         # Permute to (altup_num_inputs, batch_size, num_tokens) as the last dim is a scalar applied to each altup input
         # and expand on dim1 for broadcastability
-        all_coefs: torch.Tensor = self.correction_coefs(modalities) + 1.0
         all_coefs = all_coefs.permute(2, 0, 1).unsqueeze(-1)
 
         corrected = torch.mul(innovation, all_coefs)
@@ -1195,7 +1118,7 @@ def eager_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    dropout: float = 0.0,
+    dropout: float | int = 0.0,
     scaling: float | None = None,
     softcap: float | None = None,
     **kwargs,
@@ -1245,39 +1168,20 @@ def apply_rotary_pos_emb(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, 
     return (x * cos) + (rotate_half(x) * sin)
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class Gemma3nTextAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
     def __init__(self, config: Gemma3nTextConfig, layer_idx: int):
         super().__init__()
-        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.is_sliding = self.layer_type == "sliding_attention"
+        self.sliding_window = config.sliding_window if self.is_sliding else None
+
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = 1.0
         self.attention_dropout = self.config.attention_dropout
         self.is_causal = True
-
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
-        )
-        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
-        self.is_sliding = self.layer_type == "sliding_attention"
-
-        self.q_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
-        self.v_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
         first_kv_shared_layer_idx = self.config.num_hidden_layers - self.config.num_kv_shared_layers
         self.is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx > 0
@@ -1293,15 +1197,35 @@ class Gemma3nTextAttention(nn.Module):
                 config.layer_types[layer_idx]
             )
 
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.q_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
+
+        # Layers sharing kv states don't need any weight matrices
+        if not self.is_kv_shared_layer:
+            self.k_proj = nn.Linear(
+                config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+            )
+            self.v_proj = nn.Linear(
+                config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+            )
+            self.k_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
+            self.v_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps, with_scale=False)
+
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
+
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: torch.Tensor = None,
-        attention_mask: torch.Tensor | None = None,
+        position_embeddings: torch.Tensor,
+        attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
+        shared_kv_states: dict[int, tuple[torch.Tensor, torch.Tensor]] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.config.head_dim)
 
@@ -1311,9 +1235,11 @@ class Gemma3nTextAttention(nn.Module):
         query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
         query_states = query_states.transpose(1, 2)
 
-        # For layers with shared KV (from kv sharing point onwards), we reuse the same keys/values states as the last non-sharing layer
-        if self.is_kv_shared_layer and past_key_values is not None:
-            key_states, value_states = past_key_values.shared_layers[self.kv_shared_layer_index]
+        # For layers with shared KV (from kv sharing point onwards), we reuse the same keys/values states as the last non-sharing layer.
+        # We cannot simply reuse the cached state if we have a Cache, as sliding layers will not remember the full states in their Cache
+        # once we are past the sliding window - so we always use `shared_kv_states` instead, even when past_key_values is not None
+        if self.is_kv_shared_layer:
+            key_states, value_states = shared_kv_states[self.kv_shared_layer_index]
             # Device of past layer may be different from current one
             key_states = key_states.to(query_states.device)
             value_states = value_states.to(query_states.device)
@@ -1327,22 +1253,10 @@ class Gemma3nTextAttention(nn.Module):
             value_states = self.v_norm(value_states)
             value_states = value_states.transpose(1, 2)
 
-        if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {
-                "sin": sin,
-                "cos": cos,
-                "cache_position": cache_position,
-                "sliding_window": self.sliding_window,
-            }
-            if not self.is_kv_shared_layer:
-                key_states, value_states = past_key_values.update(
-                    key_states, value_states, self.layer_idx, cache_kwargs
-                )
-            if self.store_full_length_kv:
-                if not hasattr(past_key_values, "shared_layers"):
-                    past_key_values.shared_layers = {}
-                past_key_values.shared_layers[self.layer_idx] = key_states, value_states
+        if past_key_values is not None and not self.is_kv_shared_layer:
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if self.store_full_length_kv:
+            shared_kv_states[self.layer_idx] = key_states, value_states
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -1371,7 +1285,6 @@ class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
         self.config = config
         self.hidden_size = config.hidden_size
         self.layer_idx = layer_idx
-        self.attention_type = config.layer_types[layer_idx]
         self.self_attn = Gemma3nTextAttention(config, layer_idx)
         self.mlp = Gemma3nTextMLP(config, layer_idx=layer_idx)
         self.input_layernorm = Gemma3nRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
@@ -1393,10 +1306,10 @@ class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor = None,
         per_layer_input: torch.Tensor = None,
+        shared_kv_states: dict[int, tuple[torch.Tensor, torch.Tensor]] | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         predictions = self.altup.predict(hidden_states)
@@ -1408,10 +1321,10 @@ class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
         attn, _ = self.self_attn(
             hidden_states=active_prediction_normed,
             attention_mask=attention_mask,
+            shared_kv_states=shared_kv_states,
             position_ids=position_ids,
             position_embeddings=position_embeddings,
             past_key_values=past_key_values,
-            cache_position=cache_position,
             **kwargs,
         )
         attn = self.post_attention_layernorm(attn)
@@ -1448,7 +1361,7 @@ class Gemma3nPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Gemma3nTextDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["past_key_values", "shared_kv_states"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -1501,17 +1414,134 @@ class Gemma3nPreTrainedModel(PreTrainedModel):
         if hasattr(module, "gradient_clipping"):
             init.constant_(module.gradient_clipping, self.config.gradient_clipping)
 
+    def get_per_layer_input_embeddings(self):
+        return self.base_model.embed_tokens_per_layer
+
+    def set_per_layer_input_embeddings(self, value):
+        self.base_model.embed_tokens_per_layer = value
+
+    def resize_token_embeddings(
+        self,
+        new_num_tokens: int | None = None,
+        pad_to_multiple_of: int | None = None,
+        mean_resizing: bool = True,
+    ) -> nn.Embedding:
+        inputs_embeds = super().resize_token_embeddings(
+            new_num_tokens=new_num_tokens,
+            pad_to_multiple_of=pad_to_multiple_of,
+            mean_resizing=mean_resizing,
+        )
+        self._resize_per_layer_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
+        return inputs_embeds
+
+    def _resize_per_layer_embeddings(
+        self,
+        new_num_tokens: int | None = None,
+        pad_to_multiple_of: int | None = None,
+        mean_resizing: bool = True,
+    ):
+        self.config.get_text_config().vocab_size_per_layer_input = self.vocab_size
+        if self.config.get_text_config().hidden_size_per_layer_input:
+            embed_tokens_per_layer = self.get_per_layer_input_embeddings()
+            new_embeddings_per_layer = self._get_resized_embeddings(
+                embed_tokens_per_layer, new_num_tokens, pad_to_multiple_of, mean_resizing
+            )
+            if hasattr(embed_tokens_per_layer, "_hf_hook"):
+                hook = embed_tokens_per_layer._hf_hook
+                add_hook_to_module(new_embeddings_per_layer, hook)
+            new_embeddings_per_layer.requires_grad_(embed_tokens_per_layer.weight.requires_grad)
+            self.set_per_layer_input_embeddings(new_embeddings_per_layer)
+
+
+class Gemma3nAudioEncoder(Gemma3nPreTrainedModel):
+    """
+    An audio encoder based on the [Universal Speech Model](https://huggingface.co/papers/2303.01037) architecture.
+    """
+
+    config: Gemma3nAudioConfig
+
+    main_input_name = "audio_mel"
+    input_modalities = "audio"
+
+    def __init__(self, config: Gemma3nAudioConfig):
+        super().__init__(config)
+        self.config = config
+
+        self.subsample_conv_projection = Gemma3nAudioSubSampleConvProjection(config)
+        self.conformer = nn.ModuleList(
+            [Gemma3nAudioConformerBlock(config) for _ in range(config.conf_num_hidden_layers)]
+        )
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs
+    def forward(
+        self, audio_mel: torch.Tensor, audio_mel_mask: torch.BoolTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | Gemma3nAudioEncoderModelOutput:
+        """Encodes a batch of MELs.
+
+        Args:
+            audio_mel: a torch.Tensor of shape [batch, num_frames, num_channels,
+              mel_bins].
+
+        Returns:
+            audio_encodings: a torch.Tensor of shape
+                `[batch_size, self.config.audio_soft_tokens_per_image,
+                self.config.audio_config.hidden_size]`
+            audio_mel_mask: a torch.BoolTensor of shape [batch, num_frames].
+        """
+        audio_encodings = self.subsample_conv_projection(audio_mel)  # audio_encodings: [B, T_sub, D]
+
+        # Subsample the input audio_mel_mask to match the time dimension of audio_encodings (T_sub)
+        t_sub = audio_encodings.shape[1]
+
+        time_stride_product = 1
+        for stride_pair_idx in range(len(self.config.sscp_conv_stride_size)):
+            time_stride_product *= self.config.sscp_conv_stride_size[stride_pair_idx][0]
+
+        # Create indices for gathering from the original mask.
+        # These indices map to original time steps corresponding to the start of each
+        # receptive field in the subsampled output.
+        indices = torch.arange(t_sub, device=audio_mel_mask.device) * time_stride_product
+        indices = torch.clamp(indices, max=audio_mel_mask.shape[1] - 1)  # Ensure indices are valid
+
+        # Expand indices for batch compatibility if B > 1 and indices is 1D.
+        if audio_mel_mask.ndim > 1 and indices.ndim == 1:
+            indices = indices.unsqueeze(0).expand(audio_mel_mask.shape[0], -1)  # [B, T_sub]
+        elif (
+            audio_mel_mask.ndim == indices.ndim
+            and audio_mel_mask.shape[0] == 1
+            and indices.shape[0] != 1
+            and t_sub == indices.shape[0]
+        ):
+            # Handle case where B=1 but indices became [T_sub] instead of [1, T_sub]
+            indices = indices.unsqueeze(0)
+
+        current_mask = torch.gather(audio_mel_mask, 1, indices)  # [B, T_sub]
+
+        for block in self.conformer:
+            audio_encodings = block(audio_encodings, current_mask)  # Pass the processed mask
+
+        if self.config.conf_reduction_factor > 1:
+            audio_encodings = audio_encodings[:, :: self.config.conf_reduction_factor]
+            # Reduce the mask as well
+            current_mask = current_mask[:, :: self.config.conf_reduction_factor]
+
+        audio_encodings = audio_encodings.masked_fill(current_mask.unsqueeze(-1), 0.0)
+        return Gemma3nAudioEncoderModelOutput(
+            last_hidden_state=audio_encodings,
+            audio_mel_mask=current_mask,
+        )
+
 
 class Gemma3nRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: Gemma3nTextConfig, device=None, layer_type=None):
+    def __init__(self, config: Gemma3nTextConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
-
         self.config = config
-
         self.layer_types = list(set(config.layer_types))
         self.rope_type = {}
         for layer_type in self.layer_types:
@@ -1523,7 +1553,7 @@ class Gemma3nRotaryEmbedding(nn.Module):
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, layer_type=layer_type)
             self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
             self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
@@ -1634,6 +1664,14 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
         self.register_buffer("per_layer_projection_scale", torch.tensor(self.hidden_size**-0.5), persistent=False)
         self.register_buffer("per_layer_input_scale", torch.rsqrt(torch.tensor(2.0)), persistent=False)
 
+        # Update `_keys_to_ignore_on_load_unexpected` to drop all k/v proj and norms for the shared layers
+        self._keys_to_ignore_on_load_unexpected = []
+        for i, layer in enumerate(self.layers):
+            if layer.self_attn.is_kv_shared_layer:
+                self._keys_to_ignore_on_load_unexpected.extend(
+                    [f"layers.{i}.self_attn.{name}" for name in ("k_proj", "v_proj", "k_norm", "v_norm")]
+                )
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1649,7 +1687,6 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         r"""
@@ -1668,21 +1705,18 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "cache_position": cache_position,
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
@@ -1711,21 +1745,26 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
 
         hidden_states = torch.stack(temp_hidden_states, dim=0)  # [num_altup_inputs, batch, seq_len, hidden_size]
         position_embeddings = {}
-        for layer_type in self.config.layer_types:
+        for layer_type in set(self.config.layer_types):
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            causal_mask = causal_mask_mapping[decoder_layer.attention_type]
-            per_layer_input = per_layer_inputs[:, :, decoder_layer.layer_idx, :]
+        # Initialize as empty dict - it will be filled in the right layers. We use a UserDict instead of built-in dict (it behaves
+        # the same) for fsdp2 support (otherwise, `_apply_to_tensors` rebuilds every dict it recurses into, and `shared_kv_states`
+        # is not correctly shared, see https://github.com/pytorch/pytorch/blob/v2.10.0/torch/distributed/utils.py#L223-L255)
+        shared_kv_states = UserDict()
+
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            causal_mask = causal_mask_mapping[self.config.layer_types[i]]
+            per_layer_input = per_layer_inputs[:, :, i, :]
 
             hidden_states = decoder_layer(
                 hidden_states,
-                position_embeddings[decoder_layer.attention_type],
+                position_embeddings[self.config.layer_types[i]],
                 per_layer_input,
+                shared_kv_states=shared_kv_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -1791,7 +1830,6 @@ class Gemma3nForCausalLM(Gemma3nPreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     config: Gemma3nTextConfig
-    _checkpoint_conversion_mapping = {"model.language_model": "model"}
 
     def __init__(self, config: Gemma3nTextConfig):
         super().__init__(config)
@@ -1813,7 +1851,6 @@ class Gemma3nForCausalLM(Gemma3nPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
@@ -1842,7 +1879,6 @@ class Gemma3nForCausalLM(Gemma3nPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1925,7 +1961,6 @@ class Gemma3nMultimodalEmbedder(nn.Module):
     """
 )
 class Gemma3nModel(Gemma3nPreTrainedModel):
-    _checkpoint_conversion_mapping = {}
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
 
@@ -2025,15 +2060,14 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         token_type_ids: torch.LongTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         **lm_kwargs: Unpack[TransformersKwargs],
-    ) -> Gemma3nCausalLMOutputWithPast:
+    ) -> Gemma3nModelOutputWithPast:
         r"""
+        input_features_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Attention mask for `input_features` where non-zero values mark valid audio frames.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.text_config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -2065,11 +2099,6 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
 
         if input_ids is not None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -2112,9 +2141,9 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
 
         # Merge text and audio
         if input_features is not None and input_features_mask is not None:
-            audio_features = self.get_audio_features(input_features, ~input_features_mask, return_dict=True)
-            audio_features = audio_features.pooler_output
-            audio_mask = audio_features.audio_mel_mask
+            audio_outputs = self.get_audio_features(input_features, ~input_features_mask, return_dict=True)
+            audio_features = audio_outputs.pooler_output
+            audio_mask = audio_outputs.audio_mel_mask
 
             # The Gemma3nProcessor expects all audio will be 30s in length and inserts 188 audio soft tokens into the
             # text to account for this. However, the audio preprocessing and encoder do not gurarantee they will
@@ -2144,10 +2173,7 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             return_dict=True,
-            cache_position=cache_position,
             **lm_kwargs,
         )
 
@@ -2159,6 +2185,12 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
             image_hidden_states=image_features if pixel_values is not None else None,
             audio_hidden_states=audio_features if input_features is not None else None,
         )
+
+    def get_per_layer_input_embeddings(self):
+        return self.language_model.embed_tokens_per_layer
+
+    def set_per_layer_input_embeddings(self, value):
+        self.language_model.embed_tokens_per_layer = value
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the audio encoder into language model space.")
@@ -2190,20 +2222,14 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
     """
 )
 class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    accepts_loss_kwargs = False
 
     def __init__(self, config: Gemma3nConfig):
         super().__init__(config)
         self.model = Gemma3nModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
 
     @auto_docstring
     def get_image_features(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
@@ -2221,12 +2247,9 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         token_type_ids: torch.LongTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **lm_kwargs: Unpack[TransformersKwargs],
     ) -> Gemma3nCausalLMOutputWithPast:
@@ -2278,11 +2301,6 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
         "user\nYou are a helpful assistant.\n\n\n\n\n\nWhere is the cat standing?\nmodel\nBased on the image, the cat is standing in a snowy area, likely outdoors. It appears to"
         ```
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -2292,12 +2310,9 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
             position_ids=position_ids,
             past_key_values=past_key_values,
             token_type_ids=token_type_ids,
-            cache_position=cache_position,
             inputs_embeds=inputs_embeds,
             labels=labels,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             return_dict=True,
             **lm_kwargs,
         )
@@ -2313,25 +2328,7 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # Upcast to float if we need to compute the loss to avoid potential precision issues
-            logits = logits.float()
-            shift_logits = logits[..., :-1, :]
-            shift_labels = labels[..., 1:]
-            if attention_mask is not None:
-                # we use the input attention mask to shift the logits and labels, because it is 2D.
-                # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
-                shift_attention_mask = attention_mask[:, -shift_logits.shape[1] :].to(logits.device)
-                shift_logits = shift_logits[shift_attention_mask.to(logits.device) != 0].contiguous()
-                shift_labels = shift_labels[shift_attention_mask.to(shift_labels.device) != 0].contiguous()
-            else:
-                shift_logits = shift_logits.contiguous()
-                shift_labels = shift_labels.contiguous()
-            # Flatten the tokens
-            loss_fct = nn.CrossEntropyLoss()
-
-            flat_logits = shift_logits.view(-1, self.config.text_config.vocab_size)
-            flat_labels = shift_labels.view(-1).to(shift_logits.device)
-            loss = loss_fct(flat_logits, flat_labels)
+            loss = self.loss_function(logits, labels, self.config.get_text_config().vocab_size, **lm_kwargs)
 
         return Gemma3nCausalLMOutputWithPast(
             loss=loss,
@@ -2348,7 +2345,6 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
         input_ids,
         past_key_values=None,
         inputs_embeds=None,
-        cache_position=None,
         position_ids=None,
         pixel_values=None,
         input_features=None,
@@ -2368,7 +2364,6 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            cache_position=cache_position,
             use_cache=use_cache,
             logits_to_keep=logits_to_keep,
             token_type_ids=token_type_ids,
@@ -2385,6 +2380,12 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
             model_inputs["input_features_mask"] = input_features_mask
 
         return model_inputs
+
+    def get_per_layer_input_embeddings(self):
+        return self.model.get_per_layer_input_embeddings()
+
+    def set_per_layer_input_embeddings(self, value):
+        self.model.set_per_layer_input_embeddings(value)
 
 
 __all__ = [

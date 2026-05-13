@@ -22,46 +22,16 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import BackboneMixin
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
+from ...utils.generic import can_return_tuple
 from .configuration_pvt_v2 import PvtV2Config
 
 
 logger = logging.get_logger(__name__)
-
-
-# Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextDropPath with ConvNext->Pvt
-class PvtV2DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: float | None = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
 
 
 class PvtV2OverlapPatchEmbeddings(nn.Module):
@@ -230,6 +200,31 @@ class PvtV2ConvFeedForwardNetwork(nn.Module):
         hidden_states = self.dense2(hidden_states)
         hidden_states = self.dropout(hidden_states)
         return hidden_states
+
+
+# Copied from transformers.models.swin.modular_swin.SwinDropPath with SwinDropPath->PvtV2DropPath
+class PvtV2DropPath(nn.Module):
+    """Stochastic depth (DropPath) per sample, for residual blocks.
+
+    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
+    <https://arxiv.org/abs/1603.09382>`_.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor = torch.floor(random_tensor + keep_prob)
+        return hidden_states.div(keep_prob) * random_tensor
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
 
 
 class PvtV2BlockLayer(nn.Module):
@@ -410,7 +405,7 @@ class PvtV2Model(PvtV2PreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         encoder_outputs = self.encoder(
             pixel_values=pixel_values,
@@ -467,7 +462,7 @@ class PvtV2ForImageClassification(PvtV2PreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.pvt_v2(
             pixel_values=pixel_values,
@@ -515,6 +510,8 @@ class PvtV2Backbone(BackboneMixin, PvtV2Model):
         super().__init__(config)
         self.num_features = config.hidden_sizes
 
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
@@ -550,7 +547,7 @@ class PvtV2Backbone(BackboneMixin, PvtV2Model):
         >>> list(feature_maps[-1].shape)
         [1, 256, 7, 7]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

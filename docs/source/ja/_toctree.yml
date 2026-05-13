@@ -67,8 +67,6 @@
       title: ゼロショット画像分類
     - local: tasks/monocular_depth_estimation
       title: 深さの推定
-    - local: tasks/image_to_image
-      title: 画像から画像へ
     - local: tasks/knowledge_distillation_for_image_classification
       title: コンピュータビジョンのための知識の蒸留
     title: コンピュータビジョン

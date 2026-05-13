@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -43,8 +44,8 @@ from .configuration_sam3_tracker import Sam3TrackerConfig, Sam3TrackerMaskDecode
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the Sam3Tracker model's output.")
+@dataclass
 class Sam3TrackerImageSegmentationOutput(ModelOutput):
     r"""
     iou_scores (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks)`):
@@ -121,6 +122,15 @@ class Sam3TrackerPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_attention_backend = True
+    _keys_to_ignore_on_load_unexpected = [
+        r"^memory_.*",
+        r"^mask_downsample.*",
+        r"^object_pointer_proj.*",
+        r"^temporal_positional_encoding_projection_layer.*",
+        "no_memory_positional_encoding",
+        "no_object_pointer",
+        "occlusion_spatial_embedding_parameter",
+    ]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -735,8 +745,8 @@ class Sam3TrackerMaskDecoder(nn.Module):
         return mask_logits_out, iou_scores_out
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the vision encoder's outputs.")
+@dataclass
 class Sam3TrackerVisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, height, width, hidden_size)`):
@@ -771,6 +781,7 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
     input_modalities = ("image", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam3TrackerTwoWayAttentionBlock, index=2)}
     _tied_weights_keys = {}
+    _base_model_prefix = "tracker_model"
     _keys_to_ignore_on_load_unexpected = [
         r"^detector_model.",
         r"^memory_.*",
@@ -781,11 +792,6 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
         "no_object_pointer",
         "occlusion_spatial_embedding_parameter",
     ]
-    _checkpoint_conversion_mapping = {
-        r"tracker_model.(.+)": r"\1",  # the regex allows to remove the prefix, and add it back in revert mode
-        "detector_model.vision_encoder.backbone.": "vision_encoder.backbone.",
-        "tracker_neck.": "vision_encoder.neck.",
-    }
 
     def __init__(self, config: Sam3TrackerConfig):
         # loading from a sam3_video config

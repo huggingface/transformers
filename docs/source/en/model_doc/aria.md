@@ -17,7 +17,6 @@ rendered properly in your Markdown viewer.
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -38,14 +37,13 @@ The example below demonstrates how to generate text based on an image with [`Pip
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipeline = pipeline(
     "image-to-text",
     model="rhymes-ai/Aria",
     device=0,
-    dtype=torch.bfloat16
 )
 pipeline(
     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
@@ -58,12 +56,13 @@ pipeline(
 
 ```python
 import torch
+
 from transformers import AutoModelForCausalLM, AutoProcessor
+
 
 model = AutoModelForCausalLM.from_pretrained(
     "rhymes-ai/Aria",
     device_map="auto",
-    dtype=torch.bfloat16,
     attn_implementation="sdpa"
 )
 
@@ -78,8 +77,8 @@ messages = [
     },
 ]
 
-inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt")
-ipnuts = inputs.to(model.device, torch.bfloat16)
+inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device)
+inputs = inputs.to(model.device, torch.bfloat16)
 
 output = model.generate(
     **inputs,
@@ -101,15 +100,16 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4 and the [rhymes-ai/Aria-sequential_mlp](https://huggingface.co/rhymes-ai/Aria-sequential_mlp) checkpoint. This checkpoint replaces grouped GEMM with `torch.nn.Linear` layers for easier quantization.
 
-```py
+```python
 # pip install torchao
 import torch
-from transformers import TorchAoConfig, AutoModelForCausalLM, AutoProcessor
+
+from transformers import AutoModelForCausalLM, AutoProcessor, TorchAoConfig
+
 
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 model = AutoModelForCausalLM.from_pretrained(
     "rhymes-ai/Aria-sequential_mlp",
-    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )
@@ -126,7 +126,7 @@ messages = [
     },
 ]
 
-inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt")
+inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device)
 inputs = inputs.to(model.device, torch.bfloat16)
 
 output = model.generate(
@@ -145,6 +145,12 @@ print(response)
 ## AriaImageProcessor
 
 [[autodoc]] AriaImageProcessor
+    - preprocess
+
+## AriaImageProcessorPil
+
+[[autodoc]] AriaImageProcessorPil
+    - preprocess
 
 ## AriaProcessor
 

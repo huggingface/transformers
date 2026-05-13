@@ -891,20 +891,16 @@ class TestMistralCommonBackend(unittest.TestCase):
         # Test 1:
         # with tokenize
         self.assertEqual(
-            self.tokenizer.apply_chat_template(conversation, tokenize=False),
+            self.tokenizer.apply_chat_template(conversation, tokenize=False, reasoning_effort=None),
             expected_tokenized.text,
         )
 
         # Test 2:
         # without tokenize
         self.assertEqual(
-            self.tokenizer.apply_chat_template(conversation, tokenize=True).input_ids, expected_tokenized.tokens
+            self.tokenizer.apply_chat_template(conversation, tokenize=True, reasoning_effort=None).input_ids,
+            expected_tokenized.tokens,
         )
-
-        with self.assertRaises(
-            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.apply_chat_template`."
-        ):
-            self.tokenizer.apply_chat_template(conversation, tokenize=True, unk_args="")
 
     def test_apply_chat_template_continue_final_message(self):
         conversation = [
@@ -1067,10 +1063,41 @@ class TestMistralCommonBackend(unittest.TestCase):
         for o, e in zip(output_dict["pixel_values"], expected_tokenized.images):
             self.assertTrue(np.allclose(o, e))
 
-        output_dict = self.tokenizer.apply_chat_template(conversation, tokenize=True, return_tensors="pt")
-        self.assertEqual(output_dict["input_ids"].tolist()[0], expected_tokenized.tokens)
+        # Test with return_tensors="pt"
+        output_dict_pt = self.tokenizer.apply_chat_template(conversation, tokenize=True, return_tensors="pt")
+        self.assertEqual(output_dict_pt["input_ids"].tolist()[0], expected_tokenized.tokens)
         expected_images_pt_tensor = torch.from_numpy(np.stack(expected_tokenized.images))
-        self.assertTrue(torch.allclose(output_dict["pixel_values"], expected_images_pt_tensor))
+        self.assertTrue(torch.allclose(output_dict_pt["pixel_values"], expected_images_pt_tensor))
+        self.assertIn("image_sizes", output_dict_pt)
+        self.assertIsInstance(output_dict_pt["image_sizes"], torch.Tensor)
+        self.assertEqual(output_dict_pt["image_sizes"].shape, torch.Size([1, 2]))
+
+        # Test with return_tensors="np"
+        output_dict_np = self.tokenizer.apply_chat_template(conversation, tokenize=True, return_tensors="np")
+        self.assertEqual(output_dict_np["input_ids"].tolist()[0], expected_tokenized.tokens)
+        expected_images_np_array = np.stack(expected_tokenized.images)
+        self.assertTrue(np.allclose(output_dict_np["pixel_values"], expected_images_np_array))
+        self.assertIn("image_sizes", output_dict_np)
+        self.assertIsInstance(output_dict_np["image_sizes"], np.ndarray)
+        self.assertEqual(output_dict_np["image_sizes"].shape, (1, 2))
+
+        # Test with return_tensors=None (default - Python lists)
+        output_dict_default = self.tokenizer.apply_chat_template(conversation, tokenize=True)
+        self.assertEqual(output_dict_default["input_ids"], expected_tokenized.tokens)
+        self.assertEqual(len(output_dict_default["pixel_values"]), len(expected_tokenized.images))
+        for o, e in zip(output_dict_default["pixel_values"], expected_tokenized.images):
+            self.assertTrue(np.allclose(o, e))
+        self.assertIn("image_sizes", output_dict_default)
+        self.assertIsInstance(output_dict_default["image_sizes"], list)
+        self.assertEqual(len(output_dict_default["image_sizes"]), 1)
+
+        # Check pt, np, list are equals
+        self.assertEqual(output_dict_pt["image_sizes"].tolist(), output_dict_np["image_sizes"].tolist())
+        self.assertEqual(output_dict_pt["image_sizes"].tolist(), output_dict_default["image_sizes"])
+
+        actual_height, actual_width = output_dict_pt["image_sizes"].tolist()[0]
+        self.assertEqual(actual_height, 308, f"Expected height 308, got {actual_height}")
+        self.assertEqual(actual_width, 224, f"Expected width 224, got {actual_width}")
 
     def test_apply_chat_template_with_audio(self):
         ref_conversation = conversation = [
@@ -1235,12 +1262,6 @@ class TestMistralCommonBackend(unittest.TestCase):
         for text, token, expected in zip(text_outputs, token_outputs, expected_tokenized):
             self.assertEqual(text, expected.text)
             self.assertEqual(token, expected.tokens)
-
-        with self.assertRaises(
-            ValueError,
-            msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.batch_apply_chat_template`.",
-        ):
-            self.tokenizer.apply_chat_template(conversations, tools=tools, tokenize=True, unk_args="")
 
     def test_batch_apply_chat_template_images(self):
         conversations = [
@@ -2108,10 +2129,12 @@ class TestMistralCommonBackend(unittest.TestCase):
             (ValidationMode.test, ValidationMode.test),
             ("finetuning", ValidationMode.finetuning),
             (ValidationMode.finetuning, ValidationMode.finetuning),
+            ("serving", ValidationMode.serving),
+            (ValidationMode.serving, ValidationMode.serving),
         ]:
             self.assertEqual(MistralCommonBackend._get_validation_mode(mode), expected)
 
-        for invalid_mode in [("serving", ValidationMode.serving, "invalid", 1)]:
+        for invalid_mode in ["invalid", 1]:
             with self.assertRaises(ValueError):
                 MistralCommonBackend._get_validation_mode(invalid_mode)
 

@@ -146,7 +146,7 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = GroupViTVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=GroupViTVisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=GroupViTVisionConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):
@@ -424,7 +424,7 @@ class GroupViTTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = GroupViTTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GroupViTTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=GroupViTTextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -541,7 +541,7 @@ class GroupViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip(reason="input_embeds are tested in individual model tests")
+    @unittest.skip(reason="inputs_embeds are tested in individual model tests")
     def test_inputs_embeds(self):
         pass
 

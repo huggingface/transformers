@@ -79,7 +79,7 @@ class Lfm2VlPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
 
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -88,12 +88,12 @@ class Lfm2VlPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Lfm2Vl causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Lfm2VlCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -118,12 +118,12 @@ class Lfm2VlCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Lfm2Vl outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class Lfm2VlModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -145,8 +145,6 @@ class Lfm2VlModelOutputWithPast(BaseModelOutputWithPast):
     """
 )
 class Lfm2VlModel(Lfm2VlPreTrainedModel):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: Lfm2VlConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -248,7 +246,6 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Lfm2VlModelOutputWithPast:
         r"""
@@ -285,7 +282,6 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -304,7 +300,6 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
     """
 )
 class Lfm2VlForConditionalGeneration(Lfm2VlPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: Lfm2VlConfig):
@@ -358,7 +353,6 @@ class Lfm2VlForConditionalGeneration(Lfm2VlPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Lfm2VlCausalLMOutputWithPast:
@@ -426,7 +420,6 @@ class Lfm2VlForConditionalGeneration(Lfm2VlPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -460,7 +453,6 @@ class Lfm2VlForConditionalGeneration(Lfm2VlPreTrainedModel, GenerationMixin):
         inputs_embeds=None,
         pixel_values=None,
         attention_mask=None,
-        cache_position=None,
         logits_to_keep=None,
         is_first_iteration=False,
         **kwargs,
@@ -472,7 +464,6 @@ class Lfm2VlForConditionalGeneration(Lfm2VlPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
             **kwargs,
@@ -480,7 +471,7 @@ class Lfm2VlForConditionalGeneration(Lfm2VlPreTrainedModel, GenerationMixin):
 
         if is_first_iteration or not kwargs.get("use_cache", True):
             # Pixel values are used only in the first iteration if available
-            # In subsquent iterations, they are already merged with text and cached
+            # In subsequent iterations, they are already merged with text and cached
             # NOTE: first iteration doesn't have to be prefill, it can be the first
             # iteration with a question and cached system prompt (continue generate from cache)
             model_inputs["pixel_values"] = pixel_values

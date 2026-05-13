@@ -16,6 +16,7 @@
 import importlib
 import json
 import os
+import sys
 from collections import OrderedDict
 from typing import Any
 
@@ -160,9 +161,10 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("instructblipvideo", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("internvl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("jais2", "GPT2Tokenizer" if is_tokenizers_available() else None),
+        ("jina_embeddings_v3", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("kosmos-2", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
-        ("lasr_ctc", "ParakeetTokenizer" if is_tokenizers_available() else None),
-        ("lasr_encoder", "ParakeetTokenizer" if is_tokenizers_available() else None),
+        ("lasr_ctc", "LasrTokenizer" if is_tokenizers_available() else None),
+        ("lasr_encoder", "LasrTokenizer" if is_tokenizers_available() else None),
         ("layoutlm", "BertTokenizer" if is_tokenizers_available() else None),
         ("layoutlmv2", "LayoutLMv2Tokenizer" if is_tokenizers_available() else None),
         ("layoutlmv3", "LayoutLMv3Tokenizer" if is_tokenizers_available() else None),
@@ -171,7 +173,6 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("lighton_ocr", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
         ("lilt", "RobertaTokenizer" if is_tokenizers_available() else None),
         ("longformer", "RobertaTokenizer" if is_tokenizers_available() else None),
-        ("longt5", "T5Tokenizer" if is_tokenizers_available() else None),
         ("luke", "LukeTokenizer"),
         ("lxmert", "LxmertTokenizer" if is_tokenizers_available() else None),
         ("m2m_100", "M2M100Tokenizer" if is_sentencepiece_available() else None),
@@ -185,6 +186,13 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("megatron-bert", "BertTokenizer" if is_tokenizers_available() else None),
         ("metaclip_2", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("mgp-str", "MgpstrTokenizer"),
+        ("minicpmv4_6", "TokenizersBackend" if is_tokenizers_available() else None),
+        (
+            "ministral",
+            "MistralCommonBackend"
+            if is_mistral_common_available()
+            else ("TokenizersBackend" if is_tokenizers_available() else None),
+        ),
         (
             "ministral3",
             "MistralCommonBackend"
@@ -223,11 +231,13 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("nezha", "BertTokenizer" if is_tokenizers_available() else None),
         ("nllb", "NllbTokenizer" if is_tokenizers_available() else None),
         ("nllb-moe", "NllbTokenizer" if is_tokenizers_available() else None),
+        ("nomic_bert", "BertTokenizer" if is_tokenizers_available() else None),
         ("nougat", "NougatTokenizer" if is_tokenizers_available() else None),
         ("nystromformer", "AlbertTokenizer" if is_tokenizers_available() else None),
         ("olmo", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("olmo2", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
-        ("olmo3", "GPT2Tokenizer" if is_tokenizers_available() else None),
+        ("olmo3", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("olmo_hybrid", "TokenizersBackend" if is_tokenizers_available() else None),
         ("olmoe", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("omdet-turbo", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("oneformer", "CLIPTokenizer" if is_tokenizers_available() else None),
@@ -249,8 +259,10 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
             else ("TokenizersBackend" if is_tokenizers_available() else None),
         ),
         ("plbart", "PLBartTokenizer" if is_tokenizers_available() else None),
+        ("pp_formulanet", "NougatTokenizer" if is_tokenizers_available() else None),
         ("prophetnet", "ProphetNetTokenizer"),
         ("qdqbert", "BertTokenizer" if is_tokenizers_available() else None),
+        ("qianfan_ocr", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen2", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen2_5_omni", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen2_5_vl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
@@ -308,6 +320,12 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
             if is_mistral_common_available()
             else ("TokenizersBackend" if is_tokenizers_available() else None),
         ),
+        (
+            "voxtral_realtime",
+            "MistralCommonBackend"
+            if is_mistral_common_available()
+            else ("TokenizersBackend" if is_tokenizers_available() else None),
+        ),
         ("wav2vec2", "Wav2Vec2CTCTokenizer"),
         ("wav2vec2-bert", "Wav2Vec2CTCTokenizer"),
         ("wav2vec2-conformer", "Wav2Vec2CTCTokenizer"),
@@ -324,6 +342,52 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("yoso", "AlbertTokenizer" if is_tokenizers_available() else None),
     ]
 )
+
+# Models with incorrect tokenizer_class in their Hub tokenizer_config.json files.
+# These models will be forced to use TokenizersBackend.
+MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
+    "arctic",
+    "chameleon",
+    "chatlm",
+    "deepseek_v2",
+    "deepseek_v3",
+    "deepseek_v4",
+    "deepseek_vl",
+    "deepseek_vl_hybrid",
+    "deepseek_vl_v2",
+    "deepseek_ocr",
+    "deepseek_ocr2",
+    "fuyu",
+    "h2ovl_chat",
+    "hyperclovax_vlm",
+    "internlm2",
+    "internvl_chat",
+    "jamba",
+    "janus",
+    "llava",
+    "llava_next",
+    "minicpmv",
+    "minimax_m2",
+    "modernbert",
+    "molmo",
+    "molmo2",
+    "nemotron",
+    "nvfp4",
+    "opencua",
+    "openvla",
+    "phi3",
+    "phi3_v",
+    "phimoe",
+    "qwen2",
+    "step3p5",
+    "step3_vl",
+    "vipllava",
+    "cohere_asr",
+}
+
+for model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS:
+    if model_type not in TOKENIZER_MAPPING_NAMES:
+        TOKENIZER_MAPPING_NAMES[model_type] = "TokenizersBackend" if is_tokenizers_available() else None
 
 TOKENIZER_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TOKENIZER_MAPPING_NAMES)
 
@@ -373,7 +437,13 @@ def tokenizer_class_from_name(class_name: str) -> type[Any] | None:
             else:
                 module = importlib.import_module(f".{module_name}", "transformers.models")
             try:
-                return getattr(module, class_name)
+                result = getattr(module, class_name)
+                # BC v5: expose XxxFast alias and tokenization_*_fast submodule for pre-v5 remote code.
+                if (submod := getattr(result, "__module__", None)) and submod in sys.modules:
+                    base_mod = sys.modules[submod]
+                    setattr(base_mod, result.__name__ + "Fast", result)
+                    sys.modules.setdefault(submod + "_fast", base_mod)
+                return result
             except AttributeError:
                 continue
 
@@ -387,6 +457,10 @@ def tokenizer_class_from_name(class_name: str) -> type[Any] | None:
     main_module = importlib.import_module("transformers")
     if hasattr(main_module, class_name):
         return getattr(main_module, class_name)
+
+    # BC v5: If a XxxFast class is not found, retry without 'Fast' for tokenizers saved pre-v5.
+    if class_name.endswith("Fast"):
+        return tokenizer_class_from_name(class_name[:-4])
 
     return None
 
@@ -522,7 +596,7 @@ class AutoTokenizer:
                     - A string, the *model id* of a predefined tokenizer hosted inside a model repo on huggingface.co.
                     - A path to a *directory* containing vocabulary files required by the tokenizer, for instance saved
                       using the [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
-                    - A path or url to a single saved vocabulary file if and only if the tokenizer only requires a
+                    - a path to a single saved vocabulary file if and only if the tokenizer only requires a
                       single vocabulary file (like Bert or XLNet), e.g.: `./my_model_directory/vocab.txt`. (Not
                       applicable to all derived classes)
             inputs (additional positional arguments, *optional*):
@@ -618,7 +692,7 @@ class AutoTokenizer:
                 config = AutoConfig.from_pretrained(
                     pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
                 )
-            except Exception:
+            except (ValueError, OSError):
                 config = PreTrainedConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         config_model_type = config.model_type
@@ -636,32 +710,46 @@ class AutoTokenizer:
             else:
                 tokenizer_auto_map = tokenizer_config["auto_map"].get("AutoTokenizer", None)
 
-        # if there is a config, we can check that the tokenizer class != than model class and can thus assume we need to use TokenizersBackend
-        # Skip this early exit if auto_map is present (custom tokenizer with trust_remote_code)
+        # if there is a config, we can check that the tokenizer class != than model class.
+        # Use the config class if it's a specialized tokenizer, otherwise fall back to TokenizersBackend.
         if (
             tokenizer_auto_map is None
             and tokenizer_config_class is not None
             and config_model_type is not None
             and config_model_type != ""
-            and TOKENIZER_MAPPING_NAMES.get(config_model_type, "").replace("Fast", "")
-            != tokenizer_config_class.replace("Fast", "")
+            and TOKENIZER_MAPPING_NAMES.get(config_model_type) is not None
+            and (TOKENIZER_MAPPING_NAMES.get(config_model_type).removesuffix("Fast"))
+            != (tokenizer_config_class.removesuffix("Fast"))
         ):
-            # new model, but we ignore it unless the model type is the same
-            if TokenizersBackend is not None:
-                try:
-                    return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-                except Exception as e:
-                    logger.debug(f"Failed to use TokenizersBackend: {e}")
+            registered_class_name = TOKENIZER_MAPPING_NAMES.get(config_model_type).removesuffix("Fast")
+            if registered_class_name not in ("TokenizersBackend", "PythonBackend", "PreTrainedTokenizerFast"):
+                # If the hub class is known incorrect for this model type, use the registered class; otherwise trust the hub.
+                class_name = (
+                    registered_class_name
+                    if config_model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS
+                    else tokenizer_config_class
+                )
+                tokenizer_class = tokenizer_class_from_name(class_name)
+                if tokenizer_class is not None and tokenizer_class.__name__ not in (
+                    "TokenizersBackend",
+                    "PythonBackend",
+                    "PreTrainedTokenizerFast",
+                ):
+                    return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
-            return tokenizer_class_from_name(tokenizer_config_class).from_pretrained(
-                pretrained_model_name_or_path, *inputs, **kwargs
+            if TokenizersBackend is not None:
+                return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
+            raise ValueError(
+                f"Tokenizer class '{tokenizer_config_class}' specified in the tokenizer config was not found. "
+                f"The tokenizer may need to be converted or re-saved."
             )
 
         if "_commit_hash" in tokenizer_config:
             kwargs["_commit_hash"] = tokenizer_config["_commit_hash"]
 
-        if tokenizer_config_class:
-            tokenizer_config_class = tokenizer_config_class.replace("Fast", "")
+        if tokenizer_config_class and tokenizer_config_class.endswith("Fast"):
+            tokenizer_config_class = tokenizer_config_class[:-4]
 
         has_remote_code = tokenizer_auto_map is not None
         has_local_code = type(config) in TOKENIZER_MAPPING or (
@@ -671,6 +759,22 @@ class AutoTokenizer:
                 or tokenizer_class_from_name(tokenizer_config_class + "Fast") is not None
             )
         )
+        explicit_local_code = (
+            has_local_code
+            and type(config) not in TOKENIZER_MAPPING
+            and (
+                tokenizer_config_class is not None
+                and not (
+                    tokenizer_class_from_name(tokenizer_config_class)
+                    or tokenizer_class_from_name(tokenizer_config_class + "Fast")
+                ).__module__.startswith("transformers.")
+            )
+        )
+        # V5: Skip remote tokenizer for custom models with incorrect hub tokenizer class
+        if has_remote_code and config_model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS:
+            has_remote_code = False
+            tokenizer_auto_map = None
+
         if has_remote_code:
             # V5: Always prefer fast tokenizer (index 1), fallback to slow (index 0)
             if tokenizer_auto_map[1] is not None:
@@ -685,7 +789,10 @@ class AutoTokenizer:
                 trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
             )
 
-        if has_remote_code and trust_remote_code:
+        if has_remote_code and trust_remote_code and not explicit_local_code:
+            # BC v5: register *Fast aliases before remote code loads.
+            if tokenizer_config_class:
+                tokenizer_class_from_name(tokenizer_config_class.removesuffix("Fast"))
             tokenizer_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
             _ = kwargs.pop("code_revision", None)
             tokenizer_class.register_for_auto_class()
@@ -706,8 +813,8 @@ class AutoTokenizer:
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif getattr(config, "tokenizer_class", None):
             _class = config.tokenizer_class
-            if "PreTrainedTokenizerFast" not in _class:
-                _class = _class.replace("Fast", "")
+            if "PreTrainedTokenizerFast" not in _class and _class.endswith("Fast"):
+                _class = _class[:-4]
             tokenizer_class = tokenizer_class_from_name(_class)
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
@@ -732,7 +839,7 @@ class AutoTokenizer:
         # Fallback: try tokenizer_class from tokenizer_config.json
         tokenizer_config_class = tokenizer_config.get("tokenizer_class", None)
         if tokenizer_config_class is not None:
-            if tokenizer_config_class != "TokenizersBackend" and "Fast" in tokenizer_config_class:
+            if tokenizer_config_class != "TokenizersBackend" and tokenizer_config_class.endswith("Fast"):
                 tokenizer_config_class = tokenizer_config_class[:-4]
             tokenizer_class = tokenizer_class_from_name(tokenizer_config_class)
             if tokenizer_class is None and not tokenizer_config_class.endswith("Fast"):

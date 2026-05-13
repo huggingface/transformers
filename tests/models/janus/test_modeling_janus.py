@@ -35,6 +35,7 @@ from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import MODEL_FOR_BACKBONE_MAPPING_NAMES, MODEL_MAPPING_NAMES
 from transformers.testing_utils import (
     Expectations,
+    require_deterministic_for_xpu,
     require_torch,
     slow,
     torch_device,
@@ -198,6 +199,20 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pip
         else {}
     )
     _is_composite = True
+
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        """
+        Override to ensure vision_config.projection_dim stays in sync with text_config.hidden_size.
+        The aligner projects vision features to text embedding dimension, so they must match.
+        """
+        from tests.test_modeling_common import ModelTesterMixin
+
+        config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
+        # Sync projection_dim with text hidden_size since aligner output must match text embeddings
+        if hasattr(config, "vision_config") and hasattr(config, "text_config"):
+            config.vision_config.projection_dim = config.text_config.hidden_size
+        return config
 
     def setUp(self):
         self.model_tester = JanusVisionText2TextModelTester(self)
@@ -409,6 +424,7 @@ class JanusIntegrationTest(unittest.TestCase):
         self.model_id = "deepseek-community/Janus-Pro-1B"
 
     @slow
+    @require_deterministic_for_xpu
     def test_model_text_generation(self):
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         model.eval()
@@ -428,6 +444,7 @@ class JanusIntegrationTest(unittest.TestCase):
         )
 
     @slow
+    @require_deterministic_for_xpu
     def test_model_text_generation_batched(self):
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         processor = AutoProcessor.from_pretrained(self.model_id)
@@ -447,15 +464,25 @@ class JanusIntegrationTest(unittest.TestCase):
             images=[image_1, image_2], text=prompts, generation_mode="text", padding=True, return_tensors="pt"
         ).to(model.device, torch.float16)
 
-        EXPECTED_TEXT_COMPLETION = [
-            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is part of the zodiac and the constellation",  # fmt: skip
-            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\nforming a constellation, the constellation of Orion is located in the constellation of Scorpius.\n",  # fmt: skip
-        ]
+        EXPECTED_TEXT_COMPLETION = Expectations(
+            {
+                ("xpu", None): [
+                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is part of the zodiac and the constellation",  # fmt: skip
+                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a constellation that is shaped like a stylized figure with a long tail. This",  # fmt: skip
+                ],
+                (None, None): [
+                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is part of the zodiac and is one",  # fmt: skip
+                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a constellation of a winged figure. This constellation is the **Luna**, also",  # fmt: skip
+                ],
+            }
+        )
         generated_ids = model.generate(**inputs, max_new_tokens=20, generation_mode="text", do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+        expected_text = EXPECTED_TEXT_COMPLETION.get_expectation()
+        self.assertEqual(expected_text, text)
 
     @slow
+    @require_deterministic_for_xpu
     def test_model_text_generation_with_multi_image(self):
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         processor = AutoProcessor.from_pretrained(self.model_id)
@@ -472,12 +499,13 @@ class JanusIntegrationTest(unittest.TestCase):
             model.device, torch.float16
         )
 
-        EXPECTED_TEXT_COMPLETION = ['You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat do these two images  and  have in common?\n\nThe two images you provided are of the same constellation. The first image shows the constellation of Leo, and the second image shows the constellation of Ursa Major. Both constellations are part of']  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = ["You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat do these two images  and  have in common?\n\nThe two images you provided are of the same star constellation. The first image shows the constellation of Leo, and the second image shows the constellation of Ursa Major. Both constellations are part"]  # fmt: skip
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
+    @require_deterministic_for_xpu
     def test_model_generate_images(self):
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         processor = AutoProcessor.from_pretrained(self.model_id)
@@ -516,22 +544,21 @@ class JanusIntegrationTest(unittest.TestCase):
                     897, 4044, 1762, 4676
                 ],
                 ("cuda", None): [
-                    4484, 4015, 15750, 506, 3758, 11651, 8597, 5739, 4861, 971, 14985, 14834, 15438, 7548, 1820, 1465,
-                    13529, 12761, 10503, 12761, 14303, 6155, 4015, 11766, 705, 15736, 14146, 10417, 1951, 7713, 14305,
-                    15617, 6169, 2706, 8006, 14893, 3855, 10188, 15652, 6297, 1097, 12108, 15038, 311, 14998, 15165,
-                    897, 4044, 1762, 4676
+                    2567, 6155, 6155, 250, 15131, 15797, 15453, 12190, 3351, 10803, 10673, 3096, 14485, 5335, 6677,
+                    13743, 9574, 8228, 3679, 11495, 11495, 15342, 11209, 1389, 15628, 6841, 15490, 10301, 12841, 3930,
+                    3396, 10037, 7779, 4517, 3824, 3673, 14408, 4791, 14109, 4929, 2342, 4817, 15531, 4320, 1923, 9530,
+                    13086, 5212, 14575, 4212
                 ],
                 ("xpu", None): [
-                    4484, 4015, 15750, 506, 3758, 11651, 8597, 5739, 4861, 971, 14985, 14834, 15438, 7548, 1820, 1465,
-                    13529, 12761, 10503, 12761, 14303, 6155, 4015, 11766, 705, 15736, 14146, 10417, 1951, 7713, 14305,
-                    15617, 6169, 2706, 8006, 14893, 3855, 10188, 15652, 6297, 1097, 12108, 15038, 311, 14998, 15165,
-                    897, 4044, 1762, 4676
+                    4484, 4015, 15750, 376, 2300, 13791, 3609, 2509, 2418, 6347, 7372, 1006, 14519, 6126, 11908, 14968,
+                    9642, 9490, 14427, 196, 15131, 6155, 4015, 2047, 15628, 4656, 14055, 13908, 3077, 4377, 11641, 4835,
+                    8854, 10351, 7339, 2815, 13634, 8134, 257, 3621, 7739, 9954, 5989, 11578, 8763, 12788, 7571, 13595,
+                    1762, 12683
                 ],
             }
         )
-        expected_tokens = torch.tensor(expected_tokens.get_expectation()).to(model.device)
         # fmt: on
-
+        expected_tokens = torch.tensor(expected_tokens.get_expectation()).to(model.device)
         # Compare the first 50 generated tokens.
         self.assertTrue(torch.allclose(expected_tokens, out[0][:50]))
 

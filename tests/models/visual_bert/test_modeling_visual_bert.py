@@ -391,7 +391,7 @@ class VisualBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     def setUp(self):
         self.model_tester = VisualBertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VisualBertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=VisualBertConfig, hidden_size=32)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

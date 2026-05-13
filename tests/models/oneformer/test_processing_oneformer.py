@@ -37,12 +37,12 @@ if is_torch_available():
     import torch
 
     if is_vision_available():
-        from transformers import CLIPTokenizer, OneFormerImageProcessor, OneFormerProcessor
+        from transformers import CLIPTokenizer, OneFormerImageProcessorPil, OneFormerProcessor
         from transformers.models.oneformer.image_processing_oneformer import binary_mask_to_rle
         from transformers.models.oneformer.modeling_oneformer import OneFormerForUniversalSegmentationOutput
 
     if is_torchvision_available():
-        from transformers.models.oneformer.image_processing_oneformer_fast import OneFormerImageProcessorFast
+        from transformers.models.oneformer.image_processing_oneformer import OneFormerImageProcessor
 
 if is_vision_available():
     from PIL import Image
@@ -130,7 +130,7 @@ class OneFormerProcessorTester:
             "num_text": self.num_text,
         }
 
-        image_processor = OneFormerImageProcessorFast(**image_processor_dict)
+        image_processor = OneFormerImageProcessorPil(**image_processor_dict)
         tokenizer = CLIPTokenizer.from_pretrained(self.model_repo)
 
         return {
@@ -418,7 +418,7 @@ class OneFormerProcessingTest(unittest.TestCase):
             feat_extract_second = self.feature_extraction_class.from_pretrained(tmpdirname)
 
         self.assertEqual(feat_extract_second.image_processor.to_dict(), feat_extract_first.image_processor.to_dict())
-        self.assertIsInstance(feat_extract_first.image_processor, OneFormerImageProcessorFast)
+        self.assertIsInstance(feat_extract_first.image_processor, OneFormerImageProcessorPil)
         self.assertIsInstance(feat_extract_first.tokenizer, CLIPTokenizer)
 
     def test_call_with_segmentation_maps(self):
@@ -475,7 +475,7 @@ class OneFormerProcessingTest(unittest.TestCase):
         panoptic_map1, inst2class1 = create_panoptic_map(annotation1, segments_info1)
         panoptic_map2, inst2class2 = create_panoptic_map(annotation2, segments_info2)
 
-        image_processor = OneFormerImageProcessor(
+        image_processor = OneFormerImageProcessorPil(
             do_reduce_labels=True,
             ignore_index=0,
             size=(512, 512),

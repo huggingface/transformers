@@ -17,10 +17,6 @@ rendered properly in your Markdown viewer.
 
 # BERTweet
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## BERTweet
 
@@ -36,14 +32,13 @@ The example below demonstrates how to predict the `<mask>` token with [`Pipeline
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="fill-mask",
     model="vinai/bertweet-base",
-    dtype=torch.float16,
     device=0
 )
 pipeline("Plants create <mask> through a process known as photosynthesis.")
@@ -52,16 +47,17 @@ pipeline("Plants create <mask> through a process known as photosynthesis.")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForMaskedLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
    "vinai/bertweet-base",
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "vinai/bertweet-base",
-    dtype=torch.float16,
     device_map="auto"
 )
 inputs = tokenizer("Plants create <mask> through a process known as photosynthesis.", return_tensors="pt").to(model.device)
@@ -75,13 +71,6 @@ predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
 predicted_token = tokenizer.decode(predicted_token_id)
 
 print(f"The predicted token is: {predicted_token}")
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plants create <mask> through a process known as photosynthesis." | transformers run --task fill-mask --model vinai/bertweet-base --device 0
 ```
 
 </hfoption>

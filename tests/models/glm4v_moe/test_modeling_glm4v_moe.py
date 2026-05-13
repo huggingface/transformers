@@ -51,7 +51,7 @@ class Glm4vMoeVisionText2TextModelTester:
         self,
         parent,
         batch_size=3,
-        seq_length=7,
+        seq_length=64,
         num_channels=3,
         ignore_index=-100,
         image_size=112,
@@ -72,7 +72,7 @@ class Glm4vMoeVisionText2TextModelTester:
             "output_channels": 64,
             "hidden_act": "silu",
             "max_position_embeddings": 512,
-            "rope_parameters": {"type": "default", "mrope_section": [1, 1]},
+            "rope_parameters": {"type": "default", "mrope_section": [2, 2], "partial_rotary_factor": 1.0},
             "rope_theta": 10000,
             "tie_word_embeddings": True,
             "bos_token_id": 0,
@@ -168,6 +168,9 @@ class Glm4vMoeVisionText2TextModelTester:
         patch_size = config.vision_config.patch_size
         patches_per_side = self.image_size // patch_size
 
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[:, 1 : 1 + self.num_image_tokens] = 1
+
         inputs_dict = {
             "pixel_values": pixel_values,
             "image_grid_thw": torch.tensor(
@@ -175,6 +178,7 @@ class Glm4vMoeVisionText2TextModelTester:
             ),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
+            "mm_token_type_ids": mm_token_type_ids,
         }
         return config, inputs_dict
 

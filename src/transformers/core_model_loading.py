@@ -25,7 +25,6 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from copy import deepcopy
-from dataclasses import dataclass, field
 from itertools import chain
 from typing import TYPE_CHECKING, Any
 
@@ -33,8 +32,9 @@ import torch
 
 from .integrations.accelerate import get_device, offload_weight
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
-from .utils import is_env_variable_true, logging
+from .utils import is_env_variable_true
 from .utils.loading_report import LoadStateDictInfo
+from .utils.logging import get_logger, tqdm
 
 
 _torch_distributed_available = torch.distributed.is_available()
@@ -45,7 +45,7 @@ if TYPE_CHECKING:
     from .quantizers import HfQuantizer
 
 
-logger = logging.get_logger(__name__)
+logger = get_logger(__name__)
 
 
 def build_glob_alternation(
@@ -66,7 +66,7 @@ def build_glob_alternation(
                 i += 1
                 body = src.replace("*", r".*")
                 branches.append(f"(?P<{group_name}>{body})")
-                tgt_group_to_glob[group_name] = glob.target_patterns[0]  # we index witht the first target
+                tgt_group_to_glob[group_name] = glob.target_patterns[0]  # we index with the first target
         else:
             group_name = f"g{i}"
             src_group_to_glob[group_name] = glob
@@ -100,8 +100,19 @@ class ConversionOps:
         raise NotImplementedError
 
 
+class _IdentityOp(ConversionOps):
+    """Pass-through reverse op for dequantize operations.
+
+    Dequantized weights are already in their target dtype and should be
+    saved as-is without any conversion.
+    """
+
+    def convert(self, input_dict: dict[str, Any], **kwargs) -> dict[str, Any]:
+        return input_dict
+
+
 class Chunk(ConversionOps):
-    """Split a tensor along ``dim`` into equally sized chunks."""
+    """Split a tensor along `dim` into equally sized chunks."""
 
     def __init__(self, dim: int = 0):
         self.dim = dim
@@ -145,8 +156,11 @@ class Concatenate(ConversionOps):
         target_pattern = self.get_target_pattern(target_patterns)
         all_tensors = []
         # Very important to keep the relative order of the source patterns here, so we iterate over them not the
-        # input directly as it's unordered!
+        # input directly as it's unordered! Skip patterns that prior ops in the chain (e.g. `Fp8Dequantize`)
+        # have already consumed and dropped from `input_dict`.
         for source_pattern in source_patterns:
+            if source_pattern not in input_dict:
+                continue
             tensors = input_dict[source_pattern]
             if isinstance(tensors, list):
                 all_tensors.extend(tensors)
@@ -206,7 +220,7 @@ class MergeModulelist(ConversionOps):
 
 
 class SplitModulelist(ConversionOps):
-    """Inverse of :class:`MergeModulelist` using explicit split sizes per group."""
+    """Inverse of `MergeModulelist` using explicit split sizes per group."""
 
     def __init__(self, dim: int = 0):
         self.dim = dim
@@ -249,9 +263,10 @@ class Transpose(ConversionOps):
     Transposes the given tensor along dim0 and dim1.
     """
 
-    def __init__(self, dim0: int = 0, dim1: int = 1):
+    def __init__(self, dim0: int = 0, dim1: int = 1, check_dims: bool = False):
         self.dim0 = dim0
         self.dim1 = dim1
+        self.check_dims = check_dims
 
     @torch.no_grad
     def convert(
@@ -260,7 +275,18 @@ class Transpose(ConversionOps):
         target_pattern = self.get_target_pattern(input_dict, source_patterns, target_patterns)
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
-        return {target_pattern: torch.transpose(tensor, dim0=self.dim0, dim1=self.dim1).contiguous()}
+        # In this case, always transpose
+        if not self.check_dims:
+            return {target_pattern: torch.transpose(tensor, dim0=self.dim0, dim1=self.dim1).contiguous()}
+        # In this case, check the shapes before transposing
+        else:
+            # NOTE: this rely on the first param name, so cannot be used for many-to-one operation
+            expected_shape = kwargs["model"].get_parameter(kwargs["full_layer_name"]).shape
+            # The shapes are the same: do NOT transpose
+            if tensor.shape == expected_shape:
+                return {target_pattern: tensor}
+            else:
+                return {target_pattern: torch.transpose(tensor, dim0=self.dim0, dim1=self.dim1).contiguous()}
 
     def get_target_pattern(
         self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str]
@@ -279,7 +305,73 @@ class Transpose(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return Transpose(dim0=self.dim1, dim1=self.dim0)
+        return Transpose(dim0=self.dim1, dim1=self.dim0, check_dims=self.check_dims)
+
+
+class Conv3dToLinear(ConversionOps):
+    """Conv3d weights → flattened Linear layout."""
+
+    def __init__(self, in_channels: int, kernel_size: tuple[int, int, int]):
+        self.in_channels = in_channels
+        self.kernel_size = kernel_size
+
+    @staticmethod
+    def _get_target_pattern(
+        input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str]
+    ) -> str:
+        if len(input_dict) != 1:
+            raise ValueError("Undefined Operation encountered!")
+        if len(target_patterns) > 1:
+            if len(source_patterns) == 1:
+                return source_patterns[0]
+            else:
+                raise ValueError("Undefined Operation encountered!")
+        return target_patterns[0]
+
+    @torch.no_grad
+    def convert(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict[str, torch.Tensor]:
+        target_pattern = self._get_target_pattern(input_dict, source_patterns, target_patterns)
+        tensors = next(iter(input_dict.values()))
+        tensor = tensors[0] if isinstance(tensors, list) else tensors
+
+        if tensor.ndim == 5:
+            tensor = tensor.reshape(tensor.shape[0], -1).contiguous()
+        elif tensor.ndim != 2:
+            raise ValueError(f"Conv3dToLinear expects a 5D or 2D tensor, got {tensor.ndim}D")
+
+        return {target_pattern: tensor}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return LinearToConv3d(in_channels=self.in_channels, kernel_size=self.kernel_size)
+
+
+class LinearToConv3d(ConversionOps):
+    """Flattened Linear weights → Conv3d layout."""
+
+    def __init__(self, in_channels: int, kernel_size: tuple[int, int, int]):
+        self.in_channels = in_channels
+        self.kernel_size = kernel_size
+
+    @torch.no_grad
+    def convert(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict[str, torch.Tensor]:
+        target_pattern = Conv3dToLinear._get_target_pattern(input_dict, source_patterns, target_patterns)
+        tensors = next(iter(input_dict.values()))
+        tensor = tensors[0] if isinstance(tensors, list) else tensors
+
+        target_shape = (tensor.shape[0], self.in_channels, *self.kernel_size)
+        if tensor.numel() != math.prod(target_shape):
+            raise ValueError(f"Cannot reshape tensor with shape {tensor.shape} into {target_shape}")
+
+        return {target_pattern: tensor.reshape(target_shape).contiguous()}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return Conv3dToLinear(in_channels=self.in_channels, kernel_size=self.kernel_size)
 
 
 class PermuteForRope(ConversionOps):
@@ -439,42 +531,6 @@ class ErnieSplitAndDecoupleTextVisionExperts(ConversionOps):
         return ErnieFuseAndSplitTextVisionExperts(stack_dim=self.stack_dim, concat_dim=self.concat_dim)
 
 
-class Force16BytesAlignment(ConversionOps):
-    """
-    Ensures that the given tensor is 16-bytes aligned in memory and clones it if not.
-    This garantees 16-bytes alignmenet for kernels / implementations that use TMA or SIMD instructions like torch._grouped_mm.
-    """
-
-    @torch.no_grad()
-    def convert(
-        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
-    ) -> dict[str, torch.Tensor]:
-        target_pattern = self.get_target_pattern(input_dict, source_patterns, target_patterns)
-        tensors = next(iter(input_dict.values()))
-        tensor = tensors[0] if isinstance(tensors, list) else tensors
-        tensor = tensor.clone() if tensor.data_ptr() % 16 != 0 else tensor
-        return {target_pattern: tensor}
-
-    def get_target_pattern(
-        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str]
-    ) -> str:
-        if len(input_dict) != 1:
-            raise ValueError("Undefined Operation encountered!")
-        # Here it's the first operation of a chain, so return the source
-        if len(target_patterns) > 1:
-            if len(source_patterns) == 1:
-                return source_patterns[0]
-            else:
-                raise ValueError("Undefined Operation encountered!")
-        # Here it's the only operation, or the last operation in a chain, so we return the target
-        else:
-            return target_patterns[0]
-
-    @property
-    def reverse_op(self) -> ConversionOps:
-        return Force16BytesAlignment()
-
-
 def process_target_pattern(pattern: str) -> tuple[str, str | None]:
     """
     Process a target pattern for reverse mapping (when targets become sources).
@@ -496,8 +552,10 @@ def process_target_pattern(pattern: str) -> tuple[str, str | None]:
     # Some mapping contains `$` to notify end of string when matching -> remove it during reverse mapping
     pattern = pattern.removesuffix("$")
     # Remove negative lookahead/behind if any. This is ugly but needed for reverse mapping of
-    # Qwen2.5, Sam3, Ernie4.5 VL MoE!
-    pattern = re.sub(r"\(\?.+\)", "", pattern)
+    # Qwen2.5, Sam3, Ernie4.5 VL MoE! It needs to be non greedy in case there are several
+    pattern = re.sub(r"\(\?.+?\)?\)", "", pattern)
+    # Remove the backslash for literal dots
+    pattern = pattern.replace(r"\.", ".")
     # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3)
     capturing_group_match = re.search(r"\(.+?\)", pattern)
     captured_group = None
@@ -507,33 +565,60 @@ def process_target_pattern(pattern: str) -> tuple[str, str | None]:
     return pattern, captured_group
 
 
-@dataclass(slots=True)
+def process_source_pattern(source_pattern: str, target_pattern: str) -> str:
+    """
+    Process a source pattern for reverse mapping (when sources become targets).
+    This is useful because usually if the original source (so now the target in reverse mode) had a `^` or `$`
+    to restrict to start/end of string, we should do the same in reverse mode. This is why this method in conditioned
+    on the target pattern, we want to do it only for pairs (source, target) when the original source (so the current target
+    in reverse mode) had it.
+    """
+    if target_pattern.startswith("^"):
+        source_pattern = f"^{source_pattern}" if not source_pattern.startswith("^") else source_pattern
+    if target_pattern.endswith("$"):
+        source_pattern = f"{source_pattern}$" if not source_pattern.endswith("$") else source_pattern
+
+    return source_pattern
+
+
 class WeightTransform:
-    source_patterns: str | list[str] = field(init=True)
-    target_patterns: str | list[str] = field(init=True)
-    compiled_sources: re.Pattern = field(init=False)
+    # Restrict the attributes that can be attached
+    __slots__ = (
+        "source_patterns",
+        "target_patterns",
+        "compiled_sources",
+        "distributed_operation",
+        "quantization_operation",
+        "collected_tensors",
+        "layer_targets",
+        "_original_source_patterns",
+        "_original_target_patterns",
+        "_was_used",
+        "scope_prefix",
+    )
 
-    distributed_operation: TensorParallelLayer | None = None
-    quantization_operation: ConversionOps | None = None
+    def __init__(self, source_patterns: str | list[str], target_patterns: str | list[str]):
+        self.source_patterns: list[str] = source_patterns
+        self.target_patterns: list[str] = target_patterns
+        # Those are needed to be able to reverse correctly the transform, as the patterns may be processed
+        self._original_source_patterns = self.source_patterns.copy()
+        self._original_target_patterns = self.target_patterns.copy()
 
-    collected_tensors: dict[str, list[Future]] = field(default_factory=lambda: defaultdict(list), init=False)
-    layer_targets: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set), init=False)
+        # Init fields that will be used during conversion
+        self.distributed_operation: TensorParallelLayer | None = None
+        self.quantization_operation: ConversionOps | None = None
+        self.collected_tensors: dict[str, list[Future]] = defaultdict(list)
+        self.layer_targets: dict[str, set[str]] = defaultdict(set)
 
-    def __setattr__(self, name, value):
-        if name in ("source_patterns", "target_patterns"):
-            # We do not allow to re-set the patterns, as they are linked between each other and changing one
-            # without the other can mess-up with the capturing groups/compiled sources
-            if hasattr(self, name):
-                raise ValueError(f"Cannot assign to field {name}, you should create a new instance")
-            # Switch str to list
-            elif isinstance(value, str):
-                value = [value]
-        object.__setattr__(self, name, value)
+        # Flag to notice if the Transform was used
+        self._was_used = False
+        # Optional prefix scope: when set, this transform only applies to keys starting with
+        # `scope_prefix + "."`, stripping / re-attaching the prefix around the pattern match.
+        self.scope_prefix: str | None = None
 
-    def __post_init__(self):
-        # Due to how our `_checkpoint_conversion_mapping` mappings are written, we need a few exceptions here
-        # when instantiating the reverse mapping (i.e. the targets become sources, and sources become targets)
-        # The issues lie in the sources usually, so here we need to check the targets for the reversed mapping
+        # We need to process a few exceptions here when instantiating the reverse mapping (i.e. the targets become
+        # sources, and sources become targets). The issues lie in the sources usually, so here we need to check the
+        # targets for the reversed mapping
 
         # Process target_patterns: detect capturing groups and replace with \1
         # Store the original capturing group patterns for reverse mapping
@@ -555,6 +640,7 @@ class WeightTransform:
 
         # We also need to check capturing groups in the sources during reverse mapping (e.g. timm_wrapper, sam3)
         for i, pattern in enumerate(self.source_patterns):
+            # Replace capturing groups
             if r"\1" in pattern:
                 if unique_capturing_group is None:
                     raise ValueError(
@@ -563,6 +649,9 @@ class WeightTransform:
                     )
                 # Use the unique capturing group from target_patterns for all sources
                 pattern = pattern.replace(r"\1", unique_capturing_group, 1)
+            # Potentially process a bit more for consistency - only if they are consistent pairs, i.e. the length is the same
+            if len(self.source_patterns) == len(self.target_patterns):
+                pattern = process_source_pattern(pattern, self._original_target_patterns[i])
             self.source_patterns[i] = pattern
 
         # Construct the regex we will use to rename keys from the sources to the targets
@@ -573,9 +662,43 @@ class WeightTransform:
             branches.append(f"(?P<{group_name}>{pattern})")
         self.compiled_sources = re.compile("|".join(branches))
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}(source_patterns={self.source_patterns}, target_patterns={self.target_patterns})"
+
+    def __setattr__(self, name, value):
+        if name in ("source_patterns", "target_patterns"):
+            # We do not allow to re-set the patterns, as they are linked between each other and changing one
+            # without the other can mess-up with the capturing groups/compiled sources
+            if hasattr(self, name):
+                raise ValueError(f"Cannot assign to field {name}, you should create a new instance")
+            # Switch str to list
+            elif isinstance(value, str):
+                value = [value]
+        object.__setattr__(self, name, value)
+
     def add_tensor(self, target_key: str, source_key: str, source_pattern: str, future: Future):
         self.collected_tensors[source_pattern].append(future)
         self.layer_targets[target_key].add(source_key)
+
+    def _scoped_match(self, source_key: str) -> tuple[str | None, str, re.Match[str]] | None:
+        """
+        Apply `scope_prefix` stripping (if any), then match `compiled_sources` against the suffix.
+
+        Returns `(prefix_dot, key_to_match, match_object)` when a branch matches, where `prefix_dot` is `None`
+        if `scope_prefix` is unset, else `f"{scope_prefix}."`. Returns `None` when out of scope or unmatched.
+        """
+        prefix_dot = None
+        key_to_match = source_key
+        if self.scope_prefix is not None:
+            prefix_dot = self.scope_prefix + "."
+            if not source_key.startswith(prefix_dot):
+                return None
+            key_to_match = source_key[len(prefix_dot) :]
+
+        match_object = self.compiled_sources.search(key_to_match)
+        if match_object is None:
+            return None
+        return (prefix_dot, key_to_match, match_object)
 
     def rename_source_key(self, source_key: str) -> tuple[str, str | None]:
         """
@@ -584,23 +707,34 @@ class WeightTransform:
         In case of a one-to-many transform, i.e. we have several target patterns, the matching source pattern
         will be replaced by the first of all the target patterns (they are then correctly expanded in the Operations).
         """
-        # Try matching one of the alternation branches
-        match_object = self.compiled_sources.search(source_key)
-        if match_object is None:
+        matched = self._scoped_match(source_key)
+        if matched is None:
             return source_key, None
+
+        prefix_dot, key_to_match, match_object = matched
+
+        # We have a match, so the Transform was used
+        self._was_used = True
 
         # Find the source that produced the match (it's the first group that matched, as the search stops after first branch match)
         matching_group_name = next(name for name, val in match_object.groupdict().items() if val is not None)
         source_pattern_that_matched = self.source_patterns[int(matching_group_name[1:])]
         # If we matched, we always replace with the first target pattern, in case we have several (one to many transform)
         replacement = self.target_patterns[0]
-        # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper, sam3)
-        if r"\1" in replacement:
-            # The index of the internal group we need to replace is the index of the matched named group as it comes
-            # inside that matched named group
-            replaced_group_idx = self.compiled_sources.groupindex[matching_group_name] + 1
-            replacement = replacement.replace(r"\1", match_object.group(replaced_group_idx))
-        renamed_key = source_key.replace(match_object.group(0), replacement)
+        # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper, sam3).
+        # Backreferences `\1..\9` in the target are substituted from the matched source pattern's
+        # inner capturing groups, indexed off the matched named group so they stay correct under the
+        # `(?P<g0>...)|(?P<g1>...)|...` alternation `compiled_sources` builds.
+        if re.search(r"\\\d", replacement):
+            group_start = self.compiled_sources.groupindex[matching_group_name]
+            replacement = re.sub(
+                r"\\(\d+)",
+                lambda m: match_object.group(group_start + int(m.group(1))),
+                replacement,
+            )
+        renamed_key = key_to_match.replace(match_object.group(0), replacement, 1)
+        if prefix_dot is not None:
+            renamed_key = prefix_dot + renamed_key
         return renamed_key, source_pattern_that_matched
 
     def reverse_transform(self) -> WeightTransform:
@@ -616,9 +750,9 @@ class WeightTransform:
             kwargs["operations"] = [op.reverse_op for op in self.operations[::-1]]
 
         reverse_transform = self.__class__(
-            source_patterns=self.target_patterns, target_patterns=self.source_patterns, **kwargs
+            source_patterns=self._original_target_patterns, target_patterns=self._original_source_patterns, **kwargs
         )
-
+        reverse_transform.scope_prefix = self.scope_prefix
         return reverse_transform
 
     def materialize_tensors(self) -> dict[str, list[torch.Tensor]]:
@@ -633,7 +767,7 @@ class WeightTransform:
         - saving: the tensors are already torch.Tensor instances (the existing model weights)
         """
         collected_tensors = {}
-        for key in set(self.collected_tensors.keys()):
+        for key in list(self.collected_tensors.keys()):
             # Remove from internal attribute
             tensors = self.collected_tensors.pop(key)
             # Async loading
@@ -647,10 +781,22 @@ class WeightTransform:
 
         return collected_tensors
 
+    def was_used(self) -> bool:
+        """
+        Return whether the current Transform matched any weights during loading/saving. This is needed as some
+        weight renaming transforms are not bijective, i.e. if we drop/add full parts of a name with PrefixChange, we
+        lose some informations that we cannot get back if we don't know if the Transform was used before already (say we
+        have a prefix to drop, we need to know whether the checkpoints we loaded before contained the said prefix or not
+        before adding it back, or not, during saving).
+        """
+        return self._was_used
 
-@dataclass(slots=True)
+
 class WeightRenaming(WeightTransform):
     # Special case of WeightTransform that only renames keys without any conversion.
+
+    # Needs to be empty, otherwise the class will not be slotted
+    __slots__ = ()
 
     def convert(
         self,
@@ -686,6 +832,52 @@ class WeightRenaming(WeightTransform):
         return collected_tensors
 
 
+class PrefixChange(WeightRenaming):
+    """
+    Special case of WeightRenaming, used to simplify adding/removing full parts of a weight name. The regexes
+    that are needed for such operations are complex, so this is a much easier API for such cases.
+    """
+
+    __slots__ = (
+        "prefix_to_add",
+        "prefix_to_remove",
+        "model_prefix",
+    )
+
+    def __init__(
+        self, prefix_to_add: str | None = None, prefix_to_remove: str | None = None, model_prefix: str | None = None
+    ):
+        if (prefix_to_add is None) ^ (prefix_to_remove is not None):
+            raise ValueError("You must provide only one of `prefix_to_add` and `prefix_to_remove`")
+
+        self.prefix_to_add = prefix_to_add
+        self.prefix_to_remove = prefix_to_remove
+        self.model_prefix = "" if model_prefix is None else model_prefix
+        prefix = rf"{self.model_prefix}\." if self.model_prefix != "" else ""
+
+        if prefix_to_add is not None:
+            super().__init__(
+                # We use a lookbehind to avoid adding the prefix if we detect that it's already present
+                source_patterns=rf"^{prefix}(?:(?!{prefix_to_add}\.))(.+)$",
+                target_patterns=rf"{prefix}{prefix_to_add}\.\1",
+            )
+        else:
+            super().__init__(source_patterns=rf"^{prefix}{prefix_to_remove}\.(.+)$", target_patterns=rf"{prefix}\1")
+
+    def reverse_transform(self) -> WeightTransform:
+        """Reverse the current `WeightTransform` instance, to be able to save with the opposite weight transformations."""
+        # TODO: check this and relax when quantizer have `reverse_op`
+        if self.quantization_operation is not None:
+            raise ValueError("Cannot reverse the transform with TP or quantization")
+
+        # Only one of the 2 can ever be used, so 1 is always None
+        result = PrefixChange(
+            prefix_to_add=self.prefix_to_remove, prefix_to_remove=self.prefix_to_add, model_prefix=self.model_prefix
+        )
+        result.scope_prefix = self.scope_prefix
+        return result
+
+
 # List of classes that are known to be able to use m:n
 _INTERNAL_MANY_TO_MANY_CONVERSIONS = (
     ErnieFuseAndSplitTextVisionExperts,
@@ -693,12 +885,15 @@ _INTERNAL_MANY_TO_MANY_CONVERSIONS = (
 )
 
 
-@dataclass(slots=True)
 class WeightConverter(WeightTransform):
-    operations: list[ConversionOps] = field(default_factory=list, repr=False)
+    __slots__ = ("operations",)
 
-    def __post_init__(self):
-        WeightTransform.__post_init__(self)
+    def __init__(
+        self, source_patterns: str | list[str], target_patterns: str | list[str], operations: list[ConversionOps]
+    ):
+        super().__init__(source_patterns, target_patterns)
+        self.operations: list[ConversionOps] = operations
+
         if bool(len(self.source_patterns) - 1) + bool(len(self.target_patterns) - 1) >= 2:
             # We allow many-to-many only if we use an internal operation that can handle it
             if not any(isinstance(op, _INTERNAL_MANY_TO_MANY_CONVERSIONS) for op in self.operations):
@@ -717,7 +912,7 @@ class WeightConverter(WeightTransform):
         loading_info: LoadStateDictInfo | None = None,
     ):
         # Collect the tensors here - we use a new dictionary to avoid keeping them in memory in the internal
-        # attribute during the whole proces
+        # attribute during the whole process
         collected_tensors = self.materialize_tensors()
 
         for op in self.operations:
@@ -726,7 +921,7 @@ class WeightConverter(WeightTransform):
                     collected_tensors,
                     source_patterns=self.source_patterns,
                     target_patterns=self.target_patterns,
-                    # Additional kwargs, ususally not used
+                    # Additional kwargs, usually not used
                     full_layer_name=layer_name,
                     model=model,
                     config=config,
@@ -778,7 +973,10 @@ def _materialize_copy(tensor: torch.Tensor, device=None, dtype=None) -> torch.Te
 
 
 def spawn_materialize(
-    thread_pool: ThreadPoolExecutor | None, tensor: torch.Tensor, device=None, dtype=None
+    thread_pool: ThreadPoolExecutor | None,
+    tensor: torch.Tensor,
+    device=None,
+    dtype=None,
 ) -> Future | Callable:
     """Materialize a tensor from file asynchronously if `thread_pool` is provided, or return a Callable that will
     load the tensor synchronously when called."""
@@ -812,11 +1010,16 @@ def spawn_tp_materialize(
 
 
 def dot_natural_key(s: str):
-    parts = s.split(".")
-    for i, p in enumerate(parts):
-        # whole-segment digits -> int; otherwise leave as str
-        if p.isdigit():
-            parts[i] = int(p)
+    """Sort key for state-dict names: split on `"."` and sort digits numerically
+    and strings alphabetically. We emit a tuple at each point to sort ints
+    first and strings second to avoid int-string comparison failures.
+    """
+    parts = []
+    for part in s.split("."):
+        if part.isdigit():
+            parts.append((0, int(part)))
+        else:
+            parts.append((1, part))
     return parts
 
 
@@ -828,7 +1031,7 @@ def log_conversion_errors(
     op: list[ConversionOps] | ConversionOps | None = None,
 ):
     """Catch all exceptions during `convert` calls, and log the errors for later. Re-raise a `SkipParameters` exception
-    that will be catched later to skip the parameters that raised the original Exception."""
+    that will be caught later to skip the parameters that raised the original Exception."""
     try:
         yield
     except Exception as e:
@@ -880,6 +1083,11 @@ def set_param_for_module(
     module_path, _, param_name = target_name.rpartition(".")
     module_obj = model.get_submodule(module_path) if module_path else model
 
+    if param_name == torch.nn.modules.module._EXTRA_STATE_KEY_SUFFIX:
+        module_obj.set_extra_state(param_value)
+        loading_info.missing_keys.discard(target_name)
+        return
+
     ref = getattr(module_obj, param_name)
     if ref is None:
         loading_info.unexpected_keys.add(target_name)
@@ -903,6 +1111,8 @@ def set_param_for_module(
             # super important otherwise _init_weight will re-init the param
             param_value._is_hf_initialized = True
             setattr(module_obj, param_name, param_value)
+            if distributed_operation is not None:
+                distributed_operation.update_module_attributes(module_obj)
 
 
 def offload_and_maybe_resave_param(
@@ -939,8 +1149,28 @@ def rename_source_key(
     meta_state_dict: dict | None = None,
 ) -> tuple[str, str | None]:
     """
-    Rename a source key given all the renaming and weight conversion patterns we have. Also takes care of adding/removing
-    the base model prefix during loading if necesary.
+    Rename a checkpoint key by first applying all `WeightRenaming`s, then at most one `WeightConverter`.
+
+    A renaming and a converter may act on the same key in that order: the renaming normalises the
+    key into the namespace the converter expects. The reverse holds on the save path (converter
+    first, then renaming). There is no need for a converter-then-rename order because converters
+    act only on specific leaf patterns; no subsequent renamings should ever target their output.
+
+    Args:
+        source_key (`str`):
+            The original checkpoint key to rename.
+        weight_renamings (`list[WeightRenaming]`):
+            Applied in order; every matching renaming fires (they may chain).
+        weight_converters (`list[WeightConverter]`):
+            Applied after all renamings; at most one may match. Subsequent converters are skipped.
+        prefix (`str`, *optional*):
+            Base-model prefix to add or strip when both `prefix` and `meta_state_dict` are given.
+        meta_state_dict (`dict`, *optional*):
+            Meta state dict used to decide whether `prefix` should be added or stripped.
+
+    Returns:
+        `tuple[str, str | None]`: The renamed key and the matched converter's source pattern
+        (or `None` if no converter matched).
     """
     renamed_key = source_key
     # 1. apply all renamings in turns (if multiple match, it's the responsibility of the mappings to make sure they
@@ -956,7 +1186,7 @@ def rename_source_key(
         if source_pattern is not None:
             break
 
-    # 3. check if we need to add or remove prefix if necesary (only during loading, not saving)
+    # 3. check if we need to add or remove prefix if necessary (only during loading, not saving)
     if prefix is not None and meta_state_dict is not None:
         if (
             renamed_key.startswith(prefix)
@@ -1085,8 +1315,15 @@ def convert_and_load_state_dict_in_model(
     )
 
     # We use threading by default, if not explicitly deactivated via env variable. If we have to offload,
-    # we cannot use it either to control the memory as we are under memory constraints, so we need to be sequential
-    if is_env_variable_true("HF_DEACTIVATE_ASYNC_LOAD") or "disk" in device_map.values():
+    # we cannot use it either to control the memory as we are under memory constraints, so we need to be sequential.
+    # When doing on-the-fly quantization, we also use sync loading to avoid worker threads loading full-precision
+    # tensors to GPU faster than the main thread can quantize them, which would cause a large memory spike.
+    has_on_the_fly_quantization = hf_quantizer is not None and not hf_quantizer.pre_quantized
+    if (
+        is_env_variable_true("HF_DEACTIVATE_ASYNC_LOAD")
+        or "disk" in device_map.values()
+        or has_on_the_fly_quantization
+    ):
         thread_pool = None
     else:
         thread_pool = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
@@ -1106,10 +1343,15 @@ def convert_and_load_state_dict_in_model(
 
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
-        # 1. Rename the key according to all renaming pattern and optional weight converter patterns
+        # 1. Rename the key according to all renaming and weight conversion patterns.
         renamed_key, source_pattern = rename_source_key(
-            original_key, renamings, converters, prefix, meta_model_state_dict
+            original_key, renamings, converters, prefix=prefix, meta_state_dict=meta_model_state_dict
         )
+        if renamed_key not in meta_model_state_dict and original_key in meta_model_state_dict:
+            # Key should probably not have been renamed but we might need the `prefix` to be added.
+            renamed_key, source_pattern = rename_source_key(
+                original_key, [], [], prefix=prefix, meta_state_dict=meta_model_state_dict
+            )
 
         # 2. finally, collect the tensor into the proper converter
         if renamed_key in meta_model_state_dict:
@@ -1125,15 +1367,27 @@ def convert_and_load_state_dict_in_model(
                 source_pattern = original_key
 
             # 3. Handle dtype casting
-            if (
+            needs_quantization = (
                 hf_quantizer
                 and not hf_quantizer.pre_quantized
                 and hf_quantizer.param_needs_quantization(model, renamed_key)
-            ):
+            )
+            if needs_quantization:
                 mapping.quantization_operation = hf_quantizer.get_quantize_ops()
 
             _dtype = dtype
-            if hf_quantizer and hf_quantizer.pre_quantized and original_key != renamed_key:
+            if (
+                hf_quantizer
+                and hf_quantizer.pre_quantized
+                and (
+                    original_key != renamed_key
+                    or not (
+                        tensor.get_dtype().startswith(("F", "BF"))
+                        if hasattr(tensor, "get_dtype")
+                        else tensor.is_floating_point()
+                    )
+                )
+            ):
                 # if the key was renamed as it is not available in the state dict otherwise, it means that we are deserializing it,
                 # so we need to make sure to load the tensor with the same dtype from the checkpoint
                 # TODO: make the condition more srict for native fp8 model such as qwen2moe fp8
@@ -1147,7 +1401,7 @@ def convert_and_load_state_dict_in_model(
 
             # 4. Handle TP sharding or device_map placement
             future_or_tensor = None
-            if device_mesh:
+            if device_mesh and tp_plan:
                 if matched_tp_pattern := tp_plan_alt.search(renamed_key):
                     matched_tp_pattern = tp_plan_by_group_name[matched_tp_pattern.lastgroup]
                     if getattr(mapping, "distributed_operation", None) is None:
@@ -1182,52 +1436,50 @@ def convert_and_load_state_dict_in_model(
             loading_info.unexpected_keys.add(renamed_key)
 
     try:
-        total_entries = len(param_name_to_load)
-        with logging.tqdm(total=total_entries, desc="Loading weights") as pbar:
-            for first_param_name, mapping in param_name_to_load.items():
-                pbar.update(1)
-                pbar.set_postfix({"Materializing param": first_param_name})
-                pbar.refresh()
-                try:
-                    realized_value = mapping.convert(
-                        first_param_name,
-                        model=model,
-                        config=model.config,
-                        hf_quantizer=hf_quantizer,
-                        loading_info=loading_info,
-                    )
-                    for target_name, param in realized_value.items():
-                        param = param[0] if isinstance(param, list) else param
-                        param_device = get_device(device_map, target_name)
-                        # Offloading support
-                        if param_device == "disk" and (target_name not in model_buffers or offload_buffers):
-                            disk_offload_index = offload_and_maybe_resave_param(
-                                target_name, param, loading_info, disk_offload_folder, disk_offload_index, mapping
-                            )
-                        else:
-                            set_param_for_module(
-                                model,
-                                target_name,
-                                param,
-                                loading_info,
-                                mapping.distributed_operation,
-                                hf_quantizer,
-                            )
+        for first_param_name, mapping in tqdm(param_name_to_load.items(), desc="Loading weights"):
+            try:
+                realized_value = mapping.convert(
+                    first_param_name,
+                    model=model,
+                    config=model.config,
+                    hf_quantizer=hf_quantizer,
+                    loading_info=loading_info,
+                )
+                for target_name, param in realized_value.items():
+                    param = param[0] if isinstance(param, list) else param
+                    param_device = get_device(device_map, target_name)
+                    # Offloading support
+                    if param_device == "disk" and (target_name not in model_buffers or offload_buffers):
+                        disk_offload_index = offload_and_maybe_resave_param(
+                            target_name, param, loading_info, disk_offload_folder, disk_offload_index, mapping
+                        )
+                    else:
+                        set_param_for_module(
+                            model,
+                            target_name,
+                            param,
+                            loading_info,
+                            mapping.distributed_operation,
+                            hf_quantizer,
+                        )
 
-                    # Cleanup all the tensors that were gathered before next iteration
-                    del realized_value
+                # Cleanup all the tensors that were gathered before next iteration
+                del realized_value
 
-                except SkipParameters:
-                    continue
+            except SkipParameters:
+                continue
 
     # Close the pool, independently of whether the code was interrupted or finished successfully
     finally:
         if thread_pool is not None:
-            # `cancel_futures=True` in case the program was interupted, to avoid wasting time on exit
+            # `cancel_futures=True` in case the program was interrupted, to avoid wasting time on exit
             thread_pool.shutdown(wait=False, cancel_futures=True)
 
-    # Keep the current weight conversion mapping for later saving (in case it was coming directly from the user)
-    model._weight_conversions = weight_mapping
+    # Keep the current weight conversion mapping for later saving (in case it was coming directly from the user), but
+    # only if it was used, i.e. it matched any weight from the checkpoints
+    model_specific_conversions = [conversion for conversion in weight_mapping if conversion.was_used()]
+    model._weight_conversions = model_specific_conversions
+
     return loading_info, disk_offload_index
 
 
@@ -1244,40 +1496,54 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
 
         # Do not resave with the legacy renaming, if present
         weight_conversions = get_model_conversion_mapping(model, add_legacy=False)
+        # If the model had no `_weight_conversions` attached, drop any PrefixChange transform - this is because the
+        # model was almost surely instantiated from scratch (at least not from `from_pretrained`), and PrefixChange with
+        # `prefix_to_remove` would otherwise add a unwanted prefix (as we dont have any information about whether the prefix
+        # was there or not during load)
+        weight_conversions = [x for x in weight_conversions if not isinstance(x, PrefixChange)]
         weight_conversions = weight_conversions if len(weight_conversions) > 0 else None
 
     # We did not find any operations to perform -> quick escape
     if weight_conversions is None:
         return state_dict
 
-    # Reverse all Transform to correctly match keys
-    reverse_weight_conversion = [conversion.reverse_transform() for conversion in weight_conversions]
-    # If we are still here, we need to create the (reverse) conversion mapping from scratch
-    renamings = [entry for entry in reverse_weight_conversion if isinstance(entry, WeightRenaming)]
-    converters = [entry for entry in reverse_weight_conversion if isinstance(entry, WeightConverter)]
-    pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
-    conversion_mapping = {}
+    # Important: we need to revert the order here, so that potential conversions from submodels are performed first
+    weight_conversions = weight_conversions[::-1]
 
+    # Two-phase save: first reverse converters, then reverse renamings. Relies on the rule that
+    # WeightRenamings never operate on WeightConverter outputs (see WeightTransform docstring).
+    inverted_transforms = [transform.reverse_transform() for transform in weight_conversions]
+    inverted_converters = [transform for transform in inverted_transforms if isinstance(transform, WeightConverter)]
+    inverted_renamings = [transform for transform in inverted_transforms if not isinstance(transform, WeightConverter)]
+    pattern_to_converter = {
+        pattern: converter for converter in inverted_converters for pattern in converter.source_patterns
+    }
+
+    conversion_mapping: dict[str, WeightTransform] = {}
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
-        # Rename the key according to all renaming pattern and optional weight converter patterns
-        renamed_key, source_pattern = rename_source_key(original_key, renamings, converters)
-        if source_pattern is not None:
-            new_converter = deepcopy(pattern_to_converter[source_pattern])
-            # each target key gets its own converter instance
-            mapping = conversion_mapping.setdefault(renamed_key, new_converter)
-        else:
-            mapping = conversion_mapping.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
-            source_pattern = original_key
+        # `converter_key`: key after phase-1 (converter namespace, used as layer_name by convert()).
+        # `checkpoint_key`: key after phase-2 (final saved name, layer_name for plain renamings).
+        converter_key, matched_pattern = rename_source_key(original_key, [], inverted_converters)
+        checkpoint_key, _ = rename_source_key(converter_key, inverted_renamings, [])
 
-        mapping.add_tensor(renamed_key, original_key, source_pattern, tensor)
+        if matched_pattern is not None:
+            # Bucket under converter_key so all sibling inputs land in the same converter instance.
+            mapping = conversion_mapping.setdefault(converter_key, deepcopy(pattern_to_converter[matched_pattern]))
+        else:
+            mapping = conversion_mapping.setdefault(checkpoint_key, WeightRenaming(original_key, checkpoint_key))
+            matched_pattern = original_key
+
+        mapping.add_tensor(checkpoint_key, original_key, matched_pattern, tensor)
 
     new_state_dict = {}
-    for first_param_name, reversed_converter in conversion_mapping.items():
-        # Apply the reverse converter
-        realized_value = reversed_converter.convert(first_param_name, model=model, config=model.config)
-        for target_name, param in realized_value.items():
+    for layer_name, mapping in conversion_mapping.items():
+        realized = mapping.convert(layer_name, model=model, config=model.config)
+        for target_name, param in realized.items():
             param = param[0] if isinstance(param, list) else param
+            if isinstance(mapping, WeightConverter):
+                # Bring converter outputs from converter namespace into checkpoint namespace.
+                target_name, _ = rename_source_key(target_name, inverted_renamings, [])
             new_state_dict[target_name] = param
 
     return new_state_dict

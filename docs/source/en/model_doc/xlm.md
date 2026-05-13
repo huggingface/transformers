@@ -15,11 +15,6 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2019-01-22 and added to Hugging Face Transformers on 2020-11-16.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
 
 # XLM
 
@@ -36,13 +31,12 @@ The example below demonstrates how to predict the `<mask>` token with [`Pipeline
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="fill-mask",
     model="facebook/xlm-roberta-xl",
-    dtype=torch.float16,
     device=0
 )
 pipeline("Bonjour, je suis un modèle <mask>.")
@@ -53,14 +47,15 @@ pipeline("Bonjour, je suis un modèle <mask>.")
 
 ```python
 import torch
+
 from transformers import AutoModelForMaskedLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "FacebookAI/xlm-mlm-en-2048",
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "FacebookAI/xlm-mlm-en-2048",
-    dtype=torch.float16,
     device_map="auto",
 )
 inputs = tokenizer("Hello, I'm a <mask> model.", return_tensors="pt").to(model.device)
@@ -71,13 +66,6 @@ with torch.no_grad():
 
 predicted_token = tokenizer.decode(predictions[0][inputs["input_ids"][0] == tokenizer.mask_token_id])
 print(f"Predicted token: {predicted_token}")
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plants create <mask> through a process known as photosynthesis." | transformers run --task fill-mask --model FacebookAI/xlm-mlm-en-2048 --device 0
 ```
 
 </hfoption>

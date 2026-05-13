@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 
 为你正在使用的深度学习框架安装 🤗 Transformers、设置缓存，并选择性配置 🤗 Transformers 以离线运行。
 
-🤗 Transformers 已在 Python 3.9+ 以及 PyTorch 2.2.0+ 上进行测试。针对你使用的深度学习框架，请参照以下安装说明进行安装：
+🤗 Transformers 已在 Python 3.10+ 以及 PyTorch 2.4+ 上进行测试。针对你使用的深度学习框架，请参照以下安装说明进行安装：
 
 * [PyTorch](https://pytorch.org/get-started/locally/) 安装说明。
 
@@ -102,7 +102,7 @@ cd transformers
 pip install -e .
 ```
 
-这些命令将会链接你克隆的仓库以及你的 Python 库路径。现在，Python 不仅会在正常的库路径中搜索库，也会在你克隆到的文件夹中进行查找。例如，如果你的 Python 包通常本应安装在 `~/anaconda3/envs/main/lib/python3.7/site-packages/` 目录中，在这种情况下 Python 也会搜索你克隆到的文件夹：`~/transformers/`。
+这些命令将会链接你克隆的仓库以及你的 Python 库路径。现在，Python 不仅会在正常的库路径中搜索库，也会在你克隆到的文件夹中进行查找。例如，如果你的 Python 包通常本应安装在 `~/anaconda3/envs/main/lib/python3.10/site-packages/` 目录中，在这种情况下 Python 也会搜索你克隆到的文件夹：`~/transformers/`。
 
 <Tip warning={true}>
 

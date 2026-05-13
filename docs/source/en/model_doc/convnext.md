@@ -17,9 +17,6 @@ rendered properly in your Markdown viewer.
 
 # ConvNeXT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -64,9 +61,9 @@ If you're interested in submitting a resource to be included here, please feel f
 [[autodoc]] ConvNextImageProcessor
     - preprocess
 
-## ConvNextImageProcessorFast
+## ConvNextImageProcessorPil
 
-[[autodoc]] ConvNextImageProcessorFast
+[[autodoc]] ConvNextImageProcessorPil
     - preprocess
 
 ## ConvNextModel

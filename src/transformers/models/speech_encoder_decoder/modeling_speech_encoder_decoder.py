@@ -388,7 +388,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         >>> loss = model(input_values, labels=labels).loss
         >>> loss.backward()
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         kwargs_encoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}
 

@@ -22,7 +22,7 @@ from torch.nn import CrossEntropyLoss
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     MoEModelOutput,
@@ -158,6 +158,7 @@ class SwitchTransformersTop1Router(nn.Module):
         if self.training and self.jitter_noise > 0:
             # Multiply the token inputs by the uniform distribution - adding some noise
             hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
+        self.classifier = self.classifier.to(self.dtype)
         router_logits = self.classifier(hidden_states)
 
         # Apply Softmax and cast back to the original `dtype`
@@ -287,7 +288,6 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
         encoder_decoder_position_bias=None,
         past_key_values=None,
         use_cache=False,
-        cache_position=None,
         **kwargs,
     ):
         hidden_states, _ = self.layer[0](
@@ -296,7 +296,6 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
             position_bias=position_bias,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
         )
 
         # clamp inf values to enable fp16 training
@@ -312,9 +311,6 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
                 attention_mask=encoder_attention_mask,
                 position_bias=encoder_decoder_position_bias,
                 past_key_values=past_key_values,
-                query_length=cache_position[-1] + 1,
-                use_cache=use_cache,
-                cache_position=cache_position,
             )
 
             # clamp inf values to enable fp16 training
@@ -442,7 +438,6 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         inputs_embeds=None,
         past_key_values=None,
         use_cache=None,
-        cache_position=None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MoEModelOutputWithPastAndCrossAttentions:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -473,11 +468,6 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
             past_key_values = None
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + seq_length, device=inputs_embeds.device
-            )
-
         if attention_mask is None and not is_torchdynamo_compiling():
             # required mask seq length can be calculated via length of past cache
             mask_seq_length = past_key_values_length + seq_length
@@ -486,9 +476,8 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         if self.config.is_decoder:
             causal_mask = create_causal_mask(
                 config=self.config,
-                input_embeds=inputs_embeds,
+                inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
-                cache_position=cache_position,
                 past_key_values=past_key_values,
             )
         else:
@@ -496,16 +485,13 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
             causal_mask = causal_mask.to(dtype=inputs_embeds.dtype)
             causal_mask = (1.0 - causal_mask) * torch.finfo(inputs_embeds.dtype).min
 
-        # If a 2D or 3D attention mask is provided for the cross-attention
-        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        if self.is_decoder and encoder_hidden_states is not None:
-            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
-            if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=inputs_embeds.device)
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
-        else:
-            encoder_extended_attention_mask = None
+        if encoder_attention_mask is not None:
+            encoder_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+            )
 
         position_bias = None
         encoder_decoder_position_bias = None
@@ -518,11 +504,10 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
                 causal_mask,
                 position_bias,
                 encoder_hidden_states,
-                encoder_extended_attention_mask,
+                encoder_attention_mask,
                 encoder_decoder_position_bias,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -576,7 +561,6 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         decoder_inputs_embeds: torch.Tensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | Seq2SeqMoEModelOutput:
         if encoder_outputs is None:
@@ -592,7 +576,6 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
             past_key_values=past_key_values,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -666,7 +649,6 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         output_router_logits: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | Seq2SeqMoEOutput:
         if encoder_outputs is None:
@@ -692,7 +674,6 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
             past_key_values=past_key_values,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
-            cache_position=cache_position,
             output_router_logits=output_router_logits,
             **kwargs,
         )

@@ -19,7 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_perception_lm import *
-    from .image_processing_perception_lm_fast import *
+    from .image_processing_perception_lm import *
     from .modeling_perception_lm import *
     from .processing_perception_lm import *
 else:

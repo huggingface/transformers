@@ -133,7 +133,7 @@ class Idefics3VisionText2TextModelTester:
             [
                 self.batch_size,
                 self.num_images,
-                3,  # Idefics3ImageProcessor always generates RGB pixel values
+                3,  # Idefics3ImageProcessorPil always generates RGB pixel values
                 self.vision_config["image_size"],
                 self.vision_config["image_size"],
             ]
@@ -181,11 +181,11 @@ class Idefics3ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="input_embeds cannot be passed in without input_ids")
+    @unittest.skip(reason="inputs_embeds cannot be passed in without input_ids")
     def test_inputs_embeds():
         pass
 
-    @unittest.skip(reason="input_embeds cannot be passed in without input_ids")
+    @unittest.skip(reason="inputs_embeds cannot be passed in without input_ids")
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
@@ -344,7 +344,7 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
         self.model_tester = Idefics3VisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Idefics3Config, has_text_modality=False)
 
-    @unittest.skip(reason="input_embeds cannot be passed in without input_ids")
+    @unittest.skip(reason="inputs_embeds cannot be passed in without input_ids")
     def test_inputs_embeds():
         pass
 

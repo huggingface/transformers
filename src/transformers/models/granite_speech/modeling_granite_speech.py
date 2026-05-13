@@ -42,12 +42,12 @@ from .configuration_granite_speech import GraniteSpeechConfig, GraniteSpeechEnco
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for LlavaNext causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class GraniteSpeechCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -327,6 +327,8 @@ class GraniteSpeechCTCEncoder(GraniteSpeechPreTrainedModel):
     """
 )
 class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, GenerationMixin):
+    _supports_attention_backend = True
+
     def __init__(self, config: GraniteSpeechConfig):
         super().__init__(config)
         # NOTE: It doesn't matter when we initialize from config, but we should be careful
@@ -392,7 +394,6 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **lm_kwargs,
     ) -> tuple[torch.Tensor] | GraniteSpeechCausalLMOutputWithPast:
@@ -409,7 +410,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -450,7 +451,6 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **lm_kwargs,
         )
@@ -493,7 +493,6 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         inputs_embeds=None,
         input_features=None,
         attention_mask=None,
-        cache_position=None,
         logits_to_keep=None,
         is_first_iteration=False,
         **kwargs,
@@ -505,7 +504,6 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
             **kwargs,
@@ -517,6 +515,30 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         if is_first_iteration or not kwargs.get("use_cache", True):
             model_inputs["input_features"] = input_features
         return model_inputs
+
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, audio_features: torch.FloatTensor
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_audio_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_audio_mask = special_audio_mask.all(-1)
+        else:
+            special_audio_mask = input_ids == self.config.audio_token_id
+
+        n_audio_tokens = special_audio_mask.sum()
+        n_audio_features = audio_features.shape[0]
+        special_audio_mask = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        torch_compilable_check(
+            inputs_embeds[special_audio_mask].numel() == audio_features.numel(),
+            f"Audio features and audio tokens do not match, tokens: {n_audio_tokens}, features: {n_audio_features}",
+        )
+        return special_audio_mask
 
     def get_merged_audio_embeddings(
         self, input_ids: torch.Tensor, audio_features: torch.Tensor, input_features_mask: torch.Tensor | None = None
@@ -538,20 +560,14 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         llm_input_ids = torch.where(is_audio_index, 0, input_ids)
         inputs_embeds = self.language_model.get_input_embeddings()(llm_input_ids)  # [bsz, # features, hidden size]
 
-        # Mask the audio features into the text embeddings
-        special_audio_mask = is_audio_index.unsqueeze(-1)
         audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
         if input_features_mask is not None:
-            torch_compilable_check(
-                not torch.all(is_audio_index.int().sum(dim=1) != input_features_mask.int().sum(dim=1)),
-                "Number of audio tokens does not match number of audio features",
-            )
             audio_features = audio_features[input_features_mask]
 
-        inputs_embeds = inputs_embeds.masked_scatter(
-            special_audio_mask,
-            audio_features,
+        special_audio_mask = self.get_placeholder_mask(
+            input_ids, inputs_embeds=inputs_embeds, audio_features=audio_features
         )
+        inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_features)
         return inputs_embeds
 
     def generate(self, *args, **kwargs) -> torch.LongTensor:

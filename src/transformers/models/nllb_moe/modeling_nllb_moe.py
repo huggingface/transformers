@@ -454,16 +454,13 @@ class NllbMoeAttention(nn.Module):
         key_value_states: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         is_cross_attention = key_value_states is not None
-        bsz, tgt_len = hidden_states.shape[:-1]
-        src_len = key_value_states.shape[1] if is_cross_attention else tgt_len
-        q_input_shape = (bsz, tgt_len, -1, self.head_dim)
-        kv_input_shape = (bsz, src_len, -1, self.head_dim)
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states).view(*q_input_shape).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         is_updated = False
         if past_key_values is not None:
             if isinstance(past_key_values, EncoderDecoderCache):
@@ -482,15 +479,13 @@ class NllbMoeAttention(nn.Module):
             key_states = curr_past_key_values.layers[self.layer_idx].keys
             value_states = curr_past_key_values.layers[self.layer_idx].values
         else:
-            key_states = self.k_proj(current_states).view(*kv_input_shape).transpose(1, 2)
-            value_states = self.v_proj(current_states).view(*kv_input_shape).transpose(1, 2)
+            kv_shape = (*current_states.shape[:-1], -1, self.head_dim)
+            key_states = self.k_proj(current_states).view(kv_shape).transpose(1, 2)
+            value_states = self.v_proj(current_states).view(kv_shape).transpose(1, 2)
 
             if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_values.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
@@ -510,7 +505,7 @@ class NllbMoeAttention(nn.Module):
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
         return attn_output, attn_weights
 
@@ -553,9 +548,7 @@ class NllbMoeEncoderLayer(GradientCheckpointingLayer):
             hidden_states = self.ffn(hidden_states)
         hidden_states = self.ff_dropout(hidden_states)
         hidden_states = residual + hidden_states
-        if hidden_states.dtype == torch.float16 and (
-            torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any()
-        ):
+        if hidden_states.dtype == torch.float16 and not torch.isfinite(hidden_states).all():
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
         return hidden_states
@@ -602,7 +595,6 @@ class NllbMoeDecoderLayer(GradientCheckpointingLayer):
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -613,7 +605,6 @@ class NllbMoeDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = self.attn_dropout(hidden_states)
@@ -628,7 +619,6 @@ class NllbMoeDecoderLayer(GradientCheckpointingLayer):
                 key_value_states=encoder_hidden_states,
                 past_key_values=past_key_values,
                 attention_mask=encoder_attention_mask,
-                cache_position=cache_position,
                 **kwargs,
             )
             hidden_states = self.attn_dropout(hidden_states)
@@ -732,7 +722,7 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
         )
 
@@ -808,34 +798,26 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-
-        input_shape = inputs_embeds.size()[:-1]
 
         # initialize `past_key_values`
         if use_cache and past_key_values is None:
             past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + input_shape[1], device=inputs_embeds.device
-            )
 
         attention_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
         )
         encoder_attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=encoder_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
         )
@@ -861,7 +843,6 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
                     encoder_attention_mask=encoder_attention_mask,
                     past_key_values=past_key_values,
                     use_cache=use_cache,
-                    cache_position=cache_position,
                     **kwargs,
                 )
 
@@ -916,7 +897,6 @@ class NllbMoeModel(NllbMoePreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | Seq2SeqMoEModelOutput:
         if encoder_outputs is None:
@@ -936,7 +916,6 @@ class NllbMoeModel(NllbMoePreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1088,7 +1067,6 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         output_router_logits: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | Seq2SeqMoEOutput:
         output_router_logits = (
@@ -1111,7 +1089,6 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel, GenerationMixin):
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             output_router_logits=output_router_logits,
-            cache_position=cache_position,
             **kwargs,
         )
         lm_logits = self.lm_head(outputs[0])

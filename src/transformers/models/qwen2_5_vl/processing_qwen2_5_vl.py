@@ -22,9 +22,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-import numpy as np
-
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
@@ -37,7 +34,7 @@ class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
-            "return_mm_token_type_ids": False,
+            "return_mm_token_type_ids": True,
         },
         "videos_kwargs": {"return_metadata": True},
     }
@@ -145,11 +142,7 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
         self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
 
         if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[array_ids == self.image_token_id] = 1
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
-
+            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
@@ -225,7 +218,7 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
         names_from_processor = list(
             dict.fromkeys(tokenizer_input_names + image_processor_input_names + video_processor_input_names)
         )
-        return names_from_processor + ["second_per_grid_ts"]
+        return names_from_processor + ["second_per_grid_ts", "mm_token_type_ids"]
 
 
 __all__ = ["Qwen2_5_VLProcessor"]

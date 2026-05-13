@@ -181,7 +181,7 @@ def replace_with_bnb_linear(
             continue
         new_module = None
         with torch.device("meta"):
-            if isinstance(module, (nn.Linear, Conv1D)):
+            if isinstance(module, Conv1D) or type(module) is nn.Linear:
                 if isinstance(module, Conv1D):
                     in_features, out_features = module.weight.shape
                 else:

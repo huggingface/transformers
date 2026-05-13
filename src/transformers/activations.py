@@ -214,6 +214,13 @@ class ReLUSquaredActivation(nn.Module):
         return squared
 
 
+class SqrtSoftplusActivation(nn.Module):
+    """sqrt(softplus(x)) — the router scoring function used by DeepSeek V4."""
+
+    def forward(self, input):
+        return nn.functional.softplus(input).sqrt()
+
+
 class ClassInstantier(OrderedDict):
     def __getitem__(self, key):
         content = super().__getitem__(key)
@@ -267,9 +274,8 @@ class XIELUActivation(nn.Module):
             logger.warning_once(msg)
         except Exception as err:
             logger.warning_once(
-                "CUDA-fused xIELU not available (%s) – falling back to a Python version.\n"
-                "For CUDA xIELU (experimental), `pip install git+https://github.com/nickjbrowning/XIELU`",
-                str(err),
+                f"CUDA-fused xIELU not available ({err}) – falling back to a Python version.\n"
+                "For CUDA xIELU (experimental), `pip install git+https://github.com/nickjbrowning/XIELU`"
             )
 
     def _xielu_python(self, x: Tensor) -> Tensor:
@@ -324,6 +330,7 @@ ACT2CLS = {
     "gelu_pytorch_tanh": GELUTanh,
     "gelu_python_tanh": (GELUTanh, {"use_gelu_tanh_python": True}),
     "gelu_accurate": AccurateGELUActivation,
+    "hardswish": nn.Hardswish,
     "laplace": LaplaceActivation,
     "leaky_relu": nn.LeakyReLU,
     "linear": LinearActivation,
@@ -334,6 +341,7 @@ ACT2CLS = {
     "relu6": nn.ReLU6,
     "sigmoid": nn.Sigmoid,
     "silu": SiLUActivation,
+    "sqrtsoftplus": SqrtSoftplusActivation,
     "swish": nn.SiLU,
     "tanh": nn.Tanh,
     "prelu": nn.PReLU,
@@ -354,6 +362,7 @@ gelu_python = get_activation("gelu_python")
 gelu_new = get_activation("gelu_new")
 gelu = get_activation("gelu")
 gelu_fast = get_activation("gelu_fast")
+gelu_pytorch_tanh = get_activation("gelu_pytorch_tanh")
 quick_gelu = get_activation("quick_gelu")
 silu = get_activation("silu")
 mish = get_activation("mish")

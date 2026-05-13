@@ -18,7 +18,6 @@ rendered properly in your Markdown viewer.
 # GraniteMoe
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
@@ -39,8 +38,8 @@ We [open source](https://huggingface.co/collections/ibm/power-lm-66be64ae647ddf1
 Tips:
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 model_path = "ibm/PowerMoE-3b"
 tokenizer = AutoTokenizer.from_pretrained(model_path)
@@ -53,7 +52,7 @@ model.eval()
 prompt = "Write a code to find the maximum value in a list of numbers."
 
 # tokenize the text
-input_tokens = tokenizer(prompt, return_tensors="pt")
+input_tokens = tokenizer(prompt, return_tensors="pt").to(model.device)
 # generate output tokens
 output = model.generate(**input_tokens, max_new_tokens=100)
 # decode output tokens into text

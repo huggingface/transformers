@@ -26,8 +26,6 @@ Most of those are only useful if you are studying the code of the models in the 
 
 [[autodoc]] pipelines.ZeroShotClassificationArgumentHandler
 
-[[autodoc]] pipelines.QuestionAnsweringArgumentHandler
-
 ## Data format
 
 [[autodoc]] pipelines.PipelineDataFormat

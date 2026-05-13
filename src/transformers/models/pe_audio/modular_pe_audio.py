@@ -76,6 +76,7 @@ class PeAudioContrastiveHead(PeAudioVideoContrastiveHead): ...
 
 class PeAudioPreTrainedModel(PeAudioVideoPreTrainedModel):
     base_model_prefix = "audio_model"
+    _no_split_modules = ["PeAudioEncoderLayer", "TimmWrapperForImageClassification"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -91,13 +92,22 @@ class PeAudioPreTrainedModel(PeAudioVideoPreTrainedModel):
             init.normal_(module.weight, mean=0.0, std=0.02)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`PeAudioEncoder`].
     """
 )
+@dataclass
 class PeAudioEncoderOutput(BaseModelOutputWithPooling):
+    r"""
+    codec_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        Features extracted from the codec encoder, used as intermediate representations before the main encoder
+        processing.
+    output_mask (`tuple(torch.FloatTensor)`, *optional*):
+        Tuple of `torch.FloatTensor` masks corresponding to the encoder outputs, used to avoid performing attention
+        on padded regions.
+    """
+
     codec_features: torch.FloatTensor | None = None
     output_mask: tuple[torch.FloatTensor] | None = None
 
@@ -126,7 +136,7 @@ class PeAudioEncoder(PeAudioVideoEncoder):
         if attention_mask is not None:
             attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=inputs_embeds,
+                inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
             )
 

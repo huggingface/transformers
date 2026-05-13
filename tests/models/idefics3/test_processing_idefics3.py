@@ -66,18 +66,36 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def prepare_processor_dict():
         return {"image_seq_len": 2}
 
-    # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
-    def test_get_num_vision_tokens(self):
-        "Tests general functionality of the helper used internally in vLLM"
+    def test_get_num_multimodal_tokens_matches_processor_call(self):
+        "Tests that the helper used internally in vLLM works correctly"
 
-        processor = self.get_processor()
+        image_sizes = [(100, 100), (300, 100), (500, 30), (213, 167)]
+        image_inputs = []
+        for h, w in image_sizes:
+            image_inputs.append(np.random.randint(255, size=(h, w, 3), dtype=np.uint8))
 
-        output = processor._get_num_multimodal_tokens(image_sizes=[(100, 100), (300, 100), (500, 30)])
-        self.assertTrue("num_image_tokens" in output)
-        self.assertEqual(len(output["num_image_tokens"]), 3)
+        # Idefics3 checkpoints aren't supported on purpose. Idefics3 encodes special row/col
+        # tokens are several token ids ebcause they aren't added in `special_token_ids`. Thus
+        # we can't correctly infer which tokens in input ids are used as placeholders for image/row/col!
+        for do_image_splitting in [False, True]:
+            with self.subTest(do_image_splitting=do_image_splitting):
+                processor = self.processor_class.from_pretrained(
+                    "HuggingFaceTB/SmolVLM-256M-Instruct",
+                    add_bos_token=True,
+                    add_eos_token=False,
+                    padding_side="left",
+                    image_seq_len=2,
+                    do_image_splitting=do_image_splitting,
+                )
 
-        self.assertTrue("num_image_patches" in output)
-        self.assertEqual(len(output["num_image_patches"]), 3)
+                text = [f"This is an image {processor.image_token}"] * len(image_inputs)
+                inputs = processor(
+                    text=text, images=image_inputs, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
+                )
+
+                num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
+                num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
+                self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
 
     def get_split_image_expected_tokens(self, processor, image_rows, image_cols):
         text_split_images = []

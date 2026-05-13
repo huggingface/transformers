@@ -31,11 +31,14 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     logging,
+    requires_backends,
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.import_utils import requires
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..deformable_detr.modeling_deformable_detr import inverse_sigmoid
-from ..detr.image_processing_detr_fast import DetrImageProcessorFast
+from ..detr.image_processing_detr import DetrImageProcessor
+from ..detr.image_processing_pil_detr import DetrImageProcessorPil
 from ..detr.modeling_detr import (
     DetrConvEncoder,
     DetrDecoderLayer,
@@ -62,7 +65,43 @@ from .configuration_conditional_detr import ConditionalDetrConfig
 logger = logging.get_logger(__name__)
 
 
-class ConditionalDetrImageProcessorFast(DetrImageProcessorFast):
+def encode_sinusoidal_position_embedding(
+    pos_tensor: torch.Tensor,
+    num_pos_feats: int = 128,
+    temperature: int = 10000,
+) -> torch.Tensor:
+    """Sinusoidal position embeddings from normalized anchor coordinates.
+
+    Each coordinate in `pos_tensor` is independently encoded with ``num_pos_feats``
+    interleaved sin/cos components; per-coordinate embeddings are concatenated.
+    Handles 2-D ``(x, y)`` and N-D ``(x, y, w, h)`` inputs. For 2-D+ inputs the
+    x and y embeddings are swapped to follow the DETR ``[pos_y, pos_x, ...]`` convention.
+
+    Args:
+        pos_tensor: Normalized coordinates in ``[0, 1]``, shape ``(..., n_coords)``.
+        num_pos_feats: Embedding dimension per coordinate.
+        temperature: Base for the frequency decay.
+
+    Returns:
+        Tensor of shape ``(..., n_coords * num_pos_feats)``, same dtype as input.
+    """
+    scale = 2 * math.pi
+    dim_t = torch.arange(num_pos_feats, dtype=torch.float32, device=pos_tensor.device)
+    dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats)
+
+    coords = pos_tensor.unbind(-1)  # list of (...,) tensors
+    embeddings = [coord[..., None] * scale / dim_t for coord in coords]  # each (..., num_pos_feats)
+    embeddings = [
+        torch.stack((e[..., 0::2].sin(), e[..., 1::2].cos()), dim=-1).flatten(-2) for e in embeddings
+    ]  # each (..., num_pos_feats)
+
+    if len(embeddings) >= 2:
+        embeddings[0], embeddings[1] = embeddings[1], embeddings[0]
+
+    return torch.cat(embeddings, dim=-1).to(pos_tensor.dtype)
+
+
+class ConditionalDetrImageProcessor(DetrImageProcessor):
     def post_process_object_detection(
         self, outputs, threshold: float = 0.5, target_sizes: TensorType | list[tuple] = None, top_k: int = 100
     ):
@@ -170,6 +209,118 @@ class ConditionalDetrImageProcessorFast(DetrImageProcessorFast):
         return semantic_segmentation
 
 
+class ConditionalDetrImageProcessorPil(DetrImageProcessorPil):
+    @requires(backends=("torch",))
+    def post_process_object_detection(
+        self, outputs, threshold: float = 0.5, target_sizes: TensorType | list[tuple] = None, top_k: int = 100
+    ):
+        """
+        Converts the raw output of [`ConditionalDetrForObjectDetection`] into final bounding boxes in (top_left_x,
+        top_left_y, bottom_right_x, bottom_right_y) format. Only supports PyTorch.
+
+        Args:
+            outputs ([`ConditionalDetrObjectDetectionOutput`]):
+                Raw outputs of the model.
+            threshold (`float`, *optional*):
+                Score threshold to keep object detection predictions.
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
+                (height, width) of each image in the batch. If left to None, predictions will not be resized.
+            top_k (`int`, *optional*, defaults to 100):
+                Keep only top k bounding boxes before filtering by thresholding.
+
+        Returns:
+            `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
+            in the batch as predicted by the model.
+        """
+        requires_backends(self, ["torch"])
+        out_logits, out_bbox = outputs.logits, outputs.pred_boxes
+
+        if target_sizes is not None:
+            if len(out_logits) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+
+        prob = out_logits.sigmoid()
+        prob = prob.view(out_logits.shape[0], -1)
+        k_value = min(top_k, prob.size(1))
+        topk_values, topk_indexes = torch.topk(prob, k_value, dim=1)
+        scores = topk_values
+        topk_boxes = torch.div(topk_indexes, out_logits.shape[2], rounding_mode="floor")
+        labels = topk_indexes % out_logits.shape[2]
+        boxes = center_to_corners_format(out_bbox)
+        boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
+
+        # and from relative [0, 1] to absolute [0, height] coordinates
+        if target_sizes is not None:
+            if isinstance(target_sizes, list):
+                img_h = torch.Tensor([i[0] for i in target_sizes])
+                img_w = torch.Tensor([i[1] for i in target_sizes])
+            else:
+                img_h, img_w = target_sizes.unbind(1)
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
+            boxes = boxes * scale_fct[:, None, :]
+
+        results = []
+        for s, l, b in zip(scores, labels, boxes):
+            score = s[s > threshold]
+            label = l[s > threshold]
+            box = b[s > threshold]
+            results.append({"scores": score, "labels": label, "boxes": box})
+
+        return results
+
+    @requires(backends=("torch",))
+    def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple[int, int]] | None = None):
+        """
+        Converts the output of [`ConditionalDetrForSegmentation`] into semantic segmentation maps. Only supports PyTorch.
+
+        Args:
+            outputs ([`ConditionalDetrForSegmentation`]):
+                Raw outputs of the model.
+            target_sizes (`list[tuple[int, int]]`, *optional*):
+                A list of tuples (`tuple[int, int]`) containing the target size (height, width) of each image in the
+                batch. If unset, predictions will not be resized.
+        Returns:
+            `list[torch.Tensor]`:
+                A list of length `batch_size`, where each item is a semantic segmentation map of shape (height, width)
+                corresponding to the target_sizes entry (if `target_sizes` is specified). Each entry of each
+                `torch.Tensor` correspond to a semantic class id.
+        """
+        requires_backends(self, ["torch"])
+        class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes]
+        masks_queries_logits = outputs.pred_masks  # [batch_size, num_queries, height, width]
+
+        # Conditional DETR does not have a null class, so we use all classes
+        masks_classes = class_queries_logits.softmax(dim=-1)
+        masks_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
+
+        # Semantic segmentation logits of shape (batch_size, num_classes, height, width)
+        segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
+        batch_size = class_queries_logits.shape[0]
+
+        # Resize logits and compute semantic segmentation maps
+        if target_sizes is not None:
+            if batch_size != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+
+            semantic_segmentation = []
+            for idx in range(batch_size):
+                resized_logits = nn.functional.interpolate(
+                    segmentation[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
+                )
+                semantic_map = resized_logits[0].argmax(dim=0)
+                semantic_segmentation.append(semantic_map)
+        else:
+            semantic_segmentation = segmentation.argmax(dim=1)
+            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
+
+        return semantic_segmentation
+
+
 class ConditionalDetrDecoderOutput(DetrDecoderOutput):
     r"""
     cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
@@ -198,22 +349,6 @@ class ConditionalDetrModelOutput(DetrModelOutput):
     """
 
     reference_points: tuple[torch.FloatTensor] | None = None
-
-
-# function to generate sine positional embedding for 2d coordinates
-def gen_sine_position_embeddings(pos_tensor, d_model):
-    scale = 2 * math.pi
-    dim = d_model // 2
-    dim_t = torch.arange(dim, dtype=torch.float32, device=pos_tensor.device)
-    dim_t = 10000 ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / dim)
-    x_embed = pos_tensor[:, :, 0] * scale
-    y_embed = pos_tensor[:, :, 1] * scale
-    pos_x = x_embed[:, :, None] / dim_t
-    pos_y = y_embed[:, :, None] / dim_t
-    pos_x = torch.stack((pos_x[:, :, 0::2].sin(), pos_x[:, :, 1::2].cos()), dim=3).flatten(2)
-    pos_y = torch.stack((pos_y[:, :, 0::2].sin(), pos_y[:, :, 1::2].cos()), dim=3).flatten(2)
-    pos = torch.cat((pos_y, pos_x), dim=2)
-    return pos.to(pos_tensor.dtype)
 
 
 class ConditionalDetrObjectDetectionOutput(DetrObjectDetectionOutput):
@@ -253,7 +388,7 @@ class ConditionalDetrDecoderSelfAttention(nn.Module):
         config: ConditionalDetrConfig,
         hidden_size: int,
         num_attention_heads: int,
-        dropout: float = 0.0,
+        dropout: float | int = 0.0,
     ):
         super().__init__()
         self.config = config
@@ -339,7 +474,7 @@ class ConditionalDetrDecoderCrossAttention(nn.Module):
         config: ConditionalDetrConfig,
         hidden_size: int,
         num_attention_heads: int,
-        dropout: float = 0.0,
+        dropout: float | int = 0.0,
     ):
         super().__init__()
         self.config = config
@@ -658,7 +793,9 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
         reference_points = reference_points_before_sigmoid.sigmoid().transpose(0, 1)
         obj_center = reference_points[..., :2].transpose(0, 1)
         # get sine embedding for the query vector
-        query_sine_embed_before_transformation = gen_sine_position_embeddings(obj_center, self.config.d_model)
+        query_sine_embed_before_transformation = encode_sinusoidal_position_embedding(
+            obj_center, num_pos_feats=self.config.d_model // 2
+        )
 
         for idx, decoder_layer in enumerate(self.layers):
             if self.training:
@@ -737,10 +874,12 @@ class ConditionalDetrModel(DetrModel):
         ```python
         >>> from transformers import AutoImageProcessor, AutoModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/conditional-detr-resnet-50")
         >>> model = AutoModel.from_pretrained("microsoft/conditional-detr-resnet-50")
@@ -878,10 +1017,12 @@ class ConditionalDetrForObjectDetection(DetrForObjectDetection):
         ```python
         >>> from transformers import AutoImageProcessor, AutoModelForObjectDetection
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/conditional-detr-resnet-50")
         >>> model = AutoModelForObjectDetection.from_pretrained("microsoft/conditional-detr-resnet-50")
@@ -970,7 +1111,8 @@ class ConditionalDetrForSegmentation(DetrForSegmentation):
 
 
 __all__ = [
-    "ConditionalDetrImageProcessorFast",
+    "ConditionalDetrImageProcessor",
+    "ConditionalDetrImageProcessorPil",
     "ConditionalDetrForObjectDetection",
     "ConditionalDetrForSegmentation",
     "ConditionalDetrModel",

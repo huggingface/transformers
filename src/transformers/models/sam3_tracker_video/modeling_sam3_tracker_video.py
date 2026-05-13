@@ -619,8 +619,8 @@ class Sam3TrackerVideoFeedForward(nn.Module):
         return hidden_states
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the Sam3TrackerVideo model's output.")
+@dataclass
 class Sam3TrackerVideoImageSegmentationOutput(ModelOutput):
     r"""
     iou_scores (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks)`):
@@ -660,8 +660,8 @@ class Sam3TrackerVideoImageSegmentationOutput(ModelOutput):
     object_pointer: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the Sam2 model's output.")
+@dataclass
 class Sam3TrackerVideoSegmentationOutput(ModelOutput):
     r"""
     object_ids (`list[int]`, *optional*):
@@ -683,7 +683,7 @@ class Sam3TrackerVideoSegmentationOutput(ModelOutput):
 @auto_docstring
 class Sam3TrackerVideoPreTrainedModel(PreTrainedModel):
     config_class = Sam3TrackerVideoConfig
-    base_model_prefix = "sam3_tracker_video"
+    base_model_prefix = "tracker_model"
     main_input_name = "pixel_values"
     input_modalities = "video"
     _supports_sdpa = True
@@ -1135,8 +1135,8 @@ class Sam3TrackerVideoMemoryEncoder(nn.Module):
         return vision_features, vision_pos_enc
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the vision encoder's outputs.")
+@dataclass
 class Sam3TrackerVideoVisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, height, width, hidden_size)`):
@@ -1591,11 +1591,6 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam3TrackerVideoTwoWayAttentionBlock, index=2)}
     _tied_weights_keys = {}
     _keys_to_ignore_on_load_unexpected = [r"^detector_model."]
-    _checkpoint_conversion_mapping = {
-        r"tracker_model.(.+)": r"\1",  # the regex allows to remove the prefix, and add it back in revert mode
-        "detector_model.vision_encoder.backbone.": "vision_encoder.backbone.",
-        "tracker_neck.": "vision_encoder.neck.",
-    }
 
     def __init__(self, config: Sam3TrackerVideoConfig, remove_vision_encoder: bool = False):
         r"""

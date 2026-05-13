@@ -37,7 +37,7 @@ class DbrxModelTester(CausalLMModelTester):
         clip_qkv=8,
         rope_theta=500000,
         attn_config_model_type="",
-        moe_jitter_eps=0,
+        moe_jitter_eps=0.0,
         moe_loss_weight=0.05,
         moe_num_experts=8,
         moe_top_k=4,

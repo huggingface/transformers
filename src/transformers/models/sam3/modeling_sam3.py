@@ -20,8 +20,13 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision
 from torch import Tensor
+
+from ...utils import is_torchvision_available
+
+
+if is_torchvision_available():
+    import torchvision
 
 from transformers import CLIPTextModelWithProjection
 
@@ -43,6 +48,7 @@ from ...utils.generic import (
     is_flash_attention_requested,
     merge_with_config_defaults,
 )
+from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_sam3 import (
@@ -59,8 +65,8 @@ from .configuration_sam3 import (
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3VisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
     fpn_hidden_states (`tuple[torch.FloatTensor]`):
@@ -73,8 +79,8 @@ class Sam3VisionEncoderOutput(BaseModelOutputWithPooling):
     fpn_position_encoding: tuple[torch.FloatTensor, ...] = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3GeometryEncoderOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_prompts, hidden_size)`):
@@ -87,8 +93,8 @@ class Sam3GeometryEncoderOutput(ModelOutput):
     attention_mask: torch.BoolTensor | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3DETREncoderOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -113,8 +119,8 @@ class Sam3DETREncoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3DETRDecoderOutput(ModelOutput):
     r"""
     intermediate_hidden_states (`torch.FloatTensor` of shape `(num_layers, batch_size, num_queries, hidden_size)`):
@@ -136,8 +142,8 @@ class Sam3DETRDecoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3MaskDecoderOutput(ModelOutput):
     r"""
     pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height, width)`):
@@ -153,8 +159,8 @@ class Sam3MaskDecoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3ImageSegmentationOutput(ModelOutput):
     r"""
     pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height, width)`):
@@ -273,7 +279,7 @@ def box_cxcywh_to_xyxy(x):
 
 
 class Sam3MLP(nn.Module):
-    def __init__(self, config: Sam3ViTConfig):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
@@ -761,6 +767,7 @@ class Sam3ViTLayer(GradientCheckpointingLayer):
 
 
 @auto_docstring
+@requires(backends=("torch", "torchvision"))
 class Sam3PreTrainedModel(PreTrainedModel):
     config_class = Sam3Config
     base_model_prefix = "sam3"
@@ -792,6 +799,7 @@ class Sam3PreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class Sam3ViTModel(Sam3PreTrainedModel):
+    config: Sam3ViTConfig
     _can_record_outputs = {
         "hidden_states": Sam3ViTLayer,
         "attentions": Sam3ViTRoPEAttention,
@@ -1242,7 +1250,7 @@ class Sam3GeometryEncoder(nn.Module):
         if prompt_mask is not None:
             prompt_attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=prompt_embeds,
+                inputs_embeds=prompt_embeds,
                 attention_mask=prompt_mask,
             )
 
@@ -1442,7 +1450,7 @@ class Sam3DetrEncoder(Sam3PreTrainedModel):
         if text_mask is not None:
             prompt_cross_attn_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=features_flattened,
+                inputs_embeds=features_flattened,
                 attention_mask=text_mask,
                 encoder_hidden_states=text_features,
             )
@@ -1732,7 +1740,7 @@ class Sam3DetrDecoder(Sam3PreTrainedModel):
         if text_mask is not None:
             text_cross_attn_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=hidden_states,
+                inputs_embeds=hidden_states,
                 attention_mask=text_mask,
                 encoder_hidden_states=text_features,
             )
@@ -2042,7 +2050,7 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
             if prompt_mask is not None:
                 cross_attn_mask = create_bidirectional_mask(
                     config=self.config,
-                    input_embeds=normed_hidden_states,
+                    inputs_embeds=normed_hidden_states,
                     encoder_hidden_states=prompt_features,
                     attention_mask=prompt_mask,
                 )
@@ -2111,9 +2119,7 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
 
 class Sam3Model(Sam3PreTrainedModel):
     input_modalities = ["image", "text"]
-    _checkpoint_conversion_mapping = {
-        r"detector_model.(.+)": r"\1"  # the regex allows to remove the prefix, and add it back in revert mode
-    }
+    base_model_prefix = "detector_model"
     _keys_to_ignore_on_load_unexpected = [
         r"^tracker_model.",
         r"^tracker_neck.",

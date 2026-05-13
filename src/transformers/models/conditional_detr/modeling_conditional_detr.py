@@ -39,7 +39,6 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_conditional_detr import ConditionalDetrConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the CONDITIONAL_DETR decoder. This class adds one attribute to BaseModelOutputWithCrossAttentions,
@@ -47,6 +46,7 @@ from .configuration_conditional_detr import ConditionalDetrConfig
     gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
     """
 )
+@dataclass
 class ConditionalDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     r"""
     cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
@@ -65,7 +65,6 @@ class ConditionalDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     reference_points: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the CONDITIONAL_DETR encoder-decoder model. This class adds one attribute to Seq2SeqModelOutput,
@@ -73,6 +72,7 @@ class ConditionalDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
     """
 )
+@dataclass
 class ConditionalDetrModelOutput(Seq2SeqModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -89,12 +89,12 @@ class ConditionalDetrModelOutput(Seq2SeqModelOutput):
     reference_points: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`ConditionalDetrForObjectDetection`].
     """
 )
+@dataclass
 class ConditionalDetrObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
@@ -132,12 +132,12 @@ class ConditionalDetrObjectDetectionOutput(ModelOutput):
     encoder_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`ConditionalDetrForSegmentation`].
     """
 )
+@dataclass
 class ConditionalDetrSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
@@ -489,7 +489,7 @@ class ConditionalDetrDecoderSelfAttention(nn.Module):
         config: ConditionalDetrConfig,
         hidden_size: int,
         num_attention_heads: int,
-        dropout: float = 0.0,
+        dropout: float | int = 0.0,
     ):
         super().__init__()
         self.config = config
@@ -575,7 +575,7 @@ class ConditionalDetrDecoderCrossAttention(nn.Module):
         config: ConditionalDetrConfig,
         hidden_size: int,
         num_attention_heads: int,
-        dropout: float = 0.0,
+        dropout: float | int = 0.0,
     ):
         super().__init__()
         self.config = config
@@ -749,7 +749,7 @@ class ConditionalDetrEncoderLayer(GradientCheckpointingLayer):
         hidden_states = self.final_layer_norm(hidden_states)
 
         if self.training:
-            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+            if not torch.isfinite(hidden_states).all():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
@@ -1127,7 +1127,7 @@ class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
         )
 
@@ -1140,20 +1140,40 @@ class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
-# function to generate sine positional embedding for 2d coordinates
-def gen_sine_position_embeddings(pos_tensor, d_model):
+def encode_sinusoidal_position_embedding(
+    pos_tensor: torch.Tensor,
+    num_pos_feats: int = 128,
+    temperature: int = 10000,
+) -> torch.Tensor:
+    """Sinusoidal position embeddings from normalized anchor coordinates.
+
+    Each coordinate in `pos_tensor` is independently encoded with ``num_pos_feats``
+    interleaved sin/cos components; per-coordinate embeddings are concatenated.
+    Handles 2-D ``(x, y)`` and N-D ``(x, y, w, h)`` inputs. For 2-D+ inputs the
+    x and y embeddings are swapped to follow the DETR ``[pos_y, pos_x, ...]`` convention.
+
+    Args:
+        pos_tensor: Normalized coordinates in ``[0, 1]``, shape ``(..., n_coords)``.
+        num_pos_feats: Embedding dimension per coordinate.
+        temperature: Base for the frequency decay.
+
+    Returns:
+        Tensor of shape ``(..., n_coords * num_pos_feats)``, same dtype as input.
+    """
     scale = 2 * math.pi
-    dim = d_model // 2
-    dim_t = torch.arange(dim, dtype=torch.float32, device=pos_tensor.device)
-    dim_t = 10000 ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / dim)
-    x_embed = pos_tensor[:, :, 0] * scale
-    y_embed = pos_tensor[:, :, 1] * scale
-    pos_x = x_embed[:, :, None] / dim_t
-    pos_y = y_embed[:, :, None] / dim_t
-    pos_x = torch.stack((pos_x[:, :, 0::2].sin(), pos_x[:, :, 1::2].cos()), dim=3).flatten(2)
-    pos_y = torch.stack((pos_y[:, :, 0::2].sin(), pos_y[:, :, 1::2].cos()), dim=3).flatten(2)
-    pos = torch.cat((pos_y, pos_x), dim=2)
-    return pos.to(pos_tensor.dtype)
+    dim_t = torch.arange(num_pos_feats, dtype=torch.float32, device=pos_tensor.device)
+    dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats)
+
+    coords = pos_tensor.unbind(-1)  # list of (...,) tensors
+    embeddings = [coord[..., None] * scale / dim_t for coord in coords]  # each (..., num_pos_feats)
+    embeddings = [
+        torch.stack((e[..., 0::2].sin(), e[..., 1::2].cos()), dim=-1).flatten(-2) for e in embeddings
+    ]  # each (..., num_pos_feats)
+
+    if len(embeddings) >= 2:
+        embeddings[0], embeddings[1] = embeddings[1], embeddings[0]
+
+    return torch.cat(embeddings, dim=-1).to(pos_tensor.dtype)
 
 
 class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
@@ -1258,7 +1278,9 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
         reference_points = reference_points_before_sigmoid.sigmoid().transpose(0, 1)
         obj_center = reference_points[..., :2].transpose(0, 1)
         # get sine embedding for the query vector
-        query_sine_embed_before_transformation = gen_sine_position_embeddings(obj_center, self.config.d_model)
+        query_sine_embed_before_transformation = encode_sinusoidal_position_embedding(
+            obj_center, num_pos_feats=self.config.d_model // 2
+        )
 
         for idx, decoder_layer in enumerate(self.layers):
             if self.training:
@@ -1364,10 +1386,12 @@ class ConditionalDetrModel(ConditionalDetrPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, AutoModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/conditional-detr-resnet-50")
         >>> model = AutoModel.from_pretrained("microsoft/conditional-detr-resnet-50")
@@ -1523,10 +1547,12 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, AutoModelForObjectDetection
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/conditional-detr-resnet-50")
         >>> model = AutoModelForObjectDetection.from_pretrained("microsoft/conditional-detr-resnet-50")
@@ -1621,26 +1647,6 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
     """
 )
 class ConditionalDetrForSegmentation(ConditionalDetrPreTrainedModel):
-    _checkpoint_conversion_mapping = {
-        "bbox_attention.q_linear": "bbox_attention.q_proj",
-        "bbox_attention.k_linear": "bbox_attention.k_proj",
-        # Mask head refactor
-        "mask_head.lay1": "mask_head.conv1.conv",
-        "mask_head.gn1": "mask_head.conv1.norm",
-        "mask_head.lay2": "mask_head.conv2.conv",
-        "mask_head.gn2": "mask_head.conv2.norm",
-        "mask_head.adapter1": "mask_head.fpn_stages.0.fpn_adapter",
-        "mask_head.lay3": "mask_head.fpn_stages.0.refine.conv",
-        "mask_head.gn3": "mask_head.fpn_stages.0.refine.norm",
-        "mask_head.adapter2": "mask_head.fpn_stages.1.fpn_adapter",
-        "mask_head.lay4": "mask_head.fpn_stages.1.refine.conv",
-        "mask_head.gn4": "mask_head.fpn_stages.1.refine.norm",
-        "mask_head.adapter3": "mask_head.fpn_stages.2.fpn_adapter",
-        "mask_head.lay5": "mask_head.fpn_stages.2.refine.conv",
-        "mask_head.gn5": "mask_head.fpn_stages.2.refine.norm",
-        "mask_head.out_lay": "mask_head.output_conv",
-    }
-
     def __init__(self, config: ConditionalDetrConfig):
         super().__init__(config)
 

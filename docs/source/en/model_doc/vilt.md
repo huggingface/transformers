@@ -17,9 +17,6 @@ rendered properly in your Markdown viewer.
 
 # ViLT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -57,7 +54,6 @@ This model was contributed by [nielsr](https://huggingface.co/nielsr). The origi
   which pixel values are real and which are padding. [`ViltProcessor`] automatically creates this for you.
 - The design of ViLT is very similar to that of a standard Vision Transformer (ViT). The only difference is that the model includes
   additional embedding layers for the language modality.
-- The PyTorch version of this model is only available in torch 1.10 and higher.
 
 ## ViltConfig
 
@@ -68,9 +64,9 @@ This model was contributed by [nielsr](https://huggingface.co/nielsr). The origi
 [[autodoc]] ViltImageProcessor
     - preprocess
 
-## ViltImageProcessorFast
+## ViltImageProcessorPil
 
-[[autodoc]] ViltImageProcessorFast
+[[autodoc]] ViltImageProcessorPil
     - preprocess
 
 ## ViltProcessor

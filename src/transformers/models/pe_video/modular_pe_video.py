@@ -86,6 +86,7 @@ class PeVideoEncoderEmbedder(nn.Module):
 class PeVideoPreTrainedModel(PeAudioVideoPreTrainedModel):
     base_model_prefix = "video_model"
     main_input_name = "pixel_values_videos"
+    _no_split_modules = ["PeVideoEncoderLayer", "TimmWrapperForImageClassification"]
 
 
 @auto_docstring(
@@ -116,7 +117,7 @@ class PeVideoEncoder(PeAudioVideoEncoder):
         if attention_mask is not None:
             attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=inputs_embeds,
+                inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
             )
 

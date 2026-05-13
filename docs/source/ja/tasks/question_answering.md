@@ -69,23 +69,7 @@
 >>> context = "BLOOM has 176 billion parameters and can generate text in 46 languages natural languages and 13 programming languages."
 ```
 
-推論用に微調整されたモデルを試す最も簡単な方法は、それを [`pipeline`] で使用することです。モデルを使用して質問応答用の`pipeline`をインスタンス化し、それにテキストを渡します。
-
-```py
->>> from transformers import pipeline
-
->>> question_answerer = pipeline("question-answering", model="my_awesome_qa_model")
->>> question_answerer(question=question, context=context)
-{'score': 0.2058267742395401,
- 'start': 10,
- 'end': 95,
- 'answer': '176 billion parameters and can generate text in 46 languages natural languages and 13'}
-```
-
-必要に応じて、`pipeline`の結果を手動で複製することもできます。
-
-
-テキストをトークン化して PyTorch テンソルを返します。
+推論用に微調整されたモデルを試す最も簡単な方法は、tokenizerとmodelを直接使用することです。テキストをトークン化して PyTorch テンソルを返します:
 
 ```py
 >>> from transformers import AutoTokenizer

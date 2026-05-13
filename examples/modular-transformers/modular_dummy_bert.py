@@ -22,7 +22,6 @@ class DummyBertModel(BertModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | BaseModelOutputWithPoolingAndCrossAttentions:
         return super().forward(input_ids, **kwargs)

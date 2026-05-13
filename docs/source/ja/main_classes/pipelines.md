@@ -354,12 +354,6 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
     - __call__
     - all
 
-### ImageToImagePipeline
-
-[[autodoc]] ImageToImagePipeline
-    - __call__
-    - all
-
 ### ObjectDetectionPipeline
 
 [[autodoc]] ObjectDetectionPipeline
@@ -399,12 +393,6 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
 [[autodoc]] NerPipeline
 
 詳細については、[`TokenClassificationPipeline`] を参照してください。
-
-### QuestionAnsweringPipeline
-
-[[autodoc]] QuestionAnsweringPipeline
-    - __call__
-    - all
 
 ### TableQuestionAnsweringPipeline
 
@@ -460,12 +448,6 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
 ### ImageTextToTextPipeline
 
 [[autodoc]] ImageTextToTextPipeline
-    - __call__
-    - all
-
-### VisualQuestionAnsweringPipeline
-
-[[autodoc]] VisualQuestionAnsweringPipeline
     - __call__
     - all
 

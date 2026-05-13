@@ -55,7 +55,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import BeitImageProcessor
+    from transformers import BeitImageProcessorPil
 
 
 class BeitModelTester:
@@ -84,6 +84,9 @@ class BeitModelTester:
         out_features=["stage1", "stage2", "stage3", "stage4"],
         attn_implementation="eager",
         mask_ratio=0.5,
+        use_relative_position_bias=False,
+        use_shared_relative_position_bias=False,
+        add_fpn=True,
     ):
         self.parent = parent
         self.vocab_size = vocab_size
@@ -106,13 +109,15 @@ class BeitModelTester:
         self.out_indices = out_indices
         self.out_features = out_features
         self.num_labels = num_labels
-
+        self.add_fpn = add_fpn
         # in BeiT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
         self.seq_length = num_patches + 1
         self.mask_length = self.seq_length - 1
         self.num_masks = int(mask_ratio * self.seq_length)
         self.attn_implementation = attn_implementation
+        self.use_relative_position_bias = use_relative_position_bias
+        self.use_shared_relative_position_bias = use_shared_relative_position_bias
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -145,6 +150,9 @@ class BeitModelTester:
             out_indices=self.out_indices,
             out_features=self.out_features,
             attn_implementation=self.attn_implementation,
+            use_relative_position_bias=self.use_relative_position_bias,
+            use_shared_relative_position_bias=self.use_shared_relative_position_bias,
+            add_fpn=self.add_fpn,
         )
 
     def create_and_check_model(self, config, pixel_values, labels, pixel_labels):
@@ -155,6 +163,7 @@ class BeitModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_backbone(self, config, pixel_values, labels, pixel_labels):
+        config.add_fpn = False
         model = BeitBackbone(config=config)
         model.to(torch_device)
         model.eval()
@@ -264,7 +273,7 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = BeitModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BeitConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=BeitConfig, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -368,6 +377,17 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             loss = model(**inputs).loss
             loss.backward()
 
+    def test_reverse_loading_mapping(self):
+        # Enable both per-layer and shared relative position bias so that every
+        # mapping rule has at least one matching key in the model state dict.
+        self.model_tester.use_relative_position_bias = True
+        self.model_tester.use_shared_relative_position_bias = True
+        try:
+            super().test_reverse_loading_mapping()
+        finally:
+            self.model_tester.use_relative_position_bias = False
+            self.model_tester.use_shared_relative_position_bias = False
+
     @slow
     def test_model_from_pretrained(self):
         model_name = "microsoft/beit-base-patch16-224"
@@ -386,7 +406,9 @@ def prepare_img():
 class BeitModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return BeitImageProcessor.from_pretrained("microsoft/beit-base-patch16-224") if is_vision_available() else None
+        return (
+            BeitImageProcessorPil.from_pretrained("microsoft/beit-base-patch16-224") if is_vision_available() else None
+        )
 
     @slow
     def test_inference_masked_image_modeling_head(self):
@@ -469,7 +491,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
         model = BeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
         model = model.to(torch_device)
 
-        image_processor = BeitImageProcessor(do_resize=True, size=640, do_center_crop=False)
+        image_processor = BeitImageProcessorPil(do_resize=True, size=640, do_center_crop=False)
 
         ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
         image = ds[0]["image"].convert("RGB")
@@ -499,7 +521,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
         model = BeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
         model = model.to(torch_device)
 
-        image_processor = BeitImageProcessor(do_resize=True, size=640, do_center_crop=False)
+        image_processor = BeitImageProcessorPil(do_resize=True, size=640, do_center_crop=False)
 
         ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
         image = ds[0]["image"].convert("RGB")
@@ -525,7 +547,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
         model = BeitModel.from_pretrained(model_name, **{"use_absolute_position_embeddings": True}).to(torch_device)
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        processor = BeitImageProcessor.from_pretrained(model_name)
+        processor = BeitImageProcessorPil.from_pretrained(model_name)
         inputs = processor(images=image, return_tensors="pt", size={"height": 480, "width": 480})
         pixel_values = inputs.pixel_values.to(torch_device)
 
@@ -546,4 +568,4 @@ class BeitBackboneTest(unittest.TestCase, BackboneTesterMixin):
     config_class = BeitConfig
 
     def setUp(self):
-        self.model_tester = BeitModelTester(self)
+        self.model_tester = BeitModelTester(self, add_fpn=False)

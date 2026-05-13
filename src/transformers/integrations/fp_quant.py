@@ -50,7 +50,8 @@ class FpQuantQuantize(ConversionOps):
 
         # Let pre-forward handle the quantization and set None where necessary
         # This operation will quantize the weights internally
-        with torch.cuda.device(value.device):
+        torch_accelerator_module = getattr(torch, value.device.type, torch.cuda)
+        with torch_accelerator_module.device(value.device):
             module.pre_forward()
 
         prefix_target_key = target_key.rsplit(".", 1)[0]

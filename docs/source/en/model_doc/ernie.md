@@ -40,8 +40,9 @@ The example below demonstrates how to predict the `[MASK]` token with [`Pipeline
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="fill-mask",
@@ -54,16 +55,17 @@ pipeline("巴黎是[MASK]国的首都。")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForMaskedLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "nghuyong/ernie-3.0-xbase-zh",
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "nghuyong/ernie-3.0-xbase-zh",
-    dtype=torch.float16,
     device_map="auto"
 )
 inputs = tokenizer("巴黎是[MASK]国的首都。", return_tensors="pt").to(model.device)
@@ -77,13 +79,6 @@ predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
 predicted_token = tokenizer.decode(predicted_token_id)
 
 print(f"The predicted token is: {predicted_token}")
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "巴黎是[MASK]国的首都。" | transformers run --task fill-mask --model nghuyong/ernie-3.0-xbase-zh --device 0
 ```
 
 </hfoption>

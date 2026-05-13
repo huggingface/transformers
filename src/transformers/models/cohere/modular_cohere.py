@@ -33,7 +33,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import maybe_autocast
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -148,7 +148,6 @@ class CohereAttention(LlamaAttention):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -170,9 +169,7 @@ class CohereAttention(LlamaAttention):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; position_ids needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -209,7 +206,6 @@ class CohereDecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
@@ -226,8 +222,6 @@ class CohereDecoderLayer(GradientCheckpointingLayer):
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence
             position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
                 Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
                 with `head_dim` being the embedding dimension of each attention head.
@@ -241,7 +235,6 @@ class CohereDecoderLayer(GradientCheckpointingLayer):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -267,6 +260,8 @@ class CohereForCausalLM(LlamaForCausalLM):
         self.logit_scale = config.logit_scale
         self.tie_word_embeddings = config.tie_word_embeddings
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -276,18 +271,10 @@ class CohereForCausalLM(LlamaForCausalLM):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -304,12 +291,6 @@ class CohereForCausalLM(LlamaForCausalLM):
         >> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -317,14 +298,10 @@ class CohereForCausalLM(LlamaForCausalLM):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            cache_position=cache_position,
             **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
         logits = logits * self.logit_scale  # main diff from Llama

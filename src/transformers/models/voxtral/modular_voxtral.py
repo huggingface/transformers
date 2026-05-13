@@ -25,7 +25,7 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
 )
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel, AutoModelForCausalLM
@@ -102,11 +102,10 @@ class VoxtralEncoder(Qwen2AudioEncoder):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         for idx, encoder_layer in enumerate(self.layers):
-            layer_outputs = encoder_layer(
+            hidden_states = encoder_layer(
                 hidden_states,
                 attention_mask=attention_mask,
             )
-            hidden_states = layer_outputs[0]
 
         hidden_states = self.layer_norm(hidden_states)
 
@@ -188,6 +187,30 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
 
         return audio_outputs
 
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, audio_features: torch.FloatTensor
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_audio_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_audio_mask = special_audio_mask.all(-1)
+        else:
+            special_audio_mask = input_ids == self.config.audio_token_id
+
+        n_audio_tokens = special_audio_mask.sum()
+        n_audio_features = audio_features.shape[0]
+        special_audio_mask = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        torch_compilable_check(
+            inputs_embeds[special_audio_mask].numel() == audio_features.numel(),
+            f"Audio features and audio tokens do not match, tokens: {n_audio_tokens}, features: {n_audio_features}",
+        )
+        return special_audio_mask
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -200,7 +223,6 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
@@ -244,10 +266,10 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
             audio_embeds = self.get_audio_features(input_features, return_dict=True).pooler_output
 
             # replace text-audio token placeholders with audio embeddings
-            audio_token_mask = (input_ids == self.config.audio_token_id).unsqueeze(-1)
-            inputs_embeds = inputs_embeds.masked_scatter(
-                audio_token_mask.to(inputs_embeds.device), audio_embeds.to(inputs_embeds.device)
+            special_audio_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, audio_features=audio_embeds
             )
+            inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_embeds.to(inputs_embeds.device))
 
         outputs: BaseModelOutputWithPast = self.language_model(
             attention_mask=attention_mask,
@@ -256,7 +278,6 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             labels=labels,
             use_cache=use_cache,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **kwargs,
         )

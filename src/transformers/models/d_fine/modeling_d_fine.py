@@ -40,7 +40,6 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_d_fine import DFineConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the DFineDecoder. This class adds two attributes to
@@ -49,6 +48,7 @@ from .configuration_d_fine import DFineConfig
     - a stacked tensor of intermediate reference points.
     """
 )
+@dataclass
 class DFineDecoderOutput(ModelOutput):
     r"""
     intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -603,11 +603,59 @@ class DFineEncoderLayer(nn.Module):
             hidden_states = self.final_layer_norm(hidden_states)
 
         if self.training:
-            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+            if not torch.isfinite(hidden_states).all():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
         return hidden_states
+
+
+def build_2d_sinusoidal_position_embedding(
+    height: int,
+    width: int,
+    embed_dim: int = 256,
+    temperature: float = 10000.0,
+    cls_token: bool = False,
+    device: torch.device | None = None,
+    dtype: torch.dtype = torch.float32,
+) -> torch.Tensor:
+    """2D sinusoidal position embeddings for an image patch grid.
+
+    Each (h, w) position gets an ``embed_dim``-dimensional vector laid out as
+    ``[sin_h | cos_h | sin_w | cos_w]``, with row-major (H-outer) patch ordering.
+
+    Args:
+        height: Grid height in patches.
+        width: Grid width in patches.
+        embed_dim: Total embedding dimension; must be divisible by 4.
+        temperature: Base for the frequency decay.
+        cls_token: If `True`, prepend a zero row for a CLS token.
+        device: Target device; defaults to CPU.
+        dtype: Output dtype; frequency arithmetic uses float64 internally.
+
+    Returns:
+        Tensor of shape ``(height * width [+1], embed_dim)``.
+    """
+    if embed_dim % 4 != 0:
+        raise ValueError(f"`embed_dim` must be divisible by 4, got {embed_dim}")
+
+    pos_dim = embed_dim // 4
+    omega = torch.arange(pos_dim, dtype=torch.float64, device=device) / pos_dim
+    omega = 1.0 / temperature**omega  # (D/4,)
+
+    grid_h = torch.arange(height, dtype=torch.float64, device=device)
+    grid_w = torch.arange(width, dtype=torch.float64, device=device)
+    grid_h, grid_w = torch.meshgrid(grid_h, grid_w, indexing="ij")  # (H, W) each
+
+    emb_h = grid_h.flatten().outer(omega)  # (H*W, D/4)
+    emb_w = grid_w.flatten().outer(omega)  # (H*W, D/4)
+
+    pos_embed = torch.cat([emb_h.sin(), emb_h.cos(), emb_w.sin(), emb_w.cos()], dim=1)
+
+    if cls_token:
+        pos_embed = torch.cat([torch.zeros(1, embed_dim, dtype=torch.float64, device=device), pos_embed], dim=0)
+
+    return pos_embed.to(dtype)
 
 
 class DFineSinePositionEmbedding(nn.Module):
@@ -634,19 +682,14 @@ class DFineSinePositionEmbedding(nn.Module):
         Returns:
             Position embeddings of shape (1, height*width, embed_dim)
         """
-        grid_w = torch.arange(torch_int(width), device=device).to(dtype)
-        grid_h = torch.arange(torch_int(height), device=device).to(dtype)
-        grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="xy")
-        if self.embed_dim % 4 != 0:
-            raise ValueError("Embed dimension must be divisible by 4 for 2D sin-cos position embedding")
-        pos_dim = self.embed_dim // 4
-        omega = torch.arange(pos_dim, device=device).to(dtype) / pos_dim
-        omega = 1.0 / (self.temperature**omega)
-
-        out_w = grid_w.flatten()[..., None] @ omega[None]
-        out_h = grid_h.flatten()[..., None] @ omega[None]
-
-        return torch.concat([out_h.sin(), out_h.cos(), out_w.sin(), out_w.cos()], dim=1)[None, :, :]
+        return build_2d_sinusoidal_position_embedding(
+            height=torch_int(height),
+            width=torch_int(width),
+            embed_dim=self.embed_dim,
+            temperature=self.temperature,
+            device=device,
+            dtype=dtype,
+        ).unsqueeze(0)
 
 
 class DFineAIFILayer(nn.Module):
@@ -874,6 +917,7 @@ class DFinePreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         # initialize linear layer bias value according to a given probability value.
         if isinstance(module, (DFineForObjectDetection, DFineDecoder)):
             if module.class_embed is not None:
@@ -919,15 +963,6 @@ class DFinePreTrainedModel(PreTrainedModel):
             init.xavier_uniform_(module.enc_score_head.weight)
             init.constant_(module.enc_score_head.bias, bias)
 
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-            if getattr(module, "running_mean", None) is not None:
-                init.zeros_(module.running_mean)
-                init.ones_(module.running_var)
-                init.zeros_(module.num_batches_tracked)
-
         if isinstance(module, DFineGate):
             bias = float(-math.log((1 - 0.5) / 0.5))
             init.constant_(module.gate.bias, bias)
@@ -936,10 +971,6 @@ class DFinePreTrainedModel(PreTrainedModel):
         if isinstance(module, DFineLQE):
             init.constant_(module.reg_conf.layers[-1].bias, 0)
             init.constant_(module.reg_conf.layers[-1].weight, 0)
-
-        if isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
 
         if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
             init.xavier_uniform_(module.weight_embedding.weight)
@@ -1258,12 +1289,12 @@ class DFineDecoder(DFinePreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the RT-DETR encoder-decoder model.
     """
 )
+@dataclass
 class DFineModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
@@ -1643,10 +1674,12 @@ class DFineModel(DFinePreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, DFineModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("PekingU/DFine_r50vd")
         >>> model = DFineModel.from_pretrained("PekingU/DFine_r50vd")
@@ -1815,12 +1848,12 @@ class DFineModel(DFinePreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`DFineForObjectDetection`].
     """
 )
+@dataclass
 class DFineObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):

@@ -17,9 +17,6 @@ rendered properly in your Markdown viewer.
 
 # OneFormer
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -74,9 +71,9 @@ The resource should ideally demonstrate something new instead of duplicating an 
     - post_process_instance_segmentation
     - post_process_panoptic_segmentation
 
-## OneFormerImageProcessorFast
+## OneFormerImageProcessorPil
 
-[[autodoc]] OneFormerImageProcessorFast
+[[autodoc]] OneFormerImageProcessorPil
     - preprocess
     - post_process_semantic_segmentation
     - post_process_instance_segmentation

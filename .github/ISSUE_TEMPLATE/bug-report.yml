@@ -44,7 +44,7 @@ body:
 
         Library:
 
-          - generate: @zucchini-nlp (visual-language models) or @gante (all others)
+          - generate: @zucchini-nlp (visual-language models) or @cyrilvallez (all others)
           - continuous batching: @remi-or @ArthurZucker @McPatate
           - pipelines: @Rocketknight1
           - tokenizers: @ArthurZucker and @itazap

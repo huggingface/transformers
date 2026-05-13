@@ -25,7 +25,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torchaudio,
-    torch_device,
 )
 from transformers.utils import is_torchaudio_available
 
@@ -196,11 +195,10 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
         assert num_calculated_features == [90, 171]
         assert sum(num_expected_features) == num_audio_tokens
 
+    @parameterized.expand(["cpu", "cuda"])
     @require_torch_accelerator
-    def test_device_override(self):
-        """Ensure that we regardless of the processing device, the tensors
-        produced are on the CPU.
-        """
+    def test_device_placement(self, device):
+        """Ensure that the device parameter controls where speech inputs are placed."""
         tokenizer = self.get_tokenizer()
         audio_processor = self.get_audio_processor()
         processor = GraniteSpeechProcessor(
@@ -215,7 +213,7 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
             text=f"{processor.audio_token} Can you transcribe this audio?",
             audio=wav,
             return_tensors="pt",
-            device=torch_device,
+            device=device,
         )
 
-        assert inputs["input_features"].device.type == "cpu"
+        assert inputs["input_features"].device.type == device

@@ -17,7 +17,6 @@ rendered properly in your Markdown viewer.
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
     </div>
 </div>
@@ -36,22 +35,22 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`A
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
 
-pipeline = pipeline(task="text-generation", model="EleutherAI/gpt-neo-1.3B", dtype=torch.float16, device=0)
+
+pipeline = pipeline(task="text-generation", model="EleutherAI/gpt-neo-1.3B", device=0)
 pipeline("Hello, I'm a language model")
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model = AutoModelForCausalLM.from_pretrained("EleutherAI/gpt-neo-1.3B", dtype=torch.float16, device_map="auto", attn_implementation="flash_attention_2")
+
+model = AutoModelForCausalLM.from_pretrained("EleutherAI/gpt-neo-1.3B", device_map="auto", attn_implementation="flash_attention_2")
 tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neo-1.3B")
 
 input_ids = tokenizer("Hello, I'm a language model", return_tensors="pt").to(model.device)
@@ -61,22 +60,15 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Hello, I'm a language model" | transformers run --task text-generation --model EleutherAI/gpt-neo-1.3B --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
 
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,

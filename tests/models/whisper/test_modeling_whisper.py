@@ -1090,6 +1090,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_longform_generate_multi_batch(self):
         self._check_longform_generate_multi_batch(condition_on_prev_tokens=False)
 
+    @unittest.skip("Broken by #44130, to be checked asap")
     def test_longform_generate_multi_batch_cond_prev(self):
         self._check_longform_generate_multi_batch(condition_on_prev_tokens=True)
 

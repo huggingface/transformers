@@ -32,7 +32,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel, AutoModelForCausalLM
@@ -179,23 +179,20 @@ class VoxtralEncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        output_attentions: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
         """
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
-        hidden_states, attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
+            **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -212,7 +209,7 @@ class VoxtralEncoderLayer(GradientCheckpointingLayer):
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
-        return hidden_states, attn_weights
+        return hidden_states
 
 
 @auto_docstring
@@ -222,7 +219,7 @@ class VoxtralPreTrainedModel(PreTrainedModel):
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = None
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -327,11 +324,10 @@ class VoxtralEncoder(VoxtralPreTrainedModel):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         for idx, encoder_layer in enumerate(self.layers):
-            layer_outputs = encoder_layer(
+            hidden_states = encoder_layer(
                 hidden_states,
                 attention_mask=attention_mask,
             )
-            hidden_states = layer_outputs[0]
 
         hidden_states = self.layer_norm(hidden_states)
 
@@ -422,6 +418,30 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
 
         return audio_outputs
 
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, audio_features: torch.FloatTensor
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_audio_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_audio_mask = special_audio_mask.all(-1)
+        else:
+            special_audio_mask = input_ids == self.config.audio_token_id
+
+        n_audio_tokens = special_audio_mask.sum()
+        n_audio_features = audio_features.shape[0]
+        special_audio_mask = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        torch_compilable_check(
+            inputs_embeds[special_audio_mask].numel() == audio_features.numel(),
+            f"Audio features and audio tokens do not match, tokens: {n_audio_tokens}, features: {n_audio_features}",
+        )
+        return special_audio_mask
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -434,7 +454,6 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
@@ -478,10 +497,10 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
             audio_embeds = self.get_audio_features(input_features, return_dict=True).pooler_output
 
             # replace text-audio token placeholders with audio embeddings
-            audio_token_mask = (input_ids == self.config.audio_token_id).unsqueeze(-1)
-            inputs_embeds = inputs_embeds.masked_scatter(
-                audio_token_mask.to(inputs_embeds.device), audio_embeds.to(inputs_embeds.device)
+            special_audio_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, audio_features=audio_embeds
             )
+            inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_embeds.to(inputs_embeds.device))
 
         outputs: BaseModelOutputWithPast = self.language_model(
             attention_mask=attention_mask,
@@ -490,7 +509,6 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             labels=labels,
             use_cache=use_cache,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **kwargs,
         )

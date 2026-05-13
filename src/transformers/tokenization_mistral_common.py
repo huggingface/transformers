@@ -23,6 +23,7 @@ import numpy as np
 from huggingface_hub import create_repo
 
 from transformers.audio_utils import load_audio_as
+from transformers.image_utils import get_image_size
 from transformers.tokenization_utils_base import (
     VERY_LARGE_INTEGER,
     AddedToken,
@@ -38,7 +39,7 @@ from transformers.utils.import_utils import is_mistral_common_available, is_torc
 
 
 if is_mistral_common_available():
-    from mistral_common.protocol.instruct.request import ChatCompletionRequest
+    from mistral_common.protocol.instruct.request import ChatCompletionRequest, ReasoningEffort
     from mistral_common.protocol.instruct.validator import ValidationMode
     from mistral_common.tokens.tokenizers.base import SpecialTokenPolicy, SpecialTokens
     from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
@@ -455,23 +456,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
             else self.clean_up_tokenization_spaces
         )
         if clean_up_tokenization_spaces:
-            # Call custom cleanup method if it exists (e.g., for CLVP's [SPACE] token replacement)
-            if hasattr(self, "clean_up_tokenization") and callable(self.clean_up_tokenization):
-                text = self.clean_up_tokenization(text)
-            else:
-                # Otherwise apply standard cleanup
-                text = (
-                    text.replace(" .", ".")
-                    .replace(" ?", "?")
-                    .replace(" !", "!")
-                    .replace(" ,", ",")
-                    .replace(" ' ", "'")
-                    .replace(" n't", "n't")
-                    .replace(" 'm", "'m")
-                    .replace(" 's", "'s")
-                    .replace(" 've", "'ve")
-                    .replace(" 're", "'re")
-                )
+            text = self.clean_up_tokenization(text)
 
         return _maybe_remove_lang(text=text, skip_special_tokens=skip_special_tokens)
 
@@ -1050,6 +1035,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         max_length: int | None = None,
         return_tensors: str | TensorType | None = None,
         return_dict: bool = True,
+        reasoning_effort: ReasoningEffort | None = None,
         **kwargs,
     ) -> str | list[int] | list[str] | list[list[int]] | BatchEncoding:
         """
@@ -1096,18 +1082,19 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
             return_dict (`bool`, defaults to `False`):
                 Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
-                If at least one conversation contains an image, its pixel values will be returned in the `pixel_values` key.
+                If at least one conversation contains an image, its pixel values will be returned in the `pixel_values` key and image sizes in the `image_sizes` key.
+            reasoning_effort (`ReasoningEffort`, *optional*):
+                The reasoning effort to use for the chat completion for models that support it. Possible values are:
+                - `ReasoningEffort.none`: The model will not reason.
+                - `ReasoningEffort.high`: The model will use a reasoning approach.
+                If not specified, the default reasoning effort will be used.
+
             kwargs (additional keyword arguments, *optional*):
-                Not supported by `MistralCommonBackend.apply_chat_template`.
-                Will raise an error if used.
+                Additional arguments passed to the mistral-common `ChatCompletionRequest.from_openai` method.
 
         Returns:
             `Union[str, list[int], list[str], list[list[int]], BatchEncoding]`: The tokenized chat so far, including control tokens. This output is ready to pass to the model, either directly or via methods like `generate()`.
         """
-        if kwargs:
-            raise ValueError(
-                f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonBackend.apply_chat_template`."
-            )
         if not isinstance(truncation, bool):
             raise TypeError("`truncation` must be a boolean for `apply_chat_template` method.")
 
@@ -1192,6 +1179,8 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
                 messages=messages,
                 tools=tools,
                 continue_final_message=continue_final_message,
+                reasoning_effort=reasoning_effort,
+                **kwargs,
             )
 
             tokenized_request = self.tokenizer.encode_chat_completion(chat_request)
@@ -1231,6 +1220,8 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
                     else:
                         raise ValueError(f"Unsupported return_tensors type: {return_tensors}")
                     out.data["pixel_values"] = pixel_values
+                if images:
+                    out.data["image_sizes"] = self._get_image_sizes_for_tensor(images, return_tensors)
                 if audios:
                     if return_tensors is not None:
                         raise NotImplementedError(
@@ -1248,6 +1239,31 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
                 " Please consider using `tokenize=True` instead and don't encode the output manually."
             )
             return outputs
+
+    def _get_image_sizes_for_tensor(
+        self, images: list[np.ndarray], return_tensors: str | TensorType | None
+    ) -> "list[list[int]] | np.ndarray | torch.Tensor":
+        """
+        Convert image sizes to the appropriate format based on return_tensors.
+
+        Args:
+            images: List of image arrays
+            return_tensors: The tensor type to return
+
+        Returns:
+            Image sizes in the appropriate format
+        """
+        image_sizes = []
+        for image in images:
+            height, width = get_image_size(image)
+            image_sizes.append([height, width])
+
+        if return_tensors == "pt":
+            return torch.tensor(image_sizes, dtype=torch.long)
+        elif return_tensors == "np":
+            return np.array(image_sizes, dtype=np.int64)
+        else:
+            return image_sizes
 
     def build_inputs_with_special_tokens(self, token_ids_0: list[int], token_ids_1: None = None) -> list[int]:
         """
@@ -1574,9 +1590,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
     @staticmethod
     def _get_validation_mode(mode: str | ValidationMode) -> ValidationMode:
         """Get the validation mode from a string or a ValidationMode."""
-        _invalid_mode_msg = (
-            f"Invalid `mistral-common` tokenizer mode: {mode}. Possible values are 'finetuning' or 'test'."
-        )
+        _invalid_mode_msg = f"Invalid `mistral-common` tokenizer mode: {mode}. Possible values are {', '.join([vm.value for vm in list(ValidationMode)])}."
         if isinstance(mode, str):
             try:
                 mode = ValidationMode[mode]
@@ -1585,8 +1599,6 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         elif not isinstance(mode, (str, ValidationMode)):
             raise ValueError(_invalid_mode_msg)
 
-        if mode not in [ValidationMode.finetuning, ValidationMode.test]:
-            raise ValueError(_invalid_mode_msg)
         return mode
 
     def __repr__(self) -> str:
@@ -1595,7 +1607,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
             f"{self.__class__.__name__}(name_or_path='{self.name_or_path}',"
             f" vocab_size={self.vocab_size}, model_max_length={self.model_max_length},"
             f" padding_side='{self.padding_side}', truncation_side='{self.truncation_side}',"
-            f" special_tokens={self.special_tokens_map}"
+            f" special_tokens={self.special_tokens_map})"
         )
 
     def added_tokens_decoder(self):

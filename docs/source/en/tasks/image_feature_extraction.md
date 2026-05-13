@@ -46,7 +46,7 @@ from transformers import pipeline
 from accelerate import Accelerator
 # automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
 device = Accelerator().device
-pipe = pipeline(task="image-feature-extraction", model_name="google/vit-base-patch16-384", device=DEVICE, pool=True)
+pipe = pipeline(task="image-feature-extraction", model="google/vit-base-patch16-384", device=device, pool=True)
 ```
 
 To infer with `pipe` pass both images to it.
@@ -83,7 +83,7 @@ print(similarity_score)
 If you want to get the last hidden states before pooling, avoid passing any value for the `pool` parameter, as it is set to `False` by default. These hidden states are useful for training new classifiers or models based on the features from the model.
 
 ```python
-pipe = pipeline(task="image-feature-extraction", model_name="google/vit-base-patch16-224", device=DEVICE)
+pipe = pipeline(task="image-feature-extraction", model="google/vit-base-patch16-224", device=device)
 outputs = pipe(image_real)
 ```
 
@@ -103,14 +103,14 @@ We can also use `AutoModel` class of transformers to get the features. `AutoMod
 from transformers import AutoImageProcessor, AutoModel
 
 processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
-model = AutoModel.from_pretrained("google/vit-base-patch16-224").to(DEVICE)
+model = AutoModel.from_pretrained("google/vit-base-patch16-224").to(device)
 ```
 
 Let's write a simple function for inference. We will pass the inputs to the `processor` first and pass its outputs to the `model`.
 
 ```python
 def infer(image):
-  inputs = processor(image, return_tensors="pt").to(DEVICE)
+  inputs = processor(image, return_tensors="pt").to(device)
   outputs = model(**inputs)
   return outputs.pooler_output
 ```

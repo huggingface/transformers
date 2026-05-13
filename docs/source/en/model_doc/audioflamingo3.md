@@ -19,7 +19,6 @@ rendered properly in your Markdown viewer.
 # Audio Flamingo 3
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
@@ -56,6 +55,7 @@ The model supports audio-text instructions, including multi-turn interactions, a
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
 
+
 model_id = "nvidia/audio-flamingo-3-hf"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AudioFlamingo3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
@@ -75,11 +75,11 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     add_generation_prompt=True,
     return_dict=True,
-).to(model.device)
+).to(model.device, dtype=model.dtype)
 
 outputs = model.generate(**inputs, max_new_tokens=500)
 
-decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
+decoded_outputs = processor.decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
 print(decoded_outputs)
 ```
 
@@ -87,6 +87,7 @@ print(decoded_outputs)
 
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
+
 
 model_id = "nvidia/audio-flamingo-3-hf"
 processor = AutoProcessor.from_pretrained(model_id)
@@ -120,11 +121,11 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     add_generation_prompt=True,
     return_dict=True,
-).to(model.device)
+).to(model.device, dtype=model.dtype)
 
 outputs = model.generate(**inputs, max_new_tokens=500)
 
-decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
+decoded_outputs = processor.decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
 print(decoded_outputs)
 ```
 
@@ -132,6 +133,7 @@ print(decoded_outputs)
 
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
+
 
 model_id = "nvidia/audio-flamingo-3-hf"
 processor = AutoProcessor.from_pretrained(model_id)
@@ -151,11 +153,11 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     add_generation_prompt=True,
     return_dict=True,
-).to(model.device)
+).to(model.device, dtype=model.dtype)
 
 outputs = model.generate(**inputs, max_new_tokens=500)
 
-decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
+decoded_outputs = processor.decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
 print(decoded_outputs)
 ```
 
@@ -163,6 +165,7 @@ print(decoded_outputs)
 
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
+
 
 model_id = "nvidia/audio-flamingo-3-hf"
 processor = AutoProcessor.from_pretrained(model_id)
@@ -182,11 +185,11 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     add_generation_prompt=True,
     return_dict=True,
-).to(model.device)
+).to(model.device, dtype=model.dtype)
 
 outputs = model.generate(**inputs, max_new_tokens=500)
 
-decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
+decoded_outputs = processor.decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
 print(decoded_outputs)
 ```
 
@@ -194,6 +197,7 @@ print(decoded_outputs)
 
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
+
 
 model_id = "nvidia/audio-flamingo-3-hf"
 processor = AutoProcessor.from_pretrained(model_id)
@@ -231,11 +235,11 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     add_generation_prompt=True,
     return_dict=True,
-).to(model.device)
+).to(model.device, dtype=model.dtype)
 
 outputs = model.generate(**inputs, max_new_tokens=500)
 
-decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
+decoded_outputs = processor.decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
 print(decoded_outputs)
 ```
 
@@ -243,6 +247,7 @@ print(decoded_outputs)
 
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
+
 
 model_id = "nvidia/audio-flamingo-3-hf"
 processor = AutoProcessor.from_pretrained(model_id)
@@ -288,7 +293,7 @@ inputs = processor.apply_chat_template(
     add_generation_prompt=True,
     return_dict=True,
     output_labels=True,
-).to(model.device)
+).to(model.device, dtype=model.dtype)
 
 loss = model(**inputs).loss
 loss.backward()
@@ -299,14 +304,15 @@ loss.backward()
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
 
+
 model_id = "nvidia/audio-flamingo-3-hf"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AudioFlamingo3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
-inputs = processor.apply_transcription_request(audio="https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/t_837b89f2-26aa-4ee2-bdf6-f73f0dd59b26.wav").to(model.device)
+inputs = processor.apply_transcription_request(audio="https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/t_837b89f2-26aa-4ee2-bdf6-f73f0dd59b26.wav").to(model.device, dtype=model.dtype)
 
 outputs = model.generate(**inputs, max_new_tokens=500)
-decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True, strip_prefix=True)
+decoded_outputs = processor.decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True, strip_prefix=True)
 
 print(decoded_outputs)
 ```

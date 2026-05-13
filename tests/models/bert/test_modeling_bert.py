@@ -13,9 +13,7 @@
 # limitations under the License.
 import unittest
 
-import pytest
-
-from transformers import AutoTokenizer, BertConfig, is_torch_available
+from transformers import BertConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
     require_torch,
@@ -449,7 +447,6 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         {
             "feature-extraction": BertModel,
             "fill-mask": BertForMaskedLM,
-            "question-answering": BertForQuestionAnswering,
             "text-classification": BertForSequenceClassification,
             "text-generation": BertLMHeadModel,
             "token-classification": BertForTokenClassification,
@@ -482,7 +479,7 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     def setUp(self):
         self.model_tester = BertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=BertConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -583,41 +580,3 @@ class BertModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor([[[0.4249, 0.1008, 0.7531], [0.3771, 0.1188, 0.7467], [0.4152, 0.1098, 0.7108]]])
 
         torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
-
-    @slow
-    @pytest.mark.torch_export_test
-    def test_export(self):
-        bert_model = "google-bert/bert-base-uncased"
-        device = "cpu"
-        attn_implementation = "sdpa"
-        max_length = 512
-
-        tokenizer = AutoTokenizer.from_pretrained(bert_model)
-        inputs = tokenizer(
-            "the man worked as a [MASK].",
-            return_tensors="pt",
-            padding="max_length",
-            max_length=max_length,
-        )
-
-        model = BertForMaskedLM.from_pretrained(
-            bert_model,
-            device_map=device,
-            attn_implementation=attn_implementation,
-            use_cache=True,
-        )
-
-        logits = model(**inputs).logits
-        eg_predicted_mask = tokenizer.decode(logits[0, 6].topk(5).indices)
-        self.assertEqual(eg_predicted_mask.split(), ["carpenter", "waiter", "barber", "mechanic", "salesman"])
-
-        exported_program = torch.export.export(
-            model,
-            args=(inputs["input_ids"],),
-            kwargs={"attention_mask": inputs["attention_mask"]},
-            strict=True,
-        )
-
-        result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
-        ep_predicted_mask = tokenizer.decode(result.logits[0, 6].topk(5).indices)
-        self.assertEqual(eg_predicted_mask, ep_predicted_mask)

@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 import math
 import os
 import time
@@ -9,10 +10,8 @@ from collections import Counter
 
 import requests
 
-from transformers import logging
 
-
-logger = logging.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def get_jobs(workflow_run_id, token=None):

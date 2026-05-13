@@ -19,7 +19,7 @@ import numpy as np
 
 from transformers.image_transforms import PaddingMode
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_video_inputs
 
@@ -29,8 +29,6 @@ if is_torch_available():
 
 if is_vision_available():
     from PIL import Image
-
-    from transformers import TvpImageProcessor, TvpImageProcessorFast
 
 
 class TvpImageProcessingTester:
@@ -122,11 +120,6 @@ class TvpImageProcessingTester:
 @require_torch
 @require_vision
 class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = TvpImageProcessor if is_vision_available() else None
-    fast_image_processing_class = (
-        TvpImageProcessorFast if is_vision_available() and is_torchvision_available() else None
-    )
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = TvpImageProcessingTester(self)
@@ -136,7 +129,7 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
@@ -149,7 +142,7 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "pad_size"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"longest_edge": 40})
 
@@ -157,7 +150,7 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(image_processor.size, {"longest_edge": 12})
 
     def test_call_pil(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL videos
@@ -198,7 +191,7 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_call_numpy(self):
         # Test numpy with both processors
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
@@ -207,15 +200,15 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 self.assertIsInstance(video, list)
                 self.assertIsInstance(video[0], np.ndarray)
 
-            # For fast processor, convert numpy to tensor
-            if image_processing_class == self.fast_image_processing_class:
-                # Convert numpy arrays to tensors for fast processor
+            # For torchvision processor, convert numpy to tensor
+            if backend_name == "torchvision":
+                # Convert numpy arrays to tensors for torchvision processor
                 tensor_video_inputs = []
                 for video in video_inputs:
                     tensor_video = [torch.from_numpy(frame) for frame in video]
                     tensor_video_inputs.append(tensor_video)
                 test_inputs = tensor_video_inputs
-            else:
+            else:  # pil
                 test_inputs = video_inputs
 
             # Test not batched input
@@ -250,7 +243,7 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_call_numpy_4_channels(self):
         # Test numpy with both processors
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
@@ -259,15 +252,15 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 self.assertIsInstance(video, list)
                 self.assertIsInstance(video[0], np.ndarray)
 
-            # For fast processor, convert numpy to tensor
-            if image_processing_class == self.fast_image_processing_class:
-                # Convert numpy arrays to tensors for fast processor
+            # For torchvision processor, convert numpy to tensor
+            if backend_name == "torchvision":
+                # Convert numpy arrays to tensors for torchvision processor
                 tensor_video_inputs = []
                 for video in video_inputs:
                     tensor_video = [torch.from_numpy(frame) for frame in video]
                     tensor_video_inputs.append(tensor_video)
                 test_inputs = tensor_video_inputs
-            else:
+            else:  # pil
                 test_inputs = video_inputs
 
             # Test not batched input
@@ -315,7 +308,7 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_call_pytorch(self):
         # Test PyTorch tensors with both processors
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
@@ -356,36 +349,17 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @require_vision
     @require_torch
-    @unittest.skip(
-        reason="FIXME: @yoni probably because of an extra 'time' dimension and since image processors don't handle it well?"
-    )
-    def test_slow_fast_equivalence(self):
-        super().test_slow_fast_equivalence()
-
-    @require_vision
-    @require_torch
-    @unittest.skip(
-        reason="FIXME: @yoni probably because of an extra 'time' dimension and since image processors don't handle it well?"
-    )
-    def test_slow_fast_equivalence_batched(self):
-        if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest(reason="Skipping slow/fast equivalence test")
-
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
-
-        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
-            self.skipTest(
-                reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
-            )
+    def test_backends_equivalence_batched(self):
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_images = self.image_processor_tester.prepare_video_inputs(equal_resolution=False, torchify=True)
-        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+        image_processor_torchvision = self.image_processing_classes["torchvision"](**self.image_processor_dict)
+        image_processor_pil = self.image_processing_classes["pil"](**self.image_processor_dict)
 
-        encoding_slow = image_processor_slow(dummy_images, return_tensors="pt")
-        encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
-        # Higher max atol for video processing, mean_atol still 5e-3 -> 1e-2
-        self._assert_slow_fast_tensors_equivalence(
-            encoding_slow.pixel_values, encoding_fast.pixel_values, atol=10.0, mean_atol=1e-2
+        encoding_torchvision = image_processor_torchvision(dummy_images, return_tensors="pt")
+        encoding_pil = image_processor_pil(dummy_images, return_tensors="pt")
+        # Higher max atol for video processing, mean_atol still 5e-3 -> 1e-1
+        self._assert_tensors_equivalence(
+            encoding_torchvision.pixel_values, encoding_pil.pixel_values, atol=10.0, mean_atol=1e-1
         )

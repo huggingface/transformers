@@ -17,9 +17,6 @@ rendered properly in your Markdown viewer.
 
 # Pix2Struct
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -66,9 +63,9 @@ The original code can be found [here](https://github.com/google-research/pix2str
 [[autodoc]] Pix2StructImageProcessor
     - preprocess
 
-## Pix2StructImageProcessorFast
+## Pix2StructImageProcessorPil
 
-[[autodoc]] Pix2StructImageProcessorFast
+[[autodoc]] Pix2StructImageProcessorPil
     - preprocess
 
 ## Pix2StructTextModel
