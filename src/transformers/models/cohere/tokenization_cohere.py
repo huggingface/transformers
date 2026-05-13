@@ -16,7 +16,6 @@
 
 from typing import Literal
 
-from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
 
 from ...tokenization_utils_tokenizers import TokenizersBackend
@@ -112,76 +111,22 @@ class CohereTokenizer(TokenizersBackend):
     model = BPE
     # No `max_model_input_sizes`
 
-    def __init__(
-        self,
-        vocab: str | dict[str, int] | None = None,
-        merges: str | list[str] | None = None,
-        errors: str = "replace",
-        unk_token: str = "<UNK>",
-        bos_token: str = "<BOS_TOKEN>",
-        eos_token: str = "<|END_OF_TURN_TOKEN|>",
-        pad_token: str = "<PAD>",
-        cls_token: str = "<CLS>",
-        sep_token: str = "<SEP>",
-        mask_token: str = "<MASK_TOKEN>",
-        use_default_system_prompt: bool = False,
-        add_prefix_space: bool = False,
-        **kwargs,
-    ):
-        self.use_default_system_prompt = use_default_system_prompt
-        self.add_prefix_space = add_prefix_space
-        self.grounded_generation_template = kwargs.pop("grounded_generation_template", None)
-        self.tool_use_template = kwargs.pop("tool_use_template", None)
-
-        self._vocab = (
-            vocab
-            if vocab is not None
-            else {
-                str(pad_token): 0,
-                str(unk_token): 1,
-                str(cls_token): 2,
-                str(sep_token): 3,
-                str(mask_token): 4,
-                str(bos_token): 5,
-            }
+    @classmethod
+    def convert_to_native_format(cls, trust_remote_code=False, **kwargs):
+        # TODO: stop overriding the post_processor and honour
+        # `tokenizer.json`'s canonical `post_processor` instead.
+        #
+        # Right now we re-inject BOS/EOS kwargs so that
+        # `TokenizersBackend.__init__` overwrites the canonical
+        # post-processor with a `[BOS, A]` template. This exists solely
+        # to match `4.56.2.6` behaviour; without it, checkpoints whose
+        # canonical post-processor appends extra tokens (e.g.
+        # `<|END_OF_TURN_TOKEN|>` + `<EOS_TOKEN>`) would diverge.
+        kwargs.setdefault("add_bos_token", True)
+        kwargs.setdefault("add_eos_token", False)
+        return super().convert_to_native_format(
+            trust_remote_code=trust_remote_code, **kwargs
         )
-
-        self._merges = merges or []
-        self._tokenizer = Tokenizer(
-            BPE(
-                vocab=self._vocab,
-                merges=self._merges,
-                dropout=None,
-                continuing_subword_prefix="",
-                end_of_word_suffix="",
-                fuse_unk=False,
-            )
-        )
-
-        self._tokenizer.normalizer = normalizers.NFC()
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
-            [
-                pre_tokenizers.Digits(individual_digits=True),
-                pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space, trim_offsets=True),
-            ]
-        )
-        self._tokenizer.decoder = decoders.ByteLevel(add_prefix_space=add_prefix_space, trim_offsets=True)
-
-        super().__init__(
-            errors=errors,
-            unk_token=unk_token,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            pad_token=pad_token,
-            cls_token=cls_token,
-            sep_token=sep_token,
-            mask_token=mask_token,
-            use_default_system_prompt=use_default_system_prompt,
-            add_prefix_space=add_prefix_space,
-            **kwargs,
-        )
-
-        self._post_init()
 
     def apply_tool_use_template(
         self,

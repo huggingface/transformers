@@ -27,6 +27,7 @@ from transformers.testing_utils import (
     require_deterministic_for_xpu,
     require_torch,
     require_torch_accelerator,
+    require_torch_large_accelerator,
     slow,
     torch_device,
 )
@@ -446,3 +447,77 @@ class Cohere2IntegrationTest(unittest.TestCase):
             expected_output,
             f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
         )
+
+
+@slow
+@require_torch_large_accelerator
+class Cohere2MoeVisionIntegrationTest(unittest.TestCase):
+    """Integration tests for Cohere2VisionForConditionalGeneration with the Command A+ Model.
+    """
+
+    model_checkpoint = "/root/repos/moe/engines/command_a+_bf16"
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def get_model(self):
+        return Cohere2VisionForConditionalGeneration.from_pretrained(
+            self.model_checkpoint,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+        ).eval()
+
+    @slow
+    @require_torch_large_accelerator
+    def test_model_forward_vision(self):
+        """Forward pass with an image + text input; checks first token logit values."""
+        processor = AutoProcessor.from_pretrained(self.model_checkpoint)
+        model = self.get_model()
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+                    {"type": "text", "text": "Please describe the image explicitly."},
+                ],
+            }
+        ]
+        inputs = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+        ).to(model.device, dtype=torch.bfloat16)
+
+        with torch.inference_mode():
+            output = model(**inputs)
+
+        actual_logits = output.logits[0, -1, :5].cpu().to(torch.float32)
+        expected_logits = torch.tensor([0.7383, 0.6172, 2.125, -67.5, -4.7813])
+        self.assertTrue(
+            torch.allclose(actual_logits, expected_logits, atol=0.1),
+            f"Actual logits: {actual_logits}\nExpected logits: {expected_logits}",
+        )
+
+    @slow
+    @require_torch_large_accelerator
+    def test_model_generate_vision(self):
+        """Image + text generation with the cohere2moe backbone."""
+        processor = AutoProcessor.from_pretrained(self.model_checkpoint)
+        model = self.get_model()
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+                    {"type": "text", "text": "Please describe the image explicitly."},
+                ],
+            }
+        ]
+        inputs = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+        ).to(model.device, dtype=torch.bfloat16)
+
+        with torch.no_grad():
+            gen_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        decoded = processor.decode(gen_ids[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+
+        expected = "<|START_THINKING|><|END_THINKING|><|START_TEXT|>The image shows two tabby cats sleeping on a bright pink blanket or couch. Both"
+        self.assertEqual(decoded, expected, f"Decoded: {decoded!r}")

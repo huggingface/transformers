@@ -29,6 +29,14 @@ class CohereTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = CohereTokenizer
     from_pretrained_vocab_key = "tokenizer_file"
     from_pretrained_id = "hf-internal-testing/tiny-random-CohereForCausalLM"
+    # CohereTokenizer has no `__init__` (the v5 backend's full-`tokenizer.json`
+    # load path requires that — see `test_subclass_has_no_init`). The mixin's
+    # `get_extracted_tokenizer` builds via direct `CohereTokenizer(vocab=...,
+    # merges=...)`, which without our `__init__` falls through to
+    # `TokenizersBackend.__init__` and yields a backend with no
+    # pre_tokenizer / normalizer / decoder. Disable the from-extractor
+    # integration test the same way plbart and reformer do.
+    test_tokenizer_from_extractor = False
     special_tokens_map = {
         "bos_token": "<BOS_TOKEN>",
         "eos_token": "<|END_OF_TURN_TOKEN|>",
@@ -190,9 +198,142 @@ Finally, Write 'Grounded answer:' followed by a response to the user's last inpu
 
         self.assertEqual(grounded_generation_prompt, expected_prompt)
 
-    def test_add_prefix_space_fast(self):
-        tokenizer_w_prefix = self.get_tokenizer(add_prefix_space=True)
-        tokenizer_wo_prefix = self.get_tokenizer(add_prefix_space=False)
-        tokens_w_prefix = tokenizer_w_prefix.tokenize("Hey")
-        tokens_wo_prefix = tokenizer_wo_prefix.tokenize("Hey")
-        self.assertNotEqual(tokens_w_prefix, tokens_wo_prefix)
+    @staticmethod
+    def _write_test_tokenizer(td, tokenizer):
+        """Save *tokenizer* and a standard CohereTokenizer config into *td*."""
+        import json
+
+        tokenizer.save(str(td / "tokenizer.json"))
+        (td / "tokenizer_config.json").write_text(
+            json.dumps(
+                {
+                    "tokenizer_class": "CohereTokenizer",
+                    "bos_token": "<BOS_TOKEN>",
+                    "eos_token": "<|END_OF_TURN_TOKEN|>",
+                    "pad_token": "<PAD>",
+                    "unk_token": "<UNK>",
+                    "model_max_length": 1024,
+                }
+            )
+        )
+
+    def test_add_prefix_space_from_tokenizer_json(self):
+        # `add_prefix_space` lives in `tokenizer.json`'s
+        # `pre_tokenizer.ByteLevel` (and `decoder.ByteLevel`), not as a
+        # runtime constructor kwarg in this v5-style subclass — see
+        # `test_subclass_has_no_init` below for why. Verify that two
+        # `tokenizer.json` files differing only in that flag produce
+        # different tokenization when loaded via
+        # `CohereTokenizer.from_pretrained`, which is the way C5
+        # checkpoints actually express the setting.
+        import tempfile
+        from pathlib import Path
+
+        from tokenizers import Tokenizer, decoders, pre_tokenizers
+        from tokenizers.models import BPE
+
+        def _make_tokenizer(add_prefix_space: bool) -> Tokenizer:
+            # Include the full byte-level alphabet so any ASCII input
+            # tokenizes without `<UNK>`; only the `Ġ` (encoded space)
+            # prefix being added or not is what we want to observe.
+            alphabet = pre_tokenizers.ByteLevel.alphabet()
+            vocab = {tok: i for i, tok in enumerate(sorted(alphabet))}
+            base = len(vocab)
+            for i, special in enumerate(
+                ["<PAD>", "<UNK>", "<BOS_TOKEN>", "<|END_OF_TURN_TOKEN|>"]
+            ):
+                vocab[special] = base + i
+            tok = Tokenizer(
+                BPE(vocab=vocab, merges=[], unk_token="<UNK>")
+            )
+            tok.pre_tokenizer = pre_tokenizers.ByteLevel(
+                add_prefix_space=add_prefix_space, trim_offsets=True
+            )
+            tok.decoder = decoders.ByteLevel()
+            return tok
+
+        with (
+            tempfile.TemporaryDirectory() as raw_no,
+            tempfile.TemporaryDirectory() as raw_yes,
+        ):
+            td_no, td_yes = Path(raw_no), Path(raw_yes)
+            self._write_test_tokenizer(td_no, _make_tokenizer(add_prefix_space=False))
+            self._write_test_tokenizer(td_yes, _make_tokenizer(add_prefix_space=True))
+
+            tokens_wo_prefix = CohereTokenizer.from_pretrained(
+                str(td_no)
+            ).tokenize("Hey")
+            tokens_w_prefix = CohereTokenizer.from_pretrained(
+                str(td_yes)
+            ).tokenize("Hey")
+
+        self.assertNotEqual(
+            tokens_wo_prefix,
+            tokens_w_prefix,
+            "Loading tokenizer.json with ByteLevel(add_prefix_space=True) "
+            "vs ByteLevel(add_prefix_space=False) must yield distinct "
+            "tokenization; got identical output, which means the loaded "
+            "backend ignored the file-level setting.",
+        )
+
+    def test_loads_pre_tokenizer_normalizer_decoder_from_tokenizer_json(self):
+        # End-to-end check that a `tokenizer.json` with distinctive
+        # non-default pre_tokenizer / normalizer / decoder components
+        # round-trips through `CohereTokenizer.from_pretrained` unchanged.
+        # The settings below are intentionally not what any plausible
+        # hardcoded `__init__` would pick (NFKC instead of NFC/None;
+        # `Digits(individual_digits=False)` instead of `True`;
+        # `ByteLevel(add_prefix_space=True)` instead of `False`), so if
+        # anyone reintroduces hardcoded component assignment in the
+        # subclass this test will catch it.
+        import json
+        import tempfile
+        from pathlib import Path
+
+        from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
+        from tokenizers.models import BPE
+
+        vocab = {
+            "<PAD>": 0,
+            "<UNK>": 1,
+            "<CLS>": 2,
+            "<SEP>": 3,
+            "<MASK_TOKEN>": 4,
+            "<BOS_TOKEN>": 5,
+            "<|END_OF_TURN_TOKEN|>": 6,
+            "h": 7,
+            "i": 8,
+            "hi": 9,
+        }
+        source = Tokenizer(
+            BPE(vocab=vocab, merges=[("h", "i")], unk_token="<UNK>")
+        )
+        source.pre_tokenizer = pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.Digits(individual_digits=False),
+                pre_tokenizers.ByteLevel(
+                    add_prefix_space=True, trim_offsets=False
+                ),
+            ]
+        )
+        source.normalizer = normalizers.NFKC()
+        source.decoder = decoders.ByteLevel(
+            add_prefix_space=True, trim_offsets=False
+        )
+        source_json = json.loads(source.to_str())
+
+        with tempfile.TemporaryDirectory() as raw_td:
+            td = Path(raw_td)
+            self._write_test_tokenizer(td, source)
+
+            loaded = CohereTokenizer.from_pretrained(str(td))
+
+        loaded_json = json.loads(loaded.backend_tokenizer.to_str())
+        for component in ("pre_tokenizer", "normalizer", "decoder"):
+            self.assertEqual(
+                loaded_json[component],
+                source_json[component],
+                f"{component} from tokenizer.json was not preserved; "
+                f"expected {source_json[component]!r}, "
+                f"got {loaded_json[component]!r}",
+            )
