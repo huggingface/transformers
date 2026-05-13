@@ -260,7 +260,7 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
         Number of codebook groups used in the predicted acoustic token sequence, corresponding to multi-codebook VQ representation.
     """
 
-    model_type = "qwen3_omni_moe_talker_code_predictor"
+    model_type = "qwen42"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     # Default tensor parallel plan for base model `Qwen3OmniMoeTalkerCodePredictor`
