@@ -59,6 +59,7 @@ from .distributed.tensor_parallel import (
     verify_tp_plan,
 )
 from .distributed.utils import (
+    _distributed_barrier,
     distribute_model,
     gather_full_state_dict,
     init_device_mesh,
@@ -3491,8 +3492,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # other ranks then loop over an empty shard list and would race ahead
         # of rank 0's safetensors writes. Barrier so any subsequent
         # `from_pretrained` on this path sees the consolidated files.
-        if used_distributed_gather and torch.distributed.is_initialized():
-            torch.distributed.barrier()
+        if used_distributed_gather:
+            _distributed_barrier()
 
     @wraps(PushToHubMixin.push_to_hub)
     def push_to_hub(self, *args, **kwargs):

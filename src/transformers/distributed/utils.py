@@ -56,15 +56,37 @@ def _ensure_torch_distributed(device_type: str):
             backend_map = {"cuda": "nccl", "cpu": "gloo", "xpu": "xccl", "hpu": "hccl"}
             backend = backend_map.get(device_type)
 
-            torch.distributed.init_process_group(backend=backend, rank=rank, world_size=world_size)
-            current_device = getattr(torch, device_type)
+            # Bind the accelerator before init so the process group is created with a
+            # device_id, otherwise collectives like barrier() warn (and may spin up an
+            # extra NCCL comm) about the missing device binding.
+            device_id = None
             if device_type != "cpu":
-                current_device.set_device(local_rank)
+                getattr(torch, device_type).set_device(local_rank)
+                device_id = torch.device(device_type, local_rank)
+            torch.distributed.init_process_group(
+                backend=backend, rank=rank, world_size=world_size, device_id=device_id
+            )
         except Exception as e:
             raise OSError(
                 "We tried to initialize torch.distributed for you, but it failed. Make "
                 "sure you init torch distributed in your script to use distributed training."
             ) from e
+
+
+def _distributed_barrier():
+    """Barrier bound to the current accelerator device.
+
+    Passing `device_ids` is required when the process group was initialized without a
+    `device_id`; with it, the call is a no-op compared to plain `barrier()`. Safe to call
+    when torch.distributed has not been initialized — returns immediately.
+    """
+    if not torch.distributed.is_initialized():
+        return
+    device_type = torch._C._get_accelerator().type
+    if device_type != "cpu":
+        torch.distributed.barrier(device_ids=[getattr(torch, device_type).current_device()])
+    else:
+        torch.distributed.barrier()
 
 
 def init_device_mesh(distributed_config: DistributedConfig) -> torch.distributed.device_mesh.DeviceMesh:
@@ -119,6 +141,24 @@ def distribute_model(model, distributed_config: DistributedConfig, device_mesh) 
         fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
         model = apply_fully_shard_data_parallel(model, fsdp_mesh, distributed_config.fsdp_plan)
     return model
+
+
+@torch.no_grad()
+def clip_grad_norm(parameters, max_norm: float, norm_type: float = 2.0):
+    """Grad-norm clip that works when params live on different DTensor meshes.
+
+    ``torch.nn.utils.get_total_norm`` stacks per-grad norms; that fails when grads
+    live on different meshes (e.g. TP-wrapped params on the (fsdp, tp) mesh and
+    FSDP-only params on the (fsdp,) sub-mesh). We sidestep it by replicating each
+    DTensor grad to a plain local tensor, computing the norm over those, and
+    scaling the original DTensor grads in place — the placement of the original
+    grads doesn't matter for the per-element clip.
+    """
+    grads = [p.grad for p in parameters if p.grad is not None]
+    local_grads = [_replicate_dtensor(g).to_local() if isinstance(g, DTensor) else g for g in grads]
+    total_norm = torch.nn.utils.get_total_norm(local_grads, norm_type=norm_type)
+    torch.nn.utils.clip_grads_with_norm_(grads, max_norm=max_norm, total_norm=total_norm)
+    return total_norm
 
 
 def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
@@ -178,8 +218,7 @@ def save_model_checkpoint(model, checkpoint_dir: str) -> None:
     )
     # Wait for rank 0 to finish writing the HF safetensors so other
     # ranks don't return (and hit `from_pretrained`) before the files exist.
-    if torch.distributed.is_initialized():
-        torch.distributed.barrier()
+    _distributed_barrier()
 
 
 def save_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
