@@ -34,6 +34,7 @@ if is_torch_available():
 
     from transformers import (
         DynamicCache,
+        Qwen3NextForCausalLM,
         Qwen3NextModel,
     )
 
@@ -182,7 +183,7 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_padding_free_matches_padded_fast_path_regression(self):
         torch.manual_seed(0)
         config = self.model_tester.get_config()
-        model = model_class = self.all_generative_model_classes[0](config).to(torch_device).eval()
+        model = Qwen3NextForCausalLM(config).to(torch_device).eval()
 
         data_collator = DataCollatorWithFlattening(
             return_tensors="pt", return_seq_idx=True, return_flash_attn_kwargs=True
