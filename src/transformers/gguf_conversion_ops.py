@@ -11,16 +11,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""GGUF-specific ConversionOps for use with WeightConverter.
+"""GGUF-specific :class:`ConversionOps` for use with :class:`WeightConverter`.
 
-All ops in this file operate on already-dequantized ``torch.Tensor`` objects.
-The actual dequantization from raw GGUF bytes is handled by
-``GGUFQuantizer.spawn_materialize`` before any op chain runs.
+The ``GGUFDequantize`` op runs first in every GGUF ``WeightConverter`` chain
+and turns each :class:`GGUFQuantizedTensor` input (raw uint8 bytes carrying
+``quant_type`` metadata) into a regular ``torch.Tensor`` — same role as
+``Fp8Dequantize`` in the FP8 quantizer's chain.
+
+The remaining ops here (``Unsqueeze``/``SubtractOne``/``LogNegate``/permute/
+reshape) operate on already-dequantized ``torch.Tensor`` objects.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from .core_model_loading import ConversionOps
 
@@ -38,51 +42,43 @@ def _single_input_target(input_dict, source_patterns, target_patterns):
             return source_patterns[0]
         raise ValueError("Undefined Operation encountered!")
     target = target_patterns[0]
-    # If target still has a \1 backreference, the key was already resolved by a
-    # preceding GGUFDequantize op — reuse the input key rather than emitting a
-    # literal '\1' that WeightConverter's prefix/suffix step cannot resolve.
     if r"\1" in target:
         return next(iter(input_dict))
     return target
 
 
 class GGUFDequantize(ConversionOps):
-    """
-    First op in every GGUF WeightConverter chain.
+    """First op in every GGUF ``WeightConverter`` chain.
 
-    Since dequantization already happened inside ``GGUFQuantizer.spawn_materialize``,
-    this op is a pure key-renaming pass-through:
-
-    - **1:1 case** (``len(input_dict)==1`` and ``len(target_patterns)==1``):
-      renames the key to ``target_patterns[0]`` so that the WeightConverter
-      prefix/suffix step can find it in the HF name.
-    - **many:1 case** (e.g. Qwen2MoE gate+up): keeps source keys intact so a
-      subsequent ``Concatenate`` op can iterate over them by name.
-
-    No ``device``/``dtype`` kwargs – those are handled at spawn time.
+    Reads ``quant_type`` from each input :class:`GGUFQuantizedTensor` and
+    dequantizes the raw uint8 bytes to a floating-point ``torch.Tensor`` using
+    the pure-torch kernels in ``integrations/gguf_dequant.py`` (city96-style,
+    same kernels diffusers uses). The dequant runs on whatever device the
+    input tensor is already on, so the loader's ``.to(device)`` upstream means
+    MPS / CUDA dequant happens on-device.
     """
 
     def convert(
         self,
-        input_dict: dict[str, Any],
-        source_patterns: list[str],
-        target_patterns: list[str],
+        input_dict,
+        source_patterns,
+        target_patterns,
         **kwargs,
-    ) -> dict[str, Any]:
-        rename_to_target = len(input_dict) == 1 and len(target_patterns) == 1
-        result = {}
+    ):
+        from .integrations.gguf_dequant import GGUFQuantizedTensor, dequantize_gguf_tensor
+
+        out = {}
         for key, tensors in input_dict.items():
-            if rename_to_target:
-                # Use full_layer_name (already resolved, e.g. "model.layers.7.self_attn.q_proj.weight")
-                # instead of target_patterns[0] which may contain unresolved \1 backreferences.
-                output_key = kwargs.get("full_layer_name", target_patterns[0])
-            else:
-                output_key = key
-            result[output_key] = tensors
-        return result
+            tensors_list = tensors if isinstance(tensors, list) else [tensors]
+            dequantized = [
+                dequantize_gguf_tensor(t, t.quant_type, device=t.device) if isinstance(t, GGUFQuantizedTensor) else t
+                for t in tensors_list
+            ]
+            out[key] = dequantized if isinstance(tensors, list) else dequantized[0]
+        return out
 
     @property
-    def reverse_op(self) -> ConversionOps:
+    def reverse_op(self):
         raise NotImplementedError("GGUFDequantize is one-way")
 
 

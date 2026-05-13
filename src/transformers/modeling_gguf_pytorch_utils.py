@@ -15,7 +15,6 @@
 
 from .core_model_loading import (
     Concatenate,
-    GGUFQuantizedTensor,
     Transpose,
     WeightConverter,
     WeightRenaming,
@@ -35,6 +34,7 @@ from .integrations import (
     GGUF_TOKENIZER_MAPPING,
     _gguf_parse_value,
 )
+from .integrations.gguf_dequant import GGUFQuantizedTensor
 from .utils import is_torch_available
 from .utils.import_utils import is_gguf_available
 from .utils.logging import get_logger
@@ -64,14 +64,15 @@ GGUF_SUPPORTED_ARCHITECTURES = list(GGUF_TO_TRANSFORMERS_MAPPING["config"].keys(
 # Static per-architecture GGUF→HF rename tables
 # ---------------------------------------------------------------------------
 # Each entry is a list of `WeightRenaming` / `WeightConverter` rules — same
-# conventions as ``convert_mistral4_weight_to_hf.py`` and ``Fp8Quantizer``:
+# convention as ``convert_mistral4_weight_to_hf.py``:
 #
 #   * `WeightRenaming(source_regex, target)` — pure key renaming, no op chain.
 #   * `WeightConverter(source_patterns=..., target_patterns=..., operations=[...])`
 #     — when a tensor needs an actual transform (transpose, permute, concat).
-#     `GGUFDequantize` is automatically prepended to every `WeightConverter`
-#     by `GGUFQuantizer.update_weight_conversions`, mirroring how
-#     `Fp8Dequantize` is injected by `Fp8Quantizer`.
+#
+# Tensors are dequantized at read time inside ``load_gguf_checkpoint`` (see
+# ``integrations/gguf_dequant.py``), so the ``WeightConverter`` ops here
+# operate on plain ``torch.Tensor`` objects.
 #
 # Renaming rules apply sequentially (each one operating on the previous
 # rule's output), so we rename the structural prefix `blk.N.` →
@@ -86,9 +87,7 @@ _LLAMA_SHARED_RENAMES = [
     WeightRenaming(r"^output\.weight", "lm_head.weight"),
     WeightRenaming(r"\.attn_v\.weight", ".self_attn.v_proj.weight"),
     WeightRenaming(r"\.attn_output\.weight", ".self_attn.o_proj.weight"),
-    WeightRenaming(r"\.ffn_gate\.weight", ".mlp.gate_proj.weight"),
-    WeightRenaming(r"\.ffn_up\.weight", ".mlp.up_proj.weight"),
-    WeightRenaming(r"\.ffn_down\.weight", ".mlp.down_proj.weight"),
+    WeightRenaming(r"\.ffn_(gate|up|down)\.weight", r".mlp.\1_proj.weight"),
 ]
 _ROPE_ATTN_CONVERTERS = [
     WeightConverter(
@@ -124,53 +123,33 @@ _NEMOTRON_CONVERTERS = _LLAMA_SHARED_RENAMES + _NORM_SUBTRACT_ONE_CONVERTERS + _
 _GEMMA_CONVERTERS = _NEMOTRON_CONVERTERS  # same structure as Nemotron
 
 # --- T5 / UMT5 (encoder–decoder, no transforms — pure renames) -------------
+# After the structural prefix rename ``enc.blk.`` → ``encoder.block.`` (and
+# the analogous decoder rename), encoder and decoder share the same
+# self-attention layout (layer.0), so a single rule handles both. The FFN
+# rules differ — encoder FFN is layer.1, decoder FFN is layer.2 — so those
+# stay split. Within each FFN group we still use one rule per ``gate/up/down``
+# because the gguf → HF names are non-uniform (gate→wi_0, up→wi_1, down→wo).
 _T5_CONVERTERS = [
-    # Structural prefix renames (apply first so per-tensor renames see HF-shaped keys).
     WeightRenaming(r"^enc\.blk\.", "encoder.block."),
     WeightRenaming(r"^dec\.blk\.", "decoder.block."),
     WeightRenaming(r"^enc\.output_norm\.weight", "encoder.final_layer_norm.weight"),
     WeightRenaming(r"^dec\.output_norm\.weight", "decoder.final_layer_norm.weight"),
     WeightRenaming(r"^token_embd\.weight", "shared.weight"),
     WeightRenaming(r"^output\.weight", "lm_head.weight"),
-    # Encoder per-tensor (layer.0 = self-attn, layer.1 = ffn)
-    WeightRenaming(r"^encoder\.block\.(\d+)\.attn_norm\.weight", r"encoder.block.\1.layer.0.layer_norm.weight"),
-    WeightRenaming(r"^encoder\.block\.(\d+)\.attn_q\.weight", r"encoder.block.\1.layer.0.SelfAttention.q.weight"),
-    WeightRenaming(r"^encoder\.block\.(\d+)\.attn_k\.weight", r"encoder.block.\1.layer.0.SelfAttention.k.weight"),
-    WeightRenaming(r"^encoder\.block\.(\d+)\.attn_v\.weight", r"encoder.block.\1.layer.0.SelfAttention.v.weight"),
-    WeightRenaming(r"^encoder\.block\.(\d+)\.attn_o\.weight", r"encoder.block.\1.layer.0.SelfAttention.o.weight"),
-    WeightRenaming(
-        r"^encoder\.block\.(\d+)\.attn_rel_b\.weight",
-        r"encoder.block.\1.layer.0.SelfAttention.relative_attention_bias.weight",
-    ),
+    # Self-attention (layer.0) — shared by encoder + decoder
+    WeightRenaming(r"\.attn_(q|k|v|o)\.weight", r".layer.0.SelfAttention.\1.weight"),
+    WeightRenaming(r"\.attn_rel_b\.weight", ".layer.0.SelfAttention.relative_attention_bias.weight"),
+    WeightRenaming(r"\.attn_norm\.weight", ".layer.0.layer_norm.weight"),
+    # Cross-attention (layer.1) — decoder only
+    WeightRenaming(r"\.cross_attn_(q|k|v|o)\.weight", r".layer.1.EncDecAttention.\1.weight"),
+    WeightRenaming(r"\.cross_attn_norm\.weight", ".layer.1.layer_norm.weight"),
+    # FFN — encoder layer.1, decoder layer.2 (non-uniform gate→wi_0, up→wi_1, down→wo)
     WeightRenaming(r"^encoder\.block\.(\d+)\.ffn_norm\.weight", r"encoder.block.\1.layer.1.layer_norm.weight"),
     WeightRenaming(
         r"^encoder\.block\.(\d+)\.ffn_gate\.weight", r"encoder.block.\1.layer.1.DenseReluDense.wi_0.weight"
     ),
     WeightRenaming(r"^encoder\.block\.(\d+)\.ffn_up\.weight", r"encoder.block.\1.layer.1.DenseReluDense.wi_1.weight"),
     WeightRenaming(r"^encoder\.block\.(\d+)\.ffn_down\.weight", r"encoder.block.\1.layer.1.DenseReluDense.wo.weight"),
-    # Decoder per-tensor (layer.0 = self-attn, layer.1 = cross-attn, layer.2 = ffn)
-    WeightRenaming(r"^decoder\.block\.(\d+)\.attn_norm\.weight", r"decoder.block.\1.layer.0.layer_norm.weight"),
-    WeightRenaming(r"^decoder\.block\.(\d+)\.attn_q\.weight", r"decoder.block.\1.layer.0.SelfAttention.q.weight"),
-    WeightRenaming(r"^decoder\.block\.(\d+)\.attn_k\.weight", r"decoder.block.\1.layer.0.SelfAttention.k.weight"),
-    WeightRenaming(r"^decoder\.block\.(\d+)\.attn_v\.weight", r"decoder.block.\1.layer.0.SelfAttention.v.weight"),
-    WeightRenaming(r"^decoder\.block\.(\d+)\.attn_o\.weight", r"decoder.block.\1.layer.0.SelfAttention.o.weight"),
-    WeightRenaming(
-        r"^decoder\.block\.(\d+)\.attn_rel_b\.weight",
-        r"decoder.block.\1.layer.0.SelfAttention.relative_attention_bias.weight",
-    ),
-    WeightRenaming(r"^decoder\.block\.(\d+)\.cross_attn_norm\.weight", r"decoder.block.\1.layer.1.layer_norm.weight"),
-    WeightRenaming(
-        r"^decoder\.block\.(\d+)\.cross_attn_q\.weight", r"decoder.block.\1.layer.1.EncDecAttention.q.weight"
-    ),
-    WeightRenaming(
-        r"^decoder\.block\.(\d+)\.cross_attn_k\.weight", r"decoder.block.\1.layer.1.EncDecAttention.k.weight"
-    ),
-    WeightRenaming(
-        r"^decoder\.block\.(\d+)\.cross_attn_v\.weight", r"decoder.block.\1.layer.1.EncDecAttention.v.weight"
-    ),
-    WeightRenaming(
-        r"^decoder\.block\.(\d+)\.cross_attn_o\.weight", r"decoder.block.\1.layer.1.EncDecAttention.o.weight"
-    ),
     WeightRenaming(r"^decoder\.block\.(\d+)\.ffn_norm\.weight", r"decoder.block.\1.layer.2.layer_norm.weight"),
     WeightRenaming(
         r"^decoder\.block\.(\d+)\.ffn_gate\.weight", r"decoder.block.\1.layer.2.DenseReluDense.wi_0.weight"
@@ -181,34 +160,23 @@ _T5_CONVERTERS = [
 
 # --- StableLM (Llama-like + optional q_norm/k_norm and attn biases) --------
 _STABLELM_CONVERTERS = _LLAMA_CONVERTERS + [
-    WeightRenaming(r"\.attn_q_norm\.weight", ".self_attn.q_layernorm.weight"),
-    WeightRenaming(r"\.attn_k_norm\.weight", ".self_attn.k_layernorm.weight"),
-    WeightRenaming(r"\.attn_q\.bias", ".self_attn.q_proj.bias"),
-    WeightRenaming(r"\.attn_k\.bias", ".self_attn.k_proj.bias"),
-    WeightRenaming(r"\.attn_v\.bias", ".self_attn.v_proj.bias"),
+    WeightRenaming(r"\.attn_(q|k)_norm\.weight", r".self_attn.\1_layernorm.weight"),
+    WeightRenaming(r"\.attn_(q|k|v)\.bias", r".self_attn.\1_proj.bias"),
 ]
 
 # --- Starcoder2 (Llama-style attn + single-layer c_fc/c_proj MLP, biases) --
 _STARCODER2_CONVERTERS = [
     _BLK_PREFIX,
     WeightRenaming(r"^token_embd\.weight", "model.embed_tokens.weight"),
-    WeightRenaming(r"^output_norm\.weight", "model.norm.weight"),
-    WeightRenaming(r"^output_norm\.bias", "model.norm.bias"),
+    WeightRenaming(r"^output_norm\.(weight|bias)", r"model.norm.\1"),
     WeightRenaming(r"^output\.weight", "lm_head.weight"),
-    WeightRenaming(r"\.attn_v\.weight", ".self_attn.v_proj.weight"),
-    WeightRenaming(r"\.attn_output\.weight", ".self_attn.o_proj.weight"),
-    WeightRenaming(r"\.attn_q\.bias", ".self_attn.q_proj.bias"),
-    WeightRenaming(r"\.attn_k\.bias", ".self_attn.k_proj.bias"),
-    WeightRenaming(r"\.attn_v\.bias", ".self_attn.v_proj.bias"),
-    WeightRenaming(r"\.attn_output\.bias", ".self_attn.o_proj.bias"),
-    WeightRenaming(r"\.ffn_up\.weight", ".mlp.c_fc.weight"),
-    WeightRenaming(r"\.ffn_up\.bias", ".mlp.c_fc.bias"),
-    WeightRenaming(r"\.ffn_down\.weight", ".mlp.c_proj.weight"),
-    WeightRenaming(r"\.ffn_down\.bias", ".mlp.c_proj.bias"),
-    WeightRenaming(r"\.attn_norm\.weight", ".input_layernorm.weight"),
-    WeightRenaming(r"\.attn_norm\.bias", ".input_layernorm.bias"),
-    WeightRenaming(r"\.ffn_norm\.weight", ".post_attention_layernorm.weight"),
-    WeightRenaming(r"\.ffn_norm\.bias", ".post_attention_layernorm.bias"),
+    WeightRenaming(r"\.attn_v\.(weight|bias)", r".self_attn.v_proj.\1"),
+    WeightRenaming(r"\.attn_output\.(weight|bias)", r".self_attn.o_proj.\1"),
+    WeightRenaming(r"\.attn_(q|k)\.bias", r".self_attn.\1_proj.bias"),
+    WeightRenaming(r"\.ffn_up\.(weight|bias)", r".mlp.c_fc.\1"),
+    WeightRenaming(r"\.ffn_down\.(weight|bias)", r".mlp.c_proj.\1"),
+    WeightRenaming(r"\.attn_norm\.(weight|bias)", r".input_layernorm.\1"),
+    WeightRenaming(r"\.ffn_norm\.(weight|bias)", r".post_attention_layernorm.\1"),
     *_ROPE_ATTN_CONVERTERS,
 ]
 
@@ -216,19 +184,16 @@ _STARCODER2_CONVERTERS = [
 _FALCON_CONVERTERS = [
     WeightRenaming(r"^blk\.", "transformer.h."),
     WeightRenaming(r"^token_embd\.weight", "transformer.word_embeddings.weight"),
-    WeightRenaming(r"^output_norm\.weight", "transformer.ln_f.weight"),
-    WeightRenaming(r"^output_norm\.bias", "transformer.ln_f.bias"),
+    WeightRenaming(r"^output_norm\.(weight|bias)", r"transformer.ln_f.\1"),
     WeightRenaming(r"^output\.weight", "lm_head.weight"),
     WeightRenaming(r"\.attn_qkv\.weight", ".self_attention.query_key_value.weight"),
     WeightRenaming(r"\.attn_output\.weight", ".self_attention.dense.weight"),
     WeightRenaming(r"\.ffn_up\.weight", ".mlp.dense_h_to_4h.weight"),
     WeightRenaming(r"\.ffn_down\.weight", ".mlp.dense_4h_to_h.weight"),
     # 7B style: parallel attn+mlp shares one input_layernorm
-    WeightRenaming(r"\.attn_norm\.weight", ".input_layernorm.weight"),
-    WeightRenaming(r"\.attn_norm\.bias", ".input_layernorm.bias"),
+    WeightRenaming(r"\.attn_norm\.(weight|bias)", r".input_layernorm.\1"),
     # 40B style: separate ln_attn / ln_mlp
-    WeightRenaming(r"\.attn_norm_2\.weight", ".ln_mlp.weight"),
-    WeightRenaming(r"\.attn_norm_2\.bias", ".ln_mlp.bias"),
+    WeightRenaming(r"\.attn_norm_2\.(weight|bias)", r".ln_mlp.\1"),
 ]
 
 # --- GPT-OSS (MoE: router + post_attention_norm + merged gate_up_proj) -----
@@ -260,8 +225,7 @@ _MINIMAX_M2_CONVERTERS = [
     WeightRenaming(r"^output\.weight", "lm_head.weight"),
     WeightRenaming(r"\.attn_v\.weight", ".self_attn.v_proj.weight"),
     WeightRenaming(r"\.attn_output\.weight", ".self_attn.o_proj.weight"),
-    WeightRenaming(r"\.attn_q_norm\.weight", ".self_attn.q_norm.weight"),
-    WeightRenaming(r"\.attn_k_norm\.weight", ".self_attn.k_norm.weight"),
+    WeightRenaming(r"\.attn_(q|k)_norm\.weight", r".self_attn.\1_norm.weight"),
     WeightRenaming(r"\.attn_norm\.weight", ".input_layernorm.weight"),
     WeightRenaming(r"\.ffn_norm\.weight", ".post_attention_layernorm.weight"),
     WeightRenaming(r"\.ffn_gate_inp\.weight", ".mlp.gate.weight"),
@@ -283,14 +247,10 @@ _QWEN2_MOE_CONVERTERS = [
     WeightRenaming(r"^output\.weight", "lm_head.weight"),
     WeightRenaming(r"\.attn_v\.weight", ".self_attn.v_proj.weight"),
     WeightRenaming(r"\.attn_output\.weight", ".self_attn.o_proj.weight"),
-    WeightRenaming(r"\.attn_q\.bias", ".self_attn.q_proj.bias"),
-    WeightRenaming(r"\.attn_k\.bias", ".self_attn.k_proj.bias"),
-    WeightRenaming(r"\.attn_v\.bias", ".self_attn.v_proj.bias"),
+    WeightRenaming(r"\.attn_(q|k|v)\.bias", r".self_attn.\1_proj.bias"),
     WeightRenaming(r"\.attn_norm\.weight", ".input_layernorm.weight"),
     WeightRenaming(r"\.ffn_norm\.weight", ".post_attention_layernorm.weight"),
-    WeightRenaming(r"\.ffn_down_shexp\.weight", ".mlp.shared_expert.down_proj.weight"),
-    WeightRenaming(r"\.ffn_gate_shexp\.weight", ".mlp.shared_expert.gate_proj.weight"),
-    WeightRenaming(r"\.ffn_up_shexp\.weight", ".mlp.shared_expert.up_proj.weight"),
+    WeightRenaming(r"\.ffn_(gate|up|down)_shexp\.weight", r".mlp.shared_expert.\1_proj.weight"),
     WeightRenaming(r"\.ffn_gate_inp\.weight", ".mlp.gate.weight"),
     WeightRenaming(r"\.ffn_down_exps\.weight", ".mlp.experts.down_proj"),
     *_ROPE_ATTN_CONVERTERS,
@@ -309,23 +269,15 @@ _QWEN2_MOE_CONVERTERS = [
 # --- Bloom -----------------------------------------------------------------
 _BLOOM_CONVERTERS = [
     _BLK_PREFIX,
-    WeightRenaming(r"^token_embd\.weight", "transformer.word_embeddings.weight"),
-    WeightRenaming(r"^token_embd\.bias", "transformer.word_embeddings.bias"),
-    WeightRenaming(r"^token_embd_norm\.weight", "transformer.word_embeddings_layernorm.weight"),
-    WeightRenaming(r"^token_embd_norm\.bias", "transformer.word_embeddings_layernorm.bias"),
-    WeightRenaming(r"^output_norm\.weight", "transformer.ln_f.weight"),
-    WeightRenaming(r"^output_norm\.bias", "transformer.ln_f.bias"),
+    WeightRenaming(r"^token_embd\.(weight|bias)", r"transformer.word_embeddings.\1"),
+    WeightRenaming(r"^token_embd_norm\.(weight|bias)", r"transformer.word_embeddings_layernorm.\1"),
+    WeightRenaming(r"^output_norm\.(weight|bias)", r"transformer.ln_f.\1"),
     WeightRenaming(r"^model\.layers\.", "transformer.h."),
-    WeightRenaming(r"\.attn_norm\.weight", ".ln_attn.weight"),
-    WeightRenaming(r"\.attn_norm\.bias", ".ln_attn.bias"),
-    WeightRenaming(r"\.attn_output\.weight", ".self_attention.dense.weight"),
-    WeightRenaming(r"\.attn_output\.bias", ".self_attention.dense.bias"),
-    WeightRenaming(r"\.ffn_norm\.weight", ".ln_mlp.weight"),
-    WeightRenaming(r"\.ffn_norm\.bias", ".ln_mlp.bias"),
-    WeightRenaming(r"\.ffn_up\.weight", ".mlp.dense_h_to_4h.weight"),
-    WeightRenaming(r"\.ffn_up\.bias", ".mlp.dense_h_to_4h.bias"),
-    WeightRenaming(r"\.ffn_down\.weight", ".mlp.dense_4h_to_h.weight"),
-    WeightRenaming(r"\.ffn_down\.bias", ".mlp.dense_4h_to_h.bias"),
+    WeightRenaming(r"\.attn_norm\.(weight|bias)", r".ln_attn.\1"),
+    WeightRenaming(r"\.attn_output\.(weight|bias)", r".self_attention.dense.\1"),
+    WeightRenaming(r"\.ffn_norm\.(weight|bias)", r".ln_mlp.\1"),
+    WeightRenaming(r"\.ffn_up\.(weight|bias)", r".mlp.dense_h_to_4h.\1"),
+    WeightRenaming(r"\.ffn_down\.(weight|bias)", r".mlp.dense_4h_to_h.\1"),
     WeightConverter(
         source_patterns=r"\.attn_qkv\.weight",
         target_patterns=".self_attention.query_key_value.weight",
@@ -339,22 +291,22 @@ _BLOOM_CONVERTERS = [
 ]
 
 # --- GPT-2 (Transpose on every Linear weight, bias kept as-is) -------------
+# GGUF stores GPT-2 ``c_attn``/``c_proj``/``c_fc`` weights transposed relative to HF.
+# The TARGET names differ per source (attn_qkv→c_attn, attn_output/ffn_down→c_proj,
+# ffn_up→c_fc), so the four Transpose converters can't be merged into one rule.
 _GPT2_CONVERTERS = [
     _BLK_PREFIX,
     WeightRenaming(r"^token_embd\.weight", "transformer.wte.weight"),
     WeightRenaming(r"^position_embd\.weight", "transformer.wpe.weight"),
-    WeightRenaming(r"^output_norm\.weight", "transformer.ln_f.weight"),
-    WeightRenaming(r"^output_norm\.bias", "transformer.ln_f.bias"),
+    WeightRenaming(r"^output_norm\.(weight|bias)", r"transformer.ln_f.\1"),
     WeightRenaming(r"^output\.weight", "lm_head.weight"),
     WeightRenaming(r"^model\.layers\.", "transformer.h."),
     WeightRenaming(r"\.attn_qkv\.bias", ".attn.c_attn.bias"),
     WeightRenaming(r"\.attn_output\.bias", ".attn.c_proj.bias"),
     WeightRenaming(r"\.ffn_up\.bias", ".mlp.c_fc.bias"),
     WeightRenaming(r"\.ffn_down\.bias", ".mlp.c_proj.bias"),
-    WeightRenaming(r"\.attn_norm\.weight", ".ln_1.weight"),
-    WeightRenaming(r"\.attn_norm\.bias", ".ln_1.bias"),
-    WeightRenaming(r"\.ffn_norm\.weight", ".ln_2.weight"),
-    WeightRenaming(r"\.ffn_norm\.bias", ".ln_2.bias"),
+    WeightRenaming(r"\.attn_norm\.(weight|bias)", r".ln_1.\1"),
+    WeightRenaming(r"\.ffn_norm\.(weight|bias)", r".ln_2.\1"),
     WeightConverter(
         source_patterns=r"\.attn_qkv\.weight", target_patterns=".attn.c_attn.weight", operations=[Transpose()]
     ),
@@ -592,8 +544,14 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
         config = parsed_parameters.get("config", {})
         model_type = config.get("model_type", architecture)
 
+        # Wrap raw uint8 bytes in a ``torch.Tensor`` subclass that carries ``quant_type``.
+        # ``GGUFDequantize`` does the actual dequant inside the WeightConverter chain,
+        # on whatever device the loader has moved the bytes to.
+        import torch  # local: keep top-of-file import-light when torch isn't required
+
         parsed_parameters["tensors"] = {
-            tensor.name: GGUFQuantizedTensor(tensor.data, tensor.tensor_type) for tensor in reader.tensors
+            tensor.name: GGUFQuantizedTensor(torch.from_numpy(tensor.data), quant_type=tensor.tensor_type)
+            for tensor in reader.tensors
         }
         parsed_parameters["weight_mapping"] = get_gguf_converters(model_type)
 

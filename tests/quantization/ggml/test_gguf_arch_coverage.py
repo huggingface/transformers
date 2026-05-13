@@ -83,20 +83,19 @@ class GgufArchCoverageTests(unittest.TestCase):
             )
 
     def test_quantizer_prepends_gguf_dequantize_to_every_converter(self):
-        """``GGUFQuantizer.update_weight_conversions`` must inject ``GGUFDequantize``
-        at the start of every ``WeightConverter``'s op chain — same pattern as
-        ``Fp8Quantizer.update_weight_conversions`` (which injects ``Fp8Dequantize``).
+        """``GGUFQuantizer.update_weight_conversions`` injects ``GGUFDequantize`` at the head
+        of every ``WeightConverter`` op chain — same pattern as ``Fp8Quantizer``.
+        ``WeightRenaming`` entries pass through unmodified.
         """
         from transformers.gguf_conversion_ops import GGUFDequantize
 
         for model_type, rules in _GGUF_ARCH_CONVERTERS.items():
             quantizer = GGUFQuantizer(weight_mapping=rules)
-            injected = quantizer.update_weight_conversions([])
-            for rule in injected:
+            out = quantizer.update_weight_conversions([])
+            for rule in out:
                 if isinstance(rule, WeightConverter):
                     self.assertIsInstance(
                         rule.operations[0],
                         GGUFDequantize,
-                        f"{model_type}: WeightConverter not prefixed with GGUFDequantize after "
-                        f"GGUFQuantizer.update_weight_conversions; got {type(rule.operations[0]).__name__}.",
+                        f"{model_type}: WeightConverter not prefixed with GGUFDequantize.",
                     )

@@ -4201,7 +4201,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             from .quantizers.quantizer_gguf import GGUFQuantizer
 
             gguf_parsed = load_gguf_checkpoint(checkpoint_files[0], return_tensors=True)
-            state_dict = gguf_parsed["tensors"]  # {gguf_name: GGUFQuantizedTensor}
+            state_dict = gguf_parsed["tensors"]  # {gguf_name: GGUFQuantizedTensor} (raw bytes + quant_type)
             # GGUFQuantizer takes precedence for materialization & weight-conversion injection.
             hf_quantizer = GGUFQuantizer(weight_mapping=gguf_parsed.get("weight_mapping", []))
 

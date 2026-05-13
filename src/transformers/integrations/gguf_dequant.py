@@ -20,15 +20,18 @@ row slices, which is ~5–20x slower than the same logic expressed as
 ``torch`` ops on a ``uint8`` view of the raw bytes (and also avoids the
 ``__array_finalize__`` overhead from memmap slicing). The ops here run on
 CPU or GPU unchanged — pass an already-on-device tensor as input.
+
+``GGUFQuantizedTensor`` is a ``torch.Tensor`` subclass that carries the
+``quant_type`` metadata alongside the raw uint8 bytes, so the standard
+loader can move it to the target device with ``.to(device)`` and the
+``GGUFDequantize`` op in the weight-conversion chain can dequant on-device
+without any GGUF-specific hook in ``core_model_loading``.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import torch
 
-
-if TYPE_CHECKING:
-    import torch
 
 # Re-exported lazily so ``import transformers`` does not require gguf installed.
 QK_K = 256
@@ -333,6 +336,55 @@ def supported_quant_types():
     if _DISPATCH is None:
         _DISPATCH = _build_dispatch()
     return set(_DISPATCH.keys())
+
+
+class GGUFQuantizedTensor(torch.Tensor):
+    """``torch.Tensor`` subclass that carries the GGUF ``quant_type`` alongside
+    raw uint8 bytes.
+
+    Behaves like a regular uint8 tensor for ``.to(device)`` / slicing — the
+    ``__torch_function__`` override re-wraps results so ``quant_type`` survives
+    those operations and the :class:`GGUFDequantize` op in the conversion chain
+    can read it. Inspired by ``GGUFParameter`` in diffusers.
+    """
+
+    # Class-level default so subclass instances spawned by torch's default
+    # ``__torch_function__`` path (which doesn't invoke our ``__new__``) still
+    # have the attribute defined.
+    quant_type = None
+
+    @staticmethod
+    def __new__(cls, data, quant_type=None):
+        data = data if data is not None else torch.empty(0)
+        instance = torch.Tensor._make_subclass(cls, data, require_grad=False)
+        instance.quant_type = quant_type
+        return instance
+
+    @staticmethod
+    def _extract_quant_type(args):
+        for arg in args:
+            if isinstance(arg, GGUFQuantizedTensor) and arg.quant_type is not None:
+                return arg.quant_type
+            if isinstance(arg, (list, tuple)) and arg and isinstance(arg[0], GGUFQuantizedTensor):
+                if arg[0].quant_type is not None:
+                    return arg[0].quant_type
+        return None
+
+    @classmethod
+    def __torch_function__(cls, func, types, args=(), kwargs=None):
+        if kwargs is None:
+            kwargs = {}
+        result = super().__torch_function__(func, types, args, kwargs)
+        quant_type = cls._extract_quant_type(args)
+        if quant_type is None:
+            return result
+        if isinstance(result, cls):
+            # super() already materialised a subclass — just patch the attr
+            result.quant_type = quant_type
+            return result
+        if isinstance(result, torch.Tensor):
+            return cls(result, quant_type=quant_type)
+        return result
 
 
 def dequantize_gguf_tensor(data, quant_type, dtype=None, device=None) -> torch.Tensor:

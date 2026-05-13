@@ -25,7 +25,6 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from copy import deepcopy
-from dataclasses import dataclass
 from itertools import chain
 from typing import TYPE_CHECKING, Any
 
@@ -47,23 +46,6 @@ if TYPE_CHECKING:
 
 
 logger = get_logger(__name__)
-
-
-@dataclass
-class GGUFQuantizedTensor:
-    """Wraps undequantized GGUF tensor data for lazy processing inside WeightConverter ops."""
-
-    data: Any  # np.ndarray raw quantized bytes from gguf reader
-    tensor_type: Any  # gguf.GGMLQuantizationType
-
-    def is_floating_point(self) -> bool:
-        return True
-
-    @property
-    def dtype(self):
-        import torch
-
-        return torch.float32
 
 
 def build_glob_alternation(
@@ -171,7 +153,7 @@ class Concatenate(ConversionOps):
         target_patterns: list[str],
         **kwargs,
     ) -> dict[str, torch.Tensor]:
-        target_pattern = self.get_target_pattern(target_patterns, kwargs.get("full_layer_name"))
+        target_pattern = self.get_target_pattern(target_patterns)
         all_tensors = []
         # Very important to keep the relative order of the source patterns here, so we iterate over them not the
         # input directly as it's unordered! Skip patterns that prior ops in the chain (e.g. `Fp8Dequantize`)
@@ -186,16 +168,11 @@ class Concatenate(ConversionOps):
                 all_tensors.append(tensors)
         return {target_pattern: torch.cat(all_tensors, dim=self.dim)}
 
-    def get_target_pattern(self, target_patterns: list[str], full_layer_name: str | None = None) -> str:
+    def get_target_pattern(self, target_patterns: list[str]) -> str:
         # Here we always return the target pattern
         if len(target_patterns) > 1:
             raise ValueError("Undefined Operation encountered!")
-        target = target_patterns[0]
-        # If target contains an unresolved \1 backreference, use the already-resolved
-        # full_layer_name passed from WeightConverter.convert instead.
-        if full_layer_name is not None and r"\1" in target:
-            return full_layer_name
-        return target
+        return target_patterns[0]
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -552,42 +529,6 @@ class ErnieSplitAndDecoupleTextVisionExperts(ConversionOps):
     @property
     def reverse_op(self) -> ConversionOps:
         return ErnieFuseAndSplitTextVisionExperts(stack_dim=self.stack_dim, concat_dim=self.concat_dim)
-
-
-class Force16BytesAlignment(ConversionOps):
-    """
-    Ensures that the given tensor is 16-bytes aligned in memory and clones it if not.
-    This guarantees 16-bytes alignment for kernels / implementations that use TMA or SIMD instructions like torch.nn.functional.grouped_mm.
-    """
-
-    @torch.no_grad()
-    def convert(
-        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
-    ) -> dict[str, torch.Tensor]:
-        target_pattern = self.get_target_pattern(input_dict, source_patterns, target_patterns)
-        tensors = next(iter(input_dict.values()))
-        tensor = tensors[0] if isinstance(tensors, list) else tensors
-        tensor = tensor.clone() if tensor.data_ptr() % 16 != 0 else tensor
-        return {target_pattern: tensor}
-
-    def get_target_pattern(
-        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str]
-    ) -> str:
-        if len(input_dict) != 1:
-            raise ValueError("Undefined Operation encountered!")
-        # Here it's the first operation of a chain, so return the source
-        if len(target_patterns) > 1:
-            if len(source_patterns) == 1:
-                return source_patterns[0]
-            else:
-                raise ValueError("Undefined Operation encountered!")
-        # Here it's the only operation, or the last operation in a chain, so we return the target
-        else:
-            return target_patterns[0]
-
-    @property
-    def reverse_op(self) -> ConversionOps:
-        return Force16BytesAlignment()
 
 
 def process_target_pattern(pattern: str) -> tuple[str, str | None]:
@@ -1484,10 +1425,7 @@ def convert_and_load_state_dict_in_model(
 
             if future_or_tensor is None:
                 param_device = get_device(device_map, renamed_key, valid_torch_device=True)
-                if hf_quantizer is not None:
-                    future_or_tensor = hf_quantizer.spawn_materialize(thread_pool, tensor, param_device, _dtype)
-                else:
-                    future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype)
+                future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype)
 
             mapping.add_tensor(renamed_key, original_key, source_pattern, future_or_tensor)
         elif source_pattern is not None:  # add all target keys as unexpected
