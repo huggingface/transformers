@@ -43,6 +43,7 @@ from ...test_modeling_common import (
     ids_tensor,
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -360,7 +361,9 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/ocr_demo2.jpg",
+                        "url": url_to_local_path(
+                            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/ocr_demo2.jpg"
+                        ),
                     },
                     {"type": "text", "text": "OCR:"},
                 ],

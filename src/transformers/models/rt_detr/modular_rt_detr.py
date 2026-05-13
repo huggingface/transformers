@@ -58,6 +58,7 @@ from ..deformable_detr.modeling_deformable_detr import DeformableDetrMultiscaleD
 from ..detr.image_processing_detr import DetrImageProcessor
 from ..detr.image_processing_pil_detr import DetrImageProcessorPil
 from ..detr.modeling_detr import DetrFrozenBatchNorm2d, DetrMLPPredictionHead, DetrSelfAttention, replace_batch_norm
+from ..vit_mae.modeling_vit_mae import build_2d_sinusoidal_position_embedding
 from .configuration_rt_detr import RTDetrConfig
 
 
@@ -426,20 +427,6 @@ class RTDetrImageProcessor(DetrImageProcessor):
         raise NotImplementedError("Panoptic segmentation post-processing is not implemented for RT-DETR yet.")
 
 
-class RTDetrImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
-        Data format of the annotations. One of "coco_detection" or "coco_panoptic".
-    do_convert_annotations (`bool`, *optional*, defaults to `True`):
-        Controls whether to convert the annotations to the format expected by the RT_DETR model. Converts the
-        bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
-        Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
-    """
-
-    format: str | AnnotationFormat
-    do_convert_annotations: bool
-
-
 @requires(backends=("torch",))
 class RTDetrImageProcessorPil(DetrImageProcessorPil):
     resample = PILImageResampling.BILINEAR
@@ -676,7 +663,6 @@ class RTDetrImageProcessorPil(DetrImageProcessorPil):
         raise NotImplementedError("Panoptic segmentation post-processing is not implemented for RT-DETR yet.")
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the RTDetrDecoder. This class adds two attributes to
@@ -685,6 +671,7 @@ class RTDetrImageProcessorPil(DetrImageProcessorPil):
     - a stacked tensor of intermediate reference points.
     """
 )
+@dataclass
 class RTDetrDecoderOutput(ModelOutput):
     r"""
     intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -714,12 +701,12 @@ class RTDetrDecoderOutput(ModelOutput):
     cross_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the RT-DETR encoder-decoder model.
     """
 )
+@dataclass
 class RTDetrModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
@@ -772,12 +759,12 @@ class RTDetrModelOutput(ModelOutput):
     denoising_meta_values: dict | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`RTDetrForObjectDetection`].
     """
 )
+@dataclass
 class RTDetrObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
@@ -1295,19 +1282,14 @@ class RTDetrSinePositionEmbedding(nn.Module):
         Returns:
             Position embeddings of shape (1, height*width, embed_dim)
         """
-        grid_w = torch.arange(torch_int(width), device=device).to(dtype)
-        grid_h = torch.arange(torch_int(height), device=device).to(dtype)
-        grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="xy")
-        if self.embed_dim % 4 != 0:
-            raise ValueError("Embed dimension must be divisible by 4 for 2D sin-cos position embedding")
-        pos_dim = self.embed_dim // 4
-        omega = torch.arange(pos_dim, device=device).to(dtype) / pos_dim
-        omega = 1.0 / (self.temperature**omega)
-
-        out_w = grid_w.flatten()[..., None] @ omega[None]
-        out_h = grid_h.flatten()[..., None] @ omega[None]
-
-        return torch.concat([out_h.sin(), out_h.cos(), out_w.sin(), out_w.cos()], dim=1)[None, :, :]
+        return build_2d_sinusoidal_position_embedding(
+            height=torch_int(height),
+            width=torch_int(width),
+            embed_dim=self.embed_dim,
+            temperature=self.temperature,
+            device=device,
+            dtype=dtype,
+        ).unsqueeze(0)
 
 
 class RTDetrAIFILayer(nn.Module):
@@ -1812,10 +1794,12 @@ class RTDetrModel(RTDetrPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, RTDetrModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("PekingU/rtdetr_r50vd")
         >>> model = RTDetrModel.from_pretrained("PekingU/rtdetr_r50vd")
@@ -2037,11 +2021,13 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         ```python
         >>> from transformers import RTDetrImageProcessor, RTDetrForObjectDetection
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> import torch
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = RTDetrImageProcessor.from_pretrained("PekingU/rtdetr_r50vd")
         >>> model = RTDetrForObjectDetection.from_pretrained("PekingU/rtdetr_r50vd")

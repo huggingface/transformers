@@ -59,7 +59,7 @@ class FourOverSixConfigTest(unittest.TestCase):
 @require_fouroversix
 @require_accelerate
 class FourOverSixBaseTest(unittest.TestCase):
-    model_name = "unsloth/Llama-3.2-3B"
+    model_name = "unsloth/Llama-3.2-1B"
 
     input_text = "1 2 3 4"
     max_new_tokens = 4

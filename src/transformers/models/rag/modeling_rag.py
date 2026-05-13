@@ -33,12 +33,12 @@ from .retrieval_rag import RagRetriever
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for retriever augmented marginalized models outputs.
     """
 )
+@dataclass
 class RetrievAugLMMarginOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -129,8 +129,8 @@ class RetrievAugLMMarginOutput(ModelOutput):
     generator_cross_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class RetrievAugLMOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):

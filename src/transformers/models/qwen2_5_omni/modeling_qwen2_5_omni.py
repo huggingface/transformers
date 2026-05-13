@@ -123,7 +123,7 @@ class Qwen2_5OmniPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "video", "audio", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen2_5OmniDecoderLayer", "Qwen2_5OmniVisionBlock"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _can_compile_fullgraph = False
@@ -502,12 +502,12 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
 ############################
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Qwen2.5OmniThinker causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Qwen2_5OmniThinkerCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -2056,12 +2056,12 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
 ############################
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Qwen2.5OmniTalker causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Qwen2_5OmniTalkerCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

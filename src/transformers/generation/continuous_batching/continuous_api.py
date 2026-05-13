@@ -30,17 +30,18 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import ContinuousBatchingConfig, GenerationConfig
-from ...modeling_flash_attention_utils import lazy_import_paged_flash_attention
-from ...utils.generic import is_flash_attention_requested
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from ..logits_process import LogitsProcessorList
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
+from .initialization import resolve_continuous_batching_config
 from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
+from .model_runner import ModelRunner
+from .offloading_manager import OffloadingManager
 from .requests import GenerationOutput, RequestState, RequestStatus, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
-from .utils import attn_mask_is_needed, create_warmup_future_states, pad_to_interval
+from .utils import WorkloadHints
 
 
 """
@@ -179,67 +180,50 @@ class ContinuousBatchProcessor:
 
         # Retrieve the size of the sliding window if there is one
         self.sliding_window = 1 if getattr(config, "sliding_window", None) is None else config.sliding_window
-        # Cuda graphs for the generation step
-        self.q_padding_interval_size = self.cb_config.q_padding_interval_size
-        self.kv_padding_interval_size = self.cb_config.kv_padding_interval_size
-        self.max_cached_graphs = self.cb_config.max_cached_graphs
-        self.use_cuda_graph = self.cb_config.use_cuda_graph
 
         # Set up metrics collector
         self.max_batch_tokens = cache.max_batch_tokens
         self.metrics = ContinuousBatchProcessorMetrics(cache.max_batch_tokens)
 
-        # If the user turned on the decode fast path (ie. using a block table), check if it is available
-        self._ensure_decode_fast_path_is_available()  # this needs to happen before self.inputs_and_outputs is created
-
-        # Resolve compile behavior
-        self.cb_config.resolve_compile_configs(
-            fallback_compile_config=getattr(generation_config, "compile_config", None),
-            is_flash_attn=is_flash_attention_requested(config=config),
-            decode_fast_path_available=self.cache.max_blocks_per_request > 0,
-        )
-        varlen_config, decode_config = self.cb_config.varlen_compile_config, self.cb_config.decode_compile_config
-
-        # Compile the varlen path if config provided
-        self._compiled_varlen = None
-        if varlen_config is not None:
-            self._compiled_varlen = torch.compile(self._forward_process_and_sample, **varlen_config.to_dict())
-
-        # Compile the decode path if config provided
-        self._compiled_decode = None
-        if decode_config is not None:
-            self._compiled_decode = torch.compile(self._forward_process_and_sample, **decode_config.to_dict())
-
-        # Padding is turned on when either cuda graphs or compile is used
-        self._pad_inputs = self.use_cuda_graph or (varlen_config is not None or decode_config is not None)
-
         # Setup inputs and outputs
+        use_cuda_graph_varlen, _ = self.cb_config.cuda_graph_booleans
+        io_kwargs = {
+            "cache": cache,
+            "config": config,
+            "device": model_device,
+            "model_dtype": model_dtype,
+            "return_logprobs": self.return_logprobs,
+            "logit_processor": self.logit_processor,
+            "use_cuda_graph_varlen": use_cuda_graph_varlen,
+        }
         self.use_async_batching = self.cb_config.use_async_batching
+
         if self.use_async_batching:
             # Since in async there are 2 IO pairs, there are also 2 graph buffers: we divide the max_cached_graphs by 2
-            max_cached_graphs = ceil(self.max_cached_graphs / 2)
-            self.inputs_and_outputs = ContinuousBatchingAsyncIOs(
-                cache=cache,
-                config=config,
-                device=model_device,
-                model_dtype=model_dtype,
-                max_graphs=max_cached_graphs,
-                return_logprobs=self.return_logprobs,
-                logit_processor=self.logit_processor,
-            )
+            io_kwargs["max_graphs"] = ceil(self.cb_config.max_cached_graphs / 2)
+            self.inputs_and_outputs = ContinuousBatchingAsyncIOs(**io_kwargs)
         else:
-            self.inputs_and_outputs = ContinuousBatchingIOs(
-                cache=cache,
-                config=config,
-                device=model_device,
-                model_dtype=model_dtype,
-                max_graphs=self.max_cached_graphs,
-                return_logprobs=self.return_logprobs,
-                logit_processor=self.logit_processor,
-            )
-        # Set up the graph pool. This allows all graphs to share the same memory pool, which is fine because they never
-        # run concurrently. This greatly saves memory.
-        self.graph_pool = torch.cuda.graph_pool_handle() if self.use_cuda_graph else None
+            io_kwargs["max_graphs"] = self.cb_config.max_cached_graphs
+            self.inputs_and_outputs = ContinuousBatchingIOs(**io_kwargs)
+
+        # Offloading manager: handles CPU offloading, soft reset, and restoration
+        self.offloading_manager = OffloadingManager(
+            cache=cache,
+            scheduler=scheduler,
+            cpu_offload_space_gib=continuous_batching_config.cpu_offload_space,
+            safety_threshold=continuous_batching_config.cpu_offload_space_safety_threshold,
+            compute_stream=self.inputs_and_outputs.compute_stream,
+        )
+
+        # Setup the model runner
+        self.model_runner = ModelRunner(
+            logit_processor=self.logit_processor,
+            cb_config=self.cb_config,
+            cache=self.cache,
+            inputs_and_outputs=self.inputs_and_outputs,
+            do_sample=self.do_sample,
+            return_logprobs=self.return_logprobs,
+        )
 
     def __repr__(self) -> str:
         return (
@@ -254,32 +238,9 @@ class ContinuousBatchProcessor:
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-    def _ensure_decode_fast_path_is_available(self) -> None:
-        """Ensures the decode fast path is available. If it is not, set the max blocks per request to 0."""
-        if self.cache.max_blocks_per_request > 0:
-            # NOTE: block table should be available with FA2 and FA3, but there seems to be an issue with FA2 atm
-            if is_flash_attention_requested(self.config, version=3):
-                flash_attn_with_kvcache = lazy_import_paged_flash_attention(self.config._attn_implementation)[1]
-                conditions = [
-                    self.cache.num_sliding_attention_groups == 0,  # TODO: add support for sliding window layers
-                    torch.cuda.is_available(),  # Block table is only supported on CUDA
-                    flash_attn_with_kvcache is not None,  # The `flash_attn_with_kvcache` fn is needed
-                ]
-                if not all(conditions):
-                    logger.warning(
-                        f"Although {self.cache.max_blocks_per_request = }, the decode fast path is not available "
-                        f"because the one condition is not met: {conditions}."
-                    )
-                    self.cache.max_blocks_per_request = 0
-            else:
-                logger.warning(
-                    f"Although {self.cache.max_blocks_per_request = }, the decode fast path is not available "
-                    f"because the attention implementation is not FA3. Got {self.config._attn_implementation = }."
-                )
-                self.cache.max_blocks_per_request = 0
-
     def reset(self) -> None:
         """Reset the batch processor for a new generation loop."""
+        self.offloading_manager.reset()
         self.scheduler.reset()
         self.inputs_and_outputs.reset()
         self.cache.free_all_requests()
@@ -319,35 +280,6 @@ class ContinuousBatchProcessor:
         self.metrics.record_request_completion(state.created_time, state.request_id)
         self.output_router.deliver(state.to_generation_output())
 
-    # TODO: there should be a way to choose the offloading policy: biggest request, oldest request, etc.
-    # Including a policy to not allow offloading and crashing the generation
-    def soft_reset_one_request(self) -> None:
-        """Soft resets one active request by removing it from active requests and re-adding it to the waiting queue.
-
-        The generated tokens are kept as part of the new request's initial prompt. When `block_new_requests` is False,
-        the oldest request is offloaded; when True, the newest request is offloaded. This method also sets
-        `block_new_requests` to True to prevent infinite loops of offloading and re-scheduling requests.
-        """
-        # The offloaded request is the newest (resp. oldest) if block_new_requests is True (resp. False)
-        if self.scheduler.block_new_requests:
-            request_id, state = self.scheduler.active_requests.popitem()
-        else:
-            request_id, state = next(iter(self.scheduler.active_requests.items()))
-        logger.info(
-            f"Soft resetting request {request_id} with {len(state.initial_tokens)} initial tokens and "
-            f"{len(state.generated_tokens)} generated tokens"
-        )
-        # Create a copy of the offloaded request keeping the generated tokens as addition to the initial prompt
-        new_state = state.create_equivalent_initial_request()
-        # In async mode, this ensures the request is not updated in the other batch without triggering logging
-        state._status = RequestStatus.FINISHED
-        # Actual offloading of the request
-        self.scheduler.finish_request(request_id)
-        self.scheduler.add_waiting_request(new_state)
-        # This flag blocks any new requests from being scheduled until one request is finished. This ensures that we
-        # don't enter an offload / schedule loop
-        self.scheduler.block_new_requests = True
-
     @traced
     def prepare_next_batch(self) -> bool:
         """Prepare tensors and metadata for the next model forward pass. Returns True if there are requests to process,
@@ -355,7 +287,10 @@ class ContinuousBatchProcessor:
 
         # Get new requests from the queue, stop if there are no pending requests
         self._get_new_requests()
-        self.scheduler.clear_cancelled_requests()
+        cancelled_states = self.scheduler.clear_cancelled_requests()
+        # Also free CPU-offloaded cache for cancelled states. This is CPU-only, so it isn't batched like D2H transfers
+        for state in cancelled_states:
+            self.offloading_manager.free_request_cpu_cache(state)
         if not self.scheduler.has_pending_requests():
             return False
         self.metrics.record_queue_metrics(len(self.scheduler.active_requests), len(self.scheduler.waiting_requests))
@@ -367,13 +302,16 @@ class ContinuousBatchProcessor:
         # If requests_in_batch is None, it means we need to offload some requests if possible
         if requests_in_batch is None:
             if len(self.scheduler.active_requests) > 1:
-                self.soft_reset_one_request()
+                self.offloading_manager.offload_one_request()
                 return False
             else:
                 raise RuntimeError("No requests can be scheduled and no request can be offloaded.")
         # If it's an empty list, it means we have no requests to process
         if not requests_in_batch:
             return False
+
+        # Restore any CPU-offloaded requests that were just scheduled
+        self.offloading_manager.restore_scheduled_requests(requests_in_batch)
 
         # Otherwise, we can continue with the non-empty batch and log in the dimensions before padding
         self.metrics.record_batch_metrics(requests_in_batch)
@@ -384,9 +322,7 @@ class ContinuousBatchProcessor:
         )
 
         # If inputs are static sized, eg. for compile, we find the padded sizes of the queries and keys/values
-        if self._pad_inputs:
-            num_q_tokens = pad_to_interval(num_q_tokens, self.q_padding_interval_size, self.max_batch_tokens)
-            max_kv_read = pad_to_interval(max_kv_read, self.kv_padding_interval_size, self.cache.num_pages)
+        num_q_tokens, max_kv_read = self.model_runner.maybe_pad_inputs(num_q_tokens, max_kv_read, use_decode_fast_path)
 
         self.inputs_and_outputs.prepare_batch_tensors(
             requests_in_batch, self.logit_processor, use_decode_fast_path, num_q_tokens, max_kv_read
@@ -402,14 +338,14 @@ class ContinuousBatchProcessor:
         pending_outputs = []
         for future_state in requests_in_batch:
             state = future_state.state
-            # Early return if the request is finished
-            if state.status == RequestStatus.FINISHED:
+            # Early return if the request was finished or offloaded between scheduling and update (async mode)
+            if state.status in (RequestStatus.FINISHED, RequestStatus.PENDING):
                 if self.use_async_batching:
                     # Skip this request, but still consume its token from new_tokens if it had one
                     if future_state.has_new_token:
                         current_logits_index += 1
                     continue
-                raise RuntimeError(f"Tried to update FINISHED request {state.request_id} in sync mode.")
+                raise RuntimeError(f"Tried to update {state.status.name} request {state.request_id} in sync mode.")
             # If the request has a new token, it means prefill has already ended or just finished
             if future_state.has_new_token:
                 # If there is just one temporary token, it means prefill just ended
@@ -479,11 +415,7 @@ class ContinuousBatchProcessor:
 
     @traced
     def fail_all_requests(self, error: Exception) -> None:
-        """Fail all active requests with the given error.
-
-        Args:
-            error: The error to report in the failure message
-        """
+        """Fail all active requests with the given error."""
 
         requests = list(self.scheduler.active_requests.values())
         for state in requests:
@@ -491,6 +423,7 @@ class ContinuousBatchProcessor:
             self.scheduler.finish_request(state.request_id)
 
         # Also fail any requests in the waiting queue
+        self.offloading_manager.free_all_waiting_cpu_caches()
         for req_id in list(self.scheduler.waiting_requests.keys()):
             state = self.scheduler.waiting_requests.pop(req_id)
             self._handle_request_error(error, state)
@@ -502,223 +435,24 @@ class ContinuousBatchProcessor:
     @torch.no_grad()
     def _generation_step(self, model: nn.Module) -> None:
         """Perform a single generation step."""
+        # Retrieve the model kwargs with or without padding. After this function returns, everything happens on the
+        # device. Hence, to make the limit clear, this is left out of the model runner scope.
+        batch_data = self.inputs_and_outputs.get_model_kwargs(use_padding=self.model_runner.pad_inputs)
 
-        # Retrieve the model kwargs with or without padding
-        batch_data = self.inputs_and_outputs.get_model_kwargs(use_padding=self._pad_inputs)
-        carry_over_ids, prev_output_ids, output_ids = self.inputs_and_outputs.get_cb_kwargs()
-        compute_stream = self.inputs_and_outputs.compute_stream
+        # This takes care of the forward pass, logits processing, and sampling. After this returns, the compute is
+        # scheduled on the device's compute stream, but may not have finished yet.
+        self.model_runner.compute_batch(model, batch_data)
 
-        # Get the appropriate forward function (compiled or not, based on current path)
-        if self.inputs_and_outputs.use_block_table:
-            forward_fn = self._forward_process_and_sample if self._compiled_decode is None else self._compiled_decode
-        else:
-            forward_fn = self._forward_process_and_sample if self._compiled_varlen is None else self._compiled_varlen
-
-        # If we are not using cuda graphs, we perform the generation step and return
-        if not self.use_cuda_graph:
-            maybe_stream = torch.cuda.stream(compute_stream) if compute_stream is not None else nullcontext()
-            with maybe_stream:
-                forward_fn(model, batch_data, carry_over_ids, prev_output_ids, output_ids)
-
-        # Otherwise, we use create or replay the graph (cuda is available in this path)
-        else:
-            graph = self.inputs_and_outputs.get_graph()
-            # Case: the graph already exists, so we replay it
-            if graph is not None:
-                with torch.cuda.stream(compute_stream):
-                    graph.replay()
-            # Otherwise, the graph does not exist, so we create it
-            else:
-                args = (model, batch_data, carry_over_ids, prev_output_ids, output_ids)
-                self.capture_graph(forward_fn, compute_stream, *args)
-
-        # In any case, we transfer the outputs to the host
+        # This initiates the transfer of the outputs to the host. It is blocking in sync mode and non-blocking in async
+        # mode.
         self.inputs_and_outputs.retrieve_device_outputs()
 
-    def capture_graph(self, forward_fn: Any, compute_stream: torch.cuda.Stream, *args) -> None:
-        # Warmup (ensures the right result is computed before capturing the graph)
-        with torch.cuda.stream(compute_stream):
-            forward_fn(*args)
-        # Capture
-        graph = torch.cuda.CUDAGraph()
-        # Continuous batching can run multiple manager threads concurrently in one process, but PyTorch's
-        # default capture mode ("global") errors on CUDA actions from other threads. This means capture can be
-        # invalidated even when each manager uses a different device. To avoid this, we use "thread_local" mode.
-        with torch.cuda.graph(graph, stream=compute_stream, pool=self.graph_pool, capture_error_mode="thread_local"):
-            forward_fn(*args)
-        # Store
-        self.inputs_and_outputs.set_graph(graph)
-
-    @traced
-    def _forward_process_and_sample(
-        self,
-        model: nn.Module,
-        batch_data: dict,
-        carry_over_ids: torch.Tensor,
-        prev_output_ids: torch.Tensor,
-        output_ids: torch.Tensor,
-    ) -> None:
-        """This function performs the forward pass, logits processing, and sampling; which are broken down into smaller
-        function to be easier to trace with OpenTelemetry."""
-        self.inputs_and_outputs.carry_over_tokens(batch_data["input_ids"], carry_over_ids, prev_output_ids)
-        logits = self._model_forward(model, batch_data).float()  # convert to fp32 to match generate
-        scores = self._process_logit(batch_data, logits) if self.logit_processor else logits
-        self._sample(scores, batch_data["logits_indices"], output_ids)
-
-    @traced(span_name="model_forward")
-    def _model_forward(self, model: nn.Module, batch_data: dict) -> torch.Tensor:
-        return model(**batch_data).logits
-
-    @traced(span_name="logit_processing")
-    def _process_logit(self, batch_data: dict, logits: torch.Tensor) -> torch.Tensor:
-        # Handle shape compatibility: logit processors expect 2D tensors [batch_size, vocab_size]
-        # but continuous batching always produces 3D tensors [batch_size, seq_len, vocab_size]
-        batch_size, seq_len, vocab_size = logits.shape
-        logits_2d = logits.view(batch_size * seq_len, vocab_size)
-        input_ids_2d = batch_data["input_ids"].view(batch_size * seq_len)
-        # Process with 2D tensors
-        processed_logits_2d = self.logit_processor(input_ids_2d, logits_2d, batch_data["logits_processor_args"])
-        # Reshape back to 3D
-        return processed_logits_2d.view(batch_size, seq_len, vocab_size)
-
-    @traced(span_name="sampling")
-    def _sample(self, scores: torch.Tensor, logits_indices: torch.Tensor, output_ids: torch.Tensor) -> None:
-        # Apply softmax if we are sampling or if we are generating log probabilities
-        if self.do_sample or self.return_logprobs:
-            probs = nn.functional.softmax(scores[0], dim=-1)  # shape [seq_len, vocab_size]
-        # Otherwise just remove the batch size dimension, which is always 1
-        else:
-            probs = scores.squeeze(0)  # shape [seq_len, vocab_size]
-
-        # Retrieve next tokens through sampling or argmax
-        if self.do_sample:
-            next_tokens = torch.multinomial(probs, num_samples=1)  # shape [seq_len, 1]
-        else:
-            next_tokens = torch.argmax(probs, dim=-1, keepdim=True)  # shape [seq_len, 1]
-
-        # Maybe retrieve log probabilities
-        if self.return_logprobs:
-            per_token_probs = probs.gather(dim=1, index=next_tokens).squeeze(-1)
-            logprobs = per_token_probs.log()  # shape [seq_len]
-        # And always remove the extra dimension for the gather
-        next_tokens = next_tokens.squeeze(-1)  # shape [seq_len]
-
-        # Get seq_len dimension to slice the logits indices
-        tokens = next_tokens.size(0)
-        # Shuffle the next tokens to match the order of the batch's requests
-        indices = logits_indices[:tokens]
-        next_tokens = next_tokens[indices]
-        # Copy the next tokens and maybe their logprobs to the static output tensor
-        output_ids[0, :tokens].copy_(next_tokens)
-        if self.return_logprobs:
-            # Shuffle the logprobs the same way as the next tokens
-            logprobs = logprobs[indices]
-            # In order to match the dtype of output_ids, we cast the fp32 logprobs as int32 without changing the
-            # underlying data. It's just a trick to use the same storage for both tensors.
-            output_ids[1, :tokens].copy_(logprobs.view(dtype=torch.int32))
-
     @torch.inference_mode()
-    def warmup(
-        self,
-        model: nn.Module,
-        logit_processor: LogitsProcessorList,
-        num_query_tokens: int = 0,
-        num_cache_tokens: int = 0,
-    ) -> None:
+    def warmup(self, model: nn.Module) -> None:
         """Pre-capture CUDA graphs (or trigger compile warmup) for varlen and decode paths. In async mode, both IO
-        pairs are warmed up since each has its own graph buffer and static tensors."""
-
-        if not self._pad_inputs:
-            logger.info("CUDA graphs and compile are disabled, skipping warmup.")
-            return None
-
-        num_query_tokens = num_query_tokens if num_query_tokens > 0 else self.max_batch_tokens
-        num_query_tokens = min(num_query_tokens, self.max_batch_tokens)
-        num_cache_tokens = num_cache_tokens if num_cache_tokens > 0 else self.cache.block_size * num_query_tokens
-        num_cache_tokens = min(num_cache_tokens, self.cache.num_blocks * self.cache.block_size)
-
-        num_pages = self.cache.num_blocks * self.cache.block_size
-        compute_stream = self.inputs_and_outputs.compute_stream
-
-        # In async mode, each IO pair has its own graph buffer and static tensors, so we warm up both
-        num_io_pairs = 2 if self.use_async_batching else 1
-
-        for pair_idx in range(num_io_pairs):
-            if self.use_async_batching:
-                self.inputs_and_outputs.current_pair = pair_idx
-                logger.info(f"Warming up IO pair {pair_idx + 1}/2...")
-
-            # --- Varlen path ---
-            padded_q = pad_to_interval(num_query_tokens, self.q_padding_interval_size, self.max_batch_tokens)
-            padded_kv = pad_to_interval(num_cache_tokens + num_query_tokens, self.kv_padding_interval_size, num_pages)
-            logger.info(f"Warming up varlen path ({padded_q} Q tokens, {padded_kv} KV tokens)...")
-
-            future_states = create_warmup_future_states(
-                1, RequestStatus.PREFILLING, num_query_tokens, num_cache_tokens, self.cache
-            )
-            try:
-                start = perf_counter()
-                self.inputs_and_outputs.prepare_batch_tensors(
-                    future_states, self.logit_processor, False, padded_q, padded_kv - padded_q
-                )
-                batch_data = self.inputs_and_outputs.get_model_kwargs(use_padding=True)
-                carry_over_ids, prev_output_ids, output_ids = self.inputs_and_outputs.get_cb_kwargs()
-                forward_fn = self._compiled_varlen or self._forward_process_and_sample
-                forward_fn_args = (model, batch_data, carry_over_ids, prev_output_ids, output_ids)
-                if self.use_cuda_graph:
-                    self.capture_graph(forward_fn, compute_stream, *forward_fn_args)
-                else:
-                    with torch.cuda.stream(compute_stream):
-                        forward_fn(*forward_fn_args)
-                logger.info(f"Varlen warmup completed in {perf_counter() - start:.2f}s")
-            except Exception as e:
-                logger.warning(f"Failed to warm up varlen path: {e}")
-            finally:
-                for fs in future_states:
-                    self.cache.free_blocks(fs.state.request_id)
-
-            # Exit here if the decode fast path is not available
-            if self.cache.max_blocks_per_request == 0:
-                continue
-
-            # --- Decode fast path ---
-            logger.info("Warming up decode fast path...")
-            q_interval = self.q_padding_interval_size  # shorthand to avoid overly long lines
-            decode_graphs = 0
-            start = perf_counter()
-            # If N requests reach decoding stage, then the number of query tokens is going to start at N and decrease to
-            # 0 as all request finish. So we warmup for all intervals between 0 and N.
-            for num_requests in range(q_interval, num_query_tokens + q_interval, q_interval):
-                future_states = create_warmup_future_states(
-                    num_requests, RequestStatus.DECODING, 1, self.cache.block_size, self.cache
-                )
-                if not future_states:
-                    continue
-                try:
-                    padded_q = pad_to_interval(len(future_states), q_interval, self.max_batch_tokens)
-                    self.inputs_and_outputs.prepare_batch_tensors(
-                        future_states, self.logit_processor, True, padded_q, 0
-                    )
-                    batch_data = self.inputs_and_outputs.get_model_kwargs(use_padding=True)
-                    carry_over_ids, prev_output_ids, output_ids = self.inputs_and_outputs.get_cb_kwargs()
-                    forward_fn = self._compiled_decode or self._forward_process_and_sample
-                    forward_fn_args = (model, batch_data, carry_over_ids, prev_output_ids, output_ids)
-                    if self.use_cuda_graph:
-                        self.capture_graph(forward_fn, compute_stream, *forward_fn_args)
-                    else:
-                        with torch.cuda.stream(compute_stream):
-                            forward_fn(*forward_fn_args)
-                    decode_graphs += 1
-                except Exception as e:
-                    logger.warning(f"Failed to warm up decode path for {num_requests} requests: {e}")
-                finally:
-                    for fs in future_states:
-                        self.cache.free_blocks(fs.state.request_id)
-            logger.info(f"Decode warmup completed ({decode_graphs} graphs) in {perf_counter() - start:.2f}s.")
-
-        # If using async batching, reset to pair 0 for the generation loop
-        if self.use_async_batching:
-            self.inputs_and_outputs.current_pair = 0
+        pairs are warmed up since each has its own graph buffer and static tensors. The varlen path is warmed up at
+        the largest possible `(q, kv)` sizes so subsequent captures fit inside it without growing the pool."""
+        self.model_runner.warmup(model)
 
 
 # Manager Class (User Interface)
@@ -737,6 +471,7 @@ class ContinuousBatchingManager:
         model: ProtoPretrainedModel,
         generation_config: GenerationConfig,
         continuous_batching_config: ContinuousBatchingConfig,
+        workload_hints: WorkloadHints | None = None,
     ) -> None:
         """Initialize the continuous batching manager.
 
@@ -744,6 +479,7 @@ class ContinuousBatchingManager:
             model: The language model for generation
             generation_config: Configuration for generation parameters
             continuous_batching_config: Configuration for continuous batching parameters
+            workload_hints: Workload hints for the continuous batching initialization (optional)
         """
         # Reload paged version of the attention implementation if necessary
         if "paged|" not in model.config._attn_implementation:
@@ -752,12 +488,9 @@ class ContinuousBatchingManager:
         # Internal arguments
         self.model = model.eval()
         self.generation_config = generation_config
-        self.continuous_batching_config = continuous_batching_config
-        self.warmed_up = False  # Set to True after warmup is completed. Usefull for persistent managers.
-        # This is an approximation until the cache is created: it will infer the correct value in cache.__init__
-        self._use_prefix_sharing = self.continuous_batching_config.allow_block_sharing
+        self.warmed_up = False  # Set to True after warmup is completed. Useful for persistent managers.
 
-        self.input_queue = queue.Queue(maxsize=self.continuous_batching_config.max_queue_size)
+        self.input_queue = queue.Queue(maxsize=continuous_batching_config.max_queue_size)
         self._has_new_requests = threading.Event()
         self.output_router = OutputRouter()
         self.stop_event = threading.Event()
@@ -765,6 +498,7 @@ class ContinuousBatchingManager:
         self._generation_thread = None
         self._request_counter = 0
         self._request_lock = threading.Lock()
+        self.fatal_error: Exception | None = None
 
         # Generation config related arguments
         num_return_sequences = getattr(generation_config, "num_return_sequences", None)
@@ -772,25 +506,19 @@ class ContinuousBatchingManager:
 
         self.logit_processor = ContinuousBatchingLogitsProcessorList(
             logits_processor=self.model._get_logits_processor(generation_config),
-            per_request_processors=self.continuous_batching_config.per_request_processors,
-            drop_unsupported_processors=self.continuous_batching_config.drop_unsupported_processors,
+            per_request_processors=continuous_batching_config.per_request_processors,
+            drop_unsupported_processors=continuous_batching_config.drop_unsupported_processors,
         )
 
-        # Cuda graph behavior is determined below using either user-specified arguments or heuristics
-        is_attn_mask_needed = attn_mask_is_needed(self.model.config)
-        self.use_cuda_graph = self.continuous_batching_config.decide_use_cuda_graphs(
-            compile_config=getattr(generation_config, "compile_config", None),
-            is_attn_mask_needed=is_attn_mask_needed,
+        # Fully resolve the continuous batching config now that we have the model, the config and the logit processor.
+        self.continuous_batching_config = resolve_continuous_batching_config(
+            config=self.model.config,
+            cb_config=continuous_batching_config,
+            workload_hints=workload_hints,
+            has_logit_processors=self.logit_processor.do_processing,
         )
-        # Same for asynchronous batching behavior
-        self.use_async_batching = self.continuous_batching_config.decide_use_async_batching(is_attn_mask_needed)
-
-        # Resolve default parameters for Q and KV interval sizes, and max cached graphs. If one of those parameters is
-        # not specified (set to 0) then we use the default value and change its value in the config.
-        self.continuous_batching_config.resolve_sentinel_values()
-        self.q_padding_interval_size = self.continuous_batching_config.q_padding_interval_size
-        self.kv_padding_interval_size = self.continuous_batching_config.kv_padding_interval_size
-        self.max_cached_graphs = self.continuous_batching_config.max_cached_graphs
+        # This is an approximation until the cache is created: it will infer the correct value in cache.__init__
+        self._use_prefix_sharing = self.continuous_batching_config.allow_block_sharing
 
     @traced
     def start(self) -> None:
@@ -799,6 +527,7 @@ class ContinuousBatchingManager:
             logger.warning("Manager thread is already running.")
             return
         self.stop_event.clear()
+        self.fatal_error = None
         self._generation_thread = threading.Thread(target=self._run_generation_loop)
         self._generation_thread.start()
 
@@ -806,12 +535,12 @@ class ContinuousBatchingManager:
         """Check if the background generation thread is running."""
         return self._generation_thread is not None and self._generation_thread.is_alive()
 
-    def warmup(self, num_query_tokens: int = 0, num_cache_tokens: int = 0) -> None:
+    def warmup(self) -> None:
         """Pre-capture CUDA graphs for varlen and decode paths by running dummy batches. Initializes the batch
         processor if not already done."""
         if self.batch_processor is None:
             self.batch_processor = self._create_batch_processor()
-        self.batch_processor.warmup(self.model, self.logit_processor, num_query_tokens, num_cache_tokens)
+        self.batch_processor.warmup(self.model)
         self.warmed_up = True
 
     # NOTE: don't forget to update `continuous_batching_context_manager` when changing this method's definition
@@ -1045,6 +774,10 @@ class ContinuousBatchingManager:
         )
         self._use_prefix_sharing = paged_attention_cache.use_prefix_sharing  # update the approximation
 
+        # Disable the decode path if the model has sliding window attention (TODO)
+        if paged_attention_cache.num_sliding_attention_groups > 0:
+            self.continuous_batching_config.max_blocks_per_request = 0
+
         # Create the scheduler
         scheduler_type = self.continuous_batching_config.scheduler_type
         scheduler = SCHEDULER_MAPPING.get(scheduler_type, None)
@@ -1122,6 +855,9 @@ class ContinuousBatchingManager:
     @traced
     def _handle_critical_error(self, error: Exception, batch_processor: ContinuousBatchProcessor | None) -> None:
         """Handle critical errors that terminate the generation loop."""
+        # Record so callers (e.g. the serving layer) can fail fast on subsequent requests
+        # instead of enqueuing into a worker that will never drain.
+        self.fatal_error = error
         # Signal stop
         self.stop_event.set()
 
@@ -1156,6 +892,7 @@ class ContinuousMixin:
         self,
         generation_config: GenerationConfig | None = None,
         continuous_batching_config: ContinuousBatchingConfig | None = None,
+        workload_hints: WorkloadHints | None = None,
         **deprecated_kwargs,
     ) -> ContinuousBatchingManager:
         """Initialize a manager for continuous batching inference.
@@ -1163,6 +900,8 @@ class ContinuousMixin:
         Args:
             generation_config: An optional generation configuration, which may contain a CompileConfig object
             continuous_batching_config: An optional continuous batching configuration
+            workload_hints: Optional WorkloadHints to help the continuous batching manager make better decisions for
+                default values
             **deprecated_kwargs: Deprecated arguments that are now passed in the continuous_batching_config. Those are:
                 max_queue_size, q_padding_interval_size, kv_padding_interval_size, allow_block_sharing,
                 use_async_batching, max_cached_graphs
@@ -1201,7 +940,10 @@ class ContinuousMixin:
 
         # Create and return the manager
         return ContinuousBatchingManager(
-            model=self, generation_config=gen_config, continuous_batching_config=continuous_batching_config
+            model=self,
+            generation_config=gen_config,
+            continuous_batching_config=continuous_batching_config,
+            workload_hints=workload_hints,
         )
 
     def destroy_cached_continuous_batching_manager(self) -> None:
@@ -1220,25 +962,27 @@ class ContinuousMixin:
         timeout: float | None = None,
         continuous_batching_config: ContinuousBatchingConfig | None = None,
         persistent_manager: bool = False,
-        warmup_requests: int | None = 0,
+        warmup: bool = True,
+        workload_hints: WorkloadHints | None = None,
         **deprecated_kwargs,
     ) -> Generator[ContinuousBatchingManager]:
         """A context manager to safely use the continuous batching manager. Arguments are similar to the ones of
         `init_continuous_batching`, except for:
             - block: whether to block the thread when stopping the manager. Default is True.
             - timeout: maximum time to wait for the thread to stop. Default is None (no timeout).
-            - warmup_query_tokens: the number of expected requests for which to warmup. 0 is auto, None is no warmup.
+            - warmup: whether to pre-capture CUDA graphs at the largest sizes before running. Default is True.
         """
         manager = self.init_continuous_batching(
             generation_config=generation_config,
             continuous_batching_config=continuous_batching_config,
+            workload_hints=workload_hints,
             **deprecated_kwargs,
         )
-        if not (warmup_requests is None or manager.warmed_up):
+        if warmup and not manager.warmed_up:
             # Warmup is long (~30 sec): best to signal the user it's happening than let them think the manager is stuck
-            logger.warning("Warming up for coninuous batching...")
+            logger.warning("Warming up for continuous batching...")
             start = perf_counter()
-            manager.warmup(num_query_tokens=warmup_requests, num_cache_tokens=0)
+            manager.warmup()
             logger.warning(f"Warming up completed in {perf_counter() - start:.2f}s.")
         manager.start()
         try:
@@ -1300,13 +1044,21 @@ class ContinuousMixin:
         for depr_key in deprecated_keys:
             if depr_key in kwargs:
                 deprecated_kwargs[depr_key] = kwargs.pop(depr_key)
-        # Extract max_new_tokens from kwargs because it's the only expected kwarg
-        max_new_tokens = kwargs.pop("max_new_tokens", None)
 
         # Compute the total number of requests
         gen_cfg = self.generation_config if generation_config is None else generation_config
         num_return_sequences = gen_cfg.num_return_sequences if gen_cfg.num_return_sequences is not None else 1
         num_requests = len(inputs) * num_return_sequences
+
+        # Extract max_new_tokens from kwargs because it's the only expected kwarg
+        max_new_tokens = kwargs.pop("max_new_tokens", None)
+        max_new_tokens = gen_cfg.max_new_tokens if max_new_tokens is None else max_new_tokens
+
+        # Compute workload hints
+        workload_hints = WorkloadHints(
+            max_prompt_length=max(len(input_ids) for input_ids in inputs),
+            max_generated_length=max_new_tokens if max_new_tokens is not None else 0,
+        )
 
         # Prepare context managers for the main loop
         manager_cm = self.continuous_batching_context_manager(
@@ -1315,7 +1067,8 @@ class ContinuousMixin:
             block=True,
             timeout=5,
             persistent_manager=persistent_manager,
-            warmup_requests=len(inputs) if warmup else None,
+            warmup=warmup,
+            workload_hints=workload_hints,
             **deprecated_kwargs,
         )
         logging_cm = logging_redirect_tqdm([logger])

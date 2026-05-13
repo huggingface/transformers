@@ -102,11 +102,11 @@ class Qwen3VLMoeVisionText2TextModelTester(VLMModelTester):
         input_ids[input_ids == self.image_token_id] = self.pad_token_id
         input_ids[input_ids == self.vision_start_token_id] = self.pad_token_id
         # Place image tokens with vision_start_token_id prefix
-        input_ids[:, -1] = self.image_token_id
-        input_ids[:, -2] = self.vision_start_token_id
+        input_ids[:, 1] = self.image_token_id
+        input_ids[:, 0] = self.vision_start_token_id
         return input_ids
 
-    def get_additional_inputs(self, config, input_ids, pixel_values):
+    def get_additional_inputs(self, config, input_ids, modality_inputs):
         # Qwen3VL requires image_grid_thw tensor
         mm_token_type_ids = torch.zeros_like(input_ids)
         mm_token_type_ids[input_ids == self.image_token_id] = 1
