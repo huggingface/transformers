@@ -25,7 +25,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-def _is_ct_fp8_config(quantization_config: CompressedTensorsConfig) -> bool:
+def _is_fp8_config(quantization_config: CompressedTensorsConfig) -> bool:
     """Check if a CompressedTensorsConfig describes FP8 quantization."""
     ct_qconfig = quantization_config.quantization_config
     if ct_qconfig is None:
@@ -52,7 +52,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
     def __init__(self, quantization_config: CompressedTensorsConfig, **kwargs):
         # For FP8 with GPU/XPU, we don't require calibration (online quantization is supported)
-        if _is_ct_fp8_config(quantization_config) and (
+        if _is_fp8_config(quantization_config) and (
             is_torch_available() and (torch.cuda.is_available() or is_torch_xpu_available())
         ):
             self.requires_calibration = False
@@ -81,7 +81,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         self._activation_scheme = "dynamic"
         self._modules_to_not_convert_ct = []
 
-        if _is_ct_fp8_config(quantization_config):
+        if _is_fp8_config(quantization_config):
             ct_qconfig = quantization_config.quantization_config
             if ct_qconfig and ct_qconfig.ignore:
                 self._modules_to_not_convert_ct = list(ct_qconfig.ignore)

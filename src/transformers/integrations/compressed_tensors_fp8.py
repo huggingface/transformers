@@ -30,7 +30,6 @@ from torch.nn import functional as F
 from ..core_model_loading import ConversionOps, _IdentityOp
 from ..quantizers.quantizers_utils import should_convert_module
 from ..utils import logging
-from .hub_kernels import lazy_load_kernel
 
 
 logger = logging.get_logger(__name__)
@@ -41,7 +40,7 @@ _FP8_MAX = torch.finfo(_FP8_DTYPE).max
 
 
 def _use_fp8_kernel():
-    """Check if we can use kernels-community Triton FP8 kernel (XPU or CUDA SM89+)."""
+    """Check if we can use FP8 matmul (XPU or CUDA SM89+)."""
     if torch.xpu.is_available():
         return True
     if torch.cuda.is_available():
@@ -51,15 +50,23 @@ def _use_fp8_kernel():
     return False
 
 
-def _get_quantize_fp8_per_row():
-    """Get the quantize_fp8_per_row function from kernels-community (Triton), with caching."""
-    kernel = lazy_load_kernel("fp8-fbgemm")
-    if kernel is None:
-        raise ImportError(
-            "Failed to load the fp8-fbgemm kernel. Install the `kernels` package with "
-            "`pip install -U kernels` and ensure `kernels-community/fp8-fbgemm` is available."
-        )
-    return kernel.quantize_fp8_per_row
+def _quantize_fp8_per_row(x: torch.Tensor):
+    """Quantize a 2D tensor to FP8 per-row using pure PyTorch (torch.compile compatible).
+
+    Args:
+        x: Input tensor of shape (num_rows, hidden_dim).
+
+    Returns:
+        Tuple of (x_fp8, scales) where x_fp8 is the quantized tensor and
+        scales is a 1D tensor of shape (num_rows,) with per-row scales.
+    """
+    x_float = x.to(torch.float32)
+    row_max = x_float.abs().amax(dim=-1)  # (num_rows,)
+    # Avoid division by zero for all-zero rows
+    safe_max = torch.where(row_max > 0, row_max, torch.ones_like(row_max))
+    scales = safe_max / _FP8_MAX  # float32
+    x_fp8 = torch.clamp(x_float / scales.unsqueeze(-1), min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
+    return x_fp8, scales
 
 
 class CompressedTensorsFP8Linear(nn.Linear):
@@ -105,7 +112,7 @@ class CompressedTensorsFP8Linear(nn.Linear):
         if self.use_fp8_kernel:
             # XPU or CUDA SM89+: FP8 kernel path (quantize activation + scaled_mm)
             x = input.reshape(-1, input.shape[-1])
-            x_quantized, x_scale = _get_quantize_fp8_per_row()(x)
+            x_quantized, x_scale = _quantize_fp8_per_row(x)
 
             weight_scale_float32 = self.weight_scale_inv.to(torch.float32)
 
