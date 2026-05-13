@@ -369,11 +369,13 @@ else:
         "StaticSlidingWindowLayer",
         "QuantoQuantizedLayer",
         "HQQQuantizedLayer",
+        "TurboQuantQuantizedLayer",
         "Cache",
         "DynamicCache",
         "EncoderDecoderCache",
         "QuantizedCache",
         "StaticCache",
+        "TurboQuantCache",
     ]
     _import_structure["data.datasets"] = [
         "GlueDataset",
@@ -493,6 +495,8 @@ if TYPE_CHECKING:
     from .cache_utils import StaticCache as StaticCache
     from .cache_utils import StaticLayer as StaticLayer
     from .cache_utils import StaticSlidingWindowLayer as StaticSlidingWindowLayer
+    from .cache_utils import TurboQuantCache as TurboQuantCache
+    from .cache_utils import TurboQuantQuantizedLayer as TurboQuantQuantizedLayer
     from .configuration_utils import PreTrainedConfig as PreTrainedConfig
     from .configuration_utils import PretrainedConfig as PretrainedConfig
     from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS as SLOW_TO_FAST_CONVERTERS

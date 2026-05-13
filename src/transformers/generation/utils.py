@@ -32,6 +32,7 @@ from ..cache_utils import (
     EncoderDecoderCache,
     QuantizedCache,
     StaticCache,
+    TurboQuantCache,
 )
 from ..dynamic_module_utils import (
     check_python_requirements,
@@ -1910,10 +1911,13 @@ class GenerationMixin(ContinuousMixin):
                     "cache, please open an issue and tag @zucchini-nlp."
                 )
 
-            cache_config = generation_config.cache_config if generation_config.cache_config is not None else {}
+            cache_config = dict(generation_config.cache_config) if generation_config.cache_config is not None else {}
             cache_config.setdefault("config", self.config.get_text_config(decoder=True))
             backend = cache_config.pop("backend", "quanto")
-            model_kwargs[cache_name] = QuantizedCache(backend=backend, **cache_config)
+            if backend == "turboquant":
+                model_kwargs[cache_name] = TurboQuantCache(**cache_config)
+            else:
+                model_kwargs[cache_name] = QuantizedCache(backend=backend, **cache_config)
         # i.e. `cache_implementation` in [None, "dynamic", "offloaded", "dynamic_full"]
         # TODO: prepare linear cache from a single API, instead of creating in modeling code
         else:

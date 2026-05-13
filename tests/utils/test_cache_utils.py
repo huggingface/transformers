@@ -50,8 +50,11 @@ if is_torch_available():
         Gemma2Config,
         GenerationConfig,
         LlamaConfig,
+        PretrainedConfig,
         QuantizedCache,
         StaticCache,
+        TurboQuantCache,
+        TurboQuantQuantizedLayer,
         convert_and_export_with_cache,
         pipeline,
     )
@@ -107,6 +110,126 @@ class CacheTest(unittest.TestCase):
         cached_keys, cached_values = mqa_static_cache.update(*_random_kvs(mqa_config), 0)
         self.assertTrue(cached_keys.shape == (1, 1, 10, 128))
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
+
+    def test_turboquant_quantized_layer(self):
+        layer = TurboQuantQuantizedLayer(nbits=2, residual_length=2, codebook_grid_size=513, max_lloyd_iterations=20)
+        keys = torch.randn(2, 3, 4, 16, device=torch_device)
+        values = torch.randn(2, 3, 4, 16, device=torch_device)
+
+        cached_keys, cached_values = layer.update(keys, values)
+        self.assertEqual(cached_keys.shape, keys.shape)
+        self.assertEqual(cached_values.shape, values.shape)
+        self.assertEqual(cached_keys.dtype, keys.dtype)
+        self.assertEqual(cached_values.dtype, values.dtype)
+        self.assertLess(layer._quantized_keys["indices"].numel(), keys.numel())
+        self.assertLess(layer._quantized_keys["qjl"].numel(), keys.numel())
+        self.assertLess(layer._quantized_values["indices"].numel(), values.numel())
+
+        new_keys = torch.randn(2, 3, 1, 16, device=torch_device)
+        new_values = torch.randn(2, 3, 1, 16, device=torch_device)
+        cached_keys, cached_values = layer.update(new_keys, new_values)
+        self.assertEqual(cached_keys.shape, (2, 3, 5, 16))
+        self.assertEqual(cached_values.shape, (2, 3, 5, 16))
+
+        zero_layer = TurboQuantQuantizedLayer(nbits=2, codebook_grid_size=513, max_lloyd_iterations=20)
+        zeros = torch.zeros(1, 2, 3, 16, device=torch_device)
+        zero_layer.update(zeros, zeros)
+        dequantized_zeros = zero_layer._dequantize(zero_layer._quantized_keys)
+        self.assertTrue(torch.allclose(dequantized_zeros, zeros))
+
+        layer.reset()
+        cached_keys, cached_values = layer.update(new_keys, new_values)
+        self.assertEqual(cached_keys.shape, new_keys.shape)
+        self.assertEqual(cached_values.shape, new_values.shape)
+        cached_keys, cached_values = layer.update(new_keys, new_values)
+        self.assertEqual(cached_keys.shape, (2, 3, 2, 16))
+        self.assertEqual(cached_values.shape, (2, 3, 2, 16))
+
+    def test_turboquant_mse_error_decreases_with_bit_width(self):
+        torch.manual_seed(0)
+        vectors = torch.randn(128, 16, device=torch_device)
+        low_bit = TurboQuantQuantizedLayer(
+            nbits=1,
+            key_objective="mse",
+            value_objective="mse",
+            seed=11,
+            codebook_grid_size=513,
+            max_lloyd_iterations=20,
+        )
+        high_bit = TurboQuantQuantizedLayer(
+            nbits=4,
+            key_objective="mse",
+            value_objective="mse",
+            seed=11,
+            codebook_grid_size=513,
+            max_lloyd_iterations=20,
+        )
+
+        low_reconstruction = low_bit._dequantize(low_bit._quantize(vectors, objective="mse"))
+        high_reconstruction = high_bit._dequantize(high_bit._quantize(vectors, objective="mse"))
+        low_error = torch.mean((low_reconstruction - vectors) ** 2)
+        high_error = torch.mean((high_reconstruction - vectors) ** 2)
+
+        self.assertLess(high_error, low_error)
+
+    def test_turboquant_cache(self):
+        config = PretrainedConfig(num_hidden_layers=2)
+        cache = TurboQuantCache(
+            config=config,
+            nbits=2,
+            codebook_grid_size=513,
+            max_lloyd_iterations=20,
+        )
+
+        self.assertIsInstance(cache, QuantizedCache)
+        self.assertEqual(len(cache.layers), 2)
+        self.assertTrue(all(isinstance(layer, TurboQuantQuantizedLayer) for layer in cache.layers))
+
+        quantized_cache = QuantizedCache(
+            backend="turboquant",
+            config=config,
+            nbits=2,
+            codebook_grid_size=513,
+            max_lloyd_iterations=20,
+        )
+        self.assertTrue(all(isinstance(layer, TurboQuantQuantizedLayer) for layer in quantized_cache.layers))
+
+    def test_turboquant_cache_generation(self):
+        config = LlamaConfig(
+            vocab_size=99,
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            max_position_embeddings=32,
+            pad_token_id=0,
+            bos_token_id=1,
+            eos_token_id=2,
+        )
+        model = AutoModelForCausalLM.from_config(config).to(torch_device)
+        model.eval()
+        input_ids = torch.tensor([[1, 3, 4]], device=torch_device)
+        generation_config = GenerationConfig(
+            cache_implementation="quantized",
+            cache_config={
+                "backend": "turboquant",
+                "nbits": 2,
+                "residual_length": 2,
+                "codebook_grid_size": 513,
+                "max_lloyd_iterations": 20,
+            },
+            do_sample=False,
+            max_new_tokens=2,
+            return_dict_in_generate=True,
+            disable_compile=True,
+            pad_token_id=0,
+        )
+
+        output = model.generate(input_ids=input_ids, generation_config=generation_config)
+
+        self.assertIsInstance(output.past_key_values, TurboQuantCache)
+        self.assertEqual(generation_config.cache_config["backend"], "turboquant")
 
 
 def _skip_on_failed_cache_prerequisites(test, cache_implementation):
