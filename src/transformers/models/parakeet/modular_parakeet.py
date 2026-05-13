@@ -523,7 +523,7 @@ class ParakeetGenerateOutput(ParakeetCTCGenerateOutput):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         logger.warning_once(
-            "`ParakeetGenerateOutput` is deprecated and removed starting from version 5.5.0; please use `ParakeetCTCGenerateOutput` instead.",
+            "`ParakeetGenerateOutput` is deprecated and removed starting from version 5.11.0; please use `ParakeetCTCGenerateOutput` instead.",
         )
 
 
