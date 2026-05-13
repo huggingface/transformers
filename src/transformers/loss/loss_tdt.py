@@ -22,19 +22,13 @@ logger = logging.get_logger(__name__)
 
 def _load_tdt_kernel():
     """Try to load the TDT loss CUDA kernel from the Hub. Returns None on failure."""
-    try:
-        from ..integrations.hub_kernels import lazy_load_kernel
+    from ..integrations.hub_kernels import lazy_load_kernel
 
-        kernel = lazy_load_kernel("tdt-loss")
-        if kernel is None or not hasattr(kernel, "tdt_loss"):
-            logger.warning_once("Falling back to pure PyTorch implementation.")
-            return None
-        return kernel
-    except (ImportError, ModuleNotFoundError):
+    kernel = lazy_load_kernel("tdt-loss")
+    if kernel is None or not hasattr(kernel, "tdt_loss"):
+        logger.warning_once("Falling back to pure PyTorch implementation.")
         return None
-    except Exception as e:
-        logger.warning_once(f"Failed to load TDT CUDA kernel: {e}. Falling back to pure PyTorch implementation.")
-        return None
+    return kernel
 
 
 def tdt_loss(

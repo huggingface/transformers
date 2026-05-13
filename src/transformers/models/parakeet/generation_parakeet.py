@@ -20,6 +20,68 @@ from ...generation import GenerationMixin, StoppingCriteria
 from ...utils import ModelOutput
 
 
+class ParakeetTDTDecoderCache:
+    def __init__(self, config):
+        self.config = config
+        self.cache: torch.Tensor | None = None
+        self.hidden_state: torch.Tensor | None = None
+        self.cell_state: torch.Tensor | None = None
+        self.is_initialized: bool = False
+
+    def lazy_initialization(self, hidden_states):
+        self.cache = torch.zeros(
+            hidden_states.shape[0],
+            1,
+            self.config.decoder_hidden_size,
+            device=hidden_states.device,
+            dtype=hidden_states.dtype,
+        )
+        self.hidden_state = torch.zeros(
+            self.config.num_decoder_layers,
+            hidden_states.shape[0],
+            self.config.decoder_hidden_size,
+            device=hidden_states.device,
+            dtype=hidden_states.dtype,
+        )
+        self.cell_state = torch.zeros(
+            self.config.num_decoder_layers,
+            hidden_states.shape[0],
+            self.config.decoder_hidden_size,
+            device=hidden_states.device,
+            dtype=hidden_states.dtype,
+        )
+
+        torch._dynamo.mark_static_address(self.cache)
+        torch._dynamo.mark_static_address(self.hidden_state)
+        torch._dynamo.mark_static_address(self.cell_state)
+
+        self.is_initialized = True
+
+    def update(
+        self,
+        decoder_output,
+        hidden_state,
+        cell_state,
+        mask=None,
+    ):
+        if not self.is_initialized:
+            self.lazy_initialization(decoder_output)
+
+        if mask is None:
+            self.hidden_state.copy_(hidden_state)
+            self.cell_state.copy_(cell_state)
+            self.cache.copy_(decoder_output)
+        else:
+            # Mask to update specific batch elements
+            mask = mask.to(decoder_output.device)
+            batch_size = decoder_output.shape[0]
+            mask_h = mask.view(1, batch_size, 1)
+            mask_d = mask.view(batch_size, 1, 1)
+            self.cache = torch.where(mask_d, decoder_output, self.cache)
+            self.hidden_state = torch.where(mask_h, hidden_state, self.hidden_state)
+            self.cell_state = torch.where(mask_h, cell_state, self.cell_state)
+
+
 @dataclass
 class ParakeetTDTGenerateOutput(ModelOutput):
     """
@@ -145,9 +207,7 @@ class ParakeetTDTGenerationMixin(GenerationMixin):
         return inputs, input_name, model_kwargs
 
     def _prepare_cache_for_generation(self, generation_config, model_kwargs, *args, **kwargs):
-        from .modeling_parakeet import ParakeetTDTDecoderCache
-
-        model_kwargs["decoder_cache"] = ParakeetTDTDecoderCache()
+        model_kwargs["decoder_cache"] = ParakeetTDTDecoderCache(self.config)
 
     def prepare_inputs_for_generation(self, input_ids, *args, **kwargs):
         from .modeling_parakeet import ParakeetEncoderModelOutput

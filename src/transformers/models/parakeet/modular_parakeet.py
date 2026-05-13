@@ -32,7 +32,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torchdynamo_compiling,
     logging,
 )
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
@@ -41,7 +40,7 @@ from ..auto import AutoModel
 from ..fastspeech2_conformer.modeling_fastspeech2_conformer import FastSpeech2ConformerConvolutionModule
 from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
 from .configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig, ParakeetTDTConfig
-from .generation_parakeet import ParakeetTDTGenerationMixin
+from .generation_parakeet import ParakeetTDTDecoderCache, ParakeetTDTGenerationMixin
 
 
 logger = logging.get_logger(__name__)
@@ -674,69 +673,6 @@ class ParakeetForCTC(ParakeetPreTrainedModel, GenerationMixin):
         return sequences
 
 
-class ParakeetTDTDecoderCache:
-    def __init__(self):
-        self.cache: torch.Tensor | None = None
-        self.hidden_state: torch.Tensor | None = None
-        self.cell_state: torch.Tensor | None = None
-        self.is_initialized: bool = False
-
-    def lazy_initialization(self, hidden_states, lstm_module):
-        self.cache = torch.zeros(
-            hidden_states.shape[0], 1, lstm_module.hidden_size, device=hidden_states.device, dtype=hidden_states.dtype
-        )
-        self.hidden_state = torch.zeros(
-            lstm_module.num_layers,
-            hidden_states.shape[0],
-            lstm_module.hidden_size,
-            device=hidden_states.device,
-            dtype=hidden_states.dtype,
-        )
-        self.cell_state = torch.zeros(
-            lstm_module.num_layers,
-            hidden_states.shape[0],
-            lstm_module.hidden_size,
-            device=hidden_states.device,
-            dtype=hidden_states.dtype,
-        )
-
-        if not is_torchdynamo_compiling():
-            torch._dynamo.mark_static_address(self.cache)
-            torch._dynamo.mark_static_address(self.hidden_state)
-            torch._dynamo.mark_static_address(self.cell_state)
-
-        self.is_initialized = True
-
-    def update(
-        self,
-        decoder_output,
-        hidden_state,
-        cell_state,
-        lstm_module=None,
-        mask=None,
-    ):
-        if not self.is_initialized and lstm_module is not None:
-            self.lazy_initialization(decoder_output, lstm_module)
-        elif not self.is_initialized:
-            raise ValueError(
-                "ParakeetTDTDecoderCache is not initialized. Make sure to provide lstm_module to the update method."
-            )
-
-        if mask is None:
-            self.hidden_state.copy_(hidden_state)
-            self.cell_state.copy_(cell_state)
-            self.cache.copy_(decoder_output)
-        else:
-            # Mask to update specific batch elements
-            mask = mask.to(decoder_output.device)
-            batch_size = decoder_output.shape[0]
-            mask_h = mask.view(1, batch_size, 1)
-            mask_d = mask.view(batch_size, 1, 1)
-            self.cache = torch.where(mask_d, decoder_output, self.cache)
-            self.hidden_state = torch.where(mask_h, hidden_state, self.hidden_state)
-            self.cell_state = torch.where(mask_h, cell_state, self.cell_state)
-
-
 class ParakeetTDTDecoder(nn.Module):
     """LSTM-based prediction network for TDT."""
 
@@ -757,22 +693,29 @@ class ParakeetTDTDecoder(nn.Module):
         input_ids: torch.LongTensor,
         cache: ParakeetTDTDecoderCache | None = None,
     ) -> torch.Tensor:
-        # All-blank fast path
-        if cache is not None and cache.is_initialized:
+        if cache is not None:
             blank_mask = input_ids[:, -1] == self.blank_token_id
-            if blank_mask.all():
+            # All-blank fast path: skip decoder when all batch elements predict blank
+            if cache.is_initialized and blank_mask.all():
                 return cache.cache
 
-        hidden_cell_states = (
-            (cache.hidden_state, cache.cell_state) if cache is not None and cache.is_initialized else None
-        )
         embeddings = self.embedding(input_ids)
+
+        # Get cached hidden/cell states if available, otherwise initialize with ParakeetTDTDecoderCache
+        if cache is not None:
+            was_initialized = cache.is_initialized
+            if not was_initialized:
+                cache.lazy_initialization(embeddings)
+            hidden_cell_states = (cache.hidden_state, cache.cell_state)
+        else:
+            hidden_cell_states = None
+
         lstm_output, (hidden_state, cell_state) = self.lstm(embeddings, hidden_cell_states)
         decoder_output = self.decoder_projector(lstm_output)
 
         if cache is not None:
-            mask = ~blank_mask if cache.is_initialized else None
-            cache.update(decoder_output, hidden_state, cell_state, lstm_module=self.lstm, mask=mask)
+            mask = ~blank_mask if was_initialized else None
+            cache.update(decoder_output, hidden_state, cell_state, mask=mask)
             return cache.cache
 
         return decoder_output
@@ -911,7 +854,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel, ParakeetTDTGenerationMixin):
             )
 
         if use_decoder_cache and decoder_cache is None:
-            decoder_cache = ParakeetTDTDecoderCache()
+            decoder_cache = ParakeetTDTDecoderCache(self.config)
 
         decoder_hidden_states = self.decoder(decoder_input_ids, cache=decoder_cache)
         logits = self.joint(
