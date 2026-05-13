@@ -1,5 +1,7 @@
+import math
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
+from typing import Any
 
 import torch
 
@@ -697,6 +699,279 @@ class HQQQuantizedLayer(QuantizedLayer):
         quant_tensor, meta = qtensor
         tensor = self.quantizer.dequantize(quant_tensor, meta)
         return tensor
+
+
+class TurboQuantQuantizedLayer(QuantizedLayer):
+    """
+    Quantized cache layer implementing TurboQuant online vector quantization.
+
+    TurboQuant first normalizes each vector, applies a deterministic random rotation, quantizes every rotated
+    coordinate with a Lloyd-Max scalar codebook, and reconstructs on demand. With the `"prod"` objective, one bit is
+    reserved for a 1-bit QJL residual correction.
+    """
+
+    def __init__(
+        self,
+        nbits: int = 3,
+        axis_key: int = 0,
+        axis_value: int = 0,
+        q_group_size: int = 64,
+        residual_length: int = 128,
+        key_objective: str = "prod",
+        value_objective: str = "mse",
+        seed: int = 0,
+        codebook_grid_size: int = 8193,
+        max_lloyd_iterations: int = 100,
+        lloyd_tolerance: float = 1e-6,
+    ):
+        super().__init__(
+            nbits=nbits,
+            axis_key=axis_key,
+            axis_value=axis_value,
+            q_group_size=q_group_size,
+            residual_length=residual_length,
+        )
+
+        if self.nbits not in range(1, 9):
+            raise ValueError(f"`nbits` for `turboquant` backend has to be between 1 and 8 but got {self.nbits}")
+        if key_objective not in ("mse", "prod"):
+            raise ValueError(f"`key_objective` must be one of [`mse`, `prod`] but got {key_objective}")
+        if value_objective not in ("mse", "prod"):
+            raise ValueError(f"`value_objective` must be one of [`mse`, `prod`] but got {value_objective}")
+        if codebook_grid_size < 257:
+            raise ValueError(f"`codebook_grid_size` must be at least 257 but got {codebook_grid_size}")
+        if max_lloyd_iterations <= 0:
+            raise ValueError(f"`max_lloyd_iterations` must be positive but got {max_lloyd_iterations}")
+        if lloyd_tolerance <= 0:
+            raise ValueError(f"`lloyd_tolerance` must be positive but got {lloyd_tolerance}")
+
+        self.key_objective = key_objective
+        self.value_objective = value_objective
+        self.seed = seed
+        self.codebook_grid_size = codebook_grid_size
+        self.max_lloyd_iterations = max_lloyd_iterations
+        self.lloyd_tolerance = lloyd_tolerance
+        self._quantized_keys: dict[str, Any] | None = None
+        self._quantized_values: dict[str, Any] | None = None
+        self._codebook_cache: dict[tuple[int, int], torch.Tensor] = {}
+        self._rotation_cache: dict[tuple[int, str, int], torch.Tensor] = {}
+        self._projection_cache: dict[tuple[int, str, int], torch.Tensor] = {}
+
+    def update(
+        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        self.cumulative_length += key_states.shape[-2]
+
+        if not self.is_initialized:
+            self.lazy_initialization(key_states, value_states)
+
+        if self._quantized_keys is None or self._quantized_values is None:
+            self._quantized_keys = self._quantize(key_states.contiguous(), objective=self.key_objective)
+            self._quantized_values = self._quantize(value_states.contiguous(), objective=self.value_objective)
+            return key_states, value_states
+
+        dequant_keys = self._dequantize(self._quantized_keys)
+        dequant_values = self._dequantize(self._quantized_values)
+        keys_to_return = torch.cat([dequant_keys, self.keys, key_states], dim=-2)
+        values_to_return = torch.cat([dequant_values, self.values, value_states], dim=-2)
+        if self.keys.dim() == 4 and self.keys.shape[-2] + key_states.shape[-2] >= self.residual_length:
+            self._quantized_keys = self._quantize(keys_to_return.contiguous(), objective=self.key_objective)
+            self._quantized_values = self._quantize(values_to_return.contiguous(), objective=self.value_objective)
+            self.keys = torch.tensor([], dtype=key_states.dtype, device=key_states.device)
+            self.values = torch.tensor([], dtype=key_states.dtype, device=key_states.device)
+        else:
+            self.keys = torch.cat([self.keys, key_states], dim=-2)
+            self.values = torch.cat([self.values, value_states], dim=-2)
+
+        return keys_to_return, values_to_return
+
+    def reset(self) -> None:
+        if self.is_initialized:
+            self.keys = torch.tensor([], dtype=self.dtype, device=self.device)
+            self.values = torch.tensor([], dtype=self.dtype, device=self.device)
+        self.cumulative_length = 0
+        self._quantized_keys = None
+        self._quantized_values = None
+
+    def _quantize(self, tensor: torch.Tensor, axis: int | None = None, objective: str | None = None) -> dict[str, Any]:
+        del axis
+        if objective is None:
+            objective = "mse"
+
+        shape = tensor.shape
+        dimension = shape[-1]
+        vectors = tensor.reshape(-1, dimension).to(dtype=torch.float32)
+        norms = vectors.norm(dim=-1, keepdim=True)
+        unit_vectors = vectors / norms.clamp_min(torch.finfo(vectors.dtype).tiny)
+
+        if objective == "mse":
+            payload = self._quantize_mse(unit_vectors, self.nbits)
+        else:
+            payload = self._quantize_prod(unit_vectors, self.nbits)
+
+        payload["shape"] = shape
+        payload["norms"] = norms.reshape(*shape[:-1], 1).to(dtype=tensor.dtype)
+        payload["dtype"] = tensor.dtype
+        payload["objective"] = objective
+        return payload
+
+    def _dequantize(self, qtensor: dict[str, Any]) -> torch.Tensor:
+        shape = qtensor["shape"]
+        dimension = shape[-1]
+        device = qtensor["norms"].device
+
+        indices = self._unpack_bits(qtensor["indices"], qtensor["mse_bits"], qtensor["indices_shape"])
+        reconstruction = self._dequantize_mse(indices, dimension, qtensor["mse_bits"], device)
+        if qtensor["objective"] == "prod":
+            qjl_packed = self._unpack_bits(qtensor["qjl"], 1, qtensor["qjl_shape"])
+            qjl = torch.where(
+                qjl_packed.bool(),
+                torch.ones((), dtype=torch.float32, device=device),
+                -torch.ones((), dtype=torch.float32, device=device),
+            )
+            projection = self._get_projection(dimension, device)
+            gamma = qtensor["gamma"].reshape(-1, 1).to(dtype=torch.float32)
+            qjl_reconstruction = math.sqrt(math.pi / 2) / dimension * gamma * (qjl.reshape(-1, dimension) @ projection)
+            reconstruction = reconstruction + qjl_reconstruction
+
+        norms = qtensor["norms"].reshape(-1, 1).to(dtype=torch.float32)
+        return (reconstruction * norms).reshape(shape).to(dtype=qtensor["dtype"])
+
+    def _quantize_mse(self, unit_vectors: torch.Tensor, bit_width: int) -> dict[str, Any]:
+        indices = self._quantize_mse_indices(unit_vectors, bit_width)
+        return {
+            "indices": self._pack_bits(indices, bit_width),
+            "indices_shape": indices.shape,
+            "mse_bits": bit_width,
+        }
+
+    def _quantize_prod(self, unit_vectors: torch.Tensor, bit_width: int) -> dict[str, Any]:
+        dimension = unit_vectors.shape[-1]
+        mse_bits = bit_width - 1
+        indices = self._quantize_mse_indices(unit_vectors, mse_bits)
+        mse_reconstruction = self._dequantize_mse(indices, dimension, mse_bits, unit_vectors.device)
+        residual = unit_vectors - mse_reconstruction
+        projection = self._get_projection(dimension, unit_vectors.device)
+
+        return {
+            "indices": self._pack_bits(indices, mse_bits),
+            "indices_shape": indices.shape,
+            "mse_bits": mse_bits,
+            "gamma": residual.norm(dim=-1, keepdim=True).to(dtype=torch.float16),
+            "qjl": self._pack_bits((residual @ projection.T >= 0).to(dtype=torch.uint8), 1),
+            "qjl_shape": residual.shape,
+        }
+
+    def _pack_bits(self, values: torch.Tensor, bit_width: int) -> torch.Tensor:
+        flat_values = values.reshape(-1).to(dtype=torch.int16)
+        if bit_width == 0 or flat_values.numel() == 0:
+            return torch.empty(0, dtype=torch.uint8, device=values.device)
+
+        value_positions = torch.arange(flat_values.numel(), device=values.device, dtype=torch.long) * bit_width
+        packed = torch.zeros(
+            (math.ceil(flat_values.numel() * bit_width / 8),), dtype=torch.int16, device=values.device
+        )
+        for bit_idx in range(bit_width):
+            bit_values = (flat_values >> bit_idx) & 1
+            bit_positions = value_positions + bit_idx
+            packed.scatter_add_(0, bit_positions // 8, (bit_values << (bit_positions % 8)).to(dtype=torch.int16))
+        return packed.to(dtype=torch.uint8)
+
+    def _unpack_bits(self, packed: torch.Tensor, bit_width: int, shape: torch.Size) -> torch.Tensor:
+        num_values = math.prod(shape)
+        if bit_width == 0:
+            return torch.zeros(shape, dtype=torch.uint8, device=packed.device)
+        if num_values == 0:
+            return torch.empty(shape, dtype=torch.uint8, device=packed.device)
+
+        value_positions = torch.arange(num_values, device=packed.device, dtype=torch.long) * bit_width
+        values = torch.zeros((num_values,), dtype=torch.int16, device=packed.device)
+        for bit_idx in range(bit_width):
+            bit_positions = value_positions + bit_idx
+            bit_values = (packed[bit_positions // 8].to(dtype=torch.int16) >> (bit_positions % 8)) & 1
+            values |= bit_values << bit_idx
+        return values.reshape(shape).to(dtype=torch.uint8)
+
+    def _quantize_mse_indices(self, unit_vectors: torch.Tensor, bit_width: int) -> torch.Tensor:
+        if bit_width == 0:
+            return torch.zeros(unit_vectors.shape, dtype=torch.uint8, device=unit_vectors.device)
+
+        dimension = unit_vectors.shape[-1]
+        rotation = self._get_rotation(dimension, unit_vectors.device)
+        codebook = self._get_codebook(dimension, bit_width, unit_vectors.device)
+        boundaries = (codebook[:-1] + codebook[1:]) / 2
+
+        rotated = unit_vectors @ rotation.T
+        return torch.bucketize(rotated.contiguous(), boundaries).to(dtype=torch.uint8)
+
+    def _dequantize_mse(
+        self, indices: torch.Tensor, dimension: int, bit_width: int, device: torch.device
+    ) -> torch.Tensor:
+        if bit_width == 0:
+            return torch.zeros(indices.reshape(-1, dimension).shape, dtype=torch.float32, device=device)
+
+        rotation = self._get_rotation(dimension, device)
+        codebook = self._get_codebook(dimension, bit_width, device)
+        quantized_rotated = codebook[indices.to(dtype=torch.long)].reshape(-1, dimension)
+        return quantized_rotated @ rotation
+
+    def _get_rotation(self, dimension: int, device: torch.device) -> torch.Tensor:
+        key = (dimension, device.type, device.index or -1)
+        if key not in self._rotation_cache:
+            generator = torch.Generator(device="cpu").manual_seed(self.seed + 104729 * dimension)
+            gaussian = torch.randn(dimension, dimension, generator=generator, dtype=torch.float32)
+            q, r = torch.linalg.qr(gaussian)
+            signs = torch.sign(torch.diagonal(r))
+            signs = torch.where(signs == 0, torch.ones_like(signs), signs)
+            self._rotation_cache[key] = (q * signs.unsqueeze(0)).to(device=device)
+        return self._rotation_cache[key]
+
+    def _get_projection(self, dimension: int, device: torch.device) -> torch.Tensor:
+        key = (dimension, device.type, device.index or -1)
+        if key not in self._projection_cache:
+            generator = torch.Generator(device="cpu").manual_seed(self.seed + 1299709 * dimension)
+            projection = torch.randn(dimension, dimension, generator=generator, dtype=torch.float32)
+            self._projection_cache[key] = projection.to(device=device)
+        return self._projection_cache[key]
+
+    def _get_codebook(self, dimension: int, bit_width: int, device: torch.device) -> torch.Tensor:
+        key = (dimension, bit_width)
+        if key not in self._codebook_cache:
+            self._codebook_cache[key] = self._build_codebook(dimension, bit_width)
+        return self._codebook_cache[key].to(device=device)
+
+    def _build_codebook(self, dimension: int, bit_width: int) -> torch.Tensor:
+        if bit_width == 0:
+            return torch.zeros(1, dtype=torch.float32)
+
+        n_centroids = 2**bit_width
+        grid_size = max(self.codebook_grid_size, 64 * n_centroids + 1)
+        if grid_size % 2 == 0:
+            grid_size += 1
+
+        grid = torch.linspace(-1.0, 1.0, grid_size, dtype=torch.float64)
+        density_base = torch.clamp(1 - grid.square(), min=torch.finfo(torch.float64).tiny)
+        log_weights = (dimension - 3) / 2 * torch.log(density_base)
+        weights = torch.exp(log_weights - log_weights.max())
+
+        span = min(1.0, 3.0 / math.sqrt(dimension))
+        centroids = torch.linspace(-span, span, n_centroids, dtype=torch.float64)
+        for _ in range(self.max_lloyd_iterations):
+            boundaries = (centroids[:-1] + centroids[1:]) / 2
+            assignments = torch.bucketize(grid, boundaries)
+            updated = centroids.clone()
+            for idx in range(n_centroids):
+                mask = assignments == idx
+                bucket_weight = weights[mask].sum()
+                if bucket_weight > 0:
+                    updated[idx] = (grid[mask] * weights[mask]).sum() / bucket_weight
+
+            if torch.max(torch.abs(updated - centroids)) < self.lloyd_tolerance:
+                centroids = updated
+                break
+            centroids = updated
+
+        return centroids.to(dtype=torch.float32)
 
 
 class LinearAttentionCacheLayerMixin(ABC):
@@ -1435,20 +1710,19 @@ class QuantizedCache(Cache):
     See `Cache` for details on common methods that are implemented by all cache classes.
 
     Args:
-        backend (`str`):
-            The quantization backend to use. One of `("quanto", "hqq").
-        config (`PreTrainedConfig`):
-            The config of the model for which this Cache will be used.
-        nbits (`int`, *optional*, defaults to 4):
-            The number of bits for quantization.
-        axis_key (`int`, *optional*, defaults to 0):
-            The axis on which to quantize the keys.
-        axis_value (`int`, *optional*, defaults to 0):
-            The axis on which to quantize the values.
-        q_group_size (`int`, *optional*, defaults to 64):
-            Quantization is done per-channel according to a set `q_group_size` for both keys and values.
-        residual_length (`int`, *optional*, defaults to 128):
-            Maximum capacity for the original precision cache
+        backend (`str`): The quantization backend to use. One of `("quanto", "hqq", "turboquant")`.
+        config (`PreTrainedConfig`): The config of the model for which this Cache will be used.
+        nbits (`int`, *optional*, defaults to 4): The number of bits for quantization.
+        axis_key (`int`, *optional*, defaults to 0): The axis on which to quantize the keys.
+        axis_value (`int`, *optional*, defaults to 0): The axis on which to quantize the values.
+        q_group_size (`int`, *optional*, defaults to 64): Quantization is done per-channel according to a set `q_group_size` for both keys and values.
+        residual_length (`int`, *optional*, defaults to 128): Maximum capacity for the original precision cache.
+        key_objective (`str`, *optional*, defaults to `"prod"`): TurboQuant objective for keys, one of `"mse"` or `"prod"`.
+        value_objective (`str`, *optional*, defaults to `"mse"`): TurboQuant objective for values, one of `"mse"` or `"prod"`.
+        seed (`int`, *optional*, defaults to 0): Seed used by TurboQuant for deterministic rotations and projections.
+        codebook_grid_size (`int`, *optional*, defaults to 8193): Number of grid points used by TurboQuant to build the Lloyd-Max scalar codebook.
+        max_lloyd_iterations (`int`, *optional*, defaults to 100): Maximum Lloyd-Max refinement iterations for TurboQuant.
+        lloyd_tolerance (`float`, *optional*, defaults to 1e-06): TurboQuant codebook refinement tolerance.
     """
 
     def __init__(
@@ -1460,20 +1734,91 @@ class QuantizedCache(Cache):
         axis_value: int = 0,
         q_group_size: int = 64,
         residual_length: int = 128,
+        key_objective: str = "prod",
+        value_objective: str = "mse",
+        seed: int = 0,
+        codebook_grid_size: int = 8193,
+        max_lloyd_iterations: int = 100,
+        lloyd_tolerance: float = 1e-6,
     ):
         if backend == "quanto":
             layer_class = QuantoQuantizedLayer
         elif backend == "hqq":
             layer_class = HQQQuantizedLayer
+        elif backend == "turboquant":
+            layer_class = TurboQuantQuantizedLayer
         else:
             raise ValueError(f"Unknown quantization backend `{backend}`")
 
         config = config.get_text_config(decoder=True)
-        layers = [
-            layer_class(nbits, axis_key, axis_value, q_group_size, residual_length)
-            for _ in range(config.num_hidden_layers)
-        ]
+        if backend == "turboquant":
+            layers = [
+                layer_class(
+                    nbits=nbits,
+                    axis_key=axis_key,
+                    axis_value=axis_value,
+                    q_group_size=q_group_size,
+                    residual_length=residual_length,
+                    key_objective=key_objective,
+                    value_objective=value_objective,
+                    seed=seed,
+                    codebook_grid_size=codebook_grid_size,
+                    max_lloyd_iterations=max_lloyd_iterations,
+                    lloyd_tolerance=lloyd_tolerance,
+                )
+                for _ in range(config.num_hidden_layers)
+            ]
+        else:
+            layers = [
+                layer_class(
+                    nbits=nbits,
+                    axis_key=axis_key,
+                    axis_value=axis_value,
+                    q_group_size=q_group_size,
+                    residual_length=residual_length,
+                )
+                for _ in range(config.num_hidden_layers)
+            ]
         super().__init__(layers=layers)
+
+
+class TurboQuantCache(QuantizedCache):
+    """
+    TurboQuant quantized cache.
+
+    See `QuantizedCache` for details on the residual cache behavior shared by quantized caches.
+    """
+
+    def __init__(
+        self,
+        config: PreTrainedConfig,
+        nbits: int = 3,
+        axis_key: int = 0,
+        axis_value: int = 0,
+        q_group_size: int = 64,
+        residual_length: int = 128,
+        key_objective: str = "prod",
+        value_objective: str = "mse",
+        seed: int = 0,
+        codebook_grid_size: int = 8193,
+        max_lloyd_iterations: int = 100,
+        lloyd_tolerance: float = 1e-6,
+    ):
+        super().__init__(
+            backend="turboquant",
+            config=config,
+            nbits=nbits,
+            axis_key=axis_key,
+            axis_value=axis_value,
+            q_group_size=q_group_size,
+            residual_length=residual_length,
+            key_objective=key_objective,
+            value_objective=value_objective,
+            seed=seed,
+            codebook_grid_size=codebook_grid_size,
+            max_lloyd_iterations=max_lloyd_iterations,
+            lloyd_tolerance=lloyd_tolerance,
+        )
 
 
 class EncoderDecoderCache(Cache):

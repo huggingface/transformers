@@ -30,6 +30,20 @@ class QuantizedCache(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class TurboQuantQuantizedLayer(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TurboQuantCache(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class StaticCache(metaclass=DummyObject):
     _backends = ["torch"]
 

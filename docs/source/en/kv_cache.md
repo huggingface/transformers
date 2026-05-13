@@ -154,10 +154,11 @@ responses = tokenizer.batch_decode(out[:,-28:], skip_special_tokens=True)
 
 ## Quantized cache
 
-The [`QuantizedCache`] reduces memory requirements by quantizing the KV values to a lower precision. [`QuantizedCache`] currently supports two quantization backends:
+The [`QuantizedCache`] reduces memory requirements by quantizing the KV values to a lower precision. [`QuantizedCache`] currently supports three quantization backends:
 
 - `hqq` supports int2, int4, and int8 datatypes.
 - `quanto` supports int2 and int4 datatypes. This is the default quantization backend.
+- `turboquant` supports int1 through int8 datatypes.
 
 > [!WARNING]
 > Quantizing the cache can harm latency if the context length is short and there is enough GPU memory available for generation without enabling cache quantization. Try to find a balance between memory efficiency and latency.
