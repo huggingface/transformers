@@ -498,6 +498,7 @@ class ContinuousBatchingManager:
         self._generation_thread = None
         self._request_counter = 0
         self._request_lock = threading.Lock()
+        self.fatal_error: Exception | None = None
 
         # Generation config related arguments
         num_return_sequences = getattr(generation_config, "num_return_sequences", None)
@@ -526,6 +527,7 @@ class ContinuousBatchingManager:
             logger.warning("Manager thread is already running.")
             return
         self.stop_event.clear()
+        self.fatal_error = None
         self._generation_thread = threading.Thread(target=self._run_generation_loop)
         self._generation_thread.start()
 
@@ -853,6 +855,9 @@ class ContinuousBatchingManager:
     @traced
     def _handle_critical_error(self, error: Exception, batch_processor: ContinuousBatchProcessor | None) -> None:
         """Handle critical errors that terminate the generation loop."""
+        # Record so callers (e.g. the serving layer) can fail fast on subsequent requests
+        # instead of enqueuing into a worker that will never drain.
+        self.fatal_error = error
         # Signal stop
         self.stop_event.set()
 
