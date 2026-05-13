@@ -50,8 +50,12 @@ class PPFormulaNetProcessor(ProcessorMixin):
         self._rule_noletter_letter = re.compile(r"(?!\\ )(%s)\s+?(%s)" % (noletter, letter))
         self._rule_letter_noletter = re.compile(r"(%s)\s+?(%s)" % (letter, noletter))
 
-        # remove_chinese_text_wrapping() regex
-        self._chinese_text_wrapping_pattern = re.compile(r"\\text\s*{([^{}]*[\u4e00-\u9fff]+[^{}]*)}")
+        # remove_chinese_text_wrapping() regex. The body must stay a single
+        # quantified character class: overlapping `[^{}]*` quantifiers around
+        # an inner CJK class let the engine re-partition long CJK runs and
+        # take cubic time to fail on an unclosed brace. The CJK predicate is
+        # enforced in Python inside `remove_chinese_text_wrapping` instead.
+        self._chinese_text_wrapping_pattern = re.compile(r"\\text\s*{([^{}]*)}")
 
     @auto_docstring
     def __call__(
@@ -127,7 +131,13 @@ class PPFormulaNetProcessor(ProcessorMixin):
 
     def remove_chinese_text_wrapping(self, formula: str) -> str:
         def replacer(match):
-            return match.group(1)
+            body = match.group(1)
+            # Only strip the wrapping when the body contains at least one
+            # CJK Unified Ideograph (U+4E00 to U+9FFF); otherwise keep the
+            # original `\text{...}` substring untouched.
+            if any("一" <= ch <= "鿿" for ch in body):
+                return body
+            return match.group(0)
 
         replaced_formula = self._chinese_text_wrapping_pattern.sub(replacer, formula)
         return replaced_formula.replace('"', "")
