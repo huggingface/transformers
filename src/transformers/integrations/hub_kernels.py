@@ -31,9 +31,9 @@ from .flash_attention import flash_attention_forward
 
 
 if TYPE_CHECKING:
-    from .configuration_utils import PretrainedConfig
-    from .modeling_utils import PreTrainedModel
-    from .utils.kernel_config import KernelConfig
+    from ..configuration_utils import PretrainedConfig
+    from ..modeling_utils import PreTrainedModel
+    from ..utils.kernel_config import KernelConfig
 
 if is_torch_available():
     import torch
