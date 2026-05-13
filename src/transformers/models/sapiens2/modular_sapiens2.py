@@ -102,6 +102,7 @@ class Sapiens2Config(DINOv3ViTConfig):
     use_mask_token: bool = False
     use_gated_mlp: bool = True
     hidden_act: str = "silu"
+    layer_norm_eps: float = 1e-6
     num_register_tokens: int = 8
     key_bias: bool = True
     use_qk_norm: bool = True

@@ -87,7 +87,7 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     hidden_act: str = "silu"
     attention_dropout: float | int = 0.0
     initializer_range: float = 0.02
-    layer_norm_eps: float = 1e-5
+    layer_norm_eps: float = 1e-6
     rope_theta: float = 100.0
     image_size: int | list[int] | tuple[int, int] = 224
     num_channels: int = 3

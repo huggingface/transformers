@@ -16,7 +16,7 @@
 import unittest
 from functools import cached_property
 
-from transformers import Sapiens2Config
+from transformers import Sapiens2Config, Sapiens2ImageProcessor
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
