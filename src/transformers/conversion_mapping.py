@@ -91,6 +91,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "audioflamingo3": "qwen2_audio",
     "glmasr": "qwen2_audio",
     "musicflamingo": "qwen2_audio",
+    "granite_speech_plus": "granite_speech",
     "gemma3n_text": "qwen3_5_text",
     "qwen3_5_moe_text": "qwen3_5_text",
     "llava_next_video": "llava_next",
@@ -114,6 +115,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "AudioFlamingo3Model": "Qwen2AudioModel",
     "GlmAsrModel": "Qwen2AudioModel",
     "MusicFlamingoModel": "Qwen2AudioModel",
+    "GraniteSpeechPlusModel": "GraniteSpeechModel",
     "MaskFormerDetrDecoder": "DetrModel",
     "Qwen2_5_VLForConditionalGeneration": "Qwen2VLForConditionalGeneration",
     # ViT-style vision models (old HuggingFace checkpoint format → new modular format)
