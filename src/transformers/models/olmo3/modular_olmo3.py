@@ -21,6 +21,7 @@ from huggingface_hub.dataclasses import strict
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import auto_docstring
@@ -154,8 +155,24 @@ class Olmo3DecoderLayer(Olmo2DecoderLayer):
     pass
 
 
+# OLMo 3 RoPE is identical to Gemma2 RoPE, except:
+# - RoPE scaling is not applied to sliding window attention layers.
 class Olmo3RotaryEmbedding(Gemma2RotaryEmbedding):
-    pass
+    def __init__(self, config: Olmo3Config, device=None, rope_type: str | None = None):
+        nn.Module.__init__(self)
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+
+        self.rope_type = rope_type or self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
 
 class Olmo3PreTrainedModel(Olmo2PreTrainedModel):
@@ -172,7 +189,13 @@ class Olmo3Model(Olmo2Model):
         self.layers = nn.ModuleList(
             [Olmo3DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.rotary_emb = Olmo3RotaryEmbedding(config=config)
+        self.rotary_embs = nn.ModuleDict(
+            {
+                "sliding_attention": Olmo3RotaryEmbedding(config=config, rope_type="default"),
+                "full_attention": Olmo3RotaryEmbedding(config=config),
+            }
+        )
+        del self.rotary_emb
 
     def forward(
         self,
@@ -215,7 +238,10 @@ class Olmo3Model(Olmo2Model):
             }
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings_mapping = {
+            "sliding_attention": self.rotary_embs["sliding_attention"](hidden_states, position_ids),
+            "full_attention": self.rotary_embs["full_attention"](hidden_states, position_ids),
+        }
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
@@ -223,7 +249,7 @@ class Olmo3Model(Olmo2Model):
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
-                position_embeddings=position_embeddings,
+                position_embeddings=position_embeddings_mapping[self.config.layer_types[i]],
                 **kwargs,
             )
 

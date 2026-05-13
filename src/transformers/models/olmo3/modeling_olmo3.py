@@ -268,14 +268,14 @@ class Olmo3DecoderLayer(GradientCheckpointingLayer):
 class Olmo3RotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: Olmo3Config, device=None):
+    def __init__(self, config: Olmo3Config, device=None, rope_type: str | None = None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
 
-        self.rope_type = self.config.rope_parameters["rope_type"]
+        self.rope_type = rope_type or self.config.rope_parameters["rope_type"]
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
@@ -361,8 +361,13 @@ class Olmo3Model(Olmo3PreTrainedModel):
             [Olmo3DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = Olmo3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = Olmo3RotaryEmbedding(config=config)
         self.gradient_checkpointing = False
+        self.rotary_embs = nn.ModuleDict(
+            {
+                "sliding_attention": Olmo3RotaryEmbedding(config=config, rope_type="default"),
+                "full_attention": Olmo3RotaryEmbedding(config=config),
+            }
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -411,7 +416,10 @@ class Olmo3Model(Olmo3PreTrainedModel):
             }
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings_mapping = {
+            "sliding_attention": self.rotary_embs["sliding_attention"](hidden_states, position_ids),
+            "full_attention": self.rotary_embs["full_attention"](hidden_states, position_ids),
+        }
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
@@ -419,7 +427,7 @@ class Olmo3Model(Olmo3PreTrainedModel):
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
-                position_embeddings=position_embeddings,
+                position_embeddings=position_embeddings_mapping[self.config.layer_types[i]],
                 **kwargs,
             )
 

@@ -97,6 +97,37 @@ class Olmo3ModelTest(CausalLMModelTest, unittest.TestCase):
         # The output should be different for long inputs
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
+    def test_sliding_attention_uses_default_rope_with_scaled_config(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_hidden_layers = 2
+        config.layer_types = ["sliding_attention", "full_attention"]
+        config.rope_parameters = {"rope_type": "yarn", "factor": 10.0, "rope_theta": 10_000.0}
+
+        model = self.model_tester_class.base_model_class(config)
+        model.to(torch_device)
+        model.eval()
+
+        self.assertEqual(model.rotary_embs["sliding_attention"].rope_type, "default")
+        self.assertEqual(model.rotary_embs["full_attention"].rope_type, "yarn")
+
+        x = torch.randn(1, 10, config.hidden_size, device=torch_device)
+        position_ids = torch.arange(10, dtype=torch.long, device=torch_device).unsqueeze(0)
+
+        sliding_cos, sliding_sin = model.rotary_embs["sliding_attention"](x, position_ids)
+        full_cos, full_sin = model.rotary_embs["full_attention"](x, position_ids)
+
+        default_rope = Olmo3RotaryEmbedding(config=config, rope_type="default")
+        default_rope.to(torch_device)
+        default_cos, default_sin = default_rope(x, position_ids)
+
+        torch.testing.assert_close(sliding_cos, default_cos)
+        torch.testing.assert_close(sliding_sin, default_sin)
+
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(sliding_cos, full_cos)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(sliding_sin, full_sin)
+
     def test_model_rope_scaling_frequencies(self):
         """Tests the frequency properties of the different RoPE scaling types on the model RoPE layer."""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
