@@ -88,6 +88,9 @@ _LLAMA_SHARED_RENAMES = [
     WeightRenaming(r"\.attn_v\.weight", ".self_attn.v_proj.weight"),
     WeightRenaming(r"\.attn_output\.weight", ".self_attn.o_proj.weight"),
     WeightRenaming(r"\.ffn_(gate|up|down)\.weight", r".mlp.\1_proj.weight"),
+    # Attn biases exist on some Llama-family archs (Qwen2/3, StableLM, …) and not others;
+    # the rules are no-ops when the GGUF doesn't ship those tensors.
+    WeightRenaming(r"\.attn_(q|k|v)\.bias", r".self_attn.\1_proj.bias"),
 ]
 _ROPE_ATTN_CONVERTERS = [
     WeightConverter(
@@ -143,19 +146,14 @@ _T5_CONVERTERS = [
     # Cross-attention (layer.1) — decoder only
     WeightRenaming(r"\.cross_attn_(q|k|v|o)\.weight", r".layer.1.EncDecAttention.\1.weight"),
     WeightRenaming(r"\.cross_attn_norm\.weight", ".layer.1.layer_norm.weight"),
-    # FFN — encoder layer.1, decoder layer.2 (non-uniform gate→wi_0, up→wi_1, down→wo)
-    WeightRenaming(r"^encoder\.block\.(\d+)\.ffn_norm\.weight", r"encoder.block.\1.layer.1.layer_norm.weight"),
-    WeightRenaming(
-        r"^encoder\.block\.(\d+)\.ffn_gate\.weight", r"encoder.block.\1.layer.1.DenseReluDense.wi_0.weight"
-    ),
-    WeightRenaming(r"^encoder\.block\.(\d+)\.ffn_up\.weight", r"encoder.block.\1.layer.1.DenseReluDense.wi_1.weight"),
-    WeightRenaming(r"^encoder\.block\.(\d+)\.ffn_down\.weight", r"encoder.block.\1.layer.1.DenseReluDense.wo.weight"),
-    WeightRenaming(r"^decoder\.block\.(\d+)\.ffn_norm\.weight", r"decoder.block.\1.layer.2.layer_norm.weight"),
-    WeightRenaming(
-        r"^decoder\.block\.(\d+)\.ffn_gate\.weight", r"decoder.block.\1.layer.2.DenseReluDense.wi_0.weight"
-    ),
-    WeightRenaming(r"^decoder\.block\.(\d+)\.ffn_up\.weight", r"decoder.block.\1.layer.2.DenseReluDense.wi_1.weight"),
-    WeightRenaming(r"^decoder\.block\.(\d+)\.ffn_down\.weight", r"decoder.block.\1.layer.2.DenseReluDense.wo.weight"),
+    # FFN — encoder uses layer.1, decoder uses layer.2. Inject the layer index
+    # via two structural renames so the per-tensor renames below are shared.
+    WeightRenaming(r"^encoder\.block\.(\d+)\.ffn_", r"encoder.block.\1.layer.1.ffn_"),
+    WeightRenaming(r"^decoder\.block\.(\d+)\.ffn_", r"decoder.block.\1.layer.2.ffn_"),
+    WeightRenaming(r"\.ffn_norm\.weight", ".layer_norm.weight"),
+    WeightRenaming(r"\.ffn_gate\.weight", ".DenseReluDense.wi_0.weight"),
+    WeightRenaming(r"\.ffn_up\.weight", ".DenseReluDense.wi_1.weight"),
+    WeightRenaming(r"\.ffn_down\.weight", ".DenseReluDense.wo.weight"),
 ]
 
 # --- StableLM (Llama-like + optional q_norm/k_norm and attn biases) --------
