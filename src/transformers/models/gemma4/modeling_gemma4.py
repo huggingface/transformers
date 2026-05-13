@@ -1641,11 +1641,14 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
             merging multimodal soft tokens into `inputs_embeds` — at which point the original token ids are
             no longer recoverable.
         """
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+        if input_ids is None and inputs_embeds is None:
+            raise ValueError("You must specify either input_ids or inputs_embeds")
 
-        if input_ids is not None:
+        if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
+
+        if per_layer_inputs is None:
+            per_layer_inputs = self.get_per_layer_inputs(input_ids, inputs_embeds)
 
         if self.hidden_size_per_layer_input:
             if per_layer_inputs is None:
@@ -1730,23 +1733,10 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
         # If only inputs_embeds are provided, reverse main embedding to find the input_ids - this allows to `generate`
         # from `inputs_embeds` only as other models (otherwise it would need the value from both embeddings)
         if input_ids is None:
-            with torch.no_grad():
-                input_ids = (
-                    (
-                        inputs_embeds[:, :, None, :]
-                        == self.embed_tokens.weight[None, None, :, :] * self.config.hidden_size**0.5
-                    )
-                    .all(dim=3)
-                    .nonzero()[:, 2]
-                )
-                try:
-                    input_ids = input_ids.view(inputs_embeds.shape[:2])
-                except RuntimeError:
-                    raise RuntimeError(
-                        "It seems like you tried to call `forward` from `inputs_embeds` without providing `input_ids`, and that "
-                        "the `inputs_embeds` you provided do not exactly match the embedding weights. Since Gemma4 needs to reverse "
-                        "the embedding to compute another embedding, make sure you provide exact `inputs_embeds`"
-                    )
+            raise ValueError(
+                "input_ids must be provided when per_layer_inputs are not supplied. "
+                "Reverse lookup from inputs_embeds is disabled because it is extremely memory expensive."
+            )
 
         return self.embed_tokens_per_layer(input_ids).reshape(
             *input_ids.shape,
@@ -2211,7 +2201,7 @@ class Gemma4Model(Gemma4PreTrainedModel):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
         """
-        if (input_ids is None) ^ (inputs_embeds is not None):
+        if (input_ids is None) and (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         image_mask, video_mask, audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds)
@@ -2225,12 +2215,23 @@ class Gemma4Model(Gemma4PreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(llm_input_ids)
 
         if self.config.get_text_config().hidden_size_per_layer_input:
-            pad_embedding = self.language_model.embed_tokens.weight[self.config.text_config.pad_token_id, :]
-            multimodal_mask = multimodal_mask.to(inputs_embeds.device)
-            llm_inputs_embeds = torch.where(multimodal_mask[..., None], pad_embedding.view(1, 1, -1), inputs_embeds)
-            per_layer_inputs = self.language_model.get_per_layer_inputs(llm_input_ids, llm_inputs_embeds)
-        else:
-            per_layer_inputs = None
+            if per_layer_inputs is None:
+                pad_embedding = self.language_model.embed_tokens.weight[self.config.text_config.pad_token_id, :]
+
+                multimodal_mask = multimodal_mask.to(inputs_embeds.device)
+
+                llm_inputs_embeds = torch.where(
+                    multimodal_mask[..., None],
+                    pad_embedding.view(1, 1, -1),
+                    inputs_embeds,
+                )
+
+                per_layer_inputs = self.language_model.get_per_layer_inputs(
+                    llm_input_ids,
+                    llm_inputs_embeds,
+                )
+            else:
+                per_layer_inputs = None
 
         # Merge text and images
         if pixel_values is not None:
