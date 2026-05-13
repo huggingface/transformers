@@ -25,6 +25,7 @@ from .sharding_utils import (
     unfuse_optimizer_state,
 )
 
+
 if TYPE_CHECKING:
     import torch.nn as nn
 
@@ -33,13 +34,13 @@ if TYPE_CHECKING:
 if is_torch_available():
     import torch
     import torch.distributed.checkpoint as dcp
+    from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
     from torch.distributed.checkpoint.state_dict import (
         get_model_state_dict,
         get_optimizer_state_dict,
         set_optimizer_state_dict,
     )
     from torch.distributed.tensor import DTensor
-    from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
 
 
 def is_fsdp_enabled() -> bool:
@@ -176,7 +177,10 @@ def save_model_checkpoint(model, checkpoint_dir: str) -> None:
     """
     state_dict = get_model_state_dict(model)
     for key, value in list(state_dict.items()):
-        if isinstance(value, DTensor) and _find_strided_shard_placement_from_fused_params(value.placements) is not None:
+        if (
+            isinstance(value, DTensor)
+            and _find_strided_shard_placement_from_fused_params(value.placements) is not None
+        ):
             state_dict[key] = _replicate_dtensor(value)
 
     dcp.save(
@@ -201,6 +205,7 @@ def save_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     fusion_metadata = get_fusion_metadata(optimizer_state_dict)
     unfuse_optimizer_state(optimizer_state_dict, fusion_metadata)
     dcp.save({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
+
 
 def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     """Load optimizer state via DCP.

@@ -31,11 +31,13 @@ if torch.distributed.is_available():
     import torch.multiprocessing as mp
     from torch.distributed.device_mesh import init_device_mesh
     from torch.distributed.tensor import DTensor, distribute_tensor
+
     from transformers.distributed.sharding_utils import (
         fuse_optimizer_state,
         get_fusion_metadata,
         unfuse_optimizer_state,
     )
+
 
 class FakeMesh:
     """Fake multi-dimensional device mesh for testing DtensorShardOperation."""
@@ -379,22 +381,21 @@ class TestDtensorShardOperation(unittest.TestCase):
 
 
 class TestFindStridedShardPlacementFromFusedParams(unittest.TestCase):
-
     def test_find_strided_shard_placement_from_fused_params(self):
         expected = {
             # Plain placements — no _StridedShard, nothing to do
-            (Replicate(),):                                                 None,
-            (Shard(0),):                                                    None,
-            (Shard(0), Shard(2)):                                           None,
+            (Replicate(),): None,
+            (Shard(0),): None,
+            (Shard(0), Shard(2)): None,
             # Uncomposed _StridedShard — TP-only fused gate||up (DCP can't encode)
-            (_StridedShard(0, split_factor=2),):                            _StridedShard(0, split_factor=2),
-            (_StridedShard(1, split_factor=4),):                            _StridedShard(1, split_factor=4),
+            (_StridedShard(0, split_factor=2),): _StridedShard(0, split_factor=2),
+            (_StridedShard(1, split_factor=4),): _StridedShard(1, split_factor=4),
             # _StridedShard on a different tensor dim than the other Shard — still uncomposed
-            (Shard(0), _StridedShard(1, split_factor=2)):                   _StridedShard(1, split_factor=2),
-            (_StridedShard(2, split_factor=2), Shard(0)):                   _StridedShard(2, split_factor=2),
+            (Shard(0), _StridedShard(1, split_factor=2)): _StridedShard(1, split_factor=2),
+            (_StridedShard(2, split_factor=2), Shard(0)): _StridedShard(2, split_factor=2),
             # _StridedShard composed with another Shard on the SAME tensor dim — DCP-friendly
-            (_StridedShard(0, split_factor=2), Shard(0)):                   None,
-            (Shard(0), _StridedShard(0, split_factor=2)):                   None,
+            (_StridedShard(0, split_factor=2), Shard(0)): None,
+            (Shard(0), _StridedShard(0, split_factor=2)): None,
         }
         for placements, exp in expected.items():
             with self.subTest(placements=placements):
@@ -449,7 +450,6 @@ def _optimizer_state_checkpointing_e2e_worker(rank, world_size, port, ckpt_dir):
 
 @unittest.skipUnless(torch.distributed.is_available(), "Requires torch.distributed (gloo backend).")
 class TestOptimizerStateCheckpointing(unittest.TestCase):
-
     def test_optimizer_state_checkpointing_e2e(self):
         tmp = tempfile.mkdtemp(prefix="hf_optimizer_state_checkpointing_")
         try:
