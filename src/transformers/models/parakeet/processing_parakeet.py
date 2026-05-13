@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+from tokenizers.decoders import DecodeStream
+
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -125,37 +128,39 @@ class ParakeetProcessor(ProcessorMixin):
                 / self.feature_extractor.sampling_rate
                 * output_kwargs["audio_kwargs"]["subsampling_factor"]
             )
+            # Filter padding/blank tokens and decode per sequence to keep track of token-level timestamps
+            # See `compute_rnnt_timestamps` in NeMo:
+            # https://github.com/NVIDIA-NeMo/NeMo/blob/1692a8fb97e1aadc883cfadd2a57c4e8a1b793aa/nemo/collections/asr/parts/submodules/rnnt_decoding.py#L993
+            skip_ids = {self.tokenizer.pad_token_id, self.blank_token_id}
             proc_timestamps = []
             for batch_ids, batch_timestamps, batch_durations in zip(token_ids, timestamps, durations):
-                # See `compute_rnnt_timestamps` in NeMo: https://github.com/NVIDIA-NeMo/NeMo/blob/1692a8fb97e1aadc883cfadd2a57c4e8a1b793aa/nemo/collections/asr/parts/submodules/rnnt_decoding.py#L993
-                # Filter padding and blank tokens
-                skip_ids = {self.tokenizer.pad_token_id, self.blank_token_id}
-                non_blank_indices = [i for i, token_id in enumerate(batch_ids) if int(token_id) not in skip_ids]
-                non_blank_ids = [batch_ids[i] for i in non_blank_indices]
-                decoded_tokens = [self.tokenizer.decode([token_id]) for token_id in non_blank_ids]
-                timestamp_dict = [
-                    {
-                        "token": token_str,
-                        "start": int(batch_timestamps[i]),
-                        "end": int(batch_timestamps[i] + batch_durations[i]),
-                    }
-                    for token_str, i in zip(decoded_tokens, non_blank_indices)
-                ]
-                timestamp_dict = self._refine_timestamps_tdt(timestamp_dict)
-
-                # Convert to seconds
-                for offset in timestamp_dict:
-                    offset["start"] = offset["start"] * frame_rate
-                    offset["end"] = offset["end"] * frame_rate
-                proc_timestamps.append(timestamp_dict)
+                stream = DecodeStream(skip_special_tokens=True)
+                timestamp_dict = []
+                for i, token_id in enumerate(batch_ids):
+                    if int(token_id) in skip_ids:
+                        continue
+                    chunk = stream.step(self.tokenizer._tokenizer, int(token_id))
+                    if chunk is not None:
+                        timestamp_dict.append(
+                            {
+                                "token": chunk,
+                                "start": int(batch_timestamps[i]),
+                                "end": int(batch_timestamps[i] + batch_durations[i]),
+                            }
+                        )
+                proc_timestamps.append(self._refine_timestamps_tdt(timestamp_dict, frame_rate))
 
             return decoded, proc_timestamps
         return decoded
 
     def _refine_timestamps_tdt(
-        self, char_offsets, supported_punctuation=["?", "'", "¡", "¿", "-", ":", ",", "%", "/", ".", "!"]
+        self, char_offsets, frame_rate, supported_punctuation=["?", "'", "¡", "¿", "-", ":", ",", "%", "/", ".", "!"]
     ):
         for i, offset in enumerate(char_offsets):
+            # Convert frame indices to seconds
+            offset["start"] = offset["start"] * frame_rate
+            offset["end"] = offset["end"] * frame_rate
+
             # If token is a punctuation mark, set its start and end offset as start and end of previous token
             if offset["token"] in supported_punctuation and i > 0:
                 offset["start"] = char_offsets[i - 1]["end"]
