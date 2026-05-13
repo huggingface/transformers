@@ -3,7 +3,7 @@
 #     "inspect-ai",
 #     "inspect-evals",
 #     "huggingface-hub",
-#     "transformers[serving]==5.8.0",
+#     "transformers[serving]==5.8.1",
 #     "openai>=2.26.0",
 #     "torchvision",
 #     "kernels",
