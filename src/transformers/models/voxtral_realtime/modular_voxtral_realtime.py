@@ -589,7 +589,7 @@ class VoxtralRealtimeModel(VoxtralRealtimePreTrainedModel):
                 return_dict=True,
             )
             audio_embeds = audio_outputs.pooler_output
-            inputs_embeds = inputs_embeds + audio_embeds.to(inputs_embeds.device)
+            inputs_embeds += audio_embeds.to(inputs_embeds.device)
 
         if num_delay_tokens is None:
             num_delay_tokens = self.config.default_num_delay_tokens
