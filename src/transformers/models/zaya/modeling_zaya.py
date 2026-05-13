@@ -31,7 +31,7 @@ from torch.nn import init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, LinearAttentionAndFullAttentionLayer
 from ...generation import GenerationMixin
-from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -199,8 +199,6 @@ class ZayaCCAProjection(nn.Module):
             stride=1,
         )
 
-        self.temp = nn.Parameter(torch.zeros(self.num_key_value_heads))
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -282,6 +280,43 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 # Adapted from transformers.models.glm.modular_glm.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
@@ -321,44 +356,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
-@use_kernelized_func(apply_rotary_pos_emb)
 class ZayaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -368,22 +365,23 @@ class ZayaAttention(nn.Module):
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.num_key_value_heads = config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
+
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.layer_n = layer_idx
+        self.qkv_proj = ZayaCCAProjection(
+            config=self.config,
+            layer_idx=layer_idx,
+        )
         self.layer_type = config.layer_types[layer_idx]
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
         self.hidden_size = config.hidden_size
         self.num_attention_heads = config.num_attention_heads
-        self.num_key_value_heads = config.num_key_value_heads
-        self.qkv = ZayaCCAProjection(
-            config=self.config,
-            layer_idx=layer_idx,
-        )
+        self.temp = nn.Parameter(torch.zeros(config.num_key_value_heads))
 
     def forward(
         self,
@@ -399,7 +397,7 @@ class ZayaAttention(nn.Module):
         causal_mask = mask_mapping.get("causal")
         padding_mask = mask_mapping.get("padding")
 
-        query_states, key_states, value_states = self.qkv(hidden_states, past_key_values, padding_mask)
+        query_states, key_states, value_states = self.qkv_proj(hidden_states, past_key_values, padding_mask)
 
         norm_eps = torch.finfo(query_states.dtype).eps
         head_dim_scale = self.scaling**-1
@@ -407,7 +405,7 @@ class ZayaAttention(nn.Module):
             head_dim_scale / query_states.norm(p=2, dim=-1, keepdim=True).clamp_min(norm_eps)
         )
         key_states = key_states * (head_dim_scale / key_states.norm(p=2, dim=-1, keepdim=True).clamp_min(norm_eps))
-        key_states = key_states * self.qkv.temp[None, None, :, None]
+        key_states = key_states * self.temp[None, None, :, None]
 
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
@@ -417,7 +415,7 @@ class ZayaAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_n)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         if isinstance(causal_mask, torch.Tensor):
             causal_mask = causal_mask[:, :, : query_states.shape[-2], : key_states.shape[-2]]
@@ -443,25 +441,12 @@ class ZayaAttention(nn.Module):
         return attn_output, attn_weights, past_key_values
 
 
-def _apply_residual_scaling(
-    hidden_states: torch.Tensor,
-    residual: torch.Tensor | None,
-    residual_scaling,
-    rms_norm: ZayaRMSNorm,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    residual, hidden_states = residual_scaling(residual, hidden_states)
-    residual = hidden_states.to(torch.float32) if residual is None else hidden_states + residual
-    hidden_states = rms_norm(residual.to(dtype=rms_norm.weight.dtype))
-    return hidden_states, residual
-
-
 class ZayaDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: ZayaConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.self_attn = ZayaAttention(config, layer_idx)
         self.input_norm = ZayaRMSNorm(self.config.hidden_size, eps=self.config.norm_epsilon)
-        self.res_scale = ResidualScaling(config.hidden_size, has_residual_scale=layer_idx != 0)
         self.zaya_block = ZayaSparseMoeBlock(
             config,
             config.num_experts,
@@ -471,18 +456,21 @@ class ZayaDecoderLayer(GradientCheckpointingLayer):
         )
         self.post_attention_norm = ZayaRMSNorm(self.config.hidden_size, eps=self.config.norm_epsilon)
         self.post_attention_res_scale = ResidualScaling(config.hidden_size)
+        self.post_mlp_res_scale = ResidualScaling(config.hidden_size)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        residual: torch.Tensor | None,
         prev_router_hidden_states: torch.Tensor | None = None,
         attention_mask: dict[str, Any] | None = None,
         past_key_values: Cache | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor, torch.Tensor | None]:
-        hidden_states, residual = _apply_residual_scaling(hidden_states, residual, self.res_scale, self.input_norm)
+    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
+        residual = hidden_states
+        # Matches the original ZAYA `residual_in_fp32` path; norm casts back to the parameter dtype below.
+        residual = residual.to(torch.float32)
+        hidden_states = self.input_norm(residual.to(dtype=self.input_norm.weight.dtype))
 
         hidden_states, self_attn_weights, _ = self.self_attn(
             hidden_states=hidden_states,
@@ -492,34 +480,31 @@ class ZayaDecoderLayer(GradientCheckpointingLayer):
             **kwargs,
         )
 
-        hidden_states, residual = _apply_residual_scaling(
-            hidden_states, residual, self.post_attention_res_scale, self.post_attention_norm
-        )
+        residual = self.post_attention_res_scale(hidden_states, residual)
+        hidden_states = self.post_attention_norm(residual.to(dtype=self.post_attention_norm.weight.dtype))
 
         hidden_states, prev_router_hidden_states, _ = self.zaya_block(
             hidden_states,
             prev_router_hidden_states,
         )
 
-        return hidden_states, self_attn_weights, residual, prev_router_hidden_states
+        hidden_states = self.post_mlp_res_scale(hidden_states, residual)
+
+        return hidden_states, self_attn_weights, prev_router_hidden_states
 
 
 class ResidualScaling(nn.Module):
-    def __init__(self, hidden_size: int, has_residual_scale: bool = True):
+    def __init__(self, hidden_size: int):
         super().__init__()
-        self.has_residual_scale = has_residual_scale
         self.hidden_states_scale = nn.Parameter(torch.ones(hidden_size))
         self.hidden_states_bias = nn.Parameter(torch.zeros(hidden_size))
+        self.residual_scale = nn.Parameter(torch.ones(hidden_size))
+        self.residual_bias = nn.Parameter(torch.zeros(hidden_size))
 
-        if self.has_residual_scale:
-            self.residual_scale = nn.Parameter(torch.ones(hidden_size))
-            self.residual_bias = nn.Parameter(torch.zeros(hidden_size))
-
-    def forward(self, residual: torch.Tensor, hidden_states: torch.Tensor):
+    def forward(self, hidden_states: torch.Tensor, residual: torch.Tensor):
         hidden_states = (hidden_states + self.hidden_states_bias) * self.hidden_states_scale
-        if self.has_residual_scale:
-            residual = (residual + self.residual_bias) * self.residual_scale
-        return residual, hidden_states
+        residual = (residual + self.residual_bias) * self.residual_scale
+        return hidden_states + residual
 
 
 class ZayaRouterMLP(nn.Module):
@@ -710,11 +695,11 @@ class ZayaPreTrainedModel(PreTrainedModel):
         if isinstance(module, ResidualScaling):
             init.ones_(module.hidden_states_scale)
             init.zeros_(module.hidden_states_bias)
-            if module.has_residual_scale:
-                init.ones_(module.residual_scale)
-                init.zeros_(module.residual_bias)
-        elif isinstance(module, ZayaCCAProjection):
-            init.ones_(module.temp)
+            init.ones_(module.residual_scale)
+            init.zeros_(module.residual_bias)
+        elif isinstance(module, ZayaModel):
+            init.ones_(module.input_hidden_states_scale)
+            init.zeros_(module.input_hidden_states_bias)
         elif isinstance(module, ZayaRouter):
             if module.use_eda:
                 init.ones_(module.router_states_scale)
@@ -778,8 +763,9 @@ class ZayaModel(ZayaPreTrainedModel):
         )
 
         self.gradient_checkpointing = False
-        self.res_scale = ResidualScaling(config.hidden_size)
 
+        self.input_hidden_states_scale = nn.Parameter(torch.ones(config.hidden_size))
+        self.input_hidden_states_bias = nn.Parameter(torch.zeros(config.hidden_size))
         self.final_norm = ZayaRMSNorm(self.config.hidden_size, eps=self.config.norm_epsilon)
 
         self.rotary_emb = ZayaRotaryEmbedding(config=config)
@@ -816,8 +802,6 @@ class ZayaModel(ZayaPreTrainedModel):
                 raise ValueError("ZAYA requires a native hybrid cache created from `make_zaya_cache`.")
             past_key_values = make_zaya_cache(self.config)
 
-        residual = None
-
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             position_ids = torch.arange(
@@ -851,6 +835,8 @@ class ZayaModel(ZayaPreTrainedModel):
             for layer_type in set(self.config.layer_types)
         }
 
+        hidden_states = (hidden_states + self.input_hidden_states_bias) * self.input_hidden_states_scale
+
         prev_router_hidden_states = None
 
         for layer_n, decoder_layer in enumerate(self.layers):
@@ -859,7 +845,6 @@ class ZayaModel(ZayaPreTrainedModel):
             mask_mapping = {"causal": causal_mask_mapping[layer_type], "padding": padding_mask}
             layer_outputs = decoder_layer(
                 hidden_states,
-                residual,
                 prev_router_hidden_states,
                 attention_mask=mask_mapping,
                 past_key_values=past_key_values,
@@ -868,10 +853,9 @@ class ZayaModel(ZayaPreTrainedModel):
             )
 
             hidden_states = layer_outputs[0]
-            residual = layer_outputs[2]
-            prev_router_hidden_states = layer_outputs[3]
+            prev_router_hidden_states = layer_outputs[2]
 
-        hidden_states, residual = _apply_residual_scaling(hidden_states, residual, self.res_scale, self.final_norm)
+        hidden_states = self.final_norm(hidden_states.to(dtype=self.final_norm.weight.dtype))
 
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,

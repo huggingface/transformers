@@ -59,8 +59,10 @@ _UNUSED_CONFIG_KEYS = (
 
 def _rename_common(rest: str) -> str:
     replacements = (
-        ("self_attn.qkv.conv_qk.0.", "self_attn.qkv.conv_qk_depthwise."),
-        ("self_attn.qkv.conv_qk.1.", "self_attn.qkv.conv_qk_grouped."),
+        ("self_attn.qkv.conv_qk.0.", "self_attn.qkv_proj.conv_qk_depthwise."),
+        ("self_attn.qkv.conv_qk.1.", "self_attn.qkv_proj.conv_qk_grouped."),
+        ("self_attn.qkv.temp", "self_attn.temp"),
+        ("self_attn.qkv.", "self_attn.qkv_proj."),
         ("zaya_block.router.router_mlp.0.", "zaya_block.router.router_mlp.fc1."),
         ("zaya_block.router.router_mlp.2.", "zaya_block.router.router_mlp.fc2."),
         ("zaya_block.router.router_mlp.4.", "zaya_block.router.router_mlp.out_proj."),
@@ -87,12 +89,15 @@ def _expert_target(name: str) -> tuple[str, int] | None:
     return target, expert_idx
 
 
-def convert_weight_name(name: str) -> str | None:
+def convert_weight_name(name: str, old_num_hidden_layers: int | None = None) -> str | None:
     if _expert_target(name) is not None:
         return None
 
     match = _LAYER_PATTERN.match(name)
     if match is None:
+        if old_num_hidden_layers is not None and name.startswith("model.res_scale."):
+            new_layer_idx = old_num_hidden_layers // 2 - 1
+            return f"model.layers.{new_layer_idx}.post_mlp_res_scale.{name.removeprefix('model.res_scale.')}"
         return name
 
     old_layer_idx = int(match.group(1))
@@ -101,8 +106,12 @@ def convert_weight_name(name: str) -> str | None:
 
     if old_layer_idx % 2 == 0:
         rest = _rename_common(rest)
-        if rest.startswith(("self_attn.", "input_norm.", "res_scale.")):
+        if rest.startswith(("self_attn.", "input_norm.")):
             return f"model.layers.{new_layer_idx}.{rest}"
+        if rest.startswith("res_scale."):
+            if old_layer_idx == 0:
+                return f"model.input_{rest.removeprefix('res_scale.')}"
+            return f"model.layers.{new_layer_idx - 1}.post_mlp_res_scale.{rest.removeprefix('res_scale.')}"
     else:
         rest = _rename_common(rest)
         if rest.startswith("zaya_block."):
@@ -209,6 +218,7 @@ def copy_non_weight_files(input_dir: Path, output_dir: Path) -> None:
 def _build_weight_plan(input_dir: Path) -> tuple[dict[str, str], dict[str, list[str]], dict[str, str], dict]:
     index = json.loads((input_dir / "model.safetensors.index.json").read_text())
     old_weight_map = index["weight_map"]
+    old_num_hidden_layers = int(json.loads((input_dir / "config.json").read_text())["num_hidden_layers"])
     converted_weight_map = {}
     normal_sources_by_output_file = defaultdict(list)
     expert_sources_by_target = defaultdict(list)
@@ -223,7 +233,7 @@ def _build_weight_plan(input_dir: Path) -> tuple[dict[str, str], dict[str, list[
             converted_weight_map[target_key] = output_file_by_target[target_key]
             continue
 
-        target_key = convert_weight_name(source_key)
+        target_key = convert_weight_name(source_key, old_num_hidden_layers)
         if target_key in converted_weight_map:
             raise ValueError(f"Duplicate converted weight name: {target_key}")
         converted_weight_map[target_key] = filename
@@ -253,6 +263,7 @@ def convert_safetensors(input_dir: Path, output_dir: Path) -> None:
         if not safetensors_path.exists():
             raise FileNotFoundError("Only safetensors ZAYA checkpoints are supported by this converter.")
 
+        old_num_hidden_layers = int(json.loads((input_dir / "config.json").read_text())["num_hidden_layers"])
         with safe_open(safetensors_path, framework="pt", device="cpu") as f:
             metadata = f.metadata()
             state_dict = {}
@@ -263,7 +274,7 @@ def convert_safetensors(input_dir: Path, output_dir: Path) -> None:
                     target_key, expert_idx = expert_info
                     expert_groups[target_key].append((expert_idx, f.get_tensor(key)))
                     continue
-                state_dict[convert_weight_name(key)] = f.get_tensor(key)
+                state_dict[convert_weight_name(key, old_num_hidden_layers)] = f.get_tensor(key)
             for target_key, expert_tensors in expert_groups.items():
                 state_dict[target_key] = torch.stack([tensor for _, tensor in sorted(expert_tensors)], dim=0)
         save_file(state_dict, output_dir / "model.safetensors", metadata=metadata)
