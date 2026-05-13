@@ -258,7 +258,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
     image_std = IMAGENET_DEFAULT_STD
     size = {"height": 768, "width": 1024}
     do_resize = True
-    do_rescale = False
+    do_rescale = True
     do_normalize = True
 
 
