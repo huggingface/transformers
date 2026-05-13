@@ -342,10 +342,21 @@ class GGUFQuantizedTensor(torch.Tensor):
     """``torch.Tensor`` subclass that carries the GGUF ``quant_type`` alongside
     raw uint8 bytes.
 
-    Behaves like a regular uint8 tensor for ``.to(device)`` / slicing — the
-    ``__torch_function__`` override re-wraps results so ``quant_type`` survives
-    those operations and the :class:`GGUFDequantize` op in the conversion chain
-    can read it. Inspired by ``GGUFParameter`` in diffusers.
+    Three small affordances make the hot path through ``spawn_materialize`` fast
+    *without* touching ``core_model_loading``:
+
+    * ``__getitem__(Ellipsis)`` short-circuits — ``tensor[...]`` is a no-op for
+      already-loaded torch bytes; the default goes through ``__torch_function__``
+      dispatch for no reason.
+    * ``.to(...)`` defaults ``non_blocking=True``, letting the loader queue the
+      next transfer / dequant on the same MPS/CUDA stream while the previous
+      copy is still in flight.
+    * ``__torch_function__`` only re-wraps on ``Tensor.to`` — the one place we
+      need ``quant_type`` to survive (so the :class:`GGUFDequantize` op in the
+      conversion chain can read it on the device side). All other ops return
+      plain tensors, which avoids the per-op wrap overhead.
+
+    Inspired by ``GGUFParameter`` in diffusers.
     """
 
     # Class-level default so subclass instances spawned by torch's default
@@ -359,6 +370,22 @@ class GGUFQuantizedTensor(torch.Tensor):
         instance = torch.Tensor._make_subclass(cls, data, require_grad=False)
         instance.quant_type = quant_type
         return instance
+
+    def __getitem__(self, key):
+        # ``_materialize_copy`` does ``tensor = tensor[...]`` to pull a memmap
+        # safetensors slice into RAM. Our bytes are already a torch.Tensor view,
+        # so this is a no-op; short-circuit before torch dispatches via
+        # ``__torch_function__`` (which would re-wrap into a fresh subclass).
+        if key is Ellipsis:
+            return self
+        return super().__getitem__(key)
+
+    def to(self, *args, **kwargs):
+        # The loader queues a dequant op on the destination device right after
+        # this transfer (same MPS/CUDA stream), so ``non_blocking=True`` overlaps
+        # the bytes copy with the next ``.to(device)`` call from another worker.
+        kwargs.setdefault("non_blocking", True)
+        return super().to(*args, **kwargs)
 
     @staticmethod
     def _extract_quant_type(args):
@@ -375,11 +402,15 @@ class GGUFQuantizedTensor(torch.Tensor):
         if kwargs is None:
             kwargs = {}
         result = super().__torch_function__(func, types, args, kwargs)
+        # Only re-wrap on ``Tensor.to`` — the GGUFDequantize op in the conversion
+        # chain reads ``quant_type`` off the post-transfer tensor. Other ops in
+        # the path don't care, so skipping the wrap saves Python overhead per call.
+        if func is not torch.Tensor.to:
+            return result
         quant_type = cls._extract_quant_type(args)
         if quant_type is None:
             return result
         if isinstance(result, cls):
-            # super() already materialised a subclass — just patch the attr
             result.quant_type = quant_type
             return result
         if isinstance(result, torch.Tensor):

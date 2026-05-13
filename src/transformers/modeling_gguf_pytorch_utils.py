@@ -505,6 +505,36 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
             i for i, num_kv_heads in enumerate(gguf_num_key_value_heads) if num_kv_heads > 0
         ]
 
+    # MiniMax-M2: convert expert_gating_func integer to scoring_func string
+    if parsed_parameters["config"].get("model_type") == "minimax_m2":
+        _gating_func_map = {0: "none", 1: "softmax", 2: "sigmoid"}
+        _scoring = parsed_parameters["config"].get("scoring_func")
+        if isinstance(_scoring, int):
+            parsed_parameters["config"]["scoring_func"] = _gating_func_map.get(_scoring, "softmax")
+
+    # GPT-OSS: reconstruct rope_scaling from the architecture-prefixed metadata keys
+    if updated_architecture == "gpt_oss":
+        rope_type_field = reader.fields.get("gpt-oss.rope.scaling.type")
+        if rope_type_field is not None:
+            rope_type = rope_type_field.parts[0]
+            if isinstance(rope_type, bytes):
+                rope_type = rope_type.decode("utf-8")
+            rope_scaling = {"rope_type": rope_type}
+            for key in reader.fields:
+                if not key.startswith("gpt-oss.rope.scaling.") or key.endswith(".type"):
+                    continue
+                suffix = key[len("gpt-oss.rope.scaling.") :]
+                value = reader.fields[key].parts[0]
+                if isinstance(value, bytes):
+                    value = value.decode("utf-8")
+                if suffix in ("factor", "attention_factor", "beta_fast", "beta_slow"):
+                    value = float(value)
+                elif suffix in ("original_context_length", "original_max_position_embeddings"):
+                    suffix = "original_max_position_embeddings"
+                    value = int(value)
+                rope_scaling[suffix] = value
+            parsed_parameters["config"]["rope_scaling"] = rope_scaling
+
     # retrieve config vocab_size from tokenizer
     # Please refer to https://github.com/huggingface/transformers/issues/32526 for more details
     if "vocab_size" not in parsed_parameters["config"]:
