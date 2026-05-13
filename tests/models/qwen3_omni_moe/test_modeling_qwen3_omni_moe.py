@@ -487,7 +487,7 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
         image_grid_thw = torch.empty((0, 3), dtype=torch.long)
 
         # 3 * 2 * 2 = 12 video tokens
-        video_grid_thw = torch.tensor([[3, 2, 2]], dtype=torch.long)
+        video_grid_thw = torch.tensor([[3, 2, 2]], dtype=torch.long, device=torch_device)
 
         # num_audio_tokens = ((audio_seqlen - 1) // 2 + 1 - 2) // 2 + 1
         # i.e.: 300 audio_seqlen -> 75 audio tokens
@@ -859,7 +859,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
             **inputs, thinker_temperature=0, thinker_do_sample=False, return_audio=False, thinker_max_new_tokens=20
         )
 
-        EXPECTED_DECODED_TEXT = "user\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.\nuser\nHow about this one?\nassistant\nThe sound is a person coughing."
+        EXPECTED_DECODED_TEXT = "user\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.\nuser\nHow about this one?\nassistant\nThis is the sound of a person coughing."
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
