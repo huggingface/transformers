@@ -510,7 +510,7 @@ class FeatureExtractionMixin(PushToHubMixin):
                     f"Can't load feature extractor for '{pretrained_model_name_or_path}'. If you were trying to load"
                     " it from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                     f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
-                    f" directory containing a {FEATURE_EXTRACTOR_NAME} file"
+                    f" directory containing a {FEATURE_EXTRACTOR_NAME} or {PROCESSOR_NAME} file"
                 )
 
         # Load feature_extractor dict. Priority goes as (nested config if found -> image processor config)
@@ -530,7 +530,7 @@ class FeatureExtractionMixin(PushToHubMixin):
                 f"Can't load feature extractor for '{pretrained_model_name_or_path}'. If you were trying to load"
                 " it from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                 f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
-                f" directory containing a {feature_extractor_file} file"
+                f" directory containing a {FEATURE_EXTRACTOR_NAME} or {PROCESSOR_NAME} file"
             )
 
         if is_local:
