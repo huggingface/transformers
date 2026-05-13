@@ -972,6 +972,8 @@ class ContinuousMixin:
             - timeout: maximum time to wait for the thread to stop. Default is None (no timeout).
             - warmup: whether to pre-capture CUDA graphs at the largest sizes before running. Default is True.
         """
+        original_attn_impl = self.config._attn_implementation
+
         manager = self.init_continuous_batching(
             generation_config=generation_config,
             continuous_batching_config=continuous_batching_config,
@@ -991,6 +993,7 @@ class ContinuousMixin:
             # This is a dummy log needed for the logs of stop to show. It won't show.
             logger.debug("Continuous batching loop finished")
             manager.stop(block=block, timeout=timeout, keep_for_next_session=persistent_manager)
+            self.config._attn_implementation_internal = original_attn_impl
 
     # TODO: support streaming
     @traced
@@ -1084,6 +1087,7 @@ class ContinuousMixin:
         finished_count = 0
         with manager_cm as manager, logging_cm, pbar_cm as pbar:
             try:
+                start_idx = manager._request_counter
                 manager.add_requests(inputs=inputs, max_new_tokens=max_new_tokens, record_timestamps=record_timestamps)
                 while finished_count < num_requests:
                     result = manager.get_result(timeout=1)
@@ -1106,9 +1110,9 @@ class ContinuousMixin:
         reordered_results = {}
         for i in range(len(inputs)):
             # We cannot guarantee generation success for all requests, so check if the request is in the results
-            result = results.get(f"req_{i}")
+            result = results.get(f"req_{start_idx + i}")
             if result is not None:
                 reordered_results[f"req_{i}"] = result
             else:
-                logger.error(f"Request req_{i} not found in results.")
+                logger.error(f"Request req_{start_idx + i} not found in results.")
         return reordered_results
