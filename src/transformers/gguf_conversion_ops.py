@@ -15,7 +15,6 @@
 
 All ops in this file operate on already-dequantized ``torch.Tensor`` objects.
 The actual dequantization from raw GGUF bytes is handled by
-``spawn_gguf_materialize`` in ``core_model_loading``, which is invoked by
 ``GGUFQuantizer.spawn_materialize`` before any op chain runs.
 """
 
@@ -51,9 +50,8 @@ class GGUFDequantize(ConversionOps):
     """
     First op in every GGUF WeightConverter chain.
 
-    Since dequantization already happened inside ``spawn_gguf_materialize``
-    (called by ``GGUFQuantizer.spawn_materialize``), this op is a pure
-    key-renaming pass-through:
+    Since dequantization already happened inside ``GGUFQuantizer.spawn_materialize``,
+    this op is a pure key-renaming pass-through:
 
     - **1:1 case** (``len(input_dict)==1`` and ``len(target_patterns)==1``):
       renames the key to ``target_patterns[0]`` so that the WeightConverter

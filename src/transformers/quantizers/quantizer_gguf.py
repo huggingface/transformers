@@ -69,11 +69,25 @@ class GGUFQuantizer(HfQuantizer):
         return injected + list(weight_conversions)
 
     def spawn_materialize(self, thread_pool, tensor, device=None, dtype=None):
-        from ..core_model_loading import GGUFQuantizedTensor, spawn_gguf_materialize, spawn_materialize
+        import torch
 
-        if isinstance(tensor, GGUFQuantizedTensor):
-            return spawn_gguf_materialize(thread_pool, tensor, device, dtype)
-        return spawn_materialize(thread_pool, tensor, device, dtype)
+        from ..core_model_loading import GGUFQuantizedTensor, spawn_materialize
+
+        if not isinstance(tensor, GGUFQuantizedTensor):
+            return spawn_materialize(thread_pool, tensor, device, dtype)
+
+        def _job():
+            from ..integrations.gguf_dequant import dequantize_gguf_tensor
+
+            compute_dtype = dtype if (dtype is not None and dtype.is_floating_point) else torch.float32
+            # Move the small uint8 input to the target device first, then dequant on-device —
+            # avoids transferring the much larger fp32 output across the CPU↔accelerator bus.
+            w = dequantize_gguf_tensor(tensor.data, tensor.tensor_type, dtype=compute_dtype, device=device)
+            if dtype is not None and dtype != compute_dtype:
+                w = w.to(dtype=dtype)
+            return w
+
+        return thread_pool.submit(_job) if thread_pool is not None else _job
 
     def param_needs_quantization(self, model, param_name, **kwargs):
         # TODO: for on the fly quantization :)

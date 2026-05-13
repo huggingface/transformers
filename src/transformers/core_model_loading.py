@@ -1051,39 +1051,6 @@ def spawn_materialize(
         return _job
 
 
-def spawn_gguf_materialize(
-    thread_pool: ThreadPoolExecutor | None,
-    tensor: GGUFQuantizedTensor,
-    device=None,
-    dtype=None,
-) -> Future | Callable:
-    """Dequantize a GGUFQuantizedTensor and move to target device/dtype.
-
-    Mirrors ``spawn_materialize`` but handles raw GGUF data instead of
-    safetensors slices. Dequant runs as a pure-PyTorch kernel (city96 port,
-    also used by ``diffusers``) — ~5–20x faster than ``gguf-py``'s NumPy path
-    because the work happens on a ``torch.uint8`` view of the raw bytes
-    rather than millions of grouped row slices that trigger numpy's
-    ``__array_finalize__`` overhead. Falls back to the NumPy path for any
-    quant type without a torch kernel.
-    """
-
-    def _job():
-        from .integrations.gguf_dequant import dequantize_gguf_tensor
-
-        compute_dtype = dtype if (dtype is not None and dtype.is_floating_point) else torch.float32
-        # Move the small uint8 input to the target device first, then dequant on-device —
-        # avoids transferring the much larger fp32 output across the CPU↔accelerator bus.
-        w = dequantize_gguf_tensor(tensor.data, tensor.tensor_type, dtype=compute_dtype, device=device)
-        if dtype is not None and dtype != compute_dtype:
-            w = w.to(dtype=dtype)
-        return w
-
-    if thread_pool is not None:
-        return thread_pool.submit(_job)
-    return _job
-
-
 def spawn_tp_materialize(
     thread_pool: ThreadPoolExecutor | None, tensor: torch.Tensor, sharding_method, tensor_idx, device=None, dtype=None
 ) -> Future | Callable:
