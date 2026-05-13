@@ -904,6 +904,34 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns="LayerNorm.bias",
             ),
         ],
+        "sapiens2": [
+            WeightRenaming(r"^cls_token$", r"embeddings.cls_token"),
+            WeightRenaming(r"^storage_tokens$", r"embeddings.register_tokens"),
+            WeightRenaming(r"^patch_embed\.projection\.", r"embeddings.patch_embeddings."),
+            WeightRenaming(r"^rope_embed\.", r"rope_embeddings."),
+            WeightRenaming(r"blocks\.(\d+)\.", r"model.layer.\1."),
+            WeightRenaming(r"attn\.proj\.", r"attention.o_proj."),
+            WeightRenaming(r"attn\.wq\.", r"attention.q_proj."),
+            WeightRenaming(r"attn\.wk\.", r"attention.k_proj."),
+            WeightRenaming(r"attn\.wv\.", r"attention.v_proj."),
+            WeightRenaming(r"attn\.q_norm\.", r"attention.q_norm."),
+            WeightRenaming(r"attn\.k_norm\.", r"attention.k_norm."),
+            WeightRenaming(r"attn\.gamma\.weight$", r"layer_scale1.lambda1"),
+            WeightRenaming(r"ffn\.w3\.", r"mlp.down_proj."),
+            WeightRenaming(r"\.ln1\.", r".norm1."),
+            WeightRenaming(r"\.ln2\.", r".norm2."),
+            WeightRenaming(r"^ln1\.", r"norm."),
+            WeightConverter(
+                source_patterns=r"ffn\.w12\.weight",
+                target_patterns=[r"mlp.gate_proj.weight", r"mlp.up_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=r"ffn\.w12\.bias",
+                target_patterns=[r"mlp.gate_proj.bias", r"mlp.up_proj.bias"],
+                operations=[Chunk(dim=0)],
+            ),
+        ],
     }
     # The legacy mapping is added to the esm model here since the extra weight renaming do not apply to the esm model.
     mapping["esm"] += mapping["legacy"].copy()

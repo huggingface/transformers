@@ -69,8 +69,12 @@ class Sapiens2Embeddings(nn.Module):
         self.patch_embeddings = nn.Conv2d(
             config.num_channels, config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size
         )
+        if not config.use_mask_token:
+            del self.mask_token
 
     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
+        if bool_masked_pos is not None and not self.config.use_mask_token:
+            raise ValueError("bool_masked_pos requires use_mask_token=True in the config")
         batch_size = pixel_values.shape[0]
         target_dtype = self.patch_embeddings.weight.dtype
 
@@ -149,45 +153,44 @@ def augment_patches_center_coordinates(
 
 
 class Sapiens2RopePositionEmbedding(nn.Module):
-    inv_freq: torch.Tensor
+    periods: torch.Tensor
 
     def __init__(self, config: Sapiens2Config):
         super().__init__()
 
-        self.config = config
+        self.patch_size = config.patch_size
+        self.pos_embed_shift = config.pos_embed_shift
+        self.pos_embed_jitter = config.pos_embed_jitter
+        self.pos_embed_rescale = config.pos_embed_rescale
         self.base = config.rope_theta
         self.head_dim = config.hidden_size // config.num_attention_heads
-        self.num_patches_h = config.image_size // config.patch_size
-        self.num_patches_w = config.image_size // config.patch_size
 
-        inv_freq = 1 / self.base ** torch.arange(0, 1, 4 / self.head_dim, dtype=torch.float32)  # (head_dim / 4,)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        periods = self.base ** (2 * torch.arange(self.head_dim // 4, dtype=torch.float32) / (self.head_dim // 2))
+        self.register_buffer("periods", periods, persistent=True)  # persistent=True to match original checkpoints
 
     def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         _, _, height, width = pixel_values.shape
-        num_patches_h = height // self.config.patch_size
-        num_patches_w = width // self.config.patch_size
+        num_patches_h = height // self.patch_size
+        num_patches_w = width // self.patch_size
 
         device = pixel_values.device
         device_type = device.type if isinstance(device.type, str) and device.type != "mps" else "cpu"
 
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            # Although we could precompute static patch_coords from image_size and patch_size in the config,
-            # the model was trained with random_scale, so it can process images of varying sizes.
-            # Therefore, it's better to compute patch_coords dynamically (with lru_cache).
+        with maybe_autocast(device_type=device_type, enabled=False):
+            # TODO(guarin): Double check, the original uses bf16 by default. I followed DINOv3 implementation instead.
             patch_coords = get_patches_center_coordinates(
                 num_patches_h, num_patches_w, dtype=torch.float32, device=device
             )
             if self.training:
                 patch_coords = augment_patches_center_coordinates(
                     patch_coords,
-                    shift=self.config.pos_embed_shift,
-                    jitter=self.config.pos_embed_jitter,
-                    rescale=self.config.pos_embed_rescale,
+                    shift=self.pos_embed_shift,
+                    jitter=self.pos_embed_jitter,
+                    rescale=self.pos_embed_rescale,
                 )
 
             # (height * width, 2, head_dim / 4) -> (height * width, head_dim / 2) -> (height * width, head_dim)
-            angles = 2 * math.pi * patch_coords[:, :, None] * self.inv_freq[None, None, :]
+            angles = 2 * math.pi * patch_coords[:, :, None] / self.periods[None, None, :]
             angles = angles.flatten(1, 2)
             angles = angles.tile(2)
 
@@ -423,7 +426,7 @@ class Sapiens2Layer(GradientCheckpointingLayer):
             self.mlp = Sapiens2GatedMLP(config)
         else:
             self.mlp = Sapiens2MLP(config)
-        self.layer_scale2 = Sapiens2LayerScale(config)
+        self.layer_scale2 = nn.Identity()
 
     def forward(
         self,
@@ -481,18 +484,21 @@ class Sapiens2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             init.zeros_(module.bias)
             init.ones_(module.weight)
+        elif isinstance(module, nn.RMSNorm):
+            init.ones_(module.weight)
         elif isinstance(module, Sapiens2Embeddings):
             init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
             if module.config.num_register_tokens > 0:
                 init.trunc_normal_(module.register_tokens, mean=0.0, std=self.config.initializer_range)
-            init.zeros_(module.mask_token)
+            if module.config.use_mask_token:
+                init.zeros_(module.mask_token)
         elif isinstance(module, Sapiens2LayerScale):
             init.constant_(module.lambda1, self.config.layerscale_value)
         elif isinstance(module, Sapiens2RopePositionEmbedding):
-            inv_freq = 1 / module.base ** torch.arange(0, 1, 4 / module.head_dim, dtype=torch.float32)
-            init.copy_(module.inv_freq, inv_freq)
-        if isinstance(module, nn.RMSNorm):
-            init.ones_(module.weight)
+            periods = module.base ** (
+                2 * torch.arange(module.head_dim // 4, dtype=torch.float32) / (module.head_dim // 2)
+            )
+            init.copy_(module.periods, periods)
 
 
 class Sapiens2Encoder(Sapiens2PreTrainedModel):

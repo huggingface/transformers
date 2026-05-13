@@ -56,6 +56,8 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
         Whether to apply layer normalization to the feature maps when used as backbone.
     reshape_hidden_states (`bool`, *optional*, defaults to `True`):
         Whether to reshape the hidden states to spatial dimensions when used as backbone.
+    use_mask_token (`bool`, *optional*, defaults to `False`):
+        Whether to use a mask token in the embeddings (needed for masked image modeling pretraining).
     use_qk_norm (`bool`, *optional*, defaults to `True`):
         Whether to apply RMSNorm to queries and keys before RoPE in attention layers.
     num_key_value_heads (`int`, *optional*):
@@ -73,8 +75,11 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
 
     patch_size: int | list[int] | tuple[int, int] = 16
 
+    # TODO(guarin): This is needed to load the original checkpoints but makes unit tests fail.
+    # transformers_weights = "sapiens2_0.4b_pretrain.safetensors"
+
     hidden_size: int = 1024
-    intermediate_size: int = 2816
+    intermediate_size: int = 4096
     num_hidden_layers: int = 24
     num_attention_heads: int = 16
     hidden_act: str = "silu"
@@ -85,7 +90,7 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     image_size: int | list[int] | tuple[int, int] = 224
     num_channels: int = 3
     query_bias: bool = True
-    key_bias: bool = False
+    key_bias: bool = True
     value_bias: bool = True
     proj_bias: bool = True
     mlp_bias: bool = True
@@ -100,6 +105,7 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     _out_indices: list[int] | None = None
     apply_layernorm: bool = True
     reshape_hidden_states: bool = True
+    use_mask_token: bool = False
     use_qk_norm: bool = True
     num_key_value_heads: int | None = None
     first_k_full_attention_layers: int = 8

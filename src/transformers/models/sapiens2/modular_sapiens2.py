@@ -10,6 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from collections.abc import Callable
 
 import torch
@@ -22,6 +23,7 @@ from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImage
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.generic import maybe_autocast
 from ..dinov3_vit.configuration_dinov3_vit import DINOv3ViTConfig
 from ..dinov3_vit.modeling_dinov3_vit import (
     DINOv3ViTBackbone,
@@ -35,9 +37,10 @@ from ..dinov3_vit.modeling_dinov3_vit import (
     DINOv3ViTMLP,
     DINOv3ViTModel,
     DINOv3ViTPreTrainedModel,
-    DINOv3ViTRopePositionEmbedding,
     apply_rotary_pos_emb,
+    augment_patches_center_coordinates,
     eager_attention_forward,
+    get_patches_center_coordinates,
 )
 
 
@@ -75,6 +78,8 @@ class Sapiens2Config(DINOv3ViTConfig):
         Whether to apply layer normalization to the feature maps when used as backbone.
     reshape_hidden_states (`bool`, *optional*, defaults to `True`):
         Whether to reshape the hidden states to spatial dimensions when used as backbone.
+    use_mask_token (`bool`, *optional*, defaults to `False`):
+        Whether to use a mask token in the embeddings (needed for masked image modeling pretraining).
     use_qk_norm (`bool`, *optional*, defaults to `True`):
         Whether to apply RMSNorm to queries and keys before RoPE in attention layers.
     num_key_value_heads (`int`, *optional*):
@@ -90,17 +95,24 @@ class Sapiens2Config(DINOv3ViTConfig):
 
     model_type = "sapiens2"
 
+    # TODO(guarin): This is needed to load the original checkpoints but makes unit tests fail.
+    # transformers_weights = "sapiens2_0.4b_pretrain.safetensors"
+
     hidden_size: int = 1024
     num_hidden_layers: int = 24
     num_attention_heads: int = 16
-    intermediate_size: int = 2816
+    intermediate_size: int = 4096
+    use_mask_token: bool = False
     use_gated_mlp: bool = True
     hidden_act: str = "silu"
     num_register_tokens: int = 8
+    key_bias: bool = True
     use_qk_norm: bool = True
     num_key_value_heads: int | None = None
     first_k_full_attention_layers: int = 8
     last_k_full_attention_layers: int = 8
+
+    # TODO(guarin): Rename use_layernorm and layer_norm_eps to match the fact that we use RMSNorm.
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
@@ -113,11 +125,64 @@ class Sapiens2BackboneOutput(DINOv3ViTBackboneOutput):
 
 
 class Sapiens2Embeddings(DINOv3ViTEmbeddings):
-    pass
+    def __init__(self, config: Sapiens2Config):
+        super().__init__(config)
+        if not config.use_mask_token:
+            del self.mask_token
+
+    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
+        if bool_masked_pos is not None and not self.config.use_mask_token:
+            raise ValueError("bool_masked_pos requires use_mask_token=True in the config")
+        return super().forward(pixel_values, bool_masked_pos)
 
 
-class Sapiens2RopePositionEmbedding(DINOv3ViTRopePositionEmbedding):
-    pass
+class Sapiens2RopePositionEmbedding(nn.Module):
+    periods: torch.Tensor
+
+    def __init__(self, config: Sapiens2Config):
+        super().__init__()
+
+        self.patch_size = config.patch_size
+        self.pos_embed_shift = config.pos_embed_shift
+        self.pos_embed_jitter = config.pos_embed_jitter
+        self.pos_embed_rescale = config.pos_embed_rescale
+        self.base = config.rope_theta
+        self.head_dim = config.hidden_size // config.num_attention_heads
+
+        periods = self.base ** (2 * torch.arange(self.head_dim // 4, dtype=torch.float32) / (self.head_dim // 2))
+        self.register_buffer("periods", periods, persistent=True)  # persistent=True to match original checkpoints
+
+    def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        _, _, height, width = pixel_values.shape
+        num_patches_h = height // self.patch_size
+        num_patches_w = width // self.patch_size
+
+        device = pixel_values.device
+        device_type = device.type if isinstance(device.type, str) and device.type != "mps" else "cpu"
+
+        with maybe_autocast(device_type=device_type, enabled=False):
+            # TODO(guarin): Double check, the original uses bf16 by default. I followed DINOv3 implementation instead.
+            patch_coords = get_patches_center_coordinates(
+                num_patches_h, num_patches_w, dtype=torch.float32, device=device
+            )
+            if self.training:
+                patch_coords = augment_patches_center_coordinates(
+                    patch_coords,
+                    shift=self.pos_embed_shift,
+                    jitter=self.pos_embed_jitter,
+                    rescale=self.pos_embed_rescale,
+                )
+
+            # (height * width, 2, head_dim / 4) -> (height * width, head_dim / 2) -> (height * width, head_dim)
+            angles = 2 * math.pi * patch_coords[:, :, None] / self.periods[None, None, :]
+            angles = angles.flatten(1, 2)
+            angles = angles.tile(2)
+
+            cos = torch.cos(angles)
+            sin = torch.sin(angles)
+
+        dtype = pixel_values.dtype
+        return cos.to(dtype=dtype), sin.to(dtype=dtype)
 
 
 class Sapiens2Attention(nn.Module):
@@ -221,14 +286,34 @@ class Sapiens2Layer(DINOv3ViTLayer):
         self.attention = Sapiens2Attention(config, layer_idx=layer_idx)
         self.norm1 = nn.RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.norm2 = nn.RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layer_scale2 = nn.Identity()
 
 
 class Sapiens2PreTrainedModel(DINOv3ViTPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module) -> None:
-        super()._init_weights(module)
-        if isinstance(module, nn.RMSNorm):
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, nn.LayerNorm):
+            init.zeros_(module.bias)
             init.ones_(module.weight)
+        elif isinstance(module, nn.RMSNorm):
+            init.ones_(module.weight)
+        elif isinstance(module, Sapiens2Embeddings):
+            init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
+            if module.config.num_register_tokens > 0:
+                init.trunc_normal_(module.register_tokens, mean=0.0, std=self.config.initializer_range)
+            if module.config.use_mask_token:
+                init.zeros_(module.mask_token)
+        elif isinstance(module, Sapiens2LayerScale):
+            init.constant_(module.lambda1, self.config.layerscale_value)
+        elif isinstance(module, Sapiens2RopePositionEmbedding):
+            periods = module.base ** (
+                2 * torch.arange(module.head_dim // 4, dtype=torch.float32) / (module.head_dim // 2)
+            )
+            init.copy_(module.periods, periods)
 
 
 class Sapiens2Encoder(DINOv3ViTEncoder):
