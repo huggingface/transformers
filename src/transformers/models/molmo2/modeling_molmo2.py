@@ -400,6 +400,7 @@ class Molmo2VisionBackbone(PreTrainedModel):
         self.image_pooling_2d = Molmo2GQAAttention(adapter_config, input_dim=pool_dim)
         self.image_projector = Molmo2ImageProjectorMLP(adapter_config)
         self.image_feature_dropout = nn.Dropout(adapter_config.image_feature_dropout)
+        self.post_init()
 
     def encode_image(self, images: torch.Tensor) -> torch.Tensor:
         """

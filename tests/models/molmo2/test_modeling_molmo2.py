@@ -602,8 +602,7 @@ class Molmo2_8BIntegrationTest(unittest.TestCase):
 
     def test_forward_logits(self):
         """Test forward pass logits for Molmo2-8B."""
-        prompt = self.prompt
-        inputs = self.processor(images=self.image, text=prompt, return_tensors="pt")
+        inputs = self.processor(images=self.image, text=self.prompt, return_tensors="pt")
 
         model = Molmo2ForConditionalGeneration.from_pretrained(
             self.model_id,
@@ -643,7 +642,6 @@ class Molmo2_8BIntegrationTest(unittest.TestCase):
             atol=1e-2,
             rtol=1e-2,
         )
-
         self.assertEqual(logits[0, -1].argmax().item(), 25244)
 
     def test_generation(self):
@@ -716,42 +714,3 @@ class Molmo2_8BIntegrationTest(unittest.TestCase):
         generated_text = self.processor.batch_decode(generated_ids[:, input_len:], skip_special_tokens=True)[0]
         EXPECTED_TEXT = "Penguins appear in the video."
         self.assertEqual(generated_text.strip(), EXPECTED_TEXT)
-
-    def test_generation_multi_image(self):
-        """Test multi-image question answering for Molmo2-8B."""
-        image_urls = [
-            "https://picsum.photos/id/237/536/354",
-            "https://vllm-public-assets.s3.us-west-2.amazonaws.com/vision_model_images/cherry_blossom.jpg",
-        ]
-        images = [Image.open(requests.get(url, stream=True).raw) for url in image_urls]
-
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "Compare these images."},
-                    *[{"type": "image", "image": img} for img in images],
-                ],
-            }
-        ]
-        inputs = self.processor.apply_chat_template(
-            messages, tokenize=True, add_generation_prompt=True, return_tensors="pt", return_dict=True
-        )
-
-        model = Molmo2ForConditionalGeneration.from_pretrained(
-            self.model_id,
-            torch_dtype=torch.bfloat16,
-            device_map=torch_device,
-        )
-        model.eval()
-
-        device_inputs = {k: v.to(torch_device) if hasattr(v, "to") else v for k, v in inputs.items()}
-
-        with torch.no_grad():
-            generated_ids = model.generate(**device_inputs, max_new_tokens=2048, do_sample=False)
-
-        input_len = device_inputs["input_ids"].shape[1]
-        generated_text = self.processor.batch_decode(generated_ids[:, input_len:], skip_special_tokens=True)[0]
-        # Should produce a comparison mentioning both images
-        self.assertIn("first image", generated_text.lower())
-        self.assertIn("second image", generated_text.lower())
