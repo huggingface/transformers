@@ -249,6 +249,19 @@ class DtensorShardOperation:
         return dim if dim >= 0 else self.param_ndim + dim
 
 
+def _dtensor_from_local_like(local_tensor: torch.Tensor, ref: DTensor) -> DTensor:
+    """Wrap `local_tensor` as a DTensor that mirrors `ref`'s mesh, placements,
+    global shape, and stride."""
+    return DTensor.from_local(
+        local_tensor.contiguous(),
+        ref.device_mesh,
+        ref.placements,
+        run_check=False,
+        shape=ref.shape,
+        stride=tuple(ref.stride()),
+    )
+
+
 def _replicate_dtensor(tensor: DTensor) -> DTensor:
     """All-gather a DTensor to fully Replicate, handling _StridedShard.
 

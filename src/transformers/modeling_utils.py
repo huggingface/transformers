@@ -52,6 +52,7 @@ from .core_model_loading import (
     revert_weight_conversion,
 )
 from .distributed import DistributedConfig
+from .distributed.sharding_utils import _dtensor_from_local_like
 from .distributed.utils import gather_full_state_dict, init_device_mesh, is_fsdp_enabled, save_model_checkpoint
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
@@ -4581,14 +4582,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     dtype=param.dtype,
                     device=torch.device(param.device_mesh.device_type, torch.cuda.current_device()),
                 )
-                new_dtensor = DTensor.from_local(
-                    local_value,
-                    param.device_mesh,
-                    param.placements,
-                    run_check=False,
-                    shape=param.shape,
-                    stride=tuple(param.stride()),
-                )
+                new_dtensor = _dtensor_from_local_like(local_value, param)
                 with torch.no_grad():
                     new_param = torch.nn.Parameter(new_dtensor, requires_grad=param.requires_grad)
                     torch.utils.swap_tensors(param, new_param)

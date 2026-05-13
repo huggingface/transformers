@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from .distributed.sharding_utils import DtensorShardOperation
+from .distributed.sharding_utils import DtensorShardOperation, _dtensor_from_local_like
 from .integrations.accelerate import get_device, offload_weight
 from .utils import is_env_variable_true
 from .utils.loading_report import LoadStateDictInfo
@@ -916,14 +916,7 @@ def set_param_for_module(
         else:
             if isinstance(ref, DTensor):
                 local_param = param_value.detach() if isinstance(param_value, torch.nn.Parameter) else param_value
-                dtensor_param = DTensor.from_local(
-                    local_param.contiguous(),
-                    ref.device_mesh,
-                    ref.placements,
-                    run_check=False,
-                    shape=ref.shape,
-                    stride=tuple(ref.stride()),
-                )
+                dtensor_param = _dtensor_from_local_like(local_param, ref)
                 with torch.no_grad():
                     if ref.is_meta:
                         torch.utils.swap_tensors(
