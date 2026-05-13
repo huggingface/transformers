@@ -170,7 +170,7 @@ def convert_rf_detr_checkpoint(
     checkpoint_url: str,
     pytorch_dump_folder_path: str,
     push_to_hub: bool = False,
-    organization: str = "stevenbucaille",
+    organization: str = "Roboflow",
 ):
     """
     Convert a RF-DETR checkpoint to HuggingFace format.
