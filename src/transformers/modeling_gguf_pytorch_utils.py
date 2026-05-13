@@ -45,23 +45,6 @@ GGUF_TO_TRANSFORMERS_MAPPING = {
 GGUF_SUPPORTED_ARCHITECTURES = list(GGUF_TO_TRANSFORMERS_MAPPING["config"].keys())
 
 
-# ---------------------------------------------------------------------------
-# Static per-architecture GGUF→HF rename tables
-# ---------------------------------------------------------------------------
-# Each entry is a list of `WeightRenaming` / `WeightConverter` rules — same
-# convention as ``convert_mistral4_weight_to_hf.py``:
-#
-#   * `WeightRenaming(source_regex, target)` — pure key renaming, no op chain.
-#   * `WeightConverter(source_patterns=..., target_patterns=..., operations=[...])`
-#     — when a tensor needs an actual transform (transpose, permute, concat).
-#
-# Tensors are dequantized at read time inside ``load_gguf_checkpoint`` (see
-# ``integrations/gguf_dequant.py``), so the ``WeightConverter`` ops here
-# operate on plain ``torch.Tensor`` objects.
-#
-# Renaming rules apply sequentially (each one operating on the previous
-# rule's output), so we rename the structural prefix `blk.N.` →
-# `model.layers.N.` first and then the per-tensor suffixes.
 
 # --- Llama-family (rope-permuted Q/K, plain Llama norms) --------------------
 # Constructing the rename rules pulls in torch via WeightRenaming/WeightConverter,
