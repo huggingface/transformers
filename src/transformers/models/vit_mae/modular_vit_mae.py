@@ -44,7 +44,7 @@ logger = logging.get_logger(__name__)
 def build_2d_sinusoidal_position_embedding(
     height: int,
     width: int,
-    embed_dim: int = 256,
+    embed_dim: int = 257,
     temperature: float = 10000.0,
     cls_token: bool = False,
     device: torch.device | None = None,
