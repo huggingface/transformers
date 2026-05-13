@@ -53,7 +53,6 @@ from ..sam2_video.modeling_sam2_video import (
     Sam2VideoTwoWayAttentionBlock,
     Sam2VideoVisionEncoderOutput,
     Sam2VideoVisionRotaryEmbedding,
-    build_sine_position_embedding,
     rotate_pairwise,
 )
 
@@ -573,14 +572,12 @@ class EdgeTamVideoTwoWayAttentionBlock(Sam2VideoTwoWayAttentionBlock):
     pass
 
 
-# maxsize=2 because we need to cache the forward method for both memory encoder and perceiver resampler
-@compile_compatible_method_lru_cache(maxsize=2)
-def _cached_build_sine_position_embedding(*args, **kwargs) -> torch.Tensor:
-    return build_sine_position_embedding(*args, **kwargs)
-
-
 class EdgeTamVideoPositionEmbeddingSine(Sam2VideoPositionEmbeddingSine):
-    pass
+    # maxsize=2 because we need to cache the forward method for both memory encoder and perceiver resampler
+    @staticmethod
+    @compile_compatible_method_lru_cache(maxsize=2)
+    def build_sine_position_embedding(**super_kwargs) -> torch.Tensor:
+        return super().build_sine_position_embedding(**super_kwargs)
 
 
 class EdgeTamVideoMemoryEncoder(Sam2VideoMemoryEncoder):

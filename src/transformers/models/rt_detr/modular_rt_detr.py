@@ -1258,41 +1258,6 @@ class RTDetrDecoderLayer(nn.Module):
         return hidden_states
 
 
-@compile_compatible_method_lru_cache(maxsize=32)
-def _cached_generate_anchors(
-    spatial_shapes: tuple[tuple[int, int], ...],
-    grid_size: float,
-    device: torch.device | str = "cpu",
-    dtype: torch.dtype = torch.float32,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    anchors = []
-    for level, (height, width) in enumerate(spatial_shapes):
-        grid_y, grid_x = torch.meshgrid(
-            torch.arange(end=height, device=device).to(dtype),
-            torch.arange(end=width, device=device).to(dtype),
-            indexing="ij",
-        )
-        grid_xy = torch.stack([grid_x, grid_y], -1)
-        grid_xy = grid_xy.unsqueeze(0) + 0.5
-        grid_xy[..., 0] /= width
-        grid_xy[..., 1] /= height
-        wh = torch.ones_like(grid_xy) * grid_size * (2.0**level)
-        anchors.append(torch.concat([grid_xy, wh], -1).reshape(-1, height * width, 4))
-    # define the valid range for anchor coordinates
-    eps = 1e-2
-    anchors = torch.concat(anchors, 1)
-    valid_mask = ((anchors > eps) * (anchors < 1 - eps)).all(-1, keepdim=True)
-    anchors = torch.log(anchors / (1 - anchors))
-    anchors = torch.where(valid_mask, anchors, torch.tensor(torch.finfo(dtype).max, dtype=dtype, device=device))
-
-    return anchors, valid_mask
-
-
-@compile_compatible_method_lru_cache(maxsize=32)
-def _cached_build_2d_sinusoidal_position_embedding(*args, **kwargs) -> torch.Tensor:
-    return build_2d_sinusoidal_position_embedding(*args, **kwargs)
-
-
 class RTDetrSinePositionEmbedding(nn.Module):
     """
     2D sinusoidal position embedding used in RT-DETR hybrid encoder.
@@ -1302,6 +1267,11 @@ class RTDetrSinePositionEmbedding(nn.Module):
         super().__init__()
         self.embed_dim = embed_dim
         self.temperature = temperature
+
+    @staticmethod
+    @compile_compatible_method_lru_cache(maxsize=32)
+    def _cached_build_2d_sinusoidal_position_embedding(*args, **kwargs) -> torch.Tensor:
+        return build_2d_sinusoidal_position_embedding(*args, **kwargs)
 
     def forward(
         self,
@@ -1316,7 +1286,7 @@ class RTDetrSinePositionEmbedding(nn.Module):
         Returns:
             Position embeddings of shape (1, height*width, embed_dim)
         """
-        return _cached_build_2d_sinusoidal_position_embedding(
+        return self._cached_build_2d_sinusoidal_position_embedding(
             height=torch_int(height),
             width=torch_int(width),
             embed_dim=self.embed_dim,
@@ -1773,13 +1743,43 @@ class RTDetrModel(RTDetrPreTrainedModel):
         for param in self.backbone.parameters():
             param.requires_grad_(True)
 
+    @staticmethod
+    @compile_compatible_method_lru_cache(maxsize=32)
+    def _cached_generate_anchors(
+        spatial_shapes: tuple[tuple[int, int], ...],
+        grid_size: float,
+        device: torch.device | str = "cpu",
+        dtype: torch.dtype = torch.float32,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        anchors = []
+        for level, (height, width) in enumerate(spatial_shapes):
+            grid_y, grid_x = torch.meshgrid(
+                torch.arange(end=height, device=device).to(dtype),
+                torch.arange(end=width, device=device).to(dtype),
+                indexing="ij",
+            )
+            grid_xy = torch.stack([grid_x, grid_y], -1)
+            grid_xy = grid_xy.unsqueeze(0) + 0.5
+            grid_xy[..., 0] /= width
+            grid_xy[..., 1] /= height
+            wh = torch.ones_like(grid_xy) * grid_size * (2.0**level)
+            anchors.append(torch.concat([grid_xy, wh], -1).reshape(-1, height * width, 4))
+        # define the valid range for anchor coordinates
+        eps = 1e-2
+        anchors = torch.concat(anchors, 1)
+        valid_mask = ((anchors > eps) * (anchors < 1 - eps)).all(-1, keepdim=True)
+        anchors = torch.log(anchors / (1 - anchors))
+        anchors = torch.where(valid_mask, anchors, torch.tensor(torch.finfo(dtype).max, dtype=dtype, device=device))
+
+        return anchors, valid_mask
+
     def generate_anchors(self, spatial_shapes=None, grid_size=0.05, device="cpu", dtype=torch.float32):
         if spatial_shapes is None:
             spatial_shapes = (
                 (int(self.config.anchor_image_size[0] / s), int(self.config.anchor_image_size[1] / s))
                 for s in self.config.feat_strides
             )
-        return _cached_generate_anchors(spatial_shapes, grid_size, device, dtype)
+        return self._cached_generate_anchors(spatial_shapes, grid_size, device, dtype)
 
     @auto_docstring
     @can_return_tuple

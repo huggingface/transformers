@@ -613,45 +613,6 @@ class EdgeTamVideoTwoWayAttentionBlock(GradientCheckpointingLayer):
         return queries, keys, attn_out
 
 
-def build_sine_position_embedding(
-    shape: torch.Size,
-    device: torch.device | str,
-    dtype: torch.dtype,
-    num_position_features: int,
-    normalize: bool = False,
-    scale: float | None = None,
-    temperature: int = 10000,
-    mask: torch.Tensor | None = None,
-) -> torch.Tensor:
-    if mask is None:
-        mask = torch.ones((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
-    y_embed = mask.cumsum(1, dtype=dtype)
-    x_embed = mask.cumsum(2, dtype=dtype)
-    if normalize:
-        eps = 1e-6
-        y_embed = y_embed / (y_embed[:, -1:, :] + eps) * scale
-        x_embed = x_embed / (x_embed[:, :, -1:] + eps) * scale
-
-    dim_t = torch.arange(num_position_features, dtype=torch.int64, device=device).to(dtype)
-    dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_position_features)
-
-    pos_x = x_embed[:, :, :, None] / dim_t
-    pos_y = y_embed[:, :, :, None] / dim_t
-    pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
-    pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
-    pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
-    # Flatten spatial dimensions and permute to (batch_size, sequence_length, hidden_size) format
-    # expected by the encoder
-    pos = pos.flatten(2).permute(0, 2, 1)
-    return pos
-
-
-# maxsize=2 because we need to cache the forward method for both memory encoder and perceiver resampler
-@compile_compatible_method_lru_cache(maxsize=2)
-def _cached_build_sine_position_embedding(*args, **kwargs) -> torch.Tensor:
-    return build_sine_position_embedding(*args, **kwargs)
-
-
 class EdgeTamVideoPositionEmbeddingSine(nn.Module):
     """
     This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
@@ -673,6 +634,40 @@ class EdgeTamVideoPositionEmbeddingSine(nn.Module):
         self.normalize = normalize
         self.scale = 2 * math.pi if scale is None else scale
 
+    @staticmethod
+    @compile_compatible_method_lru_cache(maxsize=2)
+    def build_sine_position_embedding(
+        shape: torch.Size,
+        device: torch.device | str,
+        dtype: torch.dtype,
+        num_position_features: int,
+        normalize: bool = False,
+        scale: float | None = None,
+        temperature: int = 10000,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        if mask is None:
+            mask = torch.ones((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
+        y_embed = mask.cumsum(1, dtype=dtype)
+        x_embed = mask.cumsum(2, dtype=dtype)
+        if normalize:
+            eps = 1e-6
+            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * scale
+            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * scale
+
+        dim_t = torch.arange(num_position_features, dtype=torch.int64, device=device).to(dtype)
+        dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_position_features)
+
+        pos_x = x_embed[:, :, :, None] / dim_t
+        pos_y = y_embed[:, :, :, None] / dim_t
+        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
+        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
+        pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
+        # Flatten spatial dimensions and permute to (batch_size, sequence_length, hidden_size) format
+        # expected by the encoder
+        pos = pos.flatten(2).permute(0, 2, 1)
+        return pos
+
     def forward(
         self,
         shape: torch.Size,
@@ -680,7 +675,7 @@ class EdgeTamVideoPositionEmbeddingSine(nn.Module):
         dtype: torch.dtype,
         mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        return _cached_build_sine_position_embedding(
+        return self.build_sine_position_embedding(
             shape, device, dtype, self.num_position_features, self.normalize, self.scale, self.temperature, mask
         )
 
