@@ -844,14 +844,6 @@ class ParakeetForTDT(ParakeetPreTrainedModel, ParakeetTDTGenerationMixin):
                 attention_mask=attention_mask,
                 **kwargs,
             )
-        elif not isinstance(encoder_outputs, ParakeetEncoderModelOutput):
-            encoder_outputs = ParakeetEncoderModelOutput(
-                last_hidden_state=encoder_outputs[0] if len(encoder_outputs) > 0 else None,
-                pooler_output=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                hidden_states=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-                attentions=encoder_outputs[3] if len(encoder_outputs) > 3 else None,
-                attention_mask=encoder_outputs[4] if len(encoder_outputs) > 4 else None,
-            )
 
         if use_decoder_cache and decoder_cache is None:
             decoder_cache = ParakeetTDTDecoderCache(self.config)
