@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING
 from safetensors import safe_open
 from safetensors.torch import save_file
 
-from ..distributed.utils import is_fsdp_enabled
+from ..distributed.fsdp import is_fsdp_enabled
 from ..utils import (
     is_accelerate_available,
     is_torch_available,

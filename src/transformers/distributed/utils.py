@@ -16,7 +16,8 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
-from ..utils import is_torch_available, is_torch_greater_or_equal, strtobool
+from ..utils import is_torch_available, is_torch_greater_or_equal
+from .fsdp import apply_fully_shard_data_parallel
 from .sharding_utils import (
     _find_strided_shard_placement_from_fused_params,
     _replicate_dtensor,
@@ -24,6 +25,7 @@ from .sharding_utils import (
     get_fusion_metadata,
     unfuse_optimizer_state,
 )
+from .tensor_parallel import apply_tensor_parallel
 
 
 if TYPE_CHECKING:
@@ -41,37 +43,6 @@ if is_torch_available():
         set_optimizer_state_dict,
     )
     from torch.distributed.tensor import DTensor
-
-
-def is_fsdp_enabled() -> bool:
-    """Check if FSDP is active via Accelerate (env var based) — covers FSDP1 only."""
-    if not is_torch_available():
-        return False
-
-    return (
-        torch.distributed.is_available()
-        and torch.distributed.is_initialized()
-        and strtobool(os.environ.get("ACCELERATE_USE_FSDP", "False")) == 1
-        and strtobool(os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING", "False")) == 1
-    )
-
-
-def is_fsdp_managed_module(module: nn.Module) -> bool:
-    """Check if a module is managed by FSDP (1 or 2)."""
-    if not is_torch_available():
-        return False
-    if not torch.distributed.is_available():
-        return False
-
-    # FSDP2: attribute set by apply_fsdp2()
-    if getattr(module, "_is_fsdp_managed_module", False):
-        return True
-    # FSDP1: wrapped by FullyShardedDataParallel
-    try:
-        from torch.distributed.fsdp import FullyShardedDataParallel
-    except ImportError:
-        return False
-    return isinstance(module, FullyShardedDataParallel)
 
 
 def _ensure_torch_distributed(device_type: str):
@@ -134,6 +105,20 @@ def init_device_mesh(distributed_config: DistributedConfig) -> torch.distributed
         mesh._flatten("_".join(names))
 
     return mesh
+
+
+def distribute_model(model, distributed_config: DistributedConfig, device_mesh) -> nn.Module:
+    """Apply TP and/or FSDP2 to `model` based on the mesh dims in `device_mesh`."""
+    model.config.distributed_config = distributed_config
+    model.device_mesh = device_mesh
+    mesh_dim_names = device_mesh.mesh_dim_names or ()
+    if "tp" in mesh_dim_names:
+        tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
+        model = apply_tensor_parallel(model, tp_mesh, distributed_config.tp_plan)
+    if "fsdp" in mesh_dim_names:
+        fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
+        model = apply_fully_shard_data_parallel(model, fsdp_mesh, distributed_config.fsdp_plan)
+    return model
 
 
 def gather_full_state_dict(model) -> dict[str, torch.Tensor]:

@@ -15,20 +15,55 @@ from __future__ import annotations
 
 import inspect
 import os
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
-from ..utils import is_torch_available, is_torch_greater_or_equal, logging
+from ..utils import is_torch_available, is_torch_greater_or_equal, logging, strtobool
 from ..utils.quantization_config import QuantizationMethod
-from .utils import is_fsdp_enabled, is_fsdp_managed_module  # noqa: F401
 
+
+if TYPE_CHECKING:
+    import torch.nn as nn
+
+if is_torch_available():
+    import torch
 
 if is_torch_available() and is_torch_greater_or_equal("2.5"):
-    import torch
     import torch.distributed as dist
     from torch.distributed._composable.fsdp import fully_shard
     from torch.distributed.fsdp import CPUOffloadPolicy, MixedPrecisionPolicy, OffloadPolicy
 
 logger = logging.get_logger(__name__)
+
+
+def is_fsdp_enabled() -> bool:
+    """Check if FSDP is active via Accelerate (env var based) — covers FSDP1 only."""
+    if not is_torch_available():
+        return False
+
+    return (
+        torch.distributed.is_available()
+        and torch.distributed.is_initialized()
+        and strtobool(os.environ.get("ACCELERATE_USE_FSDP", "False")) == 1
+        and strtobool(os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING", "False")) == 1
+    )
+
+
+def is_fsdp_managed_module(module: nn.Module) -> bool:
+    """Check if a module is managed by FSDP (1 or 2)."""
+    if not is_torch_available():
+        return False
+    if not torch.distributed.is_available():
+        return False
+
+    # FSDP2: attribute set by apply_fsdp2()
+    if getattr(module, "_is_fsdp_managed_module", False):
+        return True
+    # FSDP1: wrapped by FullyShardedDataParallel
+    try:
+        from torch.distributed.fsdp import FullyShardedDataParallel
+    except ImportError:
+        return False
+    return isinstance(module, FullyShardedDataParallel)
 
 
 def initialize_fsdp(
