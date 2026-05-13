@@ -108,6 +108,7 @@ class PPLCNetV4Config(BackboneConfigMixin, PreTrainedConfig):
         self.set_output_features_output_indices(
             out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)
         )
+        self.stage_out_channels = [blocks[-1][2] for blocks in self.block_configs]
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):

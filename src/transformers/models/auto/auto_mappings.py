@@ -447,6 +447,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("pp_ocrv5_mobile_rec", "PPOCRV5MobileRecConfig"),
         ("pp_ocrv5_server_det", "PPOCRV5ServerDetConfig"),
         ("pp_ocrv5_server_rec", "PPOCRV5ServerRecConfig"),
+        ("pp_ocrv6_base_det", "PPOCRV6BaseDetConfig"),
+        ("pp_ocrv6_small_det", "PPOCRV6SmallDetConfig"),
         ("pp_ocrv6_small_rec", "PPOCRV6SmallRecConfig"),
         ("pp_ocrv6_tiny_rec", "PPOCRV6TinyRecConfig"),
         ("prompt_depth_anything", "PromptDepthAnythingConfig"),
