@@ -11,3 +11,6 @@ jobs:
   pr-ci:
     if: contains(fromJSON('["MEMBER","OWNER","COLLABORATOR"]'), github.event.pull_request.author_association)
     uses: huggingface/transformers-test-ci/.github/workflows/pr-ci_dynamic_caller_example.yml@main
+    secrets:
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}
+      OTEL_TOKEN: ${{ secrets.OTEL_TOKEN }}

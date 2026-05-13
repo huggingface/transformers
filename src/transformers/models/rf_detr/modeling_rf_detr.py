@@ -38,7 +38,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, torch_compilable_check, torch_int
 from ...utils.generic import ModelOutput, TransformersKwargs, can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_rf_detr import RfDetrConfig, RfDetrDinov2Config
 
 
@@ -225,6 +225,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->RfDetrDinov2
 class RfDetrDinov2SelfAttention(nn.Module):
     def __init__(self, config: RfDetrDinov2Config):
         super().__init__()
@@ -280,6 +281,7 @@ class RfDetrDinov2SelfAttention(nn.Module):
         return context_layer, attention_probs
 
 
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->RfDetrDinov2
 class RfDetrDinov2SelfOutput(nn.Module):
     """
     The residual connection is defined in RfDetrDinov2Layer instead of here (as is the case with other models), due to the
@@ -297,6 +299,7 @@ class RfDetrDinov2SelfOutput(nn.Module):
         return hidden_states
 
 
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->RfDetrDinov2
 class RfDetrDinov2Attention(nn.Module):
     def __init__(self, config: RfDetrDinov2Config):
         super().__init__()
@@ -320,35 +323,6 @@ class RfDetrDinov2LayerScale(nn.Module):
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         return hidden_state * self.lambda1
-
-
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-class RfDetrDinov2DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: float | None = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
 
 
 class RfDetrDinov2MLP(nn.Module):
@@ -385,6 +359,30 @@ class RfDetrDinov2SwiGLUFFN(nn.Module):
         x1, x2 = hidden_state.chunk(2, dim=-1)
         hidden = nn.functional.silu(x1) * x2
         return self.weights_out(hidden)
+
+
+class RfDetrDinov2DropPath(nn.Module):
+    """Stochastic depth (DropPath) per sample, for residual blocks.
+
+    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
+    <https://arxiv.org/abs/1603.09382>`_.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor = torch.floor(random_tensor + keep_prob)
+        return hidden_states.div(keep_prob) * random_tensor
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
 
 
 class RfDetrDinov2Layer(GradientCheckpointingLayer):
@@ -782,6 +780,8 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 
 class RfDetrAttention(nn.Module):
+    """LW-DETR self-attention with group-DETR training technique."""
+
     def __init__(self, config: RfDetrConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -1105,6 +1105,7 @@ class RfDetrPreTrainedModel(PreTrainedModel):
     config: RfDetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     _no_split_modules = [
         r"RfDetrConvEncoder",
         r"RfDetrDecoderLayer",
@@ -1158,12 +1159,12 @@ class RfDetrPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.segmentation_bias, 0.0)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the RfDetr backbone-decoder model.
     """
 )
+@dataclass
 class RfDetrModelOutput(ModelOutput):
     r"""
     init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
@@ -1221,43 +1222,40 @@ class RfDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     intermediate_reference_points: torch.FloatTensor | None = None
 
 
-# function to generate sine positional embedding for 4d coordinates
-def gen_sine_position_embeddings(pos_tensor, hidden_size=256):
-    """
-    This function computes position embeddings using sine and cosine functions from the input positional tensor,
-    which has a shape of (batch_size, num_queries, 4).
-    The last dimension of `pos_tensor` represents the following coordinates:
-    - 0: x-coord
-    - 1: y-coord
-    - 2: width
-    - 3: height
+def encode_sinusoidal_position_embedding(
+    pos_tensor: torch.Tensor,
+    num_pos_feats: int = 128,
+    temperature: int = 10000,
+) -> torch.Tensor:
+    """Sinusoidal position embeddings from normalized anchor coordinates.
 
-    The output shape is (batch_size, num_queries, 512), where final dim (hidden_size*2 = 512) is the total embedding dimension
-    achieved by concatenating the sine and cosine values for each coordinate.
+    Each coordinate in `pos_tensor` is independently encoded with ``num_pos_feats``
+    interleaved sin/cos components; per-coordinate embeddings are concatenated.
+    Handles 2-D ``(x, y)`` and N-D ``(x, y, w, h)`` inputs. For 2-D+ inputs the
+    x and y embeddings are swapped to follow the DETR ``[pos_y, pos_x, ...]`` convention.
+
+    Args:
+        pos_tensor: Normalized coordinates in ``[0, 1]``, shape ``(..., n_coords)``.
+        num_pos_feats: Embedding dimension per coordinate.
+        temperature: Base for the frequency decay.
+
+    Returns:
+        Tensor of shape ``(..., n_coords * num_pos_feats)``, same dtype as input.
     """
     scale = 2 * math.pi
-    dim = hidden_size // 2
-    dim_t = torch.arange(dim, dtype=torch.float32, device=pos_tensor.device)
-    dim_t = 10000 ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / dim)
-    x_embed = pos_tensor[:, :, 0] * scale
-    y_embed = pos_tensor[:, :, 1] * scale
-    pos_x = x_embed[:, :, None] / dim_t
-    pos_y = y_embed[:, :, None] / dim_t
-    pos_x = torch.stack((pos_x[:, :, 0::2].sin(), pos_x[:, :, 1::2].cos()), dim=3).flatten(2)
-    pos_y = torch.stack((pos_y[:, :, 0::2].sin(), pos_y[:, :, 1::2].cos()), dim=3).flatten(2)
-    if pos_tensor.size(-1) == 4:
-        w_embed = pos_tensor[:, :, 2] * scale
-        pos_w = w_embed[:, :, None] / dim_t
-        pos_w = torch.stack((pos_w[:, :, 0::2].sin(), pos_w[:, :, 1::2].cos()), dim=3).flatten(2)
+    dim_t = torch.arange(num_pos_feats, dtype=torch.float32, device=pos_tensor.device)
+    dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats)
 
-        h_embed = pos_tensor[:, :, 3] * scale
-        pos_h = h_embed[:, :, None] / dim_t
-        pos_h = torch.stack((pos_h[:, :, 0::2].sin(), pos_h[:, :, 1::2].cos()), dim=3).flatten(2)
+    coords = pos_tensor.unbind(-1)  # list of (...,) tensors
+    embeddings = [coord[..., None] * scale / dim_t for coord in coords]  # each (..., num_pos_feats)
+    embeddings = [
+        torch.stack((e[..., 0::2].sin(), e[..., 1::2].cos()), dim=-1).flatten(-2) for e in embeddings
+    ]  # each (..., num_pos_feats)
 
-        pos = torch.cat((pos_y, pos_x, pos_w, pos_h), dim=2)
-    else:
-        raise ValueError(f"Unknown pos_tensor shape(-1):{pos_tensor.size(-1)}")
-    return pos.to(pos_tensor.dtype)
+    if len(embeddings) >= 2:
+        embeddings[0], embeddings[1] = embeddings[1], embeddings[0]
+
+    return torch.cat(embeddings, dim=-1).to(pos_tensor.dtype)
 
 
 class RfDetrMLPPredictionHead(nn.Module):
@@ -1293,6 +1291,12 @@ class RfDetrDecoder(RfDetrPreTrainedModel):
         config: RfDetrConfig
     """
 
+    _can_record_outputs = {
+        "hidden_states": RfDetrDecoderLayer,
+        "attentions": OutputRecorder(RfDetrAttention, layer_name="self_attn", index=1),
+        "cross_attentions": OutputRecorder(RfDetrMultiscaleDeformableAttention, layer_name="cross_attn", index=1),
+    }
+
     def __init__(self, config: RfDetrConfig):
         super().__init__(config)
         self.dropout = config.dropout
@@ -1313,7 +1317,9 @@ class RfDetrDecoder(RfDetrPreTrainedModel):
         reference_points_inputs = obj_center[:, :, None] * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
 
         # batch_size, num_queries, d_model * 2
-        query_sine_embed = gen_sine_position_embeddings(reference_points_inputs[:, :, 0, :], self.config.d_model)
+        query_sine_embed = encode_sinusoidal_position_embedding(
+            reference_points_inputs[:, :, 0, :], num_pos_feats=self.config.d_model // 2
+        )
 
         # batch_size, num_queries, d_model
         query_pos = self.ref_point_head(query_sine_embed)
@@ -1875,12 +1881,12 @@ class RfDetrForObjectDetection(RfDetrPreTrainedModel):
         return logits, boxes
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`RfDetrForInstanceSegmentation`].
     """
 )
+@dataclass
 class RfDetrInstanceSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):

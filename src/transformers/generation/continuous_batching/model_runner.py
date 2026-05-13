@@ -25,7 +25,7 @@ from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
 from .requests import RequestStatus, logger
-from .utils import create_warmup_future_states, pad_to_interval, pad_to_pow2
+from .utils import create_warmup_future_states, get_cuda_pools, mem_pool_ctx, pad_to_interval, pad_to_pow2
 
 
 class ModelRunner:
@@ -58,9 +58,9 @@ class ModelRunner:
 
         # Set up the graph pool. This allows all graphs to share the same memory pool, greatly saving memory.
         if self.use_cuda_graph_varlen or self.use_cuda_graph_decode:
-            self.graph_pool = torch.cuda.graph_pool_handle()
+            self.mem_pool, self.graph_pool_id = get_cuda_pools()
         else:
-            self.graph_pool = None
+            self.mem_pool, self.graph_pool_id = None, None
 
         # Set up compiled version of the forward pass for the varlen path
         self._compiled_varlen = None
@@ -134,11 +134,13 @@ class ModelRunner:
     def _capture_graph(self, forward_fn: Callable, compute_stream: torch.cuda.Stream, *args) -> None:
         """Helper function to capture and store a graph for a given forward function."""
         # Warmup (ensures the right result is computed before capturing the graph)
-        with torch.cuda.stream(compute_stream):
+        with torch.cuda.stream(compute_stream), mem_pool_ctx(self.mem_pool):
             forward_fn(*args)
         # Capture using a thread-local capture mode to avoid capturing GPU operations from outside the model forward
         graph = torch.cuda.CUDAGraph()
-        with torch.cuda.graph(graph, stream=compute_stream, pool=self.graph_pool, capture_error_mode="thread_local"):
+        with torch.cuda.graph(
+            graph, stream=compute_stream, pool=self.graph_pool_id, capture_error_mode="thread_local"
+        ):
             forward_fn(*args)
         # Store
         self.inputs_and_outputs.set_graph(graph)

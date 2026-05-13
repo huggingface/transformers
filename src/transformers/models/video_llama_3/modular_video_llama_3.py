@@ -45,13 +45,14 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
+from ...utils.generic import accepts_precomputed_kwargs, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...video_utils import (
     VideoInput,
     group_videos_by_shape,
     reorder_videos,
 )
+from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..auto.modeling_auto import AutoModel
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
@@ -128,39 +129,7 @@ class VideoLlama3Config(PreTrainedConfig):
 
 
 class VideoLlama3VisionRotaryEmbedding(VisionRotaryEmbedding):
-    def forward(self, grid_thw, merge_sizes) -> tuple[torch.Tensor, torch.Tensor]:
-        pos_ids = []
-        for (t, h, w), merge_size in zip(grid_thw, merge_sizes):
-            hpos_ids = torch.arange(h).unsqueeze(1).expand(-1, w)
-            hpos_ids = hpos_ids.reshape(
-                h // merge_size,
-                merge_size,
-                w // merge_size,
-                merge_size,
-            )
-            hpos_ids = hpos_ids.permute(0, 2, 1, 3)
-            hpos_ids = hpos_ids.flatten()
-
-            wpos_ids = torch.arange(w).unsqueeze(0).expand(h, -1)
-            wpos_ids = wpos_ids.reshape(
-                h // merge_size,
-                merge_size,
-                w // merge_size,
-                merge_size,
-            )
-            wpos_ids = wpos_ids.permute(0, 2, 1, 3)
-            wpos_ids = wpos_ids.flatten()
-            pos_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
-
-        pos_ids = torch.cat(pos_ids, dim=0)
-        max_grid_thw = grid_thw[:, 1:].max()
-
-        seq = torch.arange(max_grid_thw, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        rotary_pos_emb_full = torch.outer(seq, self.inv_freq)
-        rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
-        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-
-        return (emb.cos(), emb.sin())
+    pass
 
 
 class VideoLlama3VisionEmbeddings(nn.Module):
@@ -421,19 +390,14 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
         merge_sizes (`torch.Tensor` of shape `(num_images_or_videos,)`):
             The spatial downsampling ratio of each image or video feature.
         """
-        position_embeddings = self.rotary_pos_emb(grid_thw, merge_sizes)
-
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0,
-            # Select dtype based on the following factors:
-            #  - FA2 requires that cu_seqlens_q must have dtype int32
-            #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
-            # See https://github.com/huggingface/transformers/pull/34852 for more information
-            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
-        )
-        cu_seqlens = torch.nn.functional.pad(cu_seqlens, (1, 0), value=0)
+        position_ids = get_vision_position_ids(grid_thw, merge_sizes, kwargs=kwargs)
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
 
         hidden_states = self.embeddings(pixel_values.type(self.dtype))
+        rotary_pos_emb = self.rotary_pos_emb(position_ids)
+        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
+        position_embeddings = (emb.cos(), emb.sin())
+
         encoder_outputs: BaseModelOutput = self.encoder(
             hidden_states,
             cu_seqlens=cu_seqlens,
@@ -514,6 +478,7 @@ class VideoLlama3Model(Qwen2VLModel):
     def compute_3d_position_ids(self):
         raise AttributeError("Not needed for VideoLLaMA3")
 
+    @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_features(
@@ -538,6 +503,7 @@ class VideoLlama3Model(Qwen2VLModel):
             **kwargs,
         )
 
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -608,7 +574,7 @@ class VideoLlama3Model(Qwen2VLModel):
         image_embeds = None
         if pixel_values is not None:
             image_embeds = self.get_image_features(
-                pixel_values, image_grid_thw, image_merge_sizes, return_dict=True
+                pixel_values, image_grid_thw, image_merge_sizes, return_dict=True, **kwargs
             ).pooler_output
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
@@ -619,7 +585,7 @@ class VideoLlama3Model(Qwen2VLModel):
         video_embeds = None
         if pixel_values_videos is not None:
             video_embeds = self.get_video_features(
-                pixel_values_videos, video_grid_thw, video_merge_sizes, return_dict=True
+                pixel_values_videos, video_grid_thw, video_merge_sizes, return_dict=True, **kwargs
             ).pooler_output
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             if video_compression_mask is not None:
