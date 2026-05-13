@@ -22,6 +22,8 @@ import torch
 
 from transformers import AutoTokenizer, NanoChatConfig, NanoChatForCausalLM
 
+from ...utils import strtobool
+
 
 def infer_kv_heads(config: NanoChatConfig, state_dict: dict[str, torch.Tensor]) -> int:
     key_weight = state_dict.get("transformer.h.0.attn.c_k.weight")
@@ -228,6 +230,13 @@ def write_tokenizer(input_dir, output_dir):
     # Convert the pickle tokenizer to HF format
     tokenizer_pkl = input_path / "tokenizer.pkl"
     if tokenizer_pkl.exists():
+        if not strtobool(os.environ.get("TRUST_REMOTE_CODE", "False")):
+            raise ValueError(
+                "This part uses `pickle.load` which is insecure and will execute arbitrary code that is potentially "
+                "malicious. It's recommended to never unpickle data that could have come from an untrusted source, or "
+                "that could have been tampered with. If you already verified the pickle data and decided to use it, "
+                "you can set the environment variable `TRUST_REMOTE_CODE` to `True` to allow it."
+            )
         try:
             import pickle
 
