@@ -351,6 +351,26 @@ model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
 
 [[autodoc]] Qwen3OmniMoeTalkerConfig
 
+## Qwen3OmniMoeTextConfig
+
+[[autodoc]] Qwen3OmniMoeTextConfig
+
+## Qwen3OmniMoeVisionEncoderConfig
+
+[[autodoc]] Qwen3OmniMoeVisionEncoderConfig
+
+## Qwen3OmniMoeAudioEncoderConfig
+
+[[autodoc]] Qwen3OmniMoeAudioEncoderConfig
+
+## Qwen3OmniMoeTalkerTextConfig
+
+[[autodoc]] Qwen3OmniMoeTalkerTextConfig
+
+## Qwen3OmniMoeTalkerCodePredictorConfig
+
+[[autodoc]] Qwen3OmniMoeTalkerCodePredictorConfig
+
 ## Qwen3OmniMoeForConditionalGeneration
 
 [[autodoc]] Qwen3OmniMoeForConditionalGeneration
