@@ -111,13 +111,6 @@ if is_torch_available():
     _NEMOTRON_CONVERTERS = _LLAMA_SHARED_RENAMES + _NORM_SUBTRACT_ONE_CONVERTERS + _ROPE_ATTN_CONVERTERS
     _GEMMA_CONVERTERS = _NEMOTRON_CONVERTERS  # same structure as Nemotron
 
-    # --- T5 / UMT5 (encoder–decoder, no transforms — pure renames) -------------
-    # After the structural prefix rename ``enc.blk.`` → ``encoder.block.`` (and
-    # the analogous decoder rename), encoder and decoder share the same
-    # self-attention layout (layer.0), so a single rule handles both. The FFN
-    # rules differ — encoder FFN is layer.1, decoder FFN is layer.2 — so those
-    # stay split. Within each FFN group we still use one rule per ``gate/up/down``
-    # because the gguf → HF names are non-uniform (gate→wi_0, up→wi_1, down→wo).
     _T5_CONVERTERS = [
         WeightRenaming(r"^enc\.blk\.", "encoder.block."),
         WeightRenaming(r"^dec\.blk\.", "decoder.block."),
