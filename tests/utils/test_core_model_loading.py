@@ -1359,14 +1359,14 @@ class TestApplyTransformsToMetaModel(unittest.TestCase):
                 super().__init__()
                 self.self_attn = TestApplyTransformsToMetaModel.QKVAttn()
 
-        class QKVModel(nn.Module):
+        class QKVLayeredModel(nn.Module):
             base_model_prefix = "model"
 
             def __init__(self):
                 super().__init__()
                 self.model = nn.ModuleList([QKVLayer(), QKVLayer()])
 
-        model = QKVModel()
+        model = QKVLayeredModel()
         model.config = PretrainedConfig()
 
         qkv_weights = {}
@@ -1401,6 +1401,40 @@ class TestApplyTransformsToMetaModel(unittest.TestCase):
             torch.testing.assert_close(state_dict[f"model.{i}.self_attn.q_proj.weight"], expected_q)
             torch.testing.assert_close(state_dict[f"model.{i}.self_attn.k_proj.weight"], expected_k)
             torch.testing.assert_close(state_dict[f"model.{i}.self_attn.v_proj.weight"], expected_v)
+
+    def test_weight_converter_glob_merges_modulelist(self):
+        class ExpertModel(nn.Module):
+            base_model_prefix = ""
+
+            def __init__(self):
+                super().__init__()
+                self.experts = nn.ModuleList([nn.Linear(2, 4, bias=False), nn.Linear(2, 4, bias=False)])
+                # Pre-create empty target so _get_submodule_or_create finds it without
+                # needing to infer a module type from the 3-D stacked tensor.
+                self.merged = nn.Module()
+
+        model = ExpertModel()
+        model.config = PretrainedConfig()
+
+        weight_0 = model.experts[0].weight.data.clone()
+        weight_1 = model.experts[1].weight.data.clone()
+
+        apply_transforms_to_meta_model(
+            model,
+            [
+                WeightConverter(
+                    "experts.*.weight",
+                    "merged.weight",
+                    operations=[MergeModulelist(dim=0)],
+                )
+            ],
+        )
+
+        state_dict = model.state_dict()
+        self.assertIn("merged.weight", state_dict)
+        self.assertNotIn("experts.0.weight", state_dict)
+        self.assertNotIn("experts.1.weight", state_dict)
+        torch.testing.assert_close(state_dict["merged.weight"], torch.stack([weight_0, weight_1], dim=0))
 
     def test_weight_converter_concatenates_projections(self):
         class SeparateAttn(nn.Module):

@@ -594,6 +594,7 @@ class TestKernelMappingDeviceFiltering(TestCasePlus):
         self.assertIn("RMSNorm", result_mapping, "RMSNorm should be in mapping")
 
 
+@require_kernels
 class TestKernelFusions(TestCasePlus):
     _MODEL_TYPE = "kernel_fusion_test_model"
 
@@ -630,9 +631,11 @@ class TestKernelFusions(TestCasePlus):
 
     def tearDown(self):
         import transformers.conversion_mapping as _cm
+        from transformers.integrations.hub_kernels import make_fused_module_class
 
         if _cm._checkpoint_conversion_mapping_cache is not None:
             _cm._checkpoint_conversion_mapping_cache.pop(self._MODEL_TYPE, None)
+        make_fused_module_class.cache_clear()
 
     def test_infer_kernel_fusion_transforms(self):
         transforms = infer_kernel_fusion_transforms(
