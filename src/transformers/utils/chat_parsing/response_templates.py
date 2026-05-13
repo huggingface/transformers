@@ -24,9 +24,11 @@ logger = logging.get_logger(__name__)
 class ResponseTemplateField:
     name: str
     open_re: re.Pattern | None
-    open_lit: str | None
+    open_lits: list[str] | None
+    open_lit_can_extend: bool
     close_re: re.Pattern | None
-    close_lit: str | None
+    close_lits: list[str] | None
+    close_lit_can_extend: bool
     content: str
     content_args: dict
     repeats: bool
@@ -40,7 +42,7 @@ class ResponseTemplate:
     fields: dict[str, ResponseTemplateField]
     implicit: str | None = None
     start_anchor_re: re.Pattern | None = None
-    start_anchor_lit: str | None = None
+    start_anchor_lits: list[str] | None = None
 
     def truncate_past_last_anchor(self, text: str, *, log_if_missing: bool = True) -> str:
         """When parsing responses, we can't just parse the tokens generated
@@ -49,46 +51,66 @@ class ResponseTemplate:
         of the most recent assistant message, which can include tokens from the template as well as the output."""
         if self.start_anchor_re is None:
             return text
-        if self.start_anchor_lit is not None:
-            idx = text.rfind(self.start_anchor_lit)
-            if idx < 0:
-                if log_if_missing:
-                    logger.warning_once(
-                        "response_template defines start_anchor but the anchor was not found "
-                        "in the prefix; the parser will process the entire prefix instead."
-                    )
-                return text
-            return text[idx + len(self.start_anchor_lit) :]
         last_end: int | None = None
         for m in self.start_anchor_re.finditer(text):
             last_end = m.end()
         if last_end is None:
             if log_if_missing:
+                kind = "start_anchor" if self.start_anchor_lits is not None else "start_anchor_pattern"
                 logger.warning_once(
-                    "response_template defines start_anchor_pattern but the anchor was not "
-                    "found in the prefix; the parser will process the entire prefix instead."
+                    f"response_template defines {kind} but the anchor was not found "
+                    "in the prefix; the parser will process the entire prefix instead."
                 )
             return text
         return text[last_end:]
 
 
-def _compile_anchor(scope: str, field: dict, lit_key: str, pat_key: str) -> tuple[re.Pattern | None, str | None]:
-    """The start and end anchors for a region can be either regexes or literal strings. Although both get compiled
-    to a regex for actual matching, we keep the literal string around too - when it's present, we can emit
-    regions much more quickly, rather than needing to keep a safety buffer as we do with regexes."""
+def _compile_anchor(
+    scope: str, field: dict, lit_key: str, pat_key: str
+) -> tuple[re.Pattern | None, list[str] | None, bool]:
+    """The start and end anchors for a region can be either regexes, a single literal string, or a list of
+    literal strings (an "any of these" alternation). Although all forms get compiled to a regex for matching,
+    we keep the literal strings around too - when present, the parser can emit regions more quickly, since it
+    knows exactly how many trailing bytes might be a partial-match prefix (and that a finished literal match
+    can never be extended by future bytes, with the one exception of literals that are prefixes of others in
+    the same list).
+
+    Returns `(compiled_re, literals, can_extend)` where `literals` is `None` for regex anchors and a list of
+    literal strings otherwise; `can_extend` is `True` iff one literal in the list is a strict prefix of
+    another, in which case a successful match at the buffer edge could still be lengthened by future input.
+    """
     if lit_key in field and pat_key in field:
         raise ValueError(f"{scope}: cannot specify both '{lit_key}' and '{pat_key}'")
     if lit_key in field:
-        lit = field[lit_key]
-        if lit == "eos":
-            return re.compile(r"\Z"), None
-        return re.compile(re.escape(lit), re.DOTALL), lit
+        raw = field[lit_key]
+        if isinstance(raw, str):
+            lits = [raw]
+        elif isinstance(raw, list):
+            if not raw:
+                raise ValueError(f"{scope}: '{lit_key}' list must contain at least one literal")
+            if not all(isinstance(s, str) for s in raw):
+                raise ValueError(f"{scope}: '{lit_key}' list must contain only strings")
+            lits = list(dict.fromkeys(raw))  # dedupe, preserve first-seen order
+        else:
+            raise ValueError(f"{scope}: '{lit_key}' must be a string or list of strings, got {type(raw).__name__}")
+        if any(s == "" for s in lits):
+            raise ValueError(f"{scope}: '{lit_key}' literals cannot be empty strings")
+        # `"eos"` is a magic literal mapping to end-of-stream; only meaningful on its own.
+        if "eos" in lits:
+            if len(lits) > 1:
+                raise ValueError(f"{scope}: the 'eos' literal cannot be combined with other literals")
+            return re.compile(r"\Z"), lits, False
+        # Sort longest-first so alternation prefers the longer alternative when both could match.
+        ordered = sorted(lits, key=len, reverse=True)
+        can_extend = any(a != b and a.startswith(b) for a in lits for b in lits)
+        pattern = "|".join(re.escape(s) for s in ordered)
+        return re.compile(pattern, re.DOTALL), lits, can_extend
     if pat_key in field:
         try:
-            return re.compile(field[pat_key], re.DOTALL), None
+            return re.compile(field[pat_key], re.DOTALL), None, False
         except re.error as e:
             raise ValueError(f"{scope}: invalid {pat_key} regex: {e}") from e
-    return None, None
+    return None, None, False
 
 
 def load_response_template(spec: dict | ResponseTemplate) -> ResponseTemplate:
@@ -132,16 +154,20 @@ def load_response_template(spec: dict | ResponseTemplate) -> ResponseTemplate:
             raise ValueError(
                 f"Field '{name}': unknown content parser '{content}'. Available: {sorted(CONTENT_PARSERS)}"
             )
-        open_re, open_lit = _compile_anchor(f"Field '{name}'", field, "open", "open_pattern")
-        close_re, close_lit = _compile_anchor(f"Field '{name}'", field, "close", "close_pattern")
+        open_re, open_lits, open_lit_can_extend = _compile_anchor(f"Field '{name}'", field, "open", "open_pattern")
+        close_re, close_lits, close_lit_can_extend = _compile_anchor(
+            f"Field '{name}'", field, "close", "close_pattern"
+        )
         if open_re is None:
             implicit_fields.append(name)
         fields[name] = ResponseTemplateField(
             name=name,
             open_re=open_re,
-            open_lit=open_lit,
+            open_lits=open_lits,
+            open_lit_can_extend=open_lit_can_extend,
             close_re=close_re,
-            close_lit=close_lit,
+            close_lits=close_lits,
+            close_lit_can_extend=close_lit_can_extend,
             content=content,
             content_args=field.get("content_args", {}),
             repeats=field.get("repeats", False),
@@ -153,7 +179,7 @@ def load_response_template(spec: dict | ResponseTemplate) -> ResponseTemplate:
             "At most one field may omit 'open'/'open_pattern' (that field becomes the "
             f"implicit-open / leftover sink). Found: {', '.join(implicit_fields)}"
         )
-    start_anchor_re, start_anchor_lit = _compile_anchor(
+    start_anchor_re, start_anchor_lits, _ = _compile_anchor(
         "response_template", spec, "start_anchor", "start_anchor_pattern"
     )
     return ResponseTemplate(
@@ -161,7 +187,7 @@ def load_response_template(spec: dict | ResponseTemplate) -> ResponseTemplate:
         fields=fields,
         implicit=implicit_fields[0] if implicit_fields else None,
         start_anchor_re=start_anchor_re,
-        start_anchor_lit=start_anchor_lit,
+        start_anchor_lits=start_anchor_lits,
     )
 
 
