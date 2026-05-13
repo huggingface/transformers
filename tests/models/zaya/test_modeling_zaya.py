@@ -27,7 +27,7 @@ if is_torch_available():
 
     from transformers import AutoTokenizer, ZayaConfig, ZayaForCausalLM, ZayaModel
     from transformers.cache_utils import DynamicCache, LinearAttentionAndFullAttentionLayer
-    from transformers.models.zaya.modeling_zaya import ZayaCCAProjection, make_zaya_cache
+    from transformers.models.zaya.modeling_zaya import ZayaCCAProjection
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -301,7 +301,7 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
 
         with torch.no_grad():
             full = cca(hidden_states, None, None)
-            cache = make_zaya_cache(config)
+            cache = DynamicCache(config=config)
             cca(hidden_states[:, :4], cache, None)
             cached = cca(hidden_states[:, 4:], cache, None)
 
@@ -328,7 +328,7 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
 
         with torch.no_grad():
             full = cca(hidden_states, None, None)
-            cache = make_zaya_cache(config)
+            cache = DynamicCache(config=config)
             cca(hidden_states[:, :3], cache, None)
             cached = cca(hidden_states[:, 3:], cache, None)
 
@@ -337,7 +337,7 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
 
     def test_zaya_cache_reorder_and_reset(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        cache = make_zaya_cache(config)
+        cache = DynamicCache(config=config)
         conv_state_size = config.num_key_value_heads * config.head_dim + config.num_attention_heads * config.head_dim
         cache.update_conv_state(
             torch.arange(2 * conv_state_size * 2, device=torch_device, dtype=torch.float32).view(

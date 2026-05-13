@@ -49,6 +49,8 @@ class ZayaConfig(PreTrainedConfig):
         Second temporal parameter of the CCA projection.
     layer_types (`list[str]`, *optional*):
         Per-layer selector for standard RoPE versus SWA RoPE embeddings.
+    cache_layer_types (`list[str]`, *optional*):
+        Per-layer selector for cache layout. ZAYA uses the native `"hybrid"` cache layer for every decoder layer.
 
     ```python
     >>> from transformers import ZayaConfig, ZayaModel
@@ -90,6 +92,7 @@ class ZayaConfig(PreTrainedConfig):
     cca_time1: int = 2
     sliding_window: int | None = None
     layer_types: list[str] | None = None
+    cache_layer_types: list[str] | None = None
     output_router_logits: bool = False
     pad_token_id: int | None = 0
     bos_token_id: int | None = 2
@@ -98,6 +101,9 @@ class ZayaConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         self.layer_types = (
             ["full_attention"] * self.num_hidden_layers if self.layer_types is None else list(self.layer_types)
+        )
+        self.cache_layer_types = (
+            ["hybrid"] * self.num_hidden_layers if self.cache_layer_types is None else list(self.cache_layer_types)
         )
 
         default_rope_params: dict[Literal["full_attention", "sliding_attention"], dict[str, Any]] = {
@@ -131,6 +137,10 @@ class ZayaConfig(PreTrainedConfig):
             raise ValueError("`num_attention_heads` must be a multiple of `num_key_value_heads`.")
         if len(self.layer_types) != self.num_hidden_layers:
             raise ValueError("`layer_types` must have one entry per hidden layer.")
+        if len(self.cache_layer_types) != self.num_hidden_layers:
+            raise ValueError("`cache_layer_types` must have one entry per hidden layer.")
+        if invalid_cache_layer_types := set(self.cache_layer_types) - {"hybrid"}:
+            raise ValueError(f"`cache_layer_types` contains unsupported values: {sorted(invalid_cache_layer_types)}.")
         if invalid_layer_types := set(self.layer_types) - {"full_attention", "sliding_attention"}:
             raise ValueError(f"`layer_types` contains unsupported values: {sorted(invalid_layer_types)}.")
         if "sliding_attention" in self.layer_types and self.sliding_window is None:

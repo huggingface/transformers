@@ -14,7 +14,6 @@
 
 """PyTorch Zaya model."""
 
-import copy
 from collections.abc import Callable
 from typing import Any, Literal
 
@@ -26,7 +25,7 @@ from torch import nn
 from torch.nn import init
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, LinearAttentionAndFullAttentionLayer
+from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -73,6 +72,8 @@ class ZayaConfig(PreTrainedConfig):
         Second temporal parameter of the CCA projection.
     layer_types (`list[str]`, *optional*):
         Per-layer selector for standard RoPE versus SWA RoPE embeddings.
+    cache_layer_types (`list[str]`, *optional*):
+        Per-layer selector for cache layout. ZAYA uses the native `"hybrid"` cache layer for every decoder layer.
 
     ```python
     >>> from transformers import ZayaConfig, ZayaModel
@@ -114,6 +115,7 @@ class ZayaConfig(PreTrainedConfig):
     cca_time1: int = 2
     sliding_window: int | None = None
     layer_types: list[str] | None = None
+    cache_layer_types: list[str] | None = None
     output_router_logits: bool = False
     pad_token_id: int | None = 0
     bos_token_id: int | None = 2
@@ -122,6 +124,9 @@ class ZayaConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         self.layer_types = (
             ["full_attention"] * self.num_hidden_layers if self.layer_types is None else list(self.layer_types)
+        )
+        self.cache_layer_types = (
+            ["hybrid"] * self.num_hidden_layers if self.cache_layer_types is None else list(self.cache_layer_types)
         )
 
         default_rope_params: dict[Literal["full_attention", "sliding_attention"], dict[str, Any]] = {
@@ -155,6 +160,10 @@ class ZayaConfig(PreTrainedConfig):
             raise ValueError("`num_attention_heads` must be a multiple of `num_key_value_heads`.")
         if len(self.layer_types) != self.num_hidden_layers:
             raise ValueError("`layer_types` must have one entry per hidden layer.")
+        if len(self.cache_layer_types) != self.num_hidden_layers:
+            raise ValueError("`cache_layer_types` must have one entry per hidden layer.")
+        if invalid_cache_layer_types := set(self.cache_layer_types) - {"hybrid"}:
+            raise ValueError(f"`cache_layer_types` contains unsupported values: {sorted(invalid_cache_layer_types)}.")
         if invalid_layer_types := set(self.layer_types) - {"full_attention", "sliding_attention"}:
             raise ValueError(f"`layer_types` contains unsupported values: {sorted(invalid_layer_types)}.")
         if "sliding_attention" in self.layer_types and self.sliding_window is None:
@@ -169,38 +178,6 @@ class ZayaRotaryEmbedding(LagunaRotaryEmbedding):
 
 class ZayaRMSNorm(Qwen3MoeRMSNorm):
     pass
-
-
-def make_zaya_cache(config: ZayaConfig) -> DynamicCache:
-    """
-    Create ZAYA's native hybrid cache.
-
-    ZAYA uses `config.layer_types` for the attention mask and RoPE variant of each layer (`"full_attention"` or
-    `"sliding_attention"`). That is separate from the cache layout: every ZAYA decoder layer needs the native
-    `"hybrid"` cache layer because it stores all three states used during decoding:
-
-    - The regular dynamic attention KV cache, updated after the CCA projection and RoPE application.
-    - `conv_states`, the pre-convolution q/k tail used by `ZayaCCAProjection` on the next decoding step. Its channel
-      dimension is `num_attention_heads * head_dim + num_key_value_heads * head_dim`, and its time dimension is
-      `cca_time0 + cca_time1 - 2`.
-    - `recurrent_states`, ZAYA's delayed value state. It stores the previous token's `val_proj2` output (the legacy
-      `prev_h2`/second value projection state), so the next token can build its value from the current `val_proj1`
-      output plus the cached delayed `val_proj2`.
-
-    The copied config only changes `layer_types` to `"hybrid"` so `DynamicCache` instantiates
-    `LinearAttentionAndFullAttentionLayer`; it does not alter the model's mask or RoPE layer types.
-    """
-    cache_config = copy.copy(config)
-    cache_config.layer_types = ["hybrid"] * config.num_hidden_layers
-    return DynamicCache(config=cache_config)
-
-
-def _is_zaya_cache(past_key_values: Cache) -> bool:
-    return (
-        isinstance(past_key_values, DynamicCache)
-        and len(past_key_values.layers) > 0
-        and isinstance(past_key_values.layers[0], LinearAttentionAndFullAttentionLayer)
-    )
 
 
 class ZayaCCAProjection(nn.Module):
@@ -654,6 +631,7 @@ class ZayaModel(ZayaPreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
+        self.cache_layer_types = config.cache_layer_types
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [ZayaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -694,10 +672,8 @@ class ZayaModel(ZayaPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if use_cache and (past_key_values is None or not _is_zaya_cache(past_key_values)):
-            if past_key_values is not None and past_key_values.get_seq_length() > 0:
-                raise ValueError("ZAYA requires a native hybrid cache created from `make_zaya_cache`.")
-            past_key_values = make_zaya_cache(self.config)
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
 
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
