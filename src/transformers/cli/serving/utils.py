@@ -623,7 +623,7 @@ class CBGenerateManager(BaseGenerateManager):
     """
 
     def __init__(self, cb_config: "ContinuousBatchingConfig | None" = None):
-        self._cb = None
+        self._cb: ContinuousBatchingManager | None = None
         self._cb_config = cb_config
 
     def init_cb(self, model: "PreTrainedModel", gen_config: "GenerationConfig") -> None:
@@ -759,8 +759,8 @@ class CBGenerateManager(BaseGenerateManager):
     @property
     def scheduler(self) -> "Scheduler":
         """The CB scheduler (for testing/monitoring)."""
-        if self._cb is None:
-            raise RuntimeError("CB manager not initialized.")
+        if self._cb is None or self._cb.batch_processor is None:
+            raise RuntimeError("Continuous batching processor not initialized.")
         return self._cb.batch_processor.scheduler
 
     def stop(self) -> None:
