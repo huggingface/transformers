@@ -17,9 +17,9 @@ import inspect
 import os
 from typing import Any, Literal
 
-from ..distributed.utils import is_fsdp_enabled, is_fsdp_managed_module  # noqa: F401
 from ..utils import is_torch_available, is_torch_greater_or_equal, logging
 from ..utils.quantization_config import QuantizationMethod
+from .utils import is_fsdp_enabled, is_fsdp_managed_module  # noqa: F401
 
 
 if is_torch_available() and is_torch_greater_or_equal("2.5"):

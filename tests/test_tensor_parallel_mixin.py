@@ -18,7 +18,7 @@ from abc import ABC, abstractmethod
 from transformers import TorchAoConfig, set_seed
 from transformers.distributed import DistributedConfig
 from transformers.distributed.sharding_utils import _replicate_dtensor
-from transformers.integrations.tensor_parallel import _get_parameter_tp_plan
+from transformers.distributed.tensor_parallel import _get_parameter_tp_plan
 from transformers.testing_utils import (
     is_tensor_parallel_test,
     is_torch_available,

@@ -52,7 +52,13 @@ from .core_model_loading import (
     revert_weight_conversion,
 )
 from .distributed import DistributedConfig
+from .distributed.fsdp import apply_fully_shard_data_parallel
 from .distributed.sharding_utils import _dtensor_from_local_like
+from .distributed.tensor_parallel import (
+    _get_parameter_tp_plan,
+    apply_tensor_parallel,
+    verify_tp_plan,
+)
 from .distributed.utils import gather_full_state_dict, init_device_mesh, is_fsdp_enabled, save_model_checkpoint
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
@@ -71,16 +77,10 @@ from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
-from .integrations.fsdp import apply_fully_shard_data_parallel
 from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
-from .integrations.tensor_parallel import (
-    _get_parameter_tp_plan,
-    apply_tensor_parallel,
-    verify_tp_plan,
-)
 from .loss.loss_utils import LOSS_MAPPING
 from .modeling_flash_attention_utils import (
     FLASH_ATTENTION_COMPATIBILITY_MATRIX,

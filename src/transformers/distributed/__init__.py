@@ -19,12 +19,24 @@ from ..utils import _LazyModule
 
 _import_structure = {
     "configuration_utils": ["DistributedConfig"],
+    "fsdp": ["is_fsdp_enabled", "is_fsdp_managed_module"],
+    "tensor_parallel": [
+        "ALL_PARALLEL_STYLES",
+        "apply_tensor_parallel",
+        "verify_tp_plan",
+    ],
 }
 
 
 if TYPE_CHECKING:
     from .configuration_utils import (
         DistributedConfig,
+    )
+    from .fsdp import is_fsdp_enabled, is_fsdp_managed_module
+    from .tensor_parallel import (
+        ALL_PARALLEL_STYLES,
+        apply_tensor_parallel,
+        verify_tp_plan,
     )
 
 else:

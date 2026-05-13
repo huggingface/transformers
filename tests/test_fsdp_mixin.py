@@ -50,7 +50,7 @@ if is_torch_available():
     from torch.nn.parallel import DistributedDataParallel as DDP
 
     from transformers.distributed import DistributedConfig
-    from transformers.integrations.fsdp import (
+    from transformers.distributed.fsdp import (
         _find_final_norm,
         apply_fully_shard_data_parallel,
         get_transformer_block_classes,
