@@ -2994,7 +2994,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         documents: list[dict[str, str]] | None = None,
         chat_template: str | None = None,
         add_generation_prompt: bool = False,
-        continue_final_message: bool = False,
+        continue_final_message: bool | str = False,
         tokenize: bool = True,
         padding: bool | str | PaddingStrategy = False,
         truncation: bool = False,
@@ -3031,11 +3031,12 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 the start of an assistant message will be appended to the formatted output. This is useful when you want to generate a response from the model.
                 Note that this argument will be passed to the chat template, and so it must be supported in the
                 template for this argument to have any effect.
-            continue_final_message (bool, *optional*):
+            continue_final_message (bool or str, *optional*):
                 If this is set, the chat will be formatted so that the final
                 message in the chat is open-ended, without any EOS tokens. The model will continue this message
                 rather than starting a new one. This allows you to "prefill" part of
-                the model's response for it. Cannot be used at the same time as `add_generation_prompt`.
+                the model's response for it. If a string is passed, it will be used as the key for the field to continue
+                (e.g. "reasoning_content"). Cannot be used at the same time as `add_generation_prompt`.
             tokenize (`bool`, defaults to `True`):
                 Whether to tokenize the output. If `False`, the output will be a string.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
