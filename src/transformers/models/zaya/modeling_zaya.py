@@ -713,6 +713,8 @@ class ZayaPreTrainedModel(PreTrainedModel):
             if module.has_residual_scale:
                 init.ones_(module.residual_scale)
                 init.zeros_(module.residual_bias)
+        elif isinstance(module, ZayaCCAProjection):
+            init.ones_(module.temp)
         elif isinstance(module, ZayaRouter):
             if module.use_eda:
                 init.ones_(module.router_states_scale)
