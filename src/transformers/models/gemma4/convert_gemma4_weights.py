@@ -73,6 +73,7 @@ _CHAT_TEMPLATE_LARGE = pathlib.Path(cached_file("gg-hf-gg/gemma-4-31B-it", "chat
 
 _RESPONSE_TEMPLATE = {
     "defaults": {"role": "assistant"},
+    "start_anchor": "<|turn>model\n",
     "fields": {
         "thinking": {
             "open": "<|channel>thought\n",
@@ -94,7 +95,7 @@ _RESPONSE_TEMPLATE = {
             },
         },
         "content": {
-            "close_pattern": r"<turn\|>|<\|tool_response>",
+            "close": ["<turn|>", "<|tool_response>", "<eos>"],
             "content": "text",
         },
     },

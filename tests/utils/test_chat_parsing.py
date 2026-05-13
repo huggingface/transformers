@@ -574,6 +574,84 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_response("hello", bad_template)
 
+    def test_literal_list_open_and_close(self):
+        """A list of literals matches any one of them, like an alternation."""
+        template_spec = {
+            "defaults": {"role": "assistant"},
+            "fields": {
+                "x": {
+                    "open": ["<a>", "<bb>"],
+                    "close": ["</a>", "</bb>"],
+                    "content": "text",
+                },
+            },
+        }
+        for opener, closer in (("<a>", "</a>"), ("<bb>", "</bb>"), ("<a>", "</bb>")):
+            self.assertEqual(
+                parse_response(f"{opener}hi{closer}", template_spec),
+                {"role": "assistant", "x": "hi"},
+            )
+
+    def test_literal_list_streams_without_64_byte_hold(self):
+        """Compared to a regex close, a literal-list close lets the parser
+        flush bytes that aren't in the longest-prefix overlap of any literal.
+        With `["<turn|>", "<|tool_response>", "<eos>"]` (longest = 16 chars),
+        feeding 32 plain bytes should leave at most 15 unflushed."""
+        template_spec = {
+            "defaults": {"role": "assistant"},
+            "fields": {
+                "content": {"close": ["<turn|>", "<|tool_response>", "<eos>"], "content": "text"},
+            },
+        }
+        parser = ResponseParser(template_spec)
+        plain = "x" * 32
+        flushed: list[str] = []
+        for ch in parser.feed(plain):
+            if ch["type"] == "region_chunk":
+                flushed.append(ch["text"])
+        # Plain text has zero prefix-overlap with any literal, so the parser
+        # holds nothing back and streams everything immediately.
+        self.assertEqual("".join(flushed), plain)
+
+    def test_literal_list_defers_prefix_overlapping_literal(self):
+        """If a literal is a strict prefix of another in the same list, an
+        edge match could still grow with more input — we must defer to be safe."""
+        template_spec = {
+            "defaults": {"role": "assistant"},
+            "fields": {
+                "x": {"open": "<x>", "close": ["END", "ENDX"], "content": "text"},
+            },
+        }
+        parser = ResponseParser(template_spec)
+        # "<x>hiEND" mid-stream: don't commit the close yet — "ENDX" might be coming.
+        events = parser.feed("<x>hiEND")
+        self.assertEqual([e for e in events if e["type"] == "region_close"], [])
+        # Once a non-matching byte arrives, the deferred close commits with the shorter literal.
+        events.extend(parser.feed(" more"))
+        message, _ = parser.finalize()
+        closes = [e for e in events if e["type"] == "region_close" and e["field"] == "x"]
+        self.assertEqual(len(closes), 1)
+        self.assertEqual(closes[0]["value"], "hi")
+        self.assertEqual(message, {"role": "assistant", "x": "hi"})
+
+    def test_literal_list_rejects_empty_and_non_string(self):
+        for bad_open in ([], [""], [1, 2], {"foo": "bar"}):
+            spec = {
+                "defaults": {"role": "assistant"},
+                "fields": {"x": {"open": bad_open, "close": "</x>", "content": "text"}},
+            }
+            with self.assertRaises(ValueError):
+                parse_response("<x>hi</x>", spec)
+
+    def test_literal_list_eos_must_stand_alone(self):
+        """The magic `"eos"` literal maps to end-of-stream and is only valid on its own."""
+        spec = {
+            "defaults": {"role": "assistant"},
+            "fields": {"content": {"close": ["eos", "<turn|>"], "content": "text"}},
+        }
+        with self.assertRaises(ValueError):
+            parse_response("hi", spec)
+
 
 # Fixtures shared by the streaming tests: one representative input per template,
 # re-used for both the correctness invariant (any chunking → same dict) and the
