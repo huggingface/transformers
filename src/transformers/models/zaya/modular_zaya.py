@@ -606,6 +606,8 @@ class ZayaPreTrainedModel(LlamaPreTrainedModel):
         elif isinstance(module, ZayaModel):
             init.ones_(module.input_hidden_states_scale)
             init.zeros_(module.input_hidden_states_bias)
+        elif isinstance(module, ZayaAttention):
+            init.zeros_(module.temp)
         elif isinstance(module, ZayaRouter):
             if module.use_eda:
                 init.ones_(module.router_states_scale)
