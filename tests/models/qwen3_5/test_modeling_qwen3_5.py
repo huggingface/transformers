@@ -527,7 +527,7 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
                 channels * temporal_patch * (patch_size**2),
             ]
         )
-        image_grid_thw = torch.tensor([[1, 1, 1]] * (bsz * num_images))
+        image_grid_thw = torch.tensor([[1, 1, 1]] * (bsz * num_images), device=torch_device)
         self.assertEqual(pixel_values.shape[0], image_grid_thw.prod(dim=1).sum().item())
 
         insertion_point = 0
@@ -580,7 +580,7 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
             ]
         )
 
-        video_grid_thw = torch.tensor([[patch_t, patch_h, patch_w]] * (bsz * num_video))
+        video_grid_thw = torch.tensor([[patch_t, patch_h, patch_w]] * (bsz * num_video), device=torch_device)
         self.assertEqual(pixel_values_videos.shape[0], video_grid_thw.prod(dim=1).sum().item())
 
         input_ids[:, -1] = self.model_tester.pad_token_id

@@ -272,7 +272,7 @@ class Qwen3VLModelTest(VLMModelTest, unittest.TestCase):
                 C * T * (P**2),
             ]
         )
-        image_grid_thw = torch.tensor([[1, 1, 1]] * (B * num_images))
+        image_grid_thw = torch.tensor([[1, 1, 1]] * (B * num_images), device=torch_device)
         self.assertEqual(pixel_values.shape[0], image_grid_thw.prod(dim=1).sum().item())
 
         insertion_point = 0
@@ -327,7 +327,7 @@ class Qwen3VLModelTest(VLMModelTest, unittest.TestCase):
             ]
         )
 
-        video_grid_thw = torch.tensor([[patch_T, patch_H, patch_W]] * (B * num_video))
+        video_grid_thw = torch.tensor([[patch_T, patch_H, patch_W]] * (B * num_video), device=torch_device)
 
         # sanity check
         self.assertEqual(pixel_values_videos.shape[0], video_grid_thw.prod(dim=1).sum().item())

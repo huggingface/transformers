@@ -1559,6 +1559,16 @@ def torch_compilable_check(cond: Any, msg: str | Callable[[], str], error_type: 
 
     import torch
 
+    # When tracing, msg may be an f-string with tensor values that dynamo can't trace
+    # (callable/isinstance on it breaks). Check compilation first and use torch._check
+    # without msg (it only serves as a compiler hint in that case).
+    if is_tracing():
+        if isinstance(cond, torch.Tensor):
+            torch._check_tensor_all(cond)
+        else:
+            torch._check(cond)
+        return
+
     if not callable(msg):
         # torch._check requires msg to be a callable but we want to keep the API simple for users
         def msg_callable():

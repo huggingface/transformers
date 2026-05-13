@@ -105,14 +105,14 @@ class Qwen3OmniMoeProcessorKwargs(ProcessingKwargs, total=False):
 
 
 def _get_feat_extract_output_lengths(input_lengths):
-    """
-    Computes the output length of the convolutional layers and the output length of the audio encoder
-    """
+    """Compute output lengths after the 3-layer CNN feature extractor with deepstack.
 
+    Three stride-2 convolutions within each 100-frame block, plus 13 output frames
+    per full block from the deepstack path.
+    """
     input_lengths_leave = input_lengths % 100
     feat_lengths = (input_lengths_leave - 1) // 2 + 1
-    output_lengths = ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // 100) * 13
-    return output_lengths
+    return ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // 100) * 13
 
 
 @auto_docstring
