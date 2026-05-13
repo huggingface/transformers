@@ -1487,7 +1487,7 @@ class TapasTokenizer(PreTrainedTokenizer):
     def _get_column_values(self, table, col_index):
         table_numeric_values = {}
         for row_index, row in table.iterrows():
-            cell = row[col_index]
+            cell = row.iloc[col_index]
             if cell.numeric_value is not None:
                 table_numeric_values[row_index] = cell.numeric_value
         return table_numeric_values
@@ -2690,7 +2690,7 @@ def _get_column_values(table, col_index):
     """
     index_to_values = {}
     for row_index, row in table.iterrows():
-        text = normalize_for_match(row[col_index].text)
+        text = normalize_for_match(row.iloc[col_index].text)
         index_to_values[row_index] = list(_get_numeric_values(text))
     return index_to_values
 
