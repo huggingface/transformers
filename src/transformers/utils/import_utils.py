@@ -519,6 +519,26 @@ def is_torch_neuron_available(check_device: bool = False) -> bool:
 
 
 @lru_cache
+def is_torch_tpu_available(check_device: bool = False) -> bool:
+    import torch
+
+    if importlib.util.find_spec("torch_tpu") is None:
+        return False
+
+    if check_device:
+        try:
+            import torch_tpu  # noqa: F401
+
+            if hasattr(torch, "tpu") and torch.tpu.is_available():
+                return torch.tpu.device_count() >= 1
+            return False
+        except RuntimeError:
+            return False
+
+    return hasattr(torch, "tpu") and torch.tpu.is_available()
+
+
+@lru_cache
 def is_torch_bf16_gpu_available() -> bool:
     if not is_torch_available():
         return False
@@ -542,6 +562,9 @@ def is_torch_bf16_gpu_available() -> bool:
         return torch.mlu.is_bf16_supported()
     if is_torch_neuron_available() and hasattr(torch, "neuron"):
         return torch.neuron.is_bf16_supported()
+    if is_torch_tpu_available():
+        # bfloat16 is always supported on TPUs; torch.tpu has no is_bf16_supported()
+        return True
     return False
 
 

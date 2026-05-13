@@ -2040,7 +2040,7 @@ class GenerationMixin(ContinuousMixin):
         cache = model_kwargs.get("past_key_values", model_kwargs.get("cache_params"))
 
         # Base logic
-        valid_hardware = self.device.type in ["cuda", "xpu", "neuron"] or bool(
+        valid_hardware = self.device.type in ["cuda", "xpu", "neuron", "tpu"] or bool(
             generation_config.compile_config is not None and generation_config.compile_config._compile_all_devices
         )
         # Note: for some models that only use linear attention (e.g. Mamba), even a DynamicCache is compileable since all

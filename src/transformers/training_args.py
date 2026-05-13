@@ -48,6 +48,7 @@ from .utils import (
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_tf32_available,
+    is_torch_tpu_available,
     is_torch_xla_available,
     is_torch_xpu_available,
     logging,
@@ -1892,6 +1893,9 @@ class TrainingArguments:
             elif is_torch_neuron_available():
                 device = torch.device("neuron:0")
                 torch.neuron.set_device(device)
+            elif is_torch_tpu_available():
+                device = torch.device("tpu:0")
+                torch.tpu.set_device(device)
             else:
                 # Default to cuda:0 (respects CUDA_VISIBLE_DEVICES); nn.DataParallel handles n_gpu > 1
                 device = torch.device(

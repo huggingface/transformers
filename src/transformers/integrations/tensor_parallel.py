@@ -63,7 +63,14 @@ def initialize_tensor_parallelism(
                 local_rank = int(os.environ["LOCAL_RANK"])
                 world_size = int(os.environ["WORLD_SIZE"])
 
-                backend_map = {"cuda": "nccl", "cpu": "gloo", "xpu": "xccl", "hpu": "hccl", "neuron": "neuron"}
+                backend_map = {
+                    "cuda": "nccl",
+                    "cpu": "gloo",
+                    "xpu": "xccl",
+                    "hpu": "hccl",
+                    "neuron": "neuron",
+                    "tpu": "tpu_dist",
+                }
                 backend = backend_map.get(device_type)
 
                 torch.distributed.init_process_group(backend=backend, rank=rank, world_size=world_size)

@@ -4647,6 +4647,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 )
             self._use_kernels = False
 
+    def _default_compile_config(self) -> CompileConfig:
+        """Build the default `CompileConfig` for `get_compiled_call`.
+
+        Inductor + `reduce-overhead` (the `CompileConfig` defaults) target CUDA.
+        torch_tpu registers its own TorchDynamo backend named `"tpu"`; route
+        `device.type == "tpu"` through it with static shapes to match the
+        common StaticCache + fixed-prefill usage."""
+        if self.device.type == "tpu":
+            return CompileConfig(backend="tpu", dynamic=False, mode="default")
+        return CompileConfig()
+
     def get_compiled_call(self, compile_config: CompileConfig | None) -> Callable:
         """Return a `torch.compile`'d version of `self.__call__`. This is useful to dynamically choose between
         non-compiled/compiled `forward` during inference, especially to switch between prefill (where we don't
@@ -4655,8 +4666,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Only reset it if not present or different from previous config
         if "llama4" in self.config.model_type:  # TODO try to enable for FULL COMPILE HYBRID CACHE SUPPORT
             return self.__call__
-        compile_config = compile_config or CompileConfig()
-        default_config = getattr(self.generation_config, "compile_config", None) or CompileConfig()
+        compile_config = compile_config or self._default_compile_config()
+        default_config = getattr(self.generation_config, "compile_config", None) or self._default_compile_config()
         if (
             not hasattr(self, "_compiled_call")
             or getattr(self, "_last_compile_config", default_config) != compile_config
