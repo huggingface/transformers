@@ -285,6 +285,46 @@ class TextGenerationPipelineTests(unittest.TestCase):
         parsed_message = outputs[0]["generated_text"][-1]
         self.assertEqual(parsed_message, {"first_word": "factors", "last_word": "factors"})
 
+    @require_torch
+    def test_return_full_text_false_with_chat_template(self):
+        """Regression test for #45854: return_full_text=False must not include prompt when using chat template."""
+        text_generator = pipeline(
+            task="text-generation",
+            model="hf-internal-testing/tiny-gpt2-with-chatml-template",
+        )
+        chat = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a test"},
+        ]
+        outputs = text_generator(chat, do_sample=False, max_new_tokens=10, return_full_text=False)
+        generated = outputs[0]["generated_text"]
+
+        # Must return plain string, not a list of message dicts
+        self.assertIsInstance(generated, str)
+        # Must not contain the prompt content
+        self.assertNotIn("This is a test", generated)
+        self.assertNotIn("This is a system message.", generated)
+
+    @require_torch
+    def test_return_full_text_true_with_chat_template(self):
+        """return_full_text=True (default) must still return full chat list with chat template."""
+        text_generator = pipeline(
+            task="text-generation",
+            model="hf-internal-testing/tiny-gpt2-with-chatml-template",
+        )
+        chat = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a test"},
+        ]
+        outputs = text_generator(chat, do_sample=False, max_new_tokens=10, return_full_text=True)
+        generated = outputs[0]["generated_text"]
+
+        # Must return list of message dicts including original messages
+        self.assertIsInstance(generated, list)
+        roles = [m["role"] for m in generated]
+        self.assertIn("user", roles)
+        self.assertIn("assistant", roles)
+
     def get_test_pipeline(
         self,
         model,
