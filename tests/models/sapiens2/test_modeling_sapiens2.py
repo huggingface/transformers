@@ -232,7 +232,11 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     @slow
     def test_model_from_pretrained(self):
         model_name = "facebook/sapiens2-pretrain-0.4b"
-        model = Sapiens2Model.from_pretrained(model_name)
+        # TODO(guarin): remove config. transformers_weights required for now because original checkpoints are called
+        # "sapiens2_0.4b_pretrain.safetensors" instead of "model.safetensors"
+        config = Sapiens2Config()
+        config.transformers_weights = "sapiens2_0.4b_pretrain.safetensors"
+        model = Sapiens2Model.from_pretrained(model_name, config=config)
         self.assertIsNotNone(model)
 
 
