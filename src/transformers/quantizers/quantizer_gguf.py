@@ -48,9 +48,25 @@ class GGUFQuantizer(HfQuantizer):
         self.weight_mapping = list(weight_mapping or [])
 
     def update_weight_conversions(self, weight_conversions):
-        # Prepend GGUF arch converters so they run before any model-specific
-        # renaming / merge / concat ops.
-        return self.weight_mapping + list(weight_conversions)
+        """Prepend the GGUF→HF rename table to the model's own conversions, and
+        inject :class:`GGUFDequantize` as the first op of every
+        :class:`WeightConverter` — mirrors how :class:`Fp8Quantizer` injects
+        :class:`Fp8Dequantize`. ``WeightRenaming`` entries are passed through
+        untouched (pure key renames need no op chain).
+        """
+        from ..core_model_loading import WeightConverter
+        from ..gguf_conversion_ops import GGUFDequantize
+
+        injected = []
+        for conv in self.weight_mapping:
+            if isinstance(conv, WeightConverter):
+                conv = WeightConverter(
+                    source_patterns=conv._original_source_patterns,
+                    target_patterns=conv._original_target_patterns,
+                    operations=[GGUFDequantize(), *conv.operations],
+                )
+            injected.append(conv)
+        return injected + list(weight_conversions)
 
     def spawn_materialize(self, thread_pool, tensor, device=None, dtype=None):
         from ..core_model_loading import GGUFQuantizedTensor, spawn_gguf_materialize, spawn_materialize

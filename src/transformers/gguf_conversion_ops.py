@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from .core_model_loading import ConversionOps, WeightConverter, WeightRenaming
+from .core_model_loading import ConversionOps
 
 
 if TYPE_CHECKING:
@@ -306,40 +306,3 @@ class BloomReshapeQKVBias(ConversionOps):
     @property
     def reverse_op(self) -> ConversionOps:
         raise NotImplementedError("BloomReshapeQKVBias is one-way")
-
-
-def gguf_rename(source_patterns, target_patterns, operations=None):
-    """Build a GGUF→HF rename rule.
-
-    - **No ops** → returns :class:`WeightRenaming` (cheap key rename, no op chain).
-    - **With ops** → returns :class:`WeightConverter` with :class:`GGUFDequantize`
-      prepended to the op chain so the source-pattern → resolved-target rename
-      happens before any transform op runs (mirrors the ``Fp8Dequantize`` injection
-      pattern used by ``Fp8Quantizer.update_weight_conversions``).
-
-    ``*`` in source patterns is converted to ``(\\d+)`` (capturing group).
-    ``*`` in target patterns is converted to ``\\1`` (backreference).
-
-    Examples::
-
-        gguf_rename("token_embd.weight", "model.embed_tokens.weight")
-        gguf_rename(
-            "blk.*.attn_q.weight",
-            "model.layers.*.self_attn.q_proj.weight",
-            [ReversePermuteAttnQ()],
-        )
-    """
-    if isinstance(source_patterns, str):
-        source_patterns = [source_patterns]
-    if isinstance(target_patterns, str):
-        target_patterns = [target_patterns]
-    source_patterns = [p.replace("*", r"(\d+)") for p in source_patterns]
-    target_patterns = [p.replace("*", r"\1") for p in target_patterns]
-
-    if not operations:
-        return WeightRenaming(source_patterns=source_patterns, target_patterns=target_patterns)
-    return WeightConverter(
-        source_patterns=source_patterns,
-        target_patterns=target_patterns,
-        operations=[GGUFDequantize(), *operations],
-    )

@@ -20,8 +20,8 @@ import unittest
 from parameterized import parameterized
 
 from transformers.core_model_loading import WeightConverter, WeightRenaming
-from transformers.gguf_conversion_ops import GGUFDequantize
 from transformers.modeling_gguf_pytorch_utils import _GGUF_ARCH_CONVERTERS, get_gguf_converters
+from transformers.quantizers.quantizer_gguf import GGUFQuantizer
 
 
 # Every HF model_type the public GGUF integration tests exercise. Keep this
@@ -81,27 +81,22 @@ class GgufArchCoverageTests(unittest.TestCase):
                 (WeightRenaming, WeightConverter),
                 f"{model_type}: every entry must be a WeightRenaming or WeightConverter, got {type(rule).__name__}",
             )
-            # When a rule has transform ops, the first one must be GGUFDequantize so the
-            # initial source-pattern → resolved-target rename happens before any tensor
-            # transform — mirrors how `Fp8Dequantize` is prepended by `Fp8Quantizer`.
-            if isinstance(rule, WeightConverter):
-                self.assertIsInstance(
-                    rule.operations[0],
-                    GGUFDequantize,
-                    f"{model_type}: WeightConverter must start with GGUFDequantize, "
-                    f"got {type(rule.operations[0]).__name__} (use `gguf_rename(...)` to build entries).",
-                )
 
-    def test_pure_renames_use_weight_renaming(self):
-        """No-op entries (pure key renames) should use the cheaper WeightRenaming class."""
+    def test_quantizer_prepends_gguf_dequantize_to_every_converter(self):
+        """``GGUFQuantizer.update_weight_conversions`` must inject ``GGUFDequantize``
+        at the start of every ``WeightConverter``'s op chain — same pattern as
+        ``Fp8Quantizer.update_weight_conversions`` (which injects ``Fp8Dequantize``).
+        """
+        from transformers.gguf_conversion_ops import GGUFDequantize
+
         for model_type, rules in _GGUF_ARCH_CONVERTERS.items():
-            for rule in rules:
+            quantizer = GGUFQuantizer(weight_mapping=rules)
+            injected = quantizer.update_weight_conversions([])
+            for rule in injected:
                 if isinstance(rule, WeightConverter):
-                    # A WeightConverter with only GGUFDequantize and nothing else is just a
-                    # rename pretending to be a converter — should be a WeightRenaming.
-                    if len(rule.operations) == 1 and isinstance(rule.operations[0], GGUFDequantize):
-                        self.fail(
-                            f"{model_type}: rule {rule.source_patterns}→{rule.target_patterns} "
-                            f"is a pure rename but uses WeightConverter. Drop the empty ops list "
-                            f"so `gguf_rename` produces a WeightRenaming instead."
-                        )
+                    self.assertIsInstance(
+                        rule.operations[0],
+                        GGUFDequantize,
+                        f"{model_type}: WeightConverter not prefixed with GGUFDequantize after "
+                        f"GGUFQuantizer.update_weight_conversions; got {type(rule.operations[0]).__name__}.",
+                    )
