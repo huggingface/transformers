@@ -73,6 +73,53 @@ generated_text = processor.batch_decode(
 print(generated_text[0])
 ```
 
+### Video pointing
+
+Molmo2 can also generate grounded points for video inputs. The points are returned in the generated text as a
+`<points coords="...">` payload, where each coordinate group contains a timestamp followed by point ids and normalized
+image coordinates.
+
+```python
+import torch
+
+from transformers import Molmo2ForConditionalGeneration, Molmo2Processor
+from transformers.video_utils import load_video
+
+
+model_id = "allenai/Molmo2-8B"
+video_url = "https://storage.googleapis.com/oe-training-public/demo_videos/many_penguins.mp4"
+
+processor = Molmo2Processor.from_pretrained(model_id)
+model = Molmo2ForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="auto")
+model.eval()
+
+video, metadata = load_video(video_url)
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "Point to the penguins."},
+            {"type": "video", "video": video},
+        ],
+    }
+]
+inputs = processor.apply_chat_template(
+    messages,
+    tokenize=True,
+    add_generation_prompt=True,
+    return_tensors="pt",
+    return_dict=True,
+    processor_kwargs={"video_metadata": [metadata]},
+).to(model.device)
+
+with torch.no_grad():
+    generated_ids = model.generate(**inputs, max_new_tokens=1024, do_sample=False)
+
+input_len = inputs["input_ids"].shape[1]
+generated_text = processor.batch_decode(generated_ids[:, input_len:], skip_special_tokens=True)[0]
+print(generated_text)
+```
+
 ## Molmo2Config
 
 [[autodoc]] Molmo2Config

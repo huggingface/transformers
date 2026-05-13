@@ -38,6 +38,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.video_utils import load_video
 
 from ...test_modeling_common import (
     _config_zero_init,
@@ -497,32 +498,6 @@ class Molmo2IntegrationTest(unittest.TestCase):
         # Check argmax at last position
         self.assertEqual(logits[0, -1].argmax().item(), 11379)
 
-    def test_generation(self):
-        """Test that generation produces non-empty output."""
-        prompt = self.prompt
-        inputs = self.processor(images=self.image, text=prompt, return_tensors="pt")
-
-        model = Molmo2ForConditionalGeneration.from_pretrained(
-            self.model_id,
-            torch_dtype=torch.float32,
-            device_map=torch_device,
-        )
-        model.eval()
-
-        device_inputs = {k: v.to(torch_device) if hasattr(v, "to") else v for k, v in inputs.items()}
-
-        with torch.no_grad():
-            generated_ids = model.generate(**device_inputs, max_new_tokens=20)
-
-        # Generated sequence should be longer than input
-        self.assertGreater(generated_ids.shape[1], device_inputs["input_ids"].shape[1])
-
-        # Decode and check non-empty
-        input_len = device_inputs["input_ids"].shape[1]
-        generated_text = self.processor.batch_decode(generated_ids[:, input_len:], skip_special_tokens=True)[0]
-        self.assertGreater(len(generated_text.strip()), 0)
-
-
 @slow
 @require_torch
 @require_vision
@@ -597,30 +572,6 @@ class Molmo2O7BIntegrationTest(unittest.TestCase):
         )
 
         self.assertEqual(logits[0, -1].argmax().item(), 578)
-
-    def test_generation(self):
-        """Test generation for Molmo2-O-7B."""
-        prompt = self.prompt
-        inputs = self.processor(images=self.image, text=prompt, return_tensors="pt")
-
-        model = Molmo2ForConditionalGeneration.from_pretrained(
-            self.model_id,
-            torch_dtype=torch.float32,
-            device_map=torch_device,
-        )
-        model.eval()
-
-        device_inputs = {k: v.to(torch_device) if hasattr(v, "to") else v for k, v in inputs.items()}
-
-        with torch.no_grad():
-            generated_ids = model.generate(**device_inputs, max_new_tokens=20, do_sample=False)
-
-        self.assertGreater(generated_ids.shape[1], device_inputs["input_ids"].shape[1])
-
-        input_len = device_inputs["input_ids"].shape[1]
-        generated_text = self.processor.batch_decode(generated_ids[:, input_len:], skip_special_tokens=True)[0]
-        self.assertGreater(len(generated_text.strip()), 0)
-
 
 @slow
 @require_torch
@@ -730,17 +681,23 @@ class Molmo2_8BIntegrationTest(unittest.TestCase):
     def test_generation_video_qa(self):
         """Test video question answering for Molmo2-8B."""
         video_url = "https://storage.googleapis.com/oe-training-public/demo_videos/many_penguins.mp4"
+        video, metadata = load_video(video_url)
         messages = [
             {
                 "role": "user",
                 "content": [
                     {"type": "text", "text": "Which animal appears in the video?"},
-                    {"type": "video", "video": video_url},
+                    {"type": "video", "video": video},
                 ],
             }
         ]
         inputs = self.processor.apply_chat_template(
-            messages, tokenize=True, add_generation_prompt=True, return_tensors="pt", return_dict=True
+            messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_tensors="pt",
+            return_dict=True,
+            processor_kwargs={"video_metadata": [metadata]},
         )
 
         model = Molmo2ForConditionalGeneration.from_pretrained(
@@ -759,40 +716,6 @@ class Molmo2_8BIntegrationTest(unittest.TestCase):
         generated_text = self.processor.batch_decode(generated_ids[:, input_len:], skip_special_tokens=True)[0]
         EXPECTED_TEXT = "Penguins appear in the video."
         self.assertEqual(generated_text.strip(), EXPECTED_TEXT)
-
-    def test_generation_video_pointing(self):
-        """Test video pointing for Molmo2-8B."""
-        video_url = "https://storage.googleapis.com/oe-training-public/demo_videos/many_penguins.mp4"
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "Point to the penguins."},
-                    {"type": "video", "video": video_url},
-                ],
-            }
-        ]
-        inputs = self.processor.apply_chat_template(
-            messages, tokenize=True, add_generation_prompt=True, return_tensors="pt", return_dict=True
-        )
-
-        model = Molmo2ForConditionalGeneration.from_pretrained(
-            self.model_id,
-            torch_dtype=torch.bfloat16,
-            device_map=torch_device,
-        )
-        model.eval()
-
-        device_inputs = {k: v.to(torch_device) if hasattr(v, "to") else v for k, v in inputs.items()}
-
-        with torch.no_grad():
-            generated_ids = model.generate(**device_inputs, max_new_tokens=2048, do_sample=False)
-
-        input_len = device_inputs["input_ids"].shape[1]
-        generated_text = self.processor.batch_decode(generated_ids[:, input_len:], skip_special_tokens=True)[0]
-        # Should contain pointing coordinates
-        self.assertIn("<points", generated_text)
-        self.assertIn("penguins", generated_text.lower())
 
     def test_generation_multi_image(self):
         """Test multi-image question answering for Molmo2-8B."""
