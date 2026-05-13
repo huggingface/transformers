@@ -96,6 +96,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("cohere", "CohereConfig"),
         ("cohere2", "Cohere2Config"),
         ("cohere2_vision", "Cohere2VisionConfig"),
+        ("cohere2moe", "Cohere2MoeConfig"),
         ("cohere_asr", "CohereAsrConfig"),
         ("colmodernvbert", "ColModernVBertConfig"),
         ("colpali", "ColPaliConfig"),
@@ -649,6 +650,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 
 SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
     [
+        ("cohere2moe", "cohere2_moe"),
         ("aimv2_text_model", "aimv2"),
         ("aimv2_vision_model", "aimv2"),
         ("align_text_model", "align"),
