@@ -38,7 +38,7 @@ class Qwen3Config(PreTrainedConfig):
     ```
     """
 
-    model_type = "qwen3"
+    model_type = "qwen42"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     # Default tensor parallel plan for base model `Qwen3`
@@ -84,6 +84,7 @@ class Qwen3Config(PreTrainedConfig):
     eos_token_id: int | list[int] | None = None
 
     def __post_init__(self, **kwargs):
+        # changing stuff
         self.sliding_window = self.sliding_window if self.use_sliding_window else None
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
