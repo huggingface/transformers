@@ -615,26 +615,15 @@ class DeepseekV4CSACompressor(nn.Module):
         # attended to. The indexer marks the rest with `-1`; we clamp before the gather and keep the `valid`
         # to drop them from the per-query block mask afterwards.
         top_k_indices = self.indexer(hidden_states, q_residual, position_ids, past_key_values, layer_idx)  # [B, S, k]
-        top_k = top_k_indices.shape[-1]
         compressed_len = compressed_kv.shape[2]
         valid = top_k_indices >= 0  # [B, S, k]
-        # Flatten (B, T) into one row axis and shift picks by `b * T`, then index_select once.
-        # Same kernel as an embedding lookup — cheaper than `gather` over an expanded view.
-        safe_indices = top_k_indices.clamp(min=0)
-        batch_offsets = (torch.arange(batch, device=compressed_kv.device) * compressed_len).view(batch, 1, 1)
-        flat_indices = (safe_indices + batch_offsets).view(-1)  # [B*S*k]
-        flat_kv = compressed_kv.reshape(batch * compressed_len, self.head_dim)
-        gathered = flat_kv.index_select(0, flat_indices).view(batch, 1, -1, self.head_dim)  # [B, 1, S*k, D]
-
         # Per-query block bias: query `t` may only see the cache entries that are <= `seq_len // m`
         # and in these, only the ones marked valid by the indexer. Everything else is `-inf`.
         # While the above negated the indexer, here we apply the "causal" masking.
-        block_bias = gathered.new_full((batch, 1, seq_len, seq_len, top_k), float("-inf"))
-        allowed = torch.where(valid, gathered.new_zeros(()), gathered.new_full((), float("-inf")))  # [B, S, k]
-        query_indices = torch.arange(seq_len, device=gathered.device)
-        block_bias[:, 0, query_indices, query_indices, :] = allowed  # diagonal: q_idx == block_idx
-        block_bias = block_bias.view(batch, 1, seq_len, seq_len * top_k)
-        return gathered, block_bias
+        safe_indices = torch.where(valid, top_k_indices, torch.full_like(top_k_indices, compressed_len))
+        block_bias = compressed_kv.new_full((batch, 1, seq_len, compressed_len + 1), float("-inf"))
+        block_bias.scatter_(-1, safe_indices.unsqueeze(1), 0.0)
+        return compressed_kv, block_bias[..., :compressed_len]
 
 
 COMPRESSOR_CLASSES = {
