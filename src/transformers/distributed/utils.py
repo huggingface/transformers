@@ -16,7 +16,7 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
-from ..utils import is_torch_available, is_torch_greater_or_equal
+from ..utils import is_torch_available, is_torch_greater_or_equal, logging
 from .fsdp import apply_fully_shard_data_parallel
 from .sharding_utils import (
     _find_strided_shard_placement_from_fused_params,
@@ -26,6 +26,9 @@ from .sharding_utils import (
     unfuse_optimizer_state,
 )
 from .tensor_parallel import apply_tensor_parallel
+
+
+logger = logging.get_logger(__name__)
 
 
 if TYPE_CHECKING:
@@ -221,6 +224,39 @@ def save_model_checkpoint(model, checkpoint_dir: str) -> None:
     _distributed_barrier()
 
 
+def has_mixed_tensor_and_dtensor_params(params) -> bool:
+    has_dtensor = False
+    has_tensor = False
+    for param in params:
+        if isinstance(param, DTensor):
+            has_dtensor = True
+        elif isinstance(param, torch.Tensor):
+            has_tensor = True
+
+        if has_dtensor and has_tensor:
+            return True
+    return False
+
+
+def maybe_disable_foreach_and_fused_for_mixed_dtensor_groups(optimizer) -> None:
+    """
+    When get_optimizer_state_dict() or set_optimizer_state_dict() runs on an optimizer with no state yet,
+    PyTorch first materializes that state by doing a no-op step() with zero gradients. If an optimizer
+    group mixes regular tensors and DTensors, the batched foreach/fused optimizer kernels cannot process
+    that mixed group, so we turn those kernels off for such groups before distributed optimizer save/
+    load.
+    """
+    for i, param_group in enumerate(optimizer.param_groups):
+        if has_mixed_tensor_and_dtensor_params(param_group.get("params", ())):
+            logger.warning_once(
+                f"Param group {i} mixes regular tensors and DTensors; disabling foreach/fused "
+                "optimizer kernels for that group so distributed optimizer save/load can materialize state."
+            )
+            param_group["foreach"] = False
+            if "fused" in param_group:
+                param_group["fused"] = False
+
+
 def save_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     """Save optimizer state via DCP.
 
@@ -229,6 +265,7 @@ def save_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     so DCP only ever sees DTensors it can encode as one contiguous chunk per
     rank.
     """
+    maybe_disable_foreach_and_fused_for_mixed_dtensor_groups(optimizer)
     optimizer_state_dict = get_optimizer_state_dict(model, optimizer)
     fusion_metadata = get_fusion_metadata(optimizer_state_dict)
     unfuse_optimizer_state(optimizer_state_dict, fusion_metadata)
@@ -242,9 +279,11 @@ def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     it, then merge fused params back to their original `_StridedShard` form
     before handing the state_dict back to the optimizer.
     """
+    maybe_disable_foreach_and_fused_for_mixed_dtensor_groups(optimizer)
     optimizer_state_dict = get_optimizer_state_dict(model, optimizer)
     fusion_metadata = get_fusion_metadata(optimizer_state_dict)
     unfuse_optimizer_state(optimizer_state_dict, fusion_metadata)
     dcp.load({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
     fuse_optimizer_state(optimizer_state_dict, fusion_metadata)
     set_optimizer_state_dict(model, optimizer, optimizer_state_dict)
+    maybe_disable_foreach_and_fused_for_mixed_dtensor_groups(optimizer)
