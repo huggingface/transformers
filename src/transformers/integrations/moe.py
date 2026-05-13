@@ -247,7 +247,12 @@ def _grouped_mm_fallback_backward(ctx, grad_output):
 
 
 if is_torch_available():
-    torch.library.custom_op("transformers::grouped_mm_fallback", _grouped_mm_fallback, mutates_args=())
+    torch.library.custom_op(
+        "transformers::grouped_mm_fallback",
+        _grouped_mm_fallback,
+        mutates_args=(),
+        schema="(Tensor input, Tensor weight, Tensor offs) -> Tensor",
+    )
     torch.library.register_fake("transformers::grouped_mm_fallback", _grouped_mm_fallback_fake)
     torch.library.register_autograd(
         "transformers::grouped_mm_fallback",

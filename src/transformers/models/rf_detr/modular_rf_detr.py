@@ -548,12 +548,12 @@ class RfDetrPreTrainedModel(LwDetrPreTrainedModel):
             nn.init.constant_(module.segmentation_bias, 0.0)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the RfDetr backbone-decoder model.
     """
 )
+@dataclass
 class RfDetrModelOutput(ModelOutput):
     r"""
     init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
@@ -610,6 +610,7 @@ class RfDetrModel(LwDetrModel):
 
         # Step 2.
         enc_outputs_class_proposals = self.enc_out_class_embed[group_id](object_query)
+        invalid_mask = invalid_mask.to(enc_outputs_class_proposals.device)
         enc_outputs_class_proposals = enc_outputs_class_proposals.masked_fill(invalid_mask, float("-inf"))
         delta_bbox = self.enc_out_bbox_embed[group_id](object_query)
 
@@ -934,12 +935,12 @@ class RfDetrForObjectDetection(LwDetrForObjectDetection):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`RfDetrForInstanceSegmentation`].
     """
 )
+@dataclass
 class RfDetrInstanceSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
