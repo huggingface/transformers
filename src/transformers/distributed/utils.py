@@ -176,6 +176,10 @@ def save_model_checkpoint(model, checkpoint_dir: str) -> None:
             enable_consolidation=True,
         ),
     )
+    # Wait for rank 0 to finish writing the HF safetensors so other
+    # ranks don't return (and hit `from_pretrained`) before the files exist.
+    if torch.distributed.is_initialized():
+        torch.distributed.barrier()
 
 
 def save_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
