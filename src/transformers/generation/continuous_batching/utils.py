@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections import OrderedDict
+from contextlib import contextmanager
 from dataclasses import dataclass
 from math import ceil, log2
 from typing import Any
@@ -19,6 +20,7 @@ from typing import Any
 import torch
 
 from transformers.configuration_utils import PretrainedConfig
+from transformers.utils import is_torch_greater_or_equal
 
 from .requests import FutureRequestState, RequestState, RequestStatus, logger
 
@@ -204,3 +206,27 @@ def create_warmup_future_states(
             FutureRequestState(state, has_new_token=True, complete_blocks=0, query_length=num_q_tokens)
         )
     return future_states
+
+
+def get_cuda_pools():  # no type hint because it would make torch 2.4 crash
+    """Returns a tuple of (mem_pool, graph_pool_id) for CUDA graphs. Since the MemPool object is only available in torch
+    2.5+, we only return a graph_pool_id for older versions."""
+    if is_torch_greater_or_equal("2.5.0"):
+        mem_pool = torch.cuda.MemPool()
+        graph_pool_id = mem_pool.id
+        return mem_pool, graph_pool_id
+    else:
+        mem_pool = None
+        graph_pool_id = torch.cuda.graph_pool_handle()
+        return mem_pool, graph_pool_id
+
+
+@contextmanager
+def mem_pool_ctx(mem_pool):
+    """A context manager to use a CUDA mem pool. If the mem pool is None, it is a no-op. No type hint because it would
+    make torch 2.4 or below crash."""
+    if mem_pool is not None:
+        with torch.cuda.use_mem_pool(mem_pool):
+            yield
+    else:
+        yield
