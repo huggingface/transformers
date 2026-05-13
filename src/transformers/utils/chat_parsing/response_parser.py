@@ -224,8 +224,8 @@ class ResponseParser:
     def _max_hold(self, watch: list[tuple[str, ResponseTemplateField]]) -> int:
         hold = 0
         for kind, fld in watch:
-            literal = fld.open_lit if kind == "open" else fld.close_lit
-            hold = max(hold, _pattern_hold(self._buffer, self._pos, literal))
+            literals = fld.open_lits if kind == "open" else fld.close_lits
+            hold = max(hold, _pattern_hold(self._buffer, self._pos, literals))
         return hold
 
     def _accumulate(self, events: list[dict], text: str) -> None:
@@ -276,27 +276,36 @@ def _should_defer(fld: ResponseTemplateField, m: re.Match, buf_len: int, is_open
     """Whether a match that already succeeded should nonetheless be deferred
     until more input (or EOS) arrives. A match is "ambiguous at the edge" when
     it ends at the current buffer end and either (a) it was zero-width (`$`-alt
-    style) or (b) the delimiter was specified as a regex, which may still
-    extend with more input. Literal non-zero-width matches never extend."""
+    style), (b) the delimiter was specified as a regex (which may still extend
+    with more input), or (c) the delimiter is a literal-alternation where one
+    literal is a prefix of another (so a short match could yet grow). Otherwise,
+    a non-zero-width literal match cannot be extended and is safe to commit."""
     if m.end() != buf_len:
         return False
-    literal = fld.open_lit if is_open else fld.close_lit
-    return literal is None or m.start() == m.end()
+    if is_open:
+        literals, can_extend = fld.open_lits, fld.open_lit_can_extend
+    else:
+        literals, can_extend = fld.close_lits, fld.close_lit_can_extend
+    return literals is None or can_extend or m.start() == m.end()
 
 
-def _pattern_hold(buffer: str, start: int, literal: str | None) -> int:
+def _pattern_hold(buffer: str, start: int, literals: list[str] | None) -> int:
     """How many trailing bytes of `buffer[start:]` must stay held because they
     might be a partial match for the delimiter. For literal delimiters this is
-    the longest-trailing-prefix of the literal; for regex delimiters (literal
-    is None) we use a conservative constant window. Caller must have already
-    verified that the delimiter's regex has no full match from `start` onward."""
+    the longest-trailing-prefix across all literals; for regex delimiters
+    (literals is None) we use a conservative constant window. Caller must have
+    already verified that the delimiter's regex has no full match from `start`
+    onward."""
     avail = len(buffer) - start
     if avail <= 0:
         return 0
-    if literal is not None:
-        max_k = min(len(literal) - 1, avail)
-        for k in range(max_k, 0, -1):
-            if buffer.endswith(literal[:k]):
-                return k
-        return 0
+    if literals is not None:
+        best = 0
+        for literal in literals:
+            max_k = min(len(literal) - 1, avail)
+            for k in range(max_k, best, -1):
+                if buffer.endswith(literal[:k]):
+                    best = k
+                    break
+        return best
     return min(avail, 64)  # 64 chosen as a safe default for now, but later we might consider making this configurable

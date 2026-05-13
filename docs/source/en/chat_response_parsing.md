@@ -188,14 +188,14 @@ tokenizer.save_pretrained(...)  # Written as a key in tokenizer_config.json
 
 Each field supports several keys. First, there are the keys that define how the field should be captured:
 
-| Key             | Type             | Purpose                                                                                     |
-|-----------------|------------------|---------------------------------------------------------------------------------------------|
-| `open`          | str              | Literal string that opens this region.                                                      |
-| `open_pattern`  | str (regex)      | Regex alternative to `open`; named groups become capture variables available to `assemble`. |
-| `close`         | str              | Literal string that closes this region. `"eos"` means end-of-stream.                        |
-| `close_pattern` | str (regex)      | Regex alternative to `close`.                                                               |
-| `repeats`       | bool             | If true, the field is a list and each match appends. Default `false`.                       |
-| `optional`      | bool             | If false and the region never matches, we raise an error. Default `true`.                   |
+| Key             | Type               | Purpose                                                                                     |
+|-----------------|--------------------|---------------------------------------------------------------------------------------------|
+| `open`          | str or list[str]   | Literal string that opens this region. A list of strings means "match any of these".        |
+| `open_pattern`  | str (regex)        | Regex alternative to `open`; named groups become capture variables available to `assemble`. |
+| `close`         | str or list[str]   | Literal string (or list of strings) that closes this region. `"eos"` means end-of-stream.   |
+| `close_pattern` | str (regex)        | Regex alternative to `close`.                                                               |
+| `repeats`       | bool               | If true, the field is a list and each match appends. Default `false`.                       |
+| `optional`      | bool               | If false and the region never matches, we raise an error. Default `true`.                   |
 
 A field should have **either** `open` or `open_pattern`, but not both, and the same is true for `close` and `close_pattern`.
 
