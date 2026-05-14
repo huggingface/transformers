@@ -44,6 +44,9 @@ env:
   TF_FORCE_GPU_ALLOW_GROWTH: true
   CUDA_VISIBLE_DEVICES: 0,1
 
+permissions:
+  contents: read
+
 jobs:
   run_models_gpu:
     name: " "

@@ -27,6 +27,9 @@ env:
     other_workflow_run_id: ""
 
 
+permissions:
+  contents: read
+
 jobs:
   setup:
     name: Setup

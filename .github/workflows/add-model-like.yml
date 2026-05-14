@@ -11,6 +11,9 @@ on:
   #    - ".github/**"
   #  types: [opened, synchronize, reopened]
 
+permissions:
+  contents: read
+
 jobs:
   run_tests_templates_like:
     name: "Add new model like template tests"

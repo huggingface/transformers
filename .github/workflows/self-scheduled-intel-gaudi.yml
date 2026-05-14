@@ -28,6 +28,9 @@ env:
   HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   HF_HOME: /mnt/cache/.cache/huggingface
 
+permissions:
+  contents: read
+
 jobs:
   setup:
     if: contains(fromJSON('["run_models_gpu", "run_trainer_and_fsdp_gpu"]'), inputs.job)

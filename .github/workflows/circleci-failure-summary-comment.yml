@@ -4,6 +4,9 @@ on:
   pull_request_target:
     types: [opened, synchronize, reopened]
 
+permissions:
+  contents: read
+
 jobs:
   comment:
     runs-on: ubuntu-22.04

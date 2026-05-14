@@ -6,6 +6,9 @@ on:
     branches:
       - 'v*-release'
 
+permissions:
+  contents: read
+
 jobs:
   build_and_test:
     name: build release

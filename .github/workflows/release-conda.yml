@@ -10,6 +10,9 @@ on:
 env:
   ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_API_TOKEN }}
 
+permissions:
+  contents: read
+
 jobs:
   build_and_package:
     runs-on: ubuntu-22.04

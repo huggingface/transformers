@@ -46,6 +46,9 @@ env:
   CUDA_VISIBLE_DEVICES: 0,1
 
 
+permissions:
+  contents: read
+
 jobs:
   setup_check_new_failures:
     name: "Setup matrix for finding commits"

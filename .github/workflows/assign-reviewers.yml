@@ -5,6 +5,9 @@ on:
       - main
     types: [ready_for_review]
 
+permissions:
+  contents: read
+
 jobs:
   assign_reviewers:
     permissions:

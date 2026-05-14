@@ -11,6 +11,9 @@ on:
 env:
   NUM_SLICES: 3
 
+permissions:
+  contents: read
+
 jobs:
   setup:
     name: Setup

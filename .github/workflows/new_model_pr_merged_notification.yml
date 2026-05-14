@@ -8,6 +8,9 @@ on:
     paths:
       - 'src/transformers/models/*/modeling_*'
 
+permissions:
+  contents: read
+
 jobs:
   notify_new_model:
     name: Notify new model

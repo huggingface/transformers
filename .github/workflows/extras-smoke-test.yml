@@ -7,6 +7,9 @@ on:
 env:
   SLACK_CHANNEL_ID: '#transformers-gh-ci-central'
 
+permissions:
+  contents: read
+
 jobs:
   get-python-versions:
     name: Get supported Python versions

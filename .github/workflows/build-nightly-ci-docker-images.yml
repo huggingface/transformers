@@ -14,6 +14,9 @@ concurrency:
   group: docker-images-builds
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   latest-with-torch-nightly-docker:
     name: "Nightly PyTorch"

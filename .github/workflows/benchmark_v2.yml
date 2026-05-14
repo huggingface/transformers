@@ -10,6 +10,9 @@ env:
   # This token is created under the bot `hf-transformers-bot`.
   HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
 
+permissions:
+  contents: read
+
 jobs:
   benchmark-v2:
     name: Benchmark v2

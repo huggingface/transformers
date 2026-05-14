@@ -3,6 +3,9 @@ on:
   pull_request_target:
     types: [opened, synchronize, reopened]
 
+permissions:
+  contents: read
+
 jobs:
   get-pr-number:
     name: Get PR number

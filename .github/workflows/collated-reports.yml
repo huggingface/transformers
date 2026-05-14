@@ -17,6 +17,9 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: read
+
 jobs:
   collated_reports:
     name: Collated reports

@@ -9,7 +9,8 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.issue.number }}-${{ startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow') }}
   cancel-in-progress: true
-permissions: read-all
+permissions:
+  contents: read
 
 env:
   HF_HOME: /mnt/cache

@@ -13,6 +13,9 @@ on:
     branches:
       - run_amd_scheduled_ci_caller*
 
+permissions:
+  contents: read
+
 jobs:
   model-ci:
     name: Model CI
