@@ -76,8 +76,8 @@ class MusicFlamingoConfig(PreTrainedConfig):
         if self.rope_parameters is None:
             self.rope_parameters = {
                 "rope_type": "default",
-                "rope_theta": kwargs.get("rope_theta", 1200),
-                "partial_rotary_factor": kwargs.get("partial_rotary_factor", 0.2),
+                "rope_theta": 1200.0,
+                "partial_rotary_factor": 0.2,
             }
         if isinstance(self.audio_config, dict):
             if self.audio_config["model_type"] in [None, "musicflamingo_encoder"]:
