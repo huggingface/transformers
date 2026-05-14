@@ -271,12 +271,33 @@ know who they are and should feel an appropriate amount of shame.
 
 ### Transform
 
-For most models, the `transform` key is unnecessary. It's used when the parsed body needs to be reshaped into the final
-output, or when information from the delimiters has to be merged into the result.
+For most fields, the `transform` key is unnecessary. It's used when the parsed body needs to be reshaped into the final
+output, or when information from the delimiters has to be merged into the result. It most commonly appears in
+`tool_calls` fields, as these often have complex structure.
 
 `transform` is a [jmespath](https://jmespath.org/) expression. The input is a dict containing `content` (the parsed body)
-plus any named groups captured by `open_pattern` / `close_pattern`. Here's how GPT-OSS handles tool calls whose function
-name is embedded in the channel header:
+plus any named groups captured by `open_pattern` / `close_pattern`. A very common use-case is to wrap a tool call
+dict in an outer dict with a `function` key, as these are part of our standard tool call format:
+
+```python
+"tool_calls": {
+    "open": "<tool_call>",
+    "close": "</tool_call>",
+    "repeats": True,
+    "content": "json",
+    "transform": "{type: 'function', function: content}",
+},
+```
+
+`content` references the parsed JSON body; the jmespath object literal builds the outer dict around it. For
+`<tool_call>{"name": "get_weather", "arguments": {"city": "Paris"}}</tool_call>` this produces
+`{"type": "function", "function": {"name": "get_weather", "arguments": {"city": "Paris"}}}`.
+
+You can abuse `transform` quite a lot though, which becomes necessary when the model output has a wildly
+different format to our standard API. GPT-OSS is a good example - it embeds the function name in the channel header
+rather than in the JSON body, so we have to capture it with a named group in `open_pattern` 
+and merge it with `content` inside the transform. All named groups in `open_pattern` and `close_pattern` become
+available as variables in the transform:
 
 ```python
 "tool_calls": {
@@ -288,12 +309,14 @@ name is embedded in the channel header:
 },
 ```
 
-For a call like `to=functions.get_weather ... {"location":"SF"}`, this produces
-`{"type": "function", "function": {"name": "get_weather", "arguments": {"location": "SF"}}}`.
+The `transform` here builds the output dict: Most of what we need is emitted by GPT-OSS in the field body, which
+forms the `content` input. We get `name` by capturing it in the `open_pattern` regex, and merge it with `content` into
+a tool call dict. Finally, we wrap the tool call dict in an outer dict, which adds `type: "function"` as in the SmolLM
+example.
 
-Because the input is a dict, the parsed body is referenced as `content` (not as `@`). jmespath's full query language is
-available, so list projection and nested extraction work — Cohere, for example, emits all parallel tool calls inside a
-single JSON array, and a single `transform` reshapes the whole list:
+In general, the `jmespath` syntax is very straightforward. The special symbols `@` and `*` are usually not necessary,
+but they are supported if you really need them. The main case when this becomes necessary is when the field content
+is a list and we want to transform every element, which often occurs with Cohere models:
 
 ```python
 "transform": "content[*].{type: 'function', function: {name: tool_name, arguments: parameters}}"
