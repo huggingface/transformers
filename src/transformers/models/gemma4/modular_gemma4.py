@@ -1490,10 +1490,10 @@ class Gemma4ForCausalLM(Gemma3ForCausalLM):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        per_layer_inputs: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        per_layer_inputs: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4CausalLMOutputWithPast:
         r"""
@@ -1911,27 +1911,27 @@ class Gemma4Model(Gemma3nModel):
         past_key_values: Cache | None = None,
         mm_token_type_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        per_layer_inputs: torch.Tensor | None = None,
         use_cache: bool | None = None,
         image_position_ids: torch.LongTensor | None = None,
         video_position_ids: torch.LongTensor | None = None,
+        per_layer_inputs: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4ModelOutputWithPast:
         r"""
         input_features_mask (`torch.FloatTensor]` of shape `(num_images, seq_length)`):
             The attention mask for the input audio.
-        per_layer_inputs (`torch.Tensor`, *optional*):
-            Pre-computed per-layer input text embeddings of shape of shape `(batch_size, sequence_length, num_hidden_layers,
-            hidden_size_per_layer_input)`. When provided, these are used directly instead of being computed from `input_ids`
-            via `get_per_layer_inputs()` in the text model. If calling the `forward` with `inputs_embeds` instead of `input_ids`,
-            you should probably precompute them and forward them along `inputs_embeds`, otherwise recomputing them needs
-            to reverse the main embedding, which is expensibe.
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             2D patch position coordinates from the image processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
         video_position_ids (`torch.LongTensor` of shape `(num_videos, num_frames, max_patches, 2)`, *optional*):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
+        per_layer_inputs (`torch.Tensor`, *optional*):
+            Pre-computed per-layer input text embeddings of shape of shape `(batch_size, sequence_length, num_hidden_layers,
+            hidden_size_per_layer_input)`. When provided, these are used directly instead of being computed from `input_ids`
+            via `get_per_layer_inputs()` in the text model. If calling the `forward` with `inputs_embeds` instead of `input_ids`,
+            you should probably precompute them and forward them along `inputs_embeds`, otherwise recomputing them needs
+            to reverse the main embedding, which is expensibe.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -2115,10 +2115,10 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
         past_key_values: Cache | None = None,
         mm_token_type_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        per_layer_inputs: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        per_layer_inputs: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4CausalLMOutputWithPast:
         r"""
