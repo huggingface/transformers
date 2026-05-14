@@ -168,18 +168,24 @@ jobs:
         id: pr_info
         if: ${{ inputs.pr_number != '' }}
         uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6.4.1
+        env:
+          PR_NUMBER: ${{ inputs.pr_number }}
+          COMMIT_SHA: ${{ inputs.commit_sha }}
         with:
-          script: |            
+          script: |
+            const pull_number = parseInt(process.env.PR_NUMBER, 10);
+            const commit_sha = process.env.COMMIT_SHA;
+
             const { data: pr } = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              pull_number: ${{ inputs.pr_number }}
+              pull_number,
             });
 
-            const { data: merge_commit }  = await github.rest.repos.getCommit({
+            const { data: merge_commit } = await github.rest.repos.getCommit({
               owner: pr.base.repo.owner.login,
               repo: pr.base.repo.name,
-              ref: '${{ inputs.commit_sha }}',
+              ref: commit_sha,
             });
 
             core.setOutput('merge_commit_base_sha', merge_commit.parents[0].sha);

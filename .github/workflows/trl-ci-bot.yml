@@ -41,12 +41,12 @@ jobs:
         id: pr
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.issue.pull_request.url }}
         run: |
-          PR_URL="${{ github.event.issue.pull_request.url }}"
           sha=$(gh api "$PR_URL" --jq .head.sha)
           number=$(gh api "$PR_URL" --jq .number)
-          echo "sha=$sha" >> $GITHUB_OUTPUT
-          echo "number=$number" >> $GITHUB_OUTPUT
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "number=$number" >> "$GITHUB_OUTPUT"
 
       - name: Dispatch TRL workflow
         if: steps.trust.outputs.trusted == 'true'

@@ -52,13 +52,15 @@ jobs:
         if: contains(fromJSON('["run_models_gpu", "run_trainer_and_fsdp_gpu"]'), inputs.job)
         name: Identify models to test
         working-directory: tests
+        env:
+          JOB: ${{ inputs.job }}
         run: |
-          if [ "${{ inputs.job }}" = "run_models_gpu" ]; then
-            echo "folder_slices=$(python3 ../utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
-            echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
-          elif [ "${{ inputs.job }}" = "run_trainer_and_fsdp_gpu" ]; then
-            echo "folder_slices=[['trainer'], ['fsdp']]" >> $GITHUB_OUTPUT
-            echo "slice_ids=[0, 1]" >> $GITHUB_OUTPUT
+          if [ "$JOB" = "run_models_gpu" ]; then
+            echo "folder_slices=$(python3 ../utils/split_model_tests.py --num_splits "$NUM_SLICES")" >> "$GITHUB_OUTPUT"
+            echo "slice_ids=$(python3 -c 'import os, sys; print(list(range(int(os.environ[\"NUM_SLICES\"]))))')" >> "$GITHUB_OUTPUT"
+          elif [ "$JOB" = "run_trainer_and_fsdp_gpu" ]; then
+            echo "folder_slices=[['trainer'], ['fsdp']]" >> "$GITHUB_OUTPUT"
+            echo "slice_ids=[0, 1]" >> "$GITHUB_OUTPUT"
           fi
 
       - id: set-matrix-quantization
