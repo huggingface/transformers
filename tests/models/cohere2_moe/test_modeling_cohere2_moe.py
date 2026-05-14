@@ -209,7 +209,7 @@ class Cohere2MoeIntegrationTest(unittest.TestCase):
     text-only inputs exercises the text backbone without requiring a separate text-only checkpoint.
     """
 
-    model_id = "/root/repos/moe/engines/command_a+_bf16"
+    model_id = "/root/repos/moe/engines/mhlv2_bf16_clean"
     input_text = ["Hello I am doing", "Hi today"]
 
     def tearDown(self):
@@ -274,8 +274,8 @@ class Cohere2MoeIntegrationTest(unittest.TestCase):
     def test_model_flash_attn(self):
         # fmt: off
         EXPECTED_TEXTS = [
-            '<BOS_TOKEN>Hello I am doing a project on the history of the internet. I am trying to ARexx script a program that',
-            '<PAD><PAD><BOS_TOKEN>Hi today we are going to discuss about the concept of "Self-Confidence". Self-confidence is a term that',
+            '<BOS_TOKEN>Hello I am doing a project on the history of the internet. I am trying to ARexx script a program that will display a comment and then a progress bar that moves across the2009-09-30\n\nHello, I am doing a project on the history of the internet. I am trying to ARexx script a program that will display a comment and then a progress bar that moves across the screen. I have a question about the "wait" command. I have been using "wait 1"',
+            '<PAD><PAD><BOS_TOKEN>Hi today we are going to discuss about the concept of "Self-Confidence". Self-confidence is a term that many people use to describe a state of mind where one feels confident in their abilities, decisions, and actions. It\'s a feeling of trust in one\'s own judgment and abilities. Self-confidence is not about being arrogant or overconfident; it\'s about having a realistic and positive view of oneself and one\'s capabilities.\n\nSelf-confidence can be developed and improved over time through various practices such as setting and achieving goals, learning',
         ]
         # fmt: on
 
