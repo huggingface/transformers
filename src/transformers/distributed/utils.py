@@ -56,7 +56,14 @@ def _ensure_torch_distributed(device_type: str):
             local_rank = int(os.environ["LOCAL_RANK"])
             world_size = int(os.environ["WORLD_SIZE"])
 
-            backend_map = {"cuda": "nccl", "cpu": "gloo", "xpu": "xccl", "hpu": "hccl"}
+            backend_map = {
+                "cuda": "nccl",
+                "cpu": "gloo",
+                "xpu": "xccl",
+                "hpu": "hccl",
+                "neuron": "neuron",
+                "tpu": "tpu_dist",
+            }
             backend = backend_map.get(device_type)
 
             # Bind the accelerator before init so the process group is created with a

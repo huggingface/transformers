@@ -103,7 +103,14 @@ def initialize_fsdp(
                 local_rank = int(os.environ["LOCAL_RANK"])
                 world_size = int(os.environ["WORLD_SIZE"])
 
-                backend_map = {"cuda": "nccl", "cpu": "gloo", "xpu": "xccl", "hpu": "hccl"}
+                backend_map = {
+                    "cuda": "nccl",
+                    "cpu": "gloo",
+                    "xpu": "xccl",
+                    "hpu": "hccl",
+                    "neuron": "neuron",
+                    "tpu": "tpu_dist",
+                }
                 backend = backend_map.get(device_type)
                 if device_type == "cpu" and int(os.environ.get("CCL_WORKER_COUNT", "0")):
                     backend = "ccl"
