@@ -37,9 +37,7 @@ cohere_template = {
             "open": "<|START_ACTION|>",
             "close": "<|END_ACTION|>",
             "content": "json",
-            "content_args": {
-                "transform": "[*].{type: 'function', function: {name: tool_name, arguments: parameters}}"
-            },
+            "transform": "content[*].{type: 'function', function: {name: tool_name, arguments: parameters}}",
         },
     },
 }
@@ -63,7 +61,7 @@ ernie_template = {
             "close": "</tool_call>",
             "repeats": True,
             "content": "json",
-            "content_args": {"transform": "{type: 'function', function: @}"},
+            "transform": "{type: 'function', function: content}",
         },
     },
 }
@@ -87,10 +85,7 @@ gpt_oss_template = {
             "close": "<|call|>",
             "repeats": True,
             "content": "json",
-            "assemble": {
-                "type": "function",
-                "function": {"name": "{name}", "arguments": "{content}"},
-            },
+            "transform": "{type: 'function', function: {name: name, arguments: content}}",
         },
     },
 }
@@ -105,7 +100,7 @@ smollm_template = {
             "close": "</tool_call>",
             "repeats": True,
             "content": "json",
-            "content_args": {"transform": "{type: 'function', function: @}"},
+            "transform": "{type: 'function', function: content}",
         },
         "content": {
             "close": "<|im_end|>",
@@ -128,10 +123,7 @@ qwen3_template = {
                 "tag_pattern": r"<parameter=(?P<key>\w+)>\s*(?P<value>.*?)\s*</parameter>",
                 "value_parser": {"name": "json", "args": {"allow_non_json": True}},
             },
-            "assemble": {
-                "type": "function",
-                "function": {"name": "{name}", "arguments": "{content}"},
-            },
+            "transform": "{type: 'function', function: {name: name, arguments: content}}",
         },
     },
 }
@@ -154,10 +146,7 @@ gemma4_template = {
                 "unquoted_keys": True,
                 "string_delims": [['<|"|>', '<|"|>']],
             },
-            "assemble": {
-                "type": "function",
-                "function": {"name": "{name}", "arguments": "{content}"},
-            },
+            "transform": "{type: 'function', function: {name: name, arguments: content}}",
         },
     },
 }
@@ -573,6 +562,23 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
         }
         with self.assertRaises(ValueError):
             parse_response("hello", bad_template)
+
+    def test_named_groups_without_transform_rejected(self):
+        bad_template = {
+            "defaults": {"role": "assistant"},
+            "fields": {
+                "tool": {
+                    "open_pattern": r"<tool name=(?P<name>\w+)>",
+                    "close": "</tool>",
+                    "content": "text",
+                },
+            },
+        }
+        with self.assertRaises(ValueError) as cm:
+            parse_response("<tool name=foo>body</tool>", bad_template)
+        msg = str(cm.exception)
+        self.assertIn("transform", msg)
+        self.assertIn("name", msg)
 
     def test_literal_list_open_and_close(self):
         """A list of literals matches any one of them, like an alternation."""
