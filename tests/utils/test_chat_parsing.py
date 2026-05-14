@@ -783,6 +783,8 @@ class ResponseEventStreamTest(unittest.TestCase):
                 chunk_accum.setdefault(open_field, "")
             elif t == "region_chunk":
                 self.assertEqual(open_field, ev["field"], f"chunk outside its region: {ev}")
+                # Every chunk carries a boolean `dirty` flag.
+                self.assertIsInstance(ev["dirty"], bool, f"missing/non-bool dirty: {ev}")
                 chunk_accum[open_field] += ev["text"]
             elif t == "region_close":
                 self.assertEqual(open_field, ev["field"], f"close for non-open region: {ev}")
@@ -793,9 +795,11 @@ class ResponseEventStreamTest(unittest.TestCase):
         self.assertIsNone(open_field, "region left open at end of stream")
 
     def test_region_chunks_reconstruct_text_regions(self):
-        """For streamable text-like regions, concatenating the region_chunk texts should
-        reconstruct the final value reported in region_close. JSON-family
-        regions emit no chunks and report the full parsed value only on close."""
+        """For text-like regions (`dirty=False`), concatenating chunk texts
+        reconstructs the final value reported in region_close. Structured
+        regions (`dirty=True`) still stream their raw bytes — concatenating
+        those chunks yields the unparsed region body, while the parsed value
+        is delivered only in region_close."""
         # Single representative case with a long text region and a JSON region.
         text = _STREAMING_FIXTURES[0][2]  # cohere fixture
         streamer = ResponseParser(cohere_template)
@@ -807,20 +811,83 @@ class ResponseEventStreamTest(unittest.TestCase):
 
         # Reconstruct per-field.
         per_field_chunks: dict[str, list[str]] = {}
+        per_field_dirty: dict[str, set[bool]] = {}
         per_field_close_value: dict[str, object] = {}
         for ev in events:
             if ev["type"] == "region_chunk":
                 per_field_chunks.setdefault(ev["field"], []).append(ev["text"])
+                per_field_dirty.setdefault(ev["field"], set()).add(ev["dirty"])
             elif ev["type"] == "region_close":
                 per_field_close_value[ev["field"]] = ev["value"]
 
-        # `thinking` is text → chunks concatenate to its value.
+        # `thinking` is text → chunks are clean and concatenate to its value.
         self.assertIn("thinking", per_field_chunks)
+        self.assertEqual(per_field_dirty["thinking"], {False})
         self.assertEqual("".join(per_field_chunks["thinking"]), "I should call a tool.")
         self.assertEqual(per_field_close_value["thinking"], "I should call a tool.")
-        # `tool_calls` is json → no chunk events, full value on close.
-        self.assertNotIn("tool_calls", per_field_chunks)
+        # `tool_calls` is json → dirty chunks stream the raw body, parsed value on close.
+        self.assertIn("tool_calls", per_field_chunks)
+        self.assertEqual(per_field_dirty["tool_calls"], {True})
+        self.assertEqual(
+            "".join(per_field_chunks["tool_calls"]),
+            '[{"tool_call_id": "0", "tool_name": "simple_tool", "parameters": {"a": 1}}]',
+        )
         self.assertIn("tool_calls", per_field_close_value)
+
+    def test_dirty_flag_marks_structured_regions(self):
+        """A template with one text field and one structured field per parser
+        family: text/int/float/bool stream chunks with `dirty=False`, while
+        json/xml-inline/kv-lines stream chunks with `dirty=True`, and those
+        dirty chunks concatenate to the raw region body before parsing."""
+        spec = {
+            "defaults": {"role": "assistant"},
+            "fields": {
+                "thinking": {"open": "<t>", "close": "</t>", "content": "text"},
+                "score": {"open": "<n>", "close": "</n>", "content": "int"},
+                "json_call": {"open": "<j>", "close": "</j>", "content": "json"},
+                "xml_call": {
+                    "open": "<x>",
+                    "close": "</x>",
+                    "content": "xml-inline",
+                    "content_args": {"tag_pattern": r"<(?P<key>\w+)=(?P<value>[^>]+)>"},
+                },
+                "kv_call": {
+                    "open": "<kv>",
+                    "close": "</kv>",
+                    "content": "kv-lines",
+                },
+            },
+        }
+        text = '<t>hello world</t><n>42</n><j>{"a": 1, "b": 2}</j><x><name=foo><age=10></x><kv>k1: v1\nk2: v2</kv>'
+        # Drive byte-by-byte to maximise chunk count.
+        streamer = ResponseParser(spec)
+        events: list[dict] = []
+        for ch in text:
+            events.extend(streamer.feed(ch))
+        _, final_events = streamer.finalize()
+        events.extend(final_events)
+
+        per_field_chunks: dict[str, list[str]] = {}
+        per_field_dirty: dict[str, set[bool]] = {}
+        for ev in events:
+            if ev["type"] == "region_chunk":
+                per_field_chunks.setdefault(ev["field"], []).append(ev["text"])
+                per_field_dirty.setdefault(ev["field"], set()).add(ev["dirty"])
+
+        # Clean (streamable) regions.
+        for field in ("thinking", "score"):
+            self.assertEqual(per_field_dirty[field], {False}, f"{field} should be clean")
+        # Dirty (structured) regions.
+        for field in ("json_call", "xml_call", "kv_call"):
+            self.assertEqual(per_field_dirty[field], {True}, f"{field} should be dirty")
+
+        # Dirty chunks reconstruct the raw region body (un-parsed). Clean
+        # chunks reconstruct the verbatim body too — stripping happens at close.
+        self.assertEqual("".join(per_field_chunks["thinking"]), "hello world")
+        self.assertEqual("".join(per_field_chunks["score"]), "42")
+        self.assertEqual("".join(per_field_chunks["json_call"]), '{"a": 1, "b": 2}')
+        self.assertEqual("".join(per_field_chunks["xml_call"]), "<name=foo><age=10>")
+        self.assertEqual("".join(per_field_chunks["kv_call"]), "k1: v1\nk2: v2")
 
     def test_feed_after_finalize_raises(self):
         streamer = ResponseParser(smollm_template)
