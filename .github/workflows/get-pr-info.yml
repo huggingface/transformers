@@ -62,6 +62,9 @@ on:
         value: ${{ jobs.get-pr-info.outputs.PR_FILES }}
 
 
+permissions:
+  contents: read
+
 jobs:
   get-pr-info:
     runs-on: ubuntu-22.04

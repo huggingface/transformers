@@ -18,6 +18,9 @@ env:
   MKL_NUM_THREADS: 16
   TF_FORCE_GPU_ALLOW_GROWTH: true
 
+permissions:
+  contents: read
+
 jobs:
   run_doctests:
     name: " "

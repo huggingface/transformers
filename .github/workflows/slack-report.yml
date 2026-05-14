@@ -35,6 +35,9 @@ on:
 env:
   TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
 
+permissions:
+  contents: read
+
 jobs:
   send_results:
     name: Send results to webhook

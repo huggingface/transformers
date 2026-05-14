@@ -9,7 +9,8 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.issue.number }}-${{ startsWith(github.event.comment.body, '@bot /repo') || startsWith(github.event.comment.body, '@bot /style') }}
   cancel-in-progress: true
-permissions: read-all
+permissions:
+  contents: read
 
 
 jobs:

@@ -12,6 +12,9 @@ env:
   TOKEN: ${{ secrets.TRANSFORMERS_HUB_BOT_HF_TOKEN }}
   HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
 
+permissions:
+  contents: read
+
 jobs:
   check_tiny_models:
     name: Check tiny models

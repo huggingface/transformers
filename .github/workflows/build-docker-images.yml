@@ -18,6 +18,9 @@ concurrency:
   group: docker-images-builds
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   latest-docker:
     name: "Latest PyTorch [dev]"

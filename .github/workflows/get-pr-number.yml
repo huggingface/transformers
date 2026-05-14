@@ -6,6 +6,9 @@ on:
         description: "The extracted PR number"
         value: ${{ jobs.get-pr-number.outputs.PR_NUMBER }}
 
+permissions:
+  contents: read
+
 jobs:
   get-pr-number:
     runs-on: ubuntu-22.04

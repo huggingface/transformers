@@ -15,6 +15,9 @@ env:
   DATASET_ID: hf-benchmarks/transformers
   MODEL_ID: meta-llama/Llama-3.1-8B-Instruct
 
+permissions:
+  contents: read
+
 jobs:
   benchmark:
     name: Benchmark

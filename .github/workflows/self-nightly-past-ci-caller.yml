@@ -7,6 +7,9 @@ on:
     branches:
       - run_past_ci*
 
+permissions:
+  contents: read
+
 jobs:
   get_number:
     name: Get number
