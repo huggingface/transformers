@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch Gemma4 model."""
 
 import unittest
+from contextlib import contextmanager
 
 import pytest
 from parameterized import parameterized
@@ -515,6 +516,49 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     )
     def test_disk_offload_safetensors(self):
         pass
+
+    def test_per_layer_inputs_are_correctly_forwarded(self):
+        from transformers.models.gemma4.modeling_gemma4 import Gemma4TextModel
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        model = Gemma4ForConditionalGeneration(config).to(torch_device)
+        model.eval()
+
+        input_ids = torch.randint(20, 50, (1, 10), device=torch_device)
+        inputs_embeds = model.get_input_embeddings()(input_ids)
+        per_layer_inputs = model.model.language_model.get_per_layer_inputs(input_ids, None)
+
+        @contextmanager
+        def count_get_per_layer_inputs_calls():
+            original = Gemma4TextModel.get_per_layer_inputs
+            counter = {"call_count": 0}
+
+            def count_calls(*args, **kwargs):
+                nonlocal counter
+                counter["call_count"] += 1
+                return original(*args, **kwargs)
+
+            Gemma4TextModel.get_per_layer_inputs = count_calls
+            try:
+                yield counter
+            finally:
+                Gemma4TextModel.get_per_layer_inputs = original
+
+        # We should never call `get_per_layer_input_embeddings` if we provide both inputs_embeds and per_layer_inputs
+        with count_get_per_layer_inputs_calls() as counter:
+            _ = model(inputs_embeds=inputs_embeds, per_layer_inputs=per_layer_inputs)
+            self.assertEqual(counter["call_count"], 0)
+
+        # We should call it once if we provide only input_ids
+        with count_get_per_layer_inputs_calls() as counter:
+            _ = model(input_ids)
+            self.assertEqual(counter["call_count"], 1)
+
+        # We should call it once as well if we provide only inputs_embeds
+        with count_get_per_layer_inputs_calls() as counter:
+            _ = model(inputs_embeds=inputs_embeds)
+            self.assertEqual(counter["call_count"], 1)
 
 
 @slow
