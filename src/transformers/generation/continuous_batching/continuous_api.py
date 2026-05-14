@@ -447,7 +447,7 @@ class ContinuousBatchProcessor:
         # mode.
         self.inputs_and_outputs.retrieve_device_outputs()
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def warmup(self, model: nn.Module) -> None:
         """Pre-capture CUDA graphs (or trigger compile warmup) for varlen and decode paths. In async mode, both IO
         pairs are warmed up since each has its own graph buffer and static tensors. The varlen path is warmed up at
@@ -811,7 +811,7 @@ class ContinuousBatchingManager:
         )
         return batch_processor
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def _run_generation_loop(self) -> None:
         """Main processing loop running in the background thread."""
         try:
@@ -897,7 +897,7 @@ class ContinuousMixin:
 
     generation_config: GenerationConfig
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def init_continuous_batching(
         self,
         generation_config: GenerationConfig | None = None,
@@ -965,7 +965,7 @@ class ContinuousMixin:
             delattr(self, "_cached_continuous_batching_manager")
 
     @contextmanager
-    @torch.inference_mode()
+    @torch.no_grad()
     def continuous_batching_context_manager(
         self,
         generation_config: GenerationConfig | None = None,
@@ -1005,7 +1005,7 @@ class ContinuousMixin:
 
     # TODO: support streaming
     @traced
-    @torch.inference_mode()
+    @torch.no_grad()
     def generate_batch(
         self,
         inputs: list[list[int]],
