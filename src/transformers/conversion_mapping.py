@@ -493,6 +493,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("attention_layer_norm", "input_layernorm"),
             WeightRenaming("feedforward_layer_norm", "post_attention_layernorm"),
         ],
+        "gemma4_text": [PrefixChange(prefix_to_remove="language_model", model_prefix="model")],
         "qwen3_5_text": [PrefixChange(prefix_to_remove="language_model", model_prefix="model")],
         "sam3_tracker": [
             WeightRenaming(
