@@ -48,6 +48,15 @@ jobs:
             const fs = require('node:fs');
             const { PR_HEAD_REPO_OWNER, PR_HEAD_REPO_NAME, PR_HEAD_SHA } = process.env;
 
+            // Validate that the PR is from the same repository (not a fork)
+            if (PR_HEAD_REPO_OWNER !== context.repo.owner || PR_HEAD_REPO_NAME !== context.repo.repo) {
+              console.log('Skipping content fetch from forked repository for security reasons');
+              fs.writeFileSync('tests_dir.txt', JSON.stringify([], null, 2));
+              fs.writeFileSync('tests_models_dir.txt', JSON.stringify([], null, 2));
+              fs.writeFileSync('tests_quantization_dir.txt', JSON.stringify([], null, 2));
+              return;
+            }
+
             const { data: tests_dir } = await github.rest.repos.getContent({
               owner: PR_HEAD_REPO_OWNER,
               repo: PR_HEAD_REPO_NAME,
