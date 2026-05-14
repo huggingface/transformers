@@ -413,12 +413,76 @@ class GgufQwen2MoeExperts(nn.Module):
         return final_hidden_states
 
 
+# =============================================================================
+# Fused-expert MoE swap registry — open for extension.
+# =============================================================================
+#
+# Each entry maps the *HF* fused-expert module's class name (matched on the
+# live ``nn.Module.__class__.__name__`` so we don't have to import every MoE
+# arch upfront) to a "factory" callable that consumes the original module +
+# the per-projection {bytes, quant_type} dict and returns the swapped Gguf*
+# module. Adding a new MoE architecture is one entry — see
+# :func:`_qwen2_moe_factory` below for the contract.
+#
+# Mixtral / DeepSeek-V3 / and any other arch where experts are stored as a
+# ``ModuleList[Linear]`` are already covered by :func:`replace_with_gguf_linear`
+# (per-Linear swap) — they don't need a registry entry.
+
+
+def _qwen2_moe_factory(mod, info, device):
+    """Build a :class:`GgufQwen2MoeExperts` from a live ``Qwen2MoeExperts`` /
+    ``Qwen3MoeExperts`` / ``MiniMaxM2Experts`` module + a per-projection quant
+    info dict. All three share the same fused-expert layout."""
+
+    config = type("C", (), dict(
+        num_experts=mod.num_experts,
+        hidden_size=mod.hidden_dim,
+        moe_intermediate_size=mod.intermediate_dim,
+        hidden_act=getattr(mod.act_fn, "_name", None) or "silu",
+    ))()
+    return GgufQwen2MoeExperts(
+        config,
+        gate_quant=info["gate_quant"],
+        up_quant=info["up_quant"],
+        down_quant=info["down_quant"],
+        device=device,
+    )
+
+
+# class_name → (factory, has-fused-experts marker).
+# Add new entries here as new fused-MoE architectures land. The factory must
+# accept ``(mod, info, device)`` and return a module with ``gate_proj_q`` /
+# ``up_proj_q`` / ``down_proj_q`` uint8 buffers (the byte-routing pattern).
+_FUSED_MOE_REGISTRY: dict[str, "callable"] = {
+    "Qwen2MoeExperts":  _qwen2_moe_factory,
+    "Qwen3MoeExperts":  _qwen2_moe_factory,
+    "MiniMaxM2Experts": _qwen2_moe_factory,
+    # Future: "GptOssExperts": _gpt_oss_factory,
+}
+
+
+def register_gguf_moe(class_name: str, factory):
+    """Register a swap factory for a new fused-expert MoE class.
+
+    The factory has signature ``(mod, info, device) -> Module`` — see
+    :func:`_qwen2_moe_factory` for the contract. Idempotent; later registrations
+    overwrite earlier ones, which keeps third-party kernels easy to slot in
+    from outside transformers.
+    """
+    _FUSED_MOE_REGISTRY[class_name] = factory
+
+
 def replace_qwen2_moe_experts(
     model: nn.Module,
     expert_info_by_layer: dict[str, dict],
 ) -> int:
-    """Walk `model` and swap each ``Qwen2MoeExperts`` whose layer name appears
-    in ``expert_info_by_layer`` for a :class:`GgufQwen2MoeExperts`.
+    """Walk ``model`` and swap every fused-expert MoE module (any class
+    registered in :data:`_FUSED_MOE_REGISTRY`) whose layer name appears in
+    ``expert_info_by_layer`` for its quantized counterpart.
+
+    Despite the legacy name, this is **not** Qwen2-specific — it dispatches
+    via :data:`_FUSED_MOE_REGISTRY`. The name is kept as a stable entrypoint
+    for :class:`GGUFQuantizer._swap_moe_experts`.
 
     ``expert_info_by_layer`` maps the *parent* path (e.g.
     ``model.layers.0.mlp.experts``) to one entry per projection::
@@ -434,32 +498,25 @@ def replace_qwen2_moe_experts(
 
     Returns the number of MoE-experts blocks swapped.
     """
+    import warnings
+
     swapped = 0
     for name, mod in list(model.named_modules()):
-        if mod.__class__.__name__ != "Qwen2MoeExperts":
+        factory = _FUSED_MOE_REGISTRY.get(mod.__class__.__name__)
+        if factory is None:
             continue
         info = expert_info_by_layer.get(name)
         if info is None:
             continue
 
-        config = type("C", (), dict(
-            num_experts=mod.num_experts,
-            hidden_size=mod.hidden_dim,
-            moe_intermediate_size=mod.intermediate_dim,
-            hidden_act=getattr(mod.act_fn, "_name", None) or "silu",
-        ))()
-
         try:
-            new = GgufQwen2MoeExperts(
-                config,
-                gate_quant=info["gate_quant"],
-                up_quant=info["up_quant"],
-                down_quant=info["down_quant"],
-                device=mod.gate_up_proj.device,
-            )
+            device = next(mod.parameters()).device
+        except StopIteration:
+            device = "cpu"
+        try:
+            new = factory(mod, info, device)
         except Exception as e:
-            import warnings
-            warnings.warn(f"GgufQwen2MoeExperts: skip {name}: {e}", stacklevel=2)
+            warnings.warn(f"replace_qwen2_moe_experts: skip {name}: {e}", stacklevel=2)
             continue
 
         ok = True
@@ -469,9 +526,8 @@ def replace_qwen2_moe_experts(
             src = info[key].detach().contiguous().view(torch.uint8).reshape(-1)
             dst = getattr(new, buf_name)
             if src.numel() != dst.numel():
-                import warnings
                 warnings.warn(
-                    f"GgufQwen2MoeExperts: {name}.{buf_name} size mismatch "
+                    f"replace_qwen2_moe_experts: {name}.{buf_name} size mismatch "
                     f"({src.numel()} vs {dst.numel()}), skipping",
                     stacklevel=2,
                 )

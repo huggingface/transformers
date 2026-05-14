@@ -440,7 +440,19 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
     fields = reader.fields
     reader_keys = list(fields.keys())
 
-    parsed_parameters = {k: {} for k in GGUF_TO_TRANSFORMERS_MAPPING}
+    parsed_parameters: dict = {k: {} for k in GGUF_TO_TRANSFORMERS_MAPPING}
+    # Snapshot every raw GGUF kv field as (typed_value, gguf_value_type) so
+    # ``save_pretrained_gguf`` can replay the metadata bit-for-bit on round-trip.
+    raw_kv: dict[str, tuple[object, int]] = {}
+    for k, field in fields.items():
+        try:
+            v = [_gguf_parse_value(field.parts[i], field.types) for i in field.data]
+            if len(v) == 1:
+                v = v[0]
+            raw_kv[k] = (v, int(field.types[0]))
+        except Exception:
+            continue
+    parsed_parameters["raw_kv"] = raw_kv
 
     architecture = read_field(reader, "general.architecture")[0]
     # NOTE: Some GGUF checkpoints may miss `general.name` field in metadata

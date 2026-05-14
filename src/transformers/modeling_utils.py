@@ -4211,10 +4211,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             gguf_linear = kwargs.pop("gguf_linear", None)
             if gguf_linear is None:
                 gguf_linear = is_gguf_linear_enabled()
+            # Always keep the GGUF tensor map (raw bytes + quant_type) on the
+            # quantizer so ``save_pretrained_gguf`` / ``hf_quantizer.save_gguf``
+            # can round-trip without re-reading the .gguf. ``linear_mode``
+            # controls only whether the loader swaps Linears for ``GgufLinear``.
             hf_quantizer = GGUFQuantizer(
                 weight_mapping=gguf_parsed.get("weight_mapping", []),
                 linear_mode=bool(gguf_linear),
-                gguf_tensors=gguf_parsed["tensors"] if gguf_linear else None,
+                gguf_tensors=gguf_parsed["tensors"],
+                gguf_kv=gguf_parsed.get("raw_kv", {}),
             )
 
         is_quantized = hf_quantizer is not None

@@ -32,7 +32,7 @@ class GGUFQuantizer(HfQuantizer):
 
     requires_calibration = False
 
-    def __init__(self, weight_mapping=None, linear_mode=False, gguf_tensors=None, **kwargs):
+    def __init__(self, weight_mapping=None, linear_mode=False, gguf_tensors=None, gguf_kv=None, **kwargs):
         # ``pre_quantized=True`` so the loader keeps `_dtype=None` (no uint8→float
         # cast in ``spawn_materialize`` — the GGUFDequantize op handles dtype).
         kwargs.setdefault("pre_quantized", True)
@@ -50,6 +50,14 @@ class GGUFQuantizer(HfQuantizer):
         # dequantized weights, then re-quantize per-Linear in Phase 2.
         self.linear_mode = linear_mode
         self.gguf_tensors: dict = dict(gguf_tensors or {})
+        # Populated during ``_process_model_after_weight_loading`` so
+        # ``integrations.gguf_save.save_pretrained_gguf`` can run the rename in
+        # reverse without re-deriving the forward map.
+        self.hf_to_gguf: dict[str, str] = {}
+        # Raw GGUF key-value snapshot from the source file ({key: (value, gguf_value_type)}).
+        # Replayed verbatim by ``save_pretrained_gguf`` so the round-trip preserves
+        # block_count / head_count / tokenizer / quantization_version etc.
+        self.gguf_kv: dict = dict(gguf_kv or {})
 
     @property
     def renaming_dequantize_op(self):
@@ -107,18 +115,31 @@ class GGUFQuantizer(HfQuantizer):
         return self._process_model_after_weight_loading(model, **kwargs)
 
     def _process_model_after_weight_loading(self, model, **kwargs):
-        if not self.linear_mode or not self.gguf_tensors:
-            return
         from ..core_model_loading import WeightConverter, WeightRenaming, rename_source_key
-        from ..integrations.gguf_linear import replace_with_gguf_linear
 
-        # Apply the same rename rules the loader used to derive HF param names
-        # from GGUF tensor names, then collect (quant_type, raw bytes, permute marker)
-        # per HF weight for the swap helper.
+        if not self.gguf_tensors:
+            return
         renamings = [e for e in self.weight_mapping if isinstance(e, WeightRenaming)]
         converters = [e for e in self.weight_mapping if isinstance(e, WeightConverter)]
         meta_state_dict = model.state_dict()
         prefix = getattr(model, "base_model_prefix", "") or ""
+
+        # Always compute the hf→gguf map (needed by save_pretrained_gguf even
+        # when ``linear_mode=False``).
+        for gguf_name, _tensor in self.gguf_tensors.items():
+            try:
+                hf_name, _ = rename_source_key(
+                    gguf_name, renamings, converters,
+                    prefix=prefix, meta_state_dict=meta_state_dict,
+                )
+            except Exception:
+                continue
+            self.hf_to_gguf[hf_name] = gguf_name
+
+        if not self.linear_mode:
+            return
+
+        from ..integrations.gguf_linear import replace_with_gguf_linear
 
         weight_info_by_name: dict[str, dict] = {}
         for gguf_name, tensor in self.gguf_tensors.items():
@@ -148,6 +169,18 @@ class GGUFQuantizer(HfQuantizer):
 
         replace_with_gguf_linear(model, weight_info_by_name)
         self._swap_moe_experts(model, renamings, converters, meta_state_dict, prefix)
+
+    def save_gguf(self, model, path: str, *, quant_config: dict | None = None) -> str:
+        """Write the model back to a .gguf file.
+
+        Delegate to :func:`transformers.integrations.gguf_save.save_pretrained_gguf`,
+        which uses ``self.hf_to_gguf`` (populated at load time) for the reverse
+        rename. Pass ``quant_config`` to override per-tensor quant types — see
+        the function docstring for the policy DSL.
+        """
+        from ..integrations.gguf_save import save_pretrained_gguf
+
+        return save_pretrained_gguf(model, path, quant_config=quant_config, quantizer=self)
 
     def _swap_moe_experts(self, model, renamings, converters, meta_state_dict, prefix):
         """Detect ``Qwen2MoeExperts``-style fused-expert modules and swap them

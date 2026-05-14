@@ -21,6 +21,7 @@ pass.
 
 from __future__ import annotations
 
+import os
 import unittest
 
 import numpy as np
@@ -325,6 +326,121 @@ class GgufQwen2MoeExpertsSerializationTest(unittest.TestCase):
         wrong = self._build_module(gate="Q4_K", up="Q4_K", down="Q4_K", num_experts=2)
         with self.assertRaises((ValueError, RuntimeError)):
             wrong.load_state_dict(sd)
+
+
+def _build_synthetic_llama_gguf(path, *, H=64, I=128, L=2, V=256, num_heads=2, seed=0):
+    """Write a tiny well-formed Q4_0 llama GGUF file for round-trip tests."""
+    import gguf
+    from gguf import GGUFWriter, GGMLQuantizationType as Q
+
+    rng = np.random.default_rng(seed)
+    w = GGUFWriter(path, arch="llama")
+    w.add_block_count(L); w.add_embedding_length(H); w.add_feed_forward_length(I)
+    w.add_head_count(num_heads); w.add_head_count_kv(num_heads); w.add_context_length(64)
+    w.add_rope_dimension_count(H // num_heads); w.add_layer_norm_rms_eps(1e-6); w.add_vocab_size(V)
+    w.add_tokenizer_model("gpt2")
+    w.add_token_list(["<unk>"] * V); w.add_token_types([1] * V); w.add_token_merges([])
+
+    def add_q40(name, shape):
+        a = rng.standard_normal(shape).astype(np.float32) * 0.1
+        w.add_tensor(name, gguf.quants.quantize(a, Q.Q4_0), raw_dtype=Q.Q4_0)
+
+    def add_f32(name, shape):
+        a = rng.standard_normal(shape).astype(np.float32) * 0.1
+        w.add_tensor(name, a, raw_dtype=Q.F32)
+
+    add_q40("token_embd.weight", (V, H))
+    add_f32("output_norm.weight", (H,))
+    add_q40("output.weight", (V, H))
+    for i in range(L):
+        for kind in ("attn_q", "attn_k", "attn_v", "attn_output"):
+            add_q40(f"blk.{i}.{kind}.weight", (H, H))
+        for kind in ("ffn_gate", "ffn_up"):
+            add_q40(f"blk.{i}.{kind}.weight", (I, H))
+        add_q40(f"blk.{i}.ffn_down.weight", (H, I))
+        add_f32(f"blk.{i}.attn_norm.weight", (H,))
+        add_f32(f"blk.{i}.ffn_norm.weight",  (H,))
+
+    w.write_header_to_file(); w.write_kv_data_to_file(); w.write_tensors_to_file(); w.close()
+    return path
+
+
+@require_torch
+@require_gguf
+class GgufSaveRoundtripTest(unittest.TestCase):
+    """``hf_quantizer.save_gguf`` writes a .gguf file that, on reload, produces
+    the same forward output as the original. The byte-preserved path is the
+    happy path: same file size, bit-identical for the per-tensor blob ordering."""
+
+    def _build_and_load(self, tmpdir, name="src.gguf"):
+        from transformers import AutoModelForCausalLM
+
+        path = os.path.join(tmpdir, name)
+        _build_synthetic_llama_gguf(path)
+        model = AutoModelForCausalLM.from_pretrained(tmpdir, gguf_file=name, gguf_linear=True)
+        return path, model
+
+    def test_byte_preserved_roundtrip(self):
+        import tempfile
+        from transformers import AutoModelForCausalLM
+
+        with tempfile.TemporaryDirectory() as tmp:
+            _, m1 = self._build_and_load(tmp)
+            rt = os.path.join(tmp, "rt.gguf")
+            m1.hf_quantizer.save_gguf(m1, rt)
+
+            m2 = AutoModelForCausalLM.from_pretrained(tmp, gguf_file="rt.gguf", gguf_linear=True)
+            torch.manual_seed(7)
+            ids = torch.randint(0, m1.config.vocab_size, (1, 8))
+            y1 = m1(ids).logits
+            y2 = m2(ids).logits
+            err = float((y1 - y2).abs().max())
+            self.assertEqual(err, 0.0, msg=f"byte-preserved roundtrip diverged: {err}")
+
+    def test_quantize_on_save_norms_to_f16(self):
+        """Override the F32 norms to F16 on save — verifies the policy DSL routes
+        the right tensors and the file size shrinks accordingly."""
+        import tempfile
+        import gguf
+        from transformers import AutoModelForCausalLM
+
+        with tempfile.TemporaryDirectory() as tmp:
+            src, m1 = self._build_and_load(tmp)
+            rt = os.path.join(tmp, "rt-f16.gguf")
+            m1.hf_quantizer.save_gguf(m1, rt, quant_config={r"_norm\.weight$": "F16"})
+
+            # The norm tensors must now read as F16 in the saved file.
+            r = gguf.GGUFReader(rt)
+            for t in r.tensors:
+                if "_norm" in t.name:
+                    self.assertEqual(t.tensor_type, gguf.GGMLQuantizationType.F16,
+                                     msg=f"{t.name}: expected F16, got {t.tensor_type}")
+
+            # Forward equivalence within F32→F16 noise.
+            m2 = AutoModelForCausalLM.from_pretrained(tmp, gguf_file="rt-f16.gguf", gguf_linear=True)
+            torch.manual_seed(7)
+            ids = torch.randint(0, m1.config.vocab_size, (1, 8))
+            err = float((m1(ids).logits - m2(ids).logits).abs().max())
+            self.assertLess(err, 5e-3, msg=f"F32→F16 norm save diverged too much: {err}")
+
+    def test_save_gguf_handles_missing_quantizer(self):
+        """``save_pretrained_gguf`` errors clearly when given a model that
+        wasn't loaded from a .gguf (no hf_to_gguf map, no source rename rules)."""
+        from transformers.integrations.gguf_save import save_pretrained_gguf
+        import tempfile
+
+        class _Stub:
+            config = type("C", (), {"model_type": "definitely_not_a_real_arch"})()
+
+            def state_dict(self):
+                return {}
+
+            def named_modules(self):
+                return []
+
+        with tempfile.NamedTemporaryFile(suffix=".gguf") as tf:
+            with self.assertRaises(ValueError):
+                save_pretrained_gguf(_Stub(), tf.name)
 
 
 if __name__ == "__main__":

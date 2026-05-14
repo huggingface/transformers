@@ -212,7 +212,34 @@ class ReversePermuteAttnQ(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        raise NotImplementedError("ReversePermuteAttnQ is one-way")
+        return PermuteAttnQ()
+
+
+class PermuteAttnQ(ConversionOps):
+    """Forward Q-projection GGUF permutation — inverse of :class:`ReversePermuteAttnQ`.
+    Used by :func:`save_pretrained_gguf` when re-emitting Q weights into llama.cpp's
+    expected layout. Reads ``config.num_attention_heads`` at convert time."""
+
+    def convert(
+        self,
+        input_dict: dict[str, torch.Tensor],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        config=None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        num_heads = config.num_attention_heads
+        target_pattern = _single_input_target(input_dict, source_patterns, target_patterns)
+        tensors = next(iter(input_dict.values()))
+        tensor = tensors[0] if isinstance(tensors, list) else tensors
+        dim = tensor.shape[0] // num_heads // 2
+        return {
+            target_pattern: tensor.reshape(num_heads, 2, dim, *tensor.shape[1:]).swapaxes(2, 1).reshape(tensor.shape)
+        }
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return ReversePermuteAttnQ()
 
 
 class ReversePermuteAttnK(ConversionOps):
@@ -240,7 +267,34 @@ class ReversePermuteAttnK(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        raise NotImplementedError("ReversePermuteAttnK is one-way")
+        return PermuteAttnK()
+
+
+class PermuteAttnK(ConversionOps):
+    """Forward K-projection GGUF permutation — inverse of :class:`ReversePermuteAttnK`."""
+
+    def convert(
+        self,
+        input_dict: dict[str, torch.Tensor],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        config=None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        num_kv_heads = config.num_key_value_heads
+        target_pattern = _single_input_target(input_dict, source_patterns, target_patterns)
+        tensors = next(iter(input_dict.values()))
+        tensor = tensors[0] if isinstance(tensors, list) else tensors
+        dim = tensor.shape[0] // num_kv_heads // 2
+        return {
+            target_pattern: tensor.reshape(num_kv_heads, 2, dim, *tensor.shape[1:])
+            .swapaxes(2, 1)
+            .reshape(tensor.shape)
+        }
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return ReversePermuteAttnK()
 
 
 class BloomReshapeQKVWeight(ConversionOps):
