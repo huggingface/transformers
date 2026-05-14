@@ -15,23 +15,78 @@
 
 import unittest
 
+import pytest
+
 from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    require_torch,
     require_torch_large_accelerator,
     slow,
     torch_device,
 )
+
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
     import torch
 
     from transformers import (
+        Llama4ForCausalLM,
         Llama4ForConditionalGeneration,
         Llama4Processor,
+        Llama4TextConfig,
+        Llama4TextModel,
     )
+
+
+# ---------------------------------------------------------------------------
+# Tiny model tester for unit / TP / EP tests (no GPU, no real weights)
+# ---------------------------------------------------------------------------
+
+class Llama4TextModelTester(CausalLMModelTester):
+    if is_torch_available():
+        config_class = Llama4TextConfig
+        base_model_class = Llama4TextModel
+        causal_lm_class = Llama4ForCausalLM
+
+    def __init__(self, *args, **kwargs):
+        # Llama4-specific tiny defaults — keep the model small enough for CPU tests
+        kwargs.setdefault("hidden_size", 32)
+        kwargs.setdefault("intermediate_size", 32)
+        kwargs.setdefault("num_hidden_layers", 2)
+        kwargs.setdefault("num_attention_heads", 2)
+        kwargs.setdefault("num_key_value_heads", 2)
+        kwargs.setdefault("head_dim", 16)
+        kwargs.setdefault("vocab_size", 64)
+        # MoE: every layer is a MoE layer with 4 tiny experts
+        kwargs.setdefault("num_local_experts", 4)
+        kwargs.setdefault("num_experts_per_tok", 1)
+        kwargs.setdefault("interleave_moe_layer_step", 1)
+        kwargs.setdefault("moe_intermediate_size", 16)
+        super().__init__(*args, **kwargs)
+
+
+@require_torch
+class Llama4TextModelTest(CausalLMModelTest, unittest.TestCase):
+    """
+    Unit tests for Llama4TextModel / Llama4ForCausalLM, including tensor parallel
+    and expert parallel coverage via :class:`~tests.test_tensor_parallel_mixin.TensorParallelTesterMixin`.
+
+    The TP/EP tests (``test_tp_forward``, ``test_ep_forward``, …) exercise the fix for
+    ``MoeTensorParalellExperts._prepare_input_fn`` which previously crashed on Llama4
+    because it assumed a 3-argument ``(hidden_states, top_k_index, top_k_weights)``
+    calling convention, while ``Llama4TextMoe`` calls ``experts(routed_in)`` — a single
+    pre-weighted tensor.
+    """
+
+    model_tester_class = Llama4TextModelTester
+
+    @unittest.skip("tp_generation_quantized requires torchao; skipped for Llama4 text-only tests")
+    def test_tp_generation_quantized(self):
+        pass
 
 
 @slow
