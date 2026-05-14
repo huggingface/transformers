@@ -118,9 +118,19 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
 
 
 class TensorParallelStyle(ParallelStyle):
+    """Base class for transformers TP styles. Installs the pre / around / post
+    forward hooks. Subclasses that need to shard params override `_apply` to
+    wrap them as DTensor placeholders before calling `super()._apply(...)`.
 
-    def shard_param(self, name, param, mesh):
-        return None
+    Param wrapping runs on meta (the model is on meta when `apply_tensor_parallel`
+    is invoked); `distribute_tensor` on meta builds metadata only — no collective.
+    Real data flows in later, async, via DtensorShardOperation during load.
+
+    Forward-time hooks (override what you need):
+      - transform_inputs_pre_forward(module, args, kwargs, mesh) → (args, kwargs)
+      - context_around_forward(module) → context manager wrapping the call
+      - transform_output_post_forward(module, output, mesh) → output
+    """
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         return args, kwargs
@@ -132,11 +142,6 @@ class TensorParallelStyle(ParallelStyle):
         return output
 
     def _apply(self, module, mesh):
-        for name, param in list(module.named_parameters(recurse=False)):
-            new_param = self.shard_param(name, param, mesh)
-            if new_param is not None:
-                module._parameters[name] = new_param
-
         original_forward = module.forward
 
         def tp_forward(*args, **kwargs):
@@ -221,15 +226,6 @@ class PackedColwiseParallel(TensorParallelStyle):
         self.use_local_output = use_local_output
         self.split_factor = split_factor
 
-    def shard_param(self, name, param, mesh):
-        if name not in ("weight", "bias"):
-            return None
-        packed_shard = _StridedShard(dim=0, split_factor=self.split_factor)
-        return torch.nn.Parameter(
-            distribute_tensor(param, mesh, [packed_shard], src_data_rank=self.src_data_rank),
-            requires_grad=param.requires_grad,
-        )
-
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         input_tensor = args[0]
         if not isinstance(input_tensor, DTensor):
@@ -276,6 +272,17 @@ class PackedColwiseParallel(TensorParallelStyle):
     def _apply(self, module, mesh):
         if not isinstance(module, torch.nn.Linear):
             raise NotImplementedError("PackedColwiseParallel currently only supports nn.Linear!")
+        # Wrap weight + bias as DTensor placeholders. Runs on meta —
+        # distribute_tensor builds metadata only, no collective.
+        placement = _StridedShard(dim=0, split_factor=self.split_factor)
+        for name in ("weight", "bias"):
+            meta = module._parameters.get(name)
+            if meta is None:
+                continue
+            module._parameters[name] = torch.nn.Parameter(
+                distribute_tensor(meta, mesh, [placement], src_data_rank=None),
+                requires_grad=meta.requires_grad,
+            )
         return super()._apply(module, mesh)
 
     def __repr__(self) -> str:
@@ -283,15 +290,6 @@ class PackedColwiseParallel(TensorParallelStyle):
             f"{self.__class__.__name__}(input_layouts={self.input_layouts}, "
             f"use_local_output={self.use_local_output}, split_factor={self.split_factor})"
         )
-
-
-# Maps string tp_plan entries for MoE experts to DTensor placements.
-# Used by MoEExpertsParallel.shard_param to create DTensors from the config plan.
-_STRING_TO_PLACEMENT = {
-    "packed_colwise": lambda: _StridedShard(dim=-2, split_factor=2),
-    "colwise": lambda: Shard(-2),
-    "rowwise": lambda: Shard(-1),
-}
 
 
 if is_torch_available() and is_torch_greater_or_equal("2.5"):
@@ -323,7 +321,8 @@ class MoEExpertsParallel(TensorParallelStyle):
     that grouped_mm (which needs plain tensors) works transparently.
 
     Lifecycle phases:
-    1. shard_param — distribute each expert weight per the shard_plan.
+    1. _apply — wrap each expert weight named in shard_plan as a DTensor
+       placeholder with the declared placement.
     2. transform_inputs_pre_forward — localize hidden_states (Replicate→local,
        gives us an all-reduce on the backward gradient for free), then fix
        routing-weight gradients (their backward is partial; use allreduce-sum,
@@ -336,22 +335,23 @@ class MoEExpertsParallel(TensorParallelStyle):
        output_layouts.
     """
 
-    def __init__(self, output_layouts=None, shard_plan: dict[str, str] | None = None):
+    def __init__(self, output_layouts=None, shard_plan=None):
         super().__init__()
         self.output_layouts = output_layouts or Replicate()
-        self._moe_shard_plan: dict[str, str] = shard_plan or {}
+        self._moe_shard_plan = shard_plan or {}
 
-    def shard_param(self, name, param, mesh):
-        plan_str = self._moe_shard_plan.get(name)
-        if plan_str is None:
-            return None
-        placement_fn = _STRING_TO_PLACEMENT.get(plan_str)
-        if placement_fn is None:
-            return None
-        return torch.nn.Parameter(
-            distribute_tensor(param.data, mesh, [placement_fn()]),
-            requires_grad=param.requires_grad,
-        )
+    def _apply(self, module, mesh):
+        # Wrap each expert weight as a DTensor placeholder. Runs on meta —
+        # distribute_tensor builds metadata only, no collective.
+        for name, placement in self._moe_shard_plan.items():
+            meta = module._parameters.get(name)
+            if meta is None:
+                continue
+            module._parameters[name] = torch.nn.Parameter(
+                distribute_tensor(meta, mesh, [placement], src_data_rank=None),
+                requires_grad=meta.requires_grad,
+            )
+        return super()._apply(module, mesh)
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         hidden_states, top_k_index, top_k_weights = args
@@ -456,10 +456,15 @@ class ParallelInterface(GeneralInterface):
                 use_local_output=True,
             ),
             "module_allgather_split": PrepareModuleInputOutput(),
-            # MoE — canonical shard_plan baked in (only variant in use across configs)
+            # MoE — canonical shard_plan baked in (only variant in use across configs).
+            # gate_up_proj is packed (gate||up along output dim) so we use _StridedShard
+            # to interleave; down_proj is plain rowwise on its input dim.
             "moe_experts_allreduce": MoEExpertsParallel(
                 output_layouts=Replicate(),
-                shard_plan={"gate_up_proj": "packed_colwise", "down_proj": "rowwise"},
+                shard_plan={
+                    "gate_up_proj": _StridedShard(dim=-2, split_factor=2),
+                    "down_proj": Shard(-1),
+                },
             ),
         }
         if is_torch_available() and is_torch_greater_or_equal("2.5") and _torch_distributed_available
