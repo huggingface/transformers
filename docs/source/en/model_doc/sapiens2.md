@@ -51,6 +51,8 @@ The original code can be found [here](https://github.com/facebookresearch/sapien
 
 ## Usage examples
 
+### Image feature extraction
+
 The example below shows how to obtain image features with [`Sapiens2Model`]. The original checkpoint
 files are named `sapiens2_0.4b_pretrain.safetensors` rather than `model.safetensors`, so you must set
 `transformers_weights` on the config to point `from_pretrained` to the correct file.
@@ -85,6 +87,41 @@ patch_features = patch_tokens.unflatten(1, (num_patches_h, num_patches_w))
 
 print("CLS token shape:", cls_token.shape)           # [1, 1024]
 print("Patch features shape:", patch_features.shape) # [1, H/patch, W/patch, 1024]
+```
+
+### Semantic segmentation
+
+The example below shows how to perform body-part segmentation with [`Sapiens2ForSemanticSegmentation`].
+The segmentation checkpoints use 29 body-part labels and are named `sapiens2_0.4b_seg.safetensors`
+rather than `model.safetensors`, so `transformers_weights` must be set on the config.
+
+```python
+import torch
+from transformers import Sapiens2Config, Sapiens2ImageProcessor, Sapiens2ForSemanticSegmentation
+from transformers.image_utils import load_image
+
+url = "http://images.cocodataset.org/val2017/000000004016.jpg"
+image = load_image(url)
+
+image_processor = Sapiens2ImageProcessor()
+
+config = Sapiens2Config(num_labels=29)
+config.transformers_weights = "sapiens2_0.4b_seg.safetensors"
+model = Sapiens2ForSemanticSegmentation.from_pretrained("facebook/sapiens2-seg-0.4b", config=config)
+
+inputs = image_processor(image, return_tensors="pt")
+with torch.inference_mode():
+    outputs = model(**inputs)
+
+# outputs.logits shape: (batch_size, num_labels, height, width)
+print("Logits shape:", outputs.logits.shape)  # [1, 29, 1024, 768]
+
+# Get per-pixel class predictions, optionally resized to the original image size
+original_size = (image.height, image.width)
+segmentation = image_processor.post_process_semantic_segmentation(
+    outputs, target_sizes=[original_size]
+)[0]
+print("Segmentation map shape:", segmentation.shape)  # [original_height, original_width]
 ```
 
 ## Sapiens2Config
