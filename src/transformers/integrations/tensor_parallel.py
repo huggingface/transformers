@@ -1175,30 +1175,53 @@ class RouterParallel(TensorParallelLayer):
 
 class MoeTensorParalellExperts(TensorParallelLayer):
     """
-    Note: For tensor parallel, the MoEExpertsParallel TP layer handles gradient sync:
+    TP layer for expert modules in MoE models.
+
+    Handles gradient sync and output aggregation across TP ranks:
         - all_reduce_backward on hidden_states (for colwise gate_up_proj gradient)
-        - all_reduce_backward on top_k_weights (for router gradient)
-        - all_reduce_forward on output (for partial expert outputs)
+        - all_reduce_backward on top_k_weights (for router gradient, standard convention only)
+        - all_reduce_forward on output (to sum partial expert outputs)
+
+    Supports two calling conventions used by different MoE models:
+
+    **Standard convention** (e.g. Gemma4, Qwen3-MoE, DeepSeekV2):
+        ``experts(hidden_states, top_k_index, top_k_weights)``
+        The MoE layer passes routing metadata to the experts module so it can
+        scatter/gather tokens internally. ``top_k_weights`` requires
+        ``all_reduce_backward`` because each rank computes a partial expert output
+        (∂L/∂routing_weights = ∂L/∂output * partial_expert_output).
+
+    **Pre-weighted convention** (e.g. Llama4):
+        ``experts(routed_in)``
+        The parent MoE layer pre-multiplies and sorts tokens per expert *before*
+        calling the experts module, so only a single ``hidden_states`` tensor is
+        passed. No top_k metadata is available inside the experts hook; only
+        ``all_reduce_backward`` on ``hidden_states`` is applied for gradient
+        correctness.
     """
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
     def _prepare_input_fn(self, mod, inputs, device_mesh):
-        # inputs = (hidden_states, top_k_index, top_k_weights)
         hidden_states = inputs[0]
-        top_k_index = inputs[1]
-        top_k_weights = inputs[2]
-
         # all_reduce_backward on hidden_states for correct colwise (gate_up_proj) gradient
         hidden_states = all_reduce_backward(hidden_states, device_mesh)
 
-        # all_reduce_backward on routing weights for correct router gradient
-        # This is needed because ∂L/∂routing_weights = ∂L/∂output * partial_expert_output
-        # and partial_expert_output is different on each GPU before all-reduce
-        top_k_weights = all_reduce_backward(top_k_weights, device_mesh)
-
-        return (hidden_states, top_k_index, top_k_weights)
+        if len(inputs) == 3:
+            # Standard convention: (hidden_states, top_k_index, top_k_weights)
+            top_k_index = inputs[1]
+            top_k_weights = inputs[2]
+            # all_reduce_backward on routing weights for correct router gradient.
+            # This is needed because ∂L/∂routing_weights = ∂L/∂output * partial_expert_output
+            # and partial_expert_output is different on each GPU before all-reduce.
+            top_k_weights = all_reduce_backward(top_k_weights, device_mesh)
+            return (hidden_states, top_k_index, top_k_weights)
+        else:
+            # Pre-weighted convention (e.g. Llama4): experts(routed_in)
+            # The parent layer already applied routing weights before calling experts,
+            # so no top_k metadata is present here.
+            return (hidden_states,)
 
     def _prepare_output_fn(self, mod, outputs, device_mesh):
         # all_reduce_forward to sum partial expert outputs across GPUs
