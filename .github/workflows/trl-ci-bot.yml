@@ -33,7 +33,7 @@ jobs:
       - name: Reject untrusted commenter
         if: steps.trust.outputs.trusted != 'true'
         run: |
-          echo "::error::Untrusted commenter (${{ github.event.comment.author_association }}); aborting."
+          echo "::error::Untrusted commenter; aborting."
           exit 1
 
       - name: Fetch PR head SHA + number
@@ -53,10 +53,11 @@ jobs:
         id: dispatch
         env:
           GH_TOKEN: ${{ secrets.TRL_CI_DISPATCH_TOKEN }}
+          PR_SHA: ${{ steps.pr.outputs.sha }}
         run: |
           gh workflow run "Tests against Transformers branch" \
             -R huggingface/trl \
-            -f transformers_ref=${{ steps.pr.outputs.sha }}
+            -f transformers_ref="$PR_SHA"
 
       - name: Find TRL workflow run URL
         if: steps.trust.outputs.trusted == 'true'
@@ -88,7 +89,10 @@ jobs:
         if: steps.trust.outputs.trusted == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_SHA: ${{ steps.pr.outputs.sha }}
+          RUN_URL: ${{ steps.find_run.outputs.url }}
         run: |
+          COMMENT_BODY="🚀 **TRL CI triggered** against transformers commit \`${PR_SHA}\`\n\n🔗 **Run:** ${RUN_URL}"
           gh api -X POST \
             /repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments \
-            -f body="🚀 **TRL CI triggered** against transformers commit \`${{ steps.pr.outputs.sha }}\`\n\n🔗 **Run:** ${{ steps.find_run.outputs.url }}"
+            -f body="$COMMENT_BODY"
