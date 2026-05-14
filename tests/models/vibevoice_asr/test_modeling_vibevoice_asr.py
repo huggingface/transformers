@@ -193,6 +193,10 @@ class VibeVoiceAsrForConditionalGenerationModelTest(ModelTesterMixin, Generation
     def test_forward_with_logits_to_keep(self):
         pass
 
+    @unittest.skip(reason="VibeVoiceAsr has slight randomness due to VAE sampling.")
+    def test_generate_methods_with_logits_to_keep(self):
+        pass
+
     def test_sdpa_can_dispatch_composite_models(self):
         # VibeVoiceAsr is audio+text composite; but audio components do not use attention
         for model_class in self.all_model_classes:
