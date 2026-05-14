@@ -117,7 +117,7 @@ class ClapAudioProcessor(NumpyAudioBackend):
         mel_shrink = mel_shrink[0][0].numpy()
         return np.stack([mel_shrink, mel_chunk_front, mel_chunk_middle, mel_chunk_back], axis=0)
 
-    def _get_mask(self, audio_ranges, padded_length, do_extract_spectrogram, spectrogram_config):
+    def _build_mask(self, audio_ranges, padded_length, *, do_extract_spectrogram, spectrogram_config):
         """Return CLAP's is_longer flag instead of a standard attention mask."""
         is_longer = getattr(self, "_is_longer_flags", None) or [False] * len(audio_ranges)
         if self.truncation_mode == "fusion" and sum(is_longer) == 0:

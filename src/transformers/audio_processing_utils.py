@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from dataclasses import fields, replace
-from typing import Unpack
+from typing import Any, TypedDict, Unpack
 
 import numpy as np
 from huggingface_hub.dataclasses import validate_typed_dict
@@ -25,8 +25,6 @@ from .tokenization_utils_base import PaddingStrategy, TruncationStrategy
 from .processing_utils import AudioKwargs
 from .utils import PaddingStrategy, TensorType, logging
 
-from typing import TypedDict
-
 
 logger = logging.get_logger(__name__)
 
@@ -35,6 +33,7 @@ class AudioKwargs(TypedDict, total=False):
     sampling_rate: int | None
     spectrogram_config: dict | SpectrogramConfig | None
     do_extract_spectrogram: bool | None
+    do_batch_spectrogram: bool | None
     do_resample: bool | None
     return_tensors: str | TensorType | None
     padding: bool | str | PaddingStrategy | None
@@ -65,6 +64,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
     mask_level = None  # None = auto (features for spectrogram, audio for raw), "audio" = always audio-level
     spectrogram_config = None
     do_extract_spectrogram = None
+    do_batch_spectrogram = True
 
     # ── Core ─────────────────────────────────────────────────────────────
 
@@ -184,55 +184,121 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
     def _preprocess(
         self,
-        audio,
-        padding,
-        max_length,
-        truncation,
-        pad_to_multiple_of,
-        return_tensors,
-        spectrogram_config=None,
-        do_extract_spectrogram=None,
-        do_batch_spectrogram=None,
-        **kwargs,
+        audio: list[np.ndarray] | list["torch.Tensor"],
+        padding: bool | str | PaddingStrategy | None,
+        max_length: int | None,
+        truncation: bool | str | TruncationStrategy | None,
+        pad_to_multiple_of: int | None,
+        return_tensors: str | TensorType | None,
+        spectrogram_config: SpectrogramConfig | None = None,
+        do_extract_spectrogram: bool | None = True,
+        do_batch_spectrogram: bool | None = True,
+        **kwargs: Any,
     ) -> BatchFeature:
-        if do_batch_spectrogram is None:
-            do_batch_spectrogram = getattr(self, "do_batch_spectrogram", True)
+        # Per-waveform extraction, then pad features → audio_features
         if do_extract_spectrogram and not do_batch_spectrogram:
-            # Per-waveform extraction path: extract → postprocess → pad features → mask
             features = self.extract_spectrogram(audio, spectrogram_config=spectrogram_config, **kwargs)
             feature_lengths = [f.shape[0] for f in features]
             features = self._postprocess_features(features, feature_lengths)
             features, feature_ranges = self._pad_features(
-                features, padding, max_length, truncation, pad_to_multiple_of
+                features, padding, max_length, truncation, pad_to_multiple_of,
             )
             output = {"audio_features": self._stack_features(features)}
             if self.return_padding_mask:
-                padded_length = features[0].shape[0]
-                output.update(self._get_feature_mask(feature_ranges, padded_length))
+                output.update(self._build_feature_mask(feature_ranges, features[0].shape[0]))
             output = self._postprocess_output(output, feature_ranges=feature_ranges, **kwargs)
+            return BatchFeature(data=output, tensor_type=return_tensors)
+
+        # Pad audio first; then either extract spectrogram on the padded batch → audio_features,
+        # or pass the raw padded audio through → audio_values.
+        audio, audio_ranges = self.pad(audio, padding, max_length, truncation, pad_to_multiple_of)
+        padded_length = audio[0].shape[-1]
+        batched = self._to_batch(audio)
+
+        if do_extract_spectrogram:
+            output = {"audio_features": self.extract_spectrogram(
+                batched, spectrogram_config=spectrogram_config, audio_ranges=audio_ranges, **kwargs,
+            )}
         else:
-            # Standard path: pad audio → optionally batch → extract/passthrough
-            audio, audio_ranges = self.pad(audio, padding, max_length, truncation, pad_to_multiple_of)
-            padded_length = audio[0].shape[-1]
+            output = {"audio_values": batched}
 
-            if do_extract_spectrogram:
-                audio = self._to_batch(audio) if do_batch_spectrogram else audio
-                feature = self.extract_spectrogram(audio, spectrogram_config=spectrogram_config, audio_ranges=audio_ranges, **kwargs)
-                output = {"audio_features": feature}
-            else:
-                output = {"audio_values": self._to_batch(audio)}
+        if self.return_padding_mask:
+            output.update(self._build_mask(
+                audio_ranges, padded_length,
+                do_extract_spectrogram=bool(do_extract_spectrogram),
+                spectrogram_config=spectrogram_config,
+            ))
 
-            if self.return_padding_mask:
-                output.update(self._get_mask(
-                    audio_ranges, padded_length, do_extract_spectrogram=do_extract_spectrogram, spectrogram_config=spectrogram_config
-                ))
-            output = self._postprocess_output(output, audio_ranges=audio_ranges, **kwargs)
-
+        output = self._postprocess_output(output, audio_ranges=audio_ranges, **kwargs)
         return BatchFeature(data=output, tensor_type=return_tensors)
+
+    # ── Masking ──────────────────────────────────────────────────────────
+
+    def _build_mask(
+        self,
+        audio_ranges,
+        padded_length,
+        *,
+        do_extract_spectrogram,
+        spectrogram_config,
+    ) -> dict:
+        """Build the attention-mask dict for an audio-padded output.
+
+        Picks audio-level vs feature-level based on ``do_extract_spectrogram`` and
+        ``self.mask_level``, computes the corresponding ranges, and delegates array
+        creation to the backend ``_get_mask``. Override this for non-standard mask
+        formats (e.g. CLAP's ``is_longer``).
+        """
+        if do_extract_spectrogram and self.mask_level != "audio":
+            ranges, padded_length = self._audio_to_feature_ranges(
+                audio_ranges, padded_length, spectrogram_config,
+            )
+        else:
+            ranges = audio_ranges
+        key = "audio_features_mask" if do_extract_spectrogram else "audio_values_mask"
+        return {key: self._get_mask(ranges, padded_length)}
+
+    def _build_feature_mask(self, feature_ranges, padded_length) -> dict:
+        """Build ``{audio_features_mask: ...}`` from already-computed feature ranges."""
+        return {"audio_features_mask": self._get_mask(feature_ranges, padded_length)}
+
+    def _audio_to_feature_ranges(self, audio_ranges, padded_length, spectrogram_config):
+        """Convert audio sample ranges to feature frame ranges given the STFT config."""
+        spec_cfg = spectrogram_config or self.spectrogram_config
+        audio_lengths = np.array([end - start for start, end in audio_ranges])
+        feature_lengths = self._get_features_lengths(audio_lengths, spec_cfg)
+        n_features = int(self._get_features_lengths(padded_length, spec_cfg, include_center_frame=True))
+        return [(0, int(length)) for length in feature_lengths], n_features
+
+    def _get_padding_strategies(self, padding=False, max_length=None):
+        """Find the correct padding strategy."""
+        if padding is not False:
+            if padding is True:
+                padding_strategy = PaddingStrategy.LONGEST
+            elif not isinstance(padding, PaddingStrategy):
+                padding_strategy = PaddingStrategy(padding)
+            elif isinstance(padding, PaddingStrategy):
+                padding_strategy = padding
+        else:
+            padding_strategy = PaddingStrategy.DO_NOT_PAD
+
+        if max_length is None:
+            if padding_strategy == PaddingStrategy.MAX_LENGTH:
+                raise ValueError(
+                    f"When setting ``padding={PaddingStrategy.MAX_LENGTH}``, make sure that max_length is defined"
+                )
+
+        if padding_strategy != PaddingStrategy.DO_NOT_PAD and (self.padding_value is None):
+            raise ValueError(
+                "Asking to pad but the feature_extractor does not have a padding value. Please select a value to use"
+                " as `padding_value`. For example: `feature_extractor.padding_value = 0.0`."
+            )
+
+        return padding_strategy
 
     def pad(
         self,
-        audio: AudioInput, # TODO: this type makes it unclear to know the have an iterable
+        audio: list[np.ndarray] | list["torch.Tensor"],
         padding: bool | str | PaddingStrategy = True,
         max_length: int | None = None,
         truncation: bool = False,
@@ -241,9 +307,6 @@ class BaseAudioProcessor(AudioProcessingMixin):
         padding_strategy = self._get_padding_strategies(padding=padding, max_length=max_length)
 
         if truncation:
-            if max_length is None:
-                # TODO: maybe this check should happen in the _validate_preprocess_kwargs method
-                raise ValueError("When setting `truncation=True`, make sure that `max_length` is defined.")
             trunc_length = max_length
             if pad_to_multiple_of is not None and (trunc_length % pad_to_multiple_of != 0):
                 trunc_length = ((trunc_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
@@ -272,10 +335,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         return audio, audio_ranges
 
     def _truncate_single(self, audio_el, max_length: int):
-        """Truncate a single audio element to max_length along the time axis."""
-        if audio_el.shape[-1] > max_length:
-            return audio_el[..., :max_length]
-        return audio_el
+        return audio_el[..., :max_length] if audio_el.shape[-1] > max_length else audio_el
 
     def _standardize_kwargs(
         self,
@@ -304,32 +364,6 @@ class BaseAudioProcessor(AudioProcessingMixin):
             raise ValueError(
                 "When setting `truncation=True`, make sure that `max_length` is defined."
             )
-
-    def _get_padding_strategies(self, padding=False, max_length=None):
-        """Find the correct padding strategy."""
-        if padding is not False:
-            if padding is True:
-                padding_strategy = PaddingStrategy.LONGEST
-            elif not isinstance(padding, PaddingStrategy):
-                padding_strategy = PaddingStrategy(padding)
-            elif isinstance(padding, PaddingStrategy):
-                padding_strategy = padding
-        else:
-            padding_strategy = PaddingStrategy.DO_NOT_PAD
-
-        if max_length is None:
-            if padding_strategy == PaddingStrategy.MAX_LENGTH:
-                raise ValueError(
-                    f"When setting ``padding={PaddingStrategy.MAX_LENGTH}``, make sure that max_length is defined"
-                )
-
-        if padding_strategy != PaddingStrategy.DO_NOT_PAD and (self.padding_value is None):
-            raise ValueError(
-                "Asking to pad but the feature_extractor does not have a padding value. Please select a value to use"
-                " as `padding_value`. For example: `feature_extractor.padding_value = 0.0`."
-            )
-
-        return padding_strategy
 
     def to_dict(self):
         output = super().to_dict()
@@ -403,14 +437,9 @@ class BaseAudioProcessor(AudioProcessingMixin):
         Implemented by backend subclasses."""
         raise NotImplementedError
 
-    def _get_mask(self, audio_ranges, padded_length, do_extract_spectrogram, spectrogram_config):
-        """Build attention mask dict from audio_ranges. Returns a dict of {key: mask} to merge into output.
-        Implemented by backend subclasses."""
-        raise NotImplementedError
-
-    def _get_feature_mask(self, feature_ranges, padded_length):
-        """Build attention mask dict from feature_ranges.
-        Implemented by backend subclasses."""
+    def _get_mask(self, ranges, padded_length):
+        """Create a binary mask array of shape (len(ranges), padded_length) with 1s at each
+        (start, end) range. Implemented by backend subclasses."""
         raise NotImplementedError
 
     # ── Spectrogram extraction pipeline ──────────────────────────────────

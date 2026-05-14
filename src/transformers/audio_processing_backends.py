@@ -108,25 +108,11 @@ class NumpyAudioBackend(BaseAudioProcessor):
 
     # ── Masking ───────────────────────────────────────────────────────────
 
-    def _get_mask(self, audio_ranges, padded_length, do_extract_spectrogram, spectrogram_config):
-        use_audio_mask = self.mask_level == "audio"
-        if do_extract_spectrogram and not use_audio_mask:
-            spec_cfg = spectrogram_config or self.spectrogram_config
-            audio_lengths = np.array([end - start for start, end in audio_ranges])
-            features_lengths = self._get_features_lengths(audio_lengths, spec_cfg)
-            n_features = self._get_features_lengths(padded_length, spec_cfg, include_center_frame=True)
-            mask = (np.arange(n_features)[None, :] < features_lengths[:, None]).astype(np.int32)
-            return {"audio_features_mask": mask}
-        mask = np.zeros((len(audio_ranges), padded_length), dtype=np.int32)
-        for i, (start, end) in enumerate(audio_ranges):
+    def _get_mask(self, ranges, padded_length):
+        mask = np.zeros((len(ranges), padded_length), dtype=np.int32)
+        for i, (start, end) in enumerate(ranges):
             mask[i, start:end] = 1
-        return {("audio_features_mask" if do_extract_spectrogram else "audio_values_mask"): mask}
-
-    def _get_feature_mask(self, feature_ranges, padded_length):
-        mask = np.zeros((len(feature_ranges), padded_length), dtype=np.int32)
-        for i, (start, end) in enumerate(feature_ranges):
-            mask[i, start:end] = 1
-        return {"audio_features_mask": mask}
+        return mask
 
     # ── STFT pipeline ─────────────────────────────────────────────────────
 
@@ -393,25 +379,11 @@ class TorchAudioBackend(BaseAudioProcessor):
 
     # ── Masking ───────────────────────────────────────────────────────────
 
-    def _get_mask(self, audio_ranges, padded_length, do_extract_spectrogram, spectrogram_config):
-        use_audio_mask = self.mask_level == "audio"
-        if do_extract_spectrogram and not use_audio_mask:
-            spec_cfg = spectrogram_config or self.spectrogram_config
-            audio_lengths = torch.tensor([end - start for start, end in audio_ranges])
-            features_lengths = self._get_features_lengths(audio_lengths, spec_cfg)
-            n_features = self._get_features_lengths(padded_length, spec_cfg, include_center_frame=True)
-            mask = (torch.arange(n_features)[None, :] < features_lengths[:, None]).to(torch.int32)
-            return {"audio_features_mask": mask}
-        mask = torch.zeros((len(audio_ranges), padded_length), dtype=torch.int32)
-        for i, (start, end) in enumerate(audio_ranges):
+    def _get_mask(self, ranges, padded_length):
+        mask = torch.zeros((len(ranges), padded_length), dtype=torch.int32)
+        for i, (start, end) in enumerate(ranges):
             mask[i, start:end] = 1
-        return {("audio_features_mask" if do_extract_spectrogram else "audio_values_mask"): mask}
-
-    def _get_feature_mask(self, feature_ranges, padded_length):
-        mask = torch.zeros((len(feature_ranges), padded_length), dtype=torch.int32)
-        for i, (start, end) in enumerate(feature_ranges):
-            mask[i, start:end] = 1
-        return {"audio_features_mask": mask}
+        return mask
 
     # ── STFT pipeline ─────────────────────────────────────────────────────
 
