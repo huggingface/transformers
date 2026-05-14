@@ -260,11 +260,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         # "sapiens2_0.4b_pretrain.safetensors" instead of "model.safetensors"
         config = Sapiens2Config()
         config.transformers_weights = "sapiens2_0.4b_pretrain.safetensors"
-        model = (
-            Sapiens2Model.from_pretrained("facebook/sapiens2-pretrain-0.4b", config=config)
-            .eval()
-            .to(torch_device)
-        )
+        model = Sapiens2Model.from_pretrained("facebook/sapiens2-pretrain-0.4b", config=config).eval().to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
