@@ -314,8 +314,9 @@ forms the `content` input. We get `name` by capturing it in the `open_pattern` r
 a tool call dict. Finally, we wrap the tool call dict in an outer dict, which adds `type: "function"` as in the SmolLM
 example.
 
-In general, the `jmespath` syntax is very straightforward. The special symbols `@` and `*` are usually not necessary,
-but they are supported if you really need them. The main case when this becomes necessary is when the field content
+In general, the `jmespath` syntax is very straightforward. `jmespath` experts may be familiar with the
+special symbols `@` (meaning the entire input dict) and `*` (the input iterator). These are usually not necessary,
+but they are supported if you really need them. The main case when `*` becomes necessary is when the field content
 is a list and we want to transform every element, which often occurs with Cohere models:
 
 ```python
