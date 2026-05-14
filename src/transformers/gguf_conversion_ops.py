@@ -73,7 +73,10 @@ def _ensure_metal_kernels():
     try:
         from kernels import get_kernel  # type: ignore[import-not-found]
 
-        _GGUF_METAL_KERNELS = get_kernel("kernels-community/gguf-dequant")
+        # Override with `TRANSFORMERS_GGUF_METAL_KERNELS_REPO=…` (pointed at the
+        # personal namespace while the kernels-community transfer is in flight).
+        repo = os.environ.get("TRANSFORMERS_GGUF_METAL_KERNELS_REPO", "ArthurZ/gguf-dequant")
+        _GGUF_METAL_KERNELS = get_kernel(repo)
     except Exception:
         _GGUF_METAL_KERNELS = None
     return _GGUF_METAL_KERNELS
