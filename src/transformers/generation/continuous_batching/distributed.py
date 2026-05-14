@@ -59,6 +59,9 @@ class DistributedHelper:
         self.dp_rank = self.global_rank // self.tp_size
         self.dp_size = self.world_size // self.tp_size
 
+        # Accumulator to CPU integer comm
+        self._cpu_int_acc = torch.tensor([0], dtype=torch.int64, device="cpu")
+
     def infer_if_tp_driver(self) -> bool:
         return self.tp_local_rank == 0
 
@@ -74,10 +77,12 @@ class DistributedHelper:
             dist.broadcast(value, src=self.tp_root_global_rank, async_op=False, group=self.tp_group)
         return value
 
-    def tp_broadcast_cpu_from_rank_0(self, value: torch.Tensor) -> torch.Tensor:
-        """Inside each TP group, broadcasts a CPU tensor from rank 0 over the gloo CPU comm group."""
+    def tp_broadcast_int(self, value: int) -> int:
+        """Inside each TP group, broadcasts an integer from rank 0 over the gloo CPU comm group."""
         if self.tp_size > 1:
-            dist.broadcast(value, src=self.tp_root_global_rank, async_op=False, group=self.cpu_comm_group)
+            self._cpu_int_acc[0] = value
+            dist.broadcast(self._cpu_int_acc, src=self.tp_root_global_rank, async_op=False, group=self.cpu_comm_group)
+            value = self._cpu_int_acc[0].item()
         return value
 
     def tp_all_reduce_min(self, value: torch.Tensor) -> torch.Tensor:

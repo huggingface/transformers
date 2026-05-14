@@ -187,6 +187,7 @@ class ContinuousBatchProcessor:
 
         # Get an integer seed for the TP group. Also work for no TP.
         self.distributed_helper.set_tp_seed(continuous_batching_config.seed, model_device)
+        self.driver_stopped = False  # will be set to True if the TP driver stops the generation loop
 
         # Retrieve the size of the sliding window if there is one
         self.sliding_window = 1 if getattr(config, "sliding_window", None) is None else config.sliding_window
@@ -255,24 +256,32 @@ class ContinuousBatchProcessor:
         self.inputs_and_outputs.reset()
         self.cache.free_all_requests()
         self.metrics = ContinuousBatchProcessorMetrics(self.cache.max_batch_tokens)
+        self.driver_stopped = False
 
     @traced
-    def _get_new_requests(self) -> None:
+    def _get_new_requests(self) -> bool:
         """Pull new requests and cancellations from the queues and apply them to the scheduler. In the context of TP,
-        only the TP driver of the TP group does this, and broadcast the new_states / cancellations to other TP ranks."""
+        only the TP driver of the TP group does this, and broadcasts the new_states / cancellations to other TP ranks.
+        Returns a boolean indicating if the TP driver for this group has stopped."""
         # The payload is filled for TP drivers only, it stays empty for other processes
         payload = ([], [])
         if self.input_queue is not None and self.cancel_queue is not None:
             payload = (drain_queue(self.input_queue), drain_queue(self.cancel_queue))
 
-        # Cheap CPU-only comm to know if there is a payload to broadcast, to avoid pickling and broadcasting emptiness
-        semaphore = torch.tensor([len(payload[0]) + len(payload[1])], dtype=torch.int64)
-        self.distributed_helper.tp_broadcast_cpu_from_rank_0(semaphore)
+        # Cheap CPU-only comm to know if there is a payload to broadcast or if the driver is stopping
+        if self.stop_event.is_set():
+            signal = -1
+        else:
+            signal = len(payload[0]) + len(payload[1])
+        signal = self.distributed_helper.tp_broadcast_int(signal)
 
-        # Early exit if there is no payload to broadcast
-        if semaphore.item() == 0:
-            return None
-        # Otherwise, broadcast and unpack the payload. No-op whe TP size is 1.
+        # If the signal is 0, it means the driver has nothing to send: stop here
+        if signal == 0:
+            return False
+        # Else if it is strictly below 0, it means the driver is stopping: do the same
+        elif signal < 0:
+            return True
+        # Otherwise, the payload size is above 0, so there is a payload to broadcast and unpack (no-op for TP size 1)
         new_states, cancellations = self.distributed_helper.tp_broadcast_object(payload)
 
         # All ranks apply the same updates in the same order.
@@ -285,6 +294,7 @@ class ContinuousBatchProcessor:
                 self._handle_request_error(e, state)
         for request_id in cancellations:
             self.scheduler.set_request_cancellation(request_id)
+        return False
 
     @traced
     def _handle_request_error(self, error: Exception, state: RequestState) -> None:
@@ -306,8 +316,10 @@ class ContinuousBatchProcessor:
         """Prepare tensors and metadata for the next model forward pass. Returns True if there are requests to process,
         False otherwise."""
 
-        # Get new requests from the queue, stop if there are no pending requests
-        self._get_new_requests()
+        # Get new requests from the queue. If the driver signaled collective stop, surface it to the manager.
+        self.driver_stopped = self._get_new_requests()
+        if self.driver_stopped:
+            return False
         cancelled_states = self.scheduler.clear_cancelled_requests()
         # Also free CPU-offloaded cache for cancelled states. This is CPU-only, so it isn't batched like D2H transfers
         for state in cancelled_states:
@@ -870,7 +882,8 @@ class ContinuousBatchingManager:
                 self._generation_step()
                 self.current_batch += 1
 
-            while (not self.stop_event.is_set()) or batch_processor.has_pending_requests():
+            # The loop continues until the TP driver stops or there are no more pending requests
+            while (not batch_processor.driver_stopped) or batch_processor.has_pending_requests():
                 self._inner_generation_loop(batch_processor)
                 self.current_batch += 1
 
@@ -938,7 +951,6 @@ class ContinuousMixin:
         generation_config: GenerationConfig | None = None,
         continuous_batching_config: ContinuousBatchingConfig | None = None,
         workload_hints: WorkloadHints | None = None,
-        **deprecated_kwargs,
     ) -> ContinuousBatchingManager:
         """Initialize a manager for continuous batching inference.
 
@@ -947,9 +959,6 @@ class ContinuousMixin:
             continuous_batching_config: An optional continuous batching configuration
             workload_hints: Optional WorkloadHints to help the continuous batching manager make better decisions for
                 default values
-            **deprecated_kwargs: Deprecated arguments that are now passed in the continuous_batching_config. Those are:
-                max_queue_size, q_padding_interval_size, kv_padding_interval_size, allow_block_sharing,
-                use_async_batching, max_cached_graphs
         Returns:
             `ContinuousBatchingManager`: The manager instance to add requests and retrieve results.
         """
@@ -982,7 +991,6 @@ class ContinuousMixin:
                 continuous_batching_config = gen_config.continuous_batching_config
             else:
                 continuous_batching_config = ContinuousBatchingConfig()
-        continuous_batching_config.account_for_cb_deprecated_arguments(**deprecated_kwargs)
 
         # Create and return the manager
         return ContinuousBatchingManager(
@@ -1010,7 +1018,6 @@ class ContinuousMixin:
         persistent_manager: bool = False,
         warmup: bool = True,
         workload_hints: WorkloadHints | None = None,
-        **deprecated_kwargs,
     ) -> Generator[ContinuousBatchingManager]:
         """A context manager to safely use the continuous batching manager. Arguments are similar to the ones of
         `init_continuous_batching`, except for:
@@ -1022,7 +1029,6 @@ class ContinuousMixin:
             generation_config=generation_config,
             continuous_batching_config=continuous_batching_config,
             workload_hints=workload_hints,
-            **deprecated_kwargs,
         )
         if warmup and not manager.warmed_up:
             # Warmup is long (~30 sec): best to signal the user it's happening than let them think the manager is stuck
@@ -1062,8 +1068,6 @@ class ContinuousMixin:
             progress_bar: If set to true, a progress bar will be displayed
             persistent_manager: whether to persist the manager after the generation is finished. Default is False.
             warmup: whether to pre-capture CUDA graphs before processing requests. Default is True.
-            **kwargs: Additional generation parameters. Only max_new_tokens is used, but other deprecated arguments
-                are extracted and passed to the continuous_batching_config object.
         Returns:
             `dict[str, GenerationOutput]`: a dictionary of request ids to GenerationOutput objects
         """
@@ -1075,21 +1079,6 @@ class ContinuousMixin:
         if logger.getEffectiveLevel() <= logging.DEBUG:
             logger.warning("Progress bar is disabled when logger level is less than DEBUG")
             progress_bar = False
-
-        # Extract deprecated arguments from regular kwargs (deprecated in v5.3). These args are now expected in the
-        # continuous_batching_config object.
-        deprecated_kwargs = {}
-        deprecated_keys = [
-            "q_padding_interval_size",
-            "kv_padding_interval_size",
-            "allow_block_sharing",
-            "use_async_batching",
-            "max_cached_graphs",
-            "max_queue_size",
-        ]
-        for depr_key in deprecated_keys:
-            if depr_key in kwargs:
-                deprecated_kwargs[depr_key] = kwargs.pop(depr_key)
 
         # Compute the total number of requests
         gen_cfg = self.generation_config if generation_config is None else generation_config
@@ -1115,7 +1104,6 @@ class ContinuousMixin:
             persistent_manager=persistent_manager,
             warmup=warmup,
             workload_hints=workload_hints,
-            **deprecated_kwargs,
         )
         logging_cm = logging_redirect_tqdm([logger])
         pbar_cm = tqdm(
