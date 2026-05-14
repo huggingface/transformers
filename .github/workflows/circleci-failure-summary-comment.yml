@@ -13,8 +13,8 @@ jobs:
     permissions:
       pull-requests: write
     env:
-      TARGET_BRANCH: ${{ github.event.pull_request.head.ref }}
-      TARGET_SHA: ${{ github.event.pull_request.head.sha }}
+      PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+      PR_SHA: ${{ github.event.pull_request.head.sha }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
     steps:
       - name: Checkout repository
