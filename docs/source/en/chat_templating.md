@@ -189,6 +189,19 @@ model.generate(**formatted_chat)
 > [!WARNING]
 > You shouldn't use [add_generation_prompt](https://huggingface.co/docs/transformers/internal/tokenization_utils#transformers.PreTrainedTokenizerBase.apply_chat_template.add_generation_prompt) and [continue_final_message](https://huggingface.co/docs/transformers/internal/tokenization_utils#transformers.PreTrainedTokenizerBase.apply_chat_template.continue_final_message) together. The former adds tokens that start a new message, while the latter removes end of sequence tokens. Using them together returns an error.
 
+Pass a field name as a string to prefill that field instead of `content`. Reasoning models often expose a separate field, like `reasoning_content` on Qwen or `thinking` on Gemma. Prefilling `content` closes the reasoning block before generation starts, so the model can't continue inside it. Prefilling the reasoning field directly leaves the block open.
+
+```py
+chat = [
+    {"role": "user", "content": "Explain 1+1"},
+    {"role": "assistant", "reasoning_content": "The user wants a simple addition. ", "content": ""},
+]
+
+formatted_chat = tokenizer.apply_chat_template(chat, tokenize=False, continue_final_message="reasoning_content")
+```
+
+The named field must exist on the final message and must be referenced by the chat template. An error is raised when either check fails.
+
 [`TextGenerationPipeline`] sets [add_generation_prompt](https://huggingface.co/docs/transformers/internal/tokenization_utils#transformers.PreTrainedTokenizerBase.apply_chat_template.add_generation_prompt) to `True` by default to start a new message. However, if the final message in the chat has the `assistant` role, it assumes the message is a prefill and switches to `continue_final_message=True`. This is because most models don't support multiple consecutive assistant messages. To override this behavior, explicitly pass the [continue_final_message](https://huggingface.co/docs/transformers/internal/tokenization_utils#transformers.PreTrainedTokenizerBase.apply_chat_template.continue_final_message) argument to the pipeline.
 
 ## Model training
