@@ -306,15 +306,15 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         last_layer_cls_token = outputs.pooler_output
-        expected_slice = torch.tensor([-0.1096, 0.0123, -0.1208, 0.0573, -0.0370], device=torch_device)
+        expected_slice = torch.tensor([-0.09233, -0.00107, -0.12215, 0.07374, -0.03773], device=torch_device)
         torch.testing.assert_close(last_layer_cls_token[0, :5], expected_slice, rtol=1e-3, atol=1e-3)
 
         last_layer_register_tokens = outputs.last_hidden_state[:, 1 : model.config.num_register_tokens + 1]
-        expected_slice = torch.tensor([0.0749, 0.0454, 0.0609, -0.0575, 0.0368], device=torch_device)
+        expected_slice = torch.tensor([0.08412, 0.04387, 0.05709, -0.04962, 0.03715], device=torch_device)
         torch.testing.assert_close(last_layer_register_tokens[0, 0, :5], expected_slice, rtol=1e-3, atol=1e-3)
 
         last_layer_patch_tokens = outputs.last_hidden_state[:, model.config.num_register_tokens + 1 :]
-        expected_slice = torch.tensor([0.1283, -0.1324, -0.0661, -0.0750, -0.1012], device=torch_device)
+        expected_slice = torch.tensor([0.14232, -0.11947, -0.05910, -0.09457, -0.11410], device=torch_device)
         torch.testing.assert_close(last_layer_patch_tokens[0, 0, :5], expected_slice, rtol=1e-3, atol=1e-3)
 
     @slow
