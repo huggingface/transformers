@@ -55,7 +55,15 @@ class Serve:
             bool | None, typer.Option(help="Enable CUDA graphs for continuous batching.")
         ] = None,
         attn_implementation: Annotated[
-            str | None, typer.Option(help="Attention implementation (e.g. flash_attention_2).")
+            str | None,
+            typer.Option(
+                help=(
+                    "Attention implementation. One of: 'eager', 'sdpa', 'flash_attention_2', "
+                    "'flash_attention_3', 'flex_attention', or any 'kernels-community/<name>' kernel "
+                    "(e.g. 'kernels-community/metal-flash-sdpa' on Apple Silicon — auto-selected if "
+                    "left unset on MPS with `kernels` installed)."
+                ),
+            ),
         ] = None,
         compile: Annotated[bool, typer.Option(help="Enable torch.compile for faster inference.")] = False,
         quantization: Annotated[

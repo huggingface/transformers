@@ -130,7 +130,7 @@ class ModelManager:
         self.device = int(device) if device.isdigit() else device
         self.dtype = self._resolve_dtype(dtype)
         self.trust_remote_code = trust_remote_code
-        self.attn_implementation = attn_implementation
+        self.attn_implementation = self._resolve_attn_implementation(attn_implementation, self.device)
         self.quantization = quantization
         self.model_timeout = model_timeout
         self.force_model = force_model
@@ -157,6 +157,35 @@ class ModelManager:
                 f"Unsupported dtype: '{dtype}'. Must be 'auto' or a valid torch dtype (e.g. 'float16', 'bfloat16')."
             )
         return resolved
+
+    @staticmethod
+    def _resolve_attn_implementation(attn_implementation: str | None, device: str | int) -> str | None:
+        """Auto-select a flash-attention kernel when the user didn't specify one.
+
+        On Apple Silicon (MPS) with ``kernels`` installed, default to
+        ``kernels-community/metal-flash-sdpa`` instead of plain SDPA — it's
+        materially faster (~1.6x on gsm8k generate_batch) and matches SDPA
+        token-for-token for greedy generation.
+        """
+        if attn_implementation is not None:
+            return attn_implementation
+
+        import torch
+
+        from ...integrations.hub_kernels import _kernels_available
+
+        is_mps_device = (
+            isinstance(device, str)
+            and device.startswith("mps")
+            or (device == "auto" and torch.backends.mps.is_available() and not torch.cuda.is_available())
+        )
+        if is_mps_device and _kernels_available:
+            logger.warning_once(
+                "MPS detected and `kernels` is installed: defaulting attention to "
+                "`kernels-community/metal-flash-sdpa`. Pass `--attn-implementation sdpa` to opt out."
+            )
+            return "kernels-community/metal-flash-sdpa"
+        return attn_implementation
 
     def _validate_args(self):
         if self.quantization is not None and self.quantization not in ("bnb-4bit", "bnb-8bit"):
