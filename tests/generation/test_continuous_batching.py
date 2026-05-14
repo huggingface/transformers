@@ -677,23 +677,42 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
                 [False, True],
                 ["eager", "sdpa", "flash_attention_2"],
                 [False, True],
-                [False, True],
             )
         )
     )
     @slow
-    def test_continuous_batching_config_combinations(
+    def test_continuous_batching_config_combinations_no_compile(
         self,
         allow_block_sharing: bool,
         attn_implementation: str,
         use_cuda_graph: bool,
-        use_compile: bool,
     ) -> None:
+        # Compiling adds a lot of overhead, so it's better not to include here (2*3*2=12 tests because of cross product)
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         continuous_batching_config = ContinuousBatchingConfig(
             allow_block_sharing=allow_block_sharing,
             use_cuda_graph=use_cuda_graph,
-            use_default_compile_configs=use_compile,
+            use_default_compile_configs=False,
+        )
+        self._test_continuous_batching_parity(
+            model_id=model_id,
+            continuous_batching_config=continuous_batching_config,
+            attn_implementation=attn_implementation,
+        )
+
+    @parameterized.expand(
+        [("eager", False), ("sdpa", False), ("sdpa", True), ("flash_attention_2", True)]
+    )
+    @slow
+    def test_continuous_batching_config_combinations_with_compile(
+        self,
+        attn_implementation: str,
+        use_cuda_graph: bool,
+    ) -> None:
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        continuous_batching_config = ContinuousBatchingConfig(
+            use_cuda_graph=use_cuda_graph,
+            use_default_compile_configs=True,
         )
         self._test_continuous_batching_parity(
             model_id=model_id,
@@ -706,7 +725,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     @parameterized.expand(
         list(
             itertools.product(
-                ["TinyLlama/TinyLlama-1.1B-Chat-v1.0", "google/gemma-2-2b-it"],
+                ["google/gemma-2-2b-it"],
                 [False, True],
                 [False, True],
             )
@@ -1084,18 +1103,25 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     #               Tests to check addtional features of CB do not change its results               #
     # --------------------------------------------------------------------------------------------- #
     @parameterized.expand(
-        list(
-            itertools.product(
-                ["sdpa", "flash_attention_2", "flash_attention_3"],
-                [False, True],
-                [False, True],
-            )
-        )
+        [
+            # SDPA: basic features or full features
+            ("sdpa", False, False),
+            ("sdpa", True, True),
+            # FA2: full coverage
+            ("flash_attention_2", False, False),
+            ("flash_attention_2", False, True),
+            ("flash_attention_2", True, False),
+            ("flash_attention_2", True, True),
+            # FA3: always turn on CUDA graphs
+            ("flash_attention_3", True, False),
+            ("flash_attention_3", True, True),
+        ]
     )
     @slow
     def test_continuous_batching_async(
         self, attn_implementation: str, use_cuda_graph: bool, use_compile: bool
     ) -> None:
+        # Again, we try to not overly use_compile because it adds a lot of overhead
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         self._test_continuous_batching_parity(
             model_id=model_id,
