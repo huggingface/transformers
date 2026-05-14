@@ -422,5 +422,7 @@ class HfArgumentParser(ArgumentParser):
 
                 - the dataclass instances in the same order as they were passed to the initializer.
         """
-        outputs = self.parse_dict(yaml.safe_load(Path(yaml_file).read_text(encoding="utf-8")), allow_extra_keys=allow_extra_keys)
+        outputs = self.parse_dict(
+            yaml.safe_load(Path(yaml_file).read_text(encoding="utf-8")), allow_extra_keys=allow_extra_keys
+        )
         return tuple(outputs)
