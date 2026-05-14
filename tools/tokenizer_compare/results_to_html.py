@@ -36,18 +36,57 @@ h2{margin:0 0 12px 0;font-size:1rem}
 """
 
 
+def _normalize_post_processor(value: str) -> str:
+    """Normalize post_processor by sorting template elements.
+
+    Extracts and sorts the elements in single= and pair= templates to ignore
+    differences that are just ordering of the same elements.
+    """
+    import re
+
+    def sort_template_elements(match):
+        # match.group(1) is the content between [ and ]
+        content = match.group(1)
+        # Split by top-level commas (avoiding nested comma splitting)
+        elements = []
+        current = ""
+        depth = 0
+        for char in content:
+            if char in "([{":
+                depth += 1
+            elif char in ")]}":
+                depth -= 1
+            elif char == "," and depth == 0:
+                elements.append(current.strip())
+                current = ""
+                continue
+            current += char
+        if current.strip():
+            elements.append(current.strip())
+
+        # Sort elements for consistent comparison
+        sorted_elements = sorted(elements)
+        return "[" + ", ".join(sorted_elements) + "]"
+
+    # Replace single=[...] and pair=[...] with sorted versions
+    normalized = re.sub(r"\[(.*?)\](?=[,\)])", sort_template_elements, value)
+    return normalized
+
+
 def should_ignore_diff(diff: Dict) -> bool:
-    """Check if diff should be ignored (only useless ByteLevel flags).
-    
+    """Check if diff should be ignored (only useless ByteLevel flags or post_processor ordering).
+
     Ignores diffs where ALL differences are in decoder and/or pre_tokenizer fields,
     and within those fields, the only differences are add_prefix_space, trim_offsets,
     and use_regex (implementation details that don't affect tokenization).
+
+    Also ignores diffs in post_processor where only the ordering of template elements differs.
     """
     if not diff:
         return False
 
-    # Check if only decoder/pre_tokenizer fields differ
-    non_trivial_fields = [f for f in diff.keys() if f not in ("decoder", "pre_tokenizer")]
+    # Check if only decoder/pre_tokenizer/post_processor fields differ
+    non_trivial_fields = [f for f in diff.keys() if f not in ("decoder", "pre_tokenizer", "post_processor")]
     if non_trivial_fields:
         return False
 
@@ -55,19 +94,27 @@ def should_ignore_diff(diff: Dict) -> bool:
     pattern = r"[,\s]*(add_prefix_space|trim_offsets|use_regex)=[^,\)]*"
 
     for field, pair in diff.items():
-        if field not in ("decoder", "pre_tokenizer"):
+        if field not in ("decoder", "pre_tokenizer", "post_processor"):
             return False
 
         auto_val = pair.get("auto", "")
         backend_val = pair.get("backend", "")
 
-        # Remove the useless flags from both values
-        auto_clean = re.sub(pattern, "", auto_val)
-        backend_clean = re.sub(pattern, "", backend_val)
+        if field in ("decoder", "pre_tokenizer"):
+            # Remove the useless flags from both values
+            auto_clean = re.sub(pattern, "", auto_val)
+            backend_clean = re.sub(pattern, "", backend_val)
 
-        # If the cleaned versions differ, there's a significant diff
-        if auto_clean != backend_clean:
-            return False
+            # If the cleaned versions differ, there's a significant diff
+            if auto_clean != backend_clean:
+                return False
+        elif field == "post_processor":
+            # Normalize by sorting template elements, then compare
+            auto_normalized = _normalize_post_processor(auto_val)
+            backend_normalized = _normalize_post_processor(backend_val)
+
+            if auto_normalized != backend_normalized:
+                return False
 
     return True
 
@@ -166,8 +213,8 @@ def main() -> int:
     script_dir = Path(__file__).resolve().parent
 
     p = argparse.ArgumentParser()
-    p.add_argument("--input", default="tokenizer_compare_results.json")
-    p.add_argument("--output", default="tokenizer_diff_report.html")
+    p.add_argument("--input", default="tokenizer_compare_results_rerun2.json")
+    p.add_argument("--output", default="tokenizer_diff_report_rerun2_2.html")
     p.add_argument("--show-all", action="store_true", help="Show all diffs, including useless flag differences")
     args = p.parse_args()
 
