@@ -9,7 +9,11 @@ from torch.distributed.tensor import DTensor
 from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.distributed import DistributedConfig
-from transformers.distributed.utils import load_optimizer, save_optimizer, _replicate_dtensor
+from transformers.distributed.utils import (
+    _replicate_dtensor,
+    load_optimizer_distributed,
+    save_optimizer_distributed,
+)
 
 def build_packed_dataset(dataset_name, tokenizer, seq_len, dp_rank, dp_world_size):
     """Stream + tokenize + greedy-pack documents into fixed-length (input, label) windows."""
@@ -36,7 +40,8 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_name", type=str, default="Qwen/Qwen3-0.6B")
-    parser.add_argument("--num_steps", type=int, default=20)
+    parser.add_argument("--start_step", type=int, default=0, help="Inclusive start of the step range to train")
+    parser.add_argument("--stop_step", type=int, default=20, help="Exclusive end of the step range to train")
     parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--seq_len", type=int, default=512)
     parser.add_argument("--batch_size", type=int, default=1)
@@ -46,8 +51,12 @@ if __name__ == "__main__":
     parser.add_argument("--enable_sp", action="store_true", help="Enable sequence parallelism")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--fixed_batches", action="store_true", help="Use pre-generated fixed batches instead of C4")
-    parser.add_argument("--resume_dir", type=str, default=None, help="Resume from this checkpoint directory")
-    parser.add_argument("--start_step", type=int, default=0, help="Starting step number (for logging)")
+    parser.add_argument("--resume_dir", type=str, default=None,
+                        help="Resume model + optimizer from a save_pretrained(distributed_checkpoint=True) dir")
+    parser.add_argument("--save_at_step", type=int, default=None,
+                        help="Save a distributed checkpoint at this step number (inside [start_step, stop_step))")
+    parser.add_argument("--distributed_checkpoint", action="store_true",
+                        help="Use distributed_checkpoint=True for the final save (per-rank shards via DCP + HF consolidation)")
     args = parser.parse_args()
 
     torch.distributed.init_process_group(backend="nccl")
@@ -66,12 +75,16 @@ if __name__ == "__main__":
         dc_kwargs["enable_sequence_parallel"] = True
     distributed_config = DistributedConfig(**dc_kwargs)
 
+    # Both `args.model_name` (HF hub) and `args.resume_dir` (written by save_pretrained,
+    # canonical or distributed_checkpoint=True) are plain HF-format directories — same load path.
     load_path = args.resume_dir if args.resume_dir else args.model_name
     model = AutoModelForCausalLM.from_pretrained(
         load_path,
         distributed_config=distributed_config,
         torch_dtype=torch.bfloat16,
     )
+    if args.resume_dir and rank == 0:
+        print(f"Resumed model from {args.resume_dir}")
 
     dp_rank = model.device_mesh["fsdp"].get_local_rank() if "fsdp" in model.device_mesh.mesh_dim_names else 0
     dp_size = model.device_mesh["fsdp"].size() if "fsdp" in model.device_mesh.mesh_dim_names else 1
@@ -88,12 +101,18 @@ if __name__ == "__main__":
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
 
     if args.resume_dir:
-        load_optimizer(model, optimizer, os.path.join(args.resume_dir, "optimizer"))
-        if rank == 0:
-            print(f"Resumed optimizer from {args.resume_dir}")
+        optim_dir = os.path.join(args.resume_dir, "optimizer")
+        if os.path.exists(optim_dir):
+            load_optimizer_distributed(model, optimizer, optim_dir)
+            if rank == 0:
+                print(f"Resumed optimizer from {optim_dir}")
+        elif rank == 0:
+            print(f"No optimizer state at {optim_dir}; starting from fresh optimizer state")
+
+    intermediate_dir = os.path.join(args.save_dir, "intermediate")
 
     model.train()
-    for step in range(args.start_step, args.start_step + args.num_steps):
+    for step in range(args.start_step, args.stop_step):
         if args.fixed_batches:
             input_ids = fixed[step]["input_ids"].to(f"cuda:{local_rank}")
             labels = fixed[step]["labels"].to(f"cuda:{local_rank}")
@@ -118,11 +137,21 @@ if __name__ == "__main__":
         if rank == 0:
             print(f"Step {step:>4d} | Loss: {loss.item():.4f} | Grad norm: {total_norm.item():.4f}")
 
-    # Save model (HF format) and optimizer (DCP)
-    model.save_pretrained(args.save_dir)
-    save_optimizer(model, optimizer, os.path.join(args.save_dir, "optimizer"))
+        # Mid-training distributed checkpoint: every rank writes its own shard in parallel via DCP +
+        # HuggingFaceStorageWriter consolidation, plus DCP optimizer save. The resulting directory
+        # is still HF-safetensors-compatible, so `from_pretrained(intermediate_dir, ...)` resumes it.
+        if args.save_at_step is not None and step == args.save_at_step:
+            model.save_pretrained(intermediate_dir, distributed_checkpoint=True)
+            save_optimizer_distributed(model, optimizer, os.path.join(intermediate_dir, "optimizer"))
+            if rank == 0:
+                print(f"Saved distributed checkpoint at step {step} to {intermediate_dir}")
 
+    # Final save: either canonical single-file HF safetensors (rank-0 gather) or distributed
+    # per-rank shards (DCP + HuggingFaceStorageWriter consolidation). Both are HF-format dirs
+    # that `from_pretrained` can resume from. Optimizer always saved via DCP.
+    model.save_pretrained(args.save_dir, distributed_checkpoint=args.distributed_checkpoint)
+    save_optimizer_distributed(model, optimizer, os.path.join(args.save_dir, "optimizer"))
     if rank == 0:
-        print(f"Saved to {args.save_dir}")
+        print(f"Saved final checkpoint to {args.save_dir}")
 
     torch.distributed.destroy_process_group()
