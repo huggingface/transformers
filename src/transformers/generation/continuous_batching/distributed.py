@@ -60,7 +60,6 @@ class DistributedHelper:
         self.dp_size = self.world_size // self.tp_size
 
     def infer_if_tp_driver(self) -> bool:
-        """Infer if the current process is the TP driver."""
         return self.tp_local_rank == 0
 
     def destroy_cpu_comm_group(self) -> None:
