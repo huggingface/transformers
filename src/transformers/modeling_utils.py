@@ -98,7 +98,7 @@ from .modeling_flash_attention_utils import (
 )
 from .modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from .monkey_patching import apply_patches, patch_output_recorders
-from .pytorch_utils import id_tensor_storage
+from .pytorch_utils import _torch_distributed_available, id_tensor_storage
 from .quantizers import HfQuantizer
 from .quantizers.auto import get_hf_quantizer
 from .quantizers.quantizers_utils import get_module_from_name
