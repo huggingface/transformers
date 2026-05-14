@@ -321,7 +321,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
     def test_inference_semantic_segmentation(self):
         # TODO(guarin): remove config. transformers_weights required for now because original checkpoints are called
         # "sapiens2_0.4b_seg.safetensors" instead of "model.safetensors"
-        config = Sapiens2Config()
+        config = Sapiens2Config(num_labels=29)
         config.transformers_weights = "sapiens2_0.4b_seg.safetensors"
         model = (
             Sapiens2ForSemanticSegmentation.from_pretrained("facebook/sapiens2-seg-0.4b", config=config)
@@ -344,7 +344,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(logits.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[3.44136, 5.53665, 6.55788], [5.71023, 7.19747, 8.10821], [6.81597, 7.98034, 8.31848]],
+            [[3.45260, 5.55483, 6.57901], [5.71913, 7.21420, 8.11209], [6.82645, 7.98208, 8.31385]],
             device=torch_device,
         )
         torch.testing.assert_close(logits[0, 0, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)
@@ -354,16 +354,14 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(len(segmentation), 1)
         self.assertEqual(segmentation[0].shape, torch.Size([height, width]))
 
-        # verify post-processing with target_sizes: output is resized to original pre-preprocessing image size
-        original_size = tuple(prepare_img().shape[-2:])
-        segmentation = image_processor.post_process_semantic_segmentation(
-            outputs=outputs, target_sizes=[original_size]
-        )
+        # verify post-processing with target_sizes
+        target_size = (height // 2, width // 2)
+        segmentation = image_processor.post_process_semantic_segmentation(outputs=outputs, target_sizes=[target_size])
         self.assertEqual(len(segmentation), 1)
-        self.assertEqual(segmentation[0].shape, torch.Size(list(original_size)))
+        self.assertEqual(segmentation[0].shape, torch.Size(target_size))
 
-        expected_class_ids = torch.tensor([[0, 0, 0], [0, 0, 0], [0, 0, 0]], device=torch_device)
-        torch.testing.assert_close(segmentation[0][:3, :3], expected_class_ids)
+        expected_class_ids = torch.tensor([[4, 3, 3], [3, 3, 3], [3, 3, 3]], device=torch_device)
+        torch.testing.assert_close(segmentation[0][50:53, 50:53], expected_class_ids)
 
 
 @require_torch
