@@ -207,6 +207,233 @@ class GgufLinear(nn.Module):
         return torch.nn.functional.linear(x.to(w.dtype), w)
 
 
+# =============================================================================
+# GgufQwen2MoeExperts — quantized replacement for ``Qwen2MoeExperts``.
+# =============================================================================
+#
+# ``Qwen2MoeExperts`` holds the *entire* MoE block's expert weights:
+#   ``gate_up_proj``: (num_experts, 2*intermediate, hidden)   fp32
+#   ``down_proj``   : (num_experts, hidden, intermediate)     fp32
+# For Qwen2-MoE-A2.7B that's ~520M params per layer × 24 layers — by far the
+# biggest memory line item. Keeping these in fp32 defeats the whole "GGUF
+# quantized weights" pitch for MoE models.
+#
+# This module mirrors the original module's forward pass but stores the gate,
+# up and down weights as *flat uint8 quantized buffers* (one per kind) — 3.5×
+# smaller for Q4_K. Forward iterates over activated experts (same as the
+# original) and per expert dispatches the matching ``mul_mat_vec`` / ``mul_mat``
+# Metal kernel against the right byte slice.
+#
+# Note: the GGUF file ships ``ffn_gate_exps`` and ``ffn_up_exps`` as separate
+# tensors. The standard transformers loader *interleaves* them into a single
+# ``gate_up_proj`` fp32 tensor during dequant. We keep them separate as
+# ``gate_proj_q`` and ``up_proj_q`` because byte-level interleave preserves
+# block structure only when we concatenate full rows — separate buffers are
+# simpler and equivalent.
+
+
+class GgufQwen2MoeExperts(nn.Module):
+    """Drop-in for ``Qwen2MoeExperts`` with quantized expert weights.
+
+    Q4_K_M GGUF files (and several other mixed-precision .gguf builds) ship
+    ``ffn_gate_exps`` / ``ffn_up_exps`` and ``ffn_down_exps`` in **different**
+    quant types per layer (e.g. gate/up = Q4_K, down = Q8_0). Each projection
+    therefore carries its own quant type + format.
+    """
+
+    def __init__(
+        self,
+        config,
+        gate_quant: str,
+        up_quant: str,
+        down_quant: str,
+        device=None,
+    ):
+        super().__init__()
+        for label, qt in (("gate", gate_quant), ("up", up_quant), ("down", down_quant)):
+            if qt not in _QUANT_INFO:
+                raise NotImplementedError(
+                    f"GgufQwen2MoeExperts {label}_quant {qt} not in {sorted(_QUANT_INFO)}"
+                )
+        self.num_experts = config.num_experts
+        self.hidden_dim = config.hidden_size
+        self.intermediate_dim = config.moe_intermediate_size
+        self.gate_quant = gate_quant
+        self.up_quant = up_quant
+        self.down_quant = down_quant
+        self._gate_fmt = _kernel_fmt(type("X", (), {"name": gate_quant})())
+        self._up_fmt = _kernel_fmt(type("X", (), {"name": up_quant})())
+        self._down_fmt = _kernel_fmt(type("X", (), {"name": down_quant})())
+
+        def _bytes_per_expert(qt: str, M: int, K: int) -> int:
+            bb, be = _QUANT_INFO[qt]
+            assert K % be == 0, f"{qt}: K={K} must be a multiple of {be}"
+            return M * (K // be) * bb
+
+        # gate / up : (intermediate, hidden);  down : (hidden, intermediate)
+        self._gate_bytes_per = _bytes_per_expert(gate_quant, self.intermediate_dim, self.hidden_dim)
+        self._up_bytes_per   = _bytes_per_expert(up_quant,   self.intermediate_dim, self.hidden_dim)
+        self._down_bytes_per = _bytes_per_expert(down_quant, self.hidden_dim,        self.intermediate_dim)
+
+        self.register_buffer(
+            "gate_proj_q",
+            torch.empty(self.num_experts * self._gate_bytes_per, dtype=torch.uint8, device=device or "cpu"),
+            persistent=True,
+        )
+        self.register_buffer(
+            "up_proj_q",
+            torch.empty(self.num_experts * self._up_bytes_per, dtype=torch.uint8, device=device or "cpu"),
+            persistent=True,
+        )
+        self.register_buffer(
+            "down_proj_q",
+            torch.empty(self.num_experts * self._down_bytes_per, dtype=torch.uint8, device=device or "cpu"),
+            persistent=True,
+        )
+
+        from ..activations import ACT2FN
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def extra_repr(self) -> str:
+        return (
+            f"num_experts={self.num_experts}, hidden_dim={self.hidden_dim}, "
+            f"intermediate_dim={self.intermediate_dim}, "
+            f"gate={self.gate_quant}, up={self.up_quant}, down={self.down_quant}"
+        )
+
+    def _expert_slice(self, buf: torch.Tensor, expert_idx: int, bytes_per: int) -> torch.Tensor:
+        start = int(expert_idx) * bytes_per
+        return buf.narrow(0, start, bytes_per)
+
+    def _matvec_or_matmul(self, qw: torch.Tensor, x_flat: torch.Tensor, M: int, fmt: str, quant_name: str) -> torch.Tensor:
+        N = x_flat.shape[0]
+        if x_flat.device.type == "mps":
+            mod = _ensure_metal_kernels()
+            if mod is not None:
+                if N == 1:
+                    y = torch.empty(M, dtype=torch.float32, device=x_flat.device)
+                    getattr(mod._ops, f"mul_mat_vec_{fmt}_f32")(qw, x_flat.reshape(-1), y)
+                    return y.unsqueeze(0)
+                else:
+                    y = torch.empty(N * M, dtype=torch.float32, device=x_flat.device)
+                    getattr(mod._ops, f"mul_mat_{fmt}_f32")(qw, x_flat, y)
+                    return y.reshape(N, M)
+        import gguf
+        from ..integrations.gguf_dequant import dequantize_gguf_tensor
+        qt = getattr(gguf.GGMLQuantizationType, quant_name)
+        K = x_flat.shape[-1]
+        w = dequantize_gguf_tensor(qw, qt, device=x_flat.device).reshape(M, K)
+        return torch.nn.functional.linear(x_flat, w)
+
+    @torch.no_grad()
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        top_k_index: torch.Tensor,
+        top_k_weights: torch.Tensor,
+    ) -> torch.Tensor:
+        final_hidden_states = torch.zeros_like(hidden_states)
+        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+        expert_mask = expert_mask.permute(2, 1, 0)
+        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+
+        for expert_idx in expert_hit:
+            expert_idx = expert_idx[0].item()
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx].to(torch.float32).contiguous()
+
+            gate_qw = self._expert_slice(self.gate_proj_q, expert_idx, self._gate_bytes_per)
+            up_qw   = self._expert_slice(self.up_proj_q,   expert_idx, self._up_bytes_per)
+            down_qw = self._expert_slice(self.down_proj_q, expert_idx, self._down_bytes_per)
+
+            gate = self._matvec_or_matmul(gate_qw, current_state, self.intermediate_dim, self._gate_fmt, self.gate_quant)
+            up   = self._matvec_or_matmul(up_qw,   current_state, self.intermediate_dim, self._up_fmt,   self.up_quant)
+            inter = (self.act_fn(gate) * up).contiguous()
+            out = self._matvec_or_matmul(down_qw, inter, self.hidden_dim, self._down_fmt, self.down_quant)
+
+            out = out * top_k_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, out.to(final_hidden_states.dtype))
+
+        return final_hidden_states
+
+
+def replace_qwen2_moe_experts(
+    model: nn.Module,
+    expert_info_by_layer: dict[str, dict],
+) -> int:
+    """Walk `model` and swap each ``Qwen2MoeExperts`` whose layer name appears
+    in ``expert_info_by_layer`` for a :class:`GgufQwen2MoeExperts`.
+
+    ``expert_info_by_layer`` maps the *parent* path (e.g.
+    ``model.layers.0.mlp.experts``) to one entry per projection::
+
+        {
+            "gate_quant":  "Q4_K",
+            "up_quant":    "Q4_K",
+            "down_quant":  "Q8_0",         # mixed quants per layer in Q4_K_M
+            "gate_bytes":  GGUFQuantizedTensor,
+            "up_bytes":    GGUFQuantizedTensor,
+            "down_bytes":  GGUFQuantizedTensor,
+        }
+
+    Returns the number of MoE-experts blocks swapped.
+    """
+    swapped = 0
+    for name, mod in list(model.named_modules()):
+        if mod.__class__.__name__ != "Qwen2MoeExperts":
+            continue
+        info = expert_info_by_layer.get(name)
+        if info is None:
+            continue
+
+        config = type("C", (), dict(
+            num_experts=mod.num_experts,
+            hidden_size=mod.hidden_dim,
+            moe_intermediate_size=mod.intermediate_dim,
+            hidden_act=getattr(mod.act_fn, "_name", None) or "silu",
+        ))()
+
+        try:
+            new = GgufQwen2MoeExperts(
+                config,
+                gate_quant=info["gate_quant"],
+                up_quant=info["up_quant"],
+                down_quant=info["down_quant"],
+                device=mod.gate_up_proj.device,
+            )
+        except Exception as e:
+            import warnings
+            warnings.warn(f"GgufQwen2MoeExperts: skip {name}: {e}", stacklevel=2)
+            continue
+
+        ok = True
+        for buf_name, key in [("gate_proj_q", "gate_bytes"),
+                              ("up_proj_q",   "up_bytes"),
+                              ("down_proj_q", "down_bytes")]:
+            src = info[key].detach().contiguous().view(torch.uint8).reshape(-1)
+            dst = getattr(new, buf_name)
+            if src.numel() != dst.numel():
+                import warnings
+                warnings.warn(
+                    f"GgufQwen2MoeExperts: {name}.{buf_name} size mismatch "
+                    f"({src.numel()} vs {dst.numel()}), skipping",
+                    stacklevel=2,
+                )
+                ok = False
+                break
+            dst.copy_(src.to(dst.device))
+        if not ok:
+            continue
+
+        parent_path, _, leaf = name.rpartition(".")
+        parent = model.get_submodule(parent_path) if parent_path else model
+        setattr(parent, leaf, new)
+        swapped += 1
+    return swapped
+
+
 def replace_with_gguf_linear(
     model: nn.Module,
     weight_info_by_name: dict[str, dict],

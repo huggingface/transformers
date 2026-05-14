@@ -147,6 +147,56 @@ class GGUFQuantizer(HfQuantizer):
             }
 
         replace_with_gguf_linear(model, weight_info_by_name)
+        self._swap_moe_experts(model, renamings, converters, meta_state_dict, prefix)
+
+    def _swap_moe_experts(self, model, renamings, converters, meta_state_dict, prefix):
+        """Detect ``Qwen2MoeExperts``-style fused-expert modules and swap them
+        for the quantized :class:`GgufQwen2MoeExperts` so the expert weights
+        (typically >90% of an MoE model's params) stay native-quantized.
+
+        Matches gate / up / down expert tensors by their GGUF source names
+        (``blk.{N}.ffn_{gate,up,down}_exps.weight``) and groups them by the HF
+        parent path the dequant rename pipeline would have produced for *any*
+        of them (the three share a single ``...mlp.experts`` parent).
+        """
+        from ..core_model_loading import rename_source_key
+        from ..integrations.gguf_linear import replace_qwen2_moe_experts
+
+        # Group the three expert source tensors per layer. Each projection gets
+        # its own quant_type because Q4_K_M (and friends) mix quant types per
+        # tensor — e.g. gate/up = Q4_K but down = Q8_0.
+        kind_to_keys = {
+            "ffn_gate_exps": ("gate_bytes", "gate_quant"),
+            "ffn_up_exps":   ("up_bytes",   "up_quant"),
+            "ffn_down_exps": ("down_bytes", "down_quant"),
+        }
+        groups: dict[str, dict] = {}
+        for gguf_name, tensor in self.gguf_tensors.items():
+            for kind, (bytes_key, quant_key) in kind_to_keys.items():
+                if f".{kind}." not in gguf_name:
+                    continue
+                try:
+                    hf_name, _ = rename_source_key(
+                        gguf_name, renamings, converters,
+                        prefix=prefix, meta_state_dict=meta_state_dict,
+                    )
+                except Exception:
+                    break
+                parent_path = hf_name.rsplit(".", 1)[0]  # drop ``.weight`` suffix
+                groups.setdefault(parent_path, {})
+                groups[parent_path][bytes_key] = tensor
+                groups[parent_path][quant_key] = (
+                    tensor.quant_type.name if hasattr(tensor.quant_type, "name") else str(tensor.quant_type)
+                )
+                break
+
+        complete = {
+            p: info for p, info in groups.items()
+            if all(k in info for k in ("gate_bytes", "up_bytes", "down_bytes",
+                                       "gate_quant", "up_quant", "down_quant"))
+        }
+        if complete:
+            replace_qwen2_moe_experts(model, complete)
 
     @property
     def is_trainable(self):
