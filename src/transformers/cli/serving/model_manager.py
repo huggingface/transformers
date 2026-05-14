@@ -158,14 +158,23 @@ class ModelManager:
             )
         return resolved
 
-    @staticmethod
-    def _resolve_attn_implementation(attn_implementation: str | None, device: str | int) -> str | None:
+    # Pinned revision for kernels-community/metal-flash-sdpa: the published `main` predates
+    # the dispatch hardening (contiguity, int32 cast, alias clone, MPS encoder flush) that the
+    # transformers integration relies on. Update / drop this pin once the PR lands on main.
+    # https://huggingface.co/kernels-community/metal-flash-sdpa/discussions/3
+    _MPS_METAL_FLASH_SDPA_KERNEL = (
+        "kernels-community/metal-flash-sdpa@223ca3350d7ba32ecf19341ff2cbb8c43fa47d62"
+    )
+
+    @classmethod
+    def _resolve_attn_implementation(cls, attn_implementation: str | None, device: str | int) -> str | None:
         """Auto-select a flash-attention kernel when the user didn't specify one.
 
         On Apple Silicon (MPS) with ``kernels`` installed, default to
         ``kernels-community/metal-flash-sdpa`` instead of plain SDPA — it's
         materially faster (~1.6x on gsm8k generate_batch) and matches SDPA
-        token-for-token for greedy generation.
+        token-for-token for greedy generation. We pin a specific revision until the
+        upstream PR with the MPS dispatch fixes lands on `main`.
         """
         if attn_implementation is not None:
             return attn_implementation
@@ -181,10 +190,10 @@ class ModelManager:
         )
         if is_mps_device and _kernels_available:
             logger.warning_once(
-                "MPS detected and `kernels` is installed: defaulting attention to "
-                "`kernels-community/metal-flash-sdpa`. Pass `--attn-implementation sdpa` to opt out."
+                f"MPS detected and `kernels` is installed: defaulting attention to "
+                f"`{cls._MPS_METAL_FLASH_SDPA_KERNEL}`. Pass `--attn-implementation sdpa` to opt out."
             )
-            return "kernels-community/metal-flash-sdpa"
+            return cls._MPS_METAL_FLASH_SDPA_KERNEL
         return attn_implementation
 
     def _validate_args(self):
