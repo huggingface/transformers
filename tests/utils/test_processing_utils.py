@@ -34,8 +34,7 @@ class TestChatTemplateKwargOverride(unittest.TestCase):
 
     MODEL_TEMPLATE = (
         "{% for message in messages %}"
-        "{{ message.role }}: {{ message.content }}
-"
+        "{{ message.role }}: {{ message.content }}\n"
         "{% endfor %}"
     )
 
