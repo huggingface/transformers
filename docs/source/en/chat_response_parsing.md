@@ -20,14 +20,20 @@ It is increasingly common for chat models to generate structured outputs, rather
 a [reasoning model](https://huggingface.co/reasoning-course) might emit a chain of thought containing its reasoning trace,
 while a [tool calling](./chat_extras) model might emit function names and arguments.
 
-In all of these cases, though, the model simply emits a chain of tokens. We need some system to turn those tokens into
-a structured response dict. That system is **response parsing**. It is controlled by a **response template**: a
-small declarative spec that describes how the model's output is laid out. Just as the [`chat_template`](./chat_templating) turns
-structured messages into tokens ready to input into the model, response templates turn generated tokens back into
-structured dicts. These two systems form the "glue" layer that allows a universal API to be used with models
-that have very different internal chat formats.
+The problem with structured outputs, though, is that LLMs outputs are not inherently structured. LLM APIs usually
+accept and return message dicts, with keys like `role` and `content` and `thinking`, but internally, LLMs actually 
+just continue a single sequence of tokens. We use a glue layer to connect the user-facing API to the actual token
+stream of the model. To turn inputs into a token stream, we use [`chat_templates`](./chat_templating), which are covered in other
+documents. This document is about the other half of that glue layer: **Response templates**, the system for turning the
+generated tokens output by the model back into a structured response dict. 
 
-Just like chat templates, response templates are attached to the tokenizer. The main entry point is the
+In many ways, response templates perform the inverse operation to chat templates. With chat templates, you feed in
+a list of messages, and you get tokens ready to input to the model. With response templates, you feed in the raw
+model output tokens, and you get a structured message. Like chat templates, response 
+templates allow users to ignore the messy details of what specific formats and control tokens a model expects,
+and use a universal API of message dicts that works with any model.
+
+The best way to understand response templates is to see them in action. The main entry point is the
 [`~PreTrainedTokenizerBase.parse_response`] method:
 
 ```python
@@ -42,12 +48,15 @@ input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, 
 outputs = model.generate(input_ids, max_new_tokens=1024)[0, input_ids.shape[1]:]
 out_text = tokenizer.decode(outputs)
 print(tokenizer.parse_response(out_text, prefix=input_ids[0]))
-# → {"role": "assistant", "thinking": "...", "content": "..."}
+# Outputs a structured dict: {"role": "assistant", "thinking": "...", "content": "..."}
 ```
 
-Note that we need to pass the `prefix` (the prompt tokens) as well. This is because many chat templates start
-messages or open thinking blocks before letting the model begin its response. Without the prefix, message parsing
-becomes ambiguous. If the tokenizer has no response template set, `parse_response` will raise an error. We're working on adding
+When a tokenizer has a `response_template`, the `parse_response` method will cleanly turn an output message into a
+structured dict, ready to append to the chat. Note that we need to pass the `prefix` (the prompt tokens) to this method as well. This is because many chat templates start
+messages or open thinking blocks before letting the model begin its response, and so our parser needs to see the 
+prompt to understand the message. 
+
+If the tokenizer has no response template set, `parse_response` will raise an error. We're working on adding
 templates to more models as quickly as we can!
 
 ## Streaming response parsing
@@ -64,13 +73,13 @@ stateful parser that you can feed text into as the model generates it:
 ```python
 parser = tokenizer.get_response_parser(prefix=input_ids[0])
 for event in parser.initial_events:
-    handle(event)
+    render(event)  # Display the partial message to the user however you want to
 for chunk in model_output:
     for event in parser.feed(chunk):
-        handle(event)
+        render(event)
 message, final_events = parser.finalize()
 for event in final_events:
-    handle(event)
+    render(event)
 ```
 
 The parser will emit **events** as text is fed in, which indicate which region is currently being parsed. When
@@ -81,24 +90,24 @@ the `finalize()` method flushes any remaining text and emits any final events, a
 
 Each streamed parsing event is a dict with a `type` key. There are three kinds:
 
-| Type           | Description                                                                         | Contents                                                                                                                                                                                                           |
-|----------------|-------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `region_open`  | Indicates that the model has started a new region, such as `content` or `thinking`. | `field` (str): the field name.                                                                                                                                                                                     |
-| `region_chunk` | A chunk of text for the current region.                                             | `field` (str): the field name. `text` (str): the new chunk. `dirty` (bool): `True` if the chunk is raw text from a structured region (`json`, `xml-inline`, `kv-lines`) that has yet to be parsed; `False` if the chunk is part of a text-like region whose body is its final value. |
-| `region_close` | Indicates that a region has finished, and that key is now finalized.                | `field` (str): the field name. `value` (any): the fully parsed value for the region                                                                                      |
+| Type           | Description                                                                         | Contents                                                                                                                        |
+|----------------|-------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------|
+| `region_open`  | Indicates that the model has started a new region, such as `content` or `thinking`. | `field` (str): the field name.                                                                                                  |
+| `region_chunk` | A chunk of text for the current region.                                             | `field` (str): the field name. `text` (str): the new chunk. `dirty` (bool): `True` if the chunk is raw text that needs parsing. |
+| `region_close` | Indicates that a region has finished, and that key is now finalized.                | `field` (str): the field name. `value` (any): the fully parsed value for the region                                             |
 
 `region_chunk` events are emitted for every region as bytes arrive, so a streaming UI can render progress
 even for structured regions. For text-like regions (`text`, `int`, `float`, `bool`) chunks are flagged
 `dirty=False`: each chunk is already part of the final value (modulo trailing whitespace stripped at
-close). For structured regions (`json`, `xml-inline`, `kv-lines`) chunks are flagged `dirty=True`: the
-text is the raw, un-parsed body — it's safe to display incrementally, but the *parsed* value (a dict,
+close). For structured regions, like JSON-format tool calls, chunks are flagged `dirty=True`. This means
+text is the raw, un-parsed body; it's safe to display incrementally, but the *parsed* value (a dict,
 list, etc.) only arrives in the matching `region_close` event. Either way, the finalized value of a
 region is always carried by `region_close`, so consumers that don't care about intermediate rendering
 can simply ignore `region_chunk` events.
 
 If the chat `prefix` wrote anything into the message (e.g. the template opened a thinking block, or an
 assistant prefill started a response before handing off to the model), the parser exposes those events as
-`parser.initial_events` — a list you can replay into your renderer before feeding any model output. Regions
+`parser.initial_events`, a list you can replay into your renderer before feeding any model output. Regions
 that were opened *and* closed inside the prefix produce a full `region_open` / `region_chunk` / `region_close`
 sequence and their parsed value lands in the output dict, exactly as if the model itself had written them.
 
@@ -106,16 +115,26 @@ A typical event stream for the SmolLM example above looks like:
 
 ```python
 {"type": "region_open",  "field": "thinking"}
-{"type": "region_chunk", "field": "thinking", "text": "Some chain ",   "dirty": False}
+{"type": "region_chunk", "field": "thinking", "text": "Some chain ", "dirty": False}
 {"type": "region_chunk", "field": "thinking", "text": "of thought...", "dirty": False}
 {"type": "region_close", "field": "thinking", "value": "Some chain of thought..."}
 {"type": "region_open",  "field": "tool_calls"}
 {"type": "region_chunk", "field": "tool_calls", "text": '{"name": "greet_user", ', "dirty": True}
 {"type": "region_chunk", "field": "tool_calls", "text": '"arguments": {"greeting": "Hi!"}}', "dirty": True}
-{"type": "region_close", "field": "tool_calls",
- "value": {"type": "function", "function": {"name": "greet_user", "arguments": {"greeting": "Hi!"}}}}
+{"type": "region_close", "field": "tool_calls", "value": {"type": "function", "function": {"name": "greet_user", "arguments": {"greeting": "Hi!"}}}}
 ```
 
+Note how `thinking` is emitted with `dirty=False`, because fields like `thinking` and `content` are usually just raw 
+text. This means you can treat the chunks as valid "partial output". However, `tool_calls` is flagged as `dirty` because
+the raw text needs significant cleanup - tool calls often need to be parsed as JSON or another format and then
+restructured to generate the final tool call dict. As a result, the final output for these regions often looks very,
+very different from the raw text. This final parsing will only happen when `region_close` is reached. It's
+up to you what you want to do with the `dirty` chunks until then - you can display them as-is to show the user the 
+"raw" output, or you can simply wait until you have something clean to display.
+
+This concludes most of what you need to know to use response templates. The rest of this document is focused on
+the internals of the parsing system, and how to write response templates. This is mostly relevant for developers
+and model authors. Most people can safely stop here!
 
 ## Advanced: Writing a response template
 
@@ -193,7 +212,7 @@ tokenizer.save_pretrained(...)  # Written as a key in tokenizer_config.json
 
 ## Advanced: Field API Reference
 
-Each field supports several keys. First, there are the keys that define how the field should be captured:
+Each field supports several keys. We can divide these into two types. First, there are the keys that define how the field should be captured:
 
 | Key             | Type               | Purpose                                                                                     |
 |-----------------|--------------------|---------------------------------------------------------------------------------------------|
@@ -221,13 +240,14 @@ The end of generation will close and finalize any open regions, even if their cl
 
 ### Parsing the content of a field
 
-Next, there are the keys that define how the content of the field is parsed after it's captured:
+Once we define how to capture a field, we also need to specify how to parse the raw text inside that capture. There are three
+keys that control this:
 
-| Key             | Type             | Purpose                                                                                     |
-|-----------------|------------------|---------------------------------------------------------------------------------------------|
-| `content`       | str              | Name of the content parser (see below). Defaults to `"text"`.                               |
-| `content_args`  | dict             | Parser-specific arguments.                                                                  |
-| `assemble`      | dict/list/string | Output template (see **Assemble**). Defaults to returning the parsed content directly.      |
+| Key             | Type             | Purpose                                                                                  |
+|-----------------|------------------|------------------------------------------------------------------------------------------|
+| `content`       | str              | The content type inside this region. Defaults to `"text"`. Each type has its own parser. |
+| `content_args`  | dict             | Arguments to be passed to the content parser for this region.                            |
+| `assemble`      | dict/list/string | Output template (see **Assemble**). Defaults to returning the parsed content directly.   |
 
 Let's go through these keys in order. The first (and most important) key is `content`. This indicates the content type
 of the field, which determines the parser that will be used to convert the raw text captured in the field to the final output.
@@ -235,19 +255,19 @@ of the field, which determines the parser that will be used to convert the raw t
 
 The available parsers are:
 
-| Parser       | Produces      | Useful `content_args`                                                                          |
-|--------------|---------------|------------------------------------------------------------------------------------------------|
-| `text`       | string        | `strip` (default `true`) — set `false` for verbatim capture                                    |
-| `int`        | int           | `strip` (default `true`)                                                                       |
-| `float`      | float         | `strip` (default `true`)                                                                       |
-| `bool`       | bool          | `strip` (default `true`); accepts `"true"`/`"1"` (case-insensitive) as true                    |
-| `json`       | any           | `transform` (jmespath), `allow_non_json`, `unquoted_keys`, `string_delims: [[open, close],...]`|
-| `xml-inline` | dict          | `tag_pattern` (regex w/ named groups `key`/`value`), `value_parser`, `merge_duplicates`        |
-| `kv-lines`   | dict          | `line_sep`, `kv_sep`, `value_parser`, `strip` (default `true`)                                 |
+| Parser       | Produces      | Useful `content_args`                                                                           |
+|--------------|---------------|-------------------------------------------------------------------------------------------------|
+| `text`       | string        | `strip` (default `true`). Set to `false` to preserve trailing whitespace                        |
+| `int`        | int           | `strip` (default `true`)                                                                        |
+| `float`      | float         | `strip` (default `true`)                                                                        |
+| `bool`       | bool          | `strip` (default `true`); accepts `"true"`/`"1"` (case-insensitive) as true                     |
+| `json`       | any           | `transform` (jmespath), `allow_non_json`, `unquoted_keys`, `string_delims: [[open, close],...]` |
+| `xml-inline` | dict          | `tag_pattern` (regex w/ named groups `key`/`value`), `value_parser`, `merge_duplicates`         |
+| `kv-lines`   | dict          | `line_sep`, `kv_sep`, `value_parser`, `strip` (default `true`)                                  |
 
 The `json` parser also accepts dialect arguments (`unquoted_keys`, `string_delims`) for models that emit JSON with cute
-quirks that completely break the standard parser. The model
-authors who are responsible for this being necessary know who they are and should feel an appropriate amount of shame.
+quirks that completely break the standard parser. The model authors who are responsible for this being necessary
+know who they are and should feel an appropriate amount of shame.
 
 ### Assemble
 
