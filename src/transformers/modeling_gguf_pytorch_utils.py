@@ -27,7 +27,6 @@ from .utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-
 GGUF_TO_TRANSFORMERS_MAPPING = {
     "ignore": {
         "GGUF": {
@@ -43,7 +42,6 @@ GGUF_TO_TRANSFORMERS_MAPPING = {
 }
 
 GGUF_SUPPORTED_ARCHITECTURES = list(GGUF_TO_TRANSFORMERS_MAPPING["config"].keys())
-
 
 
 # --- Llama-family (rope-permuted Q/K, plain Llama norms) --------------------
@@ -109,7 +107,49 @@ if is_torch_available():
 
     _LLAMA_CONVERTERS = _LLAMA_SHARED_RENAMES + _NORM_RENAMES + _ROPE_ATTN_CONVERTERS
     _NEMOTRON_CONVERTERS = _LLAMA_SHARED_RENAMES + _NORM_SUBTRACT_ONE_CONVERTERS + _ROPE_ATTN_CONVERTERS
-    _GEMMA_CONVERTERS = _NEMOTRON_CONVERTERS  # same structure as Nemotron
+
+    # Gemma-2/3 have four layer norms per block (input + post-attention + pre-ffn + post-ffn)
+    # and store every RMSNorm weight as `w + 1` (so we apply SubtractOne everywhere).
+    # `_NORM_SUBTRACT_ONE_CONVERTERS` already maps attn_norm → input_layernorm but its
+    # ffn_norm → post_attention_layernorm rule is wrong for Gemma — drop it and add the
+    # four-norm mapping explicitly.
+    _GEMMA_NORM_CONVERTERS = [
+        WeightConverter(
+            source_patterns=r"\.attn_norm\.weight",
+            target_patterns=".input_layernorm.weight",
+            operations=[SubtractOne()],
+        ),
+        WeightConverter(
+            source_patterns=r"\.post_attention_norm\.weight",
+            target_patterns=".post_attention_layernorm.weight",
+            operations=[SubtractOne()],
+        ),
+        WeightConverter(
+            source_patterns=r"\.ffn_norm\.weight",
+            target_patterns=".pre_feedforward_layernorm.weight",
+            operations=[SubtractOne()],
+        ),
+        WeightConverter(
+            source_patterns=r"\.post_ffw_norm\.weight",
+            target_patterns=".post_feedforward_layernorm.weight",
+            operations=[SubtractOne()],
+        ),
+    ]
+    _GEMMA2_CONVERTERS = _LLAMA_SHARED_RENAMES + _GEMMA_NORM_CONVERTERS + _ROPE_ATTN_CONVERTERS
+
+    # Gemma-3 adds per-head q/k RMSNorm inside attention (also stored as `w + 1`).
+    _GEMMA3_CONVERTERS = _GEMMA2_CONVERTERS + [
+        WeightConverter(
+            source_patterns=r"\.attn_q_norm\.weight",
+            target_patterns=".self_attn.q_norm.weight",
+            operations=[SubtractOne()],
+        ),
+        WeightConverter(
+            source_patterns=r"\.attn_k_norm\.weight",
+            target_patterns=".self_attn.k_norm.weight",
+            operations=[SubtractOne()],
+        ),
+    ]
 
     _T5_CONVERTERS = [
         WeightRenaming(r"^enc\.blk\.", "encoder.block."),
@@ -290,7 +330,9 @@ if is_torch_available():
         WeightConverter(
             source_patterns=r"\.attn_output\.weight", target_patterns=".attn.c_proj.weight", operations=[Transpose()]
         ),
-        WeightConverter(source_patterns=r"\.ffn_up\.weight", target_patterns=".mlp.c_fc.weight", operations=[Transpose()]),
+        WeightConverter(
+            source_patterns=r"\.ffn_up\.weight", target_patterns=".mlp.c_fc.weight", operations=[Transpose()]
+        ),
         WeightConverter(
             source_patterns=r"\.ffn_down\.weight", target_patterns=".mlp.c_proj.weight", operations=[Transpose()]
         ),
@@ -327,7 +369,6 @@ if is_torch_available():
         ),
     ]
 
-
     _GGUF_ARCH_CONVERTERS: dict[str, list] = {
         # RoPE Llama family
         "llama": _LLAMA_CONVERTERS,
@@ -339,9 +380,9 @@ if is_torch_available():
         "deci": _LLAMA_CONVERTERS,
         # Norm-subtract-one variants
         "nemotron": _NEMOTRON_CONVERTERS,
-        "gemma2": _GEMMA_CONVERTERS,
-        "gemma3": _GEMMA_CONVERTERS,
-        "gemma3_text": _GEMMA_CONVERTERS,
+        "gemma2": _GEMMA2_CONVERTERS,
+        "gemma3": _GEMMA3_CONVERTERS,
+        "gemma3_text": _GEMMA3_CONVERTERS,
         # Misc archs
         "bloom": _BLOOM_CONVERTERS,
         "gpt2": _GPT2_CONVERTERS,
@@ -556,9 +597,14 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
         # on whatever device the loader has moved the bytes to.
         import torch  # local: keep top-of-file import-light when torch isn't required
 
+        # Tensors GGUF ships as metadata for its own runtime but HF models compute on the
+        # fly (or don't store as a parameter). Skip so they don't show up as "unexpected".
+        _GGUF_RUNTIME_AUX_TENSORS = frozenset({"rope_freqs.weight"})
+
         parsed_parameters["tensors"] = {
             tensor.name: GGUFQuantizedTensor(torch.from_numpy(tensor.data), quant_type=tensor.tensor_type)
             for tensor in reader.tensors
+            if tensor.name not in _GGUF_RUNTIME_AUX_TENSORS
         }
         parsed_parameters["weight_mapping"] = get_gguf_converters(model_type)
 
