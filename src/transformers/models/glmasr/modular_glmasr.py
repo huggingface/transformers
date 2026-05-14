@@ -357,6 +357,8 @@ class GlmAsrMultiModalProjector(AudioFlamingo3MultiModalProjector):
     """
 )
 class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
+    _supports_attention_backend = True
+
     @can_return_tuple
     @auto_docstring(
         custom_intro="Compute audio embeddings from log-mel input features using the audio encoder and multi-modal projector."

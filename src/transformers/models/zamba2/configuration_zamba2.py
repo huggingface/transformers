@@ -29,6 +29,8 @@ class Zamba2Config(PreTrainedConfig):
         Number of groups for the evolution matrices of mamba 2.
     n_mamba_heads (`int`, *optional*, defaults to 8):
         Number of heads for the evolution matrices of mamba 2.
+    use_mamba_kernels (`bool`, *optional*, defaults to `True`):
+        Flag indicating whether or not to use the fast mamba kernels.
     use_conv_bias (`bool`, *optional*, defaults to `True`):
         Whether or not to use bias in the convolution layer of the mixer block.
     chunk_size (`int`, *optional*, defaults to 256):
@@ -83,6 +85,7 @@ class Zamba2Config(PreTrainedConfig):
     time_step_floor: float = 1e-4
     time_step_limit: list[float] | tuple[float, ...] | None = None
     n_mamba_heads: int = 8
+    use_mamba_kernels: bool = True
     use_conv_bias: bool = True
     chunk_size: int = 256
     use_mem_eff_path: bool = False

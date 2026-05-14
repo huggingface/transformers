@@ -34,12 +34,12 @@ from ..auto import AutoModel
 from .configuration_deepseek_vl import DeepseekVLConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for DeepseekVL model's outputs that may also contain a past key/values (to speed up sequential decoding).
     """
 )
+@dataclass
 class DeepseekVLBaseModelOutputWithPast(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -67,12 +67,12 @@ class DeepseekVLBaseModelOutputWithPast(ModelOutput):
     image_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for DeepseekVL causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class DeepseekVLCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

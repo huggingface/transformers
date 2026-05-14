@@ -123,11 +123,7 @@ class TestAddNewModelLike(unittest.TestCase):
         )
         self.assertInFile(
             '("my_test", "MyTestConfig"),\n',
-            os.path.join(self.MODEL_PATH, "auto", "configuration_auto.py"),
-        )
-        self.assertInFile(
-            '("my_test", "MyTest"),\n',
-            os.path.join(self.MODEL_PATH, "auto", "configuration_auto.py"),
+            os.path.join(self.MODEL_PATH, "auto", "auto_mappings.py"),
         )
         self.assertInFile(
             '("my_test", "MyTestModel"),\n',
@@ -406,11 +402,7 @@ class TestAddNewModelLike(unittest.TestCase):
         )
         self.assertInFile(
             '("my_test2", "MyTest2Config"),\n',
-            os.path.join(self.MODEL_PATH, "auto", "configuration_auto.py"),
-        )
-        self.assertInFile(
-            '("my_test2", "MyTest2"),\n',
-            os.path.join(self.MODEL_PATH, "auto", "configuration_auto.py"),
+            os.path.join(self.MODEL_PATH, "auto", "auto_mappings.py"),
         )
         self.assertInFile(
             '("my_test2", "MyTest2Model"),\n',
@@ -422,7 +414,7 @@ class TestAddNewModelLike(unittest.TestCase):
         )
         self.assertInFile(
             '("my_test2", {"torchvision": "MyTest2ImageProcessor"}),\n',
-            os.path.join(self.MODEL_PATH, "auto", "image_processing_auto.py"),
+            os.path.join(self.MODEL_PATH, "auto", "auto_mappings.py"),
         )
         self.assertInFile(
             '("my_test2", "MyTest2FeatureExtractor"),\n',
