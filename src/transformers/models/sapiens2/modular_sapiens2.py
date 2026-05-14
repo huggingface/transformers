@@ -111,8 +111,6 @@ class Sapiens2Config(DINOv3ViTConfig):
     last_k_full_attention_layers: int = 8
     pos_embed_dtype: str = "bfloat16"
 
-    # TODO(guarin): Rename use_layernorm and layer_norm_eps to match the fact that we use RMSNorm.
-
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads // 2
