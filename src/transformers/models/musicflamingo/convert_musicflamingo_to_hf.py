@@ -51,6 +51,8 @@ def _load_json(p: Path):
 
 def write_processor(src_root: Path, dst_root: Path):
     llm_dir = src_root / "llm"
+    if not llm_dir.is_dir():
+        llm_dir = src_root
 
     system_prompt = (
         "You are Music Flamingo, a multimodal assistant for language and music. "
@@ -108,6 +110,7 @@ def write_processor(src_root: Path, dst_root: Path):
         tokenizer=AutoTokenizer.from_pretrained(str(llm_dir), chat_template=tokenizer_chat_template, use_fast=True),
         chat_template=processor_chat_template,
     )
+    processor.tokenizer.model_max_length = 32768
     processor.save_pretrained(str(dst_root))
 
     logger.info("processor (tokenizer + preprocessor)")
@@ -140,12 +143,13 @@ def _resolve_component_dir(dirpath: Path):
 
 def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: MusicFlamingoProcessor):
     state: dict[str, Any] = {}
-    for tag in PREFIX_MAP.keys():
-        comp = _resolve_component_dir(src_root / tag)
+    components = [(_resolve_component_dir(src_root / tag), PREFIX_MAP.get(tag, tag)) for tag in PREFIX_MAP.keys()]
+    if not any(comp for comp, _ in components):
+        components = [(_resolve_component_dir(src_root), None)]
+
+    for comp, out_prefix in components:
         if not comp:
             continue
-
-        out_prefix = PREFIX_MAP.get(tag, tag)
 
         if comp[0] == "file":
             fp: Path = comp[1]
@@ -153,7 +157,7 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: MusicFlam
                 for k in f.keys():
                     if k == "__metadata__":
                         continue
-                    state[f"{out_prefix}.{k}"] = f.get_tensor(k)
+                    state[f"{out_prefix}.{k}" if out_prefix else k] = f.get_tensor(k)
         else:
             base: Path = comp[1]
             shard_map: dict[str, list[str]] = comp[2]
@@ -161,13 +165,12 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: MusicFlam
                 sp = base / shard
                 with safe_open(str(sp), framework="pt", device="cpu") as f:
                     for k in keys:
-                        state[f"{out_prefix}.{k}"] = f.get_tensor(k)
+                        state[f"{out_prefix}.{k}" if out_prefix else k] = f.get_tensor(k)
 
     if not state:
-        raise FileNotFoundError("No tensors found in llm/, sound_tower/, or sound_mm_projector/.")
+        raise FileNotFoundError("No tensors found in llm/, sound_tower/, sound_mm_projector/, or source root.")
 
     tok = processor.tokenizer
-
     text_config = Qwen2Config(
         bos_token_id=tok.bos_token_id,
         eos_token_id=tok.eos_token_id,
@@ -175,7 +178,7 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: MusicFlam
         vocab_size=len(tok),
         hidden_size=3584,
         intermediate_size=18944,
-        model_max_length=8192,
+        model_max_length=32768,
         num_attention_heads=28,
         num_hidden_layers=28,
         num_key_value_heads=4,
@@ -188,8 +191,6 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: MusicFlam
         audio_token_id=vocab["<sound>"],
         audio_bos_token_id=vocab.get("<|sound_bos|>"),
         audio_eos_token_id=vocab.get("<|sound_eos|>"),
-        audio_rotary_dim=256,
-        rope_parameters={"rope_type": "default", "rope_theta": 1200},
     )
     model = MusicFlamingoForConditionalGeneration(config).to(dtype=torch.bfloat16)
 
@@ -206,6 +207,9 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: MusicFlam
 
     # Llama-style rotary caches `inv_freq` as a non-persistent buffer, so we do not load/save it in the checkpoint.
     state.pop("audio_tower.sound_tower.pos_emb.freqs", None)
+    # Outdated HF-format weights may still include these.
+    state.pop("audio_tower.pos_emb.freqs", None)
+    state.pop("audio_tower.pos_emb.inv_freq", None)
 
     # Load weights into the instantiated model so we can push via `push_to_hub` later.
     load_res = model.load_state_dict(state, strict=True)
@@ -217,13 +221,12 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: MusicFlam
         uk = load_res.unexpected_keys
         raise ValueError(f"Unexpected keys when loading: {uk[:10]}{' ...' if len(uk) > 10 else ''}")
 
-    generation_config = GenerationConfig(
+    model.generation_config = GenerationConfig(
         bos_token_id=tok.bos_token_id,
         eos_token_id=tok.eos_token_id,
         pad_token_id=tok.pad_token_id,
         max_new_tokens=2048,
     )
-    model.generation_config = generation_config
 
     model.save_pretrained(save_directory=str(dst_root))
     logger.info("model.safetensors index and shards")
