@@ -32,12 +32,16 @@ jobs:
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
           CI_SHA: ${{ github.sha }}
           TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
+          MACHINE_TYPE: ${{ inputs.machine_type }}
+          JOB: ${{ inputs.job }}
+          REPORT_REPO_ID: ${{ inputs.report_repo_id }}
+          GPU_NAME: ${{ inputs.gpu_name }}
         run: |
           pip install huggingface_hub
-          python3 utils/collated_reports.py                  \
-            --path .                                         \
-            --machine-type ${{ inputs.machine_type }}        \
-            --commit-hash ${{ env.CI_SHA }}                  \
-            --job ${{ inputs.job }}                          \
-            --report-repo-id ${{ inputs.report_repo_id }}    \
-            --gpu-name ${{ inputs.gpu_name }}
+          python3 utils/collated_reports.py \
+            --path . \
+            --machine-type "$MACHINE_TYPE" \
+            --commit-hash "$CI_SHA" \
+            --job "$JOB" \
+            --report-repo-id "$REPORT_REPO_ID" \
+            --gpu-name "$GPU_NAME"

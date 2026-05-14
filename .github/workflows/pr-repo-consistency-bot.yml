@@ -148,9 +148,9 @@ jobs:
           
           # Initialize git and fetch with full history
           git init
-          git remote add pr-origin https://github.com/${PR_HEAD_REPO_FULL_NAME}.git
-          git fetch pr-origin ${PR_HEAD_REF}
-          git checkout ${PR_HEAD_SHA}
+          git remote add pr-origin "https://github.com/${PR_HEAD_REPO_FULL_NAME}.git"
+          git fetch pr-origin "${PR_HEAD_REF}"
+          git checkout "${PR_HEAD_SHA}"
 
           # Also fetch main branch from upstream for comparison (required by `check_modular_conversion`)
           git remote add upstream https://github.com/${{ github.repository }}.git
@@ -291,13 +291,13 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
           # Add fork as remote with token
-          git remote add origin https://x-access-token:${GITHUB_TOKEN}@github.com/${PR_HEAD_REPO_FULL_NAME}.git
-          
+          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${PR_HEAD_REPO_FULL_NAME}.git"
+
           # Fetch only the specific branch
-          git fetch origin ${PR_HEAD_REF}
-          
+          git fetch origin "${PR_HEAD_REF}"
+
           # Checkout the branch
-          git checkout -b ${PR_HEAD_REF} origin/${PR_HEAD_REF}
+          git checkout -b "${PR_HEAD_REF}" "origin/${PR_HEAD_REF}"
           
           # Verify we're on the correct SHA
           current_sha=$(git rev-parse HEAD)
@@ -322,7 +322,7 @@ jobs:
           if [ -n "$(git status --porcelain)" ]; then
             git add .
             git commit -m "Apply repo consistency fixes"
-            git push origin HEAD:${PR_HEAD_REF}
+            git push origin "HEAD:${PR_HEAD_REF}"
             echo "✅ Changes pushed successfully"
           else
             echo "No changes to commit"
@@ -353,12 +353,16 @@ jobs:
         uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6.4.1
         env:
           PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+          COMMENT_ID: ${{ needs.init_comment_with_url.outputs.comment_id }}
+          FINAL_COMMENT: ${{ steps.prepare_final_comment.outputs.final_comment }}
         with:
           script: |
-            const PR_NUMBER = parseInt(process.env.PR_NUMBER, 10);
+            const pr_number = parseInt(process.env.PR_NUMBER, 10);
+            const comment_id = parseInt(process.env.COMMENT_ID, 10);
+            const body = process.env.FINAL_COMMENT;
             await github.rest.issues.updateComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              comment_id: ${{ needs.init_comment_with_url.outputs.comment_id }},
-              body: `${{ steps.prepare_final_comment.outputs.final_comment }}`
+              comment_id,
+              body,
             });

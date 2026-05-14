@@ -50,19 +50,24 @@ jobs:
     steps:
       - name: Echo input and matrix info
         shell: bash
+        env:
+          FOLDER_SLICES: ${{ inputs.folder_slices }}
+          MATRIX_FOLDERS: ${{ matrix.folders }}
+          SLICE: ${{ toJson(fromJson(inputs.folder_slices)[inputs.slice_id]) }}
         run: |
-          echo "${{ inputs.folder_slices }}"
-          echo "${{ matrix.folders }}"
-          echo "${{ toJson(fromJson(inputs.folder_slices)[inputs.slice_id]) }}"
+          echo "$FOLDER_SLICES"
+          echo "$MATRIX_FOLDERS"
+          echo "$SLICE"
 
       - name: Echo folder ${{ matrix.folders }}
         shell: bash
+        env:
+          MATRIX_FOLDERS: ${{ matrix.folders }}
         run: |
-          echo "${{ matrix.folders }}"
-          matrix_folders=${{ matrix.folders }}
-          matrix_folders=${matrix_folders/'models/'/'models_'}
+          echo "$MATRIX_FOLDERS"
+          matrix_folders="${MATRIX_FOLDERS/'models/'/'models_'}"
           echo "$matrix_folders"
-          echo "matrix_folders=$matrix_folders" >> $GITHUB_ENV
+          echo "matrix_folders=$matrix_folders" >> "$GITHUB_ENV"
 
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -87,30 +92,44 @@ jobs:
 
       - name: Set `machine_type` for report and artifact names
         shell: bash
+        env:
+          MACHINE_TYPE: ${{ inputs.machine_type }}
         run: |
-          if [ "${{ inputs.machine_type }}" = "1gaudi" ]; then
+          if [ "$MACHINE_TYPE" = "1gaudi" ]; then
             machine_type=single-gpu
-          elif [ "${{ inputs.machine_type }}" = "2gaudi" ]; then
+          elif [ "$MACHINE_TYPE" = "2gaudi" ]; then
             machine_type=multi-gpu
           else
-            machine_type=${{ inputs.machine_type }}
+            machine_type="$MACHINE_TYPE"
           fi
-          echo "machine_type=$machine_type" >> $GITHUB_ENV
+          echo "machine_type=$machine_type" >> "$GITHUB_ENV"
 
       - name: Run all tests on Gaudi
-        run: python3 -m pytest -v --make-reports=${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }}
+        env:
+          REPORT_NAME_PREFIX: ${{ inputs.report_name_prefix }}
+          MATRIX_FOLDERS: ${{ matrix.folders }}
+        run: |
+          REPORTS="${machine_type}_${REPORT_NAME_PREFIX}_${MATRIX_FOLDERS}_test_reports"
+          python3 -m pytest -v --make-reports="$REPORTS" "tests/${MATRIX_FOLDERS}"
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports/failures_short.txt
+        env:
+          REPORT_NAME_PREFIX: ${{ inputs.report_name_prefix }}
+          MATRIX_FOLDERS: ${{ matrix.folders }}
+        run: cat "reports/${machine_type}_${REPORT_NAME_PREFIX}_${MATRIX_FOLDERS}_test_reports/failures_short.txt"
 
       - name: Run test
         shell: bash
+        env:
+          REPORT_NAME_PREFIX: ${{ inputs.report_name_prefix }}
+          MATRIX_FOLDERS: ${{ matrix.folders }}
         run: |
-          mkdir -p reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports
-          echo "hello" > reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports/hello.txt
-          echo "${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports"
+          REPORTS="${machine_type}_${REPORT_NAME_PREFIX}_${MATRIX_FOLDERS}_test_reports"
+          mkdir -p "reports/$REPORTS"
+          echo "hello" > "reports/$REPORTS/hello.txt"
+          echo "$REPORTS"
 
       - name: "Test suite reports artifacts: ${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports"
         if: ${{ always() }}
