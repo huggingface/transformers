@@ -84,12 +84,17 @@ Each streamed parsing event is a dict with a `type` key. There are three kinds:
 | Type           | Description                                                                         | Contents                                                                                                                                                                                                           |
 |----------------|-------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `region_open`  | Indicates that the model has started a new region, such as `content` or `thinking`. | `field` (str): the field name.                                                                                                                                                                                     |
-| `region_chunk` | A chunk of text for the current region. Not all regions will stream text.           | `field` (str): the field name. `text` (str): the new chunk.  |
+| `region_chunk` | A chunk of text for the current region.                                             | `field` (str): the field name. `text` (str): the new chunk. `dirty` (bool): `True` if the chunk is raw text from a structured region (`json`, `xml-inline`, `kv-lines`) that has yet to be parsed; `False` if the chunk is part of a text-like region whose body is its final value. |
 | `region_close` | Indicates that a region has finished, and that key is now finalized.                | `field` (str): the field name. `value` (any): the fully parsed value for the region                                                                                      |
 
-In general, `region_chunk` will only be emitted in text regions. Incremental parsing for structured regions
-may be added in future! Any `region_chunk` events are only useful for live-updating the UI, because the
-content in that region will always be finalized and included in a `region_close` event later. 
+`region_chunk` events are emitted for every region as bytes arrive, so a streaming UI can render progress
+even for structured regions. For text-like regions (`text`, `int`, `float`, `bool`) chunks are flagged
+`dirty=False`: each chunk is already part of the final value (modulo trailing whitespace stripped at
+close). For structured regions (`json`, `xml-inline`, `kv-lines`) chunks are flagged `dirty=True`: the
+text is the raw, un-parsed body — it's safe to display incrementally, but the *parsed* value (a dict,
+list, etc.) only arrives in the matching `region_close` event. Either way, the finalized value of a
+region is always carried by `region_close`, so consumers that don't care about intermediate rendering
+can simply ignore `region_chunk` events.
 
 If the chat `prefix` wrote anything into the message (e.g. the template opened a thinking block, or an
 assistant prefill started a response before handing off to the model), the parser exposes those events as
@@ -101,10 +106,12 @@ A typical event stream for the SmolLM example above looks like:
 
 ```python
 {"type": "region_open",  "field": "thinking"}
-{"type": "region_chunk", "field": "thinking", "text": "Some chain "}
-{"type": "region_chunk", "field": "thinking", "text": "of thought..."}
+{"type": "region_chunk", "field": "thinking", "text": "Some chain ",   "dirty": False}
+{"type": "region_chunk", "field": "thinking", "text": "of thought...", "dirty": False}
 {"type": "region_close", "field": "thinking", "value": "Some chain of thought..."}
 {"type": "region_open",  "field": "tool_calls"}
+{"type": "region_chunk", "field": "tool_calls", "text": '{"name": "greet_user", ', "dirty": True}
+{"type": "region_chunk", "field": "tool_calls", "text": '"arguments": {"greeting": "Hi!"}}', "dirty": True}
 {"type": "region_close", "field": "tool_calls",
  "value": {"type": "function", "function": {"name": "greet_user", "arguments": {"greeting": "Hi!"}}}}
 ```

@@ -166,9 +166,11 @@ CONTENT_PARSERS = {
     "kv-lines": _kv_lines,
 }
 
-# Parsers whose output is the verbatim body text (modulo whitespace) — these
-# can stream `region_chunk` events as bytes arrive. Structured parsers
-# (`json`, `xml-inline`, `kv-lines`) only meaningful values on close.
+# Parsers whose output is the verbatim body text (modulo whitespace) — chunks
+# from these fields stream with `dirty=False` because each chunk is part of
+# the final value. Structured parsers (`json`, `xml-inline`, `kv-lines`) only
+# produce a meaningful value on close, so their chunks stream raw bytes
+# flagged `dirty=True` while the parsed value is delivered in `region_close`.
 STREAMABLE_PARSERS = frozenset({"text", "int", "float", "bool"})
 
 

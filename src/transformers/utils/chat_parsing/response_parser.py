@@ -231,7 +231,10 @@ class ResponseParser:
     def _accumulate(self, events: list[dict], text: str) -> None:
         """Route `text` into the currently active region. When the current
         region is the null sink (no implicit declared, no explicit open), we
-        silently discard."""
+        silently discard. Every routed chunk emits a `region_chunk` event so
+        consumers can render live; `dirty=True` flags chunks from structured
+        parsers (json, xml-inline, kv-lines) whose raw bytes will only be
+        parsed into the final value on close."""
         if not text or self._current is None:
             return
         fld = self._spec.fields[self._current]
@@ -239,8 +242,8 @@ class ResponseParser:
             events.append({"type": "region_open", "field": self._current})
             self._opened = True
         self._body += text
-        if fld.content in STREAMABLE_PARSERS:
-            events.append({"type": "region_chunk", "field": self._current, "text": text})
+        dirty = fld.content not in STREAMABLE_PARSERS
+        events.append({"type": "region_chunk", "field": self._current, "text": text, "dirty": dirty})
 
     def _open_explicit(self, events: list[dict], fld: ResponseTemplateField, m: re.Match) -> None:
         self._current = fld.name
