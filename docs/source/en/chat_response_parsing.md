@@ -173,7 +173,7 @@ And here's the template that parses it. Don't be intimidated - a lot of it is fa
             "close": "</tool_call>",
             "repeats": True,
             "content": "json",
-            "content_args": {"transform": "{type: 'function', function: @}"},
+            "transform": "{type: 'function', function: content}",
         },
         "content": {
             "close": "<|im_end|>",
@@ -217,7 +217,7 @@ Each field supports several keys. We can divide these into two types. First, the
 | Key             | Type               | Purpose                                                                                     |
 |-----------------|--------------------|---------------------------------------------------------------------------------------------|
 | `open`          | str or list[str]   | Literal string that opens this region. A list of strings means "match any of these".        |
-| `open_pattern`  | str (regex)        | Regex alternative to `open`; named groups become capture variables available to `assemble`. |
+| `open_pattern`  | str (regex)        | Regex alternative to `open`; named groups become capture variables available to `transform`. |
 | `close`         | str or list[str]   | Literal string (or list of strings) that closes this region. `"eos"` means end-of-stream.   |
 | `close_pattern` | str (regex)        | Regex alternative to `close`.                                                               |
 | `repeats`       | bool               | If true, the field is a list and each match appends. Default `false`.                       |
@@ -247,7 +247,7 @@ keys that control this:
 |-----------------|------------------|------------------------------------------------------------------------------------------|
 | `content`       | str              | The content type inside this region. Defaults to `"text"`. Each type has its own parser. |
 | `content_args`  | dict             | Arguments to be passed to the content parser for this region.                            |
-| `assemble`      | dict/list/string | Output template (see **Assemble**). Defaults to returning the parsed content directly.   |
+| `transform`     | str (jmespath)   | Optional post-parse [jmespath](https://jmespath.org/) expression (see **Transform**).    |
 
 Let's go through these keys in order. The first (and most important) key is `content`. This indicates the content type
 of the field, which determines the parser that will be used to convert the raw text captured in the field to the final output.
@@ -261,7 +261,7 @@ The available parsers are:
 | `int`        | int           | `strip` (default `true`)                                                                        |
 | `float`      | float         | `strip` (default `true`)                                                                        |
 | `bool`       | bool          | `strip` (default `true`); accepts `"true"`/`"1"` (case-insensitive) as true                     |
-| `json`       | any           | `transform` (jmespath), `allow_non_json`, `unquoted_keys`, `string_delims: [[open, close],...]` |
+| `json`       | any           | `allow_non_json`, `unquoted_keys`, `string_delims: [[open, close],...]`                         |
 | `xml-inline` | dict          | `tag_pattern` (regex w/ named groups `key`/`value`), `value_parser`, `merge_duplicates`         |
 | `kv-lines`   | dict          | `line_sep`, `kv_sep`, `value_parser`, `strip` (default `true`)                                  |
 
@@ -269,15 +269,14 @@ The `json` parser also accepts dialect arguments (`unquoted_keys`, `string_delim
 quirks that completely break the standard parser. The model authors who are responsible for this being necessary
 know who they are and should feel an appropriate amount of shame.
 
-### Assemble
+### Transform
 
-For most models, the `assemble` key is unnecessary, which is fortunate because it's definitely the most complex and messy
-part of this entire operation. It's used when the information we want is scattered inside the target field, possibly even
-in the delimiters, and has to be captured separately before being reshaped into the final output. 
+For most models, the `transform` key is unnecessary. It's used when the parsed body needs to be reshaped into the final
+output, or when information from the delimiters has to be merged into the result.
 
-`assemble` is a template: a dict/list/string where `{content}` is replaced by the parsed body and `{name}` (or any
-other named group from `open_pattern`/`close_pattern`) is replaced by the captured text. Here's how GPT-OSS
-handles tool calls whose function name is embedded in the channel header:
+`transform` is a [jmespath](https://jmespath.org/) expression. The input is a dict containing `content` (the parsed body)
+plus any named groups captured by `open_pattern` / `close_pattern`. Here's how GPT-OSS handles tool calls whose function
+name is embedded in the channel header:
 
 ```python
 "tool_calls": {
@@ -285,12 +284,20 @@ handles tool calls whose function name is embedded in the channel header:
     "close": "<|call|>",
     "repeats": True,
     "content": "json",
-    "assemble": {
-        "type": "function",
-        "function": {"name": "{name}", "arguments": "{content}"},
-    },
+    "transform": "{type: 'function', function: {name: name, arguments: content}}",
 },
 ```
 
 For a call like `to=functions.get_weather ... {"location":"SF"}`, this produces
 `{"type": "function", "function": {"name": "get_weather", "arguments": {"location": "SF"}}}`.
+
+Because the input is a dict, the parsed body is referenced as `content` (not as `@`). jmespath's full query language is
+available, so list projection and nested extraction work — Cohere, for example, emits all parallel tool calls inside a
+single JSON array, and a single `transform` reshapes the whole list:
+
+```python
+"transform": "content[*].{type: 'function', function: {name: tool_name, arguments: parameters}}"
+```
+
+Using `transform` requires the optional `jmespath` package (`pip install jmespath`); it's only imported when a template
+actually uses the key.

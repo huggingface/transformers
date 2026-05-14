@@ -5,12 +5,13 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
-"""Content pipeline: body string → parsed value → assembled.
+"""Content pipeline: body string → parsed value → (optional) jmespath transform.
 
 Two stages compose into `process_field(body, fld, captures)`:
   1. `parse_content` dispatches through the closed `CONTENT_PARSERS` registry.
-  2. `_apply_assemble` optionally wraps the parsed value in a template
-     (using `{name}` placeholders filled from open-pattern captures).
+  2. If the field declares a `transform`, jmespath runs on
+     `{**captures, "content": <parsed>}` so templates can reshape the parsed
+     value and merge it with named regex captures from the open/close patterns.
 
 The registry is closed — schemas select parsers by name but cannot ship code."""
 
@@ -37,21 +38,6 @@ def _bool(text: str, args: dict) -> bool:
     return _text(text, args).lower() in ("true", "1")
 
 
-def _jmespath(value: Any, transform: str | None) -> Any:
-    if transform is None:
-        return value
-    from ...utils import is_jmespath_available
-
-    if not is_jmespath_available():
-        raise ImportError(
-            "response_template uses a jmespath 'transform', but jmespath is not installed. "
-            "Install with `pip install jmespath`."
-        )
-    import jmespath
-
-    return jmespath.search(transform, value)
-
-
 # Sentinel characters for lax-JSON string pre-extraction — ASCII control chars
 # that should never appear in real LLM output.
 _LAX_OPEN, _LAX_CLOSE = "\x01", "\x02"
@@ -64,7 +50,6 @@ def _json(text: str, args: dict) -> Any:
       - `unquoted_keys` (bool): quote bare-identifier keys before parsing.
       - `string_delims` ([[open, close], ...]): strings delimited by these
         custom markers are pre-extracted, then restored as standard JSON strings.
-      - `transform` (str): jmespath applied after parsing.
       - `allow_non_json` (bool): return stripped text if parsing fails.
     """
     string_delims = args.get("string_delims") or []
@@ -91,7 +76,7 @@ def _json(text: str, args: dict) -> Any:
         working = working.replace(f"{_LAX_OPEN}{i}{_LAX_CLOSE}", json.dumps(s))
 
     try:
-        value = json.loads(working)
+        return json.loads(working)
     except json.JSONDecodeError as e:
         if args.get("allow_non_json"):
             return text.strip()
@@ -101,7 +86,6 @@ def _json(text: str, args: dict) -> Any:
             f"json: could not parse after dialect transforms.\n"
             f"Original: {text!r}\nTransformed: {working!r}\nError: {e}"
         ) from e
-    return _jmespath(value, args.get("transform"))
 
 
 def _sub_parse(raw: str, value_parser: dict | None) -> Any:
@@ -178,42 +162,27 @@ def parse_content(text: str, name: str, args: dict) -> Any:
     return CONTENT_PARSERS[name](text, args)
 
 
-_PLACEHOLDER = re.compile(r"\{(\w+)\}")
-
-
-def _apply_assemble(assemble: Any, captures: dict, content: Any) -> Any:
-    if assemble is None:
+def _apply_transform(transform: str | None, captures: dict, content: Any) -> Any:
+    if transform is None:
         return content
-    if isinstance(assemble, dict):
-        return {k: _apply_assemble(v, captures, content) for k, v in assemble.items()}
-    if isinstance(assemble, list):
-        return [_apply_assemble(v, captures, content) for v in assemble]
-    if not isinstance(assemble, str):
-        return assemble
+    from ...utils import is_jmespath_available
 
-    def _lookup(key: str) -> Any:
-        if key == "content":
-            return content
-        if key in captures:
-            return captures[key]
-        raise KeyError(
-            f"assemble template '{assemble}' references unknown capture '{key}'. "
-            f"Available: {sorted(list(captures) + ['content'])}"
+    if not is_jmespath_available():
+        raise ImportError(
+            "response_template uses a jmespath 'transform', but jmespath is not installed. "
+            "Install with `pip install jmespath`."
         )
+    import jmespath
 
-    whole = _PLACEHOLDER.fullmatch(assemble)
-    if whole:
-        return _lookup(whole.group(1))
-    return _PLACEHOLDER.sub(lambda m: str(_lookup(m.group(1))), assemble)
+    return jmespath.search(transform, {**captures, "content": content})
 
 
 def process_field(body: str, fld, captures: dict) -> Any:
-    """Run `body` through the field's content parser and assembler.
+    """Run `body` through the field's content parser and optional jmespath transform.
 
     `fld` is a `spec.Field`; typed via duck-typing to avoid a cyclic import."""
     value = parse_content(body, fld.content, fld.content_args)
-    value = _apply_assemble(fld.assemble, captures, value)
-    return value
+    return _apply_transform(fld.transform, captures, value)
 
 
 __all__ = ["CONTENT_PARSERS", "STREAMABLE_PARSERS", "parse_content", "process_field"]
