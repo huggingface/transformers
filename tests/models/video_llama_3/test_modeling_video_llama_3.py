@@ -883,8 +883,8 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = Expectations(
             {
                 ("cuda", None): [
-                    'user\n\nDescribe the image.\nassistant\nThe image captures a vibrant night scene in a bustling Japanese city. A woman in a striking red dress',
-                    'user\nWhat is relativity?\nassistant\nRelativity is a scientific theory that describes the relationship between space and time. It was first proposed by'
+                    "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant night scene in a bustling Japanese city. A woman in a striking red dress",
+                    "user\nWhat is relativity?\nassistant\nRelativity is a scientific theory that describes the relationship between space and time. It was first proposed by",
                 ],
                 ("xpu", None): [
                     "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress",
@@ -918,8 +918,8 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = Expectations(
             {
                 ("cuda", None): [
-                    'user\n\nDescribe the image.\nassistant\nThe image captures a vibrant night scene in a bustling Japanese city. A woman in a striking red dress',
-                    'user\n\nDescribe the image.\nassistant\nThe image depicts a striking urban scene at night. A person is standing in the center of a wet'
+                    "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant night scene in a bustling Japanese city. A woman in a striking red dress",
+                    "user\n\nDescribe the image.\nassistant\nThe image depicts a striking urban scene at night. A person is standing in the center of a wet",
                 ],
                 ("xpu", None): [
                     "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant night scene in a bustling Japanese city. A woman in a striking red dress",

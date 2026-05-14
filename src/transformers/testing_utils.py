@@ -83,6 +83,7 @@ from .utils import (
     is_av_available,
     is_bitsandbytes_available,
     is_bs4_available,
+    is_causal_conv1d_available,
     is_compressed_tensors_available,
     is_cv2_available,
     is_cython_available,
@@ -94,6 +95,7 @@ from .utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_flash_attn_4_available,
+    is_flash_linear_attention_available,
     is_flute_available,
     is_fouroversix_available,
     is_fp_quant_available,
@@ -162,6 +164,7 @@ from .utils import (
     is_torch_optimi_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
+    is_torch_tpu_available,
     is_torch_xla_available,
     is_torch_xpu_available,
     is_torchao_available,
@@ -734,6 +737,32 @@ def require_all_flash_attn(test_case):
     )(test_case)
 
 
+def require_flash_linear_attention(test_case):
+    """
+    Decorator marking a test that requires Flash Linear Attention.
+
+    These tests are skipped when Flash Linear Attention isn't installed.
+    """
+
+    return unittest.skipUnless(
+        is_flash_linear_attention_available(),
+        "test requires `flash-linear-attention`",
+    )(test_case)
+
+
+def require_causal_conv1d(test_case):
+    """
+    Decorator marking a test that requires causal-conv1d.
+
+    These tests are skipped when causal-conv1d isn't installed.
+    """
+
+    return unittest.skipUnless(
+        is_causal_conv1d_available(),
+        "test requires `causal-conv1d`",
+    )(test_case)
+
+
 def require_peft(test_case):
     """
     Decorator marking a test that requires PEFT.
@@ -934,6 +963,13 @@ def require_torch_neuroncore(test_case):
     return unittest.skipUnless(is_torch_neuroncore_available(check_device=False), "test requires PyTorch NeuronCore")(
         test_case
     )
+
+
+def require_torch_tpu(test_case):
+    """
+    Decorator marking a test that requires TPU (in PyTorch via torch_tpu).
+    """
+    return unittest.skipUnless(is_torch_tpu_available(), "test requires PyTorch TPU")(test_case)
 
 
 def require_torch_npu(test_case):
