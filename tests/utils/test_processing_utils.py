@@ -13,10 +13,10 @@
 # limitations under the License.
 
 """
-Tests for the fix that ensures a user-supplied ``chat_template`` kwarg takes
-precedence over the model's default template in ProcessorMixin.get_processor_dict.
-
 Regression tests for https://github.com/huggingface/transformers/issues/40913.
+
+Verify that a caller-supplied ``chat_template`` kwarg is not silently
+overwritten by the model's default template in ProcessorMixin.get_processor_dict.
 """
 
 import json
@@ -30,32 +30,22 @@ from transformers.utils import CHAT_TEMPLATE_FILE
 
 
 class TestChatTemplateKwargOverride(unittest.TestCase):
-    """get_processor_dict must not overwrite a caller-supplied chat_template."""
-
-    MODEL_TEMPLATE = (
-        "{% for message in messages %}"
-        "{{ message.role }}: {{ message.content }}\n"
-        "{% endfor %}"
-    )
+    MODEL_TEMPLATE = "{% for message in messages %}{{ message.role }}: {{ message.content }}\n{% endfor %}"
 
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp()
-        # Simulate a model directory that ships a default chat template
         with open(os.path.join(self.tmpdir, CHAT_TEMPLATE_FILE), "w", encoding="utf-8") as fh:
             fh.write(self.MODEL_TEMPLATE)
-        # Provide an empty processor_config.json so the directory looks like a valid processor
         with open(os.path.join(self.tmpdir, "processor_config.json"), "w", encoding="utf-8") as fh:
             json.dump({}, fh)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdir)
 
-    def test_user_chat_template_takes_precedence(self):
-        """A caller-supplied chat_template kwarg must survive get_processor_dict unchanged."""
+    def test_user_chat_template_preserved_in_returned_kwargs(self):
+        """A caller-supplied chat_template must survive get_processor_dict in returned_kwargs."""
         user_template = "{{ messages | tojson }}"
-        _processor_dict, returned_kwargs = ProcessorMixin.get_processor_dict(
-            self.tmpdir, chat_template=user_template
-        )
+        _processor_dict, returned_kwargs = ProcessorMixin.get_processor_dict(self.tmpdir, chat_template=user_template)
         self.assertEqual(
             returned_kwargs.get("chat_template"),
             user_template,
@@ -63,16 +53,16 @@ class TestChatTemplateKwargOverride(unittest.TestCase):
             "(regression of https://github.com/huggingface/transformers/issues/40913).",
         )
 
-    def test_model_chat_template_used_when_not_overridden(self):
-        """Without a caller-supplied kwarg, the model's on-disk template must be returned."""
-        _processor_dict, returned_kwargs = ProcessorMixin.get_processor_dict(self.tmpdir)
+    def test_model_chat_template_loaded_into_processor_dict(self):
+        """Without a caller-supplied kwarg, the model's on-disk template must appear in processor_dict."""
+        processor_dict, _kwargs = ProcessorMixin.get_processor_dict(self.tmpdir)
         self.assertIn(
             "chat_template",
-            returned_kwargs,
-            "chat_template was not loaded from the model directory.",
+            processor_dict,
+            "chat_template was not loaded from the model directory into processor_dict.",
         )
         self.assertEqual(
-            returned_kwargs["chat_template"],
+            processor_dict["chat_template"],
             self.MODEL_TEMPLATE,
             "Loaded chat_template does not match the model's chat_template.jinja content.",
         )
