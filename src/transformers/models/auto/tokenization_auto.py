@@ -64,6 +64,7 @@ REGISTERED_FAST_ALIASES: dict[str, type[Any]] = {}
 
 TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
     [
+        ("aria", "TokenizersBackend" if is_tokenizers_available() else None),
         ("EvollaModel", "TokenizersBackend" if is_tokenizers_available() else None),
         ("aimv2", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("albert", "AlbertTokenizer" if is_tokenizers_available() else None),
@@ -119,6 +120,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("emu3", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("ernie", "BertTokenizer" if is_tokenizers_available() else None),
         ("esm", "EsmTokenizer"),
+        ("EvollaModel", "TokenizersBackend" if is_tokenizers_available() else None),
         ("falcon_mamba", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("fastspeech2_conformer", "FastSpeech2ConformerTokenizer" if is_g2p_en_available() else None),
         ("flaubert", "FlaubertTokenizer"),
@@ -385,6 +387,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "deepseek_ocr",
     "deepseek_ocr2",
     "ernie4_5",
+    "ernie4_5_moe",
     "fuyu",
     "h2ovl_chat",
     "hyperclovax",
@@ -415,6 +418,8 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "vipllava",
     "cohere_asr",
     "camembertv2-base",
+    "smolvlm",
+    "vision-encoder-decoder"
 }
 
 for model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS:
