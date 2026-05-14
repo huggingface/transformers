@@ -401,7 +401,7 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
 @slow
 class DeepseekV4FlashBaseIntegrationTest(unittest.TestCase):
     model_id = "deepseek-ai/DeepSeek-V4-Flash-Base"
-    prompt = "Pipeline parallelism in ai is "
+    prompt = "List the first ten prime numbers:"
 
     def test_v4_flash_base_native_fp8_generation(self):
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
@@ -414,7 +414,7 @@ class DeepseekV4FlashBaseIntegrationTest(unittest.TestCase):
         )
         inputs = tokenizer(self.prompt, return_tensors="pt").to(model.device)
         with torch.no_grad():
-            out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+            out = model.generate(**inputs, max_new_tokens=32, do_sample=False)
         decoded = tokenizer.decode(out[0], skip_special_tokens=False)
-        expected = "Pipeline parallelism in ai is  a method of computer architecture that allows multiple processes or threads to run simultaneously on a single processor or on"
+        expected = "List the first ten prime numbers: 2, 3, 5, 7, 11, 13, 17, 19, 23, 29.\r\n"
         self.assertEqual(decoded, expected)
