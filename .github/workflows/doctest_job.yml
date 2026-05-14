@@ -76,7 +76,7 @@ jobs:
 
       - name: "Test suite reports artifacts: doc_tests_gpu_test_reports_${{ env.split_keys }}"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: doc_tests_gpu_test_reports_${{ env.split_keys }}
           path: /transformers/reports/doc_tests_gpu_${{ env.split_keys }}

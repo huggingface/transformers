@@ -93,7 +93,7 @@ jobs:
     name: Build doc
     needs: [get-pr-number, get-pr-info]
     if: ${{ needs.get-pr-number.outputs.PR_NUMBER != '' }}
-    uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@main
+    uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@093eb65f2e8745457987df060dc392e6bcf1347a # main
     with:
       commit_sha: ${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}
       pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}

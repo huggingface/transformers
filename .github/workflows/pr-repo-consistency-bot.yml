@@ -58,7 +58,7 @@ jobs:
       - name: Delete existing bot comment if it exists
         env:
           PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
-        uses: actions/github-script@v6
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6.4.1
         with:
           script: |
             const PR_NUMBER = parseInt(process.env.PR_NUMBER, 10);
@@ -94,7 +94,7 @@ jobs:
         env:
           PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
           COMMENT_BODY: ${{ github.event.comment.body }}
-        uses: actions/github-script@v6
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6.4.1
         with:
           script: |
             const PR_NUMBER = parseInt(process.env.PR_NUMBER, 10);
@@ -121,12 +121,12 @@ jobs:
     steps:
       # Checkout the trusted base repository (main branch) - this is safe
       - name: Checkout base repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: main
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@7f4fc3e22c37d6ff65e88745f38bd3157c663f7c # v4.9.1
         with:
           python-version: "3.10"
 
@@ -254,7 +254,7 @@ jobs:
 
       - name: Upload modified files
         if: steps.run_repo_checks.outputs.changes_detected == 'true' || steps.run_style_checks.outputs.changes_detected == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: modified-files
           path: artifact-staging/
@@ -269,7 +269,7 @@ jobs:
     steps:
       - name: Download modified files
         if: needs.run-repo-consistency-checks.outputs.changes_detected == 'true'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: modified-files
 
@@ -350,7 +350,7 @@ jobs:
 
       - name: Comment on PR
         if: needs.init_comment_with_url.result == 'success'
-        uses: actions/github-script@v6
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6.4.1
         env:
           PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
         with:

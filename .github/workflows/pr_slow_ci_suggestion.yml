@@ -24,7 +24,7 @@ jobs:
       jobs: ${{ steps.get_jobs.outputs.jobs_to_run }}
     steps:
       # This checkout to the main branch
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: "0"
 
@@ -40,7 +40,7 @@ jobs:
 
       - name: Get repository content
         id: repo_content
-        uses: actions/github-script@v6
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6.4.1
         with:
           script: |
             const fs = require('node:fs');
@@ -90,7 +90,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Check and update comment if needed
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         env:
           BODY: "\n\nrun-slow: ${{ needs.get-jobs.outputs.jobs }}"
         with:
