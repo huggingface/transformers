@@ -31,7 +31,8 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import Sapiens2Backbone, Sapiens2Model
+    from transformers import Sapiens2Backbone, Sapiens2ForSemanticSegmentation, Sapiens2Model
+    from transformers.modeling_outputs import SemanticSegmenterOutput
 
 
 if is_vision_available():
@@ -164,7 +165,9 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     inputs_embeds, attention_mask and seq_length.
     """
 
-    all_model_classes = (Sapiens2Model, Sapiens2Backbone) if is_torch_available() else ()
+    all_model_classes = (
+        (Sapiens2Model, Sapiens2Backbone, Sapiens2ForSemanticSegmentation) if is_torch_available() else ()
+    )
     pipeline_model_mapping = (
         {
             "image-feature-extraction": Sapiens2Model,
@@ -230,6 +233,29 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_feed_forward_chunking(self):
         pass
 
+    def test_post_process_semantic_segmentation(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        image_processor = Sapiens2ImageProcessor()
+
+        batch_size = self.model_tester.batch_size
+        height = width = self.model_tester.image_size
+        outputs = SemanticSegmenterOutput(logits=torch.randn(batch_size, config.num_labels, height, width))
+
+        # without target_sizes: spatial dims match logits
+        segmentation = image_processor.post_process_semantic_segmentation(outputs)
+        self.assertEqual(len(segmentation), batch_size)
+        self.assertEqual(segmentation[0].shape, torch.Size([height, width]))
+
+        # with target_sizes: output is resized to requested size
+        target_sizes = [(height * 2, width * 2)] * batch_size
+        segmentation = image_processor.post_process_semantic_segmentation(outputs, target_sizes=target_sizes)
+        self.assertEqual(len(segmentation), batch_size)
+        self.assertEqual(segmentation[0].shape, torch.Size([height * 2, width * 2]))
+
+        # mismatched batch size raises ValueError
+        with self.assertRaises(ValueError):
+            image_processor.post_process_semantic_segmentation(outputs, target_sizes=[(100, 100)])
+
     @slow
     def test_model_from_pretrained(self):
         model_name = "facebook/sapiens2-pretrain-0.4b"
@@ -290,6 +316,55 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         last_layer_patch_tokens = outputs.last_hidden_state[:, model.config.num_register_tokens + 1 :]
         expected_slice = torch.tensor([0.1283, -0.1324, -0.0661, -0.0750, -0.1012], device=torch_device)
         torch.testing.assert_close(last_layer_patch_tokens[0, 0, :5], expected_slice, rtol=1e-3, atol=1e-3)
+
+    @slow
+    def test_inference_semantic_segmentation(self):
+        # TODO(guarin): remove config. transformers_weights required for now because original checkpoints are called
+        # "sapiens2_0.4b_seg.safetensors" instead of "model.safetensors"
+        config = Sapiens2Config()
+        config.transformers_weights = "sapiens2_0.4b_seg.safetensors"
+        model = (
+            Sapiens2ForSemanticSegmentation.from_pretrained("facebook/sapiens2-seg-0.4b", config=config)
+            .eval()
+            .to(torch_device)
+        )
+
+        image_processor = self.default_image_processor
+        image = prepare_img()
+        inputs = image_processor(image, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+        logits = outputs.logits
+
+        # verify the logits shape: segmentation head upsamples back to the original image resolution
+        _, _, height, width = inputs["pixel_values"].shape
+        expected_shape = torch.Size((1, model.config.num_labels, height, width))
+        self.assertEqual(logits.shape, expected_shape)
+
+        # TODO(guarin): replace with actual expected values
+        expected_slice = torch.tensor(
+            [[-1.0, -1.0, -1.0], [-1.0, -1.0, -1.0], [-1.0, -1.0, -1.0]], device=torch_device
+        )
+        torch.testing.assert_close(logits[0, 0, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)
+
+        # verify post-processing without resizing: output shape matches model input resolution
+        segmentation = image_processor.post_process_semantic_segmentation(outputs=outputs)
+        self.assertEqual(len(segmentation), 1)
+        self.assertEqual(segmentation[0].shape, torch.Size([height, width]))
+
+        # verify post-processing with target_sizes: output is resized to original pre-preprocessing image size
+        original_size = tuple(prepare_img().shape[-2:])
+        segmentation = image_processor.post_process_semantic_segmentation(
+            outputs=outputs, target_sizes=[original_size]
+        )
+        self.assertEqual(len(segmentation), 1)
+        self.assertEqual(segmentation[0].shape, torch.Size(list(original_size)))
+
+        # TODO(guarin): replace with actual expected class ids
+        expected_class_ids = torch.tensor([[0, 0, 0], [0, 0, 0], [0, 0, 0]], device=torch_device)
+        torch.testing.assert_close(segmentation[0][:3, :3], expected_class_ids)
 
 
 @require_torch

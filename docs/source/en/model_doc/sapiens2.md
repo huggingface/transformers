@@ -41,7 +41,7 @@ The abstract from the paper is the following:
 
 Tips:
 
-- Sapiens2 uses Rotary Position Embeddings (RoPE) and supports arbitrary input resolutions. The default image processor resizes images to 768×1024.
+- Sapiens2 uses Rotary Position Embeddings (RoPE) and supports arbitrary input resolutions. The default image processor resizes images to 1024×768 (height×width).
 - The model uses Grouped Query Attention (GQA) for middle layers and full multi-head attention for the first and last 8 layers.
 - The original checkpoint files are named `sapiens2_Xb_pretrain.safetensors` (e.g., `sapiens2_0.4b_pretrain.safetensors`) rather than `model.safetensors`. Set `transformers_weights` on the config before calling `from_pretrained` to load them correctly (see usage example below).
 - Register tokens (8 by default) reduce high-norm artifacts in patch tokens, yielding cleaner attention maps and better performance on dense prediction tasks.
@@ -99,6 +99,11 @@ print("Patch features shape:", patch_features.shape) # [1, H/patch, W/patch, 102
 ## Sapiens2Backbone
 
 [[autodoc]] Sapiens2Backbone
+    - forward
+
+## Sapiens2ForSemanticSegmentation
+
+[[autodoc]] Sapiens2ForSemanticSegmentation
     - forward
 
 ## Sapiens2ImageProcessor

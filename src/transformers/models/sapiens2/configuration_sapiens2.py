@@ -74,6 +74,8 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
         Layers before `num_hidden_layers - num_last_full_attention_layers` use GQA with `num_key_value_heads`.
     pos_embed_dtype (`str`, *optional*, defaults to `"bfloat16"`):
         Dtype used for positional embedding computations (RoPE angles, cos/sin).
+    semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
+        Label index ignored when computing the segmentation loss.
     """
 
     model_type = "sapiens2"
@@ -117,6 +119,7 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     num_first_full_attention_layers: int = 8
     num_last_full_attention_layers: int = 8
     pos_embed_dtype: str = "bfloat16"
+    semantic_loss_ignore_index: int = 255
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:

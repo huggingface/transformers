@@ -14,16 +14,19 @@ import math
 from collections.abc import Callable
 
 import torch
+import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
+from ...activations import ACT2FN
 from ...image_processing_backends import TorchvisionBackend
 from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
+from ...modeling_outputs import SemanticSegmenterOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import maybe_autocast
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import can_return_tuple, maybe_autocast
 from ..dinov3_vit.configuration_dinov3_vit import DINOv3ViTConfig
 from ..dinov3_vit.modeling_dinov3_vit import (
     DINOv3ViTBackbone,
@@ -38,6 +41,9 @@ from ..dinov3_vit.modeling_dinov3_vit import (
     get_patches_center_coordinates,
     rotate_half,
 )
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="facebook/sapiens2-pretrain-0.4b")
@@ -91,6 +97,8 @@ class Sapiens2Config(DINOv3ViTConfig):
         Layers before `num_hidden_layers - num_last_full_attention_layers` use GQA with `num_key_value_heads`.
     pos_embed_dtype (`str`, *optional*, defaults to `"bfloat16"`):
         Dtype used for positional embedding computations (RoPE angles, cos/sin).
+    semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
+        Label index ignored when computing the segmentation loss.
     """
 
     model_type = "sapiens2"
@@ -114,6 +122,7 @@ class Sapiens2Config(DINOv3ViTConfig):
     num_first_full_attention_layers: int = 8
     num_last_full_attention_layers: int = 8
     pos_embed_dtype: str = "bfloat16"
+    semantic_loss_ignore_index: int = 255
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
@@ -316,11 +325,71 @@ class Sapiens2Layer(DINOv3ViTLayer):
         self.layer_scale2 = nn.Identity()
 
 
+class Sapiens2ConvTransposeLayer(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int = 4,
+        stride: int = 2,
+        padding: int = 1,
+        bias: bool = False,
+        activation: str = "silu",
+    ):
+        super().__init__()
+        self.conv = nn.ConvTranspose2d(
+            in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding, bias=bias
+        )
+        self.norm = nn.InstanceNorm2d(out_channels)
+        self.activation = ACT2FN[activation]
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.activation(self.norm(self.conv(hidden_states)))
+
+
+class Sapiens2ConvLayer(nn.Module):
+    def __init__(
+        self, in_channels: int, out_channels: int, kernel_size: int = 1, bias: bool = False, activation: str = "silu"
+    ):
+        super().__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, bias=bias)
+        self.norm = nn.InstanceNorm2d(out_channels)
+        self.activation = ACT2FN[activation]
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.activation(self.norm(self.conv(hidden_states)))
+
+
+class Sapiens2SegmentationHead(nn.Module):
+    def __init__(self, config: Sapiens2Config):
+        super().__init__()
+        deconv_channels = (config.hidden_size, 512, 256, 128, 64)
+        self.deconv_layers = nn.ModuleList(
+            Sapiens2ConvTransposeLayer(in_ch, out_ch)
+            for in_ch, out_ch in zip(deconv_channels[:-1], deconv_channels[1:])
+        )
+        self.conv_layers = nn.ModuleList(Sapiens2ConvLayer(64, 64) for _ in range(2))
+        self.classifier = nn.Conv2d(64, config.num_labels, kernel_size=1)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        for layer in self.deconv_layers:
+            hidden_states = layer(hidden_states)
+        for layer in self.conv_layers:
+            hidden_states = layer(hidden_states)
+        return self.classifier(hidden_states)
+
+
 class Sapiens2PreTrainedModel(DINOv3ViTPreTrainedModel):
+    base_model_prefix = "sapiens2"
+
     @torch.no_grad()
     def _init_weights(self, module) -> None:
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, nn.ConvTranspose2d):
+            init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
                 init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
@@ -364,14 +433,105 @@ class Sapiens2Backbone(DINOv3ViTBackbone):
         self.post_init()
 
 
+@auto_docstring(checkpoint="facebook/sapiens2-seg-0.4b")
+class Sapiens2ForSemanticSegmentation(Sapiens2PreTrainedModel):
+    def __init__(self, config: Sapiens2Config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+        self.sapiens2 = Sapiens2Model(config)
+        self.decode_head = Sapiens2SegmentationHead(config)
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        labels: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> SemanticSegmenterOutput:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
+            Ground truth semantic segmentation maps for computing the loss.
+            Indices should be in `[0, ..., config.num_labels - 1]`.
+            If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
+        """
+        if labels is not None and self.config.num_labels == 1:
+            raise ValueError("The number of labels should be greater than one")
+
+        outputs = self.sapiens2(pixel_values, **kwargs)
+
+        batch_size, _, height, width = pixel_values.shape
+        patch_height = height // self.config.patch_size
+        patch_width = width // self.config.patch_size
+
+        patch_tokens = outputs.last_hidden_state[:, 1 + self.config.num_register_tokens :]
+        feature_map = patch_tokens.transpose(1, 2).reshape(batch_size, -1, patch_height, patch_width)
+
+        logits = self.decode_head(feature_map)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits, labels, ignore_index=self.config.semantic_loss_ignore_index)
+
+        return SemanticSegmenterOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
 class Sapiens2ImageProcessor(TorchvisionBackend):
+    # Note: original Sapiens2 uses cv2.INTER_AREA for downsampling and cv2.INTER_CUBIC for upsampling
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
-    size = {"height": 768, "width": 1024}
+    size = {"height": 1024, "width": 768}
     do_resize = True
     do_rescale = True
     do_normalize = True
+
+    def post_process_semantic_segmentation(
+        self, outputs: SemanticSegmenterOutput, target_sizes: list[tuple] | None = None
+    ) -> list[torch.Tensor]:
+        """
+        Converts the output of [`Sapiens2ForSemanticSegmentation`] into semantic segmentation maps.
+
+        Args:
+            outputs (`SemanticSegmenterOutput`):
+                Raw outputs of the model.
+            target_sizes (`list[tuple]` of length `batch_size`, *optional*):
+                List of tuples corresponding to the requested final size `(height, width)` of each prediction.
+                If unset, predictions will not be resized.
+
+        Returns:
+            `list[torch.Tensor]` of length `batch_size`, where each item is a semantic segmentation map of
+            shape `(height, width)` corresponding to the target size (if `target_sizes` is specified).
+            Each entry corresponds to a semantic class id.
+        """
+        logits = outputs.logits
+
+        if target_sizes is not None:
+            if len(logits) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+
+            semantic_segmentation = []
+            for idx in range(len(logits)):
+                resized_logits = F.interpolate(
+                    logits[idx].unsqueeze(0),
+                    size=target_sizes[idx],
+                    mode="bilinear",
+                    align_corners=False,
+                    antialias=False,
+                )
+                semantic_segmentation.append(resized_logits[0].argmax(dim=0))
+        else:
+            semantic_segmentation = list(logits.argmax(dim=1))
+
+        return semantic_segmentation
 
 
 __all__ = [
@@ -379,5 +539,6 @@ __all__ = [
     "Sapiens2Model",
     "Sapiens2PreTrainedModel",
     "Sapiens2Backbone",
+    "Sapiens2ForSemanticSegmentation",
     "Sapiens2ImageProcessor",
 ]

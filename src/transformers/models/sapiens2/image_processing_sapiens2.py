@@ -16,18 +16,65 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+import torch
+import torch.nn.functional as F
+
 from ...image_processing_backends import TorchvisionBackend
 from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
+from ...modeling_outputs import SemanticSegmenterOutput
 
 
 class Sapiens2ImageProcessor(TorchvisionBackend):
+    # Note: original Sapiens2 uses cv2.INTER_AREA for downsampling and cv2.INTER_CUBIC for upsampling
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
-    size = {"height": 768, "width": 1024}
+    size = {"height": 1024, "width": 768}
     do_resize = True
     do_rescale = True
     do_normalize = True
+
+    def post_process_semantic_segmentation(
+        self, outputs: SemanticSegmenterOutput, target_sizes: list[tuple] | None = None
+    ) -> list[torch.Tensor]:
+        """
+        Converts the output of [`Sapiens2ForSemanticSegmentation`] into semantic segmentation maps.
+
+        Args:
+            outputs (`SemanticSegmenterOutput`):
+                Raw outputs of the model.
+            target_sizes (`list[tuple]` of length `batch_size`, *optional*):
+                List of tuples corresponding to the requested final size `(height, width)` of each prediction.
+                If unset, predictions will not be resized.
+
+        Returns:
+            `list[torch.Tensor]` of length `batch_size`, where each item is a semantic segmentation map of
+            shape `(height, width)` corresponding to the target size (if `target_sizes` is specified).
+            Each entry corresponds to a semantic class id.
+        """
+        logits = outputs.logits
+
+        if target_sizes is not None:
+            if len(logits) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+
+            semantic_segmentation = []
+            for idx in range(len(logits)):
+                resized_logits = F.interpolate(
+                    logits[idx].unsqueeze(0),
+                    size=target_sizes[idx],
+                    mode="bilinear",
+                    align_corners=False,
+                    antialias=False,
+                )
+                semantic_segmentation.append(resized_logits[0].argmax(dim=0))
+        else:
+            semantic_segmentation = list(logits.argmax(dim=1))
+
+        return semantic_segmentation
 
 
 __all__ = ["Sapiens2ImageProcessor"]

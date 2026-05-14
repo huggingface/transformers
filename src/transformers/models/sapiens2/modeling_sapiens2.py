@@ -28,7 +28,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling, SemanticSegmenterOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
@@ -439,10 +439,64 @@ class Sapiens2Layer(GradientCheckpointingLayer):
         return hidden_states
 
 
+class Sapiens2ConvTransposeLayer(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int = 4,
+        stride: int = 2,
+        padding: int = 1,
+        bias: bool = False,
+        activation: str = "silu",
+    ):
+        super().__init__()
+        self.conv = nn.ConvTranspose2d(
+            in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding, bias=bias
+        )
+        self.norm = nn.InstanceNorm2d(out_channels)
+        self.activation = ACT2FN[activation]
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.activation(self.norm(self.conv(hidden_states)))
+
+
+class Sapiens2ConvLayer(nn.Module):
+    def __init__(
+        self, in_channels: int, out_channels: int, kernel_size: int = 1, bias: bool = False, activation: str = "silu"
+    ):
+        super().__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, bias=bias)
+        self.norm = nn.InstanceNorm2d(out_channels)
+        self.activation = ACT2FN[activation]
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.activation(self.norm(self.conv(hidden_states)))
+
+
+class Sapiens2SegmentationHead(nn.Module):
+    def __init__(self, config: Sapiens2Config):
+        super().__init__()
+        deconv_channels = (config.hidden_size, 512, 256, 128, 64)
+        self.deconv_layers = nn.ModuleList(
+            Sapiens2ConvTransposeLayer(in_ch, out_ch)
+            for in_ch, out_ch in zip(deconv_channels[:-1], deconv_channels[1:])
+        )
+        self.conv_layers = nn.ModuleList(Sapiens2ConvLayer(64, 64) for _ in range(2))
+        self.classifier = nn.Conv2d(64, config.num_labels, kernel_size=1)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        for layer in self.deconv_layers:
+            hidden_states = layer(hidden_states)
+        for layer in self.conv_layers:
+            hidden_states = layer(hidden_states)
+        return self.classifier(hidden_states)
+
+
 @auto_docstring
 class Sapiens2PreTrainedModel(PreTrainedModel):
     config: Sapiens2Config
-    base_model_prefix = "model"
+    base_model_prefix = "sapiens2"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     supports_gradient_checkpointing = True
@@ -461,6 +515,10 @@ class Sapiens2PreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, nn.ConvTranspose2d):
+            init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
                 init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
@@ -643,4 +701,53 @@ class Sapiens2Backbone(BackboneMixin, Sapiens2PreTrainedModel):
         return output
 
 
-__all__ = ["Sapiens2Model", "Sapiens2PreTrainedModel", "Sapiens2Backbone"]
+@auto_docstring(checkpoint="facebook/sapiens2-seg-0.4b")
+class Sapiens2ForSemanticSegmentation(Sapiens2PreTrainedModel):
+    def __init__(self, config: Sapiens2Config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+        self.sapiens2 = Sapiens2Model(config)
+        self.decode_head = Sapiens2SegmentationHead(config)
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        labels: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> SemanticSegmenterOutput:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
+            Ground truth semantic segmentation maps for computing the loss.
+            Indices should be in `[0, ..., config.num_labels - 1]`.
+            If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
+        """
+        if labels is not None and self.config.num_labels == 1:
+            raise ValueError("The number of labels should be greater than one")
+
+        outputs = self.sapiens2(pixel_values, **kwargs)
+
+        batch_size, _, height, width = pixel_values.shape
+        patch_height = height // self.config.patch_size
+        patch_width = width // self.config.patch_size
+
+        patch_tokens = outputs.last_hidden_state[:, 1 + self.config.num_register_tokens :]
+        feature_map = patch_tokens.transpose(1, 2).reshape(batch_size, -1, patch_height, patch_width)
+
+        logits = self.decode_head(feature_map)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits, labels, ignore_index=self.config.semantic_loss_ignore_index)
+
+        return SemanticSegmenterOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+__all__ = ["Sapiens2Model", "Sapiens2PreTrainedModel", "Sapiens2Backbone", "Sapiens2ForSemanticSegmentation"]
