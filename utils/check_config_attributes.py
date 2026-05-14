@@ -102,6 +102,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "ModernBertConfig": ["local_attention", "reference_compile"],
     "ModernBertDecoderConfig": ["global_attn_every_n_layers", "local_attention", "local_rope_theta"],
     "SmolLM3Config": ["no_rope_layer_interval"],
+    "Sapiens2Config": ["num_first_full_attention_layers", "num_last_full_attention_layers"],
     "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],
     "HiggsAudioV2Config": ["audio_bos_token", "audio_stream_bos_id", "audio_stream_eos_id"],
     "HiggsAudioV2TokenizerConfig": ["downsample_factor"],
