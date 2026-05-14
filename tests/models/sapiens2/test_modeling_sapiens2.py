@@ -17,6 +17,7 @@ import unittest
 from functools import cached_property
 
 from transformers import Sapiens2Config, Sapiens2ImageProcessor
+from transformers.image_utils import load_image_as_tensor
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -34,7 +35,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class Sapiens2ModelTester:
@@ -241,7 +242,7 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
 
 def prepare_img():
-    image = Image.open("./tests/fixtures/tests_samples/COCO/000000004016.png")
+    image = load_image_as_tensor("./tests/fixtures/tests_samples/COCO/000000004016.png")
     return image
 
 
