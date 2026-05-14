@@ -213,7 +213,7 @@ class ModelRunner:
             # underlying data. It's just a trick to use the same storage for both tensors.
             output_ids[1, :tokens].copy_(logprobs.view(dtype=torch.int32))
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def warmup(self, model: nn.Module) -> None:
         """Pre-capture CUDA graphs and/or trigger compile warmup for varlen and decode paths (if available). Unless the
         force_warmup flag is set, the warmup is only performed if the CUDA graphs or compile are enabled."""
