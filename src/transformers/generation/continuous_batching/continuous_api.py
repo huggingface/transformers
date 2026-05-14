@@ -812,6 +812,7 @@ class ContinuousBatchingManager:
             continuous_batching_config=self.continuous_batching_config,
             device=self.model.device,
             distributed_helper=self.distributed_helper,
+            tp_plan=getattr(self.model, "tp_plan", {}),
             dtype=self.model.dtype,
         )
         self._use_prefix_sharing = paged_attention_cache.use_prefix_sharing  # update the approximation
