@@ -15,8 +15,13 @@
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_torch_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+
+
+if is_torch_available():
+    import torch
 
 
 class Sapiens2ImageProcessingTester:
@@ -30,16 +35,13 @@ class Sapiens2ImageProcessingTester:
         max_resolution=400,
         do_resize=True,
         size=None,
-        do_center_crop=True,
-        crop_size=None,
         do_normalize=True,
-        image_mean=[0.48145466, 0.4578275, 0.40821073],
-        image_std=[0.26862954, 0.26130258, 0.27577711],
-        do_convert_rgb=True,
+        image_mean=[0.485, 0.456, 0.406],
+        image_std=[0.229, 0.224, 0.225],
+        do_reduce_labels=False,
     ):
         super().__init__()
-        size = size if size is not None else {"shortest_edge": 20}
-        crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
+        size = size if size is not None else {"height": 20, "width": 18}
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
@@ -48,27 +50,23 @@ class Sapiens2ImageProcessingTester:
         self.max_resolution = max_resolution
         self.do_resize = do_resize
         self.size = size
-        self.do_center_crop = do_center_crop
-        self.crop_size = crop_size
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
-        self.do_convert_rgb = do_convert_rgb
+        self.do_reduce_labels = do_reduce_labels
 
     def prepare_image_processor_dict(self):
         return {
             "do_resize": self.do_resize,
             "size": self.size,
-            "do_center_crop": self.do_center_crop,
-            "crop_size": self.crop_size,
             "do_normalize": self.do_normalize,
             "image_mean": self.image_mean,
             "image_std": self.image_std,
-            "do_convert_rgb": self.do_convert_rgb,
+            "do_reduce_labels": self.do_reduce_labels,
         }
 
     def expected_output_image_shape(self, images):
-        return self.num_channels, self.crop_size["height"], self.crop_size["width"]
+        return self.num_channels, self.size["height"], self.size["width"]
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         return prepare_image_inputs(
@@ -98,20 +96,96 @@ class Sapiens2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "size"))
-            self.assertTrue(hasattr(image_processing, "do_center_crop"))
-            self.assertTrue(hasattr(image_processing, "center_crop"))
             self.assertTrue(hasattr(image_processing, "do_normalize"))
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
+            self.assertTrue(hasattr(image_processing, "do_reduce_labels"))
 
     def test_image_processor_from_dict_with_kwargs(self):
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"shortest_edge": 20})
-            self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
+            self.assertEqual(image_processor.size, {"height": 20, "width": 18})
+            self.assertEqual(image_processor.do_reduce_labels, False)
 
             image_processor = image_processing_class.from_dict(
-                self.image_processor_dict, size={"height": 42, "width": 42}
+                self.image_processor_dict, size={"height": 42, "width": 42}, do_reduce_labels=True
             )
             self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+            self.assertEqual(image_processor.do_reduce_labels, True)
+
+    def test_call_segmentation_maps(self):
+        for image_processing_class in self.image_processing_classes.values():
+            image_processing = image_processing_class(**self.image_processor_dict)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            maps = [torch.zeros(image.shape[-2:]).long() for image in image_inputs]
+
+            # Single image + map
+            encoding = image_processing(image_inputs[0], maps[0], return_tensors="pt")
+            self.assertEqual(
+                encoding["pixel_values"].shape,
+                (
+                    1,
+                    self.image_processor_tester.num_channels,
+                    self.image_processor_tester.size["height"],
+                    self.image_processor_tester.size["width"],
+                ),
+            )
+            self.assertEqual(
+                encoding["labels"].shape,
+                (1, self.image_processor_tester.size["height"], self.image_processor_tester.size["width"]),
+            )
+            self.assertEqual(encoding["labels"].dtype, torch.long)
+            self.assertTrue(encoding["labels"].min().item() >= 0)
+            self.assertTrue(encoding["labels"].max().item() <= 255)
+
+            # Batched images + maps
+            encoding = image_processing(image_inputs, maps, return_tensors="pt")
+            self.assertEqual(
+                encoding["pixel_values"].shape,
+                (
+                    self.image_processor_tester.batch_size,
+                    self.image_processor_tester.num_channels,
+                    self.image_processor_tester.size["height"],
+                    self.image_processor_tester.size["width"],
+                ),
+            )
+            self.assertEqual(
+                encoding["labels"].shape,
+                (
+                    self.image_processor_tester.batch_size,
+                    self.image_processor_tester.size["height"],
+                    self.image_processor_tester.size["width"],
+                ),
+            )
+            self.assertEqual(encoding["labels"].dtype, torch.long)
+            self.assertTrue(encoding["labels"].min().item() >= 0)
+            self.assertTrue(encoding["labels"].max().item() <= 255)
+
+    def test_reduce_labels(self):
+        for image_processing_class in self.image_processing_classes.values():
+            image_processing = image_processing_class(**self.image_processor_dict)
+
+            # Test reduce_label logic directly: 0 (background) → 255, N → N-1, 255 → 255
+            label = torch.tensor([[0, 1, 2], [3, 255, 5]])
+            result = image_processing.reduce_label([label.clone()])[0]
+            self.assertEqual(result[0, 0].item(), 255)  # background → ignore index
+            self.assertEqual(result[0, 1].item(), 0)  # class 1 → 0
+            self.assertEqual(result[0, 2].item(), 1)  # class 2 → 1
+            self.assertEqual(result[1, 0].item(), 2)  # class 3 → 2
+            self.assertEqual(result[1, 1].item(), 255)  # 255 stays as ignore index
+
+            # Test full pipeline: verify range and batch count
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+            maps = [torch.zeros(image.shape[-2:]).long() for image in image_inputs]
+
+            encoding = image_processing(image_inputs, maps, return_tensors="pt")
+            self.assertEqual(encoding["labels"].dtype, torch.long)
+            self.assertTrue(encoding["labels"].min().item() >= 0)
+            self.assertTrue(encoding["labels"].max().item() <= 255)
+
+            image_processing.do_reduce_labels = True
+            encoding = image_processing(image_inputs, maps, return_tensors="pt")
+            self.assertEqual(encoding["labels"].dtype, torch.long)
+            # All-zero map: background (0) → 255 after reduce
+            self.assertEqual(encoding["labels"].unique().item(), 255)
+            self.assertEqual(len(encoding["labels"]), len(maps))
