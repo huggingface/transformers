@@ -439,11 +439,12 @@ class ZayaAttention(nn.Module):
 class ZayaDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: ZayaConfig, layer_idx: int):
         super().__init__()
-        self.config = config
-        self.self_attn = ZayaAttention(config, layer_idx)
-        self.input_layernorm = ZayaRMSNorm(self.config.hidden_size, eps=self.config.rms_norm_eps)
+        self.hidden_size = config.hidden_size
+
+        self.self_attn = ZayaAttention(config=config, layer_idx=layer_idx)
         self.mlp = ZayaSparseMoeBlock(config, layer_idx)
-        self.post_attention_layernorm = ZayaRMSNorm(self.config.hidden_size, eps=self.config.rms_norm_eps)
+        self.input_layernorm = ZayaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = ZayaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_residual_scale = ZayaResidualScaling(config.hidden_size)
         self.post_mlp_residual_scale = ZayaResidualScaling(config.hidden_size)
 

@@ -27,7 +27,6 @@ from torch.nn import init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -41,7 +40,7 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..afmoe.modeling_afmoe import AfmoeForCausalLM
 from ..laguna.configuration_laguna import LagunaConfig
 from ..laguna.modeling_laguna import LagunaRotaryEmbedding
-from ..llama.modeling_llama import LlamaPreTrainedModel, repeat_kv
+from ..llama.modeling_llama import LlamaDecoderLayer, LlamaPreTrainedModel, repeat_kv
 from ..phi3.modeling_phi3 import Phi3Attention
 from ..qwen3_5_moe.modeling_qwen3_5_moe import (
     apply_rotary_pos_emb,
@@ -354,14 +353,10 @@ class ZayaAttention(Phi3Attention):
         return attn_output, attn_weights
 
 
-class ZayaDecoderLayer(GradientCheckpointingLayer):
+class ZayaDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: ZayaConfig, layer_idx: int):
-        super().__init__()
-        self.config = config
-        self.self_attn = ZayaAttention(config, layer_idx)
-        self.input_layernorm = ZayaRMSNorm(self.config.hidden_size, eps=self.config.rms_norm_eps)
+        super().__init__(config, layer_idx)
         self.mlp = ZayaSparseMoeBlock(config, layer_idx)
-        self.post_attention_layernorm = ZayaRMSNorm(self.config.hidden_size, eps=self.config.rms_norm_eps)
         self.post_attention_residual_scale = ZayaResidualScaling(config.hidden_size)
         self.post_mlp_residual_scale = ZayaResidualScaling(config.hidden_size)
 
