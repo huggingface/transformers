@@ -384,7 +384,12 @@ class GGUFQuantizedTensor(torch.Tensor):
         # The loader queues a dequant op on the destination device right after
         # this transfer (same MPS/CUDA stream), so ``non_blocking=True`` overlaps
         # the bytes copy with the next ``.to(device)`` call from another worker.
-        kwargs.setdefault("non_blocking", True)
+        # Skip the inject if ``non_blocking`` was already supplied positionally
+        # (3rd positional after device + dtype) — torch's ``nn.Module._apply``
+        # calls ``Tensor.to`` with positional args on some torch versions and
+        # would otherwise raise a duplicate-kwarg TypeError.
+        if "non_blocking" not in kwargs and len(args) < 3:
+            kwargs["non_blocking"] = True
         return super().to(*args, **kwargs)
 
     @staticmethod

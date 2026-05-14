@@ -479,12 +479,96 @@ def grouped_mm_experts_forward(
     return final_hidden_states.to(hidden_states.dtype)
 
 
+def gguf_bmm_experts_forward(
+    self: torch.nn.Module,
+    hidden_states: torch.Tensor,
+    top_k_index: torch.Tensor,
+    top_k_weights: torch.Tensor,
+) -> torch.Tensor:
+    """Quantized fused-expert forward for GGUF MoE modules.
+
+    Mirrors :func:`batched_mm_experts_forward` but the gate / up / down
+    weights live as raw GGUF byte buffers (one row per expert). Per call:
+
+      1. Flatten ``(num_tokens, top_k)`` routing into ``S = num_tokens * top_k``
+         token-expert pairs.
+      2. ``index_select`` the active experts' bytes — one gather per
+         projection, ``S`` rows × ``bytes_per_expert``.
+      3. Dispatch a single ``dequantize_<fmt>`` Metal kernel per projection
+         to materialise the ``(S, M, K)`` fp32 weight stack — one launch
+         instead of ``3 * S * layers`` from the eager loop.
+      4. ``torch.bmm`` for the per-pair (1, K)·(K, M) matvecs in one launch.
+
+    Trades GPU memory for kernel-launch volume: peak is roughly
+    ``S * intermediate * hidden * 4 bytes`` per projection, so e.g.
+    ``Qwen1.5-MoE-A2.7B`` at ``S = 4`` decodes within ~46 MB extra per
+    projection. That's worth it for the ~ N× kernel-launch reduction
+    (single dispatch per projection vs. one per activated expert).
+
+    The module is expected to expose ``gate_proj_q`` / ``up_proj_q`` /
+    ``down_proj_q`` as ``(num_experts, bytes_per_expert)`` uint8 buffers
+    along with per-projection ``{gate,up,down}_quant`` strings and a
+    ``_gather_dequant(buf, ids, quant, fmt, M, K)`` helper (see
+    ``integrations.gguf_linear.GgufQwen2MoeExperts``).
+    """
+    num_top_k = top_k_index.size(-1)
+    num_tokens = hidden_states.size(0)
+    H = self.hidden_dim
+    I = self.intermediate_dim
+
+    selected = hidden_states.repeat_interleave(num_top_k, dim=0).to(torch.float32).contiguous()  # (S, H)
+    expert_ids = top_k_index.reshape(-1).clamp(0, self.num_experts - 1).to(torch.long)
+    sample_weights = top_k_weights.reshape(-1).to(torch.float32)
+
+    gate_w = self._gather_dequant(self.gate_proj_q, expert_ids,
+                                  self.gate_quant, self._gate_fmt, I, H)  # (S, I, H)
+    up_w   = self._gather_dequant(self.up_proj_q, expert_ids,
+                                  self.up_quant, self._up_fmt, I, H)  # (S, I, H)
+
+    # (S, 1, H) @ (S, H, I) -> (S, 1, I) -> (S, I)
+    gate = torch.bmm(selected.unsqueeze(1), gate_w.transpose(-1, -2)).squeeze(1)
+    up   = torch.bmm(selected.unsqueeze(1),   up_w.transpose(-1, -2)).squeeze(1)
+    inter = self.act_fn(gate) * up  # (S, I)
+
+    down_w = self._gather_dequant(self.down_proj_q, expert_ids,
+                                  self.down_quant, self._down_fmt, H, I)  # (S, H, I)
+    out = torch.bmm(inter.unsqueeze(1), down_w.transpose(-1, -2)).squeeze(1)  # (S, H)
+
+    weighted = out * sample_weights.unsqueeze(-1)
+    return weighted.view(num_tokens, num_top_k, H).sum(dim=1).to(hidden_states.dtype)
+
+
+def gguf_grouped_mm_experts_forward(
+    self: torch.nn.Module,
+    hidden_states: torch.Tensor,
+    top_k_index: torch.Tensor,
+    top_k_weights: torch.Tensor,
+) -> torch.Tensor:
+    """GGUF MoE forward intended for prefill (many tokens per expert).
+
+    Currently a thin wrapper that delegates to
+    :func:`gguf_bmm_experts_forward`. Reason: ``torch.grouped_mm`` requires
+    a ``(num_experts, K, M)`` weight tensor, while our quantized layout
+    only gives us the *bytes* per expert — dequantising every expert to fp32
+    every forward (60 × ~46 MB for a Qwen1.5-MoE-style layer × 3 projections)
+    is far more expensive than the bmm overhead it would save.
+
+    The right path here is a GGUF-aware grouped matmul kernel (llama.cpp's
+    ``mul_mat_id``: indexes into the byte buffer per group, never materialises
+    the dense fp tensor). Once that lands as a Metal kernel we wire it here
+    and the prefill regime stops degenerating to per-token bmm.
+    """
+    return gguf_bmm_experts_forward(self, hidden_states, top_k_index, top_k_weights)
+
+
 class ExpertsInterface(GeneralInterface):
     """Interface for registering custom experts forward functions."""
 
     _global_mapping = {
         "batched_mm": batched_mm_experts_forward,
         "grouped_mm": grouped_mm_experts_forward,
+        "gguf_bmm": gguf_bmm_experts_forward,
+        "gguf_grouped_mm": gguf_grouped_mm_experts_forward,
         "sonicmoe": sonicmoe_experts_forward,
     }
 

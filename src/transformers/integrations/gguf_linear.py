@@ -307,24 +307,37 @@ class GgufQwen2MoeExperts(nn.Module):
         self._up_bytes_per   = _bytes_per_expert(up_quant,   self.intermediate_dim, self.hidden_dim)
         self._down_bytes_per = _bytes_per_expert(down_quant, self.hidden_dim,        self.intermediate_dim)
 
+        # Per-expert byte buffers stored as ``(num_experts, bytes_per_expert)``
+        # 2D tensors so the batched-mm forward can ``buf[expert_ids]`` natively
+        # into an ``(S, bytes_per_expert)`` gather without manual slicing.
         self.register_buffer(
             "gate_proj_q",
-            torch.empty(self.num_experts * self._gate_bytes_per, dtype=torch.uint8, device=device or "cpu"),
+            torch.empty(self.num_experts, self._gate_bytes_per, dtype=torch.uint8, device=device or "cpu"),
             persistent=True,
         )
         self.register_buffer(
             "up_proj_q",
-            torch.empty(self.num_experts * self._up_bytes_per, dtype=torch.uint8, device=device or "cpu"),
+            torch.empty(self.num_experts, self._up_bytes_per, dtype=torch.uint8, device=device or "cpu"),
             persistent=True,
         )
         self.register_buffer(
             "down_proj_q",
-            torch.empty(self.num_experts * self._down_bytes_per, dtype=torch.uint8, device=device or "cpu"),
+            torch.empty(self.num_experts, self._down_bytes_per, dtype=torch.uint8, device=device or "cpu"),
             persistent=True,
         )
 
         from ..activations import ACT2FN
         self.act_fn = ACT2FN[config.hidden_act]
+        # Used by the moe.py ``ExpertsInterface`` dispatcher. Setting it via
+        # the parent config (in :func:`replace_qwen2_moe_experts`) is what
+        # ultimately routes the forward into ``gguf_bmm_experts_forward``.
+        # has_gate / is_transposed / has_bias / is_concatenated are read by
+        # the generic dispatchers — none of them apply directly to our layout
+        # but we set sane defaults for the registry contract.
+        self.has_gate = True
+        self.has_bias = False
+        self.is_transposed = False
+        self.is_concatenated = False
 
     def extra_repr(self) -> str:
         return (
@@ -353,31 +366,31 @@ class GgufQwen2MoeExperts(nn.Module):
                     f"state has {v!r}, module has {getattr(self, name)!r}"
                 )
 
-    def _expert_slice(self, buf: torch.Tensor, expert_idx: int, bytes_per: int) -> torch.Tensor:
-        start = int(expert_idx) * bytes_per
-        return buf.narrow(0, start, bytes_per)
+    def _gather_dequant(self, buf_2d: torch.Tensor, expert_ids: torch.Tensor, quant_name: str, fmt: str,
+                        M: int, K: int) -> torch.Tensor:
+        """Gather + dequant the selected experts in one shot.
 
-    def _matvec_or_matmul(self, qw: torch.Tensor, x_flat: torch.Tensor, M: int, fmt: str, quant_name: str) -> torch.Tensor:
-        N = x_flat.shape[0]
-        if x_flat.device.type == "mps":
+        ``buf_2d`` is ``(num_experts, bytes_per_expert)`` uint8; the gather
+        produces ``(S, bytes_per_expert)`` then flattens for the per-block
+        Metal dequant kernel, which dispatches threadgroups across all S
+        experts in a single launch. Returns ``(S, M, K)`` fp32.
+        """
+        gathered = buf_2d.index_select(0, expert_ids).contiguous()  # (S, bytes_per)
+        flat = gathered.view(-1)
+        S = expert_ids.shape[0]
+        out = torch.empty(S * M * K, dtype=torch.float32, device=flat.device)
+
+        if flat.device.type == "mps":
             mod = _ensure_metal_kernels()
-            op_name = f"mul_mat_vec_{fmt}_f32" if N == 1 else f"mul_mat_{fmt}_f32"
+            op_name = f"dequantize_{fmt}"
             if mod is not None and hasattr(mod._ops, op_name):
-                fn = getattr(mod._ops, op_name)
-                if N == 1:
-                    y = torch.empty(M, dtype=torch.float32, device=x_flat.device)
-                    fn(qw, x_flat.reshape(-1), y)
-                    return y.unsqueeze(0)
-                else:
-                    y = torch.empty(N * M, dtype=torch.float32, device=x_flat.device)
-                    fn(qw, x_flat, y)
-                    return y.reshape(N, M)
+                getattr(mod._ops, op_name)(flat, out)
+                return out.view(S, M, K)
+
         import gguf
         from ..integrations.gguf_dequant import dequantize_gguf_tensor
         qt = getattr(gguf.GGMLQuantizationType, quant_name)
-        K = x_flat.shape[-1]
-        w = dequantize_gguf_tensor(qw, qt, device=x_flat.device).reshape(M, K)
-        return torch.nn.functional.linear(x_flat, w)
+        return dequantize_gguf_tensor(flat, qt, device=flat.device).view(S, M, K)
 
     @torch.no_grad()
     def forward(
@@ -386,31 +399,59 @@ class GgufQwen2MoeExperts(nn.Module):
         top_k_index: torch.Tensor,
         top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
-        final_hidden_states = torch.zeros_like(hidden_states)
-        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
-        expert_mask = expert_mask.permute(2, 1, 0)
-        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        """Dispatch into the ``ExpertsInterface`` registry — same pattern as
+        :class:`FP8Experts.forward`.
 
-        for expert_idx in expert_hit:
-            expert_idx = expert_idx[0].item()
-            if expert_idx == self.num_experts:
-                continue
-            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
-            current_state = hidden_states[token_idx].to(torch.float32).contiguous()
+        Default is ``"gguf_bmm"`` (batched dequant + ``torch.bmm``). Override
+        with ``module._experts_implementation = "gguf_grouped_mm"`` or
+        ``"eager"`` per instance, or globally via
+        ``model.config._experts_implementation``.
+        """
+        from .moe import ALL_EXPERTS_FUNCTIONS
 
-            gate_qw = self._expert_slice(self.gate_proj_q, expert_idx, self._gate_bytes_per)
-            up_qw   = self._expert_slice(self.up_proj_q,   expert_idx, self._up_bytes_per)
-            down_qw = self._expert_slice(self.down_proj_q, expert_idx, self._down_bytes_per)
+        impl = getattr(self, "_experts_implementation", None)
+        if impl is None:
+            impl = "gguf_bmm"
+        fwd = ALL_EXPERTS_FUNCTIONS.get_interface(impl, _gguf_eager_experts_forward)
+        return fwd(self, hidden_states, top_k_index, top_k_weights)
 
-            gate = self._matvec_or_matmul(gate_qw, current_state, self.intermediate_dim, self._gate_fmt, self.gate_quant)
-            up   = self._matvec_or_matmul(up_qw,   current_state, self.intermediate_dim, self._up_fmt,   self.up_quant)
-            inter = (self.act_fn(gate) * up).contiguous()
-            out = self._matvec_or_matmul(down_qw, inter, self.hidden_dim, self._down_fmt, self.down_quant)
 
-            out = out * top_k_weights[token_idx, top_k_pos, None]
-            final_hidden_states.index_add_(0, token_idx, out.to(final_hidden_states.dtype))
+@torch.no_grad()
+def _gguf_eager_experts_forward(self, hidden_states, top_k_index, top_k_weights):
+    """One-at-a-time fallback. Kept as the safety net for configurations
+    where ``torch.bmm`` over batched dequant tensors isn't acceptable (e.g.
+    out-of-memory on a giant prefill where ``(S, intermediate, hidden)`` fp32
+    won't fit). 90× slower than the bmm path on Apple Silicon for decode.
+    """
+    final_hidden_states = torch.zeros_like(hidden_states)
+    expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+    expert_mask = expert_mask.permute(2, 1, 0)
+    expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
-        return final_hidden_states
+    for expert_idx in expert_hit:
+        expert_idx = expert_idx[0].item()
+        if expert_idx == self.num_experts:
+            continue
+        top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+        current_state = hidden_states[token_idx].to(torch.float32).contiguous()
+
+        ids = torch.tensor([expert_idx], device=current_state.device, dtype=torch.long)
+        gate_w = self._gather_dequant(self.gate_proj_q, ids, self.gate_quant, self._gate_fmt,
+                                       self.intermediate_dim, self.hidden_dim).squeeze(0)
+        up_w   = self._gather_dequant(self.up_proj_q,   ids, self.up_quant,   self._up_fmt,
+                                       self.intermediate_dim, self.hidden_dim).squeeze(0)
+        down_w = self._gather_dequant(self.down_proj_q, ids, self.down_quant, self._down_fmt,
+                                       self.hidden_dim, self.intermediate_dim).squeeze(0)
+
+        gate = torch.nn.functional.linear(current_state, gate_w)
+        up   = torch.nn.functional.linear(current_state, up_w)
+        inter = (self.act_fn(gate) * up).contiguous()
+        out = torch.nn.functional.linear(inter, down_w)
+
+        out = out * top_k_weights[token_idx, top_k_pos, None]
+        final_hidden_states.index_add_(0, token_idx, out.to(final_hidden_states.dtype))
+
+    return final_hidden_states
 
 
 # =============================================================================
@@ -523,8 +564,9 @@ def replace_qwen2_moe_experts(
         for buf_name, key in [("gate_proj_q", "gate_bytes"),
                               ("up_proj_q",   "up_bytes"),
                               ("down_proj_q", "down_bytes")]:
-            src = info[key].detach().contiguous().view(torch.uint8).reshape(-1)
+            src = info[key].detach().contiguous().view(torch.uint8)
             dst = getattr(new, buf_name)
+            # 2D buffer is (num_experts, bytes_per_expert) — reshape the source.
             if src.numel() != dst.numel():
                 warnings.warn(
                     f"replace_qwen2_moe_experts: {name}.{buf_name} size mismatch "
@@ -533,13 +575,21 @@ def replace_qwen2_moe_experts(
                 )
                 ok = False
                 break
-            dst.copy_(src.to(dst.device))
+            dst.copy_(src.reshape(dst.shape).to(dst.device))
         if not ok:
             continue
 
         parent_path, _, leaf = name.rpartition(".")
         parent = model.get_submodule(parent_path) if parent_path else model
         setattr(parent, leaf, new)
+        # Route the new module's forward through the ExpertsInterface dispatcher
+        # — same pattern as FP8Experts. ``gguf_bmm`` is the default; users can
+        # override via ``model.config._experts_implementation = "gguf_grouped_mm"``.
+        parent_config = getattr(model, "config", None)
+        if parent_config is not None and not hasattr(parent_config, "_experts_implementation"):
+            parent_config._experts_implementation = "gguf_bmm"
+        elif parent_config is not None and parent_config._experts_implementation in (None, "eager"):
+            parent_config._experts_implementation = "gguf_bmm"
         swapped += 1
     return swapped
 
