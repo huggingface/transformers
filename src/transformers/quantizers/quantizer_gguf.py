@@ -113,14 +113,14 @@ class GGUFQuantizer(HfQuantizer):
         from ..integrations.gguf_linear import replace_with_gguf_linear
 
         # Apply the same rename rules the loader used to derive HF param names
-        # from GGUF tensor names, then read the original quant type off each
-        # source ``GGUFQuantizedTensor`` to build the swap map.
+        # from GGUF tensor names, then collect (quant_type, raw bytes, permute marker)
+        # per HF weight for the swap helper.
         renamings = [e for e in self.weight_mapping if isinstance(e, WeightRenaming)]
         converters = [e for e in self.weight_mapping if isinstance(e, WeightConverter)]
         meta_state_dict = model.state_dict()
         prefix = getattr(model, "base_model_prefix", "") or ""
 
-        quant_types_by_name: dict[str, str] = {}
+        weight_info_by_name: dict[str, dict] = {}
         for gguf_name, tensor in self.gguf_tensors.items():
             qt = getattr(tensor, "quant_type", None)
             if qt is None:
@@ -132,9 +132,21 @@ class GGUFQuantizer(HfQuantizer):
                 )
             except Exception:
                 continue
-            quant_types_by_name[hf_name] = qt.name if hasattr(qt, "name") else str(qt)
+            # GGUF stores attn_q / attn_k weights in llama.cpp's permuted layout.
+            # Mark them so the swap helper round-trips via gguf-py instead of copying
+            # the bytes verbatim (which would give wrong matmul output).
+            permute = None
+            if ".attn_q." in gguf_name:
+                permute = "q"
+            elif ".attn_k." in gguf_name:
+                permute = "k"
+            weight_info_by_name[hf_name] = {
+                "quant_type": qt.name if hasattr(qt, "name") else str(qt),
+                "bytes": tensor,
+                "permute": permute,
+            }
 
-        replace_with_gguf_linear(model, quant_types_by_name)
+        replace_with_gguf_linear(model, weight_info_by_name)
 
     @property
     def is_trainable(self):

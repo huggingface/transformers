@@ -209,21 +209,35 @@ class GgufLinear(nn.Module):
 
 def replace_with_gguf_linear(
     model: nn.Module,
-    quant_types_by_name: dict[str, str],
+    weight_info_by_name: dict[str, dict],
     modules_to_not_convert: Optional[set[str]] = None,
 ) -> int:
-    """Walk `model` and swap each ``nn.Linear`` whose name appears in
-    ``quant_types_by_name`` (HF parameter-name → quant-type-string) with a
-    :class:`GgufLinear`. The Linear's loaded fp32 weight is re-quantized to
-    the target quant type via ``gguf-py`` and copied into the new module's
-    ``qweight`` buffer.
+    """Walk `model` and swap each ``nn.Linear`` whose weight name appears in
+    ``weight_info_by_name`` for a :class:`GgufLinear`.
+
+    ``weight_info_by_name`` maps a HF parameter name (e.g.
+    ``model.layers.0.self_attn.v_proj.weight``) to a dict::
+
+        {
+            "quant_type": "Q4_0",         # GGUF type name
+            "bytes": <uint8 Tensor>,      # original GGUF block bytes (flat)
+            "permute": None | "q" | "k",  # llama.cpp Q/K head permute marker
+        }
+
+    For non-permuted Linears the **original GGUF bytes are copied verbatim**
+    into ``qweight`` — byte-identical to llama.cpp, works for *all* quant
+    types (including K-quants where ``gguf.quantize`` isn't implemented in
+    Python), and avoids any round-trip precision loss.
+
+    For ``attn_q`` / ``attn_k`` (``permute`` set), the GGUF bytes are stored
+    in llama.cpp's permuted layout, so we dequantize → reverse-permute →
+    re-quantize through ``gguf-py``. This only works for quant types with a
+    Python re-quantizer (today Q4_0 / Q8_0); unsupported permuted layers
+    stay as the dequantized ``nn.Linear``.
 
     Returns the number of layers swapped.
-
-    Skips layers whose name contains any substring in ``modules_to_not_convert``.
     """
     import gguf
-    import numpy as np
 
     modules_to_not_convert = modules_to_not_convert or set()
     swapped = 0
@@ -232,38 +246,40 @@ def replace_with_gguf_linear(
         if not isinstance(mod, nn.Linear):
             continue
         weight_name = f"{name}.weight"
-        if weight_name not in quant_types_by_name:
+        info = weight_info_by_name.get(weight_name)
+        if info is None:
             continue
         if any(skip in name for skip in modules_to_not_convert):
             continue
 
-        quant_type = quant_types_by_name[weight_name]
+        quant_type = info["quant_type"]
         if quant_type not in _QUANT_INFO:
             continue
+        block_bytes, block_elems = _QUANT_INFO[quant_type]
+        expected_nbytes = mod.out_features * (mod.in_features // block_elems) * block_bytes
 
-        # Re-quantize the loaded fp32 weight via gguf-py. Skips silently for
-        # quant types whose Python quantizer isn't implemented (currently K-quants
-        # and IQ4 — Q4_0 / Q8_0 work).
-        try:
-            qt = getattr(gguf.GGMLQuantizationType, quant_type)
-            w_np = mod.weight.detach().to(torch.float32).cpu().numpy()
-            qb = gguf.quantize(w_np, qt)
-            qbytes = bytes(qb.tobytes())
-            expected_nbytes = mod.out_features * (mod.in_features // _QUANT_INFO[quant_type][1]) * _QUANT_INFO[quant_type][0]
-            if len(qbytes) != expected_nbytes:
-                import warnings
-                warnings.warn(
-                    f"GgufLinear: skip {name} ({mod.in_features}x{mod.out_features}) — "
-                    f"re-quantize produced {len(qbytes)} bytes, expected {expected_nbytes} "
-                    f"(w_np.shape={w_np.shape}); leaving as nn.Linear",
-                    stacklevel=2,
-                )
+        if info.get("permute") is not None:
+            # llama.cpp-permuted layout — bytes can't be used as-is. Round-trip
+            # through fp32: the loader already produced the un-permuted fp32
+            # weight in `mod.weight`, so just re-quantize it back to bytes.
+            try:
+                qt = getattr(gguf.GGMLQuantizationType, quant_type)
+                w_np = mod.weight.detach().to(torch.float32).cpu().numpy()
+                qbytes_t = torch.frombuffer(bytearray(gguf.quantize(w_np, qt).tobytes()), dtype=torch.uint8)
+            except (NotImplementedError, Exception):
+                # K-quants etc. — leave as nn.Linear with the (un-permuted) fp32 weight.
                 continue
-        except NotImplementedError:
-            continue
-        except Exception as e:
+        else:
+            raw = info["bytes"]
+            qbytes_t = raw.detach().contiguous().view(torch.uint8).reshape(-1)
+
+        if qbytes_t.numel() != expected_nbytes:
             import warnings
-            warnings.warn(f"GgufLinear: skip {name} re-quantize: {e}", stacklevel=2)
+            warnings.warn(
+                f"GgufLinear: skip {name} — bytes size mismatch "
+                f"({qbytes_t.numel()} vs expected {expected_nbytes})",
+                stacklevel=2,
+            )
             continue
 
         new = GgufLinear(
@@ -273,7 +289,7 @@ def replace_with_gguf_linear(
             bias=mod.bias is not None,
             device=mod.weight.device,
         )
-        new.qweight.copy_(torch.frombuffer(bytearray(qbytes), dtype=torch.uint8))
+        new.qweight.copy_(qbytes_t.to(new.qweight.device))
         if mod.bias is not None:
             new.bias.data.copy_(mod.bias.detach().to(torch.float32))
 
