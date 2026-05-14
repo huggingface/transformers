@@ -110,6 +110,20 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         expected_box_slice = torch.tensor([0.6908, 0.4354, 1.0737, 1.3947])
         torch.testing.assert_close(post_processed[0]["boxes"][0], expected_box_slice, rtol=1e-4, atol=1e-4)
 
+    def test_post_process_grounded_object_detection_no_boxes(self):
+        processor = self.get_processor()
+
+        grounding_dino_output = self.get_fake_grounding_dino_output()
+
+        # threshold above any sigmoid output so no box survives
+        post_processed = processor.post_process_grounded_object_detection(grounding_dino_output, threshold=2.0)
+
+        self.assertEqual(len(post_processed), self.batch_size)
+        for result in post_processed:
+            self.assertEqual(result["scores"].shape, (0,))
+            self.assertEqual(result["boxes"].shape, (0, 4))
+            self.assertEqual(result["text_labels"], [])
+
     def test_text_preprocessing_equivalence(self):
         processor = self.get_processor()
 
