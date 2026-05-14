@@ -22,6 +22,7 @@ import io
 import os
 import warnings
 from collections.abc import Sequence
+from dataclasses import dataclass, field, fields
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, Union
 
@@ -56,6 +57,123 @@ if is_torchcodec_available():
     TORCHCODEC_VERSION = version.parse(importlib.metadata.version("torchcodec"))
 
 AudioInput = Union[np.ndarray, "torch.Tensor", Sequence[np.ndarray], Sequence["torch.Tensor"]]
+
+
+@dataclass(frozen=True)
+class StftConfig:
+    """Configuration for Short-Time Fourier Transform.
+
+    Uses torchaudio parameter naming conventions. See
+    `torchaudio.transforms.MelSpectrogram` for reference.
+    """
+
+    n_fft: int = 400
+    win_length: int | None = None
+    hop_length: int | None = None
+    window_fn: str = "hann_window"
+    wkwargs: dict | None = None
+    power: float = 2.0
+    center: bool = True
+    pad_mode: str = "reflect"
+    normalized: bool = False
+    onesided: bool | None = None
+    periodic: bool = True
+    left_align_fft: bool = False
+    window_dtype: str | None = None
+
+    def to_dict(self) -> dict:
+        return {f.name: getattr(self, f.name) for f in fields(self) if getattr(self, f.name) is not None}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "StftConfig":
+        valid_keys = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in d.items() if k in valid_keys})
+
+
+@dataclass(frozen=True)
+class MelScaleConfig:
+    """Configuration for mel filterbank.
+
+    Uses torchaudio parameter naming conventions. See
+    `torchaudio.transforms.MelSpectrogram` for reference.
+    """
+
+    n_mels: int = 128
+    f_min: float = 0.0
+    f_max: float | None = None
+    mel_scale: str = "htk"
+    norm: str | None = None
+    triangularize_in_mel_space: bool = False
+    frequency_bin_mode: str = "rfft"
+    computation_dtype: str | None = None
+    bands_to_zero: int = 0
+    matmul_order: str = "filters_first"
+
+    def to_dict(self) -> dict:
+        return {f.name: getattr(self, f.name) for f in fields(self) if getattr(self, f.name) is not None}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "MelScaleConfig":
+        valid_keys = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in d.items() if k in valid_keys})
+
+
+@dataclass(frozen=True)
+class SpectrogramConfig:
+    """Configuration for spectrogram extraction, composed of STFT and mel scale sub-configs."""
+
+    stft_config: StftConfig = field(default_factory=StftConfig)
+    mel_scale_config: MelScaleConfig | None = None
+    log_mode: str = "log10"
+    chunk_length: int | None = None
+    preemphasis: float | None = None
+    remove_dc_offset: bool = False
+    mel_floor: float = 1e-10
+    waveform_scale: float | None = None
+    computation_dtype: str | None = None
+    skip_last_frame: bool = False
+
+    def __getitem__(self, key):
+        if hasattr(self, key):
+            return getattr(self, key)
+        raise KeyError(f"Key {key} not found in SpectrogramConfig.")
+
+    def __iter__(self):
+        for f in fields(self):
+            val = getattr(self, f.name)
+            if val is not None:
+                if hasattr(val, "to_dict"):
+                    yield f.name, val.to_dict()
+                else:
+                    yield f.name, val
+
+    def __eq__(self, other):
+        if isinstance(other, dict):
+            return dict(self) == other
+        if isinstance(other, SpectrogramConfig):
+            return tuple(getattr(self, f.name) for f in fields(self)) == tuple(
+                getattr(other, f.name) for f in fields(self)
+            )
+        return NotImplemented
+
+    def to_dict(self) -> dict:
+        return dict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "SpectrogramConfig":
+        stft_config = StftConfig.from_dict(d["stft_config"]) if "stft_config" in d else StftConfig()
+        mel_scale_config = MelScaleConfig.from_dict(d["mel_scale_config"]) if "mel_scale_config" in d else None
+        return cls(
+            stft_config=stft_config,
+            mel_scale_config=mel_scale_config,
+            log_mode=d.get("log_mode", "log10"),
+            chunk_length=d.get("chunk_length"),
+            preemphasis=d.get("preemphasis"),
+            remove_dc_offset=d.get("remove_dc_offset", False),
+            mel_floor=d.get("mel_floor", 1e-10),
+            waveform_scale=d.get("waveform_scale"),
+            skip_last_frame=d.get("skip_last_frame", False),
+        )
 
 
 @retry(exceptions=(httpx.HTTPError,))
