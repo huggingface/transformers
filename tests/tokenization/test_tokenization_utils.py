@@ -201,6 +201,20 @@ class TokenizerUtilsTest(unittest.TestCase):
         self.assertTrue(tokenizer.image_token_id == loaded_tokenizer.convert_tokens_to_ids("<image>"))
 
     @require_tokenizers
+    def test_decoding_empty_batch(self):
+        # decode and batch_decode should treat an empty input as an empty batch of sequences
+        for tokenizer_class in [BertTokenizer, PreTrainedTokenizerFast]:
+            with self.subTest(f"{tokenizer_class}"):
+                tokenizer = tokenizer_class.from_pretrained("google-bert/bert-base-cased")
+
+                self.assertEqual(tokenizer.decode([]), [])
+                self.assertEqual(tokenizer.decode(()), [])
+                self.assertEqual(tokenizer.batch_decode([]), [])
+
+                # a single empty sequence still returns an empty string
+                self.assertEqual(tokenizer.batch_decode([[]]), [""])
+
+    @require_tokenizers
     def test_decoding_skip_special_tokens(self):
         for tokenizer_class in [BertTokenizer, BertTokenizer]:
             with self.subTest(f"{tokenizer_class}"):

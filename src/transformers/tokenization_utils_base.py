@@ -2881,7 +2881,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         token_ids = to_py_obj(token_ids)
 
         # If we received batched input, decode each sequence
-        if isinstance(token_ids, (list, tuple)) and len(token_ids) > 0 and isinstance(token_ids[0], (list, tuple)):
+        if isinstance(token_ids, (list, tuple)) and (len(token_ids) == 0 or isinstance(token_ids[0], (list, tuple))):
             clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", False)
             return [
                 self._decode(
