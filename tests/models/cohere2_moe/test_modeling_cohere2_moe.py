@@ -209,7 +209,7 @@ class Cohere2MoeIntegrationTest(unittest.TestCase):
     text-only inputs exercises the text backbone without requiring a separate text-only checkpoint.
     """
 
-    model_id = "/root/repos/moe/engines/mhlv2_bf16_clean"
+    model_id = "/root/repos/moe/engines/command_a+_bf16"
     input_text = ["Hello I am doing", "Hi today"]
 
     def tearDown(self):
