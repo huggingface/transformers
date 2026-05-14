@@ -45,6 +45,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
@@ -131,6 +132,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install dependencies
         run: |
@@ -162,13 +164,13 @@ jobs:
 
       - name: Run all pipeline tests on Intel Gaudi
         run: |
-          python3 -m pytest -v --make-reports=${{ env.machine_type }}_run_pipelines_torch_gpu_test_reports tests/pipelines -m "not not_device_test"
+          python3 -m pytest -v --make-reports="${machine_type}_run_pipelines_torch_gpu_test_reports" tests/pipelines -m "not not_device_test"
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
         run: |
-          cat reports/${{ env.machine_type }}_run_pipelines_torch_gpu_test_reports/failures_short.txt
+          cat "reports/${machine_type}_run_pipelines_torch_gpu_test_reports/failures_short.txt"
 
       - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_pipelines_torch_gpu_test_reports"
         if: ${{ always() }}
@@ -200,6 +202,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install dependencies
         run: |
@@ -234,13 +237,13 @@ jobs:
       - name: Run examples tests on Intel Gaudi
         run: |
           pip install -r examples/pytorch/_tests_requirements.txt
-          python3 -m pytest -v --make-reports=${{ env.machine_type }}_run_examples_gpu_test_reports examples/pytorch -m "not not_device_test"
+          python3 -m pytest -v --make-reports="${machine_type}_run_examples_gpu_test_reports" examples/pytorch -m "not not_device_test"
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
         run: |
-          cat reports/${{ env.machine_type }}_run_examples_gpu_test_reports/failures_short.txt
+          cat "reports/${machine_type}_run_examples_gpu_test_reports/failures_short.txt"
 
       - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_examples_gpu_test_reports"
         if: ${{ always() }}
@@ -272,6 +275,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install dependencies
         run: |
@@ -306,13 +310,13 @@ jobs:
 
       - name: Run all deepspeed tests on intel Gaudi
         run: |
-          python3 -m pytest -v --make-reports=${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports tests/deepspeed -m "not not_device_test"
+          python3 -m pytest -v --make-reports="${machine_type}_run_torch_cuda_extensions_gpu_test_reports" tests/deepspeed -m "not not_device_test"
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
         run: |
-          cat reports/${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports/failures_short.txt
+          cat "reports/${machine_type}_run_torch_cuda_extensions_gpu_test_reports/failures_short.txt"
 
       - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports"
         if: ${{ always() }}

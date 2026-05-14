@@ -28,6 +28,8 @@ jobs:
       -
         name: Check out code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
       -
         id: get-base-image
         name: Get Base Image
@@ -73,6 +75,8 @@ jobs:
       -
         name: Check out code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
       -
         id: get-base-image
         name: Get Base Image

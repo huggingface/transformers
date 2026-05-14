@@ -72,6 +72,7 @@ jobs:
         with:
           fetch-depth: "0"
           ref: "refs/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge"
+          persist-credentials: false
 
       - name: Verify merge commit SHA
         env:
