@@ -31,26 +31,14 @@ from ...utils import auto_docstring
 @strict
 class ZayaConfig(PreTrainedConfig):
     r"""
-    intermediate_size (`int`, *optional*, defaults to 4096):
-        Dimension of the feed-forward and expert hidden states.
-    num_key_value_heads (`int`, *optional*, defaults to 2):
-        Number of key/value groups.
-    partial_rotary_factor (`float`, *optional*, defaults to 0.5):
-        Fraction of each attention head dimension using rotary embeddings.
     lm_head_bias (`bool`, *optional*, defaults to `False`):
         Whether to add a bias to the language modeling head.
-    num_experts_per_tok (`int`, *optional*, defaults to 1):
-        Number of selected experts per token. ZAYA checkpoints use top-1 routing.
-    zaya_mlp_expansion (`int`, *optional*, defaults to 256):
-        Expansion size used by the dense ZAYA blocks.
+    router_hidden_size (`int`, *optional*, defaults to 256):
+        Hidden size used by the ZAYA router.
     cca_time0 (`int`, *optional*, defaults to 2):
         First temporal parameter of the CCA projection.
     cca_time1 (`int`, *optional*, defaults to 2):
         Second temporal parameter of the CCA projection.
-    layer_types (`list[str]`, *optional*):
-        Per-layer selector for standard RoPE versus SWA RoPE embeddings.
-    cache_layer_types (`list[str]`, *optional*):
-        Per-layer selector for cache layout. ZAYA uses the native `"hybrid"` cache layer for every decoder layer.
 
     ```python
     >>> from transformers import ZayaConfig, ZayaModel
@@ -64,87 +52,76 @@ class ZayaConfig(PreTrainedConfig):
 
     model_type = "zaya"
     keys_to_ignore_at_inference = ["past_key_values"]
-    default_theta = 5000000.0
-    default_swa_theta = 10000.0
 
     vocab_size: int = 262272
     hidden_size: int = 2048
-    intermediate_size: int = 4096
     num_hidden_layers: int = 40
-    num_experts: int = 16
     num_attention_heads: int = 8
     num_key_value_heads: int = 2
     hidden_act: str = "silu"
-    head_dim: int = 128
     max_position_embeddings: int = 131072
     initializer_range: float = 0.02
-    norm_epsilon: float = 1e-5
+    rms_norm_eps: float = 1e-5
     use_cache: bool = True
     tie_word_embeddings: bool = True
     rope_parameters: RopeParameters | dict | None = None
-    partial_rotary_factor: float = 0.5
-    attention_bias: bool = False
-    lm_head_bias: bool = False
-    attention_dropout: float | int = 0.0
-    num_experts_per_tok: int = 1
-    zaya_mlp_expansion: int = 256
-    cca_time0: int = 2
-    cca_time1: int = 2
     sliding_window: int | None = None
-    layer_types: list[str] | None = None
-    cache_layer_types: list[str] | None = None
+    attention_dropout: float | int = 0.0
+    moe_intermediate_size: int = 2048
+
+    num_experts_per_tok: int = 1
+    num_experts: int = 16
     output_router_logits: bool = False
+    layer_types: list[str] | None = None
     pad_token_id: int | None = 0
     bos_token_id: int | None = 2
     eos_token_id: int | list[int] | None = 106
 
-    def __post_init__(self, **kwargs):
-        self.layer_types = (
-            ["full_attention"] * self.num_hidden_layers if self.layer_types is None else list(self.layer_types)
-        )
-        self.cache_layer_types = (
-            ["hybrid"] * self.num_hidden_layers if self.cache_layer_types is None else list(self.cache_layer_types)
-        )
+    # Zaya-specific attention
+    head_dim: int = 128
+    attention_bias: bool = False
 
-        default_rope_params: dict[Literal["full_attention", "sliding_attention"], dict[str, Any]] = {
-            "full_attention": {
+    lm_head_bias: bool = False
+    router_hidden_size: int = 256
+    cca_time0: int = 2
+    cca_time1: int = 2
+
+    def __post_init__(self, **kwargs):
+        self.layer_types = ["hybrid"] * self.num_hidden_layers if self.layer_types is None else list(self.layer_types)
+
+        default_rope_params: dict[Literal["hybrid", "hybrid_sliding"], dict[str, Any]] = {
+            "hybrid": {
                 "rope_type": "default",
-                "rope_theta": self.default_theta,
-                "partial_rotary_factor": self.partial_rotary_factor,
+                "rope_theta": 5_000_000.0,
+                "partial_rotary_factor": 0.5,
             },
-            "sliding_attention": {
+            "hybrid_sliding": {
                 "rope_type": "default",
-                "rope_theta": self.default_swa_theta,
-                "partial_rotary_factor": self.partial_rotary_factor,
+                "rope_theta": 10_000.0,
+                "partial_rotary_factor": 0.5,
             },
         }
         if self.rope_parameters is None:
-            self.rope_parameters = {
-                layer_type: default_rope_params[layer_type] for layer_type in set(self.layer_types)
-            }
+            self.rope_parameters = default_rope_params
 
-        super().__post_init__(**kwargs)
+        super().__post_init__(**kwargs, ignore_keys_at_rope_validation={"hybrid", "hybrid_sliding"})
 
     def convert_rope_params_to_dict(self, **kwargs):
-        # ZAYA uses nested RoPE parameters keyed by layer type. Keep the base RoPE BC conversion from treating them
-        # like a single flat RoPE dict and injecting top-level keys such as `rope_theta`.
+        # No legacy flat RoPE format is supported here; conversion writes the nested ZAYA layer-type format directly.
         return kwargs
 
     def validate_architecture(self):
+        """Part of ``@strict``-powered validation."""
         if self.num_experts_per_tok != 1:
             raise ValueError("ZAYA currently supports `num_experts_per_tok=1` only.")
         if self.num_attention_heads % self.num_key_value_heads != 0:
             raise ValueError("`num_attention_heads` must be a multiple of `num_key_value_heads`.")
         if len(self.layer_types) != self.num_hidden_layers:
             raise ValueError("`layer_types` must have one entry per hidden layer.")
-        if len(self.cache_layer_types) != self.num_hidden_layers:
-            raise ValueError("`cache_layer_types` must have one entry per hidden layer.")
-        if invalid_cache_layer_types := set(self.cache_layer_types) - {"hybrid"}:
-            raise ValueError(f"`cache_layer_types` contains unsupported values: {sorted(invalid_cache_layer_types)}.")
-        if invalid_layer_types := set(self.layer_types) - {"full_attention", "sliding_attention"}:
+        if invalid_layer_types := set(self.layer_types) - {"hybrid", "hybrid_sliding"}:
             raise ValueError(f"`layer_types` contains unsupported values: {sorted(invalid_layer_types)}.")
-        if "sliding_attention" in self.layer_types and self.sliding_window is None:
-            raise ValueError("`sliding_window` must be set when `layer_types` contains `sliding_attention`.")
+        if "hybrid_sliding" in self.layer_types and self.sliding_window is None:
+            raise ValueError("`sliding_window` must be set when `layer_types` contains `hybrid_sliding`.")
         if self.sliding_window is not None and self.sliding_window <= 0:
             raise ValueError("`sliding_window` must be a strictly positive integer.")
 

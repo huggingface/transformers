@@ -26,7 +26,11 @@ if is_torch_available():
     import torch
 
     from transformers import AutoTokenizer, ZayaConfig, ZayaForCausalLM, ZayaModel
-    from transformers.cache_utils import DynamicCache, LinearAttentionAndFullAttentionLayer
+    from transformers.cache_utils import (
+        DynamicCache,
+        LinearAttentionAndFullAttentionLayer,
+        LinearAttentionAndSlidingWindowAttentionLayer,
+    )
     from transformers.models.zaya.modeling_zaya import ZayaCCAProjection
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -46,15 +50,15 @@ class ZayaModelTester(CausalLMModelTester):
             num_hidden_layers=2,
             num_attention_heads=4,
             num_key_value_heads=2,
-            intermediate_size=64,
+            moe_intermediate_size=32,
         )
         self.head_dim = 8
         self.num_experts = 4
         self.num_experts_per_tok = 1
-        self.zaya_mlp_expansion = 4
+        self.router_hidden_size = 4
         self.tie_word_embeddings = False
         self.rope_parameters = {
-            "full_attention": {
+            "hybrid": {
                 "rope_theta": 10000,
                 "rope_type": "default",
                 "partial_rotary_factor": 0.5,
@@ -69,7 +73,8 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
 
     def _get_conv_state_shape(self, batch_size: int, config):
         conv_state_size = config.num_key_value_heads * config.head_dim + config.num_attention_heads * config.head_dim
-        return (batch_size, conv_state_size, config.cca_time0 + config.cca_time1 - 2)
+        conv_kernel_size = config.cca_time0 + config.cca_time1 - 2
+        return (batch_size, conv_state_size, conv_kernel_size)
 
     def _get_recurrent_state_shape(self, batch_size: int, config):
         return (batch_size, config.num_key_value_heads * config.head_dim // 2)
@@ -84,8 +89,13 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
         conv_shape = self._get_conv_state_shape(batch_size, config)
         recurrent_shape = self._get_recurrent_state_shape(batch_size, config)
 
-        for layer in past_key_values.layers:
-            self.assertIs(type(layer), LinearAttentionAndFullAttentionLayer)
+        for layer_type, layer in zip(config.layer_types, past_key_values.layers):
+            expected_layer_class = (
+                LinearAttentionAndSlidingWindowAttentionLayer
+                if layer_type == "hybrid_sliding"
+                else LinearAttentionAndFullAttentionLayer
+            )
+            self.assertIs(type(layer), expected_layer_class)
             self.assertEqual(layer.keys.shape, attention_shape)
             self.assertEqual(layer.values.shape, attention_shape)
             self.assertEqual(layer.conv_states.shape, conv_shape)
@@ -153,13 +163,13 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
         Copied from Laguna to adapt to per-layer-type rope configs.
         """
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        config.layer_types = ["full_attention", "sliding_attention"]
-        partial_rotary_factor = config.partial_rotary_factor
+        config.layer_types = ["hybrid", "hybrid_sliding"]
+        partial_rotary_factor = config.rope_parameters["hybrid"]["partial_rotary_factor"]
 
         def set_rope_params(rope_params):
             config.rope_parameters = {
-                "full_attention": {**rope_params, "partial_rotary_factor": partial_rotary_factor},
-                "sliding_attention": {**rope_params, "partial_rotary_factor": partial_rotary_factor},
+                "hybrid": {**rope_params, "partial_rotary_factor": partial_rotary_factor},
+                "hybrid_sliding": {**rope_params, "partial_rotary_factor": partial_rotary_factor},
             }
 
         set_rope_params({"rope_type": "default", "rope_theta": 10_000.0})
@@ -186,15 +196,15 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
 
         set_rope_params({"rope_type": "default", "rope_theta": 10_000.0})
         original_rope = rope_class(config=config).to(torch_device)
-        original_cos_short, original_sin_short = original_rope(x, position_ids_short, layer_type="sliding_attention")
-        original_cos_long, original_sin_long = original_rope(x, position_ids_long, layer_type="sliding_attention")
+        original_cos_short, original_sin_short = original_rope(x, position_ids_short, layer_type="hybrid_sliding")
+        original_cos_long, original_sin_long = original_rope(x, position_ids_long, layer_type="hybrid_sliding")
         torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
         torch.testing.assert_close(original_sin_short, original_sin_long[:, :short_input_length, :])
 
         set_rope_params({"rope_type": "linear", "factor": scaling_factor, "rope_theta": 10_000.0})
         linear_scaling_rope = rope_class(config=config).to(torch_device)
-        linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short, layer_type="sliding_attention")
-        linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long, layer_type="sliding_attention")
+        linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short, layer_type="hybrid_sliding")
+        linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long, layer_type="hybrid_sliding")
         torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
         torch.testing.assert_close(linear_sin_short, linear_sin_long[:, :short_input_length, :])
         for new_position in range(0, long_input_length, scaling_factor):
@@ -204,22 +214,20 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
 
         set_rope_params({"rope_type": "dynamic", "factor": scaling_factor, "rope_theta": 10_000.0})
         ntk_scaling_rope = rope_class(config=config).to(torch_device)
-        ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short, layer_type="sliding_attention")
-        ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long, layer_type="sliding_attention")
+        ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short, layer_type="hybrid_sliding")
+        ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long, layer_type="hybrid_sliding")
         torch.testing.assert_close(ntk_cos_short, original_cos_short)
         torch.testing.assert_close(ntk_sin_short, original_sin_short)
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(ntk_cos_long, original_cos_long)
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(ntk_sin_long, original_sin_long)
-        self.assertTrue(
-            (ntk_scaling_rope.sliding_attention_inv_freq <= original_rope.sliding_attention_inv_freq).all()
-        )
+        self.assertTrue((ntk_scaling_rope.hybrid_sliding_inv_freq <= original_rope.hybrid_sliding_inv_freq).all())
 
         set_rope_params({"rope_type": "yarn", "factor": scaling_factor, "rope_theta": 10_000.0})
         yarn_scaling_rope = rope_class(config=config).to(torch_device)
-        yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short, layer_type="sliding_attention")
-        yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long, layer_type="sliding_attention")
+        yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short, layer_type="hybrid_sliding")
+        yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long, layer_type="hybrid_sliding")
         torch.testing.assert_close(yarn_cos_short, yarn_cos_long[:, :short_input_length, :])
         torch.testing.assert_close(yarn_sin_short, yarn_sin_long[:, :short_input_length, :])
         with self.assertRaises(AssertionError):
@@ -259,14 +267,14 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
         config = ZayaConfig(
             vocab_size=128,
             hidden_size=32,
-            intermediate_size=64,
+            moe_intermediate_size=32,
             num_hidden_layers=4,
             num_experts=4,
             num_attention_heads=4,
             num_key_value_heads=2,
             head_dim=8,
-            zaya_mlp_expansion=4,
-            layer_types=["sliding_attention", "full_attention", "full_attention", "full_attention"],
+            router_hidden_size=4,
+            layer_types=["hybrid_sliding", "hybrid", "hybrid_sliding", "hybrid"],
             sliding_window=3,
             tie_word_embeddings=False,
             attn_implementation="eager",
@@ -285,13 +293,13 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
         config = ZayaConfig(
             vocab_size=128,
             hidden_size=32,
-            intermediate_size=64,
+            moe_intermediate_size=32,
             num_hidden_layers=1,
             num_experts=4,
             num_attention_heads=4,
             num_key_value_heads=2,
             head_dim=8,
-            zaya_mlp_expansion=4,
+            router_hidden_size=4,
             tie_word_embeddings=False,
         )
         torch.manual_seed(0)
@@ -312,13 +320,13 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
         config = ZayaConfig(
             vocab_size=128,
             hidden_size=32,
-            intermediate_size=64,
+            moe_intermediate_size=32,
             num_hidden_layers=1,
             num_experts=4,
             num_attention_heads=4,
             num_key_value_heads=2,
             head_dim=8,
-            zaya_mlp_expansion=4,
+            router_hidden_size=4,
             tie_word_embeddings=False,
         )
         torch.manual_seed(0)

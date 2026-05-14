@@ -71,7 +71,8 @@ ALLOWED_LAYER_TYPES = (
     "attention",
     "sparse",
     "dense",
-    "hybrid",  # for layers that have both mamba and attention in zamba and zamba2
+    "hybrid",  # for zamba/zamba2/zaya1, which use full attention + conv states
+    "hybrid_sliding",  # for zaya1, which uses swa + conv states
     "moe",  # for nemotron_h, which uses either attention, mamba or moe
 )
 

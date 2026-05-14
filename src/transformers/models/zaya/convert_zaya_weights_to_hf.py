@@ -27,6 +27,8 @@ from safetensors.torch import save_file
 from transformers import ZayaConfig
 
 
+_DEFAULT_ROPE_THETA = 5_000_000.0
+_DEFAULT_SWA_ROPE_THETA = 10_000.0
 _LAYER_PATTERN = re.compile(r"^model\.layers\.(\d+)\.(.+)$")
 _LOCAL_EXPERT_PATTERN = re.compile(
     r"^model\.layers\.(\d+)\.zaya_block\.experts\.local_experts\.(\d+)\.linear_fc([12])\.weight$"
@@ -35,8 +37,11 @@ _LOCAL_EXPERT_PATTERN = re.compile(
 _UNUSED_CONFIG_KEYS = (
     "cca",
     "num_query_groups",
+    "intermediate_size",
     "ffn_hidden_size",
     "moe_router_topk",
+    "norm_epsilon",
+    "zaya_mlp_expansion",
     "activation_func",
     "normalization",
     "add_bias_linear",
@@ -61,11 +66,18 @@ def _rename_common(rest: str) -> str:
     replacements = (
         ("self_attn.qkv.conv_qk.0.", "self_attn.qkv_proj.conv_qk_depthwise."),
         ("self_attn.qkv.conv_qk.1.", "self_attn.qkv_proj.conv_qk_grouped."),
-        ("self_attn.qkv.temp", "self_attn.temp"),
+        ("self_attn.qkv.temp", "self_attn.qk_norm.temp"),
+        ("self_attn.qkv.linear_q.", "self_attn.qkv_proj.q_proj."),
+        ("self_attn.qkv.linear_k.", "self_attn.qkv_proj.k_proj."),
+        ("self_attn.qkv.val_proj1.", "self_attn.qkv_proj.v_proj_current."),
+        ("self_attn.qkv.val_proj2.", "self_attn.qkv_proj.v_proj_delayed."),
         ("self_attn.qkv.", "self_attn.qkv_proj."),
-        ("zaya_block.router.router_mlp.0.", "zaya_block.router.router_mlp.fc1."),
-        ("zaya_block.router.router_mlp.2.", "zaya_block.router.router_mlp.fc2."),
-        ("zaya_block.router.router_mlp.4.", "zaya_block.router.router_mlp.out_proj."),
+        ("zaya_block.router.rmsnorm_eda.", "mlp.gate.router_mlp.rmsnorm_eda."),
+        ("zaya_block.router.router_mlp.0.", "mlp.gate.router_mlp.fc1."),
+        ("zaya_block.router.router_mlp.2.", "mlp.gate.router_mlp.fc2."),
+        ("zaya_block.router.router_mlp.4.", "mlp.gate.router_mlp.out_proj."),
+        ("zaya_block.router.", "mlp.gate."),
+        ("zaya_block.", "mlp."),
     )
     for old, new in replacements:
         if rest.startswith(old):
@@ -85,7 +97,7 @@ def _expert_target(name: str) -> tuple[str, int] | None:
     new_layer_idx = old_layer_idx // 2
     expert_idx = int(match.group(2))
     projection = "gate_up_proj" if match.group(3) == "1" else "down_proj"
-    target = f"model.layers.{new_layer_idx}.zaya_block.experts.{projection}"
+    target = f"model.layers.{new_layer_idx}.mlp.experts.{projection}"
     return target, expert_idx
 
 
@@ -97,7 +109,7 @@ def convert_weight_name(name: str, old_num_hidden_layers: int | None = None) -> 
     if match is None:
         if old_num_hidden_layers is not None and name.startswith("model.res_scale."):
             new_layer_idx = old_num_hidden_layers // 2 - 1
-            return f"model.layers.{new_layer_idx}.post_mlp_res_scale.{name.removeprefix('model.res_scale.')}"
+            return f"model.layers.{new_layer_idx}.post_mlp_residual_scale.{name.removeprefix('model.res_scale.')}"
         return name
 
     old_layer_idx = int(match.group(1))
@@ -106,41 +118,51 @@ def convert_weight_name(name: str, old_num_hidden_layers: int | None = None) -> 
 
     if old_layer_idx % 2 == 0:
         rest = _rename_common(rest)
-        if rest.startswith(("self_attn.", "input_norm.")):
+        if rest.startswith("self_attn."):
             return f"model.layers.{new_layer_idx}.{rest}"
+        if rest.startswith("input_norm."):
+            return f"model.layers.{new_layer_idx}.input_layernorm.{rest.removeprefix('input_norm.')}"
         if rest.startswith("res_scale."):
             if old_layer_idx == 0:
                 return f"model.input_{rest.removeprefix('res_scale.')}"
-            return f"model.layers.{new_layer_idx - 1}.post_mlp_res_scale.{rest.removeprefix('res_scale.')}"
+            return f"model.layers.{new_layer_idx - 1}.post_mlp_residual_scale.{rest.removeprefix('res_scale.')}"
     else:
         rest = _rename_common(rest)
-        if rest.startswith("zaya_block."):
+        if rest.startswith("mlp."):
             return f"model.layers.{new_layer_idx}.{rest}"
         if rest.startswith("input_norm."):
-            return f"model.layers.{new_layer_idx}.post_attention_norm.{rest.removeprefix('input_norm.')}"
+            return f"model.layers.{new_layer_idx}.post_attention_layernorm.{rest.removeprefix('input_norm.')}"
         if rest.startswith("res_scale."):
-            return f"model.layers.{new_layer_idx}.post_attention_res_scale.{rest.removeprefix('res_scale.')}"
+            return f"model.layers.{new_layer_idx}.post_attention_residual_scale.{rest.removeprefix('res_scale.')}"
 
     raise ValueError(f"Unexpected ZAYA layer weight name: {name}")
+
+
+def _to_hybrid_layer_type(layer_type: str) -> str:
+    if layer_type == "full_attention":
+        return "hybrid"
+    if layer_type == "sliding_attention":
+        return "hybrid_sliding"
+    raise ValueError(f"Unsupported ZAYA layer type: {layer_type}")
 
 
 def _convert_layer_types(config_dict: dict, old_num_hidden_layers: int, new_num_hidden_layers: int) -> list[str]:
     layer_types = config_dict.get("layer_types")
     if layer_types is not None:
         if len(layer_types) == old_num_hidden_layers:
-            return layer_types[::2]
+            return [_to_hybrid_layer_type(layer_type) for layer_type in layer_types[::2]]
         if len(layer_types) == new_num_hidden_layers:
-            return list(layer_types)
+            return [_to_hybrid_layer_type(layer_type) for layer_type in layer_types]
         raise ValueError("`layer_types` must match either the original or converted number of hidden layers.")
 
     swa_layers = config_dict.get("swa_layers")
     if swa_layers is None:
-        return ["full_attention"] * new_num_hidden_layers
+        return ["hybrid"] * new_num_hidden_layers
     if len(swa_layers) == old_num_hidden_layers:
         swa_layers = swa_layers[::2]
     elif len(swa_layers) != new_num_hidden_layers:
         raise ValueError("`swa_layers` must match either the original or converted number of hidden layers.")
-    return ["full_attention" if int(window_size) == 0 else "sliding_attention" for window_size in swa_layers]
+    return ["hybrid" if int(window_size) == 0 else "hybrid_sliding" for window_size in swa_layers]
 
 
 def convert_config(input_dir: Path, output_dir: Path) -> None:
@@ -151,12 +173,15 @@ def convert_config(input_dir: Path, output_dir: Path) -> None:
 
     new_num_hidden_layers = old_num_hidden_layers // 2
     layer_types = _convert_layer_types(config_dict, old_num_hidden_layers, new_num_hidden_layers)
-    partial_rotary_factor = config_dict.get("partial_rotary_factor", ZayaConfig.partial_rotary_factor)
-    rope_theta = config_dict.get("rope_theta", ZayaConfig.default_theta)
-    swa_rotary_base = config_dict.get("swa_rotary_base", ZayaConfig.default_swa_theta)
-    intermediate_size = config_dict.get(
-        "intermediate_size", config_dict.get("ffn_hidden_size", ZayaConfig.intermediate_size)
+    partial_rotary_factor = 0.5
+    rope_theta = config_dict.get("rope_theta", _DEFAULT_ROPE_THETA)
+    swa_rotary_base = config_dict.get("swa_rotary_base", _DEFAULT_SWA_ROPE_THETA)
+    rms_norm_eps = config_dict.get("rms_norm_eps", config_dict.get("norm_epsilon", ZayaConfig.rms_norm_eps))
+    router_hidden_size = config_dict.get(
+        "router_hidden_size", config_dict.get("zaya_mlp_expansion", ZayaConfig.router_hidden_size)
     )
+    expert_ffn_size = config_dict.get("intermediate_size", config_dict.get("ffn_hidden_size"))
+    moe_intermediate_size = expert_ffn_size // 2 if expert_ffn_size is not None else ZayaConfig.moe_intermediate_size
     num_experts_per_tok = config_dict.get(
         "num_experts_per_tok", config_dict.get("moe_router_topk", ZayaConfig.num_experts_per_tok)
     )
@@ -170,12 +195,12 @@ def convert_config(input_dir: Path, output_dir: Path) -> None:
         sliding_window = max(positive_windows) + 1 if positive_windows else None
 
     rope_parameters = {
-        "full_attention": {
+        "hybrid": {
             "rope_type": "default",
             "rope_theta": rope_theta,
             "partial_rotary_factor": partial_rotary_factor,
         },
-        "sliding_attention": {
+        "hybrid_sliding": {
             "rope_type": "default",
             "rope_theta": swa_rotary_base,
             "partial_rotary_factor": partial_rotary_factor,
@@ -189,11 +214,13 @@ def convert_config(input_dir: Path, output_dir: Path) -> None:
         {
             "architectures": ["ZayaForCausalLM"],
             "num_hidden_layers": new_num_hidden_layers,
-            "intermediate_size": intermediate_size,
+            "moe_intermediate_size": moe_intermediate_size,
             "num_experts_per_tok": num_experts_per_tok,
+            "rms_norm_eps": rms_norm_eps,
+            "router_hidden_size": router_hidden_size,
             "layer_types": layer_types,
             "sliding_window": sliding_window,
-            "rope_parameters": {layer_type: rope_parameters[layer_type] for layer_type in set(layer_types)},
+            "rope_parameters": rope_parameters,
         }
     )
     ZayaConfig(**config_dict).save_pretrained(output_dir)
