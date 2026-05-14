@@ -63,12 +63,15 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     num_key_value_heads (`int`, *optional*):
         Number of key/value heads for GQA layers. Defaults to `num_attention_heads // 2`.
         Set to `None` to disable GQA and use full multi-head attention everywhere.
-    first_k_full_attention_layers (`int`, *optional*, defaults to 8):
+    layer_types (`list[str]`, *optional*):
+        Per-layer attention type, one of `"full_attention"` or `"grouped_query_attention"`. Computed automatically
+        from `num_first_full_attention_layers` and `num_last_full_attention_layers` if not provided.
+    num_first_full_attention_layers (`int`, *optional*, defaults to 8):
         Number of initial transformer layers that use full multi-head attention.
         Layers at or after this index switch to GQA with `num_key_value_heads`.
-    last_k_full_attention_layers (`int`, *optional*, defaults to 8):
+    num_last_full_attention_layers (`int`, *optional*, defaults to 8):
         Number of final transformer layers that use full multi-head attention.
-        Layers before `num_hidden_layers - last_k_full_attention_layers` use GQA with `num_key_value_heads`.
+        Layers before `num_hidden_layers - num_last_full_attention_layers` use GQA with `num_key_value_heads`.
     pos_embed_dtype (`str`, *optional*, defaults to `"bfloat16"`):
         Dtype used for positional embedding computations (RoPE angles, cos/sin).
     """
@@ -110,13 +113,24 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     use_mask_token: bool = False
     use_qk_norm: bool = True
     num_key_value_heads: int | None = None
-    first_k_full_attention_layers: int = 8
-    last_k_full_attention_layers: int = 8
+    layer_types: list[str] | None = None
+    num_first_full_attention_layers: int = 8
+    num_last_full_attention_layers: int = 8
     pos_embed_dtype: str = "bfloat16"
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads // 2
+        if self.layer_types is None:
+            self.layer_types = [
+                "full_attention"
+                if (
+                    i < self.num_first_full_attention_layers
+                    or i >= self.num_hidden_layers - self.num_last_full_attention_layers
+                )
+                else "grouped_query_attention"
+                for i in range(self.num_hidden_layers)
+            ]
         self.stage_names = ["stem"] + [f"stage{i}" for i in range(1, self.num_hidden_layers + 1)]
         self.set_output_features_output_indices(
             out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)

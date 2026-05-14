@@ -80,12 +80,15 @@ class Sapiens2Config(DINOv3ViTConfig):
     num_key_value_heads (`int`, *optional*):
         Number of key/value heads for GQA layers. Defaults to `num_attention_heads // 2`.
         Set to `None` to disable GQA and use full multi-head attention everywhere.
-    first_k_full_attention_layers (`int`, *optional*, defaults to 8):
+    layer_types (`list[str]`, *optional*):
+        Per-layer attention type, one of `"full_attention"` or `"grouped_query_attention"`. Computed automatically
+        from `num_first_full_attention_layers` and `num_last_full_attention_layers` if not provided.
+    num_first_full_attention_layers (`int`, *optional*, defaults to 8):
         Number of initial transformer layers that use full multi-head attention.
         Layers at or after this index switch to GQA with `num_key_value_heads`.
-    last_k_full_attention_layers (`int`, *optional*, defaults to 8):
+    num_last_full_attention_layers (`int`, *optional*, defaults to 8):
         Number of final transformer layers that use full multi-head attention.
-        Layers before `num_hidden_layers - last_k_full_attention_layers` use GQA with `num_key_value_heads`.
+        Layers before `num_hidden_layers - num_last_full_attention_layers` use GQA with `num_key_value_heads`.
     pos_embed_dtype (`str`, *optional*, defaults to `"bfloat16"`):
         Dtype used for positional embedding computations (RoPE angles, cos/sin).
     """
@@ -107,13 +110,24 @@ class Sapiens2Config(DINOv3ViTConfig):
     key_bias: bool = True
     use_qk_norm: bool = True
     num_key_value_heads: int | None = None
-    first_k_full_attention_layers: int = 8
-    last_k_full_attention_layers: int = 8
+    layer_types: list[str] | None = None
+    num_first_full_attention_layers: int = 8
+    num_last_full_attention_layers: int = 8
     pos_embed_dtype: str = "bfloat16"
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads // 2
+        if self.layer_types is None:
+            self.layer_types = [
+                "full_attention"
+                if (
+                    i < self.num_first_full_attention_layers
+                    or i >= self.num_hidden_layers - self.num_last_full_attention_layers
+                )
+                else "grouped_query_attention"
+                for i in range(self.num_hidden_layers)
+            ]
         super().__post_init__(**kwargs)
 
 
@@ -225,12 +239,9 @@ class Sapiens2Attention(nn.Module):
         self.dropout = config.attention_dropout
         self.use_qk_norm = config.use_qk_norm
 
-        is_full_attention = (
-            config.num_key_value_heads is None
-            or layer_idx < config.first_k_full_attention_layers
-            or layer_idx >= config.num_hidden_layers - config.last_k_full_attention_layers
+        self.num_kv_heads = (
+            self.num_heads if config.layer_types[layer_idx] == "full_attention" else config.num_key_value_heads
         )
-        self.num_kv_heads = self.num_heads if is_full_attention else config.num_key_value_heads
         kv_dim = self.num_kv_heads * self.head_dim
 
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.query_bias)

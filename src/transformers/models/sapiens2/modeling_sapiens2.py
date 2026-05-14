@@ -266,12 +266,9 @@ class Sapiens2Attention(nn.Module):
         self.dropout = config.attention_dropout
         self.use_qk_norm = config.use_qk_norm
 
-        is_full_attention = (
-            config.num_key_value_heads is None
-            or layer_idx < config.first_k_full_attention_layers
-            or layer_idx >= config.num_hidden_layers - config.last_k_full_attention_layers
+        self.num_kv_heads = (
+            self.num_heads if config.layer_types[layer_idx] == "full_attention" else config.num_key_value_heads
         )
-        self.num_kv_heads = self.num_heads if is_full_attention else config.num_key_value_heads
         kv_dim = self.num_kv_heads * self.head_dim
 
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.query_bias)
