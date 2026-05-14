@@ -134,14 +134,51 @@ class BaseAudioProcessor(AudioProcessingMixin):
         audio = self._prepare_audio_like_inputs(audio=audio, sample_rate=sample_rate)
         return self._preprocess(audio, *args, **kwargs)
 
-    def _to_batch(self, audio):
-        """Stack a list of audio arrays/tensors into a batch. Implemented by backend subclasses."""
-        raise NotImplementedError
+    def _prepare_audio_like_inputs(self, audio: AudioInput, *args, sample_rate: int | None = None, **kwargs) -> list:
+        """
+        Prepare audio-like inputs for processing by structuring and then converting each
+        audio item via `process_audio`.
 
-    def _get_mask(self, audio_ranges, padded_length, do_extract_spectrogram, spectrogram_config):
-        """Build attention mask dict from audio_ranges. Returns a dict of {key: mask} to merge into output.
-        Implemented by backend subclasses."""
-        raise NotImplementedError
+        Analogous to `_prepare_image_like_inputs` in the image processing pipeline.
+        """
+        audio = self._prepare_audio_structure(audio, sample_rate=sample_rate)
+        audio = [self.process_audio(audio_el) for audio_el in audio]
+        return audio
+
+    def _prepare_audio_structure(self, audio: AudioInput, sample_rate: int | None = None) -> list:
+        """
+        Prepare the audio structure for processing: fetch URL inputs, validate sample rate,
+        and flatten into a list of audio arrays.
+
+        Analogous to `_prepare_images_structure` in the image processing pipeline.
+        """
+        is_url_input = isinstance(audio, str) or (
+            isinstance(audio, (list, tuple)) and all(isinstance(el, str) for el in audio)
+        )
+
+        if is_url_input:
+            # URL inputs: load directly at the correct sample rate
+            audio = self.fetch_audio(audio)
+        else:
+            # Array inputs: validate that the user-provided sample rate matches the model's
+            if sample_rate is not None:
+                if sample_rate != self.sample_rate:
+                    raise ValueError(
+                        f"The model corresponding to this audio processor: {self.__class__.__name__} was trained using a"
+                        f" sample rate of {self.sample_rate}. Please make sure that the provided `audio` input"
+                        f" was sampled with {self.sample_rate} and not {sample_rate}."
+                    )
+            else:
+                logger.warning(
+                    f"It is strongly recommended to pass the `sample_rate` argument to `{self.__class__.__name__}()`. "
+                    "Failing to do so can result in silent errors that might be hard to debug."
+                )
+
+        audio = make_list_of_audio(audio)
+        return audio
+
+    def process_audio(self, *args, **kwargs):
+        return self._process_audio(*args, **kwargs)
 
     def _preprocess(
         self,
@@ -191,6 +228,15 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
         return BatchFeature(data=output, tensor_type=return_tensors)
 
+    def _to_batch(self, audio):
+        """Stack a list of audio arrays/tensors into a batch. Implemented by backend subclasses."""
+        raise NotImplementedError
+
+    def _get_mask(self, audio_ranges, padded_length, do_extract_spectrogram, spectrogram_config):
+        """Build attention mask dict from audio_ranges. Returns a dict of {key: mask} to merge into output.
+        Implemented by backend subclasses."""
+        raise NotImplementedError
+
     def _postprocess_features(self, features, feature_lengths):
         """Hook: per-utterance feature processing after extraction, before feature-level padding.
 
@@ -222,49 +268,6 @@ class BaseAudioProcessor(AudioProcessingMixin):
         Implemented by backend subclasses."""
         raise NotImplementedError
 
-    def _prepare_audio_like_inputs(self, audio: AudioInput, *args, sample_rate: int | None = None, **kwargs) -> list:
-        """
-        Prepare audio-like inputs for processing by structuring and then converting each
-        audio item via `process_audio`.
-
-        Analogous to `_prepare_image_like_inputs` in the image processing pipeline.
-        """
-        audio = self._prepare_audio_structure(audio, sample_rate=sample_rate)
-        audio = [self.process_audio(audio_el) for audio_el in audio]
-        return audio
-
-    def _prepare_audio_structure(self, audio: AudioInput, sample_rate: int | None = None) -> list:
-        """
-        Prepare the audio structure for processing: fetch URL inputs, validate sample rate,
-        and flatten into a list of audio arrays.
-
-        Analogous to `_prepare_images_structure` in the image processing pipeline.
-        """
-        is_url_input = isinstance(audio, str) or (
-            isinstance(audio, (list, tuple)) and all(isinstance(el, str) for el in audio)
-        )
-
-        if is_url_input:
-            # URL inputs: load directly at the correct sample rate
-            audio = self.fetch_audio(audio)
-        else:
-            # Array inputs: validate that the user-provided sample rate matches the model's
-            if sample_rate is not None:
-                if sample_rate != self.sample_rate:
-                    raise ValueError(
-                        f"The model corresponding to this audio processor: {self.__class__.__name__} was trained using a"
-                        f" sample rate of {self.sample_rate}. Please make sure that the provided `audio` input"
-                        f" was sampled with {self.sample_rate} and not {sample_rate}."
-                    )
-            else:
-                logger.warning(
-                    f"It is strongly recommended to pass the `sample_rate` argument to `{self.__class__.__name__}()`. "
-                    "Failing to do so can result in silent errors that might be hard to debug."
-                )
-
-        audio = make_list_of_audio(audio)
-        return audio
-
     def _process_audio(self, *args, **kwargs):
         """
         Process a single raw audio input into the backend's working format.
@@ -274,9 +277,6 @@ class BaseAudioProcessor(AudioProcessingMixin):
         mono conversion if needed.
         """
         raise NotImplementedError
-
-    def process_audio(self, *args, **kwargs):
-        return self._process_audio(*args, **kwargs)
 
     def pad(
         self,

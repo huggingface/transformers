@@ -18,7 +18,15 @@ import math
 import numpy as np
 
 from .audio_processing_utils import BaseAudioProcessor
-from .audio_utils import SpectrogramConfig, amplitude_to_db, mel_filter_bank, power_to_db
+from .audio_utils import (
+    SpectrogramConfig,
+    _create_triangular_filter_bank,
+    amplitude_to_db,
+    hertz_to_mel,
+    mel_filter_bank,
+    mel_to_hertz,
+    power_to_db,
+)
 from .utils import PaddingStrategy, is_torch_available, logging
 
 
@@ -27,64 +35,6 @@ logger = logging.get_logger(__name__)
 
 if is_torch_available():
     import torch
-
-
-# ── Torch frequency conversion utilities (used by TorchAudioBackend._mel_filter_bank) ──
-
-
-def _torch_hertz_to_mel_scalar(freq: float, mel_scale: str = "htk") -> float:
-    if mel_scale == "htk":
-        return 2595.0 * math.log10(1.0 + freq / 700.0)
-    elif mel_scale == "kaldi":
-        return 1127.0 * math.log(1.0 + freq / 700.0)
-    f_sp = 200.0 / 3
-    min_log_hz = 1000.0
-    min_log_mel = (min_log_hz - 0.0) / f_sp
-    logstep = math.log(6.4) / 27.0
-    if freq >= min_log_hz:
-        return min_log_mel + math.log(freq / min_log_hz) / logstep
-    return (freq - 0.0) / f_sp
-
-
-def _torch_hertz_to_mel(freq: "torch.Tensor", mel_scale: str = "htk") -> "torch.Tensor":
-    if mel_scale == "htk":
-        return 2595.0 * torch.log10(1.0 + freq / 700.0)
-    elif mel_scale == "kaldi":
-        return 1127.0 * torch.log(1.0 + freq / 700.0)
-    f_sp = 200.0 / 3
-    min_log_hertz = 1000.0
-    min_log_mel = min_log_hertz / f_sp
-    logstep = 27.0 / torch.log(torch.tensor(6.4))
-    mels = freq / f_sp
-    log_region = freq >= min_log_hertz
-    mels[log_region] = min_log_mel + torch.log(freq[log_region] / min_log_hertz) * logstep
-    return mels
-
-
-def _torch_mel_to_hertz(mels: "torch.Tensor", mel_scale: str = "htk") -> "torch.Tensor":
-    if mel_scale == "htk":
-        return 700.0 * (10.0 ** (mels / 2595.0) - 1.0)
-    elif mel_scale == "kaldi":
-        return 700.0 * (torch.exp(mels / 1127.0) - 1.0)
-    f_sp = 200.0 / 3
-    min_log_hz = 1000.0
-    min_log_mel = (min_log_hz - 0.0) / f_sp
-    logstep = math.log(6.4) / 27.0
-    freq = 0.0 + f_sp * mels
-    log_region = mels >= min_log_mel
-    freq[log_region] = min_log_hz * torch.exp(logstep * (mels[log_region] - min_log_mel))
-    return freq
-
-
-def _torch_triangular_filter_bank(fft_freqs, filter_freqs, computation_dtype=None):
-    """Compute triangular mel filter bank (shared by non-kaldi TorchAudioBackend paths)."""
-    num_mel_filters = len(filter_freqs) - 2
-    filter_diff = filter_freqs[1:] - filter_freqs[:-1]
-    slopes = filter_freqs.unsqueeze(0) - fft_freqs.unsqueeze(1)
-    down_slopes = -slopes[:, :-2] / filter_diff[:-1]
-    up_slopes = slopes[:, 2:] / filter_diff[1:]
-    zero = torch.zeros(1, dtype=computation_dtype) if computation_dtype else torch.zeros(1)
-    return torch.clamp(torch.minimum(down_slopes, up_slopes), min=0)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -597,23 +547,16 @@ class TorchAudioBackend(BaseAudioProcessor):
     @staticmethod
     def _kaldi_mel_banks_with_zero_bands(num_mel_filters, num_frequency_bins, min_frequency,
                                          max_frequency, sampling_rate, n_fft, mel_cfg, computation_dtype):
-        """Kaldi-style with bands_to_zero > 0."""
-        mel_min = _torch_hertz_to_mel_scalar(min_frequency, mel_scale=mel_cfg.mel_scale)
-        mel_max = _torch_hertz_to_mel_scalar(max_frequency, mel_scale=mel_cfg.mel_scale)
-        mel_delta = (mel_max - mel_min) / (num_mel_filters + 1)
-        bin_idx = torch.arange(num_mel_filters, dtype=computation_dtype).unsqueeze(1)
-        left_mel = mel_min + bin_idx * mel_delta
-        center_mel = mel_min + (bin_idx + 1.0) * mel_delta
-        right_mel = mel_min + (bin_idx + 2.0) * mel_delta
+        """Kaldi-style (triangularize in mel space) with optional zeroed low bands."""
+        mel_min = hertz_to_mel(min_frequency, mel_scale=mel_cfg.mel_scale)
+        mel_max = hertz_to_mel(max_frequency, mel_scale=mel_cfg.mel_scale)
+        filter_freqs = torch.linspace(mel_min, mel_max, num_mel_filters + 2, dtype=computation_dtype)
 
         fft_bin_width = sampling_rate / n_fft
         hz_freqs = fft_bin_width * torch.arange(mel_cfg.bands_to_zero, num_frequency_bins, dtype=computation_dtype)
-        mel = _torch_hertz_to_mel(hz_freqs, mel_scale=mel_cfg.mel_scale).unsqueeze(0)
+        fft_freqs = hertz_to_mel(hz_freqs, mel_scale=mel_cfg.mel_scale)
 
-        up_slope = (mel - left_mel) / (center_mel - left_mel)
-        down_slope = (right_mel - mel) / (right_mel - center_mel)
-        zero = torch.zeros(1, dtype=computation_dtype)
-        mel_filters = torch.max(zero, torch.min(up_slope, down_slope)).T
+        mel_filters = _create_triangular_filter_bank(fft_freqs, filter_freqs)
         if mel_cfg.bands_to_zero > 0:
             mel_filters = torch.nn.functional.pad(mel_filters, (0, 0, mel_cfg.bands_to_zero, 0))
         return mel_filters
@@ -622,10 +565,10 @@ class TorchAudioBackend(BaseAudioProcessor):
     def _standard_mel_banks(num_mel_filters, num_frequency_bins, min_frequency,
                             max_frequency, sampling_rate, n_fft, mel_cfg, computation_dtype):
         """Standard (non-kaldi) triangular mel filter bank."""
-        mel_min = _torch_hertz_to_mel_scalar(min_frequency, mel_scale=mel_cfg.mel_scale)
-        mel_max = _torch_hertz_to_mel_scalar(max_frequency, mel_scale=mel_cfg.mel_scale)
+        mel_min = hertz_to_mel(min_frequency, mel_scale=mel_cfg.mel_scale)
+        mel_max = hertz_to_mel(max_frequency, mel_scale=mel_cfg.mel_scale)
         mel_freqs = torch.linspace(mel_min, mel_max, num_mel_filters + 2, dtype=computation_dtype)
-        filter_freqs = _torch_mel_to_hertz(mel_freqs, mel_scale=mel_cfg.mel_scale)
+        filter_freqs = mel_to_hertz(mel_freqs, mel_scale=mel_cfg.mel_scale)
 
         if mel_cfg.frequency_bin_mode == "rfft":
             fft_freqs = torch.fft.rfftfreq(n=n_fft, d=1.0 / sampling_rate)
@@ -634,15 +577,11 @@ class TorchAudioBackend(BaseAudioProcessor):
         if computation_dtype is not None:
             fft_freqs = fft_freqs.to(computation_dtype)
 
-        filter_diff = filter_freqs[1:] - filter_freqs[:-1]
-        slopes = filter_freqs.unsqueeze(0) - fft_freqs.unsqueeze(1)
-        down_slopes = -slopes[:, :-2] / filter_diff[:-1]
-        up_slopes = slopes[:, 2:] / filter_diff[1:]
-        mel_filters = torch.clamp(torch.minimum(down_slopes, up_slopes), min=0)
+        mel_filters = _create_triangular_filter_bank(fft_freqs, filter_freqs)
 
         if mel_cfg.norm == "slaney":
             enorm = 2.0 / (filter_freqs[2 : num_mel_filters + 2] - filter_freqs[:num_mel_filters])
-            mel_filters = mel_filters * enorm.unsqueeze(0)
+            mel_filters = mel_filters * enorm[None, :]
 
         if mel_cfg.bands_to_zero > 0:
             mel_filters = torch.nn.functional.pad(mel_filters, (0, 0, mel_cfg.bands_to_zero, 0))
