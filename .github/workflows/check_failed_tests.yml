@@ -55,7 +55,7 @@ jobs:
       n_runners: ${{ steps.set-matrix.outputs.n_runners }}
       process: ${{ steps.set-matrix.outputs.process }}
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         continue-on-error: true
         with:
           name: ci_results_${{ inputs.job }}
@@ -127,12 +127,12 @@ jobs:
       image: ${{ inputs.docker }}
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ci_results_${{ inputs.job }}
           path: /transformers/ci_results_${{ inputs.job }}
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         env:
           ACTIONS_ARTIFACT_MAX_ARTIFACT_COUNT: 2000
         with:
@@ -167,7 +167,7 @@ jobs:
       - name: Extract the base commit on `main` (of the merge commit created by Github) if it is a PR
         id: pr_info
         if: ${{ inputs.pr_number != '' }}
-        uses: actions/github-script@v6
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6.4.1
         with:
           script: |            
             const { data: pr } = await github.rest.pulls.get({
@@ -243,7 +243,7 @@ jobs:
           cat "new_failures_with_bad_commit_${job}_${run_idx}.json"
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: new_failures_with_bad_commit_${{ inputs.job }}_${{ matrix.run_idx }}
           path: /transformers/new_failures_with_bad_commit_${{ inputs.job }}_${{ matrix.run_idx }}.json
@@ -258,12 +258,12 @@ jobs:
       image: ${{ inputs.docker }}
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ci_results_${{ inputs.job }}
           path: /transformers/ci_results_${{ inputs.job }}
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         env:
           ACTIONS_ARTIFACT_MAX_ARTIFACT_COUNT: 2000
         with:
@@ -357,7 +357,7 @@ jobs:
           cat new_failures_with_bad_commit.json
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: new_failures_with_bad_commit_${{ inputs.job }}
           path: |
