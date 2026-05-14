@@ -20,11 +20,13 @@ from ..utils import _LazyModule
 _import_structure = {
     "configuration_utils": ["DistributedConfig"],
     "fsdp": ["is_fsdp_enabled", "is_fsdp_managed_module"],
+    "sharding_utils": [],
     "tensor_parallel": [
         "ALL_PARALLEL_STYLES",
         "apply_tensor_parallel",
         "verify_tp_plan",
     ],
+    "utils": [],
 }
 
 
