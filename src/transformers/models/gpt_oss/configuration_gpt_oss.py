@@ -38,7 +38,7 @@ class GptOssConfig(PreTrainedConfig):
         "layers.*.mlp.experts.gate_up_proj_bias": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj_bias": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
     }
 
     num_hidden_layers: int = 36
