@@ -487,52 +487,78 @@ def gguf_bmm_experts_forward(
 ) -> torch.Tensor:
     """Quantized fused-expert forward for GGUF MoE modules.
 
-    Mirrors :func:`batched_mm_experts_forward` but the gate / up / down
-    weights live as raw GGUF byte buffers (one row per expert). Per call:
+    Per token-expert pair (``S = num_tokens * top_k``), the gate / up / down
+    projections run as indexed matvecs over the raw GGUF byte buffers via
+    the ``mul_mat_id_<fmt>_f32`` Metal kernels — same pattern as llama.cpp's
+    ``mul_mat_id``. Each projection is **one** kernel launch; the kernel
+    reads the quantized bytes for ``ids[s]`` inline and never materialises
+    the expert weights as fp32.
 
-      1. Flatten ``(num_tokens, top_k)`` routing into ``S = num_tokens * top_k``
-         token-expert pairs.
-      2. ``index_select`` the active experts' bytes — one gather per
-         projection, ``S`` rows × ``bytes_per_expert``.
-      3. Dispatch a single ``dequantize_<fmt>`` Metal kernel per projection
-         to materialise the ``(S, M, K)`` fp32 weight stack — one launch
-         instead of ``3 * S * layers`` from the eager loop.
-      4. ``torch.bmm`` for the per-pair (1, K)·(K, M) matvecs in one launch.
-
-    Trades GPU memory for kernel-launch volume: peak is roughly
-    ``S * intermediate * hidden * 4 bytes`` per projection, so e.g.
-    ``Qwen1.5-MoE-A2.7B`` at ``S = 4`` decodes within ~46 MB extra per
-    projection. That's worth it for the ~ N× kernel-launch reduction
-    (single dispatch per projection vs. one per activated expert).
+    When the loaded kernels package lacks the ``mul_mat_id`` op for a given
+    quant type, falls back to ``gather + dequant + torch.bmm`` (~10× faster
+    than the eager per-expert loop but still bandwidth-bound — it
+    materialises the (S, M, K) fp32 weight stack every forward).
 
     The module is expected to expose ``gate_proj_q`` / ``up_proj_q`` /
     ``down_proj_q`` as ``(num_experts, bytes_per_expert)`` uint8 buffers
-    along with per-projection ``{gate,up,down}_quant`` strings and a
-    ``_gather_dequant(buf, ids, quant, fmt, M, K)`` helper (see
+    along with per-projection ``{gate,up,down}_quant`` strings, the
+    matching ``_<proj>_fmt`` lowercase format keys, and a
+    ``_gather_dequant`` helper (see
     ``integrations.gguf_linear.GgufQwen2MoeExperts``).
     """
+    from .gguf_linear import _ensure_metal_kernels
+
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
     H = self.hidden_dim
     I = self.intermediate_dim
+    device = hidden_states.device
 
     selected = hidden_states.repeat_interleave(num_top_k, dim=0).to(torch.float32).contiguous()  # (S, H)
-    expert_ids = top_k_index.reshape(-1).clamp(0, self.num_experts - 1).to(torch.long)
+    expert_ids_long = top_k_index.reshape(-1).clamp(0, self.num_experts - 1).to(torch.long)
     sample_weights = top_k_weights.reshape(-1).to(torch.float32)
+    S = expert_ids_long.shape[0]
 
-    gate_w = self._gather_dequant(self.gate_proj_q, expert_ids,
-                                  self.gate_quant, self._gate_fmt, I, H)  # (S, I, H)
-    up_w   = self._gather_dequant(self.up_proj_q, expert_ids,
-                                  self.up_quant, self._up_fmt, I, H)  # (S, I, H)
+    mod = _ensure_metal_kernels() if device.type == "mps" else None
 
-    # (S, 1, H) @ (S, H, I) -> (S, 1, I) -> (S, I)
-    gate = torch.bmm(selected.unsqueeze(1), gate_w.transpose(-1, -2)).squeeze(1)
-    up   = torch.bmm(selected.unsqueeze(1),   up_w.transpose(-1, -2)).squeeze(1)
-    inter = self.act_fn(gate) * up  # (S, I)
+    def _has_id_op(fmt: str) -> bool:
+        return mod is not None and hasattr(mod._ops, f"mul_mat_id_{fmt}_f32")
 
-    down_w = self._gather_dequant(self.down_proj_q, expert_ids,
-                                  self.down_quant, self._down_fmt, H, I)  # (S, H, I)
-    out = torch.bmm(inter.unsqueeze(1), down_w.transpose(-1, -2)).squeeze(1)  # (S, H)
+    use_id_kernel = (device.type == "mps"
+                     and _has_id_op(self._gate_fmt)
+                     and _has_id_op(self._up_fmt)
+                     and _has_id_op(self._down_fmt))
+
+    if use_id_kernel:
+        ids32 = expert_ids_long.to(torch.int32).contiguous()
+
+        # gate_proj_q / up_proj_q are 2D (num_experts, bytes_per_expert) uint8
+        # tensors; ``.view(-1)`` gives the flat per-expert byte stream the
+        # kernel expects. The op writes directly into a preallocated (S, M).
+        gate_qw = self.gate_proj_q.contiguous().view(-1)
+        up_qw   = self.up_proj_q.contiguous().view(-1)
+        down_qw = self.down_proj_q.contiguous().view(-1)
+
+        gate = torch.empty(S, I, dtype=torch.float32, device=device)
+        up   = torch.empty(S, I, dtype=torch.float32, device=device)
+        getattr(mod._ops, f"mul_mat_id_{self._gate_fmt}_f32")(gate_qw, selected, ids32, gate)
+        getattr(mod._ops, f"mul_mat_id_{self._up_fmt}_f32")  (up_qw,   selected, ids32, up)
+        inter = (self.act_fn(gate) * up).contiguous()
+
+        out = torch.empty(S, H, dtype=torch.float32, device=device)
+        getattr(mod._ops, f"mul_mat_id_{self._down_fmt}_f32")(down_qw, inter, ids32, out)
+    else:
+        # Fallback: per-projection batched dequant + bmm.
+        gate_w = self._gather_dequant(self.gate_proj_q, expert_ids_long,
+                                      self.gate_quant, self._gate_fmt, I, H)
+        up_w   = self._gather_dequant(self.up_proj_q, expert_ids_long,
+                                      self.up_quant, self._up_fmt, I, H)
+        gate = torch.bmm(selected.unsqueeze(1), gate_w.transpose(-1, -2)).squeeze(1)
+        up   = torch.bmm(selected.unsqueeze(1),   up_w.transpose(-1, -2)).squeeze(1)
+        inter = (self.act_fn(gate) * up).contiguous()
+        down_w = self._gather_dequant(self.down_proj_q, expert_ids_long,
+                                      self.down_quant, self._down_fmt, H, I)
+        out = torch.bmm(inter.unsqueeze(1), down_w.transpose(-1, -2)).squeeze(1)
 
     weighted = out * sample_weights.unsqueeze(-1)
     return weighted.view(num_tokens, num_top_k, H).sum(dim=1).to(hidden_states.dtype)

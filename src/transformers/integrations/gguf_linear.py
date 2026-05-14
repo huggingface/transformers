@@ -49,21 +49,77 @@ _GGUF_METAL_KERNELS = None
 _GGUF_METAL_LOADED = False
 
 
+class _DirectKernelHandle:
+    """Tiny stand-in for the kernels package's module object — exposes only
+    ``_ops`` (a ``torch._C._OpNamespace``) which is the single attribute our
+    forward path reads. Used when the ``kernels`` package can't load the repo
+    cleanly (its older snapshot_download flow uses a non-recursive ``*`` glob
+    that drops the nested ``gguf_dequant/__init__.py`` file, see
+    huggingface/kernels#TBD)."""
+
+    def __init__(self, ops):
+        self._ops = ops
+
+
+def _load_kernels_direct(repo: str):
+    """Pull the .so for the current torch variant directly from the Hub and
+    register its ops via ``torch.ops.load_library``. Returns a stub with a
+    ``_ops`` attribute, matching the shape of the ``kernels`` module object.
+    """
+    import torch
+    from huggingface_hub import snapshot_download
+    try:
+        from kernels.utils import build_variant
+    except Exception:
+        # Compute the variant string ourselves if kernels isn't installed.
+        major, minor = torch.__version__.split(".")[:2]
+        build_variant = lambda: f"torch{int(major)}{int(minor)}-metal-aarch64-darwin"  # noqa: E731
+
+    variant = build_variant() if callable(build_variant) else build_variant
+    # `**` to grab the nested package files the kernels package itself misses.
+    repo_dir = snapshot_download(repo, allow_patterns=[f"build/{variant}/**"])
+    import os, re
+    var_dir = os.path.join(repo_dir, "build", variant)
+    # The canonical .so name lives in ``_ops.py``: ``from . import _<ns>``.
+    # Read it to pin the right .so when several builds are shipped side-by-side.
+    ops_py = os.path.join(var_dir, "_ops.py")
+    with open(ops_py) as f:
+        m = re.search(r"from \. import (\w+)", f.read())
+    if not m:
+        raise FileNotFoundError(f"No `from . import` directive in {ops_py}")
+    ns_name = m.group(1)
+    so = os.path.join(var_dir, f"{ns_name}.abi3.so")
+    if not os.path.exists(so):
+        raise FileNotFoundError(f"Canonical .so missing: {so}")
+    torch.ops.load_library(so)
+    # ``ns_name`` includes a leading underscore from the .so file convention.
+    ns = getattr(torch.ops, ns_name)
+    return _DirectKernelHandle(ns)
+
+
 def _ensure_metal_kernels():
-    """Idempotent loader for the kernels-community Metal kernel package."""
+    """Idempotent loader for the kernels-community Metal kernel package.
+
+    Tries the ``kernels`` package first; on failure (e.g. when the package's
+    snapshot pattern strips the nested module init), falls back to a direct
+    ``snapshot_download + torch.ops.load_library`` path that's resilient to
+    the kernels lib's layout assumptions.
+    """
     global _GGUF_METAL_KERNELS, _GGUF_METAL_LOADED
     if _GGUF_METAL_LOADED:
         return _GGUF_METAL_KERNELS
     _GGUF_METAL_LOADED = True
     if os.environ.get("TRANSFORMERS_GGUF_USE_METAL_KERNELS", "1") == "0":
         return None
+    repo = os.environ.get("TRANSFORMERS_GGUF_METAL_KERNELS_REPO", "ArthurZ/gguf-kernels")
     try:
         from kernels import get_kernel  # type: ignore[import-not-found]
-
-        repo = os.environ.get("TRANSFORMERS_GGUF_METAL_KERNELS_REPO", "ArthurZ/gguf-kernels")
         _GGUF_METAL_KERNELS = get_kernel(repo)
     except Exception:
-        _GGUF_METAL_KERNELS = None
+        try:
+            _GGUF_METAL_KERNELS = _load_kernels_direct(repo)
+        except Exception:
+            _GGUF_METAL_KERNELS = None
     return _GGUF_METAL_KERNELS
 
 
@@ -203,22 +259,42 @@ class GgufLinear(nn.Module):
         is_mps = x.device.type == "mps"
         if is_mps:
             mod = _ensure_metal_kernels()
-            op_name = f"mul_mat_vec_{self._fmt}_f32" if N == 1 else f"mul_mat_{self._fmt}_f32"
-            # Kernels package not installed, or this build of the package predates
-            # the op for this quant type (e.g. Q5_0 / Q5_1 on an older hub build):
-            # fall back to dequant + linear so behavior stays correct.
-            if mod is None or not hasattr(mod._ops, op_name):
+            # The simdgroup matmul kernel requires N % 32 == 0 for its tile
+            # geometry; prefill prompts of arbitrary length don't hit that.
+            # For N == 1 (decode) we use the matvec kernel. For everything
+            # else we issue N separate matvec calls — slower per token than
+            # a big matmul but correct for any N. The mat path stays around
+            # for callers that already pad to multiples of 32.
+            qw_op = "mul_mat_q4_K_f32"  # any matmul op so we can probe support
+            qw_op = f"mul_mat_{self._fmt}_f32"
+            mv_op = f"mul_mat_vec_{self._fmt}_f32"
+            has_mat = mod is not None and hasattr(mod._ops, qw_op)
+            has_mv  = mod is not None and hasattr(mod._ops, mv_op)
+            if not (has_mat or has_mv):
                 return self._dequant_forward(x)
             qw = self.qweight.to(x.device)
-            fn = getattr(mod._ops, op_name)
-            if N == 1:
+
+            if N == 1 and has_mv:
+                fn = getattr(mod._ops, mv_op)
                 y = torch.empty(self.out_features, dtype=torch.float32, device=x.device)
                 fn(qw, x_flat.reshape(-1), y)
                 y = y.reshape(*batch_shape, self.out_features)
-            else:
+            elif N % 32 == 0 and has_mat:
+                fn = getattr(mod._ops, qw_op)
                 y = torch.empty(N * self.out_features, dtype=torch.float32, device=x.device)
                 fn(qw, x_flat, y)
                 y = y.reshape(N, self.out_features).reshape(*batch_shape, self.out_features)
+            elif has_mv:
+                # Small / odd batch — issue one matvec per row.
+                fn = getattr(mod._ops, mv_op)
+                rows = []
+                for i in range(N):
+                    row_y = torch.empty(self.out_features, dtype=torch.float32, device=x.device)
+                    fn(qw, x_flat[i].reshape(-1), row_y)
+                    rows.append(row_y)
+                y = torch.stack(rows, dim=0).reshape(*batch_shape, self.out_features)
+            else:
+                return self._dequant_forward(x)
         else:
             y = self._dequant_forward(x)
 
