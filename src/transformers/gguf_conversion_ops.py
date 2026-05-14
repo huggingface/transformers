@@ -20,10 +20,18 @@ and turns each :class:`GGUFQuantizedTensor` input (raw uint8 bytes carrying
 
 The remaining ops here (``Unsqueeze``/``SubtractOne``/``LogNegate``/permute/
 reshape) operate on already-dequantized ``torch.Tensor`` objects.
+
+When the optional ``kernels-community/gguf-dequant`` package is installed and
+the GGUF tensor lives on MPS, ``GGUFDequantize`` routes Q4_0 / Q8_0 / Q4_K /
+Q5_K / Q6_K / IQ4_NL / IQ4_XS through a single Metal compute kernel per tensor
+(2-7× faster than the chained PyTorch path). The pure-torch implementation
+in :mod:`integrations.gguf_dequant` remains the fallback on every other
+device and for quant types the kernel doesn't ship yet.
 """
 
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING
 
 from .core_model_loading import ConversionOps
@@ -31,6 +39,74 @@ from .core_model_loading import ConversionOps
 
 if TYPE_CHECKING:
     import torch
+
+
+# Optional Metal fast path. Loaded lazily on the first ``GGUFDequantize.convert``
+# call so that importing this module doesn't pull in the kernels package or
+# trigger a Hub round-trip during ``transformers`` import.
+_GGUF_METAL_KERNELS: object | None = None
+_GGUF_METAL_LOADED = False
+_GGUF_METAL_FN_NAMES = {
+    # `gguf.GGMLQuantizationType.<X>` → kernel function name on the loaded module.
+    # Resolved lazily inside `_ensure_metal_kernels` so this module is safe under
+    # tokenizer-only installs that don't have `gguf` available.
+    "Q4_0":   "torch_dequantize_q4_0",
+    "Q8_0":   "torch_dequantize_q8_0",
+    "Q4_K":   "torch_dequantize_q4_K",
+    "Q5_K":   "torch_dequantize_q5_K",
+    "Q6_K":   "torch_dequantize_q6_K",
+    "IQ4_NL": "torch_dequantize_iq4_nl",
+    "IQ4_XS": "torch_dequantize_iq4_xs",
+}
+
+
+def _ensure_metal_kernels():
+    """Lazily import ``kernels-community/gguf-dequant``. Returns the module or
+    ``None`` if the kernels package / Hub artifact / current build variant is
+    unavailable. Opt-out via ``TRANSFORMERS_GGUF_USE_METAL_KERNELS=0``."""
+    global _GGUF_METAL_KERNELS, _GGUF_METAL_LOADED
+    if _GGUF_METAL_LOADED:
+        return _GGUF_METAL_KERNELS
+    _GGUF_METAL_LOADED = True
+    if os.environ.get("TRANSFORMERS_GGUF_USE_METAL_KERNELS", "1") == "0":
+        return None
+    try:
+        from kernels import get_kernel  # type: ignore[import-not-found]
+
+        _GGUF_METAL_KERNELS = get_kernel("kernels-community/gguf-dequant")
+    except Exception:
+        _GGUF_METAL_KERNELS = None
+    return _GGUF_METAL_KERNELS
+
+
+def _try_metal_dequantize(tensor):
+    """If ``tensor`` is an MPS-resident :class:`GGUFQuantizedTensor` whose
+    ``quant_type`` has a Metal kernel, dequantize via the kernel and return a
+    float32 result with the correct logical shape. Otherwise return ``None``
+    (caller falls back to the pure-torch path)."""
+    if tensor.device.type != "mps":
+        return None
+    mod = _ensure_metal_kernels()
+    if mod is None:
+        return None
+    fn_name = _GGUF_METAL_FN_NAMES.get(tensor.quant_type.name)
+    if fn_name is None or not hasattr(mod, fn_name):
+        return None
+
+    import gguf  # local — already a transitive dep when we get here
+    import torch
+
+    block_size, type_size = gguf.GGML_QUANT_SIZES[tensor.quant_type]
+    byte_shape = tuple(tensor.shape)
+    if byte_shape[-1] % type_size != 0:
+        return None
+    logical_shape = (*byte_shape[:-1], byte_shape[-1] // type_size * block_size)
+
+    flat_in = tensor.contiguous().view(torch.uint8).reshape(-1)
+    flat_out = torch.empty(flat_in.numel() // type_size * block_size,
+                           dtype=torch.float32, device=tensor.device)
+    getattr(mod, fn_name)(flat_in, flat_out)
+    return flat_out.reshape(logical_shape)
 
 
 def _single_input_target(input_dict, source_patterns, target_patterns):
@@ -67,13 +143,18 @@ class GGUFDequantize(ConversionOps):
     ):
         from .integrations.gguf_dequant import GGUFQuantizedTensor, dequantize_gguf_tensor
 
+        def _dequant_one(t):
+            if not isinstance(t, GGUFQuantizedTensor):
+                return t
+            fast = _try_metal_dequantize(t)
+            if fast is not None:
+                return fast
+            return dequantize_gguf_tensor(t, t.quant_type, device=t.device)
+
         out = {}
         for key, tensors in input_dict.items():
             tensors_list = tensors if isinstance(tensors, list) else [tensors]
-            dequantized = [
-                dequantize_gguf_tensor(t, t.quant_type, device=t.device) if isinstance(t, GGUFQuantizedTensor) else t
-                for t in tensors_list
-            ]
+            dequantized = [_dequant_one(t) for t in tensors_list]
             out[key] = dequantized if isinstance(tensors, list) else dequantized[0]
         return out
 
