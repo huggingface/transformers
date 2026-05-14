@@ -66,6 +66,8 @@ class BaseAudioProcessor(AudioProcessingMixin):
     spectrogram_config = None
     do_extract_spectrogram = None
 
+    # ── Core ─────────────────────────────────────────────────────────────
+
     def __init__(
         self,
         sample_rate: int | None = None,
@@ -228,56 +230,6 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
         return BatchFeature(data=output, tensor_type=return_tensors)
 
-    def _to_batch(self, audio):
-        """Stack a list of audio arrays/tensors into a batch. Implemented by backend subclasses."""
-        raise NotImplementedError
-
-    def _get_mask(self, audio_ranges, padded_length, do_extract_spectrogram, spectrogram_config):
-        """Build attention mask dict from audio_ranges. Returns a dict of {key: mask} to merge into output.
-        Implemented by backend subclasses."""
-        raise NotImplementedError
-
-    def _postprocess_features(self, features, feature_lengths):
-        """Hook: per-utterance feature processing after extraction, before feature-level padding.
-
-        Override for normalization that must happen on unpadded features
-        (e.g., SeamlessM4t mean/variance normalization).
-        """
-        return features
-
-    def _postprocess_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
-        """Hook: augment or modify the output dict after main processing.
-
-        Override to add custom fields (e.g., audio_embed_sizes) or
-        post-hoc normalization on the stacked/batched output.
-        """
-        return output
-
-    def _pad_features(self, features, padding, max_length, truncation, pad_to_multiple_of):
-        """Pad a list of 2D feature arrays along the time axis (axis 0).
-        Implemented by backend subclasses."""
-        raise NotImplementedError
-
-    def _stack_features(self, features):
-        """Stack a list of feature arrays/tensors into a batch.
-        Implemented by backend subclasses."""
-        raise NotImplementedError
-
-    def _get_feature_mask(self, feature_ranges, padded_length):
-        """Build attention mask dict from feature_ranges.
-        Implemented by backend subclasses."""
-        raise NotImplementedError
-
-    def _process_audio(self, *args, **kwargs):
-        """
-        Process a single raw audio input into the backend's working format.
-
-        Implemented by backend subclasses (e.g., `TorchAudioBackend`). Converts a raw input
-        (NumPy array) to the backend's internal format (e.g., `torch.Tensor`), handles
-        mono conversion if needed.
-        """
-        raise NotImplementedError
-
     def pad(
         self,
         audio: AudioInput, # TODO: this type makes it unclear to know the have an iterable
@@ -325,6 +277,114 @@ class BaseAudioProcessor(AudioProcessingMixin):
             return audio_el[..., :max_length]
         return audio_el
 
+    def _standardize_kwargs(
+        self,
+        **kwargs,
+    ) -> dict:
+        """Coerce dict configs to their dataclass form."""
+        if isinstance(kwargs.get("spectrogram_config"), dict):
+            kwargs["spectrogram_config"] = SpectrogramConfig.from_dict(
+                kwargs["spectrogram_config"]
+            )
+        if kwargs.get("spectrogram_config") is not None and kwargs.get("do_extract_spectrogram") is None:
+            kwargs["do_extract_spectrogram"] = True
+        return kwargs
+
+    def _validate_preprocess_kwargs(
+        self,
+        sample_rate: int | None = None,
+        max_length: int | None = None,
+        truncation: bool | None = None,
+        pad_to_multiple_of: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        **kwargs,
+    ):
+        """Validate the kwargs for the preprocess method."""
+        if truncation and max_length is None:
+            raise ValueError(
+                "When setting `truncation=True`, make sure that `max_length` is defined."
+            )
+
+    def _get_padding_strategies(self, padding=False, max_length=None):
+        """Find the correct padding strategy."""
+        if padding is not False:
+            if padding is True:
+                padding_strategy = PaddingStrategy.LONGEST
+            elif not isinstance(padding, PaddingStrategy):
+                padding_strategy = PaddingStrategy(padding)
+            elif isinstance(padding, PaddingStrategy):
+                padding_strategy = padding
+        else:
+            padding_strategy = PaddingStrategy.DO_NOT_PAD
+
+        if max_length is None:
+            if padding_strategy == PaddingStrategy.MAX_LENGTH:
+                raise ValueError(
+                    f"When setting ``padding={PaddingStrategy.MAX_LENGTH}``, make sure that max_length is defined"
+                )
+
+        if padding_strategy != PaddingStrategy.DO_NOT_PAD and (self.padding_value is None):
+            raise ValueError(
+                "Asking to pad but the feature_extractor does not have a padding value. Please select a value to use"
+                " as `padding_value`. For example: `feature_extractor.padding_value = 0.0`."
+            )
+
+        return padding_strategy
+
+    def to_dict(self):
+        output = super().to_dict()
+        # Serialize config dataclasses to plain dicts for JSON persistence
+        for key in ("spectrogram_config",):
+            if key in output and hasattr(output[key], "to_dict"):
+                output[key] = output[key].to_dict()
+
+        # Filter out None values that are class defaults
+        filtered_dict = {}
+        for key, value in output.items():
+            if value is None:
+                class_default = getattr(type(self), key, "NOT_FOUND")
+                # Keep None if user explicitly set it (class default is non-None)
+                if class_default != "NOT_FOUND" and class_default is not None:
+                    filtered_dict[key] = value
+            else:
+                filtered_dict[key] = value
+
+        return filtered_dict
+
+    # ── Hooks ────────────────────────────────────────────────────────────
+
+    def _postprocess_features(self, features, feature_lengths):
+        """Hook: per-utterance feature processing after extraction, before feature-level padding.
+
+        Override for normalization that must happen on unpadded features
+        (e.g., SeamlessM4t mean/variance normalization).
+        """
+        return features
+
+    def _postprocess_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
+        """Hook: augment or modify the output dict after main processing.
+
+        Override to add custom fields (e.g., audio_embed_sizes) or
+        post-hoc normalization on the stacked/batched output.
+        """
+        return output
+
+    # ── Backend ──────────────────────────────────────────────────────────
+
+    def _process_audio(self, *args, **kwargs):
+        """
+        Process a single raw audio input into the backend's working format.
+
+        Implemented by backend subclasses (e.g., `TorchAudioBackend`). Converts a raw input
+        (NumPy array) to the backend's internal format (e.g., `torch.Tensor`), handles
+        mono conversion if needed.
+        """
+        raise NotImplementedError
+
+    def _to_batch(self, audio):
+        """Stack a list of audio arrays/tensors into a batch. Implemented by backend subclasses."""
+        raise NotImplementedError
+
     def _pad_single(self, audio, max_length: int) -> AudioInput:
         """
         Pad a single input (on left/right) up to predefined length or max length in the batch.
@@ -332,6 +392,58 @@ class BaseAudioProcessor(AudioProcessingMixin):
         Implemented by backend subclasses.
         """
         raise NotImplementedError
+
+    def _pad_features(self, features, padding, max_length, truncation, pad_to_multiple_of):
+        """Pad a list of 2D feature arrays along the time axis (axis 0).
+        Implemented by backend subclasses."""
+        raise NotImplementedError
+
+    def _stack_features(self, features):
+        """Stack a list of feature arrays/tensors into a batch.
+        Implemented by backend subclasses."""
+        raise NotImplementedError
+
+    def _get_mask(self, audio_ranges, padded_length, do_extract_spectrogram, spectrogram_config):
+        """Build attention mask dict from audio_ranges. Returns a dict of {key: mask} to merge into output.
+        Implemented by backend subclasses."""
+        raise NotImplementedError
+
+    def _get_feature_mask(self, feature_ranges, padded_length):
+        """Build attention mask dict from feature_ranges.
+        Implemented by backend subclasses."""
+        raise NotImplementedError
+
+    # ── Spectrogram extraction pipeline ──────────────────────────────────
+    #
+    # The full feature-extraction pipeline executed by `extract_spectrogram`:
+    #
+    #   1. _extract_spectrogram   (STFT → power/magnitude spectrogram)
+    #      a. _stft                        – orchestrates steps b–g (overridable for fully custom STFTs)
+    #      b.   _needs_manual_framing      – decide framing strategy (hook)
+    #      c.   _create_stft_window        – create the STFT window (backend)
+    #      d.   _prepare_window_and_framing– pad/reshape window, decide frame length (backend)
+    #      e.   manual path (needs_manual_framing=True):
+    #             _frame_audio             – center pad + frame extraction (backend)
+    #             _apply_frame_processing  – per-frame conditioning (hook)
+    #             _window_and_fft          – window + zero-pad + FFT + normalize → complex (backend)
+    #           native path (needs_manual_framing=False):
+    #             _native_stft             – native STFT returning complex output (backend)
+    #      f.   _compute_magnitudes        – complex → real magnitudes (backend, shared by both paths)
+    #      g.   _cast_stft_output          – cast output dtype (hook, no-op by default)
+    #   2. _apply_mel_scale       (mel filterbank projection)
+    #   3. _normalize_magnitude   (log / dB scaling, optional per-utterance norm)
+    #
+    # Backend subclasses (NumpyAudioBackend, TorchAudioBackend) implement the
+    # full pipeline.  Model-specific processors can override individual hooks
+    # (_apply_frame_processing) or the entire _stft when the base STFT path
+    # is insufficient.
+    #
+    # ``audio_ranges`` is passed through as a kwarg from ``_preprocess`` so that
+    # model-specific overrides (e.g., Parakeet waveform-level preemphasis,
+    # Phi4 boundary masking) can access original audio lengths without stashing
+    # state on ``self``.
+
+    # ── Spectrogram core ─────────────────────────────────────────────────
 
     def extract_spectrogram(self, audio, *, spectrogram_config: SpectrogramConfig | None = None, **kwargs):
         """
@@ -378,36 +490,6 @@ class BaseAudioProcessor(AudioProcessingMixin):
             features = self._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)
 
         return features
-
-    # ── Spectrogram extraction pipeline ──────────────────────────────────
-    #
-    # The full feature-extraction pipeline executed by `extract_spectrogram`:
-    #
-    #   1. _extract_spectrogram   (STFT → power/magnitude spectrogram)
-    #      a. _stft                        – orchestrates steps b–g (overridable for fully custom STFTs)
-    #      b.   _needs_manual_framing      – decide framing strategy (hook)
-    #      c.   _create_stft_window        – create the STFT window (backend)
-    #      d.   _prepare_window_and_framing– pad/reshape window, decide frame length (backend)
-    #      e.   manual path (needs_manual_framing=True):
-    #             _frame_audio             – center pad + frame extraction (backend)
-    #             _apply_frame_processing  – per-frame conditioning (hook)
-    #             _window_and_fft          – window + zero-pad + FFT + normalize → complex (backend)
-    #           native path (needs_manual_framing=False):
-    #             _native_stft             – native STFT returning complex output (backend)
-    #      f.   _compute_magnitudes        – complex → real magnitudes (backend, shared by both paths)
-    #      g.   _cast_stft_output          – cast output dtype (hook, no-op by default)
-    #   2. _apply_mel_scale       (mel filterbank projection)
-    #   3. _normalize_magnitude   (log / dB scaling, optional per-utterance norm)
-    #
-    # Backend subclasses (NumpyAudioBackend, TorchAudioBackend) implement the
-    # full pipeline.  Model-specific processors can override individual hooks
-    # (_apply_frame_processing) or the entire _stft when the base STFT path
-    # is insufficient.
-    #
-    # ``audio_ranges`` is passed through as a kwarg from ``_preprocess`` so that
-    # model-specific overrides (e.g., Parakeet waveform-level preemphasis,
-    # Phi4 boundary masking) can access original audio lengths without stashing
-    # state on ``self``.
 
     def _extract_spectrogram(self, audio, *, spectrogram_config, **kwargs):
         """Orchestrate the STFT pipeline.
@@ -461,39 +543,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         magnitudes = self._compute_magnitudes(stft_out, stft_cfg.power, spectrogram_config=spectrogram_config)
         return self._cast_stft_output(magnitudes, spectrogram_config)
 
-    def _create_stft_window(self, win_length, stft_cfg, audio):
-        """Create the STFT window. Implemented by backend subclasses."""
-        raise NotImplementedError
-
-    def _prepare_window_and_framing(self, window, win_length, n_fft, needs_manual_framing):
-        """Pad/reshape window and determine frame length. Implemented by backend subclasses."""
-        raise NotImplementedError
-
-    def _frame_audio(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
-        """Extract overlapping frames from the audio signal.
-
-        Handles center padding and dtype promotion. Returns frames of shape
-        (..., num_frames, frame_length). Implemented by backend subclasses.
-        """
-        raise NotImplementedError
-
-    def _window_and_fft(self, frames, window, frame_length, n_fft, stft_cfg):
-        """Apply window, zero-pad, FFT, and normalize. Returns complex STFT of shape (..., freq, time).
-        Implemented by backend subclasses."""
-        raise NotImplementedError
-
-    def _native_stft(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
-        """Native STFT (e.g. torch.stft). Returns complex output. Implemented by backend subclasses."""
-        raise NotImplementedError
-
-    def _compute_magnitudes(self, stft_out, power, spectrogram_config=None):
-        """Convert complex STFT output to a real-valued magnitude spectrogram.
-        Implemented by backend subclasses. Overridable for custom magnitude computation (e.g. Parakeet)."""
-        raise NotImplementedError
-
-    def _cast_stft_output(self, magnitudes, spectrogram_config):
-        """Cast STFT output to the desired output dtype. Default: no-op."""
-        return magnitudes
+    # ── Spectrogram hooks ────────────────────────────────────────────────
 
     def _needs_manual_framing(self, spectrogram_config):
         """Whether the STFT requires manual framing (unfold-based) instead of a native STFT.
@@ -510,36 +560,9 @@ class BaseAudioProcessor(AudioProcessingMixin):
             or spectrogram_config.remove_dc_offset
         )
 
-    def _compute_magnitudes(self, stft_out, power, spectrogram_config=None):
-        """Convert complex STFT output to a real-valued magnitude spectrogram.
-
-        Only used in the non-manual-framing STFT path.  Override for
-        non-standard magnitude computation (e.g. Parakeet's view_as_real path).
-        """
-        raise NotImplementedError
-
-    def _apply_frame_processing(self, frames, *, spectrogram_config, **kwargs):
-        """Hook: per-frame signal conditioning after frame extraction.
-
-        Called after framing, before windowing and FFT. Default backend
-        implementations apply dither, DC-offset removal, and standard
-        preemphasis.
-
-        Override for non-standard frame processing, e.g. HTK-style
-        preemphasis (Gemma3n).
-        """
-        raise NotImplementedError
-
-    def _apply_mel_scale(self, *args, **kwargs):
-        """Apply mel filterbank to spectrogram features."""
-        raise NotImplementedError
-
-    def _normalize_magnitude(self, *args, **kwargs):
-        """Apply magnitude normalization (log, log10, or dB scaling) to spectrogram features."""
-        raise NotImplementedError
-
-    def _mel_filter_bank(self, spectrogram_config: SpectrogramConfig):
-        raise NotImplementedError
+    def _cast_stft_output(self, magnitudes, spectrogram_config):
+        """Cast STFT output to the desired output dtype. Default: no-op."""
+        return magnitudes
 
     def _get_features_lengths(self, audio_lengths, spectrogram_config, include_center_frame=False):
         """
@@ -558,76 +581,57 @@ class BaseAudioProcessor(AudioProcessingMixin):
             lengths = lengths + 1
         return lengths
 
-    def _get_padding_strategies(self, padding=False, max_length=None):
-        """Find the correct padding strategy."""
-        if padding is not False:
-            if padding is True:
-                padding_strategy = PaddingStrategy.LONGEST
-            elif not isinstance(padding, PaddingStrategy):
-                padding_strategy = PaddingStrategy(padding)
-            elif isinstance(padding, PaddingStrategy):
-                padding_strategy = padding
-        else:
-            padding_strategy = PaddingStrategy.DO_NOT_PAD
+    # ── Spectrogram backend ──────────────────────────────────────────────
 
-        if max_length is None:
-            if padding_strategy == PaddingStrategy.MAX_LENGTH:
-                raise ValueError(
-                    f"When setting ``padding={PaddingStrategy.MAX_LENGTH}``, make sure that max_length is defined"
-                )
+    def _create_stft_window(self, win_length, stft_cfg, audio):
+        """Create the STFT window. Implemented by backend subclasses."""
+        raise NotImplementedError
 
-        if padding_strategy != PaddingStrategy.DO_NOT_PAD and (self.padding_value is None):
-            raise ValueError(
-                "Asking to pad but the feature_extractor does not have a padding value. Please select a value to use"
-                " as `padding_value`. For example: `feature_extractor.padding_value = 0.0`."
-            )
+    def _prepare_window_and_framing(self, window, win_length, n_fft, needs_manual_framing):
+        """Pad/reshape window and determine frame length. Implemented by backend subclasses."""
+        raise NotImplementedError
 
-        return padding_strategy
+    def _frame_audio(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
+        """Extract overlapping frames from the audio signal.
 
-    def _standardize_kwargs(
-        self,
-        **kwargs,
-    ) -> dict:
-        """Coerce dict configs to their dataclass form."""
-        if isinstance(kwargs.get("spectrogram_config"), dict):
-            kwargs["spectrogram_config"] = SpectrogramConfig.from_dict(
-                kwargs["spectrogram_config"]
-            )
-        if kwargs.get("spectrogram_config") is not None and kwargs.get("do_extract_spectrogram") is None:
-            kwargs["do_extract_spectrogram"] = True
-        return kwargs
+        Handles center padding and dtype promotion. Returns frames of shape
+        (..., num_frames, frame_length). Implemented by backend subclasses.
+        """
+        raise NotImplementedError
 
-    def _validate_preprocess_kwargs(
-        self,
-        sample_rate: int | None = None,
-        max_length: int | None = None,
-        truncation: bool | None = None,
-        pad_to_multiple_of: int | None = None,
-        return_tensors: str | TensorType | None = None,
-        **kwargs,
-    ):
-        """Validate the kwargs for the preprocess method."""
-        if truncation and max_length is None:
-            raise ValueError(
-                "When setting `truncation=True`, make sure that `max_length` is defined."
-            )
+    def _apply_frame_processing(self, frames, *, spectrogram_config, **kwargs):
+        """Hook: per-frame signal conditioning after frame extraction.
 
-    def to_dict(self):
-        output = super().to_dict()
-        # Serialize config dataclasses to plain dicts for JSON persistence
-        for key in ("spectrogram_config",):
-            if key in output and hasattr(output[key], "to_dict"):
-                output[key] = output[key].to_dict()
+        Called after framing, before windowing and FFT. Default backend
+        implementations apply dither, DC-offset removal, and standard
+        preemphasis.
 
-        # Filter out None values that are class defaults
-        filtered_dict = {}
-        for key, value in output.items():
-            if value is None:
-                class_default = getattr(type(self), key, "NOT_FOUND")
-                # Keep None if user explicitly set it (class default is non-None)
-                if class_default != "NOT_FOUND" and class_default is not None:
-                    filtered_dict[key] = value
-            else:
-                filtered_dict[key] = value
+        Override for non-standard frame processing, e.g. HTK-style
+        preemphasis (Gemma3n).
+        """
+        raise NotImplementedError
 
-        return filtered_dict
+    def _window_and_fft(self, frames, window, frame_length, n_fft, stft_cfg):
+        """Apply window, zero-pad, FFT, and normalize. Returns complex STFT of shape (..., freq, time).
+        Implemented by backend subclasses."""
+        raise NotImplementedError
+
+    def _native_stft(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
+        """Native STFT (e.g. torch.stft). Returns complex output. Implemented by backend subclasses."""
+        raise NotImplementedError
+
+    def _compute_magnitudes(self, stft_out, power, spectrogram_config=None):
+        """Convert complex STFT output to a real-valued magnitude spectrogram.
+        Implemented by backend subclasses. Overridable for custom magnitude computation (e.g. Parakeet)."""
+        raise NotImplementedError
+
+    def _apply_mel_scale(self, *args, **kwargs):
+        """Apply mel filterbank to spectrogram features."""
+        raise NotImplementedError
+
+    def _normalize_magnitude(self, *args, **kwargs):
+        """Apply magnitude normalization (log, log10, or dB scaling) to spectrogram features."""
+        raise NotImplementedError
+
+    def _mel_filter_bank(self, spectrogram_config: SpectrogramConfig):
+        raise NotImplementedError
