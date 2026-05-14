@@ -575,7 +575,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     _no_split_modules = ["AriaTextDecoderLayer", "AriaGroupedExpertsGemm"]
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -829,12 +829,12 @@ class AriaTextForCausalLM(AriaTextPreTrainedModel, GenerationMixin):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Aria causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class AriaCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -859,12 +859,12 @@ class AriaCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Aria outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class AriaModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):

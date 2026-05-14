@@ -47,7 +47,12 @@ class Qwen3OmniMoeAudioEncoderConfig(PreTrainedConfig):
     """
 
     model_type = "qwen3_omni_moe_audio_encoder"
-    attribute_map = {"num_hidden_layers": "encoder_layers"}
+    attribute_map = {
+        "num_hidden_layers": "encoder_layers",
+        "hidden_size": "d_model",
+        "num_attention_heads": "encoder_attention_heads",
+        "intermediate_size": "encoder_ffn_dim",
+    }
 
     num_mel_bins: int = 128
     encoder_layers: int = 32
@@ -398,11 +403,18 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
         "layers.*.mlp.down_proj": "rowwise_reduce_scatter",
         "norm": "activation",
     }
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+
     vocab_size: int = 3072
     hidden_size: int = 1024
     intermediate_size: int = 2048
@@ -513,6 +525,7 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
     audio_start_token_id: int = 151669
     speaker_id: dict | None = None
     initializer_range: float = 0.02
+    tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
         if self.code_predictor_config is None:
@@ -697,4 +710,13 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
         return self.thinker_config.get_text_config()
 
 
-__all__ = ["Qwen3OmniMoeConfig", "Qwen3OmniMoeThinkerConfig", "Qwen3OmniMoeTalkerConfig"]
+__all__ = [
+    "Qwen3OmniMoeConfig",
+    "Qwen3OmniMoeThinkerConfig",
+    "Qwen3OmniMoeTalkerConfig",
+    "Qwen3OmniMoeAudioEncoderConfig",
+    "Qwen3OmniMoeTalkerCodePredictorConfig",
+    "Qwen3OmniMoeTalkerTextConfig",
+    "Qwen3OmniMoeTextConfig",
+    "Qwen3OmniMoeVisionEncoderConfig",
+]

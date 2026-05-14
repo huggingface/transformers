@@ -82,6 +82,12 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
         "layers.*.mlp.down_proj": "rowwise_reduce_scatter",
         "norm": "activation",
     }
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
@@ -140,7 +146,7 @@ class Qwen3VLMoeVisionConfig(PreTrainedConfig):
         Indexed of layers for deepstack embeddings.
     """
 
-    model_type = "qwen3_vl_moe"
+    model_type = "qwen3_vl_moe_vision"
     base_config_key = "vision_config"
 
     depth: int = 27
@@ -203,4 +209,4 @@ class Qwen3VLMoeConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["Qwen3VLMoeConfig", "Qwen3VLMoeTextConfig"]
+__all__ = ["Qwen3VLMoeConfig", "Qwen3VLMoeTextConfig", "Qwen3VLMoeVisionConfig"]

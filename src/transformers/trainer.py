@@ -712,6 +712,8 @@ class Trainer:
             ddp_kwargs["bucket_cap_mb"] = self.args.ddp_bucket_cap_mb
         if self.args.ddp_broadcast_buffers is not None:
             ddp_kwargs["broadcast_buffers"] = self.args.ddp_broadcast_buffers
+        if self.args.ddp_static_graph is not None:
+            ddp_kwargs["static_graph"] = self.args.ddp_static_graph
 
         args["kwargs_handlers"] = [DistributedDataParallelKwargs(**ddp_kwargs)]
 
@@ -2416,8 +2418,12 @@ class Trainer:
                 return model
             return smp.DistributedModel(model, backward_passes_per_step=self.args.gradient_accumulation_steps)
 
-        # Multi-gpu training, 8bit models does not support DP
-        if self.args.n_gpu > 1 and not getattr(model, "is_loaded_in_8bit", False):
+        # Multi-gpu training, quantized models do not support DP
+        if (
+            self.args.n_gpu > 1
+            and not getattr(model, "is_loaded_in_8bit", False)
+            and not getattr(model, "is_loaded_in_4bit", False)
+        ):
             model = nn.DataParallel(model)
 
         # Note: in torch.distributed mode, there's no point in wrapping the model
@@ -3731,8 +3737,10 @@ class Trainer:
     def _issue_warnings_after_load(self, load_result: Any) -> None:
         """Log warnings for missing or unexpected keys after loading a checkpoint."""
         if len(load_result.missing_keys) != 0:
-            if self.model._keys_to_ignore_on_save is not None and set(load_result.missing_keys) == set(
-                self.model._keys_to_ignore_on_save
+            if (
+                self.model._keys_to_ignore_on_save is not None
+                and len(self.model._keys_to_ignore_on_save) > 0
+                and set(load_result.missing_keys) == set(self.model._keys_to_ignore_on_save)
             ):
                 self.model.tie_weights()
             else:

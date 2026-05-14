@@ -35,12 +35,12 @@ from ..auto import AutoModel
 from .configuration_vipllava import VipLlavaConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for VipLlava outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class VipLlavaModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -56,12 +56,12 @@ class VipLlavaModelOutputWithPast(BaseModelOutputWithPast):
     image_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for VipLlava causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class VipLlavaCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -116,7 +116,7 @@ class VipLlavaPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
 
     _supports_flash_attn = True
     _supports_sdpa = True

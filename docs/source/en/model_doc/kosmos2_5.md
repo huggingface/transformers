@@ -13,7 +13,6 @@ specific language governing permissions and limitations under the License.
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -40,18 +39,15 @@ The examples below demonstrates how to generate with [`AutoModel`], for both Mar
 <hfoptions id="usage">
 <hfoption id="AutoModel - Markdown Task">
 
-```py
-import re
-import torch
+```python
 import requests
-from PIL import Image, ImageDraw
+from PIL import Image
+
 from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
-from accelerate import Accelerator
+
 
 repo = "microsoft/kosmos-2.5"
-device = "cuda:0"
-dtype = torch.bfloat16
-model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map=device, dtype=dtype)
+model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map="auto")
 processor = AutoProcessor.from_pretrained(repo)
 
 # sample image
@@ -59,14 +55,14 @@ url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.pn
 image = Image.open(requests.get(url, stream=True).raw)
 
 prompt = "<md>"
-inputs = processor(text=prompt, images=image, return_tensors="pt")
+inputs = processor(text=prompt, images=image, return_tensors="pt").to(model.device)
 
 height, width = inputs.pop("height"), inputs.pop("width")
 raw_width, raw_height = image.size
 scale_height = raw_height / height
 scale_width = raw_width / width
 
-inputs = {k: v.to(device) if v is not None else None for k, v in inputs.items()}
+inputs = {k: v.to(model.device) if v is not None else None for k, v in inputs.items()}
 inputs["flattened_patches"] = inputs["flattened_patches"].to(dtype)
 generated_ids = model.generate(
     **inputs,
@@ -80,18 +76,17 @@ print(generated_text[0])
 </hfoption>
 <hfoption id="AutoModel - OCR Task">
 
-```py
+```python
 import re
-import torch
+
 import requests
 from PIL import Image, ImageDraw
+
 from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
-from accelerate import Accelerator
+
 
 repo = "microsoft/kosmos-2.5"
-device = "cuda:0"
-dtype = torch.bfloat16
-model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map=device, dtype=dtype)
+model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map="auto")
 processor = AutoProcessor.from_pretrained(repo)
 
 # sample image
@@ -100,20 +95,20 @@ image = Image.open(requests.get(url, stream=True).raw)
 
 # bs = 1
 prompt = "<ocr>"
-inputs = processor(text=prompt, images=image, return_tensors="pt")
+inputs = processor(text=prompt, images=image, return_tensors="pt").to(model.device)
 height, width = inputs.pop("height"), inputs.pop("width")
 raw_width, raw_height = image.size
 scale_height = raw_height / height
 scale_width = raw_width / width
 
 # bs > 1, batch generation
-# inputs = processor(text=[prompt, prompt], images=[image,image], return_tensors="pt")
+# inputs = processor(text=[prompt, prompt], images=[image,image], return_tensors="pt").to(model.device)
 # height, width = inputs.pop("height"), inputs.pop("width")
 # raw_width, raw_height = image.size
 # scale_height = raw_height / height[0]
 # scale_width = raw_width / width[0]
 
-inputs = {k: v.to(device) if v is not None else None for k, v in inputs.items()}
+inputs = {k: v.to(model.device) if v is not None else None for k, v in inputs.items()}
 inputs["flattened_patches"] = inputs["flattened_patches"].to(dtype)
 generated_ids = model.generate(
     **inputs,
@@ -165,19 +160,18 @@ image.save("output.png")
 The authors also released Kosmos-2.5 Chat, which is a chat version optimized for document understanding. You can use it like so:
 
 ```python
-import re
-import torch
 import requests
-from PIL import Image, ImageDraw
+import torch
+from PIL import Image
+
 from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
 
+
 repo = "microsoft/kosmos-2.5-chat"
-device = "cuda:0"
 dtype = torch.bfloat16
 
 model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo,
-                                                          device_map=device,
-                                                          torch_dtype=dtype,
+                                                          device_map="auto",
                                                           attn_implementation="flash_attention_2")
 processor = AutoProcessor.from_pretrained(repo)
 
@@ -189,14 +183,14 @@ image = Image.open(requests.get(url, stream=True).raw)
 question = "What is the sub total of the receipt?"
 template = "<md>A chat between a curious user and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the user's questions. USER: {} ASSISTANT:"
 prompt = template.format(question)
-inputs = processor(text=prompt, images=image, return_tensors="pt")
+inputs = processor(text=prompt, images=image, return_tensors="pt").to(model.device)
 
 height, width = inputs.pop("height"), inputs.pop("width")
 raw_width, raw_height = image.size
 scale_height = raw_height / height
 scale_width = raw_width / width
 
-inputs = {k: v.to(device) if v is not None else None for k, v in inputs.items()}
+inputs = {k: v.to(model.device) if v is not None else None for k, v in inputs.items()}
 inputs["flattened_patches"] = inputs["flattened_patches"].to(dtype)
 generated_ids = model.generate(
     **inputs,
@@ -210,6 +204,14 @@ print(generated_text[0])
 ## Kosmos2_5Config
 
 [[autodoc]] Kosmos2_5Config
+
+## Kosmos2_5TextConfig
+
+[[autodoc]] Kosmos2_5TextConfig
+
+## Kosmos2_5VisionConfig
+
+[[autodoc]] Kosmos2_5VisionConfig
 
 ## Kosmos2_5ImageProcessor
 
