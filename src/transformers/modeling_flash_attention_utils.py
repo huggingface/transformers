@@ -800,36 +800,8 @@ def _flash_attention_forward(
 
     # No padding
     else:
-        # Varlen-only kernels (e.g. `kernels-community/metal-flash-sdpa`) don't expose `flash_attn_func`,
-        # so we synthesize `cu_seqlens` for the batched dense layout and route through `flash_varlen_fn`.
-        if flash_fn is None:
-            batch_size, q_len = query_states.size(0), query_states.size(1)
-            k_len = key_states.size(1)
-            tensor_kwargs = {"dtype": torch.int32, "device": query_states.device}
-            cu_seq_lens_q = torch.arange(0, batch_size + 1, **tensor_kwargs) * q_len
-            cu_seq_lens_k = torch.arange(0, batch_size + 1, **tensor_kwargs) * k_len
-            q = query_states.contiguous().view(-1, query_states.size(-2), query_states.size(-1))
-            k = key_states.contiguous().view(-1, key_states.size(-2), key_states.size(-1))
-            v = value_states.contiguous().view(-1, value_states.size(-2), value_states.size(-1))
-
-            # See `kernels-community/metal-flash-sdpa` notes above: cu_seqlens_k must not alias cu_seqlens_q on MPS.
-            if "mps" in str(q.device):
-                cu_seq_lens_k = cu_seq_lens_k.clone()
-
-            out = flash_varlen_fn(
-                q,
-                k,
-                v,
-                cu_seqlens_q=cu_seq_lens_q,
-                cu_seqlens_k=cu_seq_lens_k,
-                **flash_kwargs(max_seqlen_q=q_len, max_seqlen_k=k_len),
-            )
-            if isinstance(out, tuple):
-                out = out[0]
-            out = out.view(batch_size, q_len, out.size(-2), out.size(-1))
-        else:
-            out = flash_fn(query_states, key_states, value_states, **flash_kwargs())
-            if isinstance(out, tuple):
-                out = out[0]
+        out = flash_fn(query_states, key_states, value_states, **flash_kwargs())
+        if isinstance(out, tuple):
+            out = out[0]
 
     return out
