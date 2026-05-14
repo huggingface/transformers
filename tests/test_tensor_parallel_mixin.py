@@ -402,9 +402,14 @@ def _test_tp_generation_quantized_impl(_rank, model_path, model_class, max_new_t
 
 def _load_ep_and_reference_models(model_path, model_class):
     """Load EP model and non-EP reference model for comparison."""
+    tp_size = dist.get_world_size()
     model_ep = model_class.from_pretrained(
         model_path,
-        distributed_config=DistributedConfig(enable_expert_parallel=True),
+        distributed_config=DistributedConfig(
+            tp_size=tp_size,
+            tp_plan="auto",
+            enable_expert_parallel=True,
+        ),
     )
     dist.barrier()
 
