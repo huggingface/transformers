@@ -6,7 +6,7 @@ permissions:
   pull-requests: write
 
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, reopened]
 
 jobs:
