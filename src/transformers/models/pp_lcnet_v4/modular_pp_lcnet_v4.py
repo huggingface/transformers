@@ -50,15 +50,15 @@ class PPLCNetV4Config(PPLCNetConfig):
         - First number (3) is input image channels
         - Second number (48) is intermediate stem channels
         - Third number (96) is output stem channels
+    reduction (`int`, *optional*, defaults to 4):
+        The reduction factor for feature channel dimensions in the squeeze-and-excitation (SE) blocks, used to
+        reduce the number of model parameters and computational complexity while maintaining feature representability.
     stem_strides (`Sequence[int | list[int] | tuple[int, ...]]`, *optional*, defaults to `(2, 1, 1, 2, 1)`):
         Stride patterns for the stem layers.
     stem_type (`str`, *optional*, defaults to `large`):
         The type of stem layer to use. Can be one of:
         - `"large"`: Standard PP-LCNetV4 stem.
         - `"small"`: Variant with smaller channel dimensions.
-    reduction (`int`, *optional*, defaults to 4):
-        The reduction factor for feature channel dimensions in the squeeze-and-excitation (SE) blocks, used to
-        reduce the number of model parameters and computational complexity while maintaining feature representability.
     use_learnable_affine_block (`bool`, *optional*, defaults to `False`):
         Whether to use Learnable Affine Blocks (LAB) in the network.
         LAB adds learnable scale and bias parameters after certain operations.

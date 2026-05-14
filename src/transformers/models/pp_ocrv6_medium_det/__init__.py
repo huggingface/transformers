@@ -20,8 +20,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_pp_ocrv6_base_det import *
-    from .modeling_pp_ocrv6_base_det import *
+    from .configuration_pp_ocrv6_medium_det import *
+    from .modeling_pp_ocrv6_medium_det import *
 else:
     import sys
 

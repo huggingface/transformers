@@ -34,9 +34,11 @@ from ..pp_ocrv5_server_det.modeling_pp_ocrv5_server_det import (
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="PaddlePaddle/PP-OCRv6_base_det_safetensors")
+@auto_docstring(checkpoint="PaddlePaddle/PP-OCRv6_medium_det_safetensors")
 @strict
-class PPOCRV6BaseDetConfig(PPOCRV5ServerDetConfig):
+class PPOCRV6MediumDetConfig(PPOCRV5ServerDetConfig):
+    hidden_act = AttributeError()
+
     def __post_init__(self, **kwargs):
         self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=self.backbone_config,
@@ -46,18 +48,18 @@ class PPOCRV6BaseDetConfig(PPOCRV5ServerDetConfig):
         PreTrainedConfig.__post_init__(**kwargs)
 
 
-class PPOCRV6BaseDetHead(PPOCRV5MobileDetHead):
+class PPOCRV6MediumDetHead(PPOCRV5MobileDetHead):
     pass
 
 
-@auto_docstring(custom_intro="PPOCR6BaseDet model for text detection tasks.")
-class PPOCRV6BaseDetForObjectDetection(PPOCRV5ServerDetForObjectDetection):
+@auto_docstring(custom_intro="PPOCRV6MediumDet model for text detection tasks.")
+class PPOCRV6MediumDetForObjectDetection(PPOCRV5ServerDetForObjectDetection):
     pass
 
 
 __all__ = [
-    "PPOCRV6BaseDetForObjectDetection",
-    "PPOCRV6BaseDetConfig",
-    "PPOCRV6BaseDetModel",  # noqa: F822
-    "PPOCRV6BaseDetPreTrainedModel",  # noqa: F822
+    "PPOCRV6MediumDetForObjectDetection",
+    "PPOCRV6MediumDetConfig",
+    "PPOCRV6MediumDetModel",  # noqa: F822
+    "PPOCRV6MediumDetPreTrainedModel",  # noqa: F822
 ]
