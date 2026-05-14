@@ -183,10 +183,15 @@ def _accumulate_local_param_grad(original_param: DTensor, local_grad: torch.Tens
     """Stitch a local grad back onto the original DTensor parameter.
 
     During forward we replace the DTensor param with a detached plain-tensor
-    leaf (see ``context_around_forward``) because ``grouped_mm`` / fused ops do
-    not accept DTensor inputs. That swap breaks the autograd link between the
-    local leaf's grad and the DTensor param's ``.grad``, so this tensor hook
+    leaf (see ``_swap_dtensor_params_for_local``) because ``grouped_mm`` / fused
+    ops don't accept DTensor inputs. That swap breaks the autograd link between
+    the local leaf's grad and the DTensor param's ``.grad``, so this tensor hook
     runs on the leaf and copies/accumulates the grad onto the original DTensor.
+
+    NOTE: An autograd-aware ``param.to_local()`` swap would let backward stitch
+    the grad automatically, but DTensor's backward path then redistributes the
+    resulting grad — and that redistribute does not currently support
+    ``_StridedShard`` placements (used by ``MoEExpertsParallel`` / ``PackedColwiseParallel``).
     """
     tensor_meta = original_param._spec.tensor_meta
     detached_grad = local_grad.detach()
@@ -198,7 +203,6 @@ def _accumulate_local_param_grad(original_param: DTensor, local_grad: torch.Tens
         shape=tensor_meta.shape,
         stride=tensor_meta.stride,
     )
-
     with torch.no_grad():
         existing_grad = original_param.grad
         if existing_grad is None:
@@ -207,8 +211,38 @@ def _accumulate_local_param_grad(original_param: DTensor, local_grad: torch.Tens
             existing_grad._local_tensor.add_(detached_grad)
         else:
             existing_grad.add_(detached_grad)
-
     return local_grad
+
+
+@contextlib.contextmanager
+def _swap_dtensor_params_for_local(module):
+    """Temporarily replace DTensor params with local-shard ``Parameter``s for forward.
+
+    ``grouped_mm`` / fused kernels don't accept DTensor inputs, so each DTensor
+    param is swapped for a detached local ``Parameter``. A tensor hook
+    (``_accumulate_local_param_grad``) on the local leaf copies the backward
+    grad back onto the original DTensor.
+
+    The original DTensor params are restored on exit (even on exception) so
+    save_pretrained / state-dict still see sharded params.
+    """
+    shadows = {}
+    for name, param in list(module.named_parameters(recurse=False)):
+        if not isinstance(param, DTensor):
+            continue
+        shadows[name] = param
+        local = torch.nn.Parameter(param._local_tensor.detach(), requires_grad=param.requires_grad)
+        if param.requires_grad:
+            local.register_hook(lambda g, p=param: _accumulate_local_param_grad(p, g))
+        module._parameters.pop(name)
+        setattr(module, name, local)
+    try:
+        yield
+    finally:
+        for name, param in shadows.items():
+            if hasattr(module, name):
+                delattr(module, name)
+            module.register_parameter(name, param)
 
 
 class PackedColwiseParallel(TensorParallelStyle):
@@ -235,32 +269,8 @@ class PackedColwiseParallel(TensorParallelStyle):
         input_tensor = input_tensor.to_local()
         return (input_tensor,) + args[1:], kwargs
 
-    @contextlib.contextmanager
     def context_around_forward(self, module):
-        """Swap DTensor params for local leaf params during forward.
-
-        ``grouped_mm`` / fused ops don't accept DTensor inputs, so we forward
-        through a detached plain-tensor leaf and let ``_accumulate_local_param_grad``
-        (a tensor hook on the leaf) copy the backward grad onto the original DTensor.
-        DTensor params are restored on exit (even on exception).
-        """
-        shadows = {}
-        for name, param in list(module.named_parameters(recurse=False)):
-            if not isinstance(param, DTensor):
-                continue
-            shadows[name] = param
-            local = torch.nn.Parameter(param._local_tensor.detach(), requires_grad=param.requires_grad)
-            if param.requires_grad:
-                local.register_hook(lambda g, p=param: _accumulate_local_param_grad(p, g))
-            module._parameters.pop(name)
-            setattr(module, name, local)
-        try:
-            yield
-        finally:
-            for name, param in shadows.items():
-                if hasattr(module, name):
-                    delattr(module, name)
-                module.register_parameter(name, param)
+        return _swap_dtensor_params_for_local(module)
 
     def transform_output_post_forward(self, module, output, mesh):
         if output is None or self.use_local_output:
@@ -366,32 +376,8 @@ class MoEExpertsParallel(TensorParallelStyle):
 
         return (hidden_states, top_k_index, top_k_weights), kwargs
 
-    @contextlib.contextmanager
     def context_around_forward(self, module):
-        """Swap DTensor params for local leaf params during forward.
-
-        ``grouped_mm`` / fused ops don't accept DTensor inputs, so we forward
-        through a detached plain-tensor leaf and let ``_accumulate_local_param_grad``
-        (a tensor hook on the leaf) copy the backward grad onto the original DTensor.
-        DTensor params are restored on exit (even on exception).
-        """
-        shadows = {}
-        for name, param in list(module.named_parameters(recurse=False)):
-            if not isinstance(param, DTensor):
-                continue
-            shadows[name] = param
-            local = torch.nn.Parameter(param._local_tensor.detach(), requires_grad=param.requires_grad)
-            if param.requires_grad:
-                local.register_hook(lambda g, p=param: _accumulate_local_param_grad(p, g))
-            module._parameters.pop(name)
-            setattr(module, name, local)
-        try:
-            yield
-        finally:
-            for name, param in shadows.items():
-                if hasattr(module, name):
-                    delattr(module, name)
-                module.register_parameter(name, param)
+        return _swap_dtensor_params_for_local(module)
 
     def transform_output_post_forward(self, module, output, mesh):
         if output is None:
