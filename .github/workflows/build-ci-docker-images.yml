@@ -18,9 +18,6 @@ concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-
 jobs:
   build:
     runs-on: ubuntu-22.04
