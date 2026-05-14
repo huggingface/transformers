@@ -456,7 +456,7 @@ class ModelUtilsTest(TestCasePlus):
 
             with (
                 patch("transformers.modeling_utils.init_device_mesh", return_value=fake_mesh),
-                patch("transformers.modeling_utils.apply_fully_shard_data_parallel", side_effect=fake_apply_fsdp),
+                patch("transformers.distributed.utils.apply_fully_shard_data_parallel", side_effect=fake_apply_fsdp),
                 patch.object(GPT2LMHeadModel, "_load_pretrained_model", side_effect=fake_load_pretrained_model),
                 patch.object(
                     GPT2LMHeadModel,
