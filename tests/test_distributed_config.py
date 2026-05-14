@@ -54,6 +54,7 @@ class TestDistributedConfig:
             "tp_size": 2,
             "tp_plan": "auto",
             "enable_sequence_parallel": False,
+            "enable_expert_parallel": False,
             "fsdp_size": 4,
             "fsdp_plan": "auto",
         }
