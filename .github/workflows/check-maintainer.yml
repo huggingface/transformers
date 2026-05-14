@@ -1,0 +1,52 @@
+name: Check maintainer team membership
+
+# Reusable workflow: fails if `actor` is not a member of the
+# `huggingface/transformers-core-maintainers` team.
+#
+# Used to gate comment-triggered CI workflows in place of a hardcoded
+# allowlist of GitHub usernames. The team is the single source of truth
+# for "who can trigger maintainer-only CI" and is managed in GitHub's
+# team UI.
+#
+# Requires a repo secret `HF_ORG_READ_TOKEN` set to a token with
+# `read:org` scope on the `huggingface` org (PAT or GitHub App
+# installation token).
+
+on:
+  workflow_call:
+    inputs:
+      actor:
+        description: "GitHub login to check membership for"
+        required: true
+        type: string
+      team:
+        description: "Team slug under the huggingface org"
+        required: false
+        type: string
+        default: transformers-core-maintainers
+    secrets:
+      org_read_token:
+        description: "Token with read:org scope on the huggingface org"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check team membership
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check ${{ inputs.actor }} is a member of huggingface/${{ inputs.team }}
+        env:
+          GH_TOKEN: ${{ secrets.org_read_token }}
+          ACTOR: ${{ inputs.actor }}
+          TEAM: ${{ inputs.team }}
+        run: |
+          # Returns 200 if the user is an active member of the team, 404 otherwise.
+          # `gh api` exits non-zero on 404, so a single call is enough.
+          if ! gh api "orgs/huggingface/teams/${TEAM}/memberships/${ACTOR}" --jq '.state' >/dev/null 2>&1; then
+            echo "::error::${ACTOR} is not an active member of huggingface/${TEAM}"
+            exit 1
+          fi
+          echo "${ACTOR} is a member of huggingface/${TEAM}"

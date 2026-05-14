@@ -26,9 +26,18 @@ env:
 
 
 jobs:
+  check-maintainer:
+    name: Check maintainer
+    if: ${{ github.event.issue.state == 'open' && (startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow')) }}
+    uses: ./.github/workflows/check-maintainer.yml
+    with:
+      actor: ${{ github.actor }}
+    secrets:
+      org_read_token: ${{ secrets.HF_ORG_READ_TOKEN }}
+
   get-pr-number:
     name: Get PR number
-    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "molbap", "LysandreJik", "Cyrilvallez", "Rocketknight1", "SunMarc", "eustlb", "vasqu", "ivarflakstad", "stevhliu", "ebezzam", "remi-or", "itazap", "3outeille", "IlyasMoutawwakil", "tarekziade", "yonigozlan"]'), github.actor) && (startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow')) }}
+    needs: check-maintainer
     uses: ./.github/workflows/get-pr-number.yml
 
   get-pr-info:

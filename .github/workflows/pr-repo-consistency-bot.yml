@@ -14,9 +14,18 @@ permissions:
 
 
 jobs:
+  check-maintainer:
+    name: Check maintainer
+    if: ${{ github.event.issue.state == 'open' && (startsWith(github.event.comment.body, '@bot /repo') || startsWith(github.event.comment.body, '@bot /style')) }}
+    uses: ./.github/workflows/check-maintainer.yml
+    with:
+      actor: ${{ github.actor }}
+    secrets:
+      org_read_token: ${{ secrets.HF_ORG_READ_TOKEN }}
+
   get-pr-number:
     name: Get PR number
-    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "molbap", "gante", "LysandreJik", "Cyrilvallez", "Rocketknight1", "SunMarc", "eustlb", "MekkCyber", "vasqu", "ivarflakstad", "stevhliu", "ebezzam", "remi-or", "itazap", "3outeille", "IlyasMoutawwakil", "tarekziade"]'), github.actor) && (startsWith(github.event.comment.body, '@bot /repo') || startsWith(github.event.comment.body, '@bot /style')) }}
+    needs: check-maintainer
     uses: ./.github/workflows/get-pr-number.yml
 
   get-pr-info:
