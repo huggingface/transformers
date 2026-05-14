@@ -570,7 +570,7 @@ class ContinuousBatchingManager:
     @traced
     def start(self) -> None:
         """Start the background generation thread."""
-        if self._generation_thread is not None and self._generation_thread.is_alive():
+        if self.is_running():
             logger.warning("Manager thread is already running.")
             return
         self.stop_event.clear()

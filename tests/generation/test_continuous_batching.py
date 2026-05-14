@@ -367,6 +367,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
             config=AutoConfig.from_pretrained("HuggingFaceTB/SmolLM-1.7B", attn_implementation="sdpa"),
             continuous_batching_config=ContinuousBatchingConfig(block_size=16, num_blocks=8, max_batch_tokens=8),
             device=torch_device,
+            tp_plan={},
             distributed_helper=DistributedHelper(device_mesh=None),
         )
 
@@ -700,9 +701,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             attn_implementation=attn_implementation,
         )
 
-    @parameterized.expand(
-        [("eager", False), ("sdpa", False), ("sdpa", True), ("flash_attention_2", True)]
-    )
+    @parameterized.expand([("eager", False), ("sdpa", False), ("sdpa", True), ("flash_attention_2", True)])
     @slow
     def test_continuous_batching_config_combinations_with_compile(
         self,
@@ -1211,11 +1210,11 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             use_async_batching=use_async_batching,
             per_request_processors=True,
             return_logprobs=True,
+            q_padding_interval_size=16,  # allows for exact comparison between CB and regular generation
         )
         manager = model.init_continuous_batching(
             generation_config=generation_config,
             continuous_batching_config=continuous_batching_config,
-            q_padding_interval_size=16,  # allows for exact comparison between CB and regular generation
         )
 
         # Trick to have temperature, top-k, top-p ... without randomness: diable sampling after manager creation
