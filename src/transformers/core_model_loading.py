@@ -1385,6 +1385,14 @@ def convert_and_load_state_dict_in_model(
             else:
                 mapping = param_name_to_load.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
                 source_pattern = original_key
+                # Pre-quantized loaders (e.g. GGUF) need a dequant op on the rename path:
+                # ``WeightRenaming.convert`` returns the raw quantized tensor directly under
+                # the renamed key, and ``set_param_for_module`` skips the shape check when a
+                # quantizer is active. Without an explicit dequant op the layer would land in
+                # the model as raw bytes cast to fp32 with the wrong (byte-) shape.
+                renaming_dequant = getattr(hf_quantizer, "renaming_dequantize_op", None)
+                if renaming_dequant is not None and mapping.quantization_operation is None:
+                    mapping.quantization_operation = renaming_dequant
 
             # 3. Handle dtype casting
             needs_quantization = (
