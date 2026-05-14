@@ -1400,12 +1400,12 @@ class Gemma4TextModel(Gemma3TextModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4TextModelOutputWithPast:
         r"""
-        per_layer_inputs (`torch.Tensor` of shape `(batch_size, sequence_length, num_hidden_layers, hidden_size_per_layer_input)`, *optional*):
-            Pre-computed per-layer input embeddings. When provided, these are used directly instead of being
-            computed from `input_ids` via `get_per_layer_inputs()`. This is primarily used by the multimodal
-            model (`Gemma4Model`) which pre-computes per-layer inputs from the original `input_ids` *before*
-            merging multimodal soft tokens into `inputs_embeds` — at which point the original token ids are
-            no longer recoverable.
+        per_layer_inputs (`torch.Tensor`, *optional*):
+            Pre-computed per-layer input text embeddings of shape of shape `(batch_size, sequence_length, num_hidden_layers,
+            hidden_size_per_layer_input)`. When provided, these are used directly instead of being computed from `input_ids`
+            via `get_per_layer_inputs()` in the text model. If calling the `forward` with `inputs_embeds` instead of `input_ids`,
+            you should probably precompute them and forward them along `inputs_embeds`, otherwise recomputing them needs
+            to reverse the main embedding, which is expensibe.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1493,9 +1493,17 @@ class Gemma4ForCausalLM(Gemma3ForCausalLM):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        per_layer_inputs: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4CausalLMOutputWithPast:
         r"""
+        per_layer_inputs (`torch.Tensor`, *optional*):
+            Pre-computed per-layer input text embeddings of shape of shape `(batch_size, sequence_length, num_hidden_layers,
+            hidden_size_per_layer_input)`. When provided, these are used directly instead of being computed from `input_ids`
+            via `get_per_layer_inputs()` in the text model. If calling the `forward` with `inputs_embeds` instead of `input_ids`,
+            you should probably precompute them and forward them along `inputs_embeds`, otherwise recomputing them needs
+            to reverse the main embedding, which is expensibe.
+
         Example:
 
         ```python
@@ -1519,6 +1527,7 @@ class Gemma4ForCausalLM(Gemma3ForCausalLM):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            per_layer_inputs=per_layer_inputs,
             use_cache=use_cache,
             **kwargs,
         )
@@ -1905,6 +1914,7 @@ class Gemma4Model(Gemma3nModel):
         use_cache: bool | None = None,
         image_position_ids: torch.LongTensor | None = None,
         video_position_ids: torch.LongTensor | None = None,
+        per_layer_inputs: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4ModelOutputWithPast:
         r"""
@@ -1916,6 +1926,12 @@ class Gemma4Model(Gemma3nModel):
         video_position_ids (`torch.LongTensor` of shape `(num_videos, num_frames, max_patches, 2)`, *optional*):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
+        per_layer_inputs (`torch.Tensor`, *optional*):
+            Pre-computed per-layer input text embeddings of shape of shape `(batch_size, sequence_length, num_hidden_layers,
+            hidden_size_per_layer_input)`. When provided, these are used directly instead of being computed from `input_ids`
+            via `get_per_layer_inputs()` in the text model. If calling the `forward` with `inputs_embeds` instead of `input_ids`,
+            you should probably precompute them and forward them along `inputs_embeds`, otherwise recomputing them needs
+            to reverse the main embedding, which is expensibe.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1930,13 +1946,11 @@ class Gemma4Model(Gemma3nModel):
             llm_input_ids[multimodal_mask] = self.config.text_config.pad_token_id
             inputs_embeds = self.get_input_embeddings()(llm_input_ids)
 
-        if self.config.get_text_config().hidden_size_per_layer_input:
+        if per_layer_inputs is None and self.config.get_text_config().hidden_size_per_layer_input:
             pad_embedding = self.language_model.embed_tokens.weight[self.config.text_config.pad_token_id, :]
             multimodal_mask = multimodal_mask.to(inputs_embeds.device)
             llm_inputs_embeds = torch.where(multimodal_mask[..., None], pad_embedding.view(1, 1, -1), inputs_embeds)
             per_layer_inputs = self.language_model.get_per_layer_inputs(llm_input_ids, llm_inputs_embeds)
-        else:
-            per_layer_inputs = None
 
         # Merge text and images
         if pixel_values is not None:
@@ -2104,6 +2118,7 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        per_layer_inputs: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4CausalLMOutputWithPast:
         r"""
@@ -2115,6 +2130,12 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
         video_position_ids (`torch.LongTensor` of shape `(num_videos, num_frames, max_patches, 2)`, *optional*):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
+        per_layer_inputs (`torch.Tensor`, *optional*):
+            Pre-computed per-layer input text embeddings of shape of shape `(batch_size, sequence_length, num_hidden_layers,
+            hidden_size_per_layer_input)`. When provided, these are used directly instead of being computed from `input_ids`
+            via `get_per_layer_inputs()` in the text model. If calling the `forward` with `inputs_embeds` instead of `input_ids`,
+            you should probably precompute them and forward them along `inputs_embeds`, otherwise recomputing them needs
+            to reverse the main embedding, which is expensibe.
         """
         outputs = self.model(
             input_ids=input_ids,
@@ -2127,6 +2148,7 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
             past_key_values=past_key_values,
             mm_token_type_ids=mm_token_type_ids,
             inputs_embeds=inputs_embeds,
+            per_layer_inputs=per_layer_inputs,
             labels=labels,
             use_cache=use_cache,
             image_position_ids=image_position_ids,
