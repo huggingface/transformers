@@ -158,7 +158,173 @@ class GgufLinearAcceptsSupportedTypes(unittest.TestCase):
 
         self.assertTrue(gguf_linear_supports(gguf.GGMLQuantizationType.Q4_0))
         self.assertTrue(gguf_linear_supports(gguf.GGMLQuantizationType.Q4_K))
+        self.assertTrue(gguf_linear_supports(gguf.GGMLQuantizationType.Q5_0))
+        self.assertTrue(gguf_linear_supports(gguf.GGMLQuantizationType.Q5_1))
         self.assertFalse(gguf_linear_supports(gguf.GGMLQuantizationType.F32))
+
+
+@require_torch
+@require_gguf
+class GgufLinearSerializationTest(unittest.TestCase):
+    """``state_dict`` / ``load_state_dict`` roundtrip preserves bytes + quant type,
+    and forward output of a freshly reloaded module matches the original."""
+
+    def _roundtrip_state_dict(self, layer):
+        sd = layer.state_dict()
+        clone = GgufLinear(
+            in_features=layer.in_features,
+            out_features=layer.out_features,
+            quant_type=layer.quant_type,
+            bias=layer.bias is not None,
+        )
+        # zero the clone so the reload is observable
+        clone.qweight.zero_()
+        if clone.bias is not None:
+            clone.bias.data.zero_()
+        clone.load_state_dict(sd)
+        return clone, sd
+
+    def test_q4_0_state_dict_roundtrip(self):
+        M, K = 64, 256
+        qb = _random_q4_0_bytes(M, K, seed=11)
+        layer = GgufLinear(K, M, "Q4_0", bias=False)
+        layer.qweight.copy_(torch.frombuffer(bytearray(qb), dtype=torch.uint8))
+
+        clone, sd = self._roundtrip_state_dict(layer)
+
+        # state_dict carries the raw bytes verbatim.
+        self.assertTrue(torch.equal(sd["qweight"], layer.qweight))
+        # And the extra state carries the quant_type.
+        self.assertIn("_extra_state", sd)
+        self.assertEqual(sd["_extra_state"]["quant_type"], "Q4_0")
+        # Reloaded module has identical bytes.
+        self.assertTrue(torch.equal(clone.qweight, layer.qweight))
+
+        # Forward output of the clone matches the original bit-for-bit.
+        torch.manual_seed(3)
+        x = torch.randn(4, K) * 0.1
+        self.assertTrue(torch.equal(layer(x), clone(x)))
+
+    def test_q4_K_state_dict_with_bias(self):
+        M, K = 64, 256
+        qb = _random_q4_K_bytes(M, K, seed=13)
+        layer = GgufLinear(K, M, "Q4_K", bias=True)
+        layer.qweight.copy_(torch.frombuffer(bytearray(qb), dtype=torch.uint8))
+        layer.bias.data.copy_(torch.linspace(-0.5, 0.5, M))
+
+        clone, sd = self._roundtrip_state_dict(layer)
+
+        self.assertIn("bias", sd)
+        self.assertTrue(torch.equal(clone.bias, layer.bias))
+        torch.manual_seed(5)
+        x = torch.randn(2, K) * 0.1
+        self.assertTrue(torch.equal(layer(x), clone(x)))
+
+    def test_quant_type_mismatch_raises(self):
+        M, K = 64, 256
+        qb = _random_q4_0_bytes(M, K, seed=17)
+        layer = GgufLinear(K, M, "Q4_0", bias=False)
+        layer.qweight.copy_(torch.frombuffer(bytearray(qb), dtype=torch.uint8))
+        sd = layer.state_dict()
+
+        # Loading Q4_0 state into a Q4_K-configured module must fail loudly
+        # rather than silently dequant garbage.
+        wrong = GgufLinear(K, M, "Q4_K", bias=False)
+        with self.assertRaises((ValueError, RuntimeError)):
+            wrong.load_state_dict(sd)
+
+    def test_disk_roundtrip_via_torch_save(self):
+        """torch.save / torch.load on the state_dict — same path save_pretrained
+        uses internally for non-safetensor backends."""
+        import io
+
+        M, K = 64, 256
+        qb = _random_q4_K_bytes(M, K, seed=23)
+        layer = GgufLinear(K, M, "Q4_K", bias=False)
+        layer.qweight.copy_(torch.frombuffer(bytearray(qb), dtype=torch.uint8))
+
+        buf = io.BytesIO()
+        torch.save(layer.state_dict(), buf)
+        buf.seek(0)
+        sd = torch.load(buf, weights_only=False)
+
+        clone = GgufLinear(K, M, "Q4_K", bias=False)
+        clone.qweight.zero_()
+        clone.load_state_dict(sd)
+
+        torch.manual_seed(11)
+        x = torch.randn(3, K) * 0.1
+        self.assertTrue(torch.equal(layer(x), clone(x)))
+
+
+@require_torch
+@require_gguf
+class GgufQwen2MoeExpertsSerializationTest(unittest.TestCase):
+    """Round-trip ``GgufQwen2MoeExperts`` — including per-projection quant types
+    that mixed-precision (e.g. Q4_K_M) files exercise."""
+
+    @staticmethod
+    def _build_module(gate="Q4_K", up="Q4_K", down="Q8_0", num_experts=4):
+        from transformers.integrations.gguf_linear import GgufQwen2MoeExperts
+
+        class _Cfg:
+            pass
+
+        cfg = _Cfg()
+        cfg.num_experts = num_experts
+        cfg.hidden_size = 256
+        cfg.moe_intermediate_size = 256
+        cfg.hidden_act = "silu"
+        return GgufQwen2MoeExperts(cfg, gate_quant=gate, up_quant=up, down_quant=down)
+
+    @staticmethod
+    def _fill_random(m, seed=0):
+        rng = np.random.default_rng(seed)
+        for name in ("gate_proj_q", "up_proj_q", "down_proj_q"):
+            buf = getattr(m, name)
+            rnd = torch.from_numpy(rng.integers(0, 256, size=buf.shape, dtype=np.uint8))
+            buf.copy_(rnd)
+
+    def test_state_dict_roundtrip_mixed_quants(self):
+        # Q4_K_M-style: gate/up are Q4_K, down is Q8_0.
+        m = self._build_module(gate="Q4_K", up="Q4_K", down="Q8_0", num_experts=3)
+        self._fill_random(m, seed=31)
+
+        sd = m.state_dict()
+        # Per-projection bytes and per-projection quant types both ride along.
+        self.assertIn("gate_proj_q", sd)
+        self.assertIn("up_proj_q", sd)
+        self.assertIn("down_proj_q", sd)
+        self.assertIn("_extra_state", sd)
+        self.assertEqual(sd["_extra_state"]["gate_quant"], "Q4_K")
+        self.assertEqual(sd["_extra_state"]["up_quant"], "Q4_K")
+        self.assertEqual(sd["_extra_state"]["down_quant"], "Q8_0")
+
+        clone = self._build_module(gate="Q4_K", up="Q4_K", down="Q8_0", num_experts=3)
+        for name in ("gate_proj_q", "up_proj_q", "down_proj_q"):
+            getattr(clone, name).zero_()
+        clone.load_state_dict(sd)
+        for name in ("gate_proj_q", "up_proj_q", "down_proj_q"):
+            self.assertTrue(torch.equal(getattr(clone, name), getattr(m, name)))
+
+    def test_state_dict_roundtrip_uniform_q4_K(self):
+        m = self._build_module(gate="Q4_K", up="Q4_K", down="Q4_K", num_experts=2)
+        self._fill_random(m, seed=37)
+        sd = m.state_dict()
+
+        clone = self._build_module(gate="Q4_K", up="Q4_K", down="Q4_K", num_experts=2)
+        clone.load_state_dict(sd)
+        for name in ("gate_proj_q", "up_proj_q", "down_proj_q"):
+            self.assertTrue(torch.equal(getattr(clone, name), getattr(m, name)))
+
+    def test_quant_type_mismatch_raises(self):
+        m = self._build_module(gate="Q4_K", up="Q4_K", down="Q8_0", num_experts=2)
+        self._fill_random(m, seed=41)
+        sd = m.state_dict()
+        # Constructed with the wrong ``down_quant`` — must reject.
+        wrong = self._build_module(gate="Q4_K", up="Q4_K", down="Q4_K", num_experts=2)
+        with self.assertRaises((ValueError, RuntimeError)):
+            wrong.load_state_dict(sd)
 
 
 if __name__ == "__main__":

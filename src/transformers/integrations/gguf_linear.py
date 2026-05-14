@@ -71,6 +71,8 @@ def _ensure_metal_kernels():
 # the ``mul_mat_<fmt>_f32`` and ``mul_mat_vec_<fmt>_f32`` ops in the kernel.
 _QUANT_INFO: dict[str, tuple[int, int]] = {
     "Q4_0":   (18, 32),
+    "Q5_0":   (22, 32),
+    "Q5_1":   (24, 32),
     "Q8_0":   (34, 32),
     "Q4_K":   (144, 256),
     "Q5_K":   (176, 256),
@@ -90,6 +92,8 @@ def _kernel_fmt(quant_type) -> str:
     name = quant_type.name if hasattr(quant_type, "name") else str(quant_type)
     return {
         "Q4_0": "q4_0",
+        "Q5_0": "q5_0",
+        "Q5_1": "q5_1",
         "Q8_0": "q8_0",
         "Q4_K": "q4_K",
         "Q5_K": "q5_K",
@@ -161,6 +165,32 @@ class GgufLinear(nn.Module):
             f"quant_type={self.quant_type}, bias={self.bias is not None}"
         )
 
+    # ``quant_type`` isn't a tensor, so it doesn't ride along in state_dict() by
+    # default. ``get_extra_state`` / ``set_extra_state`` is the standard hook
+    # for that — save_pretrained / load_state_dict will carry the quant type so
+    # a reloaded module can be validated against the bytes it's about to receive.
+    def get_extra_state(self) -> dict:
+        return {
+            "quant_type": self.quant_type,
+            "in_features": self.in_features,
+            "out_features": self.out_features,
+        }
+
+    def set_extra_state(self, state: dict) -> None:
+        qt = state.get("quant_type")
+        if qt is not None and qt != self.quant_type:
+            raise ValueError(
+                f"GgufLinear quant_type mismatch on load: state has {qt!r}, "
+                f"module was constructed with {self.quant_type!r}"
+            )
+        for name in ("in_features", "out_features"):
+            v = state.get(name)
+            if v is not None and v != getattr(self, name):
+                raise ValueError(
+                    f"GgufLinear {name} mismatch on load: state has {v}, "
+                    f"module has {getattr(self, name)}"
+                )
+
     @torch.no_grad()
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if x.shape[-1] != self.in_features:
@@ -173,17 +203,19 @@ class GgufLinear(nn.Module):
         is_mps = x.device.type == "mps"
         if is_mps:
             mod = _ensure_metal_kernels()
-            if mod is None:
-                # Kernels package not installed — fall back to dequant + linear.
+            op_name = f"mul_mat_vec_{self._fmt}_f32" if N == 1 else f"mul_mat_{self._fmt}_f32"
+            # Kernels package not installed, or this build of the package predates
+            # the op for this quant type (e.g. Q5_0 / Q5_1 on an older hub build):
+            # fall back to dequant + linear so behavior stays correct.
+            if mod is None or not hasattr(mod._ops, op_name):
                 return self._dequant_forward(x)
             qw = self.qweight.to(x.device)
+            fn = getattr(mod._ops, op_name)
             if N == 1:
-                fn = getattr(mod._ops, f"mul_mat_vec_{self._fmt}_f32")
                 y = torch.empty(self.out_features, dtype=torch.float32, device=x.device)
                 fn(qw, x_flat.reshape(-1), y)
                 y = y.reshape(*batch_shape, self.out_features)
             else:
-                fn = getattr(mod._ops, f"mul_mat_{self._fmt}_f32")
                 y = torch.empty(N * self.out_features, dtype=torch.float32, device=x.device)
                 fn(qw, x_flat, y)
                 y = y.reshape(N, self.out_features).reshape(*batch_shape, self.out_features)
@@ -301,6 +333,26 @@ class GgufQwen2MoeExperts(nn.Module):
             f"gate={self.gate_quant}, up={self.up_quant}, down={self.down_quant}"
         )
 
+    def get_extra_state(self) -> dict:
+        return {
+            "gate_quant": self.gate_quant,
+            "up_quant": self.up_quant,
+            "down_quant": self.down_quant,
+            "num_experts": self.num_experts,
+            "hidden_dim": self.hidden_dim,
+            "intermediate_dim": self.intermediate_dim,
+        }
+
+    def set_extra_state(self, state: dict) -> None:
+        for name in ("gate_quant", "up_quant", "down_quant",
+                     "num_experts", "hidden_dim", "intermediate_dim"):
+            v = state.get(name)
+            if v is not None and v != getattr(self, name):
+                raise ValueError(
+                    f"GgufQwen2MoeExperts {name} mismatch on load: "
+                    f"state has {v!r}, module has {getattr(self, name)!r}"
+                )
+
     def _expert_slice(self, buf: torch.Tensor, expert_idx: int, bytes_per: int) -> torch.Tensor:
         start = int(expert_idx) * bytes_per
         return buf.narrow(0, start, bytes_per)
@@ -309,14 +361,16 @@ class GgufQwen2MoeExperts(nn.Module):
         N = x_flat.shape[0]
         if x_flat.device.type == "mps":
             mod = _ensure_metal_kernels()
-            if mod is not None:
+            op_name = f"mul_mat_vec_{fmt}_f32" if N == 1 else f"mul_mat_{fmt}_f32"
+            if mod is not None and hasattr(mod._ops, op_name):
+                fn = getattr(mod._ops, op_name)
                 if N == 1:
                     y = torch.empty(M, dtype=torch.float32, device=x_flat.device)
-                    getattr(mod._ops, f"mul_mat_vec_{fmt}_f32")(qw, x_flat.reshape(-1), y)
+                    fn(qw, x_flat.reshape(-1), y)
                     return y.unsqueeze(0)
                 else:
                     y = torch.empty(N * M, dtype=torch.float32, device=x_flat.device)
-                    getattr(mod._ops, f"mul_mat_{fmt}_f32")(qw, x_flat, y)
+                    fn(qw, x_flat, y)
                     return y.reshape(N, M)
         import gguf
         from ..integrations.gguf_dequant import dequantize_gguf_tensor
