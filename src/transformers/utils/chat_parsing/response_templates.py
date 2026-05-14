@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any
 
 from ...utils import logging
 from .content_parsers import CONTENT_PARSERS
@@ -33,7 +32,7 @@ class ResponseTemplateField:
     content_args: dict
     repeats: bool
     optional: bool
-    assemble: Any
+    transform: str | None
 
 
 @dataclass
@@ -123,7 +122,7 @@ def load_response_template(spec: dict | ResponseTemplate) -> ResponseTemplate:
         "content_args",
         "repeats",
         "optional",
-        "assemble",
+        "transform",
     }
     # Error checking / validation block
     if isinstance(spec, ResponseTemplate):
@@ -160,6 +159,21 @@ def load_response_template(spec: dict | ResponseTemplate) -> ResponseTemplate:
         )
         if open_re is None:
             implicit_fields.append(name)
+        transform = field.get("transform")
+        if transform is None:
+            captured_names = set()
+            if open_re is not None:
+                captured_names |= set(open_re.groupindex)
+            if close_re is not None:
+                captured_names |= set(close_re.groupindex)
+            if captured_names:
+                raise ValueError(
+                    f"Field '{name}': open_pattern/close_pattern declares named group(s) "
+                    f"{sorted(captured_names)}, but the field has no 'transform'. Named captures "
+                    f"are only surfaced through a 'transform' jmespath expression (where they appear "
+                    f"alongside 'content'). Either add a 'transform' that uses the captures, or "
+                    f"remove the named groups from the pattern."
+                )
         fields[name] = ResponseTemplateField(
             name=name,
             open_re=open_re,
@@ -172,7 +186,7 @@ def load_response_template(spec: dict | ResponseTemplate) -> ResponseTemplate:
             content_args=field.get("content_args", {}),
             repeats=field.get("repeats", False),
             optional=field.get("optional", True),
-            assemble=field.get("assemble"),
+            transform=transform,
         )
     if len(implicit_fields) > 1:
         raise ValueError(
