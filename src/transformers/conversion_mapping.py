@@ -932,7 +932,16 @@ def _build_checkpoint_conversion_mapping():
                 operations=[Chunk(dim=0)],
             ),
         ],
-        "Sapiens2ForSemanticSegmentation": [],
+        "Sapiens2ForSemanticSegmentation": [
+            WeightRenaming(r"^backbone\.", r"sapiens2."),
+            WeightRenaming(r"decode_head\.deconv_layers\.0\.weight", r"decode_head.deconv_layers.0.conv.weight"),
+            WeightRenaming(r"decode_head\.deconv_layers\.3\.weight", r"decode_head.deconv_layers.1.conv.weight"),
+            WeightRenaming(r"decode_head\.deconv_layers\.6\.weight", r"decode_head.deconv_layers.2.conv.weight"),
+            WeightRenaming(r"decode_head\.deconv_layers\.9\.weight", r"decode_head.deconv_layers.3.conv.weight"),
+            WeightRenaming(r"decode_head\.conv_layers\.0\.(weight|bias)", r"decode_head.conv_layers.0.conv.\1"),
+            WeightRenaming(r"decode_head\.conv_layers\.3\.(weight|bias)", r"decode_head.conv_layers.1.conv.\1"),
+            WeightRenaming(r"decode_head\.conv_seg\.", r"decode_head.classifier."),
+        ],
     }
     # The legacy mapping is added to the esm model here since the extra weight renaming do not apply to the esm model.
     mapping["esm"] += mapping["legacy"].copy()
