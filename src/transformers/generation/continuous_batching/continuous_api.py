@@ -481,9 +481,9 @@ class ContinuousBatchingManager:
             continuous_batching_config: Configuration for continuous batching parameters
             workload_hints: Workload hints for the continuous batching initialization (optional)
         """
-        # Reload paged version of the attention implementation if necessary
-        if "paged|" not in model.config._attn_implementation:
-            model.set_attn_implementation(f"paged|{model.config._attn_implementation}")
+        # If needed, reload the paged version of the attention implementation (keep the original to restore it later)
+        self._original_attn_impl = None
+        self.switch_to_paged_attn(model)
 
         # Internal arguments
         self.model = model.eval()
@@ -519,6 +519,12 @@ class ContinuousBatchingManager:
         )
         # This is an approximation until the cache is created: it will infer the correct value in cache.__init__
         self._use_prefix_sharing = self.continuous_batching_config.allow_block_sharing
+
+    def switch_to_paged_attn(self, model: ProtoPretrainedModel) -> None:
+        """Switch to the paged version of the attention implementation. If the attn is already paged, does nothing."""
+        if "paged|" not in model.config._attn_implementation:
+            self._original_attn_impl = model.config._attn_implementation
+            model.set_attn_implementation(f"paged|{model.config._attn_implementation}")
 
     @traced
     def start(self) -> None:
@@ -583,6 +589,9 @@ class ContinuousBatchingManager:
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+        # And we restore the original attention implementation
+        if self._original_attn_impl is not None:
+            self.model.set_attn_implementation(self._original_attn_impl)
 
     def join(self, stop_trigger_time: float, timeout: float | None = None) -> None:
         """Wait for the background thread to finish.
@@ -655,7 +664,7 @@ class ContinuousBatchingManager:
         streaming: bool = False,
         record_timestamps: bool = False,
         **logit_processor_kwargs: Any,
-    ) -> None:
+    ) -> list[str]:
         # Infer the request ids of all incoming requests
         with self._request_lock:
             request_ids = [f"req_{i}" for i in range(self._request_counter, self._request_counter + len(inputs))]
@@ -680,6 +689,7 @@ class ContinuousBatchingManager:
                 eos_token_id=eos_token_id,
                 **logit_processor_kwargs,
             )
+        return request_ids
 
     def cancel_request(self, request_id: str) -> None:
         """Cancel a request by its ID.
@@ -919,6 +929,7 @@ class ContinuousMixin:
                 "Cached continuous batching manager found: it will be re-used instead of creating a new one. If you"
                 " want to create a new manager, you should call `destroy_cached_continuous_batching_manager` first."
             )
+            cached_manager.switch_to_paged_attn(self)  # might have switched in .stop
             return cached_manager
 
         # Retrieve generation config
@@ -972,8 +983,6 @@ class ContinuousMixin:
             - timeout: maximum time to wait for the thread to stop. Default is None (no timeout).
             - warmup: whether to pre-capture CUDA graphs at the largest sizes before running. Default is True.
         """
-        original_attn_impl = self.config._attn_implementation
-
         manager = self.init_continuous_batching(
             generation_config=generation_config,
             continuous_batching_config=continuous_batching_config,
@@ -993,7 +1002,6 @@ class ContinuousMixin:
             # This is a dummy log needed for the logs of stop to show. It won't show.
             logger.debug("Continuous batching loop finished")
             manager.stop(block=block, timeout=timeout, keep_for_next_session=persistent_manager)
-            self.config._attn_implementation_internal = original_attn_impl
 
     # TODO: support streaming
     @traced
@@ -1087,8 +1095,9 @@ class ContinuousMixin:
         finished_count = 0
         with manager_cm as manager, logging_cm, pbar_cm as pbar:
             try:
-                start_idx = manager._request_counter
-                manager.add_requests(inputs=inputs, max_new_tokens=max_new_tokens, record_timestamps=record_timestamps)
+                request_ids = manager.add_requests(
+                    inputs=inputs, max_new_tokens=max_new_tokens, record_timestamps=record_timestamps
+                )
                 while finished_count < num_requests:
                     result = manager.get_result(timeout=1)
                     if result:
@@ -1108,11 +1117,13 @@ class ContinuousMixin:
 
         # Re-order requests to match the order of the inputs
         reordered_results = {}
-        for i in range(len(inputs)):
-            # We cannot guarantee generation success for all requests, so check if the request is in the results
-            result = results.get(f"req_{start_idx + i}")
+        missing_keys = []
+        for req_id in request_ids:
+            result = results.get(req_id)
             if result is not None:
-                reordered_results[f"req_{i}"] = result
+                reordered_results[req_id] = result
             else:
-                logger.error(f"Request req_{start_idx + i} not found in results.")
+                missing_keys.append(req_id)
+        if missing_keys:
+            logger.error(f"Requests {missing_keys} not found in results.")
         return reordered_results
