@@ -32,12 +32,24 @@ class GGUFQuantizer(HfQuantizer):
 
     requires_calibration = False
 
-    def __init__(self, weight_mapping=None, **kwargs):
+    def __init__(self, weight_mapping=None, linear_mode=False, gguf_tensors=None, **kwargs):
         # ``pre_quantized=True`` so the loader keeps `_dtype=None` (no uint8→float
         # cast in ``spawn_materialize`` — the GGUFDequantize op handles dtype).
         kwargs.setdefault("pre_quantized", True)
         super().__init__(quantization_config=None, **kwargs)
         self.weight_mapping = list(weight_mapping or [])
+        # When ``linear_mode=True``, ``_process_model_after_weight_loading`` walks
+        # the model and swaps each ``nn.Linear`` whose source GGUF tensor has a
+        # supported quant type for a :class:`GgufLinear` that runs matmul/matvec
+        # directly on the quantized bytes via the kernels-community Metal kernels
+        # (same kernels as llama.cpp; ~llama.cpp parity at decode on Apple Silicon).
+        #
+        # ``gguf_tensors`` is the ``{gguf_name: GGUFQuantizedTensor}`` map from
+        # :func:`load_gguf_checkpoint`. We hold it here so we can recover each
+        # original tensor's quant type after the model has been loaded with
+        # dequantized weights, then re-quantize per-Linear in Phase 2.
+        self.linear_mode = linear_mode
+        self.gguf_tensors: dict = dict(gguf_tensors or {})
 
     @property
     def renaming_dequantize_op(self):
@@ -89,11 +101,40 @@ class GGUFQuantizer(HfQuantizer):
         pass
 
     def postprocess_model(self, model, **kwargs):
-        # GGUF loading does not set any quantization config on the model.
-        pass
+        # GGUF loading does not set any quantization config on the model — but
+        # we still need to fire ``_process_model_after_weight_loading`` so the
+        # opt-in ``linear_mode`` swap (nn.Linear → GgufLinear) happens.
+        return self._process_model_after_weight_loading(model, **kwargs)
 
     def _process_model_after_weight_loading(self, model, **kwargs):
-        pass
+        if not self.linear_mode or not self.gguf_tensors:
+            return
+        from ..core_model_loading import WeightConverter, WeightRenaming, rename_source_key
+        from ..integrations.gguf_linear import replace_with_gguf_linear
+
+        # Apply the same rename rules the loader used to derive HF param names
+        # from GGUF tensor names, then read the original quant type off each
+        # source ``GGUFQuantizedTensor`` to build the swap map.
+        renamings = [e for e in self.weight_mapping if isinstance(e, WeightRenaming)]
+        converters = [e for e in self.weight_mapping if isinstance(e, WeightConverter)]
+        meta_state_dict = model.state_dict()
+        prefix = getattr(model, "base_model_prefix", "") or ""
+
+        quant_types_by_name: dict[str, str] = {}
+        for gguf_name, tensor in self.gguf_tensors.items():
+            qt = getattr(tensor, "quant_type", None)
+            if qt is None:
+                continue
+            try:
+                hf_name, _ = rename_source_key(
+                    gguf_name, renamings, converters,
+                    prefix=prefix, meta_state_dict=meta_state_dict,
+                )
+            except Exception:
+                continue
+            quant_types_by_name[hf_name] = qt.name if hasattr(qt, "name") else str(qt)
+
+        replace_with_gguf_linear(model, quant_types_by_name)
 
     @property
     def is_trainable(self):

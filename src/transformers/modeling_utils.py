@@ -4197,13 +4197,25 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         )
 
         if gguf_file:
+            from .integrations.gguf_linear import is_gguf_linear_enabled
             from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
             from .quantizers.quantizer_gguf import GGUFQuantizer
 
             gguf_parsed = load_gguf_checkpoint(checkpoint_files[0], return_tensors=True)
             state_dict = gguf_parsed["tensors"]  # {gguf_name: GGUFQuantizedTensor} (raw bytes + quant_type)
             # GGUFQuantizer takes precedence for materialization & weight-conversion injection.
-            hf_quantizer = GGUFQuantizer(weight_mapping=gguf_parsed.get("weight_mapping", []))
+            #
+            # Opt-in linear_mode (via kwarg or `TRANSFORMERS_GGUF_LINEAR=1`) keeps weights at native
+            # quant after load and routes matmuls through Metal kernels (kernels-community).
+            # Same kernels as llama.cpp — ~1.0× parity on Apple Silicon decode.
+            gguf_linear = kwargs.pop("gguf_linear", None)
+            if gguf_linear is None:
+                gguf_linear = is_gguf_linear_enabled()
+            hf_quantizer = GGUFQuantizer(
+                weight_mapping=gguf_parsed.get("weight_mapping", []),
+                linear_mode=bool(gguf_linear),
+                gguf_tensors=gguf_parsed["tensors"] if gguf_linear else None,
+            )
 
         is_quantized = hf_quantizer is not None
 
