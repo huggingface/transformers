@@ -477,13 +477,26 @@ class Sapiens2ConvLayer(nn.Module):
 class Sapiens2SegmentationHead(nn.Module):
     def __init__(self, config: Sapiens2Config):
         super().__init__()
-        deconv_channels = (config.hidden_size, 512, 256, 128, 64)
+        upsample_in_channels = [config.hidden_size] + config.head_upsample_out_channels[:-1]
         self.deconv_layers = nn.ModuleList(
-            Sapiens2ConvTransposeLayer(in_ch, out_ch)
-            for in_ch, out_ch in zip(deconv_channels[:-1], deconv_channels[1:])
+            Sapiens2ConvTransposeLayer(in_ch, out_ch, kernel_size=ks)
+            for in_ch, out_ch, ks in zip(
+                upsample_in_channels, config.head_upsample_out_channels, config.head_upsample_kernel_sizes
+            )
         )
-        self.conv_layers = nn.ModuleList(Sapiens2ConvLayer(64, 64) for _ in range(2))
-        self.classifier = nn.Conv2d(64, config.num_labels, kernel_size=1)
+        conv_in_channels = [config.head_upsample_out_channels[-1]] + config.head_conv_out_channels[:-1]
+        self.conv_layers = nn.ModuleList(
+            Sapiens2ConvLayer(in_ch, out_ch, kernel_size=ks)
+            for in_ch, out_ch, ks in zip(
+                conv_in_channels, config.head_conv_out_channels, config.head_conv_kernel_sizes
+            )
+        )
+        classifier_in = (
+            config.head_conv_out_channels[-1]
+            if config.head_conv_out_channels
+            else config.head_upsample_out_channels[-1]
+        )
+        self.classifier = nn.Conv2d(classifier_in, config.num_labels, kernel_size=1)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         for layer in self.deconv_layers:

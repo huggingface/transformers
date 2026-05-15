@@ -110,6 +110,17 @@ class Sapiens2Config(DINOv3ViTConfig):
         Dtype used for positional embedding computations (RoPE angles, cos/sin).
     semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
         Label index ignored when computing the segmentation loss.
+    head_upsample_out_channels (`list[int]`, *optional*, defaults to `[512, 256, 128, 64]`):
+        Output channel counts for each upsample block in the decode head.
+        The first block takes `hidden_size` channels as input; subsequent blocks use the previous output.
+    head_upsample_kernel_sizes (`list[int]`, *optional*):
+        Kernel size for each upsample block. Defaults to `4` for every block.
+        Must have the same length as `head_upsample_out_channels`.
+    head_conv_out_channels (`list[int]`, *optional*, defaults to `[64, 64]`):
+        Output channel counts for the refinement conv layers that follow the upsample blocks.
+    head_conv_kernel_sizes (`list[int]`, *optional*):
+        Kernel size for each refinement conv layer. Defaults to `1` for every layer.
+        Must have the same length as `head_conv_out_channels`.
     """
 
     model_type = "sapiens2"
@@ -134,6 +145,10 @@ class Sapiens2Config(DINOv3ViTConfig):
     num_last_full_attention_layers: int = 8
     pos_embed_dtype: str = "bfloat16"
     semantic_loss_ignore_index: int = 255
+    head_upsample_out_channels: list[int] | None = None
+    head_upsample_kernel_sizes: list[int] | None = None
+    head_conv_out_channels: list[int] | None = None
+    head_conv_kernel_sizes: list[int] | None = None
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
@@ -148,6 +163,14 @@ class Sapiens2Config(DINOv3ViTConfig):
                 else "grouped_query_attention"
                 for i in range(self.num_hidden_layers)
             ]
+        if self.head_upsample_out_channels is None:
+            self.head_upsample_out_channels = [512, 256, 128, 64]
+        if self.head_upsample_kernel_sizes is None:
+            self.head_upsample_kernel_sizes = [4] * len(self.head_upsample_out_channels)
+        if self.head_conv_out_channels is None:
+            self.head_conv_out_channels = [64, 64]
+        if self.head_conv_kernel_sizes is None:
+            self.head_conv_kernel_sizes = [1] * len(self.head_conv_out_channels)
         super().__post_init__(**kwargs)
 
 
@@ -374,20 +397,33 @@ class Sapiens2ConvLayer(nn.Module):
 class Sapiens2SegmentationHead(nn.Module):
     def __init__(self, config: Sapiens2Config):
         super().__init__()
-        deconv_channels = (config.hidden_size, 512, 256, 128, 64)
+        upsample_in_channels = [config.hidden_size] + config.head_upsample_out_channels[:-1]
         self.deconv_layers = nn.ModuleList(
-            Sapiens2ConvTransposeLayer(in_ch, out_ch)
-            for in_ch, out_ch in zip(deconv_channels[:-1], deconv_channels[1:])
+            Sapiens2ConvTransposeLayer(in_ch, out_ch, kernel_size=ks)
+            for in_ch, out_ch, ks in zip(
+                upsample_in_channels, config.head_upsample_out_channels, config.head_upsample_kernel_sizes
+            )
         )
-        self.conv_layers = nn.ModuleList(Sapiens2ConvLayer(64, 64) for _ in range(2))
-        self.classifier = nn.Conv2d(64, config.num_labels, kernel_size=1)
+        conv_in_channels = [config.head_upsample_out_channels[-1]] + config.head_conv_out_channels[:-1]
+        self.conv_layers = nn.ModuleList(
+            Sapiens2ConvLayer(in_ch, out_ch, kernel_size=ks)
+            for in_ch, out_ch, ks in zip(
+                conv_in_channels, config.head_conv_out_channels, config.head_conv_kernel_sizes
+            )
+        )
+        classifier_in = (
+            config.head_conv_out_channels[-1]
+            if config.head_conv_out_channels
+            else config.head_upsample_out_channels[-1]
+        )
+        self.predictor = nn.Conv2d(classifier_in, config.num_labels, kernel_size=1)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         for layer in self.deconv_layers:
             hidden_states = layer(hidden_states)
         for layer in self.conv_layers:
             hidden_states = layer(hidden_states)
-        return self.classifier(hidden_states)
+        return self.predictor(hidden_states)
 
 
 class Sapiens2PreTrainedModel(DINOv3ViTPreTrainedModel):

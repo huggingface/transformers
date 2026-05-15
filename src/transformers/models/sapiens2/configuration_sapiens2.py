@@ -76,6 +76,17 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
         Dtype used for positional embedding computations (RoPE angles, cos/sin).
     semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
         Label index ignored when computing the segmentation loss.
+    head_upsample_out_channels (`list[int]`, *optional*, defaults to `[512, 256, 128, 64]`):
+        Output channel counts for each upsample block in the decode head.
+        The first block takes `hidden_size` channels as input; subsequent blocks use the previous output.
+    head_upsample_kernel_sizes (`list[int]`, *optional*):
+        Kernel size for each upsample block. Defaults to `4` for every block.
+        Must have the same length as `head_upsample_out_channels`.
+    head_conv_out_channels (`list[int]`, *optional*, defaults to `[64, 64]`):
+        Output channel counts for the refinement conv layers that follow the upsample blocks.
+    head_conv_kernel_sizes (`list[int]`, *optional*):
+        Kernel size for each refinement conv layer. Defaults to `1` for every layer.
+        Must have the same length as `head_conv_out_channels`.
     """
 
     model_type = "sapiens2"
@@ -120,6 +131,10 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     num_last_full_attention_layers: int = 8
     pos_embed_dtype: str = "bfloat16"
     semantic_loss_ignore_index: int = 255
+    head_upsample_out_channels: list[int] | None = None
+    head_upsample_kernel_sizes: list[int] | None = None
+    head_conv_out_channels: list[int] | None = None
+    head_conv_kernel_sizes: list[int] | None = None
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
@@ -134,6 +149,14 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
                 else "grouped_query_attention"
                 for i in range(self.num_hidden_layers)
             ]
+        if self.head_upsample_out_channels is None:
+            self.head_upsample_out_channels = [512, 256, 128, 64]
+        if self.head_upsample_kernel_sizes is None:
+            self.head_upsample_kernel_sizes = [4] * len(self.head_upsample_out_channels)
+        if self.head_conv_out_channels is None:
+            self.head_conv_out_channels = [64, 64]
+        if self.head_conv_kernel_sizes is None:
+            self.head_conv_kernel_sizes = [1] * len(self.head_conv_out_channels)
         self.stage_names = ["stem"] + [f"stage{i}" for i in range(1, self.num_hidden_layers + 1)]
         self.set_output_features_output_indices(
             out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)
