@@ -23,15 +23,18 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_layers import (
+    GenericForSequenceClassification,
+    GenericForTokenClassification,
+    GradientCheckpointingLayer,
+)
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...modeling_vision_utils import get_pos_embed_indices, get_vision_cu_seqlens
-from ...modeling_vision_utils import get_rotary_pos_ids_interleaved as get_rotary_pos_ids
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ...vision_utils import get_vision_bilinear_indices_and_weights, get_vision_cu_seqlens, get_vision_position_ids
 from ..qwen3.modeling_qwen3 import Qwen3ForCausalLM
 from ..qwen3_next.configuration_qwen3_next import Qwen3NextConfig
 from ..qwen3_next.modeling_qwen3_next import (
@@ -211,15 +214,18 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         hidden_states: torch.Tensor,
         cache_params: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
 
         # Set up dimensions for reshapes later
         batch_size, seq_len, _ = hidden_states.shape
 
-        use_precomputed_states = (
-            cache_params is not None and cache_params.has_previous_state(self.layer_idx) and seq_len == 1
-        )
+        # We have cached `conv_state` / `recurrent_state` to continue from. The two cached modes
+        # (single-token decode and chunk-tokens continuation) share the state read here; they only
+        # diverge in how the conv input is assembled and which kernel consumes the states below,
+        # which we gate locally on `seq_len`.
+        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
 
         # getting projected states from cache if it exists
         if use_precomputed_states:
@@ -235,9 +241,8 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         b = self.in_proj_b(hidden_states)
         a = self.in_proj_a(hidden_states)
 
-        if use_precomputed_states:
-            # 2. Convolution sequence transformation
-            # NOTE: the conv state is updated in `causal_conv1d_update`
+        if use_precomputed_states and seq_len == 1:
+            # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
             mixed_qkv = self.causal_conv1d_update(
                 mixed_qkv,
                 conv_state,
@@ -246,19 +251,27 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                 self.activation,
             )
         else:
+            # Multi-token forward (prefill, or chunked-tokens decode when the cache has prior state).
+            if use_precomputed_states:
+                # Cached chunked-tokens decode: prepend the cached conv context so the causal conv
+                # sees the correct left-context rather than zero-padding. Dropped from the output
+                # at the end of this branch.
+                mixed_qkv = torch.cat([conv_state, mixed_qkv], dim=-1)
             if cache_params is not None:
-                conv_state = F.pad(mixed_qkv, (self.conv_kernel_size - mixed_qkv.shape[-1], 0))
-                conv_state = cache_params.update_conv_state(conv_state, self.layer_idx)
+                new_conv_state = F.pad(mixed_qkv, (self.conv_kernel_size - mixed_qkv.shape[-1], 0))
+                cache_params.update_conv_state(new_conv_state, self.layer_idx)
             if self.causal_conv1d_fn is not None:
                 mixed_qkv = self.causal_conv1d_fn(
                     x=mixed_qkv,
                     weight=self.conv1d.weight.squeeze(1),
                     bias=self.conv1d.bias,
                     activation=self.activation,
-                    seq_idx=None,
+                    seq_idx=kwargs.get("seq_idx"),
                 )
             else:
-                mixed_qkv = F.silu(self.conv1d(mixed_qkv)[:, :, :seq_len])
+                mixed_qkv = F.silu(self.conv1d(mixed_qkv)[:, :, : mixed_qkv.shape[-1]])
+            if use_precomputed_states:
+                mixed_qkv = mixed_qkv[:, :, -seq_len:]
 
         mixed_qkv = mixed_qkv.transpose(1, 2)
         query, key, value = torch.split(
@@ -282,19 +295,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
             query = query.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
             key = key.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
 
-        if not use_precomputed_states:
-            core_attn_out, last_recurrent_state = self.chunk_gated_delta_rule(
-                query,
-                key,
-                value,
-                g=g,
-                beta=beta,
-                initial_state=None,
-                output_final_state=cache_params is not None,
-                use_qk_l2norm_in_kernel=True,
-            )
-
-        else:
+        if use_precomputed_states and seq_len == 1:
             core_attn_out, last_recurrent_state = self.recurrent_gated_delta_rule(
                 query,
                 key,
@@ -304,6 +305,19 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                 initial_state=recurrent_state,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
+            )
+        else:
+            core_attn_out, last_recurrent_state = self.chunk_gated_delta_rule(
+                query,
+                key,
+                value,
+                g=g,
+                beta=beta,
+                initial_state=recurrent_state if use_precomputed_states else None,
+                output_final_state=cache_params is not None,
+                use_qk_l2norm_in_kernel=True,
+                # The chunked FLA kernel takes a single `cu_seqlens` arg; for packed self-attention this matches q-side lengths.
+                cu_seqlens=kwargs.get("cu_seq_lens_q"),
             )
 
         # Update cache
@@ -366,6 +380,7 @@ class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
                 hidden_states=hidden_states,
                 cache_params=past_key_values,
                 attention_mask=attention_mask,
+                **kwargs,
             )
         elif self.layer_type == "full_attention":
             # Self Attention
@@ -422,51 +437,30 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
 
     @merge_with_config_defaults
     @capture_outputs
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        grid_thw: torch.Tensor,
-        cu_seqlens: torch.Tensor | None = None,
-        rotary_pos_ids: torch.Tensor | None = None,
-        embed_indices: torch.Tensor | None = None,
-        bilinear_weights: torch.Tensor | None = None,
-        **kwargs,
-    ) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
                 The final hidden states of the model.
             grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
                 The temporal, height and width of feature shape of each image in LLM.
-            cu_seqlens (`torch.Tensor`, *optional*):
-                Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
-            rotary_pos_ids (`torch.Tensor` of shape `(total_tokens, 2)`, *optional*):
-                Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
-            embed_indices (`torch.Tensor` of shape `(4, total_thw)`, *optional*):
-                Bilinear corner indices into the position embedding table (from `get_pos_embed_indices`).
-            bilinear_weights (`torch.Tensor` of shape `(4, total_thw)`, *optional*):
-                Interpolation weights for the four bilinear corners (from `get_pos_embed_indices`).
 
         Returns:
             `torch.Tensor`: hidden_states.
         """
+        bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
+            grid_thw,
+            num_grid_per_side=self.num_grid_per_side,
+            spatial_merge_size=self.config.spatial_merge_size,
+            kwargs=kwargs,
+        )
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+
         hidden_states = self.patch_embed(hidden_states)
-
-        if embed_indices is None or bilinear_weights is None:
-            embed_indices, bilinear_weights = get_pos_embed_indices(
-                grid_thw, self.num_grid_per_side, self.config.spatial_merge_size
-            )
-
-        pos_embeds = (self.pos_embed(embed_indices) * bilinear_weights[:, :, None]).sum(0)
-        hidden_states = hidden_states + pos_embeds
-
-        if rotary_pos_ids is None:
-            rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
-
-        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
-
-        if cu_seqlens is None:
-            cu_seqlens = get_vision_cu_seqlens(grid_thw)
+        pos_embeds = (self.pos_embed(bilinear_indices) * bilinear_weights[:, :, None]).sum(0)
+        hidden_states = hidden_states + pos_embeds.to(hidden_states.dtype)
+        rotary_pos_emb = self.rotary_pos_emb(position_ids)
 
         seq_len, _ = hidden_states.size()
         hidden_states = hidden_states.reshape(seq_len, -1)
@@ -570,13 +564,13 @@ class Qwen3_5TextModel(Qwen3NextModel):
 class Qwen3_5Model(Qwen3VLModel):
     _no_split_modules = ["Qwen3_5DecoderLayer", "Qwen3_5VisionBlock"]
 
-    def get_video_features(
-        self,
-        **super_kwargs,
-    ) -> tuple | BaseModelOutputWithPooling:
+    def get_video_features(self, **super_kwargs) -> tuple | BaseModelOutputWithPooling:
         # Same implementation as for images
         return super().get_video_features(**super_kwargs)
 
+    @accepts_precomputed_kwargs(modality="image")
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -624,7 +618,7 @@ class Qwen3_5Model(Qwen3VLModel):
 
         if pixel_values is not None:
             image_outputs: BaseModelOutputWithPooling = self.get_image_features(
-                pixel_values, image_grid_thw, return_dict=True
+                pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
             image_embeds = image_outputs.pooler_output
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
@@ -635,7 +629,7 @@ class Qwen3_5Model(Qwen3VLModel):
 
         if pixel_values_videos is not None:
             video_outputs: BaseModelOutputWithPooling = self.get_video_features(
-                pixel_values_videos, video_grid_thw, return_dict=True
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             )
             video_embeds = video_outputs.pooler_output
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
@@ -679,32 +673,64 @@ class Qwen3_5ForCausalLM(Qwen3ForCausalLM):
         self.model = Qwen3_5TextModel(config)
 
 
-class Qwen3_5ForSequenceClassification(GenericForSequenceClassification, Qwen3_5PreTrainedModel):
-    config: Qwen3_5TextConfig
+class Qwen3_5ForTokenClassification(GenericForTokenClassification, Qwen3_5PreTrainedModel):
+    config: Qwen3_5Config
 
 
 class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration):
-    def get_video_features(
-        self,
-        **super_kwargs,
-    ) -> tuple | BaseModelOutputWithPooling:
+    def get_video_features(self, **super_kwargs) -> tuple | BaseModelOutputWithPooling:
         return super().get_video_features(**super_kwargs)
 
-    def get_image_features(
-        self,
-        **super_kwargs,
-    ) -> tuple | BaseModelOutputWithPooling:
+    def get_image_features(self, **super_kwargs) -> tuple | BaseModelOutputWithPooling:
         return super().get_image_features(**super_kwargs)
+
+
+class Qwen3_5TextForSequenceClassification(GenericForSequenceClassification, Qwen3_5PreTrainedModel):
+    config: Qwen3_5TextConfig
+    input_modalities = ("text",)
+
+
+class Qwen3_5ForSequenceClassification(GenericForSequenceClassification, Qwen3_5PreTrainedModel):
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> SequenceClassifierOutputWithPast:
+        return super().forward(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            mm_token_type_ids=mm_token_type_ids,
+            **kwargs,
+        )
 
 
 __all__ = [
     "Qwen3_5Config",
     "Qwen3_5TextConfig",
+    "Qwen3_5VisionConfig",
     "Qwen3_5VisionModel",
     "Qwen3_5TextModel",
     "Qwen3_5Model",
     "Qwen3_5ForCausalLM",
+    "Qwen3_5TextForSequenceClassification",
     "Qwen3_5ForSequenceClassification",
+    "Qwen3_5ForTokenClassification",
     "Qwen3_5ForConditionalGeneration",
     "Qwen3_5PreTrainedModel",
 ]

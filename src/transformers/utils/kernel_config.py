@@ -58,8 +58,8 @@ def infer_device(model):
 def add_to_mapping(layer_name, device, repo_name, mode, compatible_mapping):
     from kernels import LayerRepository
 
-    if device not in ["cuda", "rocm", "xpu", "npu", "neuron"]:
-        raise ValueError(f"Only cuda, rocm, xpu, npu and neuron devices supported, got: {device}")
+    if device not in ["cuda", "rocm", "xpu", "npu", "neuron", "tpu"]:
+        raise ValueError(f"Only cuda, rocm, xpu, npu, neuron and tpu devices supported, got: {device}")
     repo_layer_name = repo_name.split(":")[1]
     repo_id = repo_name.split(":")[0]
     compatible_mapping[layer_name] = {
@@ -77,8 +77,8 @@ def add_to_mapping_local(layer_name, device, repo_name, mode, compatible_mapping
 
     from kernels import LocalLayerRepository
 
-    if device not in ["cuda", "rocm", "xpu", "npu", "neuron"]:
-        raise ValueError(f"Only cuda, rocm, xpu, npu and neuron devices supported, got: {device}")
+    if device not in ["cuda", "rocm", "xpu", "npu", "neuron", "tpu"]:
+        raise ValueError(f"Only cuda, rocm, xpu, npu, neuron and tpu devices supported, got: {device}")
     repo_layer_name = repo_name.split(":")[1]
     repo_path = repo_name.split(":")[0]
     repo_package_name = repo_path.split("/")[-1]
@@ -194,8 +194,8 @@ class KernelConfig(PushToHubMixin):
 
             elif isinstance(kernel, dict):
                 for device, repo_name in kernel.items():
-                    if device not in ["cuda", "rocm", "xpu", "npu", "neuron"]:
-                        raise ValueError(f"Only cuda, rocm, xpu, npu and neuron devices supported, got: {device}")
+                    if device not in ["cuda", "rocm", "xpu", "npu", "neuron", "tpu"]:
+                        raise ValueError(f"Only cuda, rocm, xpu, npu, neuron and tpu devices supported, got: {device}")
 
                     if not isinstance(repo_name, str) or "/" not in repo_name or ":" not in repo_name:
                         raise ValueError(

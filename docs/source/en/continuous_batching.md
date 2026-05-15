@@ -124,6 +124,20 @@ Cancel a request with [`~ContinuousBatchingManager.cancel_request`].
 manager.cancel_request(request_id="my_request")
 ```
 
+### Per-request sampling parameters
+
+Enable `per_request_processors` to apply `temperature`, `top_k`, and `top_p` independently per request within the same forward pass to allow different sampling parameters for different requests (creative, high-temperature outputs versus precise, low-temperature ones for example).
+
+```py
+cb_config = ContinuousBatchingConfig(per_request_processors=True)
+
+# each request gets its own sampling parameters
+manager.add_request(input_ids=inputs_a, temperature=0.9, top_p=0.95)
+manager.add_request(input_ids=inputs_b, temperature=0.1, top_k=10)
+```
+
+Each parameter in [`GenerationConfig`] must be a non-default value in order to create the associated logits processor at runtime. For example, set `temperature` to a value other than `None` or `1` to support per-request temperature control. Requests with temperatures of `1` can still be created afterwards.
+
 ### Retrieving results
 
 Iterate over the manager to receive results as they arrive.
@@ -171,9 +185,12 @@ By default, `num_blocks` and `max_batch_tokens` are inferred automatically from 
 | `scheduler` | | ✓ scheduling policy | ✓ TTFT |
 | CUDA graphs | ↑ graph storage | ✓ less dispatch overhead | ✓ |
 | Async batching | ↑ ~2× I/O buffers | ✓ overlaps CPU/GPU | |
+| Decode fast path | ↑ block table per request | ✓ faster decode-only steps | ✓ |
+| CPU offloading | ↑ pinned CPU memory | ✓ skips some re-prefills | |
 | Prefix caching | ↓ shared KV blocks | ✓ skips redundant prefill | ✓ TTFT |
 | Paged attention | ↓ no fragmentation | ✓ dynamic batch membership | |
 | Sliding window | ↓ bounded KV per layer | | |
+| Per-request processors | | ✓ mixed sampling params per batch | |
 
 ```py
 from transformers.generation import ContinuousBatchingConfig
@@ -235,6 +252,38 @@ cb_config = ContinuousBatchingConfig(
     use_async_batching=True,
 )
 ```
+
+### Decode fast path
+
+When a batch contains only decode requests (one query token per sequence), the manager can dispatch to the `flash_attn_with_kvcache` kernel instead of the variable-length kernel. This is faster than the varlen path because the kernel reads and writes the paged KV cache in-place through a block table rather than going through a manual update. See [Paged attention](./paged_attention) for kernel-level details.
+
+The fast path is sized by `max_blocks_per_request`, which dimensions the per-request block table. By default this is auto-inferred. If `max_prompt_length` and `max_generated_length` are set on the manager, the block table is sized to fit the maximum sequence length. Otherwise, a fallback default (32 blocks per request) is used.
+
+Set `max_blocks_per_request` to a specific value to size the block table explicitly. This is useful when you know the maximum sequence length per request and want to bound the block table memory cost.
+
+```py
+cb_config = ContinuousBatchingConfig(max_blocks_per_request=64)
+```
+
+Set `max_blocks_per_request=0` to disable the fast path and force every batch through the varlen kernel. This recovers the pre-default behavior and is useful when the fast path is unavailable for your attention implementation (the manager also disables it automatically when the underlying kernel can't be used).
+
+```py
+cb_config = ContinuousBatchingConfig(max_blocks_per_request=0)
+```
+
+The fast path requires FlashAttention 3. With other attention implementations, the manager logs a warning and falls back to the varlen path.
+
+### CPU offloading
+
+CPU offloading copies evicted KV cache blocks to a pre-allocated pinned CPU buffer when the GPU KV cache is full. After cache space becomes available, the manager copies the blocks back to the GPU and resumes the request without recomputing its prompt and generated tokens.
+
+Set `cpu_offload_space` to the CPU swap space in GiB. The default value, `0.0`, disables CPU offloading.
+
+```py
+cb_config = ContinuousBatchingConfig(cpu_offload_space=8.0)
+```
+
+By default, `cpu_offload_space_safety_threshold=0.8` limits the requested space to 80% of available system RAM when `psutil` is installed. Set `cpu_offload_space=None` to size the swap pool from the safety threshold.
 
 ### Prefix caching
 

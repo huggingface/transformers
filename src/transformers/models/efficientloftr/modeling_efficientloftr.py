@@ -38,7 +38,6 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_efficientloftr import EfficientLoFTRConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of EfficientLoFTR keypoint matching models. Due to the nature of keypoint detection and matching, the number
@@ -46,6 +45,7 @@ from .configuration_efficientloftr import EfficientLoFTRConfig
     images, the maximum number of matches is set as the dimension of the matches and matching scores.
     """
 )
+@dataclass
 class EfficientLoFTRKeypointMatchingOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*):

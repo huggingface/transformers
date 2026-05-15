@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import math
+import warnings
 from collections.abc import Callable
 from typing import Any
 
@@ -28,13 +29,13 @@ from ...generation import GenerationMixin
 from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...modeling_vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
 from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import accepts_precomputed_kwargs, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
+from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
 from ..chameleon.modeling_chameleon import ChameleonVQVAE, ChameleonVQVAEModelOutput, ChameleonVQVAEVectorQuantizer
 from ..glm4v.configuration_glm4v import Glm4vTextConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
@@ -225,7 +226,7 @@ class GlmImageVisionAttention(Glm4vVisionAttention):
             self.config._attn_implementation, eager_attention_forward
         )
 
-        if "flash" in self.config._attn_implementation:
+        if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
             max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
             attn_output, _ = attention_interface(
@@ -429,45 +430,40 @@ class GlmImageVisionModel(Glm4vVisionModel):
         del self.downsample
         del self.post_layernorm
 
+    def rot_pos_emb(self, grid_thw):
+        warnings.warn(
+            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in v5.11. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        return get_vision_position_ids(grid_thw, self.spatial_merge_size)
+
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
     def forward(
-        self,
-        pixel_values: torch.Tensor,
-        grid_thw: torch.Tensor,
-        cu_seqlens: torch.Tensor | None = None,
-        rotary_pos_ids: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
+        self, pixel_values: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
         pixel_values (`torch.Tensor` of shape `(total_patches, num_channels * patch_size * patch_size)`):
             Packed pixel values.
         grid_thw (`torch.Tensor` of shape `(num_images, 3)`):
             The temporal, height and width of feature shape of each image.
-        cu_seqlens (`torch.Tensor`, *optional*):
-            Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
-        rotary_pos_ids (`torch.Tensor`, *optional*):
-            Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
 
         Returns:
             `torch.Tensor` of shape `(total_patches, hidden_size)`: Hidden states.
         """
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+
         hidden_states = self.patch_embed(pixel_values)
-
-        if rotary_pos_ids is None:
-            rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
-
-        if cu_seqlens is None:
-            cu_seqlens = get_vision_cu_seqlens(grid_thw)
-
         seqlens = cu_seqlens[1:] - cu_seqlens[:-1]
         hidden_states = self.embeddings(
             hidden_states,
             seqlens,
             grid_thw,
-            rotary_pos_ids[:, 0].to(hidden_states.device),
-            rotary_pos_ids[:, 1].to(hidden_states.device),
+            position_ids[:, 0].to(hidden_states.device),
+            position_ids[:, 1].to(hidden_states.device),
         )
 
         # Transformer blocks (no position_embeddings needed, already added above)
@@ -703,6 +699,7 @@ class GlmImageModel(Glm4vModel):
     def get_video_features(self):
         raise AttributeError("Not needed for GlmImage")
 
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -718,7 +715,7 @@ class GlmImageModel(Glm4vModel):
             The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
-        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
+        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         image_embeds = torch.split(vision_outputs.last_hidden_state, split_sizes)
         vision_outputs.pooler_output = image_embeds
@@ -858,7 +855,7 @@ class GlmImageModel(Glm4vModel):
                 # Fallback for batch_size=1: all but last grid are source images
                 source_grids = image_grid_thw[:-1]
 
-            image_features = self.get_image_features(pixel_values, source_grids, return_dict=True)
+            image_features = self.get_image_features(pixel_values, source_grids, return_dict=True, **kwargs)
             image_embeds = torch.cat(image_features.pooler_output, dim=0)
             image_ids = self.get_image_tokens(image_embeds, source_grids)
             image_ids = image_ids.view(-1).to(input_ids.device)

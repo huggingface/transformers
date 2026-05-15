@@ -46,7 +46,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
-from ...utils.generic import TransformersKwargs, is_flash_attention_requested, merge_with_config_defaults
+from ...utils.generic import TransformersKwargs, accepts_precomputed_kwargs, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...video_utils import VideoInput, make_batched_videos
 from ..mimi.modeling_mimi import MimiLayerScale
@@ -103,7 +103,7 @@ from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
 logger = logging.get_logger(__name__)
 
 
-def _get_feat_extract_output_lengths(input_lengths: torch.Tensor) -> torch.Tensor:
+def _get_feat_extract_output_lengths(input_lengths):
     """Compute output lengths after the 3-layer CNN feature extractor with deepstack.
 
     Three stride-2 convolutions within each 100-frame block, plus 13 output frames
@@ -115,41 +115,52 @@ def _get_feat_extract_output_lengths(input_lengths: torch.Tensor) -> torch.Tenso
 
 
 def chunk_and_pad_features(
-    input_features: torch.Tensor, feature_lens: torch.Tensor, n_window: int
+    input_features: torch.Tensor, feature_lens: torch.Tensor, n_window: int, kwargs: dict | None = None
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Split audio features into fixed-size chunks and pad to uniform length.
+    """Split audio features into fixed-size chunks and pad to uniform length, or pop precomputed pair from `kwargs`.
 
-    Each audio sample is split into chunks of ``n_window * 2`` frames (the last
+    Each audio sample is split into chunks of `n_window * 2` frames (the last
     chunk may be shorter), then all chunks are right-padded to the longest chunk.
 
     Args:
-        input_features: ``(feature_dim, total_frames)`` concatenated audio features.
-        feature_lens: ``(batch_size,)`` per-sample frame counts.
+        input_features: `(feature_dim, total_frames)` concatenated audio features.
+        feature_lens: `(batch_size,)` per-sample frame counts.
         n_window: half the target chunk size in frames.
+        kwargs: optional caller kwargs — if it contains both `"padded_feature"` and `"chunk_lengths"` they are popped and returned.
 
     Returns:
-        ``padded_feature``: ``(num_chunks, feature_dim, max_chunk_len)`` padded chunks.
-        ``chunk_lengths``: ``(num_chunks,)`` actual length of each chunk before padding.
+        `padded_feature`: `(num_chunks, feature_dim, max_chunk_len)` padded chunks.
+        `chunk_lengths`: `(num_chunks,)` actual length of each chunk before padding.
     """
+    if kwargs is not None:
+        padded_feature = kwargs.pop("padded_feature", None)
+        chunk_lengths = kwargs.pop("chunk_lengths", None)
+        if padded_feature is not None and chunk_lengths is not None:
+            return padded_feature, chunk_lengths
+
     chunk_num = torch.ceil(feature_lens / (n_window * 2)).long()
     chunk_lengths = torch.full((chunk_num.sum(),), n_window * 2, dtype=torch.long, device=feature_lens.device)
     tail_chunk_index = F.pad(chunk_num, (1, 0), value=-1).cumsum(0)[1:]
     chunk_lengths[tail_chunk_index] = feature_lens % (n_window * 2)
     chunk_lengths = torch.where(chunk_lengths == 0, n_window * 2, chunk_lengths)
+
     chunk_list = input_features.T.split(chunk_lengths.tolist(), dim=0)
     padded_feature = nn.utils.rnn.pad_sequence(chunk_list, batch_first=True).transpose(1, 2)
     return padded_feature, chunk_lengths
 
 
-def get_valid_indices(chunk_lengths: torch.Tensor) -> torch.Tensor:
-    """Compute flat indices of valid (non-padding) positions after CNN extraction.
+def get_valid_indices(chunk_lengths: torch.Tensor, kwargs: dict | None = None) -> torch.Tensor:
+    """Compute flat indices of valid (non-padding) positions after CNN extraction, or pop `"valid_indices"` from `kwargs` if precomputed.
 
     Args:
-        chunk_lengths: ``(num_chunks,)`` pre-CNN chunk lengths.
+        chunk_lengths: `(num_chunks,)` pre-CNN chunk lengths.
+        kwargs: optional caller kwargs — if it contains `"valid_indices"` it is popped and returned.
 
     Returns:
-        ``(total_valid,)`` flat indices into the ``(num_chunks * max_len_after_cnn)`` grid.
+        `(total_valid,)` flat indices into the `(num_chunks * max_len_after_cnn)` grid.
     """
+    if kwargs is not None and (valid_indices := kwargs.pop("valid_indices", None)) is not None:
+        return valid_indices
     feature_lens_after_cnn = _get_feat_extract_output_lengths(chunk_lengths)
     max_len_after_cnn = feature_lens_after_cnn.max().item()
     mask = torch.arange(max_len_after_cnn, device=chunk_lengths.device) < feature_lens_after_cnn.unsqueeze(1)
@@ -157,38 +168,49 @@ def get_valid_indices(chunk_lengths: torch.Tensor) -> torch.Tensor:
 
 
 def get_audio_cu_seqlens(
-    chunk_lengths: torch.Tensor, feature_lens: torch.Tensor, n_window_infer: int, n_window: int
+    chunk_lengths: torch.Tensor,
+    feature_lens: torch.Tensor,
+    n_window_infer: int,
+    n_window: int,
+    kwargs: dict | None = None,
 ) -> torch.Tensor:
-    """Compute cumulative sequence lengths for audio attention windowing.
+    """Compute cumulative sequence lengths for audio attention windowing, or pop `"cu_seqlens"` from `kwargs` if precomputed.
 
     Splits each sample's post-CNN features into inference windows and returns
     cumulative boundaries for flash-attention-style sequence packing.
 
     Args:
-        chunk_lengths: ``(num_chunks,)`` pre-CNN chunk lengths.
-        feature_lens: ``(batch_size,)`` per-sample frame counts.
+        chunk_lengths: `(num_chunks,)` pre-CNN chunk lengths.
+        feature_lens: `(batch_size,)` per-sample frame counts.
         n_window_infer: inference window size (in raw frames).
         n_window: half the chunk size (in raw frames).
+        kwargs: optional caller kwargs — if it contains `"cu_seqlens"` it is popped and returned.
 
     Returns:
-        ``(num_windows + 1,)`` int32 cumulative sequence boundaries.
+        `(num_windows + 1,)` int32 cumulative sequence boundaries.
     """
+    if kwargs is not None and (cu_seqlens := kwargs.pop("cu_seqlens", None)) is not None:
+        return cu_seqlens
+
     aftercnn_lens = _get_feat_extract_output_lengths(feature_lens)
     feature_lens_after_cnn = _get_feat_extract_output_lengths(chunk_lengths)
     max_len_after_cnn = feature_lens_after_cnn.max().item()
-    cu_chunk_lens = [0]
+
     n_window_ratio = n_window_infer // (n_window * 2)
     window_aftercnn = max_len_after_cnn * n_window_ratio
+
+    cu_chunk_lens = [0]
     for cnn_len in aftercnn_lens:
         cu_chunk_lens += [window_aftercnn] * (cnn_len // window_aftercnn)
         remainder = cnn_len % window_aftercnn
         if remainder != 0:
             cu_chunk_lens += [remainder]
+
     return torch.tensor(cu_chunk_lens, device=feature_lens.device).cumsum(-1, dtype=torch.int32)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
     r"""
     deepstack_features (`List[torch.FloatTensor]`, *optional*):
@@ -196,17 +218,6 @@ class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
     """
 
     deepstack_features: list[torch.FloatTensor] | None = None
-
-
-def _get_feat_extract_output_lengths(input_lengths):
-    """
-    Computes the output length of the convolutional layers and the output length of the audio encoder
-    """
-
-    input_lengths_leave = input_lengths % 100
-    feat_lengths = (input_lengths_leave - 1) // 2 + 1
-    output_lengths = ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // 100) * 13
-    return output_lengths
 
 
 class Qwen3OmniMoeAudioEncoderConfig(Qwen2_5OmniAudioEncoderConfig):
@@ -379,6 +390,13 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(Qwen3Config):
 
 
 class Qwen3OmniMoeTalkerTextConfig(Qwen3MoeConfig):
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
+
     vocab_size: int = 3072
     hidden_size: int = 1024
     intermediate_size: int = 2048
@@ -470,6 +488,7 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
     audio_start_token_id: int = 151669
     speaker_id: dict | None = None
     initializer_range: float = 0.02
+    tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
         if self.code_predictor_config is None:
@@ -976,45 +995,30 @@ class Qwen3OmniMoeAudioEncoder(Qwen2_5OmniAudioEncoder):
     def set_input_embeddings(self, value):
         self.conv2d1 = value
 
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
-    @auto_docstring
-    def forward(
-        self,
-        input_features=None,
-        feature_lens=None,
-        padded_feature=None,
-        chunk_lengths=None,
-        valid_indices=None,
-        cu_seqlens=None,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
+    def forward(self, input_features=None, feature_lens=None, **kwargs: Unpack[TransformersKwargs]):
         r"""
         feature_lens (`torch.LongTensor` of shape `(batch_size,)`):
             mel length
-        padded_feature (`torch.FloatTensor`, *optional*):
-            Precomputed padded audio chunks (from `chunk_and_pad_features`).
-        chunk_lengths (`torch.LongTensor`, *optional*):
-            Precomputed per-chunk lengths (from `chunk_and_pad_features`).
-        valid_indices (`torch.LongTensor`, *optional*):
-            Precomputed flat indices of valid post-CNN positions (from `get_valid_indices`).
-        cu_seqlens (`torch.IntTensor`, *optional*):
-            Precomputed cumulative sequence lengths (from `get_audio_cu_seqlens`).
         """
-        if padded_feature is None:
-            padded_feature, chunk_lengths = chunk_and_pad_features(input_features, feature_lens, self.n_window)
-
-        if valid_indices is None:
-            valid_indices = get_valid_indices(chunk_lengths)
-
-        if cu_seqlens is None:
-            cu_seqlens = get_audio_cu_seqlens(chunk_lengths, feature_lens, self.n_window_infer, self.n_window)
+        padded_feature, chunk_lengths = chunk_and_pad_features(
+            input_features, feature_lens, self.n_window, kwargs=kwargs
+        )
+        valid_indices = get_valid_indices(chunk_lengths, kwargs=kwargs)
+        cu_seqlens = get_audio_cu_seqlens(
+            chunk_lengths, feature_lens, self.n_window_infer, self.n_window, kwargs=kwargs
+        )
 
         # Add channel dim for Conv2d: (num_chunks, mel_bins, time) -> (num_chunks, 1, mel_bins, time)
         padded_feature = padded_feature.unsqueeze(1)
-        padded_embed = F.gelu(self.conv2d1(padded_feature))
-        padded_embed = F.gelu(self.conv2d2(padded_embed))
-        padded_embed = F.gelu(self.conv2d3(padded_embed))
+        # Split to chunk to avoid OOM during convolution
+        padded_embeds = []
+        for chunk in padded_feature.split(self.conv_chunksize, dim=0):
+            padded_embed = F.gelu(self.conv2d1(chunk))
+            padded_embed = F.gelu(self.conv2d2(padded_embed))
+            padded_embed = F.gelu(self.conv2d3(padded_embed))
+            padded_embeds.append(padded_embed)
+        padded_embed = torch.cat(padded_embeds, dim=0)
+
         b, c, f, t = padded_embed.size()
         padded_embed = self.conv_out(padded_embed.permute(0, 3, 1, 2).contiguous().view(b, t, c * f))
 
@@ -1026,33 +1030,10 @@ class Qwen3OmniMoeAudioEncoder(Qwen2_5OmniAudioEncoder):
         padded_embed = padded_embed + positional_embedding
         hidden_states = torch.index_select(padded_embed.reshape(-1, padded_embed.shape[-1]), 0, valid_indices)
 
-        # Flash Attention 2 doesn't need a 4D mask and relies on `cu_seqlens/max_seqlen`
-        # NOTE: the created attention mask only approximates the ragged FA2 attention by
-        # allowing bidirectional attention within `cu_seqlens` blocks, and not attending between
-        # blocks. Though it will not be a 100% match for FA2's `varlen` path
-        if is_flash_attention_requested(self.config):
-            attention_mask = None
-        else:
-            seq_idx = torch.arange(hidden_states.shape[0], device=hidden_states.device)
-            block_ids = torch.searchsorted(cu_seqlens[1:], seq_idx, right=True)
-            same_block = block_ids.unsqueeze(0) == block_ids.unsqueeze(1)
-            attention_mask = (
-                torch.full(
-                    (hidden_states.shape[0], hidden_states.shape[0]),
-                    torch.finfo(hidden_states.dtype).min,
-                    dtype=hidden_states.dtype,
-                    device=hidden_states.device,
-                )
-                .masked_fill(same_block, 0.0)
-                .unsqueeze(0)
-                .unsqueeze(0)
-            )
-
         for encoder_layer in self.layers:
             layer_outputs = encoder_layer(
                 hidden_states,
                 cu_seqlens,
-                attention_mask=attention_mask,
             )
             hidden_states = layer_outputs[0]
 
@@ -1196,6 +1177,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         self.num_experts_per_tok = config.text_config.num_experts_per_tok
         self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
 
+    @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_features(
@@ -1213,6 +1195,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         return self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
 
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -1254,12 +1237,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             audio_feature_lengths = None
 
         feature_lens = audio_feature_lengths if audio_feature_lengths is not None else feature_attention_mask.sum(-1)
-        audio_outputs = self.audio_tower(
-            input_features,
-            feature_lens=feature_lens,
-            return_dict=True,
-            **kwargs,
-        )
+        audio_outputs = self.audio_tower(input_features, feature_lens=feature_lens, return_dict=True, **kwargs)
 
         return audio_outputs
 
@@ -1301,10 +1279,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         # 2. Merge text , audios , image and video
         if input_features is not None:
             audio_features = self.get_audio_features(
-                input_features,
-                feature_attention_mask=feature_attention_mask,
-                audio_feature_lengths=audio_feature_lengths,
-                return_dict=True,
+                input_features, feature_attention_mask, audio_feature_lengths, return_dict=True, **kwargs
             ).last_hidden_state
             audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
             _, _, audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds)
@@ -1312,7 +1287,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
 
         if pixel_values is not None:
             image_outputs: BaseModelOutputWithDeepstackFeatures = self.get_image_features(
-                pixel_values, image_grid_thw, return_dict=True
+                pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
             image_embeds = image_outputs.pooler_output
             image_embeds_multiscale = image_outputs.deepstack_features
@@ -1324,7 +1299,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
 
         if pixel_values_videos is not None:
             video_outputs: BaseModelOutputWithDeepstackFeatures = self.get_video_features(
-                pixel_values_videos, video_grid_thw, return_dict=True
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             )
             video_embeds = video_outputs.pooler_output
             video_embeds_multiscale = video_outputs.deepstack_features
@@ -2726,6 +2701,11 @@ __all__ = [
     "Qwen3OmniMoeConfig",
     "Qwen3OmniMoeThinkerConfig",
     "Qwen3OmniMoeTalkerConfig",
+    "Qwen3OmniMoeAudioEncoderConfig",
+    "Qwen3OmniMoeTalkerCodePredictorConfig",
+    "Qwen3OmniMoeTalkerTextConfig",
+    "Qwen3OmniMoeTextConfig",
+    "Qwen3OmniMoeVisionEncoderConfig",
     "Qwen3OmniMoeForConditionalGeneration",
     "Qwen3OmniMoeThinkerTextModel",
     "Qwen3OmniMoeThinkerForConditionalGeneration",

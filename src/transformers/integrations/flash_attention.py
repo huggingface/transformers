@@ -33,6 +33,7 @@ def flash_attention_forward(
     sliding_window: int | None = None,
     softcap: float | None = None,
     is_causal: bool | None = None,
+    s_aux: torch.Tensor | None = None,  # alias: learnable attention sink
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     if kwargs.get("output_attentions", False):
@@ -80,6 +81,11 @@ def flash_attention_forward(
         target_dtype=target_dtype,
         attn_implementation=module.config._attn_implementation,
         layer_idx=module.layer_idx if hasattr(module, "layer_idx") else None,
+        s_aux=(
+            s_aux.to(query.dtype)  # FA only accepts half precision
+            if s_aux is not None
+            else None
+        ),
         **kwargs,
     )
 

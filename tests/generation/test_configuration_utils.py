@@ -157,31 +157,47 @@ class GenerationConfigTest(unittest.TestCase):
             GenerationConfig()
         self.assertEqual(len(captured_logs.out), 0)
 
-        # Inconsequent but technically wrong configuration will throw a warning (e.g. setting sampling
-        # parameters with `do_sample=False`). May be escalated to an error in the future.
+        # Inconsequent but technically wrong configuration will throw a warning (e.g. requesting an extra output
+        # without `return_dict_in_generate=True`). May be escalated to an error in the future.
         logger.warning_once.cache_clear()
         with CaptureLogger(logger) as captured_logs:
             GenerationConfig(return_dict_in_generate=False, output_scores=True)
         self.assertNotEqual(len(captured_logs.out), 0)
 
+        # Explicitly setting a sampling flag alongside `do_sample=False` still warns: this is a user-level mistake.
         logger.warning_once.cache_clear()
         with CaptureLogger(logger) as captured_logs:
             generation_config_bad_temperature = GenerationConfig(do_sample=False, temperature=0.5)  # store for later
         self.assertNotEqual(len(captured_logs.out), 0)
 
-        # Expanding on the case above, we can update a bad configuration to get rid of the warning. Ideally,
-        # that is done by unsetting the parameter (i.e. setting it to None)
+        # But a value inherited from a model's default config (i.e. not in this update's kwargs) does NOT warn: in
+        # the real world, `generate(do_sample=False)` on a model whose `generation_config.json` has `temperature=0.6`
+        # would otherwise log a useless warning.
+        logger.warning_once.cache_clear()
+        base_config = GenerationConfig(do_sample=True, temperature=0.6)  # mimics a model's default config
+        with CaptureLogger(logger) as captured_logs:
+            base_config.update(do_sample=False)
+        self.assertEqual(len(captured_logs.out), 0)
+
+        # Inverse provenance case: `do_sample=False` inherited from a model's config (so not user-set this call), user only
+        # sets a sampling flag. The conflict SHOULD produce noise because the user may think that it's non-greedy by default
+        logger.warning_once.cache_clear()
+        greedy_hub_config = GenerationConfig(do_sample=False)  # mimics a model's default config forcing greedy
+        with CaptureLogger(logger) as captured_logs:
+            greedy_hub_config.update(top_p=0.8)
+        self.assertNotEqual(len(captured_logs.out), 0)
+
+        # Updating only `temperature` (do_sample was pre-existing, i.e. "from the hub") does warn
         logger.warning_once.cache_clear()
         with CaptureLogger(logger) as captured_logs:
-            # BAD - 0.9 means it is still set, we should warn
             generation_config_bad_temperature.update(temperature=0.9)
         self.assertNotEqual(len(captured_logs.out), 0)
 
+        # But setting both in the same `update()` call DOES warn.
         logger.warning_once.cache_clear()
         with CaptureLogger(logger) as captured_logs:
-            # CORNER CASE - 1.0 is the default, we can't detect whether it is set by the user or not, we shouldn't warn
-            generation_config_bad_temperature.update(temperature=1.0)
-        self.assertEqual(len(captured_logs.out), 0)
+            generation_config_bad_temperature.update(do_sample=False, temperature=0.9)
+        self.assertNotEqual(len(captured_logs.out), 0)
 
         logger.warning_once.cache_clear()
         with CaptureLogger(logger) as captured_logs:
@@ -229,6 +245,63 @@ class GenerationConfigTest(unittest.TestCase):
         generation_config.do_sample = False
         with self.assertRaises(ValueError):
             generation_config.validate(strict=True)
+
+    def test_validate_sampling_flag_provenance(self):
+        """
+        Dedicated coverage for the provenance-aware warning rule on sampling-only flags:
+        we only warn when BOTH `do_sample=False` AND a conflicting sampling flag (e.g. `top_p`, `temperature`)
+        were explicitly provided by the caller in the same context, or none of the 2 were directly provided, or only
+        the sampling flag is provided along do_sample=False already existing.
+        """
+        logger = transformers_logging.get_logger("transformers.generation.configuration_utils")
+
+        def _warn_count(fn):
+            logger.warning_once.cache_clear()
+            with CaptureLogger(logger) as captured:
+                fn()
+            return len(captured.out)
+
+        # 1. Hub config sets `temperature`, user does only `generate(do_sample=False)` -> NO warning.
+        #    (Emulates: model whose `generation_config.json` carries `do_sample=True, temperature=0.6`, user
+        #    explicitly asks for greedy decoding.)
+        def case_hub_temp_user_do_sample_only():
+            cfg = GenerationConfig(do_sample=True, temperature=0.6)  # stands in for the hub default
+            cfg.update(do_sample=False)
+
+        self.assertEqual(_warn_count(case_hub_temp_user_do_sample_only), 0)
+
+        # 2. User explicitly sets BOTH `do_sample=False` and `top_p=0.8` in the same call -> WARN.
+        self.assertNotEqual(_warn_count(lambda: GenerationConfig(do_sample=False, top_p=0.8)), 0)
+
+        # 3. User explicitly sets only `do_sample=False` (no sampling flag) -> NO warning, even though
+        #    attribute defaults (like `top_k=50`) may be present.
+        self.assertEqual(_warn_count(lambda: GenerationConfig(do_sample=False)), 0)
+
+        # 4. Hub config forces greedy (`do_sample=False`), user sets only `top_p=0.8` -> warnings:
+        # do_sample` was inherited, but clashes with user-expressed intent, so flagging their `top_p`
+        def case_hub_greedy_user_top_p():
+            cfg = GenerationConfig(do_sample=False)  # stands in for the hub default
+            cfg.update(top_p=0.8)
+
+        self.assertNotEqual(_warn_count(case_hub_greedy_user_top_p), 0)
+
+        # 5. User sets `do_sample=False` and `temperature=0.5` via a single `update()` call -> WARN.
+        def case_update_both_sides():
+            cfg = GenerationConfig()
+            cfg.update(do_sample=False, temperature=0.5)
+
+        self.assertNotEqual(_warn_count(case_update_both_sides), 0)
+
+        # 6. Same idea for beam flags: user only asks for `num_beams=1`, hub default has `length_penalty=0.8`
+        #    -> NO warning.
+        def case_hub_length_penalty_user_num_beams_only():
+            cfg = GenerationConfig(num_beams=4, length_penalty=0.8)  # stands in for the hub default
+            cfg.update(num_beams=1)
+
+        self.assertEqual(_warn_count(case_hub_length_penalty_user_num_beams_only), 0)
+
+        # 7. User sets BOTH `num_beams=1` and `length_penalty=0.8` explicitly -> WARN.
+        self.assertNotEqual(_warn_count(lambda: GenerationConfig(num_beams=1, length_penalty=0.8)), 0)
 
     def test_refuse_to_save(self):
         """Tests that we refuse to save a generation config that fails validation."""

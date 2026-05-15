@@ -13,6 +13,7 @@
 # limitations under the License.
 """PyTorch Qwen3-VL model."""
 
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -33,14 +34,13 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...modeling_vision_utils import get_pos_embed_indices, get_vision_cu_seqlens
-from ...modeling_vision_utils import get_rotary_pos_ids_interleaved as get_rotary_pos_ids
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import accepts_precomputed_kwargs, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...video_utils import VideoInput
+from ...vision_utils import get_vision_bilinear_indices_and_weights, get_vision_cu_seqlens, get_vision_position_ids
 from ..llama.modeling_llama import LlamaRotaryEmbedding
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLCausalLMOutputWithPast,
@@ -69,8 +69,8 @@ from ..qwen3.modeling_qwen3 import (
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
     r"""
     deepstack_features (`List[torch.FloatTensor]`, *optional*):
@@ -92,7 +92,7 @@ class Qwen3VLVisionConfig(PreTrainedConfig):
         Indexed of layers for deepstack embeddings.
     """
 
-    model_type = "qwen3_vl"
+    model_type = "qwen3_vl_vision"
     base_config_key = "vision_config"
 
     depth: int = 27
@@ -295,7 +295,9 @@ class Qwen3VLTextRotaryEmbedding(LlamaRotaryEmbedding):
         # So we expand the inv_freq to shape (3, ...)
         if position_ids.ndim == 2:
             position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
-        inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
+        inv_freq_expanded = (
+            self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1).to(x.device)
+        )
         position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
@@ -446,17 +448,33 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
 
         self.post_init()
 
+    def rot_pos_emb(self, grid_thw: torch.Tensor) -> torch.Tensor:
+        warnings.warn(
+            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in v5.11. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
+        rotary_pos_emb = self.rotary_pos_emb(position_ids)
+        return rotary_pos_emb
+
+    def fast_pos_embed_interpolate(self, grid_thw):
+        warnings.warn(
+            f"`{self.__class__.__name__}.fast_pos_embed_interpolate` is deprecated and will be removed in v5.11. Use `get_vision_bilinear_indices_and_weights` from `transformers.vision_utils` and apply `self.pos_embed`.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
+            grid_thw,
+            num_grid_per_side=self.num_grid_per_side,
+            spatial_merge_size=self.config.spatial_merge_size,
+        )
+        return (self.pos_embed(bilinear_indices) * bilinear_weights[:, :, None]).sum(0)
+
     @merge_with_config_defaults
     @capture_outputs
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        grid_thw: torch.Tensor,
-        cu_seqlens: torch.Tensor | None = None,
-        rotary_pos_ids: torch.Tensor | None = None,
-        embed_indices: torch.Tensor | None = None,
-        bilinear_weights: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
+        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
         """
         Args:
@@ -464,35 +482,23 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
                 The final hidden states of the model.
             grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
                 The temporal, height and width of feature shape of each image in LLM.
-            cu_seqlens (`torch.Tensor`, *optional*):
-                Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
-            rotary_pos_ids (`torch.Tensor` of shape `(total_tokens, 2)`, *optional*):
-                Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
-            embed_indices (`torch.Tensor` of shape `(4, total_thw)`, *optional*):
-                Bilinear corner indices into the position embedding table (from `get_pos_embed_indices`).
-            bilinear_weights (`torch.Tensor` of shape `(4, total_thw)`, *optional*):
-                Interpolation weights for the four bilinear corners (from `get_pos_embed_indices`).
 
         Returns:
             `torch.Tensor`: hidden_states.
         """
+        bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
+            grid_thw,
+            num_grid_per_side=self.num_grid_per_side,
+            spatial_merge_size=self.config.spatial_merge_size,
+            kwargs=kwargs,
+        )
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+
         hidden_states = self.patch_embed(hidden_states)
-
-        if embed_indices is None or bilinear_weights is None:
-            embed_indices, bilinear_weights = get_pos_embed_indices(
-                grid_thw, self.num_grid_per_side, self.config.spatial_merge_size
-            )
-
-        pos_embeds = (self.pos_embed(embed_indices) * bilinear_weights[:, :, None]).sum(0)
-        hidden_states = hidden_states + pos_embeds
-
-        if rotary_pos_ids is None:
-            rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
-
-        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
-
-        if cu_seqlens is None:
-            cu_seqlens = get_vision_cu_seqlens(grid_thw)
+        pos_embeds = (self.pos_embed(bilinear_indices) * bilinear_weights[:, :, None]).sum(0)
+        hidden_states = hidden_states + pos_embeds.to(hidden_states.dtype)
+        rotary_pos_emb = self.rotary_pos_emb(position_ids)
 
         seq_len, _ = hidden_states.size()
         hidden_states = hidden_states.reshape(seq_len, -1)
@@ -655,7 +661,7 @@ class Qwen3VLModel(Qwen2VLModel):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Difference from Qwen2VL/Qwen2.5VL's get_rope_index:
-        - Since Qwen3.5 use timestamps to seperate videos, like <t1> <vision_start> <frame1> <vision_end> <t2> <vision_start> <frame2> <vision_end>, the video_grid_thw should also be split too.
+        - Since Qwen3.5 use timestamps to separate videos, like <t1> <vision_start> <frame1> <vision_end> <t2> <vision_start> <frame2> <vision_end>, the video_grid_thw should also be split too.
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -678,13 +684,14 @@ class Qwen3VLModel(Qwen2VLModel):
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
 
-        # Separate video grid thw into multiple grids because timestamps are used to seperate videos.
+        # Separate video grid thw into multiple grids because timestamps are used to separate videos.
         if video_grid_thw is not None:
             video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
             video_grid_thw[:, 0] = 1
 
         return super().get_rope_index(video_grid_thw=video_grid_thw, **super_kwargs)
 
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -710,6 +717,7 @@ class Qwen3VLModel(Qwen2VLModel):
 
         return vision_output
 
+    @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_features(
@@ -760,7 +768,7 @@ class Qwen3VLModel(Qwen2VLModel):
 
         if pixel_values is not None:
             image_outputs: BaseModelOutputWithDeepstackFeatures = self.get_image_features(
-                pixel_values, image_grid_thw, return_dict=True
+                pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
             image_embeds = image_outputs.pooler_output
             deepstack_image_embeds = image_outputs.deepstack_features
@@ -772,7 +780,7 @@ class Qwen3VLModel(Qwen2VLModel):
 
         if pixel_values_videos is not None:
             video_outputs: BaseModelOutputWithDeepstackFeatures = self.get_video_features(
-                pixel_values_videos, video_grid_thw, return_dict=True
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             )
             video_embeds = video_outputs.pooler_output
             deepstack_video_embeds = video_outputs.deepstack_features
@@ -1236,6 +1244,7 @@ class Qwen3VLProcessor(Qwen2VLProcessor):
 __all__ = [
     "Qwen3VLConfig",
     "Qwen3VLTextConfig",
+    "Qwen3VLVisionConfig",
     "Qwen3VLVisionModel",
     "Qwen3VLForConditionalGeneration",
     "Qwen3VLModel",

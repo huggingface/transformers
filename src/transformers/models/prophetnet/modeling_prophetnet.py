@@ -108,12 +108,12 @@ def compute_all_stream_relative_buckets(num_buckets, max_distance, position_ids)
     return main_relative_position_buckets, predict_relative_position_buckets
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for sequence-to-sequence language models outputs.
     """
 )
+@dataclass
 class ProphetNetSeq2SeqLMOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -159,13 +159,13 @@ class ProphetNetSeq2SeqLMOutput(ModelOutput):
     encoder_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for model encoder's outputs that also contains : pre-computed hidden states that can speed up sequential
     decoding.
     """
 )
+@dataclass
 class ProphetNetSeq2SeqModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, decoder_sequence_length, hidden_size)`):
@@ -209,12 +209,12 @@ class ProphetNetSeq2SeqModelOutput(ModelOutput):
     encoder_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for model's outputs that may also contain a past key/values (to speed up sequential decoding).
     """
 )
+@dataclass
 class ProphetNetDecoderModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, decoder_sequence_length, hidden_size)`):
@@ -253,12 +253,12 @@ class ProphetNetDecoderModelOutput(ModelOutput):
     cross_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for model's outputs that may also contain a past key/values (to speed up sequential decoding).
     """
 )
+@dataclass
 class ProphetNetDecoderLMOutput(ModelOutput):
     r"""
     ngram_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):

@@ -15,11 +15,6 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2020-10-22 and added to Hugging Face Transformers on 2020-11-17.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
 
 # mT5
 
@@ -38,15 +33,14 @@ The example below demonstrates how to summarize text with [`Pipeline`], [`AutoMo
 <hfoption id="AutoModel">
 
 ```python
-import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "csebuetnlp/mT5_multilingual_XLSum"
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "csebuetnlp/mT5_multilingual_XLSum",
-    dtype=torch.float16,
     device_map="auto",
 )
 
@@ -67,17 +61,15 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to int4.
 
 ```python
-import torch
-from transformers import BitsAndBytesConfig, AutoModelForSeq2SeqLM, AutoTokenizer
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BitsAndBytesConfig
+
 
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.bfloat16,
     bnb_4bit_quant_type="nf4"
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "csebuetnlp/mT5_multilingual_XLSum",
-    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )

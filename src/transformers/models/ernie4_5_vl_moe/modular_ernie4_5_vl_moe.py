@@ -42,8 +42,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
-from ...modeling_vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     TransformersKwargs,
@@ -51,8 +50,9 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import accepts_precomputed_kwargs, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
 from ..ernie4_5_moe.configuration_ernie4_5_moe import Ernie4_5_MoeConfig
 from ..ernie4_5_moe.modeling_ernie4_5_moe import (
     Ernie4_5_MoeAttention,
@@ -63,7 +63,7 @@ from ..ernie4_5_moe.modeling_ernie4_5_moe import (
     Ernie4_5_MoeStatics,
     Ernie4_5_MoeTopKRouter,
 )
-from ..glm4v.image_processing_glm4v import Glm4vImageProcessor
+from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
 from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
 from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration
 from ..mixtral.modeling_mixtral import load_balancing_loss_func
@@ -699,24 +699,15 @@ class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPretr
     @merge_with_config_defaults
     @capture_outputs
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        grid_thw: torch.Tensor,
-        cu_seqlens: torch.Tensor | None = None,
-        rotary_pos_ids: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
+        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+
         hidden_states = self.patch_embed(hidden_states)
-
-        if rotary_pos_ids is None:
-            rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
-
-        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
+        rotary_pos_emb = self.rotary_pos_emb(position_ids)
         emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
-
-        if cu_seqlens is None:
-            cu_seqlens = get_vision_cu_seqlens(grid_thw)
 
         for block in self.blocks:
             hidden_states = block(
@@ -964,6 +955,7 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, mrope_position_deltas
 
+    @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_features(
@@ -972,7 +964,7 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        video_outputs = self.vision_tower(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
+        video_outputs = self.vision_tower(pixel_values_videos, video_grid_thw, **kwargs)
         video_embeds = self.resampler_model(video_outputs.last_hidden_state, video_grid_thw)
         split_sizes = (
             video_grid_thw.prod(-1)
@@ -983,6 +975,7 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         video_outputs.pooler_output = video_embeds
         return video_outputs
 
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -991,7 +984,7 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        image_outputs = self.vision_tower(pixel_values, image_grid_thw, return_dict=True, **kwargs)
+        image_outputs = self.vision_tower(pixel_values, image_grid_thw, **kwargs)
         image_embeds = self.resampler_model(image_outputs.last_hidden_state, image_grid_thw)
         split_sizes = (image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2).tolist()
         image_embeds = torch.split(image_embeds, split_sizes)
@@ -1033,7 +1026,9 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw, return_dict=True).pooler_output
+            image_embeds = self.get_image_features(
+                pixel_values, image_grid_thw, return_dict=True, **kwargs
+            ).pooler_output
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
@@ -1041,7 +1036,9 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, return_dict=True).pooler_output
+            video_embeds = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            ).pooler_output
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
@@ -1222,7 +1219,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, Gene
         )
 
 
-class Ernie4_5_VLMoeImageProcessorKwargs(ImagesKwargs, total=False):
+class Ernie4_5_VLMoeImageProcessorKwargs(Glm4vImageProcessorKwargs):
     r"""
     patch_size (`int`, *optional*, defaults to 14):
         The spatial patch size of the vision encoder.
@@ -1231,10 +1228,6 @@ class Ernie4_5_VLMoeImageProcessorKwargs(ImagesKwargs, total=False):
     merge_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
     """
-
-    patch_size: int
-    temporal_patch_size: int
-    merge_size: int
 
 
 class Ernie4_5_VLMoeImageProcessorPil(Glm4vImageProcessorPil):
@@ -1412,17 +1405,12 @@ class Ernie4_5_VLMoeImageProcessor(Glm4vImageProcessor):
             patches = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            if patches.ndim == 4:
-                # add a temporal dimension if we have images
-                patches = patches.unsqueeze(1)
 
-            # Main difference to Qwen2 VL - no temporal patches
-            batch_size, grid_t, channel = patches.shape[:3]
+            batch_size, channel = patches.shape[:2]
             grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
 
             patches = patches.view(
                 batch_size,
-                grid_t,
                 channel,
                 grid_h // merge_size,
                 merge_size,
@@ -1432,17 +1420,17 @@ class Ernie4_5_VLMoeImageProcessor(Glm4vImageProcessor):
                 patch_size,
             )
             # Reorder dimensions to group grid and patch information for subsequent flattening.
-            # [batch, grid_t, grid_h/merge, grid_w/merge, merge, merge, channel, patch, patch]
-            patches = patches.permute(0, 1, 3, 6, 4, 7, 2, 5, 8)
+            # [batch, grid_h/merge, grid_w/merge, merge, merge, channel, patch, patch]
+            patches = patches.permute(0, 2, 5, 3, 6, 1, 4, 7)
 
             flatten_patches = patches.reshape(
                 batch_size,
-                grid_t * grid_h * grid_w,
+                grid_h * grid_w,
                 channel * patch_size * patch_size,
             )
 
             processed_images_grouped[shape] = flatten_patches
-            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
+            processed_grids[shape] = [[1, grid_h, grid_w]] * batch_size
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_grids = reorder_images(processed_grids, grouped_images_index)
