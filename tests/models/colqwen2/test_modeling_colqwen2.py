@@ -150,7 +150,7 @@ class ColQwen2ForRetrievalModelTester:
         )
 
         # Hardcoded image grid size: do not change unless you modified image size or patch size!
-        image_grid_thw = torch.tensor([1, 4, 4]).repeat(self.batch_size, 1)
+        image_grid_thw = torch.tensor([1, 4, 4], device=torch_device).repeat(self.batch_size, 1)
 
         # NOTE: The following adjustment ensures correct behavior with DDP on multiple GPUs.
         # Line is copied from `src/transformers/models/colqwen2/processing_colqwen2.py`
