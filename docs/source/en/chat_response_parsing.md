@@ -214,14 +214,14 @@ tokenizer.save_pretrained(...)  # Written as a key in tokenizer_config.json
 
 Each field supports several keys. We can divide these into two types. First, there are the keys that define how the field should be captured:
 
-| Key             | Type               | Purpose                                                                                     |
-|-----------------|--------------------|---------------------------------------------------------------------------------------------|
-| `open`          | str or list[str]   | Literal string that opens this region. A list of strings means "match any of these".        |
-| `open_pattern`  | str (regex)        | Regex alternative to `open`; named groups become capture variables available to `transform`. |
-| `close`         | str or list[str]   | Literal string (or list of strings) that closes this region. `"eos"` means end-of-stream.   |
-| `close_pattern` | str (regex)        | Regex alternative to `close`.                                                               |
-| `repeats`       | bool               | If true, the field is a list and each match appends. Default `false`.                       |
-| `optional`      | bool               | If false and the region never matches, we raise an error. Default `true`.                   |
+| Key             | Type               | Purpose                                                                                       |
+|-----------------|--------------------|-----------------------------------------------------------------------------------------------|
+| `open`          | str or list[str]   | Literal string that opens this region. A list of strings means "match any of these".          |
+| `open_pattern`  | str (regex)        | Regex alternative to `open`. Named groups become capture variables available to `transform`.  |
+| `close`         | str or list[str]   | Literal string (or list of strings) that closes this region. `"eos"` means end-of-stream.     |
+| `close_pattern` | str (regex)        | Regex alternative to `close`. Named groups become capture variables available to `transform`. |
+| `repeats`       | bool               | If true, the field is a list and each match appends. Default `false`.                         |
+| `optional`      | bool               | If false and the region never matches, we raise an error. Default `true`.                     |
 
 A field should have **either** `open` or `open_pattern`, but not both, and the same is true for `close` and `close_pattern`.
 
@@ -289,10 +289,6 @@ dict in an outer dict with a `function` key, as these are part of our standard t
 },
 ```
 
-`content` references the parsed JSON body; the jmespath object literal builds the outer dict around it. For
-`<tool_call>{"name": "get_weather", "arguments": {"city": "Paris"}}</tool_call>` this produces
-`{"type": "function", "function": {"name": "get_weather", "arguments": {"city": "Paris"}}}`.
-
 You can abuse `transform` quite a lot though, which becomes necessary when the model output has a wildly
 different format to our standard API. GPT-OSS is a good example - it embeds the function name in the channel header
 rather than in the JSON body, so we have to capture it with a named group in `open_pattern` 
@@ -315,7 +311,7 @@ a tool call dict. Finally, we wrap the tool call dict in an outer dict, which ad
 example.
 
 In general, the `jmespath` syntax is very straightforward. `jmespath` experts may be familiar with the
-special symbols `@` (meaning the entire input dict) and `*` (the input iterator). These are usually not necessary,
+special symbols `@` (meaning the entire input dict, including any capture groups) and `*` (the input iterator). These are usually not necessary,
 but they are supported if you really need them. The main case when `*` becomes necessary is when the field content
 is a list and we want to transform every element, which often occurs with Cohere models:
 
