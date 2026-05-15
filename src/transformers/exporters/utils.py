@@ -318,15 +318,21 @@ def _precompute_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) ->
     if hasattr(model_mod, "get_vision_cu_seqlens"):
         inputs["cu_seqlens"] = model_mod.get_vision_cu_seqlens(grid_thw)
 
-    if hasattr(model_mod, "get_vision_position_ids"):
-        inputs["position_ids"] = model_mod.get_vision_position_ids(grid_thw, model.spatial_merge_size)
+    # spatial_merge_size may be a model attribute (Qwen-VL/GLM/Ernie), an input tensor
+    # `merge_sizes` (Video-Llama-3, per-image merge), or hardcoded to 1 (PaddleOCR-VL).
+    spatial_merge_size = getattr(model, "spatial_merge_size", None)
+    if spatial_merge_size is None:
+        spatial_merge_size = inputs.get("merge_sizes", 1)
 
-    if hasattr(model_mod, "get_vision_window_index"):
+    if hasattr(model_mod, "get_vision_position_ids"):
+        inputs["position_ids"] = model_mod.get_vision_position_ids(grid_thw, spatial_merge_size)
+
+    if hasattr(model_mod, "get_vision_window_index") and hasattr(model, "window_size"):
         inputs["window_index"], inputs["cu_window_seqlens"] = model_mod.get_vision_window_index(
-            grid_thw, model.spatial_merge_size, model.window_size, model.patch_size
+            grid_thw, spatial_merge_size, model.window_size, model.patch_size
         )
 
-    if hasattr(model_mod, "get_vision_bilinear_indices_and_weights"):
+    if hasattr(model_mod, "get_vision_bilinear_indices_and_weights") and hasattr(model, "num_grid_per_side"):
         inputs["bilinear_indices"], inputs["bilinear_weights"] = model_mod.get_vision_bilinear_indices_and_weights(
             grid_thw, model.num_grid_per_side, model.config.spatial_merge_size
         )

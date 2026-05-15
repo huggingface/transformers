@@ -350,6 +350,7 @@ class VideoLlama3VisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (VideoLlama3VisionModel,) if is_torch_available() else ()
     additional_model_inputs = ["grid_thw", "merge_sizes"]
+    test_torch_exportable = False  # data-dependent per-image `pixel_unshuffle` loop with per-image `merge_size` reshapes
     test_resize_embeddings = False
     test_cpu_offload = False
     test_disk_offload_safetensors = False
@@ -653,6 +654,7 @@ class VideoLlama3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
     )
     pipeline_model_mapping = {"image-text-to-text": VideoLlama3ForConditionalGeneration}
     _is_composite = True
+    test_torch_exportable = False  # data-dependent per-image `pixel_unshuffle` loop with per-image `merge_size` reshapes
 
     def setUp(self):
         self.model_tester = VideoLlama3VisionText2TextModelTester(self)

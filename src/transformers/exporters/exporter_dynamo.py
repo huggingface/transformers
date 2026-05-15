@@ -174,9 +174,19 @@ def _reshaped_vision_attention_forward(
     )
 
     if hasattr(self, "qkv"):
-        query_states, key_states, value_states = (
-            self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
-        )
+        # Grouped-query attention (q_dim != kv_dim, e.g. Exaone4.5) splits asymmetrically;
+        # uniform reshape into (seq, 3, num_heads, -1) only works when Q, K, V share the head count.
+        if hasattr(self, "q_dim") and hasattr(self, "kv_dim") and self.q_dim != self.kv_dim:
+            query_states, key_states, value_states = self.qkv(hidden_states).split(
+                [self.q_dim, self.kv_dim, self.kv_dim], dim=-1
+            )
+            query_states = query_states.view(seq_length, self.num_heads, self.head_dim)
+            key_states = key_states.view(seq_length, self.num_key_value_heads, self.head_dim)
+            value_states = value_states.view(seq_length, self.num_key_value_heads, self.head_dim)
+        else:
+            query_states, key_states, value_states = (
+                self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
+            )
     else:
         q_proj = getattr(self, "q_proj", getattr(self, "q", None))
         k_proj = getattr(self, "k_proj", getattr(self, "k", None))
@@ -210,6 +220,7 @@ def _reshaped_vision_attention_forward(
         is_causal=False,
         scale=self.scaling,
         dropout_p=0.0 if not self.training else self.attention_dropout,
+        enable_gqa=getattr(self, "num_key_value_heads", self.num_heads) != self.num_heads,
     )
 
     # (n_seg, heads, seg_len, dim) → (n_seg, seg_len, heads, dim) → (seq, heads*dim)

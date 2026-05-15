@@ -177,6 +177,7 @@ class PaddleOCRVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     all_model_classes = (PaddleOCRVLForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": PaddleOCRVLForConditionalGeneration}
     _is_composite = True
+    test_torch_exportable = False  # data-dependent per-image slice loop in vision embedding (`embeddings[start:end]` with `t*h*w` slice)
 
     def setUp(self):
         self.model_tester = PaddleOCRVLVisionText2TextModelTester(self)
