@@ -125,12 +125,16 @@ def _register_fake_impls(ns_name: str) -> None:
     def _kv_update_meta(keys_cache, values_cache, new_keys, new_values, position):
         return None
 
+    def _mlp_silu_meta(gate_qw, up_qw, down_qw, x, gate_buf, up_buf, out, g, u, d):
+        return None
+
     fakes = {
         "rmsnorm_f32": _rmsnorm_meta,
         "gguf_mul_mat_vec_multi_f32": _multi_mv_meta,
         "gguf_moe_decode_f32": _moe_decode_meta,
         "gguf_moe_silu_f32": _moe_silu_meta,
         "kv_update_decode_f32": _kv_update_meta,
+        "gguf_mlp_silu_f32": _mlp_silu_meta,
     }
     # Library.impl is the contract for C++ TORCH_LIBRARY ops. Open a FRAGMENT
     # library on the same namespace and add Meta + CompositeExplicitAutograd
@@ -1161,6 +1165,100 @@ def apply_fused_rmsnorm(model: nn.Module) -> int:
     return patched
 
 
+_FUSED_MV_FMT_CODE_ALL = {
+    "q4_0":   0, "q5_0":   1, "q5_1":   2, "q8_0":   3,
+    "q4_K":   4, "q5_K":   5, "q6_K":   6,
+    "iq4_nl": 7, "iq4_xs": 8,
+}
+
+
+def _fused_mlp_forward(self, hidden_states):
+    """Replacement for ``Qwen2MoeMLP.forward`` (shared_expert path) that
+    runs gate + up + SwiGLU + down in one ``gguf_mlp_silu_f32`` torch op
+    dispatch.
+
+    Falls through to the original Python path under dynamo trace, when
+    input shape doesn't match the pre-allocated scratch, or when one of
+    the projections isn't a GgufLinear with a kMvTable-supported fmt.
+    """
+    op = self._mlp_silu_op
+    last_dim = hidden_states.shape[-1]
+    flat_n = hidden_states.numel() // last_dim
+    if (op is None
+            or torch.compiler.is_compiling()
+            or flat_n != 1
+            or hidden_states.device.type != "mps"):
+        # Original Qwen2MoeMLP forward.
+        gate = self.gate_proj(hidden_states)
+        up = self.up_proj(hidden_states)
+        return self.down_proj(self.act_fn(gate) * up)
+
+    x = hidden_states.reshape(-1).contiguous()
+    if x.dtype != torch.float32:
+        x = x.to(torch.float32)
+    op(self.gate_proj.qweight, self.up_proj.qweight, self.down_proj.qweight,
+       x, self._mlp_gate_buf, self._mlp_up_buf, self._mlp_out_buf,
+       *self._mlp_fmt_codes)
+    return self._mlp_out_buf.view(*hidden_states.shape[:-1], -1)
+
+
+def apply_fused_mlp(model: nn.Module) -> int:
+    """Patch every ``Qwen2MoeMLP``-shaped module (gate / up / down all
+    GgufLinear with a supported fmt) to run the gate+up+silu+down chain
+    via one ``gguf_mlp_silu_f32`` op call instead of 3 separate
+    GgufLinear dispatches.
+
+    Recognises any module that exposes ``gate_proj`` / ``up_proj`` /
+    ``down_proj`` attributes that are all GgufLinear instances. Targets
+    the SparseMoeBlock's ``shared_expert`` on Qwen2-MoE / Qwen3-MoE.
+
+    Returns the number of MLP modules patched. Idempotent.
+    """
+    metal = _ensure_metal_kernels()
+    if metal is None:
+        return 0
+    ops = metal._ops
+    if not hasattr(ops, "gguf_mlp_silu_f32"):
+        return 0
+    op = ops.gguf_mlp_silu_f32
+    op = getattr(op, "default", op)
+
+    import types as _types
+    patched = 0
+    for mod in model.modules():
+        if not (hasattr(mod, "gate_proj") and hasattr(mod, "up_proj")
+                and hasattr(mod, "down_proj") and hasattr(mod, "act_fn")):
+            continue
+        g, u, d = mod.gate_proj, mod.up_proj, mod.down_proj
+        if not (isinstance(g, GgufLinear) and isinstance(u, GgufLinear)
+                and isinstance(d, GgufLinear)):
+            continue
+        try:
+            codes = [_FUSED_MV_FMT_CODE_ALL[g._fmt],
+                     _FUSED_MV_FMT_CODE_ALL[u._fmt],
+                     _FUSED_MV_FMT_CODE_ALL[d._fmt]]
+        except KeyError:
+            continue
+        if getattr(mod, "_mlp_silu_op", None) is op:
+            continue
+        # Pre-allocate scratch + output buffers as non-persistent buffers.
+        dev = g.qweight.device
+        I = g.out_features
+        H = d.out_features
+        for name in ("_mlp_gate_buf", "_mlp_up_buf", "_mlp_out_buf"):
+            if name in mod._buffers:
+                del mod._buffers[name]
+        mod.register_buffer("_mlp_gate_buf", torch.empty(I, dtype=torch.float32, device=dev), persistent=False)
+        mod.register_buffer("_mlp_up_buf",   torch.empty(I, dtype=torch.float32, device=dev), persistent=False)
+        mod.register_buffer("_mlp_out_buf",  torch.empty(H, dtype=torch.float32, device=dev), persistent=False)
+        mod._mlp_silu_op = op
+        mod._mlp_fmt_codes = codes
+        mod._orig_mlp_forward = mod.forward
+        mod.forward = _types.MethodType(_fused_mlp_forward, mod)
+        patched += 1
+    return patched
+
+
 def apply_fused_kv_update(model: nn.Module) -> int:
     """Patch each ``StaticLayer.update`` on the model's KV cache so decode
     (kv_length=1) writes both K and V via one ``kv_update_decode_f32``
@@ -1303,6 +1401,10 @@ def setup_for_compile(model, *, mode: str = "reduce-overhead") -> None:
     # arange + add + 2× index_put_ into one dispatch. Class-level patch on
     # StaticLayer.update — idempotent.
     apply_fused_kv_update(model)
+    # MLP fusion (``apply_fused_mlp``) is available but NOT wired in: under
+    # torch.compile it regresses by ~6 tok/s because dynamo can no longer
+    # optimise across the now-opaque custom op. Opt-in for callers running
+    # without compile where they want fewer dispatcher round-trips.
     # Fused RMSNorm kernel kept available (see ``apply_fused_rmsnorm``) but
     # *not* wired in by default — microbench shows MPSGraph already auto-fuses
     # the Python RMSNorm into ~1-2 kernels, so the custom kernel is a wash.
