@@ -503,40 +503,19 @@ class GgufQwen2MoeExperts(nn.Module):
 
 @torch.no_grad()
 def _gguf_eager_experts_forward(self, hidden_states, top_k_index, top_k_weights):
-    """One-at-a-time fallback. Kept as the safety net for configurations
-    where ``torch.bmm`` over batched dequant tensors isn't acceptable (e.g.
-    out-of-memory on a giant prefill where ``(S, intermediate, hidden)`` fp32
-    won't fit). 90× slower than the bmm path on Apple Silicon for decode.
+    """Fallback path used when neither ``"gguf_bmm"`` nor ``"gguf_grouped_mm"``
+    are registered (shouldn't happen — they're hard-wired into
+    :data:`ALL_EXPERTS_FUNCTIONS`). Routes to :func:`gguf_bmm_experts_forward`
+    so the device-side path is preserved.
+
+    A previous implementation iterated one activated expert at a time via
+    ``.nonzero()`` + ``.item()`` + ``torch.where``, which inserts a CPU↔MPS
+    sync per expert per layer and tanks decode throughput by ~17× on Apple
+    Silicon. Don't bring it back.
     """
-    final_hidden_states = torch.zeros_like(hidden_states)
-    expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
-    expert_mask = expert_mask.permute(2, 1, 0)
-    expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+    from .moe import gguf_bmm_experts_forward
 
-    for expert_idx in expert_hit:
-        expert_idx = expert_idx[0].item()
-        if expert_idx == self.num_experts:
-            continue
-        top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
-        current_state = hidden_states[token_idx].to(torch.float32).contiguous()
-
-        ids = torch.tensor([expert_idx], device=current_state.device, dtype=torch.long)
-        gate_w = self._gather_dequant(self.gate_proj_q, ids, self.gate_quant, self._gate_fmt,
-                                       self.intermediate_dim, self.hidden_dim).squeeze(0)
-        up_w   = self._gather_dequant(self.up_proj_q,   ids, self.up_quant,   self._up_fmt,
-                                       self.intermediate_dim, self.hidden_dim).squeeze(0)
-        down_w = self._gather_dequant(self.down_proj_q, ids, self.down_quant, self._down_fmt,
-                                       self.hidden_dim, self.intermediate_dim).squeeze(0)
-
-        gate = torch.nn.functional.linear(current_state, gate_w)
-        up   = torch.nn.functional.linear(current_state, up_w)
-        inter = (self.act_fn(gate) * up).contiguous()
-        out = torch.nn.functional.linear(inter, down_w)
-
-        out = out * top_k_weights[token_idx, top_k_pos, None]
-        final_hidden_states.index_add_(0, token_idx, out.to(final_hidden_states.dtype))
-
-    return final_hidden_states
+    return gguf_bmm_experts_forward(self, hidden_states, top_k_index, top_k_weights)
 
 
 # =============================================================================
