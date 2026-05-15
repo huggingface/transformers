@@ -246,11 +246,38 @@ def _reshaped_vision_attention_forward(
     return (attn_output, None) if returns_tuple else attn_output
 
 
+def _patch_xlstm_seqlen_offset(module):
+    """Reset ``cache_params.seqlen_offset`` to a plain int after forward.
+
+    xLSTMModel does ``cache_params.seqlen_offset += inputs_embeds.shape[1]``; when no
+    input cache is supplied a fresh xLSTMCache is allocated inside forward with
+    ``seqlen_offset = 0`` (plain int), and the ``int + SymInt`` promotion makes it a
+    SymInt leaf in the output pytree. ``run_decompositions`` later re-flattens the
+    output, sees one extra leaf in the spec versus the actual graph outputs, and fails
+    with ``leaves has length N but ... holds N+1 items``. seqlen_offset isn't read
+    inside the model — overwriting it after forward keeps the public counter consistent
+    with the spec without changing the model API.
+    """
+    if module.__class__.__name__ not in ("xLSTMModel", "xLSTMForCausalLM"):
+        return None
+    original_forward = module.forward
+
+    def patched(*args, **kwargs):
+        out = original_forward(*args, **kwargs)
+        cache_params = getattr(out, "cache_params", None)
+        if cache_params is not None:
+            cache_params.seqlen_offset = 0
+        return out
+
+    return ("forward", patched)
+
+
 _MODEL_PATCHERS = [
     _patch_mamba_mask,
     _patch_classifier_cast,
     _patch_linear_attn_mask,
     _patch_chunked_vision_attention,
+    _patch_xlstm_seqlen_offset,
 ]
 
 
