@@ -631,6 +631,8 @@
         title: GLM-Image
       - local: model_doc/glm_moe_dsa
         title: GlmMoeDsa
+      - local: model_doc/hrm_text
+        title: HRM-Text
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
