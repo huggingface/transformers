@@ -94,7 +94,55 @@ def _load_kernels_direct(repo: str):
     torch.ops.load_library(so)
     # ``ns_name`` includes a leading underscore from the .so file convention.
     ns = getattr(torch.ops, ns_name)
+    _register_fake_impls(ns_name)
     return _DirectKernelHandle(ns)
+
+
+def _register_fake_impls(ns_name: str) -> None:
+    """Register meta / fake-tensor implementations for our custom ops so they
+    can run under ``torch.compile`` (AOTAutograd's analysis pass needs to
+    shape-infer custom ops on FakeTensors before partitioning). Each fake
+    just validates inputs and returns None — the ops are all in-place
+    (output buffer is a pre-allocated arg).
+    """
+    import torch
+
+    def _rmsnorm_meta(x, weight, out, eps):
+        return None
+
+    def _multi_mv_meta(qweights, x, outputs, fmts):
+        return None
+
+    def _moe_decode_meta(hidden, top_k_index, top_k_weights, gate_qw, up_qw,
+                         down_qw, gate_buf, up_buf, pair_out, output,
+                         gate_fmt_code, up_fmt_code, down_fmt_code):
+        return None
+
+    def _moe_silu_meta(gate_qw, up_qw, down_qw, x, ids, gate_buf, up_buf, out,
+                       g, u, d):
+        return None
+
+    fakes = {
+        "rmsnorm_f32": _rmsnorm_meta,
+        "gguf_mul_mat_vec_multi_f32": _multi_mv_meta,
+        "gguf_moe_decode_f32": _moe_decode_meta,
+        "gguf_moe_silu_f32": _moe_silu_meta,
+    }
+    # Library.impl is the contract for C++ TORCH_LIBRARY ops. Open a FRAGMENT
+    # library on the same namespace and add Meta + CompositeExplicitAutograd
+    # impls so AOTAutograd's FakeTensor analysis pass can shape-check.
+    try:
+        lib = torch.library.Library(ns_name, "FRAGMENT")  # type: ignore[arg-type]
+    except RuntimeError:
+        return
+    ns_ops = getattr(torch.ops, ns_name)
+    for op_name, fn in fakes.items():
+        if not hasattr(ns_ops, op_name):
+            continue
+        try:
+            lib.impl(op_name, fn, "Meta")
+        except RuntimeError:
+            pass  # already registered
 
 
 def _load_kernels_local_so(so_path: str):
@@ -108,6 +156,7 @@ def _load_kernels_local_so(so_path: str):
     # `torch.ops.load_library` registers ops under the TORCH_EXTENSION_NAME the
     # .so was built with — same string as the .so basename's namespace stub.
     ns = getattr(torch.ops, fname)
+    _register_fake_impls(fname)
     return _DirectKernelHandle(ns)
 
 
@@ -1044,6 +1093,70 @@ def _fused_qkv_forward(self, hidden_states, position_embeddings=None,
     return attn_output, attn_weights
 
 
+def _fused_rmsnorm_forward(self, hidden_states):
+    """Replacement for ``Qwen2MoeRMSNorm.forward`` that runs one fused Metal
+    kernel instead of (.to(fp32) + pow + mean + add + rsqrt + mul + mul + .to(dtype)).
+
+    Under torch.compile we keep the Python path so dynamo+inductor can trace
+    the constituent ops (AOTAutograd's FakeTensor analysis can't shape-check
+    our custom op without a registered abstract impl). Eager path uses the
+    fused kernel.
+    """
+    op = self._rmsnorm_op
+    if (op is None
+            or torch.compiler.is_compiling()
+            or hidden_states.device.type != "mps"
+            or hidden_states.dtype != torch.float32):
+        # Original Qwen2MoeRMSNorm body.
+        input_dtype = hidden_states.dtype
+        h = hidden_states.to(torch.float32)
+        var = h.pow(2).mean(-1, keepdim=True)
+        h = h * torch.rsqrt(var + self.variance_epsilon)
+        return self.weight * h.to(input_dtype)
+    out = torch.empty_like(hidden_states)
+    w = self._rmsnorm_weight
+    op(hidden_states, w, out, float(self.variance_epsilon))
+    return out
+
+
+def apply_fused_rmsnorm(model: nn.Module) -> int:
+    """Patch every RMSNorm-shaped module to use a single Metal kernel.
+
+    Recognises any module that exposes a ``weight`` Parameter and a
+    ``variance_epsilon`` float — covers Qwen2MoeRMSNorm and the other
+    Llama-family RMSNorms transformers ships under different class names.
+    """
+    metal = _ensure_metal_kernels()
+    if metal is None:
+        return 0
+    ops = metal._ops
+    if not hasattr(ops, "rmsnorm_f32"):
+        return 0
+    op = ops.rmsnorm_f32
+    op = getattr(op, "default", op)
+
+    import types as _types
+    patched = 0
+    for mod in model.modules():
+        cls_name = mod.__class__.__name__
+        if "RMSNorm" not in cls_name:
+            continue
+        if not (hasattr(mod, "weight") and hasattr(mod, "variance_epsilon")):
+            continue
+        if getattr(mod, "_rmsnorm_op", None) is op:
+            continue
+        mod._rmsnorm_op = op
+        # Strip tensor subclass off the weight — GGUFQuantizedTensor wraps the
+        # raw bytes at load time and its __torch_dispatch__ doesn't know about
+        # our custom ops, which raises a "Multiple dispatch failed" error.
+        # ``torch.as_tensor`` on a Parameter produces a plain Tensor that
+        # shares storage, so weight updates (if any) stay visible.
+        mod._rmsnorm_weight = torch.as_tensor(mod.weight.data)
+        mod.forward = _types.MethodType(_fused_rmsnorm_forward, mod)
+        patched += 1
+    return patched
+
+
 def apply_fused_qkv(model: nn.Module) -> int:
     """Patch every attention module whose q/k/v are all :class:`GgufLinear`
     to run the multi-matvec op in one torch dispatch during decode.
@@ -1126,4 +1239,7 @@ def setup_for_compile(model, *, mode: str = "reduce-overhead") -> None:
     # Fuse Q/K/V into one torch op dispatch when q/k/v are GgufLinear with a
     # supported quant fmt. Patches each attention module in-place, idempotent.
     apply_fused_qkv(model)
+    # Fused RMSNorm kernel kept available (see ``apply_fused_rmsnorm``) but
+    # *not* wired in by default — microbench shows MPSGraph already auto-fuses
+    # the Python RMSNorm into ~1-2 kernels, so the custom kernel is a wash.
     model.forward = _torch.compile(model.forward, mode=mode, dynamic=False)
