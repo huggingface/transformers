@@ -129,8 +129,8 @@ class Sapiens2ModelTester:
         config.num_labels = 3
         config.head_upsample_out_channels = [32, 16, 8, 8]
         config.head_upsample_kernel_sizes = [4, 4, 4, 4]
-        config.head_conv_out_channels = [8, 8]
-        config.head_conv_kernel_sizes = [1, 1]
+        config.head_conv_out_channels = [8, 8, 8]
+        config.head_conv_kernel_sizes = [1, 1, 1]
         return config
 
     def get_config_for_pose_estimation(self):
