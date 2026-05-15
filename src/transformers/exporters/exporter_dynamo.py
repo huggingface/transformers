@@ -16,17 +16,21 @@
 """Dynamo exporter.
 
 Wraps `torch.export.export(strict=False)` with helpers that make Transformers
-models exportable. The export pipeline uses four helper sections:
+models exportable. The export pipeline uses five sections, in execution order:
 
 1. **Model patches** (`patch_untraceable_patterns`): reversible patches applied
    during tracing to replace non-exportable model patterns (data-dependent loops,
    in-place ops, mask checks) with export-safe equivalents.
 2. **Pytree registration** (`register_cache_pytrees_for_model`): flatten/unflatten
-   for Cache objects and other custom types so `torch.export` can trace through them.
+   hooks (via `torch.utils._pytree.register_pytree_node`) for Cache subclasses and
+   custom containers so `torch.export` can trace through them.
 3. **Model signature patch** (`patch_forward_signature`): replaces `model.forward`
    with a flat explicit signature so `torch.export` does not choke on `**kwargs`.
 4. **Dynamic shapes** (`get_auto_dynamic_shapes`): automatic `Dim.AUTO` inference
    for all tensor and cache inputs when `DynamoConfig.dynamic=True`.
+5. **State cleanup** (`cleanup_state`): resets non-Cache stateful module attributes
+   that `torch.export` may have left as FakeTensors, so a follow-up eager forward
+   on the same module is safe.
 """
 
 from __future__ import annotations
@@ -100,16 +104,30 @@ class DynamoExporter(HfExporter):
         return exported_program
 
 
+# Module attribute names that hold tensor state populated *inside* `forward` (not via
+# `register_buffer` or `Cache`). torch.export traces forward with FakeTensors, which leaves
+# these attributes as FakeTensors after tracing returns. A subsequent eager forward on the
+# same module then hits shape/dtype mismatches when it reuses the stale state.
+_STATEFUL_CACHE_ATTRS = (
+    "_cached_keys",                        # glm_moe_dsa DSA indexer
+    "_cached_decode_position_ids",         # glm_image (m-rope decode position ids)
+    "_prefill_len",                        # glm_image (m-rope prefill length)
+    "cached_rotary_positional_embedding",  # wav2vec2_bert, seamless_m4t
+    "cached_sequence_length",              # wav2vec2_bert, seamless_m4t
+)
+
+
 def cleanup_state(model: torch.nn.Module) -> None:
     """Reset stateful module attributes that ``torch.export`` may have populated with
-    FakeTensors during tracing (e.g. ``_cached_keys`` on glm_moe_dsa's DSA indexer).
+    FakeTensors during tracing, so a follow-up eager forward on the same module is safe.
 
-    Without this, a subsequent eager forward on the same module hits shape mismatches
-    when it tries to concatenate FakeTensor state with a real input.
+    Only resets attributes whose names are in `_STATEFUL_CACHE_ATTRS` — narrow allowlist
+    rather than a wildcard, so we don't accidentally clear caller-owned state.
     """
     for module in model.modules():
-        if hasattr(module, "_cached_keys"):
-            module._cached_keys = None
+        for attr in _STATEFUL_CACHE_ATTRS:
+            if hasattr(module, attr):
+                setattr(module, attr, None)
 
 
 # ── Untraceable pattern patches ────────────────────────────────────────────
