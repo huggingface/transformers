@@ -454,10 +454,10 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
 
     def test_inference_object_detection(self):
         tol = 5e-3
-        model = RfDetrForObjectDetection.from_pretrained(
-            "stevenbucaille/rf-detr-base", attn_implementation="eager"
-        ).to(torch_device)
-        image_processor = DetrImageProcessor.from_pretrained("stevenbucaille/rf-detr-base")
+        model = RfDetrForObjectDetection.from_pretrained("Roboflow/rf-detr-base", attn_implementation="eager").to(
+            torch_device
+        )
+        image_processor = DetrImageProcessor.from_pretrained("Roboflow/rf-detr-base")
         image = prepare_img()
         inputs = image_processor(images=image, annotations=self.annotations, return_tensors="pt").to(torch_device)
         inputs["labels"] = [
@@ -552,10 +552,10 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         # Loss involves random mask point sampling, so we use a more lenient tolerance
         loss_tol = 1e-2
         model = RfDetrForInstanceSegmentation.from_pretrained(
-            "stevenbucaille/rf-detr-seg-small", attn_implementation="eager"
+            "Roboflow/rf-detr-seg-small", attn_implementation="eager"
         ).to(torch_device)
 
-        image_processor = DetrImageProcessor.from_pretrained("stevenbucaille/rf-detr-seg-small")
+        image_processor = DetrImageProcessor.from_pretrained("Roboflow/rf-detr-seg-small")
         image = prepare_img()
         inputs = image_processor(images=image, annotations=self.annotations, return_tensors="pt").to(torch_device)
         inputs["labels"] = [
