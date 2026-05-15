@@ -730,7 +730,7 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 text_embeds = model.get_text_features(
                     input_ids=inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"], return_dict=True
-                ).pooler_output
+                )
 
             # Forward with text_embeds (remove input_ids)
             inputs_with_embeds = {

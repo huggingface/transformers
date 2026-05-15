@@ -189,8 +189,9 @@ class BeitRelativePositionBias(nn.Module):
         )  # 2*Wh-1 * 2*Ww-1, nH
         # cls to token & token 2 cls & cls to cls
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=10)
-    def generate_relative_position_index(self, window_size: tuple[int, int]) -> torch.Tensor:
+    def generate_relative_position_index(window_size: tuple[int, int]) -> torch.Tensor:
         """
         This method creates the relative position index, modified to support arbitrary window sizes,
         as introduced in [MiDaS v3.1](https://huggingface.co/papers/2307.14460).
