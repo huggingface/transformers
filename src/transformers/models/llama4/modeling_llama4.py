@@ -150,7 +150,7 @@ class Llama4Router(nn.Linear):
         router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=1)
         router_scores = torch.full_like(router_logits, float("-inf")).scatter_(1, router_indices, router_top_value)
         router_scores = torch.nn.functional.sigmoid(router_scores.float()).to(router_scores.dtype)
-        return router_scores, router_logits
+        return router_logits, router_scores, router_indices
 
 
 @use_kernel_forward_from_hub("Llama4TextMoe")
@@ -166,7 +166,7 @@ class Llama4TextMoe(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_scores, router_logits = self.router(hidden_states)
+        router_logits, router_scores, router_indices = self.router(hidden_states)
         routed_in = hidden_states.repeat(router_scores.shape[1], 1)
         routed_in = routed_in * router_scores.transpose(0, 1).reshape(-1, 1)
         routed_out = self.experts(routed_in)
