@@ -275,7 +275,7 @@ class HrmTextPreTrainedModel(LlamaPreTrainedModel):
         if isinstance(module, HrmTextModel):
             init.zeros_(module.z_L_init)
             # `z_L_init` is the frozen low-cycle initial state and never trains.
-            module.z_L_init.requires_grad_(False)
+            module.z_L_init.requires_grad_(False)  # trf-ignore: TRF012
 
 
 @auto_docstring
