@@ -129,8 +129,8 @@ class Sapiens2ModelTester:
         config.num_labels = 3
         config.head_upsample_out_channels = [32, 16, 8, 8]
         config.head_upsample_kernel_sizes = [4, 4, 4, 4]
-        config.head_conv_out_channels = [8, 8, 8]
-        config.head_conv_kernel_sizes = [1, 1, 1]
+        config.head_conv_out_channels = [8, 8]
+        config.head_conv_kernel_sizes = [1, 1]
         return config
 
     def get_config_for_pose_estimation(self):
@@ -397,8 +397,8 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
             num_labels=29,
             head_upsample_out_channels=[512, 256, 128, 64],
             head_upsample_kernel_sizes=[4, 4, 4, 4],
-            head_conv_out_channels=[64, 64, 64],
-            head_conv_kernel_sizes=[1, 1, 1],
+            head_conv_out_channels=[64, 64],
+            head_conv_kernel_sizes=[1, 1],
         )
         config.transformers_weights = "sapiens2_0.4b_seg.safetensors"
         model = (

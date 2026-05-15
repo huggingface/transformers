@@ -950,7 +950,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"decode_head\.conv_layers\.0\.(weight|bias)", r"decode_head.conv_layers.0.conv.\1"),
             WeightRenaming(r"decode_head\.conv_layers\.3\.(weight|bias)", r"decode_head.conv_layers.1.conv.\1"),
             WeightRenaming(r"decode_head\.conv_layers\.6\.(weight|bias)", r"decode_head.conv_layers.2.conv.\1"),
-            WeightRenaming(r"decode_head\.conv_seg\.", r"decode_head.predictor."),
+            WeightRenaming(r"decode_head\.conv_pose\.", r"decode_head.predictor."),
         ],
     }
     # The legacy mapping is added to the esm model here since the extra weight renaming do not apply to the esm model.
