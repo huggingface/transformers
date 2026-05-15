@@ -127,10 +127,10 @@ def get_vjepa2_config(model_name):
             use_rope_interleave=True,
             use_modality_embeddings=True,
             interpolate_rope=True,
-            return_all_tokens=True,
-            img_temporal_dim_size=1,
+            use_context_projection=True,
+            use_image_patch_embedder=True,
             teacher_embed_dim=1664,
-            n_output_distillation=1,
+            num_distillation_outputs=1,
             hierarchical_layers=[2, 5, 8, 11],
         )
     elif model_name == "vit_large_2_1_384":
@@ -148,10 +148,10 @@ def get_vjepa2_config(model_name):
             use_rope_interleave=True,
             use_modality_embeddings=True,
             interpolate_rope=True,
-            return_all_tokens=True,
-            img_temporal_dim_size=1,
+            use_context_projection=True,
+            use_image_patch_embedder=True,
             teacher_embed_dim=1664,
-            n_output_distillation=1,
+            num_distillation_outputs=1,
             hierarchical_layers=[5, 11, 17, 23],
         )
     elif model_name == "vit_giant_2_1_384":
@@ -169,9 +169,9 @@ def get_vjepa2_config(model_name):
             use_rope_interleave=True,
             use_modality_embeddings=True,
             interpolate_rope=True,
-            return_all_tokens=True,
-            img_temporal_dim_size=1,
-            n_output_distillation=4,
+            use_context_projection=True,
+            use_image_patch_embedder=True,
+            num_distillation_outputs=4,
             hierarchical_layers=[9, 19, 29, 39],
         )
     elif model_name == "vit_gigantic_2_1_384":
@@ -189,9 +189,9 @@ def get_vjepa2_config(model_name):
             use_rope_interleave=True,
             use_modality_embeddings=True,
             interpolate_rope=True,
-            return_all_tokens=True,
-            img_temporal_dim_size=1,
-            n_output_distillation=4,
+            use_context_projection=True,
+            use_image_patch_embedder=True,
+            num_distillation_outputs=4,
             hierarchical_layers=[11, 23, 37, 47],
         )
     else:
@@ -387,7 +387,7 @@ def convert_and_test_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, pus
         model = model.to(device="cuda", dtype=torch.float32)
         # forward
         is_2_1 = _is_2_1_model(model_name)
-        if is_2_1 and config.n_output_distillation > 1:
+        if is_2_1 and config.num_distillation_outputs > 1:
             original_encoder.return_hierarchical = True
         original_encoder_outputs = original_encoder(pixel_values_videos.permute(0, 2, 1, 3, 4))
         B, N, _ = original_encoder_outputs.shape
@@ -398,7 +398,7 @@ def convert_and_test_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, pus
         outputs = model(pixel_values_videos, context_mask=context_mask, target_mask=predictor_mask)
         assert torch.allclose(outputs.last_hidden_state, original_encoder_outputs, atol=1e-3)
         predictor_outputs = outputs.predictor_output
-        if is_2_1 and config.return_all_tokens:
+        if is_2_1 and config.use_context_projection:
             og_target, og_context = original_predictor_outputs
             N_ctxt = context_mask[0].shape[1]
             hf_context = predictor_outputs.last_hidden_state[:, :N_ctxt]
@@ -420,7 +420,7 @@ def convert_and_test_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, pus
         outputs = model(pixel_values_videos, context_mask=context_mask, target_mask=predictor_mask)
         assert torch.allclose(outputs.last_hidden_state, original_encoder_outputs, atol=1e-3)
         predictor_outputs = outputs.predictor_output
-        if is_2_1 and config.return_all_tokens:
+        if is_2_1 and config.use_context_projection:
             og_target, og_context = original_predictor_outputs
             N_ctxt = context_mask[0].shape[1]
             hf_context = predictor_outputs.last_hidden_state[:, :N_ctxt]

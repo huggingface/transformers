@@ -129,7 +129,7 @@ class VJEPA2Embeddings(nn.Module):
         self.hidden_size = hidden_size
         self.patch_embeddings = VJEPA2PatchEmbeddings3D(config, hidden_size=hidden_size)
 
-        if config.img_temporal_dim_size is not None:
+        if config.use_image_patch_embedder:
             img_config = copy.copy(config)
             img_config.tubelet_size = 1
             self.patch_embeddings_img = VJEPA2PatchEmbeddings3D(img_config, hidden_size=hidden_size)
@@ -149,7 +149,7 @@ class VJEPA2Embeddings(nn.Module):
         # (batch_size, channels, num_frames, height, width)
         pixel_values_videos = pixel_values_videos.permute(0, 2, 1, 3, 4)
 
-        is_image = self.config.img_temporal_dim_size is not None and num_frames == self.config.img_temporal_dim_size
+        is_image = self.config.use_image_patch_embedder and num_frames == 1
 
         if is_image and self.patch_embeddings_img is not None:
             target_dtype = self.patch_embeddings_img.proj.weight.dtype
@@ -477,7 +477,7 @@ class VJEPA2Encoder(nn.Module):
             self.norms_block = nn.ModuleList(
                 [nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) for _ in config.hierarchical_layers]
             )
-            n_dist = config.n_output_distillation if config.n_output_distillation > 0 else 1
+            n_dist = config.num_distillation_outputs
             self._extraction_layers = config.hierarchical_layers[-n_dist:]
             self.layernorm = None
         else:
@@ -546,10 +546,10 @@ class VJEPA2PredictorEmbeddings(nn.Module):
 
         self.config = config
 
-        n_dist = config.n_output_distillation if config.n_output_distillation > 0 else 1
+        n_dist = config.num_distillation_outputs
         encoder_output_dim = config.hidden_size * n_dist
 
-        if config.n_output_distillation > 1:
+        if config.num_distillation_outputs > 1:
             self.predictor_embeddings = nn.Sequential(
                 nn.Linear(encoder_output_dim, config.hidden_size, bias=True),
                 nn.GELU(),
@@ -660,7 +660,7 @@ class VJEPA2Predictor(nn.Module):
 
         self.proj = nn.Linear(config.pred_hidden_size, proj_output_dim, bias=True)
 
-        if config.return_all_tokens:
+        if config.use_context_projection:
             self.proj_context = nn.Linear(config.pred_hidden_size, proj_output_dim, bias=True)
         else:
             self.proj_context = None
@@ -712,7 +712,7 @@ class VJEPA2Predictor(nn.Module):
         hidden_states = self.layernorm(hidden_states)
         hidden_states = self.unsort_tokens(hidden_states, argsort)
 
-        if self.config.return_all_tokens and self.proj_context is not None:
+        if self.config.use_context_projection and self.proj_context is not None:
             context_tokens = hidden_states[:, :N_ctxt]
             target_tokens = hidden_states[:, N_ctxt:]
             target_tokens = self.proj(target_tokens)
@@ -1025,12 +1025,9 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
         if pixel_values_videos is None:
             raise ValueError("You have to specify pixel_values_videos")
 
-        is_image = (
-            self.config.img_temporal_dim_size is not None
-            and pixel_values_videos.shape[1] == self.config.img_temporal_dim_size
-        )
+        is_image = self.config.use_image_patch_embedder and pixel_values_videos.shape[1] == 1
 
-        needs_hierarchical = not skip_predictor and self.config.n_output_distillation > 1
+        needs_hierarchical = not skip_predictor and self.config.num_distillation_outputs > 1
         encoder_outputs: BaseModelOutput = self.encoder(
             pixel_values_videos=pixel_values_videos,
             return_hierarchical=needs_hierarchical,
@@ -1085,10 +1082,10 @@ class VJEPA2ForVideoClassification(VJEPA2PreTrainedModel):
     def __init__(self, config: VJEPA2Config):
         super().__init__(config)
 
-        if config.n_output_distillation > 1:
+        if config.num_distillation_outputs > 1:
             raise ValueError(
                 f"Classification heads for hierarchical distillation outputs "
-                f"(n_output_distillation={config.n_output_distillation}) are not yet supported. "
+                f"(num_distillation_outputs={config.num_distillation_outputs}) are not yet supported. "
                 f"Use VJEPA2Model for feature extraction instead."
             )
 

@@ -44,7 +44,7 @@ V-JEPA 2.1 was released by Meta on 2026-03-16 with four pretrained backbones at 
 | ViT-g/16, 384 | 1B | No | `vjepa2.1-vitg-fpc64-384` |
 | ViT-G/16, 384 | 2B | No | `vjepa2.1-vitG-fpc64-384` |
 
-Key architectural differences from V-JEPA 2: corrected RoPE implementation (`repeat_interleave`), learnable modality embeddings, hierarchical feature extraction with per-layer norms, separate image patch embedding, RoPE position interpolation, and predictor context token projection (`return_all_tokens`).
+Key architectural differences from V-JEPA 2: corrected RoPE implementation (`repeat_interleave`), learnable modality embeddings, hierarchical feature extraction with per-layer norms, separate image patch embedding, RoPE position interpolation, and predictor context token projection (`use_context_projection`).
 
 V-JEPA 2.1 models are loaded using the same `VJEPA2Model` class with 2.1-specific config fields set automatically by the conversion script.
 

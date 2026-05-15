@@ -190,10 +190,10 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertFalse(config.use_rope_interleave)
         self.assertFalse(config.use_modality_embeddings)
         self.assertFalse(config.interpolate_rope)
-        self.assertFalse(config.return_all_tokens)
-        self.assertIsNone(config.img_temporal_dim_size)
+        self.assertFalse(config.use_context_projection)
+        self.assertFalse(config.use_image_patch_embedder)
         self.assertIsNone(config.teacher_embed_dim)
-        self.assertEqual(config.n_output_distillation, 0)
+        self.assertEqual(config.num_distillation_outputs, 1)
         self.assertIsNone(config.hierarchical_layers)
 
     def test_model_2_1_forward(self):
@@ -212,10 +212,10 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             use_rope_interleave=True,
             use_modality_embeddings=True,
             interpolate_rope=True,
-            return_all_tokens=True,
-            img_temporal_dim_size=1,
+            use_context_projection=True,
+            use_image_patch_embedder=True,
             teacher_embed_dim=64,
-            n_output_distillation=1,
+            num_distillation_outputs=1,
             hierarchical_layers=[0, 1, 2, 3],
         )
         model = VJEPA2Model(config).to(torch_device).eval()
@@ -225,12 +225,12 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             outputs = model(pixel_values)
         # n_dist=1: encoder returns single-norm (hidden_size)
         self.assertEqual(outputs.last_hidden_state.shape, (1, 1, 32))
-        # predictor with return_all_tokens: context + target tokens
+        # predictor with use_context_projection: context + target tokens
         # proj_output_dim = n_hier(4) * (teacher_embed_dim(64) // n_hier(4)) = 64
         self.assertEqual(outputs.predictor_output.last_hidden_state.shape, (1, 2, 64))
 
     def test_model_2_1_multi_distillation(self):
-        """Fast test: 2.1 config with n_output_distillation=4 (multi-layer predictor embed)."""
+        """Fast test: 2.1 config with num_distillation_outputs=4 (multi-layer predictor embed)."""
         config = VJEPA2Config(
             crop_size=16,
             frames_per_clip=2,
@@ -245,9 +245,9 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             use_rope_interleave=True,
             use_modality_embeddings=True,
             interpolate_rope=True,
-            return_all_tokens=True,
-            img_temporal_dim_size=1,
-            n_output_distillation=4,
+            use_context_projection=True,
+            use_image_patch_embedder=True,
+            num_distillation_outputs=4,
             hierarchical_layers=[0, 1, 2, 3],
         )
         model = VJEPA2Model(config).to(torch_device).eval()
@@ -408,10 +408,10 @@ class VJEPA2ModelIntegrationTest(unittest.TestCase):
             use_rope_interleave=True,
             use_modality_embeddings=True,
             interpolate_rope=True,
-            return_all_tokens=True,
-            img_temporal_dim_size=1,
+            use_context_projection=True,
+            use_image_patch_embedder=True,
             teacher_embed_dim=64,
-            n_output_distillation=1,
+            num_distillation_outputs=1,
             hierarchical_layers=[0, 1, 2, 3],
         )
         model = VJEPA2Model(config).to(torch_device).eval()

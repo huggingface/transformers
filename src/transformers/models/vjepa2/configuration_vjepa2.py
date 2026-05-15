@@ -49,14 +49,20 @@ class VJEPA2Config(PreTrainedConfig):
         Add learnable modality embeddings (`img_mod_embed`/`video_mod_embed`) to patch embeddings.
     interpolate_rope (`bool`, *optional*, defaults to `False`):
         Scale RoPE positions for flexible resolution handling.
-    return_all_tokens (`bool`, *optional*, defaults to `False`):
-        Whether the predictor returns both predicted and context tokens via a separate projection.
-    img_temporal_dim_size (`int`, *optional*, defaults to `None`):
-        When set, creates a separate image patch embedding with `tubelet_size=1`.
+    use_context_projection (`bool`, *optional*, defaults to `False`):
+        When True, the predictor instantiates a separate context projection head and exposes
+        the projected context tokens as `VJEPA2PredictorOutput.context_predictions`. When
+        False, only target predictions are produced (`last_hidden_state`).
+    use_image_patch_embedder (`bool`, *optional*, defaults to `False`):
+        When True, a separate single-frame patch embedder (tubelet_size=1) is instantiated
+        and used when the input has a single frame (image inputs). When False, the standard
+        video patch embedder is always used.
     teacher_embed_dim (`int`, *optional*, defaults to `None`):
         Teacher embedding dimension for distilled models. Controls predictor output projection size.
-    n_output_distillation (`int`, *optional*, defaults to 0):
-        Number of distillation output layers. Controls predictor embed architecture (>1 uses MLP).
+    num_distillation_outputs (`int`, *optional*, defaults to 1):
+        Number of distillation outputs taken from `hierarchical_layers` (the last
+        `num_distillation_outputs` indices). Predictor uses a 2-layer MLP embedder when
+        greater than 1.
     hierarchical_layers (`list[int]`, *optional*, defaults to `None`):
         Encoder layer indices for hierarchical feature extraction with per-layer norms.
 
@@ -103,10 +109,10 @@ class VJEPA2Config(PreTrainedConfig):
     use_rope_interleave: bool = False
     use_modality_embeddings: bool = False
     interpolate_rope: bool = False
-    return_all_tokens: bool = False
-    img_temporal_dim_size: int | None = None
+    use_context_projection: bool = False
+    use_image_patch_embedder: bool = False
     teacher_embed_dim: int | None = None
-    n_output_distillation: int = 0
+    num_distillation_outputs: int = 1
     hierarchical_layers: list[int] | None = None
 
 
