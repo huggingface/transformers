@@ -290,8 +290,13 @@ class StaticLayer(CacheLayerMixin):
     def __init__(self, max_cache_len: int):
         super().__init__()
         self.max_cache_len = max_cache_len
-        # Very important that it's a tensor here, to avoid recompiling when we update it and use it to create positions
-        self.cumulative_length = torch.tensor([0], dtype=int)
+        # Very important that it's a tensor here, to avoid recompiling when we update it and use it to create positions.
+        # Use a 0-dim scalar tensor so `get_seq_length()` returns a value
+        # consistent with `DynamicCache.get_seq_length()` (a plain int)
+        # in arithmetic contexts; a shape-(1,) tensor here promoted
+        # downstream `int - past_len` operations into shape-(1,) tensors
+        # (see #45987).
+        self.cumulative_length = torch.tensor(0, dtype=torch.int64)
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         """
