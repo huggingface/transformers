@@ -506,47 +506,51 @@ def gguf_bmm_experts_forward(
     ``_gather_dequant`` helper (see
     ``integrations.gguf_linear.GgufQwen2MoeExperts``).
     """
-    from .gguf_linear import _ensure_metal_kernels
-
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
     H = self.hidden_dim
     I = self.intermediate_dim
     device = hidden_states.device
 
+    # Cached at swap time by ``_prepare_id_kernel_refs``. The fused op
+    # (``_moe_silu_op``) handles all three mul_mat_ids + the SwiGLU in one
+    # torch-op call when available; the per-projection ops are kept as a
+    # fallback for builds that only ship the individual kernels.
+    fused_op = getattr(self, "_moe_silu_op", None)
+    fused_fmt_codes = getattr(self, "_moe_silu_fmt_codes", None)
+    op_gate = getattr(self, "_id_op_gate", None)
+    op_up   = getattr(self, "_id_op_up",   None)
+    op_down = getattr(self, "_id_op_down", None)
+    use_fused = fused_op is not None and fused_fmt_codes is not None
+    use_id_kernel = op_gate is not None and op_up is not None and op_down is not None
+
     selected = hidden_states.repeat_interleave(num_top_k, dim=0).to(torch.float32).contiguous()  # (S, H)
     expert_ids_long = top_k_index.reshape(-1).clamp(0, self.num_experts - 1).to(torch.long)
     sample_weights = top_k_weights.reshape(-1).to(torch.float32)
     S = expert_ids_long.shape[0]
 
-    mod = _ensure_metal_kernels() if device.type == "mps" else None
-
-    def _has_id_op(fmt: str) -> bool:
-        return mod is not None and hasattr(mod._ops, f"mul_mat_id_{fmt}_f32")
-
-    use_id_kernel = (device.type == "mps"
-                     and _has_id_op(self._gate_fmt)
-                     and _has_id_op(self._up_fmt)
-                     and _has_id_op(self._down_fmt))
-
-    if use_id_kernel:
-        ids32 = expert_ids_long.to(torch.int32).contiguous()
-
-        # gate_proj_q / up_proj_q are 2D (num_experts, bytes_per_expert) uint8
-        # tensors; ``.view(-1)`` gives the flat per-expert byte stream the
-        # kernel expects. The op writes directly into a preallocated (S, M).
-        gate_qw = self.gate_proj_q.contiguous().view(-1)
-        up_qw   = self.up_proj_q.contiguous().view(-1)
-        down_qw = self.down_proj_q.contiguous().view(-1)
-
+    if use_fused:
+        ids32 = expert_ids_long.to(torch.int32)
+        gate_qw = self.gate_proj_q.view(-1)
+        up_qw   = self.up_proj_q.view(-1)
+        down_qw = self.down_proj_q.view(-1)
+        gate_buf = torch.empty(S, I, dtype=torch.float32, device=device)
+        up_buf   = torch.empty(S, I, dtype=torch.float32, device=device)
+        out      = torch.empty(S, H, dtype=torch.float32, device=device)
+        fused_op(gate_qw, up_qw, down_qw, selected, ids32,
+                 gate_buf, up_buf, out, *fused_fmt_codes)
+    elif use_id_kernel:
+        ids32 = expert_ids_long.to(torch.int32)
+        gate_qw = self.gate_proj_q.view(-1)
+        up_qw   = self.up_proj_q.view(-1)
+        down_qw = self.down_proj_q.view(-1)
         gate = torch.empty(S, I, dtype=torch.float32, device=device)
         up   = torch.empty(S, I, dtype=torch.float32, device=device)
-        getattr(mod._ops, f"mul_mat_id_{self._gate_fmt}_f32")(gate_qw, selected, ids32, gate)
-        getattr(mod._ops, f"mul_mat_id_{self._up_fmt}_f32")  (up_qw,   selected, ids32, up)
+        op_gate(gate_qw, selected, ids32, gate)
+        op_up  (up_qw,   selected, ids32, up)
         inter = (self.act_fn(gate) * up).contiguous()
-
         out = torch.empty(S, H, dtype=torch.float32, device=device)
-        getattr(mod._ops, f"mul_mat_id_{self._down_fmt}_f32")(down_qw, inter, ids32, out)
+        op_down(down_qw, inter, ids32, out)
     else:
         # Fallback: per-projection batched dequant + bmm.
         gate_w = self._gather_dequant(self.gate_proj_q, expert_ids_long,

@@ -247,6 +247,23 @@ class GgufLinear(nn.Module):
                     f"module has {getattr(self, name)}"
                 )
 
+    def _bind_kernels(self) -> None:
+        """Cache the matvec/matmul op references at construct time so the hot
+        forward path avoids per-call ``_ensure_metal_kernels`` + ``hasattr`` +
+        ``getattr`` round-trips. Re-callable; the bench helper invokes this
+        again after ``.to(device)`` if needed (the op refs themselves don't
+        change on device move)."""
+        mod = _ensure_metal_kernels()
+        if mod is None:
+            self._mv_op = None
+            self._mat_op = None
+            return
+        ops = mod._ops
+        self._mv_op  = getattr(ops, f"mul_mat_vec_{self._fmt}_f32", None) \
+            if hasattr(ops, f"mul_mat_vec_{self._fmt}_f32") else None
+        self._mat_op = getattr(ops, f"mul_mat_{self._fmt}_f32", None) \
+            if hasattr(ops, f"mul_mat_{self._fmt}_f32") else None
+
     @torch.no_grad()
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if x.shape[-1] != self.in_features:
@@ -258,39 +275,31 @@ class GgufLinear(nn.Module):
 
         is_mps = x.device.type == "mps"
         if is_mps:
-            mod = _ensure_metal_kernels()
-            # The simdgroup matmul kernel requires N % 32 == 0 for its tile
-            # geometry; prefill prompts of arbitrary length don't hit that.
-            # For N == 1 (decode) we use the matvec kernel. For everything
-            # else we issue N separate matvec calls — slower per token than
-            # a big matmul but correct for any N. The mat path stays around
-            # for callers that already pad to multiples of 32.
-            qw_op = "mul_mat_q4_K_f32"  # any matmul op so we can probe support
-            qw_op = f"mul_mat_{self._fmt}_f32"
-            mv_op = f"mul_mat_vec_{self._fmt}_f32"
-            has_mat = mod is not None and hasattr(mod._ops, qw_op)
-            has_mv  = mod is not None and hasattr(mod._ops, mv_op)
-            if not (has_mat or has_mv):
+            # ``_bind_kernels`` populates these once per module; lazy-fetch on
+            # the first forward if it hasn't run yet (state-dict load path).
+            mv_op = getattr(self, "_mv_op", None)
+            mat_op = getattr(self, "_mat_op", None)
+            if mv_op is None and mat_op is None:
+                self._bind_kernels()
+                mv_op = self._mv_op
+                mat_op = self._mat_op
+            if mv_op is None and mat_op is None:
                 return self._dequant_forward(x)
-            qw = self.qweight.to(x.device)
 
-            if N == 1 and has_mv:
-                fn = getattr(mod._ops, mv_op)
+            qw = self.qweight  # already on the right device after model.to(...)
+            if N == 1 and mv_op is not None:
                 y = torch.empty(self.out_features, dtype=torch.float32, device=x.device)
-                fn(qw, x_flat.reshape(-1), y)
+                mv_op(qw, x_flat.reshape(-1), y)
                 y = y.reshape(*batch_shape, self.out_features)
-            elif N % 32 == 0 and has_mat:
-                fn = getattr(mod._ops, qw_op)
+            elif N % 32 == 0 and mat_op is not None:
                 y = torch.empty(N * self.out_features, dtype=torch.float32, device=x.device)
-                fn(qw, x_flat, y)
+                mat_op(qw, x_flat, y)
                 y = y.reshape(N, self.out_features).reshape(*batch_shape, self.out_features)
-            elif has_mv:
-                # Small / odd batch — issue one matvec per row.
-                fn = getattr(mod._ops, mv_op)
+            elif mv_op is not None:
                 rows = []
                 for i in range(N):
                     row_y = torch.empty(self.out_features, dtype=torch.float32, device=x.device)
-                    fn(qw, x_flat[i].reshape(-1), row_y)
+                    mv_op(qw, x_flat[i].reshape(-1), row_y)
                     rows.append(row_y)
                 y = torch.stack(rows, dim=0).reshape(*batch_shape, self.out_features)
             else:
@@ -658,6 +667,7 @@ def replace_qwen2_moe_experts(
         parent_path, _, leaf = name.rpartition(".")
         parent = model.get_submodule(parent_path) if parent_path else model
         setattr(parent, leaf, new)
+        _prepare_id_kernel_refs(new)
         # Route the new module's forward through the ExpertsInterface dispatcher
         # — same pattern as FP8Experts. ``gguf_bmm`` is the default; users can
         # override via ``model.config._experts_implementation = "gguf_grouped_mm"``.
@@ -668,6 +678,54 @@ def replace_qwen2_moe_experts(
             parent_config._experts_implementation = "gguf_bmm"
         swapped += 1
     return swapped
+
+
+def _prepare_id_kernel_refs(mod: nn.Module) -> None:
+    """Resolve mul_mat_id ops + precompute flat byte views.
+
+    Called once after a fused-MoE module is swapped in. Caches the three op
+    callables and the flat uint8 ``view(-1)`` of each ``<proj>_proj_q`` buffer
+    so the hot ``gguf_bmm_experts_forward`` path can do a constant-time
+    attribute read instead of an ``_ensure_metal_kernels`` + ``hasattr`` +
+    ``getattr(mod._ops, ...)`` per layer. The cache also makes
+    ``torch.compile`` see the ops as fixed module attributes.
+    """
+    metal = _ensure_metal_kernels()
+    if metal is None:
+        return
+    ops = metal._ops
+    fmt_to_code = {"q4_K": 0, "q5_0": 1, "q5_1": 2, "q8_0": 3}
+    fmt_codes = []
+    all_supported = True
+    for proj, fmt_attr, cache_attr in (
+        ("gate", "_gate_fmt", "_id_op_gate"),
+        ("up",   "_up_fmt",   "_id_op_up"),
+        ("down", "_down_fmt", "_id_op_down"),
+    ):
+        fmt = getattr(mod, fmt_attr, None)
+        if fmt is None:
+            return
+        op_name = f"mul_mat_id_{fmt}_f32"
+        op = getattr(ops, op_name, None)
+        if op is None or not hasattr(ops, op_name):
+            return
+        setattr(mod, cache_attr, op)
+        if fmt in fmt_to_code:
+            fmt_codes.append(fmt_to_code[fmt])
+        else:
+            all_supported = False
+
+    # NOTE: the fused ``gguf_moe_silu_f32`` op exists but a microbench shows
+    # it is ~2.6× slower than the per-projection mul_mat_id path on M3 Max
+    # decode shapes (303 µs vs 118 µs / layer). Likely the silu_mul kernel
+    # dispatch and the 4-encode-per-sync block break MPS pipelining better
+    # than 3 short dispatch_syncs interleaved with torch's silu/mul ops, which
+    # MPSGraph fuses internally. The op stays on the build for callers that
+    # want to opt in (``module._moe_silu_op = ops.gguf_moe_silu_f32``) but
+    # the default is the per-projection path.
+    if False and all_supported and hasattr(ops, "gguf_moe_silu_f32"):  # opt-in only
+        mod._moe_silu_op = ops.gguf_moe_silu_f32
+        mod._moe_silu_fmt_codes = tuple(fmt_codes)
 
 
 def replace_with_gguf_linear(
@@ -759,6 +817,7 @@ def replace_with_gguf_linear(
         parent_path, _, leaf = name.rpartition(".")
         parent = model.get_submodule(parent_path) if parent_path else model
         setattr(parent, leaf, new)
+        new._bind_kernels()
         swapped += 1
 
     return swapped
