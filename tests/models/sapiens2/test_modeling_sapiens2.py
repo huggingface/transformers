@@ -18,7 +18,7 @@ from functools import cached_property
 
 from transformers import Sapiens2Config, Sapiens2ImageProcessor
 from transformers.image_utils import load_image_as_tensor
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_cv2, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_backbone_common import BackboneTesterMixin
@@ -31,7 +31,12 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import Sapiens2Backbone, Sapiens2ForSemanticSegmentation, Sapiens2Model
+    from transformers import (
+        Sapiens2Backbone,
+        Sapiens2ForPoseEstimation,
+        Sapiens2ForSemanticSegmentation,
+        Sapiens2Model,
+    )
     from transformers.modeling_outputs import SemanticSegmenterOutput
 
 
@@ -118,6 +123,25 @@ class Sapiens2ModelTester:
             reshape_hidden_states=True,
         )
 
+    # TODO(guarin): Check if multiple get_config methods is the best approach here.
+    def get_config_for_semantic_segmentation(self):
+        config = self.get_config()
+        config.num_labels = 3
+        config.head_upsample_out_channels = [32, 16, 8, 8]
+        config.head_upsample_kernel_sizes = [4, 4, 4, 4]
+        config.head_conv_out_channels = [8, 8, 8]
+        config.head_conv_kernel_sizes = [1, 1, 1]
+        return config
+
+    def get_config_for_pose_estimation(self):
+        config = self.get_config()
+        config.num_labels = 3
+        config.head_upsample_out_channels = [32, 16]
+        config.head_upsample_kernel_sizes = [4, 4]
+        config.head_conv_out_channels = [16, 16, 16]
+        config.head_conv_kernel_sizes = [1, 1, 1]
+        return config
+
     def create_and_check_backbone(self, config, pixel_values, labels):
         config.out_features = ["stage1", "stage2"]
         config.reshape_hidden_states = True
@@ -147,13 +171,51 @@ class Sapiens2ModelTester:
             (self.batch_size, self.seq_length, self.hidden_size),
         )
 
+    def create_and_check_for_semantic_segmentation(self, config, pixel_values, labels):
+        model = Sapiens2ForSemanticSegmentation(config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            result = model(pixel_values)
+        # patch_height = image_size // patch_size = 30 // 2 = 15
+        # 4 deconv layers with stride=2: 15 * 2^4 = 240
+        patch_height = self.image_size // self.patch_size
+        expected_h = patch_height * (2 ** len(config.head_upsample_out_channels))
+        self.parent.assertEqual(
+            result.logits.shape,
+            (self.batch_size, config.num_labels, expected_h, expected_h),
+        )
+
+    def create_and_check_for_pose_estimation(self, config, pixel_values, labels):
+        model = Sapiens2ForPoseEstimation(config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            result = model(pixel_values)
+        # patch_height = image_size // patch_size = 30 // 2 = 15
+        # 2 deconv layers with stride=2: 15 * 2^2 = 60
+        patch_height = self.image_size // self.patch_size
+        expected_h = patch_height * (2 ** len(config.head_upsample_out_channels))
+        self.parent.assertEqual(
+            result.heatmaps.shape,
+            (self.batch_size, config.num_labels, expected_h, expected_h),
+        )
+
+    def prepare_config_and_inputs_for_semantic_segmentation(self):
+        config = self.get_config_for_semantic_segmentation()
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        labels = ids_tensor([self.batch_size, self.image_size, self.image_size], config.num_labels)
+        return config, pixel_values, labels
+
+    def prepare_config_and_inputs_for_pose_estimation(self):
+        config = self.get_config_for_pose_estimation()
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        labels = ids_tensor([self.batch_size, self.image_size, self.image_size], config.num_labels)
+        return config, pixel_values, labels
+
     def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            pixel_values,
-            labels,
-        ) = config_and_inputs
+        config = self.get_config_for_semantic_segmentation()
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
@@ -166,7 +228,9 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     """
 
     all_model_classes = (
-        (Sapiens2Model, Sapiens2Backbone, Sapiens2ForSemanticSegmentation) if is_torch_available() else ()
+        (Sapiens2Model, Sapiens2Backbone, Sapiens2ForSemanticSegmentation, Sapiens2ForPoseEstimation)
+        if is_torch_available()
+        else ()
     )
     pipeline_model_mapping = (
         {
@@ -205,6 +269,14 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_for_semantic_segmentation(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_semantic_segmentation()
+        self.model_tester.create_and_check_for_semantic_segmentation(*config_and_inputs)
+
+    def test_for_pose_estimation(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_pose_estimation()
+        self.model_tester.create_and_check_for_pose_estimation(*config_and_inputs)
 
     def test_output_hidden_states(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -362,6 +434,42 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
 
         expected_class_ids = torch.tensor([[4, 3, 3], [3, 3, 3], [3, 3, 3]], device=torch_device)
         torch.testing.assert_close(segmentation[0][50:53, 50:53], expected_class_ids)
+
+    @require_cv2
+    @slow
+    def test_inference_pose_estimation(self):
+        # TODO(guarin): remove config. transformers_weights required for now because original checkpoints are called
+        # "sapiens2_0.4b_pose.safetensors" instead of "model.safetensors"
+        config = Sapiens2Config(num_labels=308)
+        config.transformers_weights = "sapiens2_0.4b_pose.safetensors"
+        model = (
+            Sapiens2ForPoseEstimation.from_pretrained("facebook/sapiens2-pose-0.4b", config=config)
+            .eval()
+            .to(torch_device)
+        )
+
+        image_processor = self.default_image_processor
+        image = prepare_img()
+        _, img_height, img_width = image.shape
+        # Person bbox in xyxy format covering the full COCO test image
+        boxes = [[[0, 0, img_width, img_height]]]
+        inputs = image_processor(image, boxes=boxes, return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        self.assertEqual(outputs.heatmaps.shape, torch.Size([1, model.config.num_labels, 192, 256]))
+
+        results = image_processor.post_process_pose_estimation(outputs, boxes=boxes)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(len(results[0]), 1)
+        person = results[0][0]
+        # All keypoint x-coordinates should be within the image width
+        self.assertTrue(person["keypoints"][:, 0].min().item() >= 0)
+        self.assertTrue(person["keypoints"][:, 0].max().item() <= img_width)
+        # All keypoint y-coordinates should be within the image height
+        self.assertTrue(person["keypoints"][:, 1].min().item() >= 0)
+        self.assertTrue(person["keypoints"][:, 1].max().item() <= img_height)
 
 
 @require_torch

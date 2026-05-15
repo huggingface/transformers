@@ -22,7 +22,6 @@ from dataclasses import dataclass
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
@@ -821,14 +820,11 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         labels: torch.FloatTensor | None = None,
-        keypoint_weights: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Sapiens2PoseEstimatorOutput:
         r"""
         labels (`torch.FloatTensor` of shape `(batch_size, num_keypoints, height, width)`, *optional*):
             Heatmap ground truth for computing the loss.
-        keypoint_weights (`torch.FloatTensor` of shape `(batch_size, num_keypoints)`, *optional*):
-            Per-keypoint weights applied to the MSE loss. Invisible keypoints can be down-weighted to zero.
         """
         outputs = self.sapiens2(pixel_values, **kwargs)
 
@@ -843,11 +839,7 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
 
         loss = None
         if labels is not None:
-            if keypoint_weights is not None:
-                weights = keypoint_weights[:, :, None, None]
-                loss = F.mse_loss(heatmaps * weights, labels * weights)
-            else:
-                loss = F.mse_loss(heatmaps, labels)
+            raise NotImplementedError("Training is not yet supported")
 
         return Sapiens2PoseEstimatorOutput(
             loss=loss,
