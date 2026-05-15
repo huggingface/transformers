@@ -252,17 +252,25 @@ class GgufLinear(nn.Module):
         forward path avoids per-call ``_ensure_metal_kernels`` + ``hasattr`` +
         ``getattr`` round-trips. Re-callable; the bench helper invokes this
         again after ``.to(device)`` if needed (the op refs themselves don't
-        change on device move)."""
+        change on device move).
+
+        Resolves to the concrete ``OpOverload`` (``op.default``) rather than
+        the ``OpOverloadPacket``. Calling the overload skips one level of
+        dispatcher (the packet's overload resolution) — a few µs per call,
+        which is meaningful at ~170 GgufLinear calls per decode token.
+        """
         mod = _ensure_metal_kernels()
         if mod is None:
             self._mv_op = None
             self._mat_op = None
             return
         ops = mod._ops
-        self._mv_op  = getattr(ops, f"mul_mat_vec_{self._fmt}_f32", None) \
-            if hasattr(ops, f"mul_mat_vec_{self._fmt}_f32") else None
-        self._mat_op = getattr(ops, f"mul_mat_{self._fmt}_f32", None) \
-            if hasattr(ops, f"mul_mat_{self._fmt}_f32") else None
+        mv_name = f"mul_mat_vec_{self._fmt}_f32"
+        mat_name = f"mul_mat_{self._fmt}_f32"
+        mv_packet = getattr(ops, mv_name, None) if hasattr(ops, mv_name) else None
+        mat_packet = getattr(ops, mat_name, None) if hasattr(ops, mat_name) else None
+        self._mv_op  = getattr(mv_packet, "default", mv_packet) if mv_packet is not None else None
+        self._mat_op = getattr(mat_packet, "default", mat_packet) if mat_packet is not None else None
 
     @torch.no_grad()
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -688,6 +696,9 @@ def _prepare_id_kernel_refs(mod: nn.Module) -> None:
         op = getattr(ops, op_name, None)
         if op is None or not hasattr(ops, op_name):
             return
+        # Resolve to the concrete OpOverload to skip one dispatcher level
+        # on every call (see GgufLinear._bind_kernels for the rationale).
+        op = getattr(op, "default", op)
         setattr(mod, cache_attr, op)
         if fmt in fmt_to_code:
             fmt_codes.append(fmt_to_code[fmt])
