@@ -355,7 +355,6 @@ class T5Gemma2MergedAttention(Gemma3Attention):
             # Capture self-KV length before any trimming so we can correctly index the
             # incoming merged_attention_mask (which covers the full cached self span).
             full_self_kv = key_states.shape[2]
-            enc_kv = cross_key_states.shape[2]
 
             # SWA: trim self-KV to the last `sliding_window` tokens for the decode step.
             # We deliberately do NOT pass sliding_window into the FA2 call because that
@@ -370,7 +369,7 @@ class T5Gemma2MergedAttention(Gemma3Attention):
 
             # Build a 2D FA2-style padding mask aligned with the (possibly trimmed) merged KV.
             # merged_attention_mask is either None (no padding anywhere) or a 2D boolean tensor
-            # of shape (batch, full_self_kv + enc_kv) produced by the decoder forward pass.
+            # of shape (batch, full_self_kv + cross_key_states.shape[2]) produced by the decoder forward pass.
             if merged_attention_mask is not None:
                 dec_mask = merged_attention_mask[:, full_self_kv - effective_self_kv : full_self_kv]
                 enc_mask = merged_attention_mask[:, full_self_kv:]
