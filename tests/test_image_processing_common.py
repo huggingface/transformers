@@ -608,10 +608,8 @@ class ImageProcessingTestMixin:
                 first_line = result.stdout.strip().split("\n")[0]
                 date_part = first_line.split(" ")[0]  # Extract just the date part
                 commit_date = datetime.strptime(date_part, "%Y-%m-%d")
-                print("commit_date", commit_date)
                 # Check if committed before the cutoff date
                 cutoff_date = datetime(*date_cutoff)
-                print("cutoff_date", cutoff_date)
                 return commit_date <= cutoff_date
 
             except Exception:
