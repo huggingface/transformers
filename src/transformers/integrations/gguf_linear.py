@@ -824,26 +824,39 @@ def is_gguf_linear_enabled() -> bool:
     return os.environ.get("TRANSFORMERS_GGUF_LINEAR", "0") not in ("0", "", "false", "False")
 
 
-def setup_for_compile(model, *, mode: str = "default") -> None:
+def setup_for_compile(model, *, mode: str = "reduce-overhead") -> None:
     """Configure a GGUF-loaded model for ``torch.compile``.
 
-    ``torch.compile`` only delivers its full speedup when the forward sees
-    the same input shapes every step — under ``generate()`` with the default
-    dynamic KV cache, the cache length grows per token and dynamo recompiles
-    every step (~60 s wasted on a 24-layer MoE before steady state). This
-    helper:
+    The recipe is the result of profiling ``generate()`` under dynamo on
+    Apple Silicon and removing every avoidable recompile:
 
-    1. Forces ``cache_implementation = "static"`` on the model's
-       ``generation_config`` so the cache is preallocated at max length and
-       its tensor shapes stay constant.
-    2. Wraps ``model.forward`` with ``torch.compile(mode=mode, dynamic=False)``.
+    1. ``cache_implementation = "static"`` on the model's generation_config.
+       The default dynamic KV cache grows on every step, which would force a
+       new compiled graph per decode token.
+    2. ``torch._dynamo.config.cache_size_limit = 512`` — a 24-layer model
+       can have ~170 distinct ``GgufLinear.forward`` specialisations (one
+       per layer × per projection); dynamo's default cap of 8 silently
+       falls back to eager for the rest.
+    3. ``torch._dynamo.config.allow_unspec_int_on_nn_module = True`` so
+       the per-layer ``self.layer_idx`` integer attribute on Cache.update
+       isn't burned in as a guard (otherwise that recompiles once per layer
+       per generate call — 24 useless recompiles).
+    4. ``torch.compile(model.forward, mode=mode, dynamic=False)``. The
+       default ``reduce-overhead`` mode tries cudagraph replay; that's a
+       no-op on MPS but stays consistent with the CUDA recipe.
 
-    On M3 Max with Qwen1.5-MoE-A2.7B Q4_K_M this turns the eager
-    ``GgufLinear + mul_mat_id`` path's 33 tok/s into ~64 tok/s (≈ 2× over
-    uncompiled, ~66% of llama.cpp's ``llama-bench``). Without static cache,
-    compile only buys ~1.27× and warmup is brutal.
+    With this setup, a 24-layer MoE warms up in ~0.16 s (one trace, static
+    shapes) and steady-state decode is consistently 60–65 tok/s on M3 Max
+    for ``Qwen1.5-MoE-A2.7B Q4_K_M`` — 2× uncompiled, ~66% of llama.cpp's
+    ``llama-bench``. The only remaining recompile is the prefill → decode
+    shape change, which fires once per ``generate()`` call.
     """
     import torch as _torch
+    import torch._dynamo as _dynamo
+
+    _dynamo.config.cache_size_limit = max(_dynamo.config.cache_size_limit, 512)
+    _dynamo.config.recompile_limit = max(_dynamo.config.recompile_limit, 512)
+    _dynamo.config.allow_unspec_int_on_nn_module = True
 
     model.generation_config.cache_implementation = "static"
     model.forward = _torch.compile(model.forward, mode=mode, dynamic=False)
