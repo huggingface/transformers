@@ -470,7 +470,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
 
-        self.assertEqual(outputs.heatmaps.shape, torch.Size([1, model.config.num_labels, 192, 256]))
+        self.assertEqual(outputs.heatmaps.shape, torch.Size([1, model.config.num_labels, 256, 192]))
 
         results = image_processor.post_process_pose_estimation(outputs, boxes=boxes)
         self.assertEqual(len(results), 1)
