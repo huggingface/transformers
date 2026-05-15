@@ -101,7 +101,7 @@ class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     pipeline_model_mapping = {"image-feature-extraction": SLANeXtForTableRecognition} if is_torch_available() else {}
 
     test_resize_embeddings = False
-    test_torch_exportable = False
+    test_torch_exportable = False  # data-dependent control flow in layout-OCR head
 
     def setUp(self):
         self.model_tester = SLANeXtModelTester(

@@ -119,7 +119,6 @@ class QianfanOCRVisionText2TextModelTester(VLMModelTester):
 @require_torch
 class QianfanOCRModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = QianfanOCRVisionText2TextModelTester
-    test_torch_exportable = False
 
     def test_reverse_loading_mapping(self):
         # Conversion happens only for the `ConditionalGeneration` model, not the base model

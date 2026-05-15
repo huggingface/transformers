@@ -127,7 +127,7 @@ class TimesFmModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     is_encoder_decoder = False
     test_inputs_embeds = False
-    test_torch_exportable = False
+    test_torch_exportable = False  # data-dependent guard in patching (`Eq(u0, 1)`)
 
     def setUp(self):
         self.model_tester = TimesFmModelTester(self)

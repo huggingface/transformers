@@ -307,7 +307,7 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     pipeline_model_mapping = {"feature-extraction": BridgeTowerModel} if is_torch_available() else {}
 
     is_training = False
-    test_torch_exportable = False
+    test_torch_exportable = False  # 2D vs 4D attention-mask broadcasting mismatch in export
     test_resize_embeddings = False
     has_attentions = False
 

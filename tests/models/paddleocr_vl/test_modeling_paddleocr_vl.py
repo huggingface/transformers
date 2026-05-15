@@ -176,7 +176,6 @@ class PaddleOCRVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 
     all_model_classes = (PaddleOCRVLForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": PaddleOCRVLForConditionalGeneration}
-    test_torch_exportable = False
     _is_composite = True
 
     def setUp(self):

@@ -162,7 +162,6 @@ class Lfm2VlModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 
     model_tester_class = Lfm2VlModelTester
     _is_composite = True
-    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = Lfm2VlModelTester(self)

@@ -110,7 +110,6 @@ class VideomtForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMixin,
     pipeline_model_mapping = {}
     is_encoder_decoder = False
     test_missing_keys = False
-    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = VideomtForUniversalSegmentationTester(self)

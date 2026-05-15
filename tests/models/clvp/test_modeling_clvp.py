@@ -396,7 +396,7 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
 
     test_resize_embeddings = False
     test_attention_outputs = False
-    test_torch_exportable = False
+    test_torch_exportable = False  # decoding test inputs requires `torchcodec` (not installed in CI)
 
     def setUp(self):
         self.model_tester = ClvpModelForConditionalGenerationTester(self)

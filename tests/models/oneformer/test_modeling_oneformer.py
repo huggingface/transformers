@@ -236,7 +236,7 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     is_encoder_decoder = False
 
     test_missing_keys = False
-    test_torch_exportable = False
+    test_torch_exportable = False  # detection head uses data-dependent filtering
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(

@@ -112,7 +112,7 @@ class PixtralVisionModelModelTest(ModelTesterMixin, unittest.TestCase):
     additional_model_inputs = ["image_sizes"]
 
     test_resize_embeddings = False
-    test_torch_exportable = False
+    test_torch_exportable = False  # data-dependent vision placeholder mask
 
     def setUp(self):
         self.model_tester = PixtralVisionModelTester(self)

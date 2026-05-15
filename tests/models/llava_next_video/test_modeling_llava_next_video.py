@@ -212,7 +212,6 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
     skip_test_video_features_output_shape = True
 
     _is_composite = True
-    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = LlavaNextVideoVisionText2TextModelTester(self)
