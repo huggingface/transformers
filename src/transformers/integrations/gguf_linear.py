@@ -759,6 +759,16 @@ def _prepare_id_kernel_refs(mod: nn.Module) -> None:
             mod._moe_silu_op = getattr(fused, "default", fused)
             mod._moe_silu_fmt_codes = fmt_codes
 
+    # ``gguf_moe_decode_f32`` collapses the entire ``gguf_bmm_experts_forward``
+    # Python wrapper into one torch op call. Skipped at dynamo trace time so
+    # compile can still see the constituent ops; the wrapper detects that
+    # via ``torch.compiler.is_compiling()``.
+    if all_supported and os.environ.get("TRANSFORMERS_GGUF_MOE_DECODE", "1") != "0":
+        decode = getattr(ops, "gguf_moe_decode_f32", None)
+        if decode is not None and hasattr(ops, "gguf_moe_decode_f32"):
+            mod._moe_decode_op = getattr(decode, "default", decode)
+            mod._moe_decode_fmt_codes = fmt_codes
+
 
 def _row_permute_attn_q_bytes(qbytes_flat: torch.Tensor, num_heads: int,
                               out_features: int, bytes_per_row: int) -> torch.Tensor:

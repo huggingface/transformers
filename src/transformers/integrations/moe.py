@@ -511,6 +511,37 @@ def gguf_bmm_experts_forward(
     H = self.hidden_dim
     I = self.intermediate_dim
     device = hidden_states.device
+    S = num_tokens * num_top_k
+
+    # ---- gguf_moe_decode_f32 fast path -------------------------------------
+    # Single torch op call absorbs the entire MoE block (repeat_interleave,
+    # ids cast, gate+up+silu+down kernels, weighted reduce). Skipped during
+    # torch.compile tracing so dynamo can still emit a clean FX graph of the
+    # constituent ops (see ``torch.compiler.is_compiling`` check below).
+    decode_op = getattr(self, "_moe_decode_op", None)
+    decode_codes = getattr(self, "_moe_decode_fmt_codes", None)
+    if decode_op is not None and decode_codes is not None and not torch.compiler.is_compiling():
+        # Scratch + output buffers are reused across layers + decode steps.
+        cache_key = (S, num_tokens, device)
+        if getattr(self, "_scratch_key", None) != cache_key:
+            self._gate_buf    = torch.empty(S, I, dtype=torch.float32, device=device)
+            self._up_buf      = torch.empty(S, I, dtype=torch.float32, device=device)
+            self._pair_out    = torch.empty(S, H, dtype=torch.float32, device=device)
+            self._decode_out_buf = torch.empty(num_tokens, H, dtype=torch.float32, device=device)
+            self._gate_qw_flat = self.gate_proj_q.view(-1)
+            self._up_qw_flat   = self.up_proj_q.view(-1)
+            self._down_qw_flat = self.down_proj_q.view(-1)
+            self._scratch_key = cache_key
+        hidden = hidden_states if hidden_states.dtype == torch.float32 else hidden_states.to(torch.float32)
+        decode_op(
+            hidden, top_k_index, top_k_weights,
+            self._gate_qw_flat, self._up_qw_flat, self._down_qw_flat,
+            self._gate_buf, self._up_buf, self._pair_out,
+            self._decode_out_buf,
+            *decode_codes,
+        )
+        out_buf = self._decode_out_buf
+        return out_buf if out_buf.dtype == hidden_states.dtype else out_buf.to(hidden_states.dtype)
 
     # Cached at swap time by ``_prepare_id_kernel_refs``. The fused op
     # (``_moe_silu_op``) handles all three mul_mat_ids + the SwiGLU in one
@@ -546,7 +577,6 @@ def gguf_bmm_experts_forward(
         sample_weights = top_k_weights.reshape(-1).to(torch.float32)
     else:
         sample_weights = top_k_weights.reshape(-1)
-    S = ids32.shape[0]
 
     # qweight `view(-1)` is stride-only (no copy, no dispatch), but the
     # attribute resolution + view() call still costs ~µs per access. Cache.
