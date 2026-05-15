@@ -49,7 +49,7 @@ from transformers.testing_utils import (
     require_vision,
     slow,
 )
-from transformers.utils.chat_parsing_utils import recursive_parse
+from transformers.utils.chat_parsing import parse_response
 from transformers.utils.import_utils import is_serve_available
 
 
@@ -1811,7 +1811,7 @@ class TestToolCallUnit(unittest.TestCase):
     def test_parse_tool_calls_from_text(self):
         text = '<tool_call>\n{"name": "get_weather", "arguments": {"city": "Paris"}}\n</tool_call>'
         processor = MagicMock()
-        processor.parse_response = lambda t, s: recursive_parse(t, s)
+        processor.parse_response = parse_response
         schema = next(v["schema"] for k, v in _TOOL_CALL_FALLBACKS.items() if "qwen2" in k)
         calls = parse_tool_calls(processor, text, schema)
         self.assertEqual(len(calls), 1)
@@ -1823,7 +1823,7 @@ class TestToolCallUnit(unittest.TestCase):
             '<tool_call>\n{"name": "get_weather", "arguments": {"city": "London"}}\n</tool_call>'
         )
         processor = MagicMock()
-        processor.parse_response = lambda t, s: recursive_parse(t, s)
+        processor.parse_response = parse_response
         schema = next(v["schema"] for k, v in _TOOL_CALL_FALLBACKS.items() if "qwen2" in k)
         calls = parse_tool_calls(processor, text, schema)
         self.assertEqual(len(calls), 2)
