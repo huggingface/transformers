@@ -289,6 +289,14 @@ def is_multimodal(model: PreTrainedModel) -> bool:
     return bool(_find_multimodal_submodules(model))
 
 
+def _find_submodule_attr(model: torch.nn.Module, name: str) -> Any | None:
+    """Return the first non-None value of `name` found on `model` or any of its submodules."""
+    for module in model.modules():
+        if (value := getattr(module, name, None)) is not None:
+            return value
+    return None
+
+
 def _precompute_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
     """Pre-compute data-dependent vision tensors and inject them into inputs.
 
@@ -318,23 +326,29 @@ def _precompute_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) ->
     if hasattr(model_mod, "get_vision_cu_seqlens"):
         inputs["cu_seqlens"] = model_mod.get_vision_cu_seqlens(grid_thw)
 
-    # spatial_merge_size may be a model attribute (Qwen-VL/GLM/Ernie), an input tensor
-    # `merge_sizes` (Video-Llama-3, per-image merge), or hardcoded to 1 (PaddleOCR-VL).
-    spatial_merge_size = getattr(model, "spatial_merge_size", None)
+    # Vision config attributes can live anywhere in the submodule tree (encoder, transformer,
+    # embeddings, …) — walk to find them rather than asking models to mirror state on the
+    # outer module just so the exporter can read it.
+    spatial_merge_size = _find_submodule_attr(model, "spatial_merge_size")
     if spatial_merge_size is None:
+        # Video-Llama-3 carries per-image merge sizes as an input tensor; PaddleOCR-VL has none
+        # (the encoder hard-codes `1` because spatial merging happens in the projector).
         spatial_merge_size = inputs.get("merge_sizes", 1)
 
     if hasattr(model_mod, "get_vision_position_ids"):
         inputs["position_ids"] = model_mod.get_vision_position_ids(grid_thw, spatial_merge_size)
 
-    if hasattr(model_mod, "get_vision_window_index") and hasattr(model, "window_size"):
+    window_size = _find_submodule_attr(model, "window_size")
+    patch_size = _find_submodule_attr(model, "patch_size")
+    if hasattr(model_mod, "get_vision_window_index") and window_size is not None and patch_size is not None:
         inputs["window_index"], inputs["cu_window_seqlens"] = model_mod.get_vision_window_index(
-            grid_thw, spatial_merge_size, model.window_size, model.patch_size
+            grid_thw, spatial_merge_size, window_size, patch_size
         )
 
-    if hasattr(model_mod, "get_vision_bilinear_indices_and_weights") and hasattr(model, "num_grid_per_side"):
+    num_grid_per_side = _find_submodule_attr(model, "num_grid_per_side")
+    if hasattr(model_mod, "get_vision_bilinear_indices_and_weights") and num_grid_per_side is not None:
         inputs["bilinear_indices"], inputs["bilinear_weights"] = model_mod.get_vision_bilinear_indices_and_weights(
-            grid_thw, model.num_grid_per_side, model.config.spatial_merge_size
+            grid_thw, num_grid_per_side, spatial_merge_size
         )
 
 

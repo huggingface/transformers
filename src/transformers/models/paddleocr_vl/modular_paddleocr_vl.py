@@ -18,6 +18,7 @@
 # limitations under the License.
 
 import math
+import warnings
 
 import numpy as np
 import torch
@@ -52,12 +53,15 @@ from ...utils import (
     can_return_tuple,
     logging,
     torch_compilable_check,
-    torch_int,
 )
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
+from ...vision_utils import (
+    get_vision_bilinear_indices_and_weights,
+    get_vision_cu_seqlens,
+    get_vision_position_ids,
+)
 from ..ernie4_5.configuration_ernie4_5 import Ernie4_5Config
 from ..ernie4_5.modeling_ernie4_5 import (
     Ernie4_5DecoderLayer,
@@ -699,33 +703,27 @@ class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel, Ernie4_5Model):
 class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
     def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__()
+        self.num_grid_per_side = int(self.num_positions**0.5)
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        num_positions = self.position_embedding.weight.shape[0]
-
-        patch_pos_embed = self.position_embedding.weight.unsqueeze(0)
-
-        dim = embeddings.shape[-1]
-
-        sqrt_num_positions = torch_int(num_positions**0.5)
-        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
-        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
-
-        patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed,
-            size=(height, width),
-            mode="bilinear",
-            align_corners=False,
+        warnings.warn(
+            f"`{self.__class__.__name__}.interpolate_pos_encoding` is deprecated and will be removed in v5.11. "
+            "Use `get_vision_bilinear_indices_and_weights` from `transformers.vision_utils` and apply `self.position_embedding`.",
+            FutureWarning,
+            stacklevel=2,
         )
-
-        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-        return patch_pos_embed
+        grid_thw = torch.tensor([[1, height, width]], device=embeddings.device)
+        bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
+            grid_thw, num_grid_per_side=self.num_grid_per_side, spatial_merge_size=1
+        )
+        return (self.position_embedding(bilinear_indices) * bilinear_weights[:, :, None]).sum(0).unsqueeze(0)
 
     @deprecate_kwarg("image_grid_thw", new_name="grid_thw", version="5.11.0")
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         """
         Args:
@@ -739,19 +737,13 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
         pixel_values = pixel_values.reshape(batch_size * squence_len, channel, height, width)
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
         embeddings = patch_embeds.flatten(-2).squeeze(-1)
-        embeddings = embeddings.reshape(batch_size, squence_len, -1)
+        embeddings = embeddings.reshape(batch_size * squence_len, -1)
 
-        start = 0
-        embeddings = embeddings.squeeze(0)
-        tmp_embeddings = []
-        for t, h, w in grid_thw:
-            end = start + t * h * w
-            image_embeddings = embeddings[start:end, :]
-            position_embedding = self.interpolate_pos_encoding(image_embeddings, h, w).squeeze(0).repeat(t, 1)
-            image_embeddings = image_embeddings + position_embedding
-            tmp_embeddings.append(image_embeddings)
-            start = end
-        embeddings = torch.concat(tmp_embeddings, dim=0)
+        bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
+            grid_thw, num_grid_per_side=self.num_grid_per_side, spatial_merge_size=1, kwargs=kwargs
+        )
+        pos_embeds = (self.position_embedding(bilinear_indices) * bilinear_weights[:, :, None]).sum(0)
+        embeddings = embeddings + pos_embeds.to(embeddings.dtype)
 
         return embeddings
 
@@ -866,7 +858,7 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
             grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
         """
-        hidden_states = self.embeddings(pixel_values, grid_thw=grid_thw)
+        hidden_states = self.embeddings(pixel_values, grid_thw=grid_thw, **kwargs)
         encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
             grid_thw=grid_thw,
