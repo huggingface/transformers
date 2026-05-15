@@ -513,6 +513,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("zamba", "ZambaModel"),
         ("zamba2", "Zamba2Model"),
         ("zaya", "ZayaModel"),
+        ("zaya1_vl", "Zaya1VLModel"),
+        ("zaya1_vl_text", "Zaya1VLTextModel"),
     ]
 )
 
@@ -1052,6 +1054,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("video_llava", "VideoLlavaForConditionalGeneration"),
         ("vipllava", "VipLlavaForConditionalGeneration"),
         ("vision-encoder-decoder", "VisionEncoderDecoderModel"),
+        ("zaya1_vl", "Zaya1VLForConditionalGeneration"),
     ]
 )
 

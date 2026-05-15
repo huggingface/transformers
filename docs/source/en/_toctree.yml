@@ -1381,6 +1381,8 @@
         title: Qwen3VL
       - local: model_doc/qwen3_vl_moe
         title: Qwen3VLMoe
+      - local: model_doc/zaya1_vl
+        title: ZAYA1-VL
       - local: model_doc/sam3
         title: SAM3
       - local: model_doc/sam3_video

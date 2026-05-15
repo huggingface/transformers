@@ -189,6 +189,7 @@ else:
             ("wavlm", "Wav2Vec2Processor"),
             ("whisper", "WhisperProcessor"),
             ("xclip", "XCLIPProcessor"),
+            ("zaya1_vl", "Zaya1VLProcessor"),
         ]
     )
 

@@ -480,6 +480,7 @@ if TYPE_CHECKING:
     from .zamba import *
     from .zamba2 import *
     from .zaya import *
+    from .zaya1_vl import *
     from .zoedepth import *
 else:
     import sys

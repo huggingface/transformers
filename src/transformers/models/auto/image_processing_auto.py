@@ -154,6 +154,7 @@ else:
             ("vit_msn", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
             ("vivit", {"torchvision": "VivitImageProcessor"}),
             ("xclip", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
+            ("zaya1_vl", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
         ]
     )
 
