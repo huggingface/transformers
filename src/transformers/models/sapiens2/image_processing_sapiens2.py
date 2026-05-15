@@ -40,7 +40,7 @@ from ...utils import TensorType, auto_docstring, is_cv2_available, requires_back
 from .modeling_sapiens2 import Sapiens2PoseEstimatorOutput
 
 
-# TODO(guarin): Check if we can drop cv2 dependency
+# TODO(guarin): Check if we can drop cv2 dependency. Ideally re-use as much as possible from ViTPoseProcessor.
 if is_cv2_available():
     import cv2
 
