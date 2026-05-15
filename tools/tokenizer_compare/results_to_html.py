@@ -213,8 +213,8 @@ def main() -> int:
     script_dir = Path(__file__).resolve().parent
 
     p = argparse.ArgumentParser()
-    p.add_argument("--input", default="tokenizer_compare_results_rerun2.json")
-    p.add_argument("--output", default="tokenizer_diff_report_rerun2_2.html")
+    p.add_argument("--input", default="tokenizer_compare_results_rerun.json")
+    p.add_argument("--output", default="tokenizer_diff_report_rerun.html")
     p.add_argument("--show-all", action="store_true", help="Show all diffs, including useless flag differences")
     args = p.parse_args()
 

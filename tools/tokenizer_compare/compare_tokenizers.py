@@ -166,6 +166,10 @@ def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--models-file")
     p.add_argument("--models", nargs="*")
+    p.add_argument(
+        "--rerun-from-results",
+        help="Path to a prior results .json file. Only entries with match=false are rerun.",
+    )
     p.add_argument("--output", default="tokenizer_compare_results.json")
     p.add_argument("--no-cleanup", action="store_true")
     p.add_argument("--list", action="store_true", help="Only list discovered model IDs and the files where they were found")
@@ -182,10 +186,20 @@ def main() -> int:
     if args.models:
         for v in args.models:
             models_map.setdefault(v, set()).add("<cli>")
+    if args.rerun_from_results:
+        rerun_data = json.loads(Path(args.rerun_from_results).read_text(encoding="utf-8"))
+        for entry in rerun_data:
+            if entry.get("match") is False:
+                model_id = entry.get("model_id")
+                if not model_id:
+                    continue
+                paths = entry.get("found_in") or ["<rerun-from-results>"]
+                models_map.setdefault(model_id, set()).update(paths)
     # collect from tests only
-    tests_map = collect_from_tests(root / "tests/models")
-    for k, s in tests_map.items():
-        models_map.setdefault(k, set()).update(s)
+    if not args.rerun_from_results:
+        tests_map = collect_from_tests(root / "tests/models")
+        for k, s in tests_map.items():
+            models_map.setdefault(k, set()).update(s)
 
     if args.list:
         for m in sorted(models_map.keys()):
