@@ -854,13 +854,14 @@ class GenerationMixin(ContinuousMixin):
         # decoder_attention_mask if provided)
         elif (decoder_input_ids[:, 0] != decoder_start_token_id[:, 0]).all().item():
             decoder_input_ids = torch.cat([decoder_start_token_id, decoder_input_ids], dim=-1)
-            if "decoder_attention_mask" in model_kwargs:
-                decoder_attention_mask = model_kwargs["decoder_attention_mask"]
-                decoder_attention_mask = torch.cat(
-                    (torch.ones_like(decoder_attention_mask)[:, :1], decoder_attention_mask),
-                    dim=-1,
-                )
-                model_kwargs["decoder_attention_mask"] = decoder_attention_mask
+            decoder_attention_mask = model_kwargs.get("decoder_attention_mask", None)
+
+            if decoder_attention_mask is not None:
+                    decoder_attention_mask = torch.cat(
+                       (torch.ones_like(decoder_attention_mask)[:, :1], decoder_attention_mask),
+                       dim=-1,
+                    )
+            model_kwargs["decoder_attention_mask"] = decoder_attention_mask
 
         return decoder_input_ids, model_kwargs
 
