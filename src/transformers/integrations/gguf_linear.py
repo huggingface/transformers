@@ -122,11 +122,15 @@ def _register_fake_impls(ns_name: str) -> None:
                        g, u, d):
         return None
 
+    def _kv_update_meta(keys_cache, values_cache, new_keys, new_values, position):
+        return None
+
     fakes = {
         "rmsnorm_f32": _rmsnorm_meta,
         "gguf_mul_mat_vec_multi_f32": _multi_mv_meta,
         "gguf_moe_decode_f32": _moe_decode_meta,
         "gguf_moe_silu_f32": _moe_silu_meta,
+        "kv_update_decode_f32": _kv_update_meta,
     }
     # Library.impl is the contract for C++ TORCH_LIBRARY ops. Open a FRAGMENT
     # library on the same namespace and add Meta + CompositeExplicitAutograd
@@ -1157,6 +1161,62 @@ def apply_fused_rmsnorm(model: nn.Module) -> int:
     return patched
 
 
+def apply_fused_kv_update(model: nn.Module) -> int:
+    """Patch each ``StaticLayer.update`` on the model's KV cache so decode
+    (kv_length=1) writes both K and V via one ``kv_update_decode_f32``
+    custom-op call instead of the Python arange + add + 2× index_put_ chain.
+
+    Returns the number of layers patched. Only takes effect after the cache
+    is created and assigned to the model — typical call order:
+        m = AutoModelForCausalLM.from_pretrained(...).to('mps').eval()
+        m.generation_config.cache_implementation = 'static'
+        apply_fused_qkv(m)
+        # cache built lazily by generate() — patch happens via a deeper hook
+        # registered globally on the StaticLayer class.
+    """
+    metal = _ensure_metal_kernels()
+    if metal is None:
+        return 0
+    ops = metal._ops
+    if not hasattr(ops, "kv_update_decode_f32"):
+        return 0
+    kv_op = getattr(ops, "kv_update_decode_f32")
+    kv_op = getattr(kv_op, "default", kv_op)
+
+    # Patch the StaticLayer class globally so any StaticCache instance that
+    # generate() creates after this call uses the fast path. We keep the
+    # original implementation as a fallback for shapes other than decode.
+    from ..cache_utils import StaticLayer
+    if getattr(StaticLayer, "_gguf_kv_update_patched", False):
+        return 0  # already patched
+
+    _orig_update = StaticLayer.update
+
+    def fast_update(self, key_states, value_states, *args, **kwargs):
+        if not self.is_initialized:
+            self.lazy_initialization(key_states, value_states)
+        kv_length = key_states.shape[-2]
+        # Decode fast path: one Metal kernel call, no arange / index_put_.
+        if (kv_length == 1
+                and key_states.device.type == "mps"
+                and key_states.dtype == torch.float32):
+            # cumulative_length is the current cache fill (== next write index).
+            # Cast to int32 once — the kernel reads a scalar int.
+            pos = self.cumulative_length
+            if pos.dtype != torch.int32:
+                pos32 = pos.to(torch.int32)
+            else:
+                pos32 = pos
+            kv_op(self.keys, self.values, key_states, value_states, pos32)
+            self.cumulative_length.add_(1)
+            return self.keys, self.values
+        return _orig_update(self, key_states, value_states, *args, **kwargs)
+
+    StaticLayer.update = fast_update
+    StaticLayer._gguf_kv_update_patched = True
+    return 1
+
+
 def apply_fused_qkv(model: nn.Module) -> int:
     """Patch every attention module whose q/k/v are all :class:`GgufLinear`
     to run the multi-matvec op in one torch dispatch during decode.
@@ -1239,6 +1299,10 @@ def setup_for_compile(model, *, mode: str = "reduce-overhead") -> None:
     # Fuse Q/K/V into one torch op dispatch when q/k/v are GgufLinear with a
     # supported quant fmt. Patches each attention module in-place, idempotent.
     apply_fused_qkv(model)
+    # Decode-time KV cache write in one Metal kernel: collapses
+    # arange + add + 2× index_put_ into one dispatch. Class-level patch on
+    # StaticLayer.update — idempotent.
+    apply_fused_kv_update(model)
     # Fused RMSNorm kernel kept available (see ``apply_fused_rmsnorm``) but
     # *not* wired in by default — microbench shows MPSGraph already auto-fuses
     # the Python RMSNorm into ~1-2 kernels, so the custom kernel is a wash.
