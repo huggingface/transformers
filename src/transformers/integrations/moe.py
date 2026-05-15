@@ -524,35 +524,62 @@ def gguf_bmm_experts_forward(
     use_fused = fused_op is not None and fused_fmt_codes is not None
     use_id_kernel = op_gate is not None and op_up is not None and op_down is not None
 
-    selected = hidden_states.repeat_interleave(num_top_k, dim=0).to(torch.float32).contiguous()  # (S, H)
-    expert_ids_long = top_k_index.reshape(-1).clamp(0, self.num_experts - 1).to(torch.long)
-    sample_weights = top_k_weights.reshape(-1).to(torch.float32)
-    S = expert_ids_long.shape[0]
+    # Per-decode-step Python-overhead trims (each torch.Tensor.* op below
+    # is a ~30 µs ATen dispatch in eager — 24 layers × call → adds up fast):
+    #   - skip `.to(fp32)` when already fp32 (model loaded in fp32 — typical)
+    #   - skip `.contiguous()` when already contiguous
+    #   - `top_k_index` is already int (often int64); convert directly to int32
+    selected = hidden_states.repeat_interleave(num_top_k, dim=0)  # (S, H)
+    if selected.dtype != torch.float32:
+        selected = selected.to(torch.float32)
+    if not selected.is_contiguous():
+        selected = selected.contiguous()
+    # expert_ids_long was reshape+clamp+to(long)+to(int32). clamp is only there
+    # for routers that emit OOB indices — skip when guaranteed in-range (already
+    # an int and < num_experts). Skip to(long) entirely; we only need int32.
+    if top_k_index.dtype == torch.int32:
+        ids32 = top_k_index.reshape(-1)
+    else:
+        ids32 = top_k_index.reshape(-1).to(torch.int32)
+    expert_ids_long = ids32  # kept for fallback branch's _gather_dequant call
+    if top_k_weights.dtype != torch.float32:
+        sample_weights = top_k_weights.reshape(-1).to(torch.float32)
+    else:
+        sample_weights = top_k_weights.reshape(-1)
+    S = ids32.shape[0]
+
+    # qweight `view(-1)` is stride-only (no copy, no dispatch), but the
+    # attribute resolution + view() call still costs ~µs per access. Cache.
+    gate_qw = getattr(self, "_gate_qw_flat", None)
+    if gate_qw is None or gate_qw.shape[0] != self.gate_proj_q.numel():
+        self._gate_qw_flat = self.gate_proj_q.view(-1)
+        self._up_qw_flat   = self.up_proj_q.view(-1)
+        self._down_qw_flat = self.down_proj_q.view(-1)
+        gate_qw = self._gate_qw_flat
+    up_qw, down_qw = self._up_qw_flat, self._down_qw_flat
+
+    # Scratch buffer cache: avoid 3× `torch.empty` per layer when S/device
+    # are stable across calls (true for decode: S = top_k, device = mps).
+    cache_key = (S, device)
+    if getattr(self, "_scratch_key", None) != cache_key:
+        self._gate_buf  = torch.empty(S, I, dtype=torch.float32, device=device)
+        self._up_buf    = torch.empty(S, I, dtype=torch.float32, device=device)
+        self._pair_out  = torch.empty(S, H, dtype=torch.float32, device=device)
+        self._scratch_key = cache_key
+    gate_buf, up_buf, out = self._gate_buf, self._up_buf, self._pair_out
 
     if use_fused:
-        ids32 = expert_ids_long.to(torch.int32)
-        gate_qw = self.gate_proj_q.view(-1)
-        up_qw   = self.up_proj_q.view(-1)
-        down_qw = self.down_proj_q.view(-1)
-        gate_buf = torch.empty(S, I, dtype=torch.float32, device=device)
-        up_buf   = torch.empty(S, I, dtype=torch.float32, device=device)
-        out      = torch.empty(S, H, dtype=torch.float32, device=device)
         fused_op(gate_qw, up_qw, down_qw, selected, ids32,
                  gate_buf, up_buf, out, *fused_fmt_codes)
     elif use_id_kernel:
-        ids32 = expert_ids_long.to(torch.int32)
-        gate_qw = self.gate_proj_q.view(-1)
-        up_qw   = self.up_proj_q.view(-1)
-        down_qw = self.down_proj_q.view(-1)
-        gate = torch.empty(S, I, dtype=torch.float32, device=device)
-        up   = torch.empty(S, I, dtype=torch.float32, device=device)
-        op_gate(gate_qw, selected, ids32, gate)
-        op_up  (up_qw,   selected, ids32, up)
-        inter = (self.act_fn(gate) * up).contiguous()
-        out = torch.empty(S, H, dtype=torch.float32, device=device)
+        op_gate(gate_qw, selected, ids32, gate_buf)
+        op_up  (up_qw,   selected, ids32, up_buf)
+        inter = (self.act_fn(gate_buf) * up_buf).contiguous()
         op_down(down_qw, inter, ids32, out)
     else:
-        # Fallback: per-projection batched dequant + bmm.
+        # Fallback: per-projection batched dequant + bmm. `_gather_dequant`
+        # uses ``.index_select(0, ids)`` which requires int64.
+        expert_ids_long = ids32.to(torch.long) if ids32.dtype != torch.long else ids32
         gate_w = self._gather_dequant(self.gate_proj_q, expert_ids_long,
                                       self.gate_quant, self._gate_fmt, I, H)
         up_w   = self._gather_dequant(self.up_proj_q, expert_ids_long,

@@ -97,6 +97,20 @@ def _load_kernels_direct(repo: str):
     return _DirectKernelHandle(ns)
 
 
+def _load_kernels_local_so(so_path: str):
+    """Load a locally-built kernel .so directly. ``TRANSFORMERS_GGUF_METAL_KERNELS_SO``
+    points at a path like ``.../result-bundle/torchXY-metal-aarch64-darwin/_gguf_dequant_*.abi3.so``.
+    Used for local development without round-tripping through the Hub."""
+    import re
+    import torch
+    torch.ops.load_library(so_path)
+    fname = os.path.basename(so_path).split(".")[0]  # `_gguf_dequant_<rev>`
+    # `torch.ops.load_library` registers ops under the TORCH_EXTENSION_NAME the
+    # .so was built with — same string as the .so basename's namespace stub.
+    ns = getattr(torch.ops, fname)
+    return _DirectKernelHandle(ns)
+
+
 def _ensure_metal_kernels():
     """Idempotent loader for the kernels-community Metal kernel package.
 
@@ -111,6 +125,13 @@ def _ensure_metal_kernels():
     _GGUF_METAL_LOADED = True
     if os.environ.get("TRANSFORMERS_GGUF_USE_METAL_KERNELS", "1") == "0":
         return None
+    local_so = os.environ.get("TRANSFORMERS_GGUF_METAL_KERNELS_SO")
+    if local_so:
+        try:
+            _GGUF_METAL_KERNELS = _load_kernels_local_so(local_so)
+            return _GGUF_METAL_KERNELS
+        except Exception:
+            pass  # fall through to Hub path
     repo = os.environ.get("TRANSFORMERS_GGUF_METAL_KERNELS_REPO", "ArthurZ/gguf-kernels")
     try:
         from kernels import get_kernel  # type: ignore[import-not-found]
@@ -277,16 +298,27 @@ class GgufLinear(nn.Module):
         if x.shape[-1] != self.in_features:
             raise ValueError(f"Last dim of x must be {self.in_features}, got {x.shape[-1]}")
 
+        # Avoid eager dispatches when the cast / reshape / contiguous are no-ops.
+        # Each ATen call below costs ~30 µs in eager — with ~120 GgufLinear
+        # calls per decode token (24 layers × Q/K/V/O + router + lm_head),
+        # skipping no-ops at the Python level saves several ms per token.
+        if x.dim() == 2:
+            x_flat = x
+        else:
+            x_flat = x.reshape(-1, self.in_features)
+        if not x_flat.is_contiguous():
+            x_flat = x_flat.contiguous()
+        if x_flat.dtype != torch.float32:
+            x_flat = x_flat.to(torch.float32)
         batch_shape = x.shape[:-1]
-        x_flat = x.reshape(-1, self.in_features).contiguous().to(torch.float32)
         N = x_flat.shape[0]
 
         is_mps = x.device.type == "mps"
         if is_mps:
             # ``_bind_kernels`` populates these once per module; lazy-fetch on
             # the first forward if it hasn't run yet (state-dict load path).
-            mv_op = getattr(self, "_mv_op", None)
-            mat_op = getattr(self, "_mat_op", None)
+            mv_op = self._mv_op
+            mat_op = self._mat_op
             if mv_op is None and mat_op is None:
                 self._bind_kernels()
                 mv_op = self._mv_op
@@ -297,12 +329,17 @@ class GgufLinear(nn.Module):
             qw = self.qweight  # already on the right device after model.to(...)
             if N == 1 and mv_op is not None:
                 y = torch.empty(self.out_features, dtype=torch.float32, device=x.device)
-                mv_op(qw, x_flat.reshape(-1), y)
-                y = y.reshape(*batch_shape, self.out_features)
+                # x_flat is (1, K). The matvec kernel expects a flat (K,) input;
+                # `view(-1)` is a strides-only no-dispatch reshape on contiguous.
+                mv_op(qw, x_flat.view(-1), y)
+                if len(batch_shape) != 1 or batch_shape[0] != 1:
+                    y = y.reshape(*batch_shape, self.out_features)
+                else:
+                    y = y.unsqueeze(0)
             elif N % 32 == 0 and mat_op is not None:
                 y = torch.empty(N * self.out_features, dtype=torch.float32, device=x.device)
                 mat_op(qw, x_flat, y)
-                y = y.reshape(N, self.out_features).reshape(*batch_shape, self.out_features)
+                y = y.view(N, self.out_features).reshape(*batch_shape, self.out_features)
             elif mv_op is not None:
                 rows = []
                 for i in range(N):
@@ -316,7 +353,12 @@ class GgufLinear(nn.Module):
             y = self._dequant_forward(x)
 
         if self.bias is not None:
-            y = y + self.bias.to(y.device).to(y.dtype)
+            # `.to(device).to(dtype)` is a no-op when bias is already on the
+            # matching device + dtype (typical after `.to(mps)` at load time).
+            b = self.bias
+            if b.device != y.device or b.dtype != y.dtype:
+                b = b.to(device=y.device, dtype=y.dtype)
+            y = y + b
         return y
 
     def _dequant_forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -705,13 +747,44 @@ def _prepare_id_kernel_refs(mod: nn.Module) -> None:
         else:
             all_supported = False
 
-    # The fused ``gguf_moe_silu_f32`` op exists but a microbench shows it
-    # is ~2.6× slower than the per-projection mul_mat_id path on M3 Max
-    # decode shapes (303 µs vs 118 µs / layer). Likely the bundled
-    # silu_mul kernel breaks MPSGraph's silu/mul fusion across torch ops.
-    # Kept available as ``module._moe_silu_op = ops.gguf_moe_silu_f32`` for
-    # callers who want to opt in (e.g. for a future architecture where the
-    # activation cost can be properly recouped); off by default.
+    # ``gguf_moe_silu_f32`` fuses gate+up+silu+down into one torch op
+    # dispatch (4 kernels on one encoder). On the per-call microbench it
+    # measured slower than the per-projection path; in the model bench
+    # it's a different question because layer-to-layer pipelining changes
+    # the cost equation. Wired in unconditionally — controlled via the
+    # ``TRANSFORMERS_GGUF_MOE_FUSED=0`` env var if it ever regresses.
+    if all_supported and os.environ.get("TRANSFORMERS_GGUF_MOE_FUSED", "1") != "0":
+        fused = getattr(ops, "gguf_moe_silu_f32", None)
+        if fused is not None and hasattr(ops, "gguf_moe_silu_f32"):
+            mod._moe_silu_op = getattr(fused, "default", fused)
+            mod._moe_silu_fmt_codes = fmt_codes
+
+
+def _row_permute_attn_q_bytes(qbytes_flat: torch.Tensor, num_heads: int,
+                              out_features: int, bytes_per_row: int) -> torch.Tensor:
+    """Reverse llama.cpp's Q-projection row interleave on a flat byte buffer.
+
+    Mirrors :class:`ReversePermuteAttnQ` operating on fp32 rows: it reshapes
+    the leading axis (output features) as ``(num_heads, dim, 2)``, swaps the
+    last two of those, and flattens. The bytes within each row are untouched,
+    so this works for any GGUF quant — including K-quants where ``gguf.quantize``
+    has no Python impl.
+    """
+    assert qbytes_flat.numel() == out_features * bytes_per_row, (
+        f"byte count mismatch: {qbytes_flat.numel()} vs "
+        f"{out_features}×{bytes_per_row}"
+    )
+    dim = out_features // num_heads // 2
+    assert out_features == num_heads * dim * 2
+    rows = qbytes_flat.view(num_heads, dim, 2, bytes_per_row)
+    permuted = rows.transpose(2, 1).contiguous()  # (num_heads, 2, dim, bpr)
+    return permuted.view(-1)
+
+
+def _row_permute_attn_k_bytes(qbytes_flat: torch.Tensor, num_kv_heads: int,
+                              out_features: int, bytes_per_row: int) -> torch.Tensor:
+    """Mirror :func:`_row_permute_attn_q_bytes` for K projections (different head count)."""
+    return _row_permute_attn_q_bytes(qbytes_flat, num_kv_heads, out_features, bytes_per_row)
 
 
 def replace_with_gguf_linear(
@@ -765,16 +838,31 @@ def replace_with_gguf_linear(
         block_bytes, block_elems = _QUANT_INFO[quant_type]
         expected_nbytes = mod.out_features * (mod.in_features // block_elems) * block_bytes
 
-        if info.get("permute") is not None:
-            # llama.cpp-permuted layout — bytes can't be used as-is. Round-trip
-            # through fp32: the loader already produced the un-permuted fp32
-            # weight in `mod.weight`, so just re-quantize it back to bytes.
+        permute_kind = info.get("permute")
+        if permute_kind is not None:
+            # llama.cpp-permuted layout: bytes are in (num_heads, dim, 2, K) row
+            # order; HF wants (num_heads, 2, dim, K). Since each row's bytes are
+            # independent (quant scales/codes are scoped to one row in every
+            # supported quant type), we permute the byte rows directly — no
+            # dequant + re-quantize round-trip required. This unlocks K-quants
+            # (Q4_K / Q5_K / Q6_K) where ``gguf.quantize`` has no Python impl.
+            cfg = getattr(model, "config", None)
+            num_heads = getattr(cfg, "num_attention_heads", None) if cfg else None
+            num_kv_heads = (
+                getattr(cfg, "num_key_value_heads", num_heads) if cfg else None
+            )
+            if num_heads is None:
+                continue  # no config → conservative fall-through
+            raw = info["bytes"]
+            qbytes_src = raw.detach().contiguous().view(torch.uint8).reshape(-1)
+            nblocks_per_row = mod.in_features // block_elems
+            bytes_per_row = nblocks_per_row * block_bytes
+            heads = num_heads if permute_kind == "q" else num_kv_heads
             try:
-                qt = getattr(gguf.GGMLQuantizationType, quant_type)
-                w_np = mod.weight.detach().to(torch.float32).cpu().numpy()
-                qbytes_t = torch.frombuffer(bytearray(gguf.quantize(w_np, qt).tobytes()), dtype=torch.uint8)
-            except (NotImplementedError, Exception):
-                # K-quants etc. — leave as nn.Linear with the (un-permuted) fp32 weight.
+                qbytes_t = _row_permute_attn_q_bytes(
+                    qbytes_src, heads, mod.out_features, bytes_per_row
+                )
+            except AssertionError:
                 continue
         else:
             raw = info["bytes"]
@@ -814,6 +902,160 @@ def is_gguf_linear_enabled() -> bool:
     return os.environ.get("TRANSFORMERS_GGUF_LINEAR", "0") not in ("0", "", "false", "False")
 
 
+# ---------------------------------------------------------------------------
+# QKV-fusion: one torch op dispatch for Q/K/V matvec via the multi op
+# ---------------------------------------------------------------------------
+#
+# Decode-time profiling on Apple Silicon shows ~50–100 µs of overhead per
+# torch.ops call (Python → C++ trampoline + dispatcher + MPSStream
+# bookkeeping) on top of ~20 µs of actual Metal kernel work. With 4
+# projections per attention block (q/k/v/o) × 24 layers, that's ~10 ms /
+# token of pure dispatcher cost — most of our gap to llama.cpp.
+#
+# ``gguf_mul_mat_vec_multi_f32`` encodes N matvecs onto one MPS command
+# encoder via one torch op dispatch. For Qwen2-MoE attention we collapse
+# q/k/v into one op (3 → 1); the post-attention o_proj remains separate
+# because hidden→attn-out crosses the SDPA call.
+
+# Maps GgufLinear._fmt string → int code matching dequantize.mm kMvTable.
+_FUSED_MV_FMT_CODE = {
+    "q4_0":   0, "q5_0":   1, "q5_1":   2, "q8_0":   3,
+    "q4_K":   4, "q5_K":   5, "q6_K":   6,
+    "iq4_nl": 7, "iq4_xs": 8,
+}
+
+
+def _fused_qkv_forward(self, hidden_states, position_embeddings=None,
+                       attention_mask=None, past_key_values=None, **kwargs):
+    """Replacement for ``Qwen2MoeAttention.forward`` that fuses q/k/v projections
+    into one ``gguf_mul_mat_vec_multi_f32`` call during decode.
+
+    Falls through to ``self._orig_forward`` when any of:
+      - prefill (N > 1) — multi-matvec only supports vec inputs
+      - non-MPS device
+      - q/k/v aren't all GgufLinear with compatible fmts
+      - the multi op isn't available
+    """
+    from ..models.qwen2_moe.modeling_qwen2_moe import (  # local: model-specific patch
+        ALL_ATTENTION_FUNCTIONS, apply_rotary_pos_emb, eager_attention_forward,
+    )
+
+    q_lin, k_lin, v_lin = self.q_proj, self.k_proj, self.v_proj
+    multi_op = getattr(self, "_qkv_multi_op", None)
+    # Decode-only fast path: shape-static under torch.compile.
+    last_dim = hidden_states.shape[-1]
+    flat_n = hidden_states.numel() // last_dim
+    if (
+        multi_op is None
+        or flat_n != 1
+        or hidden_states.device.type != "mps"
+        or not isinstance(q_lin, GgufLinear)
+        or not isinstance(k_lin, GgufLinear)
+        or not isinstance(v_lin, GgufLinear)
+    ):
+        return self._orig_forward(
+            hidden_states,
+            position_embeddings=position_embeddings,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            **kwargs,
+        )
+
+    input_shape = hidden_states.shape[:-1]
+    hidden_shape = (*input_shape, -1, self.head_dim)
+    x_flat = hidden_states.reshape(-1).contiguous().to(torch.float32)
+
+    dev = hidden_states.device
+    q_out = torch.empty(q_lin.out_features, dtype=torch.float32, device=dev)
+    k_out = torch.empty(k_lin.out_features, dtype=torch.float32, device=dev)
+    v_out = torch.empty(v_lin.out_features, dtype=torch.float32, device=dev)
+
+    multi_op(
+        [q_lin.qweight, k_lin.qweight, v_lin.qweight],
+        x_flat,
+        [q_out, k_out, v_out],
+        self._qkv_fmt_codes,
+    )
+
+    # Bias add (qkv_bias on Qwen2-MoE is True for q/k/v).
+    if q_lin.bias is not None: q_out = q_out + q_lin.bias.to(dev).to(torch.float32)
+    if k_lin.bias is not None: k_out = k_out + k_lin.bias.to(dev).to(torch.float32)
+    if v_lin.bias is not None: v_out = v_out + v_lin.bias.to(dev).to(torch.float32)
+
+    query_states = q_out.reshape(*input_shape, q_lin.out_features).view(hidden_shape).transpose(1, 2)
+    key_states   = k_out.reshape(*input_shape, k_lin.out_features).view(hidden_shape).transpose(1, 2)
+    value_states = v_out.reshape(*input_shape, v_lin.out_features).view(hidden_shape).transpose(1, 2)
+
+    cos, sin = position_embeddings
+    query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+    if past_key_values is not None:
+        key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+
+    attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
+        self.config._attn_implementation, eager_attention_forward
+    )
+
+    attn_output, attn_weights = attention_interface(
+        self,
+        query_states,
+        key_states,
+        value_states,
+        attention_mask,
+        dropout=0.0 if not self.training else self.attention_dropout,
+        scaling=self.scaling,
+        **kwargs,
+    )
+
+    attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+    attn_output = self.o_proj(attn_output)
+    return attn_output, attn_weights
+
+
+def apply_fused_qkv(model: nn.Module) -> int:
+    """Patch every attention module whose q/k/v are all :class:`GgufLinear`
+    to run the multi-matvec op in one torch dispatch during decode.
+
+    Returns the number of attention modules patched. Idempotent.
+    """
+    metal = _ensure_metal_kernels()
+    if metal is None:
+        return 0
+    ops = metal._ops
+    if not hasattr(ops, "gguf_mul_mat_vec_multi_f32"):
+        return 0
+    multi_op = ops.gguf_mul_mat_vec_multi_f32
+    multi_op = getattr(multi_op, "default", multi_op)
+
+    import types as _types
+    patched = 0
+    for name, mod in list(model.named_modules()):
+        # Look for the q_proj/k_proj/v_proj/o_proj signature.
+        if not (hasattr(mod, "q_proj") and hasattr(mod, "k_proj")
+                and hasattr(mod, "v_proj") and hasattr(mod, "o_proj")):
+            continue
+        q, k, v = mod.q_proj, mod.k_proj, mod.v_proj
+        if not (isinstance(q, GgufLinear) and isinstance(k, GgufLinear)
+                and isinstance(v, GgufLinear)):
+            continue
+        # All three projections must share a supported kMvTable fmt code.
+        try:
+            codes = [_FUSED_MV_FMT_CODE[q._fmt], _FUSED_MV_FMT_CODE[k._fmt],
+                     _FUSED_MV_FMT_CODE[v._fmt]]
+        except KeyError:
+            continue
+
+        if getattr(mod, "_qkv_multi_op", None) is multi_op:
+            continue  # already patched
+
+        mod._qkv_multi_op = multi_op
+        mod._qkv_fmt_codes = codes
+        mod._orig_forward = mod.forward
+        mod.forward = _types.MethodType(_fused_qkv_forward, mod)
+        patched += 1
+    return patched
+
+
 def setup_for_compile(model, *, mode: str = "reduce-overhead") -> None:
     """Configure a GGUF-loaded model for ``torch.compile``.
 
@@ -849,4 +1091,7 @@ def setup_for_compile(model, *, mode: str = "reduce-overhead") -> None:
     _dynamo.config.allow_unspec_int_on_nn_module = True
 
     model.generation_config.cache_implementation = "static"
+    # Fuse Q/K/V into one torch op dispatch when q/k/v are GgufLinear with a
+    # supported quant fmt. Patches each attention module in-place, idempotent.
+    apply_fused_qkv(model)
     model.forward = _torch.compile(model.forward, mode=mode, dynamic=False)
