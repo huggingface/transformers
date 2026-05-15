@@ -417,9 +417,6 @@ class Sam2VideoPositionEmbeddingSine(nn.Module):
         pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
-        # Flatten spatial dimensions and permute to (batch_size, sequence_length, hidden_size) format
-        # expected by the encoder
-        pos = pos.flatten(2).permute(0, 2, 1)
         return pos
 
     def forward(
@@ -1881,6 +1878,10 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
 
         # flatten NxCxHxW to HWxNxC (position embeddings are already in this format)
         feature_maps = [feature_map.flatten(2).permute(2, 0, 1) for feature_map in feature_maps]
+        feature_maps_position_embeddings = [
+            feature_maps_position_embeddings.transpose(0, 1)
+            for feature_maps_position_embeddings in feature_maps_position_embeddings
+        ]
         vision_outputs.fpn_hidden_states = feature_maps
         vision_outputs.fpn_position_encoding = feature_maps_position_embeddings
 
@@ -2686,8 +2687,9 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
             ].expand(*maskmem_features.shape)
 
         # convert to bfloat16 to save memory, and for consistency with the original implementation
+        # flatten memory features from BxCxHxW to HWxBxC (pos encoding already in BxHWxC)
         maskmem_features = maskmem_features.to(torch.bfloat16).flatten(2).permute(2, 0, 1)
-        maskmem_pos_enc = maskmem_pos_enc.to(pred_masks_high_res.dtype).flatten(2).permute(2, 0, 1)
+        maskmem_pos_enc = maskmem_pos_enc.to(pred_masks_high_res.dtype).transpose(0, 1)
 
         return maskmem_features, maskmem_pos_enc
 

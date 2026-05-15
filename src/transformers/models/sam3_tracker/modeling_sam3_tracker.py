@@ -1093,6 +1093,10 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
 
         # flatten NxCxHxW to HWxNxC (position embeddings are already in this format)
         feature_maps = [feature_map.flatten(2).permute(2, 0, 1) for feature_map in feature_maps]
+        feature_maps_position_embeddings = [
+            feature_maps_position_embeddings.transpose(0, 1)
+            for feature_maps_position_embeddings in feature_maps_position_embeddings
+        ]
         vision_outputs.fpn_hidden_states = feature_maps
         vision_outputs.fpn_position_encoding = feature_maps_position_embeddings
 
