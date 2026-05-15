@@ -715,17 +715,13 @@ def _prepare_id_kernel_refs(mod: nn.Module) -> None:
         else:
             all_supported = False
 
-    # NOTE: the fused ``gguf_moe_silu_f32`` op exists but a microbench shows
-    # it is ~2.6× slower than the per-projection mul_mat_id path on M3 Max
-    # decode shapes (303 µs vs 118 µs / layer). Likely the silu_mul kernel
-    # dispatch and the 4-encode-per-sync block break MPS pipelining better
-    # than 3 short dispatch_syncs interleaved with torch's silu/mul ops, which
-    # MPSGraph fuses internally. The op stays on the build for callers that
-    # want to opt in (``module._moe_silu_op = ops.gguf_moe_silu_f32``) but
-    # the default is the per-projection path.
-    if False and all_supported and hasattr(ops, "gguf_moe_silu_f32"):  # opt-in only
-        mod._moe_silu_op = ops.gguf_moe_silu_f32
-        mod._moe_silu_fmt_codes = tuple(fmt_codes)
+    # The fused ``gguf_moe_silu_f32`` op exists but a microbench shows it
+    # is ~2.6× slower than the per-projection mul_mat_id path on M3 Max
+    # decode shapes (303 µs vs 118 µs / layer). Likely the bundled
+    # silu_mul kernel breaks MPSGraph's silu/mul fusion across torch ops.
+    # Kept available as ``module._moe_silu_op = ops.gguf_moe_silu_f32`` for
+    # callers who want to opt in (e.g. for a future architecture where the
+    # activation cost can be properly recouped); off by default.
 
 
 def replace_with_gguf_linear(
@@ -826,3 +822,28 @@ def replace_with_gguf_linear(
 def is_gguf_linear_enabled() -> bool:
     """``TRANSFORMERS_GGUF_LINEAR=1`` opts into the GgufLinear path. Off by default."""
     return os.environ.get("TRANSFORMERS_GGUF_LINEAR", "0") not in ("0", "", "false", "False")
+
+
+def setup_for_compile(model, *, mode: str = "default") -> None:
+    """Configure a GGUF-loaded model for ``torch.compile``.
+
+    ``torch.compile`` only delivers its full speedup when the forward sees
+    the same input shapes every step — under ``generate()`` with the default
+    dynamic KV cache, the cache length grows per token and dynamo recompiles
+    every step (~60 s wasted on a 24-layer MoE before steady state). This
+    helper:
+
+    1. Forces ``cache_implementation = "static"`` on the model's
+       ``generation_config`` so the cache is preallocated at max length and
+       its tensor shapes stay constant.
+    2. Wraps ``model.forward`` with ``torch.compile(mode=mode, dynamic=False)``.
+
+    On M3 Max with Qwen1.5-MoE-A2.7B Q4_K_M this turns the eager
+    ``GgufLinear + mul_mat_id`` path's 33 tok/s into ~64 tok/s (≈ 2× over
+    uncompiled, ~66% of llama.cpp's ``llama-bench``). Without static cache,
+    compile only buys ~1.27× and warmup is brutal.
+    """
+    import torch as _torch
+
+    model.generation_config.cache_implementation = "static"
+    model.forward = _torch.compile(model.forward, mode=mode, dynamic=False)
