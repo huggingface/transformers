@@ -352,18 +352,31 @@ class StaticLayer(CacheLayerMixin):
         if not self.is_initialized:
             self.lazy_initialization(key_states, value_states)
 
-        # Create a tensor to slice the static kv at the correct indices
         kv_length = key_states.shape[-2]
-        cache_position = torch.arange(kv_length, device=self.device) + self.cumulative_length
-        # Note that has to be performed in-place, as we have a static address that we need to keep
-        self.cumulative_length.add_(kv_length)
+        # Decode fast path: ``cumulative_length`` is already the (1,) tensor
+        # holding the destination index, so we can skip ``arange + add`` (saves
+        # 2 ATen dispatches per layer per token). We must do the writes BEFORE
+        # incrementing cumulative_length so the alias still holds the right
+        # offset at index_copy time.
+        if kv_length == 1:
+            cache_position = self.cumulative_length
+            try:
+                self.keys.index_copy_(2, cache_position, key_states)
+                self.values.index_copy_(2, cache_position, value_states)
+            except NotImplementedError:
+                # Fallback for devices like MPS where index_copy_ might not be supported.
+                self.keys[:, :, cache_position] = key_states
+                self.values[:, :, cache_position] = value_states
+            self.cumulative_length.add_(kv_length)
+            return self.keys, self.values
 
-        # Update the cache
+        # Prefill / multi-token path: need arange + add to enumerate positions.
+        cache_position = torch.arange(kv_length, device=self.device) + self.cumulative_length
+        self.cumulative_length.add_(kv_length)
         try:
             self.keys.index_copy_(2, cache_position, key_states)
             self.values.index_copy_(2, cache_position, value_states)
         except NotImplementedError:
-            # Fallback for devices like MPS where index_copy_ might not be supported.
             self.keys[:, :, cache_position] = key_states
             self.values[:, :, cache_position] = value_states
 
