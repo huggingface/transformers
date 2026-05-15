@@ -1079,6 +1079,7 @@ class EomtDinov3PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = False
     _no_split_modules = ["EomtDinov3Layer"]
     _supports_sdpa = True
+    _supports_flash_attn = True
     _can_record_outputs = {
         "hidden_states": EomtDinov3Layer,
         "attentions": EomtDinov3Attention,

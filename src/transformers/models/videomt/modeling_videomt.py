@@ -949,6 +949,7 @@ class VideomtPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = False
     _no_split_modules = ["VideomtLayer"]
     _supports_sdpa = True
+    _supports_flash_attn = True
     _can_record_outputs = {
         "hidden_states": VideomtLayer,
         "attentions": VideomtAttention,
