@@ -1338,6 +1338,8 @@ def is_jmespath_available() -> bool:
 
 @lru_cache
 def is_mlx_available() -> bool:
+    if is_env_variable_false("USE_MLX") or is_env_variable_false("HF_USE_MLX"):
+        return False
     return _is_package_available("mlx")[0]
 
 
