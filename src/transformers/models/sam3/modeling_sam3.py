@@ -66,8 +66,8 @@ from .configuration_sam3 import (
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3VisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
     fpn_hidden_states (`tuple[torch.FloatTensor]`):
@@ -80,8 +80,8 @@ class Sam3VisionEncoderOutput(BaseModelOutputWithPooling):
     fpn_position_encoding: tuple[torch.FloatTensor, ...] = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3GeometryEncoderOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_prompts, hidden_size)`):
@@ -94,8 +94,8 @@ class Sam3GeometryEncoderOutput(ModelOutput):
     attention_mask: torch.BoolTensor | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3DETREncoderOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -120,8 +120,8 @@ class Sam3DETREncoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3DETRDecoderOutput(ModelOutput):
     r"""
     intermediate_hidden_states (`torch.FloatTensor` of shape `(num_layers, batch_size, num_queries, hidden_size)`):
@@ -143,8 +143,8 @@ class Sam3DETRDecoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3MaskDecoderOutput(ModelOutput):
     r"""
     pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height, width)`):
@@ -160,8 +160,8 @@ class Sam3MaskDecoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3ImageSegmentationOutput(ModelOutput):
     r"""
     pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height, width)`):

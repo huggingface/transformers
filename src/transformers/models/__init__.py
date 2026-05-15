@@ -135,6 +135,7 @@ if TYPE_CHECKING:
     from .esm import *
     from .evolla import *
     from .exaone4 import *
+    from .exaone4_5 import *
     from .exaone_moe import *
     from .falcon import *
     from .falcon_h1 import *
@@ -155,6 +156,7 @@ if TYPE_CHECKING:
     from .gemma3 import *
     from .gemma3n import *
     from .gemma4 import *
+    from .gemma4_assistant import *
     from .git import *
     from .glm import *
     from .glm4 import *
@@ -178,6 +180,7 @@ if TYPE_CHECKING:
     from .gpt_sw3 import *
     from .gptj import *
     from .granite import *
+    from .granite4_vision import *
     from .granite_speech import *
     from .granite_speech_plus import *
     from .granitemoe import *
@@ -195,6 +198,7 @@ if TYPE_CHECKING:
     from .hunyuan_v1_dense import *
     from .hunyuan_v1_moe import *
     from .hy_v3 import *
+    from .hyperclovax import *
     from .ibert import *
     from .idefics import *
     from .idefics2 import *
@@ -364,6 +368,7 @@ if TYPE_CHECKING:
     from .regnet import *
     from .rembert import *
     from .resnet import *
+    from .rf_detr import *
     from .roberta import *
     from .roberta_prelayernorm import *
     from .roc_bert import *

@@ -18,7 +18,6 @@ rendered properly in your Markdown viewer.
 # Qwen3-Omni-MOE
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
@@ -351,6 +350,26 @@ model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
 ## Qwen3OmniMoeTalkerConfig
 
 [[autodoc]] Qwen3OmniMoeTalkerConfig
+
+## Qwen3OmniMoeTextConfig
+
+[[autodoc]] Qwen3OmniMoeTextConfig
+
+## Qwen3OmniMoeVisionEncoderConfig
+
+[[autodoc]] Qwen3OmniMoeVisionEncoderConfig
+
+## Qwen3OmniMoeAudioEncoderConfig
+
+[[autodoc]] Qwen3OmniMoeAudioEncoderConfig
+
+## Qwen3OmniMoeTalkerTextConfig
+
+[[autodoc]] Qwen3OmniMoeTalkerTextConfig
+
+## Qwen3OmniMoeTalkerCodePredictorConfig
+
+[[autodoc]] Qwen3OmniMoeTalkerCodePredictorConfig
 
 ## Qwen3OmniMoeForConditionalGeneration
 

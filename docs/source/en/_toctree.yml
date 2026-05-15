@@ -587,6 +587,8 @@
         title: EuroBERT
       - local: model_doc/exaone4
         title: EXAONE-4.0
+      - local: model_doc/exaone4_5
+        title: EXAONE-4.5
       - local: model_doc/exaone_moe
         title: EXAONE-MoE
       - local: model_doc/falcon
@@ -663,6 +665,8 @@
         title: HunYuanDenseV1
       - local: model_doc/hunyuan_v1_moe
         title: HunYuanMoEV1
+      - local: model_doc/hyperclovax
+        title: HyperCLOVAX
       - local: model_doc/hy_v3
         title: HYV3
       - local: model_doc/ibert
@@ -981,6 +985,8 @@
         title: RegNet
       - local: model_doc/resnet
         title: ResNet
+      - local: model_doc/rf_detr
+        title: RF-DETR
       - local: model_doc/rt_detr
         title: RT-DETR
       - local: model_doc/rt_detr_v2
@@ -1217,6 +1223,8 @@
         title: FLAVA
       - local: model_doc/florence2
         title: Florence2
+      - local: model_doc/gemma4_assistant
+        title: Gemma 4 Assistant
       - local: model_doc/gemma3
         title: Gemma3
       - local: model_doc/gemma3n
@@ -1235,6 +1243,8 @@
         title: GlmOcr
       - local: model_doc/got_ocr2
         title: GOT-OCR2
+      - local: model_doc/granite4_vision
+        title: Granite4Vision
       - local: model_doc/granitevision
         title: GraniteVision
       - local: model_doc/grounding-dino

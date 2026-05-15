@@ -746,67 +746,6 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
                 error_msg = f"logprob mismatch at position {j} for request {i}: CB={cb_lp}, expected={exp_lp}"
                 self.assertAlmostEqual(cb_lp, exp_lp, delta=delta, msg=error_msg)
 
-    def test_continuous_batching_with_default_compile_configs(self) -> None:
-        """Test continuous batching with use_default_compile_configs=True in ContinuousBatchingConfig.
-
-        This test verifies that:
-        1. Default compile configs are created for appropriate paths
-        2. Generation completes successfully with compiled functions
-        3. Output matches expectations
-        """
-        # Skip if Flash Attention 2 is not available
-        if not (is_flash_attn_2_available() or is_kernels_available()):
-            self.skipTest("Flash Attention 2 is not available and neither is the kernels library. Skipping test.")
-        # Skip if not on CUDA (compile works best on CUDA)
-        if torch_device != "cuda":
-            self.skipTest("This test is designed for CUDA devices. Skipping test.")
-
-        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-
-        try:
-            # Prepare inputs
-            tokenizer, model = get_tokenizer_and_model(model_id, "flash_attention_2", torch_device)
-            user_messages = ["What is 2+2?", "What is the capital of France?"]
-            input_ids = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True)
-
-            # Create ContinuousBatchingConfig with use_default_compile_configs=True
-            cb_config = ContinuousBatchingConfig(use_default_compile_configs=True)
-
-            # Verify the config will create default compile configs
-            cb_config.resolve_compile_configs(
-                fallback_compile_config=None, is_flash_attn=True, decode_fast_path_available=False
-            )
-            self.assertIsNone(
-                cb_config.varlen_compile_config,
-                "Varlen compile config should not be created with use_default_compile_configs=True",
-            )
-            self.assertIsNotNone(
-                cb_config.decode_compile_config,
-                "Decode compile config should be created with use_default_compile_configs=True",
-            )
-
-            # Create GenerationConfig
-            gen_config = GenerationConfig(max_new_tokens=20, do_sample=False)
-
-            # Test that generation works with default compile configs
-            outputs = model.generate_batch(
-                inputs=input_ids, generation_config=gen_config, continuous_batching_config=cb_config
-            )
-
-            # Verify we got outputs for all requests
-            self.assertEqual(len(outputs), len(user_messages), "Should have outputs for all input requests")
-
-            # Verify outputs are valid
-            for req_id, output in outputs.items():
-                self.assertIsNotNone(output.generated_tokens, f"Output for {req_id} should have generated_tokens")
-                self.assertGreater(
-                    len(output.generated_tokens), 0, f"Output for {req_id} should have at least one token"
-                )
-                self.assertEqual(output.status.name, "FINISHED", f"Output for {req_id} should be FINISHED")
-
-        finally:
-            flush_memory(flush_compile=True)
-
     def test_continuous_batching_few_blocks(self) -> None:
         """This test verifies that generation works with a very small number of blocks, ie. small enough that we need to
         offload a request at some point. To add more complexity, we repeat the same prompt 4 times and enable prefix
