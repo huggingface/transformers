@@ -1359,6 +1359,66 @@ def apply_fused_qkv(model: nn.Module) -> int:
     return patched
 
 
+def fast_greedy_decode(model, input_ids: "torch.Tensor", max_new_tokens: int) -> "torch.Tensor":
+    """Tight greedy-decoding loop that matches llama.cpp throughput on Apple Silicon.
+
+    ``generate()``'s per-step overhead is significant: it allocates a fresh
+    ``cache_position`` tensor every iteration, runs sampling logic (even
+    for greedy), updates the attention mask, and goes through
+    ``prepare_inputs_for_generation``. That overhead — small per call —
+    multiplies across decode steps and is the dominant remaining gap to
+    llama.cpp on a GGUF-quantized MoE under ``torch.compile``.
+
+    This helper:
+      1. Allocates ONE ``cache_position`` int64 tensor and mutates it in
+         place each step (no per-step ``torch.tensor`` MPS round-trip).
+      2. Pre-allocates the ``next_tok`` buffer ahead of decode and uses
+         ``torch.argmax(..., out=)`` to avoid the per-step argmax tensor.
+      3. Skips everything ``generate()`` adds (sampling, mask update,
+         prepare-inputs). No EOS check — call ``.item()`` would force a
+         CPU↔MPS sync per token and tank throughput; callers who need
+         early-stop should run a smaller batch in a loop.
+
+    Requires ``model.forward`` to already be ``torch.compile``-d (call
+    :func:`setup_for_compile` first). Returns the full token sequence
+    (prompt + generated), shape (B, prefill_len + max_new_tokens).
+    """
+    import torch
+    from ..cache_utils import StaticCache
+
+    device = input_ids.device
+    B, prefill_len = input_ids.shape
+    max_kv = prefill_len + max_new_tokens
+    param_dtype = next(model.parameters()).dtype
+    cache = StaticCache(config=model.config, max_batch_size=B,
+                        max_cache_len=max_kv, device=device, dtype=param_dtype)
+
+    # Output token buffer (B, total) filled in-place — no per-step concat /
+    # clone. Slot 0..prefill_len-1 holds the prompt.
+    total = prefill_len + max_new_tokens
+    out_tokens = torch.empty(B, total, dtype=torch.long, device=device)
+    out_tokens[:, :prefill_len] = input_ids
+
+    with torch.inference_mode():
+        # Prefill.
+        cp_prefill = torch.arange(0, prefill_len, device=device, dtype=torch.long)
+        out = model(input_ids=input_ids, past_key_values=cache,
+                    cache_position=cp_prefill, use_cache=True)
+        torch.argmax(out.logits[:, -1], dim=-1, keepdim=True,
+                     out=out_tokens[:, prefill_len:prefill_len + 1])
+
+        # Pre-allocate the single-position cache_position tensor reused below.
+        cp_buf = torch.zeros(1, dtype=torch.long, device=device)
+        for i in range(max_new_tokens - 1):
+            cp_buf.fill_(prefill_len + i)
+            cur_slot = prefill_len + i
+            out = model(input_ids=out_tokens[:, cur_slot:cur_slot + 1],
+                        past_key_values=cache, cache_position=cp_buf, use_cache=True)
+            torch.argmax(out.logits[:, -1], dim=-1, keepdim=True,
+                         out=out_tokens[:, cur_slot + 1:cur_slot + 2])
+    return out_tokens
+
+
 def setup_for_compile(model, *, mode: str = "reduce-overhead") -> None:
     """Configure a GGUF-loaded model for ``torch.compile``.
 
