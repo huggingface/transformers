@@ -15,7 +15,7 @@
 # limitations under the License.
 
 from collections.abc import Callable
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -23,17 +23,13 @@ import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.deprecation import deprecate_kwarg
+from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..cohere2.modeling_cohere2 import (
@@ -47,133 +43,111 @@ from ..cohere2.modeling_cohere2 import (
     Cohere2RotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
-    repeat_kv,
 )
+from ..llama.modeling_llama import LlamaRMSNorm
 from .configuration_cohere2_moe import Cohere2MoeConfig
 
 
 class Cohere2MoeMLP(Cohere2MLP):
     def __init__(self, config: Cohere2MoeConfig, intermediate_size=None):
-        nn.Module.__init__(self)
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = intermediate_size if intermediate_size is not None else config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
+        super().__init__(config)
+        if intermediate_size is not None:
+            self.intermediate_size = intermediate_size
+            self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+            self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+            self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+
+
+class Cohere2MoeRouter(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_experts
+        self.expert_selection_fn = config.expert_selection_fn
+        self.norm_topk_prob = config.norm_topk_prob
+        self.weight = nn.Parameter(torch.empty(config.num_experts, config.hidden_size))
+
+    def forward(self, hidden_states: torch.Tensor):
+        hidden_states = hidden_states.reshape(-1, hidden_states.shape[-1])
+        router_logits = F.linear(hidden_states, self.weight).float()
+        routing_weights, selected_experts = torch.topk(router_logits, self.top_k, dim=-1)
+
+        if self.expert_selection_fn == "softmax":
+            routing_weights = F.softmax(routing_weights, dim=-1, dtype=torch.float)
+        elif self.expert_selection_fn == "sigmoid":
+            routing_weights = torch.sigmoid(routing_weights)
+            if self.norm_topk_prob:
+                routing_weights = routing_weights / routing_weights.sum(dim=-1, keepdim=True)
+        else:
+            raise NotImplementedError("Expert selection function can only be either softmax or sigmoid.")
+
+        return router_logits, routing_weights, selected_experts
+
+
+class Cohere2MoeExperts(nn.ModuleList):
+    """Collection of experts stored as a ModuleList to preserve per-expert weight names
+    (experts.{i}.gate_proj / up_proj / down_proj) matching the checkpoint layout."""
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        selected_experts: torch.Tensor,
+        routing_weights: torch.Tensor,
+    ) -> torch.Tensor:
+        final_hidden_states = torch.zeros_like(hidden_states)
+        expert_mask = F.one_hot(selected_experts, num_classes=len(self)).permute(2, 1, 0)
+
+        for expert_idx, expert in enumerate(self):
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            if token_idx.numel() == 0:
+                continue
+            current_hidden_states = expert(hidden_states[token_idx])
+            current_hidden_states = current_hidden_states * routing_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+
+        return final_hidden_states
 
 
 class Cohere2MoeSparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.num_experts = config.num_experts
-        self.top_k = config.num_experts_per_tok
         self.num_shared_experts = config.num_shared_experts
-        self.expert_selection_fn = config.expert_selection_fn
         self.shared_expert_combination_strategy = config.shared_expert_combination_strategy
 
-        # gating
-        self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
-        self.experts = nn.ModuleList(
-            [Cohere2MoeMLP(config, config.intermediate_size) for _ in range(self.num_experts)]
-        )
+        self.gate = Cohere2MoeRouter(config)
+        self.experts = Cohere2MoeExperts([Cohere2MoeMLP(config) for _ in range(config.num_experts)])
 
-        # shared experts
         if self.num_shared_experts > 0:
-            self.shared_experts = Cohere2MoeMLP(config, config.intermediate_size * config.num_shared_experts)
-
-        self.norm_topk_prob = config.norm_topk_prob
+            self.shared_experts = Cohere2MoeMLP(
+                config,
+                intermediate_size=config.intermediate_size * config.num_shared_experts,
+            )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """ """
         batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_dim)
-        # router_logits: (batch * sequence_length, n_experts)
-        router_logits = self.gate(hidden_states).float()
+        hidden_states_flat = hidden_states.view(-1, hidden_dim)
 
-        routing_weights, selected_experts = torch.topk(router_logits, self.top_k, dim=-1)
-        if self.expert_selection_fn == "softmax":
-            routing_weights = F.softmax(routing_weights, dim=1, dtype=torch.float)
-        elif self.expert_selection_fn == "sigmoid":
-            routing_weights = F.sigmoid(routing_weights)
-            if self.norm_topk_prob:
-                routing_weights = routing_weights / torch.sum(routing_weights, dim=-1, keepdims=True)
-        else:
-            raise NotImplementedError("Expert selection function can only be either Softmax or Sigmoid.")
-
-        # we cast back to the input dtype
+        _, routing_weights, selected_experts = self.gate(hidden_states_flat)
         routing_weights = routing_weights.to(hidden_states.dtype)
 
-        final_hidden_states = torch.zeros(
-            (batch_size * sequence_length, hidden_dim), dtype=hidden_states.dtype, device=hidden_states.device
-        )
-
-        # One hot encode the selected experts to create an expert mask
-        # this will be used to easily index which expert is going to be sollicitated
-        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
-
-        # Loop over all available experts in the model and perform the computation on each expert
-        for expert_idx in range(self.num_experts):
-            expert_layer = self.experts[expert_idx]
-            idx, top_x = torch.where(expert_mask[expert_idx])
-
-            # Index the correct hidden states and compute the expert hidden state for
-            # the current expert. We need to make sure to multiply the output hidden
-            # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
-            current_state = hidden_states[None, top_x].reshape(-1, hidden_dim)
-            current_hidden_states = expert_layer(current_state) * routing_weights[top_x, idx, None]
-
-            # However `index_add_` only support torch tensors for indexing so we'll use
-            # the `top_x` tensor here.
-            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
+        final_hidden_states = self.experts(hidden_states_flat, selected_experts, routing_weights)
 
         if self.num_shared_experts > 0:
-            shared_expert_output = self.shared_experts(hidden_states)
+            shared_expert_output = self.shared_experts(hidden_states_flat)
             if self.shared_expert_combination_strategy == "sum":
                 final_hidden_states = final_hidden_states + shared_expert_output
             elif self.shared_expert_combination_strategy == "average":
                 final_hidden_states = (final_hidden_states + shared_expert_output) / 2
-        final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
-        return final_hidden_states
+
+        return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
 
-@use_kernel_forward_from_hub("RMSNorm")
-class Cohere2MoeRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        Cohere2MoeRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+class Cohere2MoeRMSNorm(LlamaRMSNorm):
+    pass
 
 
 class Cohere2MoeLayerNorm(Cohere2LayerNorm):
     pass
-
-
-def select_norm_impl(config: Cohere2MoeConfig) -> tuple[type[torch.nn.Module], float]:
-    """
-    Returns the normalization layer class and epsilon value to use.
-    If `config.rms_norm_eps` is present, use RMSNorm.
-    Otherwise default to LayerNorm with `config.layer_norm_eps`.
-    """
-    rms_eps = getattr(config, "rms_norm_eps", None)
-    if rms_eps is not None:
-        return Cohere2MoeRMSNorm, rms_eps
-
-    return Cohere2MoeLayerNorm, config.layer_norm_eps
 
 
 class Cohere2MoeAttention(Cohere2Attention):
@@ -211,7 +185,6 @@ class Cohere2MoeAttention(Cohere2Attention):
             and self.layer_idx < first_k_dense_replace
         )
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -233,12 +206,11 @@ class Cohere2MoeAttention(Cohere2Attention):
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -261,130 +233,35 @@ class Cohere2MoeDecoderLayer(Cohere2DecoderLayer):
     def __init__(self, config: Cohere2MoeConfig, layer_idx: int):
         GradientCheckpointingLayer.__init__(self)
 
-        norm_cls, norm_eps = select_norm_impl(config)
         self.hidden_size = config.hidden_size
         self.self_attn = Cohere2MoeAttention(config=config, layer_idx=layer_idx)
-        self.input_layernorm = norm_cls(hidden_size=(config.hidden_size), eps=norm_eps)
         self.attention_type = config.layer_types[layer_idx]
+
+        rms_norm_eps = getattr(config, "rms_norm_eps", None)
+        self.input_layernorm = (
+            Cohere2MoeRMSNorm(hidden_size=config.hidden_size, eps=rms_norm_eps)
+            if rms_norm_eps is not None
+            else Cohere2MoeLayerNorm(hidden_size=config.hidden_size, eps=config.layer_norm_eps)
+        )
 
         if layer_idx < config.first_k_dense_replace:
             self.mlp = Cohere2MoeMLP(config, config.prefix_dense_intermediate_size)
         else:
             self.mlp = Cohere2MoeSparseMoeBlock(config)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*):
-                attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
-                query_sequence_length, key_sequence_length)` if default attention is used.
-            past_key_values (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence
-            position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
-                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
-                with `head_dim` being the embedding dimension of each attention head.
-        """
-        residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)
-        hidden_states_attention, _ = self.self_attn(
-            hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            **kwargs,
-        )
-
-        hidden_states_mlp = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states_attention + hidden_states_mlp
-        return hidden_states
-
 
 @auto_docstring
 class Cohere2MoePreTrainedModel(Cohere2PreTrainedModel):
-    config: Cohere2MoeConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    config_class = Cohere2MoeConfig
     _no_split_modules = ["Cohere2MoeDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": Cohere2MoeDecoderLayer,
         "attentions": Cohere2MoeAttention,
     }
-    config_class = Cohere2MoeConfig
 
 
 class Cohere2MoeRotaryEmbedding(Cohere2RotaryEmbedding):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: Cohere2MoeConfig, device=None):
-        nn.Module.__init__(self)
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-
-        self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
-
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
-
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: "Cohere2MoeConfig | None" = None,
-        device: Optional["torch.device"] = None,
-        seq_len: "int | None" = None,
-    ) -> tuple["torch.Tensor", float]:
-        base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-        attention_factor = 1.0
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.repeat_interleave(freqs, 2, dim=-1)  # diff from Llama: we interleave() instead of cat()
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+    pass
 
 
 @auto_docstring
@@ -397,7 +274,6 @@ class Cohere2MoeModel(Cohere2Model):
 
     def __init__(self, config: Cohere2MoeConfig):
         Cohere2MoePreTrainedModel.__init__(self, config)
-        norm_cls, norm_eps = select_norm_impl(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
@@ -405,7 +281,12 @@ class Cohere2MoeModel(Cohere2Model):
         self.layers = nn.ModuleList(
             [Cohere2MoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = norm_cls(hidden_size=(config.hidden_size), eps=norm_eps)
+        rms_norm_eps = getattr(config, "rms_norm_eps", None)
+        self.norm = (
+            Cohere2MoeRMSNorm(hidden_size=config.hidden_size, eps=rms_norm_eps)
+            if rms_norm_eps is not None
+            else Cohere2MoeLayerNorm(hidden_size=config.hidden_size, eps=config.layer_norm_eps)
+        )
         self.rotary_emb = Cohere2MoeRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
@@ -477,96 +358,7 @@ class Cohere2MoeModel(Cohere2Model):
 
 @auto_docstring
 class Cohere2MoeForCausalLM(Cohere2ForCausalLM):
-    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
-    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
-
-    def __init__(self, config: Cohere2MoeConfig):
-        Cohere2MoePreTrainedModel.__init__(self, config)
-        self.model = Cohere2MoeModel(config)
-        self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.logit_scale = config.logit_scale
-        self.tie_word_embeddings = config.tie_word_embeddings
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Example:
-
-        ```python
-        >> from transformers import AutoTokenizer, Cohere2MoeForCausalLM
-
-        >> model = Cohere2MoeForCausalLM.from_pretrained("Cohere2MoeForAI/c4ai-command-r-v01")
-        >> tokenizer = AutoTokenizer.from_pretrained("Cohere2MoeForAI/c4ai-command-r-v01")
-
-        >> prompt = "Hey, are you conscious? Can you talk to me?"
-        >> inputs = tokenizer(prompt, return_tensors="pt")
-
-        >> # Generate
-        >> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
-        ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs: BaseModelOutputWithPast = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            cache_position=cache_position,
-            **kwargs,
-        )
-
-        hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
-        logits = logits * self.logit_scale  # main diff from Llama
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-
-        return CausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
 
 
 __all__ = ["Cohere2MoeForCausalLM", "Cohere2MoeModel", "Cohere2MoePreTrainedModel"]
