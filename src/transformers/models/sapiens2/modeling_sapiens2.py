@@ -22,13 +22,20 @@ from dataclasses import dataclass
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling, SemanticSegmenterOutput
+from ...modeling_outputs import (
+    BackboneOutput,
+    BaseModelOutput,
+    BaseModelOutputWithPooling,
+    ModelOutput,
+    SemanticSegmenterOutput,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
@@ -496,14 +503,41 @@ class Sapiens2SegmentationHead(nn.Module):
             if config.head_conv_out_channels
             else config.head_upsample_out_channels[-1]
         )
-        self.classifier = nn.Conv2d(classifier_in, config.num_labels, kernel_size=1)
+        self.predictor = nn.Conv2d(classifier_in, config.num_labels, kernel_size=1)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         for layer in self.deconv_layers:
             hidden_states = layer(hidden_states)
         for layer in self.conv_layers:
             hidden_states = layer(hidden_states)
-        return self.classifier(hidden_states)
+        return self.predictor(hidden_states)
+
+
+@auto_docstring(
+    custom_intro="""
+    Class for outputs of pose estimation models.
+    """
+)
+@dataclass
+class Sapiens2PoseEstimatorOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Keypoint loss computed between the predicted heatmaps and the ground-truth heatmaps.
+    heatmaps (`torch.FloatTensor` of shape `(batch_size, num_keypoints, height, width)`):
+        Heatmaps as predicted by the model.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage)
+        of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
+        each layer plus the initial embedding outputs.
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one per layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`. Attentions weights after the attention softmax.
+    """
+
+    loss: torch.FloatTensor | None = None
+    heatmaps: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @auto_docstring
@@ -763,4 +797,71 @@ class Sapiens2ForSemanticSegmentation(Sapiens2PreTrainedModel):
         )
 
 
-__all__ = ["Sapiens2Model", "Sapiens2PreTrainedModel", "Sapiens2Backbone", "Sapiens2ForSemanticSegmentation"]
+class Sapiens2PoseHead(Sapiens2SegmentationHead):
+    pass
+
+
+@auto_docstring(
+    checkpoint="facebook/sapiens2-pose-0.4b",
+    custom_intro="""
+    The Sapiens2 model with a pose estimation head on top (a set of heatmap predictors on top of the hidden states output).
+    """,
+)
+class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
+    def __init__(self, config: Sapiens2Config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+        self.sapiens2 = Sapiens2Model(config)
+        self.decode_head = Sapiens2PoseHead(config)
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        labels: torch.FloatTensor | None = None,
+        keypoint_weights: torch.FloatTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Sapiens2PoseEstimatorOutput:
+        r"""
+        labels (`torch.FloatTensor` of shape `(batch_size, num_keypoints, height, width)`, *optional*):
+            Heatmap ground truth for computing the loss.
+        keypoint_weights (`torch.FloatTensor` of shape `(batch_size, num_keypoints)`, *optional*):
+            Per-keypoint weights applied to the MSE loss. Invisible keypoints can be down-weighted to zero.
+        """
+        outputs = self.sapiens2(pixel_values, **kwargs)
+
+        batch_size, _, height, width = pixel_values.shape
+        patch_height = height // self.config.patch_size
+        patch_width = width // self.config.patch_size
+
+        patch_tokens = outputs.last_hidden_state[:, 1 + self.config.num_register_tokens :]
+        feature_map = patch_tokens.transpose(1, 2).reshape(batch_size, -1, patch_height, patch_width)
+
+        heatmaps = self.decode_head(feature_map)
+
+        loss = None
+        if labels is not None:
+            if keypoint_weights is not None:
+                weights = keypoint_weights[:, :, None, None]
+                loss = F.mse_loss(heatmaps * weights, labels * weights)
+            else:
+                loss = F.mse_loss(heatmaps, labels)
+
+        return Sapiens2PoseEstimatorOutput(
+            loss=loss,
+            heatmaps=heatmaps,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+__all__ = [
+    "Sapiens2Model",
+    "Sapiens2PreTrainedModel",
+    "Sapiens2Backbone",
+    "Sapiens2ForSemanticSegmentation",
+    "Sapiens2ForPoseEstimation",
+    "Sapiens2PoseEstimatorOutput",
+]
