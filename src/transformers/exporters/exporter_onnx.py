@@ -671,11 +671,27 @@ def _aten_index_put(
     return op.Reshape(result, op.Shape(self))
 
 
+def _aten_bincount(self: INT64, weights=None, minlength: int = 0) -> INT64:
+    """ONNX implementation of `torch.bincount`: count occurrences of non-negative ints.
+
+    No native ONNX op. We use `OneHot(self, depth=max+1, values=[0,1])` then `ReduceSum`
+    along the input axis. Weights are unused (splinter's only caller passes none).
+    """
+    one = op.Constant(value_ints=[1])
+    max_val = op.Unsqueeze(op.ReduceMax(self, keepdims=0), op.Constant(value_ints=[0]))
+    depth = op.Add(max_val, one)
+    if minlength > 0:
+        depth = op.Max(depth, op.Constant(value_ints=[minlength]))
+    one_hot = op.OneHot(self, depth, op.Constant(value_ints=[0, 1]), axis=-1)
+    return op.ReduceSum(one_hot, op.Constant(value_ints=[0]), keepdims=0)
+
+
 _ONNX_TRANSLATION_TABLE: dict[Any, Any] = {}
 if is_onnxscript_available():
     _ONNX_TRANSLATION_TABLE.update(
         {
             torch.ops.aten.index_put.default: _aten_index_put,
+            torch.ops.aten.bincount.default: _aten_bincount,
         }
     )
 

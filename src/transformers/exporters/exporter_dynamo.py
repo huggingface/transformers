@@ -96,7 +96,20 @@ class DynamoExporter(HfExporter):
                 prefer_deferred_runtime_asserts_over_guards=self.export_config.prefer_deferred_runtime_asserts_over_guards,
             )
 
+        cleanup_state(model)
         return exported_program
+
+
+def cleanup_state(model: torch.nn.Module) -> None:
+    """Reset stateful module attributes that ``torch.export`` may have populated with
+    FakeTensors during tracing (e.g. ``_cached_keys`` on glm_moe_dsa's DSA indexer).
+
+    Without this, a subsequent eager forward on the same module hits shape mismatches
+    when it tries to concatenate FakeTensor state with a real input.
+    """
+    for module in model.modules():
+        if hasattr(module, "_cached_keys"):
+            module._cached_keys = None
 
 
 # ── Untraceable pattern patches ────────────────────────────────────────────
