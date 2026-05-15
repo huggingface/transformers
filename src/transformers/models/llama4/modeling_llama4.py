@@ -27,7 +27,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_chunked_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -53,6 +53,7 @@ from .configuration_llama4 import Llama4Config, Llama4TextConfig
 logger = logging.get_logger(__name__)
 
 
+@use_experts_implementation(is_transposed=True)
 class Llama4TextExperts(nn.Module):
     def __init__(self, config: Llama4TextConfig):
         super().__init__()
@@ -64,25 +65,28 @@ class Llama4TextExperts(nn.Module):
         self.down_proj = nn.Parameter(torch.empty((self.num_experts, self.expert_dim, self.hidden_size)))
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """
-        This should really not be run on a single machine, as we are reaching compute bound:
-        - the inputs are expected to be "sorted" per expert already.
-        - the weights are viewed with another dim, to match num_expert, 1, shape * num_tokens, shape
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        top_k_index: torch.Tensor,
+        top_k_weights: torch.Tensor,
+    ) -> torch.Tensor:
+        # Reconstruct full routing scores matrix [num_tokens, num_experts] with zeros for non-selected
+        num_tokens = hidden_states.size(0)
+        router_scores = torch.zeros(num_tokens, self.num_experts, device=hidden_states.device, dtype=top_k_weights.dtype)
+        router_scores.scatter_(1, top_k_index, top_k_weights)
 
-        Args:
-            hidden_states (torch.Tensor): (batch_size * token_num, hidden_size)
-            selected_experts (torch.Tensor): (batch_size * token_num, top_k)
-            routing_weights (torch.Tensor): (batch_size * token_num, top_k)
-        Returns:
-            torch.Tensor
-        """
-        hidden_states = hidden_states.view(self.gate_up_proj.shape[0], -1, self.hidden_size)
-        gate_up = torch.bmm(hidden_states, self.gate_up_proj)
-        gate, up = gate_up.chunk(2, dim=-1)  # not supported for DTensors
+        # Original Llama4 bmm: repeat tokens per expert, pre-multiply by routing weights
+        routed_in = hidden_states.repeat(self.num_experts, 1)
+        routed_in = routed_in * router_scores.T.reshape(-1, 1)
+
+        # bmm over all experts
+        routed_in = routed_in.view(self.num_experts, -1, self.hidden_size)
+        gate_up = torch.bmm(routed_in, self.gate_up_proj)
+        gate, up = gate_up.chunk(2, dim=-1)
         next_states = torch.bmm((up * self.act_fn(gate)), self.down_proj)
-        next_states = next_states.view(-1, self.hidden_size)
-        return next_states
+        # Sum across experts
+        return next_states.sum(dim=0)
 
 
 # Phi3MLP
@@ -150,7 +154,9 @@ class Llama4Router(nn.Linear):
         router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=1)
         router_scores = torch.full_like(router_logits, float("-inf")).scatter_(1, router_indices, router_top_value)
         router_scores = torch.nn.functional.sigmoid(router_scores.float()).to(router_scores.dtype)
-        return router_scores, router_logits
+        # Extract top-k weights at selected indices
+        top_k_weights = router_scores.gather(1, router_indices)  # (num_tokens, top_k)
+        return router_logits, top_k_weights, router_indices
 
 
 @use_kernel_forward_from_hub("Llama4TextMoe")
@@ -166,12 +172,10 @@ class Llama4TextMoe(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_scores, router_logits = self.router(hidden_states)
-        routed_in = hidden_states.repeat(router_scores.shape[1], 1)
-        routed_in = routed_in * router_scores.transpose(0, 1).reshape(-1, 1)
-        routed_out = self.experts(routed_in)
+        router_logits, top_k_weights, top_k_index = self.router(hidden_states)
+        routed_out = self.experts(hidden_states, top_k_index, top_k_weights)
         out = self.shared_expert(hidden_states)
-        out.add_(routed_out.reshape(router_scores.shape[1], -1, routed_out.shape[-1]).sum(dim=0))
+        out = out + routed_out
         return out, router_logits
 
 
