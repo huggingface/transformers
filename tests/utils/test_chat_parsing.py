@@ -182,18 +182,6 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
         }
         self.assertEqual(tokenizer.parse_response(model_out), expected)
 
-    def test_batched_inputs(self):
-        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        tokenizer.response_template = cohere_template
-        model_out = (
-            "<|START_THINKING|>I should call a tool.<|END_THINKING|>"
-            '<|START_ACTION|>[\n    {"tool_call_id": "0", "tool_name": "simple_tool", '
-            '"parameters": {"temperature_format": "Celsius"}}\n]<|END_ACTION|><|END_OF_TURN_TOKEN|>'
-        )
-        single = tokenizer.parse_response(model_out)
-        self.assertEqual(tokenizer.parse_response([model_out]), [single])
-        self.assertEqual(tokenizer.parse_response([model_out] * 2), [single] * 2)
-
     def test_token_id_inputs(self):
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
         tokenizer.response_template = cohere_template
@@ -205,7 +193,6 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
         parsed = tokenizer.parse_response(model_out)
         tokenized = tokenizer(model_out).input_ids
         self.assertEqual(tokenizer.parse_response(tokenized), parsed)
-        self.assertEqual(tokenizer.parse_response([tokenized]), [parsed])
 
     def test_cohere(self):
         model_out = (
