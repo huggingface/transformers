@@ -1212,11 +1212,11 @@ class DetrModel(DetrPreTrainedModel):
 
             # Apply 1x1 conv to map (batch_size, C, H, W) -> (batch_size, hidden_size, H, W), then flatten to (batch_size, HW, hidden_size)
             projected_feature_map = self.input_projection(feature_map)
-            flattened_features = projected_feature_map.flatten(2).permute(0, 2, 1)
+            flattened_features = projected_feature_map.flatten(2).transpose(1, 2)
             spatial_position_embeddings = (
                 self.position_embedding(shape=feature_map.shape, device=device, dtype=pixel_values.dtype, mask=mask)
                 .flatten(2)
-                .permute(0, 2, 1)
+                .transpose(1, 2)
             )
             flattened_mask = mask.flatten(1)
         else:
@@ -1235,7 +1235,7 @@ class DetrModel(DetrPreTrainedModel):
                     dtype=inputs_embeds.dtype,
                 )
                 .flatten(2)
-                .permute(0, 2, 1)
+                .transpose(1, 2)
             )
             # If a pixel_mask is provided with inputs_embeds, interpolate it to feat_dim, then flatten.
             if pixel_mask is not None:
@@ -1554,13 +1554,13 @@ class DetrForSegmentation(DetrPreTrainedModel):
 
         # Apply 1x1 conv to map (batch_size, C, H, W) -> (batch_size, hidden_size, H, W), then flatten to (batch_size, HW, hidden_size)
         projected_feature_map = self.detr.model.input_projection(feature_map)
-        flattened_features = projected_feature_map.flatten(2).permute(0, 2, 1)
+        flattened_features = projected_feature_map.flatten(2).transpose(1, 2)
         spatial_position_embeddings = (
             self.detr.model.position_embedding(
                 shape=feature_map.shape, device=device, dtype=pixel_values.dtype, mask=mask
             )
             .flatten(2)
-            .permute(0, 2, 1)
+            .transpose(1, 2)
         )
         flattened_mask = mask.flatten(1)
 
@@ -1598,9 +1598,7 @@ class DetrForSegmentation(DetrPreTrainedModel):
         pred_boxes = self.detr.bbox_predictor(sequence_output).sigmoid()
 
         height, width = feature_map.shape[-2:]
-        memory = encoder_outputs.last_hidden_state.permute(0, 2, 1).view(
-            batch_size, self.config.d_model, height, width
-        )
+        memory = encoder_outputs.last_hidden_state.transpose(1, 2).view(batch_size, self.config.d_model, height, width)
         attention_mask = flattened_mask.view(batch_size, height, width)
 
         if attention_mask is not None:

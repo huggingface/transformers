@@ -1070,9 +1070,9 @@ class MaskFormerTransformerModule(nn.Module):
         object_queries = (
             self.position_embedder(image_features.shape, image_features.device, image_features.dtype)
             .view(batch_size, num_channels, height * width)
-            .permute(0, 2, 1)
+            .transpose(1, 2)
         )
-        image_features = image_features.view(batch_size, num_channels, height * width).permute(0, 2, 1)
+        image_features = image_features.view(batch_size, num_channels, height * width).transpose(1, 2)
 
         decoder_output: DetrDecoderOutput = self.decoder(
             inputs_embeds=inputs_embeds,
