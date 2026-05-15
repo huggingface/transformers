@@ -393,7 +393,13 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
     def test_inference_semantic_segmentation(self):
         # TODO(guarin): remove config. transformers_weights required for now because original checkpoints are called
         # "sapiens2_0.4b_seg.safetensors" instead of "model.safetensors"
-        config = Sapiens2Config(num_labels=29)
+        config = Sapiens2Config(
+            num_labels=29,
+            head_upsample_out_channels=[512, 256, 128, 64],
+            head_upsample_kernel_sizes=[4, 4, 4, 4],
+            head_conv_out_channels=[64, 64, 64],
+            head_conv_kernel_sizes=[1, 1, 1],
+        )
         config.transformers_weights = "sapiens2_0.4b_seg.safetensors"
         model = (
             Sapiens2ForSemanticSegmentation.from_pretrained("facebook/sapiens2-seg-0.4b", config=config)
@@ -440,7 +446,13 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
     def test_inference_pose_estimation(self):
         # TODO(guarin): remove config. transformers_weights required for now because original checkpoints are called
         # "sapiens2_0.4b_pose.safetensors" instead of "model.safetensors"
-        config = Sapiens2Config(num_labels=308)
+        config = Sapiens2Config(
+            num_labels=308,
+            head_upsample_out_channels=[1024, 768],
+            head_upsample_kernel_sizes=[4, 4],
+            head_conv_out_channels=[512, 512, 256],
+            head_conv_kernel_sizes=[1, 1, 1],
+        )
         config.transformers_weights = "sapiens2_0.4b_pose.safetensors"
         model = (
             Sapiens2ForPoseEstimation.from_pretrained("facebook/sapiens2-pose-0.4b", config=config)
