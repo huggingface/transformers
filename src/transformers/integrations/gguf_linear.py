@@ -769,6 +769,28 @@ def _prepare_id_kernel_refs(mod: nn.Module) -> None:
             mod._moe_decode_op = getattr(decode, "default", decode)
             mod._moe_decode_fmt_codes = fmt_codes
 
+    # Pre-allocate decode-shape scratch buffers so the wrapper's per-call
+    # ``if _scratch_key != cache_key: torch.empty(...)`` branch never
+    # triggers a dynamo recompile (which it does on attr mutation:
+    # None → tuple). Without this the compile re-traces on every call.
+    # Registered as non-persistent buffers so ``model.to(device)`` moves
+    # them along with the qweights.
+    H = mod.hidden_dim
+    I = mod.intermediate_dim
+    top_k = getattr(getattr(mod, "config", None), "num_experts_per_tok", None) or 4
+    dev = mod.gate_proj_q.device
+    S_dec = top_k  # decode-time S (num_tokens=1)
+    # Drop any prior buffers (re-entrant safety; this fn can run multiple times).
+    for name in ("_gate_buf", "_up_buf", "_pair_out", "_decode_out_buf"):
+        if name in mod._buffers:
+            del mod._buffers[name]
+    mod.register_buffer("_gate_buf",       torch.empty(S_dec, I, dtype=torch.float32, device=dev), persistent=False)
+    mod.register_buffer("_up_buf",         torch.empty(S_dec, I, dtype=torch.float32, device=dev), persistent=False)
+    mod.register_buffer("_pair_out",       torch.empty(S_dec, H, dtype=torch.float32, device=dev), persistent=False)
+    mod.register_buffer("_decode_out_buf", torch.empty(1,     H, dtype=torch.float32, device=dev), persistent=False)
+    mod._scratch_S    = S_dec
+    mod._scratch_T    = 1
+
 
 def _row_permute_attn_q_bytes(qbytes_flat: torch.Tensor, num_heads: int,
                               out_features: int, bytes_per_row: int) -> torch.Tensor:

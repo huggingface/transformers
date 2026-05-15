@@ -514,28 +514,22 @@ def gguf_bmm_experts_forward(
     S = num_tokens * num_top_k
 
     # ---- gguf_moe_decode_f32 fast path -------------------------------------
-    # Single torch op call absorbs the entire MoE block (repeat_interleave,
-    # ids cast, gate+up+silu+down kernels, weighted reduce). Skipped during
-    # torch.compile tracing so dynamo can still emit a clean FX graph of the
-    # constituent ops (see ``torch.compiler.is_compiling`` check below).
+    # Single torch op call absorbs the entire MoE block. Skipped under dynamo
+    # tracing so compile still sees the constituent ops. Scratch buffers are
+    # pre-allocated at swap time (``_prepare_id_kernel_refs``) as non-
+    # persistent buffers — ``.to(device)`` moves them. Buffer size assumes
+    # decode shape (S = top_k, num_tokens = 1); larger shapes (prefill) fall
+    # through to the Python wrapper below.
     decode_op = getattr(self, "_moe_decode_op", None)
     decode_codes = getattr(self, "_moe_decode_fmt_codes", None)
-    if decode_op is not None and decode_codes is not None and not torch.compiler.is_compiling():
-        # Scratch + output buffers are reused across layers + decode steps.
-        cache_key = (S, num_tokens, device)
-        if getattr(self, "_scratch_key", None) != cache_key:
-            self._gate_buf    = torch.empty(S, I, dtype=torch.float32, device=device)
-            self._up_buf      = torch.empty(S, I, dtype=torch.float32, device=device)
-            self._pair_out    = torch.empty(S, H, dtype=torch.float32, device=device)
-            self._decode_out_buf = torch.empty(num_tokens, H, dtype=torch.float32, device=device)
-            self._gate_qw_flat = self.gate_proj_q.view(-1)
-            self._up_qw_flat   = self.up_proj_q.view(-1)
-            self._down_qw_flat = self.down_proj_q.view(-1)
-            self._scratch_key = cache_key
+    if (decode_op is not None and decode_codes is not None
+            and not torch.compiler.is_compiling()
+            and getattr(self, "_scratch_S", None) == S
+            and getattr(self, "_scratch_T", None) == num_tokens):
         hidden = hidden_states if hidden_states.dtype == torch.float32 else hidden_states.to(torch.float32)
         decode_op(
             hidden, top_k_index, top_k_weights,
-            self._gate_qw_flat, self._up_qw_flat, self._down_qw_flat,
+            self.gate_proj_q.view(-1), self.up_proj_q.view(-1), self.down_proj_q.view(-1),
             self._gate_buf, self._up_buf, self._pair_out,
             self._decode_out_buf,
             *decode_codes,
@@ -578,25 +572,23 @@ def gguf_bmm_experts_forward(
     else:
         sample_weights = top_k_weights.reshape(-1)
 
-    # qweight `view(-1)` is stride-only (no copy, no dispatch), but the
-    # attribute resolution + view() call still costs ~µs per access. Cache.
-    gate_qw = getattr(self, "_gate_qw_flat", None)
-    if gate_qw is None or gate_qw.shape[0] != self.gate_proj_q.numel():
-        self._gate_qw_flat = self.gate_proj_q.view(-1)
-        self._up_qw_flat   = self.up_proj_q.view(-1)
-        self._down_qw_flat = self.down_proj_q.view(-1)
-        gate_qw = self._gate_qw_flat
-    up_qw, down_qw = self._up_qw_flat, self._down_qw_flat
+    # `view(-1)` is a strides-only no-copy op (~5 µs dispatch). We don't
+    # cache it because cached views don't follow ``model.to(device)``.
+    gate_qw = self.gate_proj_q.view(-1)
+    up_qw   = self.up_proj_q.view(-1)
+    down_qw = self.down_proj_q.view(-1)
 
-    # Scratch buffer cache: avoid 3× `torch.empty` per layer when S/device
-    # are stable across calls (true for decode: S = top_k, device = mps).
-    cache_key = (S, device)
-    if getattr(self, "_scratch_key", None) != cache_key:
-        self._gate_buf  = torch.empty(S, I, dtype=torch.float32, device=device)
-        self._up_buf    = torch.empty(S, I, dtype=torch.float32, device=device)
-        self._pair_out  = torch.empty(S, H, dtype=torch.float32, device=device)
-        self._scratch_key = cache_key
-    gate_buf, up_buf, out = self._gate_buf, self._up_buf, self._pair_out
+    # Pre-allocated scratch buffers (decode shape) — see
+    # ``_prepare_id_kernel_refs`` for the registration. For non-decode
+    # shapes (prefill with num_tokens > 1) we allocate on demand without
+    # mutating module state so dynamo doesn't trip a recompile.
+    if (getattr(self, "_scratch_S", None) == S
+            and getattr(self, "_scratch_T", None) == num_tokens):
+        gate_buf, up_buf, out = self._gate_buf, self._up_buf, self._pair_out
+    else:
+        gate_buf = torch.empty(S, I, dtype=torch.float32, device=device)
+        up_buf   = torch.empty(S, I, dtype=torch.float32, device=device)
+        out      = torch.empty(S, H, dtype=torch.float32, device=device)
 
     if use_fused:
         fused_op(gate_qw, up_qw, down_qw, selected, ids32,
