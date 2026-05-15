@@ -5,17 +5,6 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
-"""Response parsing walks a single pointer through a growing buffer. At any point
-there is a "current region" -- either the implicit/sink field (if the spec
-defined one), or an explicit field whose open pattern just matched -- and a
-watchlist of regex patterns whose match would end or redirect it. On each
-`feed()` call it commits every byte it can safely classify and holds back any
-trailing bytes that could still be the prefix of an upcoming delimiter, so
-events fire incrementally without waiting for the whole response.
-
-`parse_response()` is a thin wrapper that feeds the whole string at once; the
-correctness invariant is that streamed + finalize() equals whole-string parse
-for any chunking of the input."""
 
 from __future__ import annotations
 
@@ -27,7 +16,7 @@ from .response_templates import ResponseTemplate, ResponseTemplateField, load_re
 
 
 def parse_response(text: str, response_template: dict | ResponseTemplate, *, prefix: str | None = None) -> dict:
-    """A convenience function for response parsing when you don't want streaming. Takes a whole output + text
+    """The main function for response parsing when you don't want streaming. Takes a whole output + text
     and parses it without streaming any events, then returns the parsed message.
     """
     response_template = load_response_template(response_template)

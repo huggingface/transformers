@@ -5,15 +5,9 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
-"""Content pipeline: body string → parsed value → (optional) jmespath transform.
-
-Two stages compose into `process_field(body, fld, captures)`:
-  1. `parse_content` dispatches through the closed `CONTENT_PARSERS` registry.
-  2. If the field declares a `transform`, jmespath runs on
-     `{**captures, "content": <parsed>}` so templates can reshape the parsed
-     value and merge it with named regex captures from the open/close patterns.
-
-The registry is closed — schemas select parsers by name but cannot ship code."""
+"""This file contains the parsers used by chat response parsing. Each parser takes a chunk of captured text
+and parses it into a single key in the output message dictionary. Functions are generally boilerplate and as
+a result this is mostly agent-written."""
 
 from __future__ import annotations
 
