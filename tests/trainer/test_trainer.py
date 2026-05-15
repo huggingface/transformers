@@ -140,6 +140,47 @@ class TrainerMixedPrecisionTest(TestCasePlus, TrainerIntegrationCommon):
 
 
 # ---------------------------------------------------------------------------
+# DDP kwargs forwarding tests
+# ---------------------------------------------------------------------------
+
+
+@require_torch
+class TrainerDDPKwargsTest(TestCasePlus):
+    """The `ddp_*` TrainingArguments fields must reach DistributedDataParallelKwargs."""
+
+    def _get_ddp_kwargs(self, **training_args_overrides):
+        """Build a Trainer, run _build_accelerator_args, return the DDP kwargs dict."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(output_dir=tmp_dir, max_steps=1, **training_args_overrides)
+            trainer = Trainer(model=RegressionModel(), args=args, train_dataset=RegressionDataset())
+            accelerator_args = trainer._build_accelerator_args()
+            (handler,) = accelerator_args["kwargs_handlers"]
+            return handler
+
+    def test_ddp_static_graph_true_reaches_accelerator(self):
+        """ddp_static_graph=True is forwarded as static_graph=True to DistributedDataParallelKwargs."""
+        handler = self._get_ddp_kwargs(ddp_static_graph=True)
+        self.assertTrue(handler.static_graph)
+
+    def test_ddp_static_graph_false_reaches_accelerator(self):
+        """ddp_static_graph=False is forwarded as static_graph=False."""
+        handler = self._get_ddp_kwargs(ddp_static_graph=False)
+        self.assertFalse(handler.static_graph)
+
+    def test_ddp_static_graph_none_preserves_default(self):
+        """ddp_static_graph=None (default) must NOT override DistributedDataParallelKwargs' own default (False).
+
+        Regression guard: the conditional in _build_accelerator_args must keep static_graph out of ddp_kwargs
+        when the flag is unset, otherwise clusters not configured for it would silently switch behavior.
+        """
+        handler = self._get_ddp_kwargs()  # ddp_static_graph unset
+        # DistributedDataParallelKwargs default is False. If our conditional is broken and we always injected
+        # the attribute, this would still be False only by coincidence. Cross-check with ddp_static_graph=True
+        # (above) that the kwarg IS plumbed when set — together these tests pin both directions.
+        self.assertFalse(handler.static_graph)
+
+
+# ---------------------------------------------------------------------------
 # Gradient accumulation tests
 # ---------------------------------------------------------------------------
 

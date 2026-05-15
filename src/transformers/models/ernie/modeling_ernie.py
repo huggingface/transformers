@@ -693,12 +693,12 @@ class ErnieModel(ErniePreTrainedModel):
         return attention_mask, encoder_attention_mask
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`ErnieForPreTraining`].
     """
 )
+@dataclass
 class ErnieForPreTrainingOutput(ModelOutput):
     r"""
     loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
