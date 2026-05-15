@@ -1065,9 +1065,13 @@ class MaskFormerTransformerModule(nn.Module):
         if self.training:
             inputs_embeds.requires_grad_(True)
 
-        object_queries = self.position_embedder(image_features.shape, image_features.device, image_features.dtype)
         batch_size, num_channels, height, width = image_features.shape
-        # rearrange image_features "b c h w -> b (h w) c" (object_queries are already in this format)
+        # rearrange both image_features and object_queries "b c h w -> b (h w) c"
+        object_queries = (
+            self.position_embedder(image_features.shape, image_features.device, image_features.dtype)
+            .view(batch_size, num_channels, height * width)
+            .permute(0, 2, 1)
+        )
         image_features = image_features.view(batch_size, num_channels, height * width).permute(0, 2, 1)
 
         decoder_output: DetrDecoderOutput = self.decoder(

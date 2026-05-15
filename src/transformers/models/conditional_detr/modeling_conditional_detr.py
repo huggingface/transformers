@@ -388,9 +388,6 @@ class ConditionalDetrLearnedPositionEmbedding(nn.Module):
         pos = pos.permute(2, 0, 1)
         pos = pos.unsqueeze(0)
         pos = pos.repeat(shape[0], 1, 1, 1)
-        # Flatten spatial dimensions and permute to (batch_size, sequence_length, hidden_size) format
-        # expected by the encoder
-        pos = pos.flatten(2).permute(0, 2, 1)
         return pos
 
 
@@ -1441,8 +1438,10 @@ class ConditionalDetrModel(ConditionalDetrPreTrainedModel):
         projected_feature_map = self.input_projection(feature_map)
 
         # Generate position embeddings
-        spatial_position_embeddings = self.position_embedding(
-            shape=feature_map.shape, device=device, dtype=pixel_values.dtype, mask=mask
+        spatial_position_embeddings = (
+            self.position_embedding(shape=feature_map.shape, device=device, dtype=pixel_values.dtype, mask=mask)
+            .flatten(2)
+            .permute(0, 2, 1)
         )
 
         # Third, flatten the feature map of shape NxCxHxW to NxCxHW, and permute it to NxHWxC
@@ -1765,8 +1764,12 @@ class ConditionalDetrForSegmentation(ConditionalDetrPreTrainedModel):
         # Apply 1x1 conv to map (batch_size, C, H, W) -> (batch_size, hidden_size, H, W), then flatten to (batch_size, HW, hidden_size)
         projected_feature_map = self.conditional_detr.model.input_projection(feature_map)
         flattened_features = projected_feature_map.flatten(2).permute(0, 2, 1)
-        spatial_position_embeddings = self.conditional_detr.model.position_embedding(
-            shape=feature_map.shape, device=device, dtype=pixel_values.dtype, mask=mask
+        spatial_position_embeddings = (
+            self.conditional_detr.model.position_embedding(
+                shape=feature_map.shape, device=device, dtype=pixel_values.dtype, mask=mask
+            )
+            .flatten(2)
+            .permute(0, 2, 1)
         )
         flattened_mask = mask.flatten(1)
 

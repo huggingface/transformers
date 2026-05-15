@@ -917,8 +917,10 @@ class ConditionalDetrModel(DetrModel):
         projected_feature_map = self.input_projection(feature_map)
 
         # Generate position embeddings
-        spatial_position_embeddings = self.position_embedding(
-            shape=feature_map.shape, device=device, dtype=pixel_values.dtype, mask=mask
+        spatial_position_embeddings = (
+            self.position_embedding(shape=feature_map.shape, device=device, dtype=pixel_values.dtype, mask=mask)
+            .flatten(2)
+            .permute(0, 2, 1)
         )
 
         # Third, flatten the feature map of shape NxCxHxW to NxCxHW, and permute it to NxHWxC

@@ -1610,8 +1610,8 @@ class Sam2Model(Sam2PreTrainedModel):
         # flatten NxCxHxW to HWxNxC
         feature_maps = [feature_map.flatten(2).permute(2, 0, 1) for feature_map in feature_maps]
         feature_maps_position_embeddings = [
-            feature_map_position_embedding.flatten(2).permute(2, 0, 1)
-            for feature_map_position_embedding in feature_maps_position_embeddings
+            feature_maps_position_embeddings.flatten(2).permute(2, 0, 1)
+            for feature_maps_position_embeddings in feature_maps_position_embeddings
         ]
         vision_outputs.fpn_hidden_states = feature_maps
         vision_outputs.fpn_position_encoding = feature_maps_position_embeddings

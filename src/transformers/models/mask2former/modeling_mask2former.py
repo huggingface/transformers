@@ -888,9 +888,6 @@ class Mask2FormerSinePositionEmbedding(nn.Module):
         pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
-        # Flatten spatial dimensions and permute to (batch_size, sequence_length, hidden_size) format
-        # expected by the encoder
-        pos = pos.flatten(2).permute(0, 2, 1)
         return pos
 
     def forward(
@@ -1337,6 +1334,7 @@ class Mask2FormerPixelDecoder(nn.Module):
         spatial_shapes = torch.as_tensor(spatial_shapes_list, dtype=torch.long, device=input_embeds_flat.device)
         masks_flat = torch.cat([mask.flatten(1) for mask in masks], 1)
 
+        position_embeddings = [embed.flatten(2).transpose(1, 2) for embed in position_embeddings]
         level_pos_embed_flat = [x + self.level_embed[i].view(1, 1, -1) for i, x in enumerate(position_embeddings)]
         level_pos_embed_flat = torch.cat(level_pos_embed_flat, 1)
 
@@ -2084,16 +2082,15 @@ class Mask2FormerTransformerModule(nn.Module):
         for i in range(self.num_feature_levels):
             size_list.append(multi_scale_features[i].shape[-2:])
             multi_stage_positional_embeddings.append(
-                # transpose  NxHWxC to NxCxHW
                 self.position_embedder(
                     multi_scale_features[i].shape, multi_scale_features[i].device, multi_scale_features[i].dtype, None
-                ).transpose(1, 2)
+                ).flatten(2)
             )
             multi_stage_features.append(
-                # Flatten NxCxHxW to NxCxHW
                 self.input_projections[i](multi_scale_features[i]).flatten(2)
                 + self.level_embed.weight[i][None, :, None]
             )
+
             # Permute  NxCxHW to HWxNxC
             multi_stage_positional_embeddings[-1] = multi_stage_positional_embeddings[-1].permute(2, 0, 1)
             multi_stage_features[-1] = multi_stage_features[-1].permute(2, 0, 1)

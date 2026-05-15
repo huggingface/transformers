@@ -955,9 +955,6 @@ class Sam3SinePositionEmbedding(nn.Module):
         pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
-        # Flatten spatial dimensions and permute to (batch_size, sequence_length, hidden_size) format
-        # expected by the encoder
-        pos = pos.flatten(2).permute(0, 2, 1)
         return pos
 
     def forward(
@@ -1252,7 +1249,8 @@ class Sam3GeometryEncoder(nn.Module):
         # Prepare vision features for cross-attention: flatten spatial dimensions
         vision_feats = img_feats[-1]  # [B, C, H, W]
         vision_pos_embeds = img_pos_embeds[-1] if img_pos_embeds is not None else torch.zeros_like(vision_feats)
-        vision_feats = vision_feats.flatten(2).transpose(1, 2)  # [B, H*W, C]
+        vision_feats_flat = vision_feats.flatten(2).transpose(1, 2)  # [B, H*W, C]
+        vision_pos_embeds_flat = vision_pos_embeds.flatten(2).transpose(1, 2)  # [B, H*W, C]
 
         # Normalize image features for pooling operations
         img_feats_last = img_feats[-1]  # [B, C, H, W]
@@ -1282,8 +1280,8 @@ class Sam3GeometryEncoder(nn.Module):
         for layer in self.layers:
             prompt_embeds = layer(
                 prompt_feats=prompt_embeds,
-                vision_feats=vision_feats,
-                vision_pos_encoding=vision_pos_embeds,
+                vision_feats=vision_feats_flat,
+                vision_pos_encoding=vision_pos_embeds_flat,
                 prompt_mask=prompt_attention_mask,
             )
 
@@ -1413,6 +1411,7 @@ class Sam3DetrEncoder(Sam3PreTrainedModel):
 
             # Flatten spatial dimensions: [batch_size, channels, height, width] -> [batch_size, height*width, channels]
             features = features.flatten(2).transpose(1, 2)
+            pos_embed = pos_embed.flatten(2).transpose(1, 2)
 
             features_flattened.append(features)
             pos_embeds_flattened.append(pos_embed)
@@ -1460,6 +1459,7 @@ class Sam3DetrEncoder(Sam3PreTrainedModel):
             for i, (height, width) in enumerate(spatial_sizes):
                 # Reshape from [height*width, batch_size, channels] to [batch_size, channels, height, width]
                 vision_features[i] = vision_features[i].reshape(height, width, batch_size, -1).permute(2, 3, 0, 1)
+                vision_pos_embeds[i] = vision_pos_embeds[i].reshape(height, width, batch_size, -1).permute(2, 3, 0, 1)
 
         # Flatten multi-level features for encoder processing
         (

@@ -1376,6 +1376,7 @@ class OneFormerPixelDecoder(nn.Module):
             spatial_shapes.append(spatial_shape)
             source = source.flatten(2).transpose(1, 2)
             mask = mask.flatten(1)
+            pos_embed = pos_embed.flatten(2).transpose(1, 2)
             lvl_pos_embed = pos_embed + self.level_embed[level].view(1, 1, -1)
             lvl_pos_embed_flatten.append(lvl_pos_embed)
             source_flatten.append(source)
@@ -2104,9 +2105,8 @@ class OneFormerTransformerDecoderQueryTransformer(nn.Module):
 
     def forward(self, src, mask, query_embed, pos_embed, task_token=None):
         batch_size = src.shape[0]
-        # transpose NxHWxC to HWxNxC
-        src = src.transpose(0, 1)
         # flatten NxCxHxW to HWxNxC
+        src = src.flatten(2).permute(2, 0, 1)
         pos_embed = pos_embed.flatten(2).permute(2, 0, 1)
         query_embed = query_embed.unsqueeze(1).repeat(1, batch_size, 1)
         if mask is not None:
@@ -2317,14 +2317,13 @@ class OneFormerTransformerModule(nn.Module):
 
         for i in range(self.num_feature_levels):
             size_list.append(multi_scale_features[i].shape[-2:])
+            # Flatten NxCxHxW to NxCxHW
             multi_stage_positional_embeddings.append(
-                # transpose  NxHWxC to NxCxHW
                 self.position_embedder(
                     multi_scale_features[i].shape, multi_scale_features[i].device, multi_scale_features[i].dtype, None
-                ).transpose(1, 2)
+                ).flatten(2)
             )
             multi_stage_features.append(
-                # Flatten NxCxHxW to NxCxHW
                 self.input_projections[i](multi_scale_features[i]).flatten(2)
                 + self.level_embed.weight[i][None, :, None]
             )
@@ -2404,9 +2403,6 @@ class OneFormerSinePositionEmbedding(nn.Module):
         pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
-        # Flatten spatial dimensions and permute to (batch_size, sequence_length, hidden_size) format
-        # expected by the encoder
-        pos = pos.flatten(2).permute(0, 2, 1)
         return pos
 
     def forward(
