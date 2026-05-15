@@ -14,13 +14,23 @@
 # limitations under the License.
 """ExecuTorch exporter.
 
-Extends `DynamoExporter` to produce an `ExecutorchProgramManager` for
-mobile and edge deployment, with two extra steps:
+Extends `DynamoExporter` to produce an `ExecutorchProgramManager` for mobile and
+edge deployment. The export pipeline runs:
 
 1. **Backend preparation** (`prepare_for_xnnpack`, `prepare_for_cuda`): move the
    model to the target device/dtype and build the partitioner list.
-2. **Torch patches** (`patch_torch_ops`): replace ops unsupported by ExecuTorch
-   backends (split_copy, topk, avg_pool2d, ...) with decomposed equivalents.
+2. **Torch op patches** (`patch_torch_ops`): swap ops unsupported by ExecuTorch
+   backends (split_copy, topk, avg_pool2d, ...) with decomposed equivalents, then
+   `torch.export.export` the model.
+3. **FX graph patches** (`patch_fx_graph`): apply `_FX_PATCHES` on the resulting
+   `ExportedProgram` to repair shape bounds, placeholder metadata, op args, and
+   replace Python sym ops with their `executorch_prim.*` equivalents.
+4. **Upstream-pass softenings** (`patch_executorch_passes`): temporarily replace
+   ExecuTorch passes (`SpecPropPass`, `PruneEmptyTensorsPass`,
+   `eval_upper_bound`) with versions that don't crash on legitimate dynamic-shape
+   patterns. Reverted on exit.
+5. **Lowering**: `to_edge_transform_and_lower` followed by `to_executorch` with
+   the config from `_get_executorch_backend_config`.
 """
 
 from __future__ import annotations
@@ -38,12 +48,19 @@ from .exporter_dynamo import DynamoExporter
 if is_torch_available():
     import torch
     from torch.export import ExportedProgram
+    from torch.fx.experimental.symbolic_shapes import guard_or_true
+    from torch.utils._sympy.numbers import IntInfinity
+    from torch.utils._sympy.value_ranges import ValueRanges
 
 
 if is_executorch_available():
     from executorch.backends.cuda.cuda_backend import CudaBackend
     from executorch.backends.cuda.cuda_partitioner import CudaPartitioner
     from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
+    from executorch.exir import sym_util
+    from executorch.exir.capture._config import ExecutorchBackendConfig
+    from executorch.exir.passes import prune_empty_tensors_pass, spec_prop_pass, sym_shape_eval_pass
+    from executorch.exir.passes.executorch_prim_ops_registry import _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS
     from executorch.exir.program import EdgeProgramManager, ExecutorchProgramManager, to_edge_transform_and_lower
 
 
@@ -81,55 +98,32 @@ class ExecutorchExporter(DynamoExporter):
 
         model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
 
-        with patch_torch_ops():
+        with patch_torch_ops(), patch_executorch_passes():
             exported_program: ExportedProgram = super().export(model, sample_inputs)
-            _bound_range_constraints(exported_program)
+            patch_fx_graph(exported_program)
             edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
                 exported_program, partitioner=partitioner
             )
-            executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch()
+            executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch(
+                config=_get_executorch_backend_config()
+            )
 
         return executorch_programs_manager
 
 
-# ── Range constraint bounding ─────────────────────────────────────────────────
-# ExecuTorch requires concrete upper bounds on every dynamic dimension.
-# Dim.AUTO leaves them as int_oo, which causes "Cannot evaluate the shape
-# upper bound" errors in to_edge_transform_and_lower.  This helper caps
-# unbounded dims after torch.export (preserving AUTO's static-vs-dynamic
-# inference and dimension sharing).
+def _get_executorch_backend_config() -> ExecutorchBackendConfig:
+    """Build the ``ExecutorchBackendConfig`` used for ``edge_program_manager.to_executorch``.
 
-_MAX_DIM_MULTIPLIER = 4  # upper bound = max(lower * multiplier, floor)
-_MAX_DIM_FLOOR = 1024  # minimum upper bound for any dynamic dim
-
-
-def _bound_range_constraints(exported_program: ExportedProgram) -> None:
-    """Cap ``int_oo`` upper bounds for ExecuTorch compatibility.
-
-    Uses ``max(lower * 4, 1024)`` per dim — keeps bounds proportional to the
-    actual sample sizes so XNNPACK memory planning doesn't overflow.
+    Currently no overrides from the upstream defaults. ``remove_view_copy=False`` was
+    tried to fix the ``_ViewSpec is incompatible with its base`` failure on depth_pro /
+    pvt / vitdet, but it kept ``view_copy`` ops that XNNPACK then partitioned as pass-
+    through and regressed more tests than it fixed — those three models go back into the
+    known-failing list until a per-model fix is found.
     """
-    from torch.utils._sympy.numbers import IntInfinity
-    from torch.utils._sympy.value_ranges import ValueRanges
-
-    # Collect all range dicts that need patching: range_constraints (torch.export
-    # verifiers) + shape_env.var_to_range (ExecuTorch sym_shape_eval_pass).
-    range_dicts = [exported_program._range_constraints]
-    for node in exported_program.graph_module.graph.nodes:
-        val = node.meta.get("val")
-        if isinstance(val, torch.Tensor) and hasattr(val, "fake_mode"):
-            range_dicts.append(val.fake_mode.shape_env.var_to_range)
-            break  # all nodes share the same shape_env, so we only need one
-
-    for rd in range_dicts:
-        for sym, vr in rd.items():
-            if isinstance(vr.upper, IntInfinity):
-                lower = int(vr.lower) if hasattr(vr.lower, "__int__") else 2
-                upper = max(lower * _MAX_DIM_MULTIPLIER, _MAX_DIM_FLOOR)
-                rd[sym] = ValueRanges(vr.lower, upper)
+    return ExecutorchBackendConfig()
 
 
-# ── Backend preparation ────────────────────────────────────────────────────────
+# ── Stage 1: Backend preparation ──────────────────────────────────────────────
 # Each prepare_for_* function receives the original model and sample inputs, applies backend-specific preparation,
 # and returns the modified model, the list of partitioners to apply, and the modified sample inputs. Common patterns include:
 # - Move the model to the target device.
@@ -171,7 +165,7 @@ _BACKEND_PREPARE = {
 }
 
 
-# ── Torch patches ──────────────────────────────────────────────────────────────
+# ── Stage 2: Torch op patches ─────────────────────────────────────────────────
 # Same factory pattern as exporter_onnx.py: each _patch_* receives the original
 # and returns the replacement. _TORCH_PATCHES lists (obj, attr, factory).
 
@@ -186,6 +180,10 @@ def _patch_split(original):
             for i in range(0, total, split_size_or_sections):
                 splits.append(input.narrow(dim, i, min(split_size_or_sections, total - i)))
             return tuple(splits)
+        elif isinstance(split_size_or_sections, torch.SymInt):
+            # Dynamic split size: `range(0, total, sym_int)` needs a concrete step, so
+            # the narrow-based loop above doesn't apply. Defer to the original torch.split.
+            return original(input, split_size_or_sections, dim)
         else:
             splits = []
             start = 0
@@ -218,7 +216,7 @@ def _patch_topk(original):
         indices = torch.argsort(input, dim=dim, descending=largest)
         topk_indices = indices.narrow(dim, 0, k)
         topk_values = torch.gather(input, dim, topk_indices)
-        return topk_values, topk_indices
+        return torch.return_types.topk((topk_values, topk_indices))
 
     return patch
 
@@ -304,11 +302,19 @@ def _patch_dropout(_original):
     return patch
 
 
-def _patch_view(_original):
-    """Replace view with reshape to avoid stride errors on non-contiguous tensors."""
+def _patch_expand(original):
+    """Force a contiguous copy after ``expand``.
 
-    def patch(self, *shape):
-        return self.reshape(*shape)
+    ``Tensor.expand`` produces a view with stride ``0`` along broadcast dims.
+    ExecuTorch's memory planner rejects ``stride == 0`` (``tensor.py:77``: "0 in
+    strides is not supported for ExecuTorch"). Materialise the broadcast so the
+    captured tensor has standard strides downstream.
+    """
+
+    def patch(self, *sizes):
+        if len(sizes) == 1 and isinstance(sizes[0], (list, tuple, torch.Size)):
+            sizes = tuple(sizes[0])
+        return original(self, *sizes).clone(memory_format=torch.contiguous_format)
 
     return patch
 
@@ -328,7 +334,7 @@ if is_torch_available():
         (torch.nn.functional, "avg_pool2d", _patch_avg_pool2d),
         (torch.nn.functional, "scaled_dot_product_attention", _patch_scaled_dot_product_attention),
         (torch.nn.functional, "dropout", _patch_dropout),
-        (torch.Tensor, "view", _patch_view),
+        (torch.Tensor, "expand", _patch_expand),
     ]
 
 
@@ -337,6 +343,321 @@ def patch_torch_ops():
     """Context manager: install torch patches for ExecuTorch export."""
     originals = []
     for obj, attr, factory in _TORCH_PATCHES:
+        original = getattr(obj, attr)
+        originals.append((obj, attr, original))
+        setattr(obj, attr, factory(original))
+
+    try:
+        yield
+    finally:
+        for obj, attr, original in originals:
+            setattr(obj, attr, original)
+
+
+# ── Stage 3: FX graph patches ─────────────────────────────────────────────────
+# Patches applied to the ExportedProgram between ``torch.export.export`` and
+# ``to_edge_transform_and_lower``, to repair the graph for ExecuTorch's stricter
+# expectations (concrete dim bounds, placeholder metadata, allowlisted ops,
+# normalised op args). Same role as ``patch_fx_graph`` in ``exporter_onnx.py``,
+# but at ExportedProgram granularity rather than per-node.
+
+_MAX_DIM_MULTIPLIER = 4  # upper bound = max(lower * multiplier, floor)
+_MAX_DIM_FLOOR = 1024  # minimum upper bound for any dynamic dim
+
+
+def _as_int(x, default: int = 0) -> int:
+    """Best-effort ``int(x)`` for sympy values, with a fallback for infinities.
+
+    ``int(sympy.oo / -oo / IntInfinity)`` raises ``OverflowError`` → falls through
+    to ``AttributeError`` on ``'Infinity'._mpf_``. Catch both so unbounded ends
+    fall back to ``default`` instead of propagating sympy's internals.
+    """
+    try:
+        return int(x)
+    except (TypeError, ValueError, OverflowError, AttributeError):
+        return default
+
+
+def _bound_range_constraints(exported_program: ExportedProgram) -> None:
+    """Cap ``int_oo`` upper bounds for ExecuTorch compatibility.
+
+    Uses ``max(lower * 4, trace_value * 4, 1024)`` per dim — keeps bounds
+    proportional to actual sample sizes so XNNPACK memory planning doesn't
+    overflow, while still covering trace-time values (e.g. VLM image tokens).
+    """
+    # Collect all range dicts that need patching: range_constraints (torch.export
+    # verifiers) + shape_env.var_to_range (ExecuTorch sym_shape_eval_pass).
+    range_dicts = [exported_program._range_constraints]
+    var_to_val = {}
+    for node in exported_program.graph_module.graph.nodes:
+        val = node.meta.get("val")
+        if isinstance(val, torch.Tensor) and hasattr(val, "fake_mode"):
+            shape_env = val.fake_mode.shape_env
+            range_dicts.append(shape_env.var_to_range)
+            var_to_val = getattr(shape_env, "backed_var_to_val", None) or shape_env.var_to_val
+            break  # all nodes share the same shape_env, so we only need one
+
+    for rd in range_dicts:
+        for sym, vr in rd.items():
+            if isinstance(vr.upper, IntInfinity):
+                lower = _as_int(vr.lower, 2)
+                trace_val = _as_int(var_to_val.get(sym), 0)
+                upper = max(lower * _MAX_DIM_MULTIPLIER, trace_val * _MAX_DIM_MULTIPLIER, _MAX_DIM_FLOOR)
+                rd[sym] = ValueRanges(vr.lower, upper)
+
+
+def _populate_missing_placeholder_vals(exported_program: ExportedProgram) -> None:
+    """Ensure parameter/buffer/lifted-constant placeholders have a tensor ``meta["val"]``.
+
+    ExecuTorch's ``SpecPropPass`` builds ``node.meta["spec"]`` from ``meta["val"]``
+    via ``TensorSpec.from_tensor``. If ``val`` is ``None`` (or a non-tensor) for a
+    placeholder that the graph signature marks as a parameter/buffer/lifted
+    constant, ``spec`` stays ``None`` and a later ``spec.const = True`` crashes
+    with ``AttributeError``. Fill in the missing val from the actual state-dict
+    tensor so the spec round-trips correctly.
+    """
+    sig = exported_program.graph_signature
+    state_dict = exported_program.state_dict
+    constants = getattr(exported_program, "constants", {}) or {}
+
+    sources = (
+        (sig.inputs_to_parameters, state_dict),
+        (sig.inputs_to_buffers, state_dict),
+        (sig.inputs_to_lifted_tensor_constants, constants),
+    )
+
+    for node in exported_program.graph_module.graph.nodes:
+        if node.op != "placeholder" or not isinstance(node.target, str):
+            continue
+        if isinstance(node.meta.get("val"), torch.Tensor):
+            continue
+        for input_map, store in sources:
+            fqn = input_map.get(node.target)
+            if fqn is None:
+                continue
+            tensor = store.get(fqn)
+            if isinstance(tensor, torch.Tensor):
+                node.meta["val"] = tensor
+            break
+
+
+def _normalize_amax_dim(exported_program: ExportedProgram) -> None:
+    """Rewrite negative ``dim`` indices on max/amax ops to positive ones.
+
+    XNNPACK's ``op_max_dim`` visitor compares ``node.args[1]`` directly against
+    2 and 3 without normalizing, so a ``dim=-1`` call on a 4-D tensor fails with
+    ``amax.default only supports dim == 2 or dim == 3`` even though dim 3 is
+    what was meant. Convert any negative ``dim`` to ``rank + dim`` so the
+    partitioner sees a positive index. Done for both ``aten.amax.default`` and
+    ``aten.max.dim`` (which gets folded into amax later during lowering).
+    """
+    targets = {torch.ops.aten.amax.default, torch.ops.aten.max.dim}
+    for module in exported_program.graph_module.modules():
+        if not isinstance(module, torch.fx.GraphModule):
+            continue
+        for node in module.graph.nodes:
+            if node.op != "call_function" or node.target not in targets:
+                continue
+            if len(node.args) < 2:
+                continue
+            input_node = node.args[0]
+            input_val = input_node.meta.get("val") if hasattr(input_node, "meta") else None
+            rank = input_val.dim() if isinstance(input_val, torch.Tensor) else None
+            if rank is None:
+                continue
+            dim_arg = node.args[1]
+            if isinstance(dim_arg, int) and dim_arg < 0:
+                new_args = list(node.args)
+                new_args[1] = rank + dim_arg
+                node.args = tuple(new_args)
+            elif isinstance(dim_arg, (list, tuple)) and any(isinstance(d, int) and d < 0 for d in dim_arg):
+                new_dims = [d + rank if isinstance(d, int) and d < 0 else d for d in dim_arg]
+                new_args = list(node.args)
+                new_args[1] = type(dim_arg)(new_dims)
+                node.args = tuple(new_args)
+
+
+_SYM_OP_REPLACEMENTS = {
+    target: _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS[target]
+    for target in (torch.sym_float, torch.sym_max, torch.sym_min, math.ceil, math.trunc, round)
+    if target in _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS
+}
+
+
+def _replace_python_sym_ops(exported_program: ExportedProgram) -> None:
+    """Replace Python sym ops (``torch.sym_min``, ``math.ceil``, ...) with their
+    ExecuTorch backend equivalents.
+
+    The edge-dialect verifier rejects Python ``FunctionType`` ops other than
+    ``alloc`` (``verifier.py:317``). ExecuTorch has its own pass
+    (``EdgeToBackendOpsPass``) that swaps these for ``executorch_prim.*`` ops,
+    but it only runs during ``to_executorch``, after the edge verifier already
+    runs in ``to_edge_transform_and_lower``. Apply the same swap here.
+
+    Only ``torch.sym_*`` and ``math.*`` targets are swapped — ``operator.add`` /
+    ``mul`` / etc. are also used for tensor-tensor ops, where the ``Scalar``
+    overload fails at runtime with ``Cannot cast NotImplemented to number``.
+    """
+    for module in exported_program.graph_module.modules():
+        if not isinstance(module, torch.fx.GraphModule):
+            continue
+        changed = False
+        for node in module.graph.nodes:
+            if node.op == "call_function" and node.target in _SYM_OP_REPLACEMENTS:
+                node.target = _SYM_OP_REPLACEMENTS[node.target]
+                changed = True
+        if changed:
+            module.recompile()
+
+
+def _force_contiguous_clone_memory_format(exported_program: ExportedProgram) -> None:
+    """Force ``contiguous_format`` on ``aten.clone`` nodes whose input has a non-standard
+    dim order.
+
+    ``Tensor.clone()`` defaults to ``preserve_format`` and inherits the source's stride
+    layout. When a cache tensor has been transposed earlier (dim order e.g. ``[1, 0, 2, 3]``),
+    the clone inherits it and ExecuTorch's ``dim_order_from_stride`` fails to map it to a
+    ``torch.memory_format``. Only rewrite clones whose input ``meta["val"]`` is non-contiguous
+    so we don't disturb the (much more common) clones of already-contiguous tensors — those
+    can otherwise get optimised into pass-through nodes that XNNPACK rejects.
+    """
+    clone_op = torch.ops.aten.clone.default
+    for module in exported_program.graph_module.modules():
+        if not isinstance(module, torch.fx.GraphModule):
+            continue
+        for node in module.graph.nodes:
+            if node.op != "call_function" or node.target is not clone_op:
+                continue
+            if node.kwargs.get("memory_format") is not None:
+                continue
+            input_val = node.args[0].meta.get("val") if hasattr(node.args[0], "meta") else None
+            if isinstance(input_val, torch.Tensor) and not input_val.is_contiguous():
+                node.kwargs = {**node.kwargs, "memory_format": torch.contiguous_format}
+
+
+_FX_PATCHES = [
+    _bound_range_constraints,
+    _populate_missing_placeholder_vals,
+    _replace_python_sym_ops,
+    _normalize_amax_dim,
+    _force_contiguous_clone_memory_format,
+]
+
+
+def patch_fx_graph(exported_program: ExportedProgram) -> None:
+    """Apply every FX graph patch in order on ``exported_program`` (in place)."""
+    for fx_patch in _FX_PATCHES:
+        fx_patch(exported_program)
+
+
+# ── Stage 4: Upstream-pass softenings ─────────────────────────────────────────
+# Same factory pattern as Stage 2: each _patch_* receives the original and returns
+# the replacement. _EXECUTORCH_PASS_PATCHES lists (obj, attr, factory).
+
+
+def _patch_eval_upper_bound(original):
+    """Constraint-based bound, then trace hint, then ``_MAX_DIM_FLOOR``.
+
+    Constraint propagation returns ``int_oo`` for compound expressions whose
+    constraints don't compose (e.g. ``((s43*s53)//s70)``) or for sums of
+    unbacked symbols (e.g. MoE per-expert cats ``u320+u321+...``); the
+    fallbacks guarantee an ``int`` so ``ConstraintBasedSymShapeEvalPass``
+    doesn't raise.
+    """
+
+    def patch(maybe_symint):
+        result = original(maybe_symint)
+        if isinstance(result, int):
+            return result
+        hint = sym_util.eval_expr(maybe_symint)
+        return hint if isinstance(hint, int) else _MAX_DIM_FLOOR
+
+    return patch
+
+
+def _patch_remove_empty_tensors_from_cat(_original):
+    """Replacement for ``PruneEmptyTensorsPass.remove_empty_tensors_from_cat``.
+
+    The original checks ``input.numel() != 0`` directly; for tensors with
+    unbacked dynamic shapes (e.g. ``74 * u176``) that raises
+    ``GuardOnDataDependentSymNode`` because ``Ne(74*u176, 0)`` can't be proved
+    either way at trace time. Using ``guard_or_true`` keeps unbacked-shape
+    inputs conservatively (the pass is purely an optimisation).
+    """
+    from executorch.exir.dialects._ops import ops as exir_ops
+
+    def patch(self, graph_module, cat_node):
+        pruned = [arg for arg in cat_node.args[0] if guard_or_true(arg.meta["val"].numel() != 0)]
+        cat_node.args = (pruned,) + cat_node.args[1:]
+        if not pruned:
+            cat_tensor = cat_node.meta["val"]
+            with graph_module.graph.inserting_after(cat_node):
+                full_like = graph_module.graph.create_node(
+                    "call_function",
+                    target=exir_ops.edge.aten.full.default,
+                    args=(tuple(cat_tensor.shape), 0),
+                    kwargs={"dtype": cat_tensor.dtype},
+                )
+                full_like.meta = cat_node.meta
+                cat_node.replace_all_uses_with(full_like)
+
+    return patch
+
+
+def _patch_update_placeholder_tensor_specs(_original):
+    """Replacement for ``SpecPropPass.update_placeholder_tensor_specs``.
+
+    The original unconditionally sets ``spec.const = True`` for placeholders in
+    ``inputs_to_parameters``/``inputs_to_buffers``/``inputs_to_lifted_tensor_constants``.
+    ``insert_write_back_for_buffers_pass`` can leave ``inputs_to_buffers``
+    shifted by one slot, so a user input placeholder (e.g. ``input_ids``) is
+    keyed as a buffer with a stale FQN; ``SpecPropPass`` builds no spec for it
+    (``val`` is ``None``) and the assignment raises ``AttributeError``. Skip
+    ``None`` specs so user inputs aren't mis-marked const.
+    """
+
+    def patch(self, exported_program, graph_module):
+        sig = exported_program.graph_signature
+        for node in graph_module.graph.nodes:
+            if node.op != "placeholder":
+                continue
+            if "spec" not in node.meta:
+                raise RuntimeError(f"Placeholder node {node} missing meta['spec']")
+            spec = node.meta["spec"]
+            if spec is None:
+                continue
+            if isinstance(node.target, str) and (
+                node.target in sig.inputs_to_parameters
+                or (node.target in sig.inputs_to_buffers and not spec_prop_pass._is_mutable_buffer(node, sig))
+                or node.target in sig.inputs_to_lifted_tensor_constants
+            ):
+                spec.const = True
+
+    return patch
+
+
+_EXECUTORCH_PASS_PATCHES = []
+if is_executorch_available():
+    _EXECUTORCH_PASS_PATCHES += [
+        # ConstraintBasedSymShapeEvalPass imports eval_upper_bound at module load,
+        # so we need to rebind both `sym_util.eval_upper_bound` (the canonical home)
+        # and `sym_shape_eval_pass.eval_upper_bound` (the imported copy).
+        (sym_util, "eval_upper_bound", _patch_eval_upper_bound),
+        (sym_shape_eval_pass, "eval_upper_bound", _patch_eval_upper_bound),
+        (
+            prune_empty_tensors_pass.PruneEmptyTensorsPass,
+            "remove_empty_tensors_from_cat",
+            _patch_remove_empty_tensors_from_cat,
+        ),
+        (spec_prop_pass.SpecPropPass, "update_placeholder_tensor_specs", _patch_update_placeholder_tensor_specs),
+    ]
+
+
+@contextmanager
+def patch_executorch_passes():
+    """Context manager: install ExecuTorch pass softenings for export."""
+    originals = []
+    for obj, attr, factory in _EXECUTORCH_PASS_PATCHES:
         original = getattr(obj, attr)
         originals.append((obj, attr, original))
         setattr(obj, attr, factory(original))
