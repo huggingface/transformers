@@ -201,7 +201,6 @@ class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ColQwen2ForRetrieval,) if is_torch_available() else ()
 
     test_resize_embeddings = True
-    test_torch_exportable = False  # data-dependent multimodal placeholder mask
     test_missing_keys = False
 
     def setUp(self):

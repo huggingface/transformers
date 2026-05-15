@@ -152,7 +152,6 @@ class MiniCPMV4_6VisionText2TextModelTester(VLMModelTester):
 @require_torch
 class MiniCPMV4_6ModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = MiniCPMV4_6VisionText2TextModelTester
-    test_torch_exportable = False  # data-dependent float comparison (`zuf0 > 0.0`)
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)

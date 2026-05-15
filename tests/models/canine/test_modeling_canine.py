@@ -235,7 +235,6 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_mismatched_shapes = False
     test_resize_embeddings = False
-    test_torch_exportable = False  # data-dependent mask shape (`squeeze(1)` on conditionally-3D mask)
 
     def setUp(self):
         self.model_tester = CanineModelTester(self)

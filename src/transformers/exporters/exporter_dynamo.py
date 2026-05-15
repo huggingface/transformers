@@ -154,7 +154,7 @@ def _patch_chunked_vision_attention(module):
     )
     src = inspect.getsource(module.forward) if has_attention else ""
     if has_attention and "zip(*splits)" in src:
-        returns_tuple = "return attn_output, attn_weight" in src
+        returns_tuple = "return attn_output, attn_weight" in src or "return attn_output, None" in src
         return ("forward", functools.partial(_reshaped_vision_attention_forward, module, returns_tuple=returns_tuple))
 
 
@@ -168,6 +168,13 @@ def _reshaped_vision_attention_forward(
     **kwargs,
 ):
     """Export-safe vision attention: reshape segments into batch dim, single SDPA call."""
+
+    # Normalise NaViT-style `(1, T, D)` packing (minicpmv4_6) to the flat `(T, D)` layout
+    # the rest of this wrapper assumes. The leading dim is always 1 — multi-image batches
+    # are packed along the sequence dim.
+    needs_batch_restore = hidden_states.ndim == 3
+    if needs_batch_restore:
+        hidden_states = hidden_states.squeeze(0)
 
     seq_length = hidden_states.shape[0]
     num_segments = cu_seqlens.shape[0] - 1
@@ -232,6 +239,10 @@ def _reshaped_vision_attention_forward(
     attn_output = attn_output.transpose(1, 2).reshape(seq_length, -1).contiguous()
     out_proj = self.proj if hasattr(self, "proj") else self.out_proj
     attn_output = out_proj(attn_output)
+
+    if needs_batch_restore:
+        attn_output = attn_output.unsqueeze(0)
+
     return (attn_output, None) if returns_tuple else attn_output
 
 

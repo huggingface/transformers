@@ -259,17 +259,19 @@ _MULTIMODAL_ENCODER_NAMES = (
     "visual",
 )
 _MULTIMODAL_SUBMODULE_NAMES = _MULTIMODAL_ENCODER_NAMES + _MULTIMODAL_PROJECTOR_NAMES + _MULTIMODAL_LM_NAMES
+_WRAPPER_ATTRS = ("model", "vlm")
 
 
 def _find_multimodal_submodules(model: PreTrainedModel) -> dict[str, torch.nn.Module]:
     """Return `{attr_name: module}` for all known multi-modal submodule names found on the model.
 
-    Checks `model` first, then `model.model` (common wrapper pattern).
+    Checks `model` first, then known wrapper attributes (`model.model`, `model.vlm`, …).
     Only returns results when at least one modal encoder AND one language model are
     found — otherwise the model is not multi-modal and should be exported as a single unit.
     """
+    roots = [model] + [getattr(model, attr, None) for attr in _WRAPPER_ATTRS]
     found: dict[str, torch.nn.Module] = {}
-    for root in (model, getattr(model, "model", None)):
+    for root in roots:
         if root is None:
             continue
         for name in _MULTIMODAL_SUBMODULE_NAMES:
@@ -316,47 +318,69 @@ def _precompute_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) ->
             position_ids, _ = model.get_rope_index(**rope_inputs)
             inputs["position_ids"] = position_ids
 
-    # Vision submodule level: precompute from grid_thw
+    modeling_module = sys.modules[type(model).__module__]
+
+    # NaViT-style packed encoders carry per-image `(h, w)` as `target_sizes` instead of `grid_thw`.
+    # Run the nearest-position-id / window-index / merged-shape helpers on the synthesised
+    # `grid_thw = [1, h, w]` so the per-image Python loops move outside the traced graph.
+    target_sizes = inputs.get("target_sizes")
+    if target_sizes is not None:
+        device = target_sizes.device
+        num_patches_per_side = _find_submodule_attr(model, "num_patches_per_side")
+        if hasattr(modeling_module, "get_vision_nearest_position_ids") and num_patches_per_side is not None:
+            inputs["position_ids"] = modeling_module.get_vision_nearest_position_ids(
+                target_sizes, num_patches_per_side
+            ).to(device)
+
+        window_kernel_size = _find_submodule_attr(model, "window_kernel_size")
+        if hasattr(modeling_module, "get_vision_window_index") and window_kernel_size is not None:
+            grid_thw = torch.nn.functional.pad(target_sizes, (1, 0), value=1)
+            window_index, cu_window_seqlens = modeling_module.get_vision_window_index(
+                grid_thw, spatial_merge_size=1, window_size=window_kernel_size[0], patch_size=1
+            )
+            inputs["window_index"] = window_index.to(device)
+            inputs["cu_window_seqlens"] = cu_window_seqlens.to(device)
+            inputs["merged_shape"] = modeling_module.get_vision_merged_shape(target_sizes, window_kernel_size)
+
+    # Vision submodule level: precompute from grid_thw. Vision config attributes can live
+    # anywhere in the submodule tree (encoder, transformer, embeddings, …) — walk to find
+    # them rather than asking models to mirror state on the outer module just so the
+    # exporter can read it.
     grid_thw = inputs.get("grid_thw")
-    if grid_thw is None:
-        return
+    if grid_thw is not None:
+        spatial_merge_size = _find_submodule_attr(model, "spatial_merge_size")
+        if spatial_merge_size is None:
+            # Video-Llama-3 carries per-image merge sizes as an input tensor; PaddleOCR-VL has
+            # none (its encoder hard-codes `1` because spatial merging happens in the projector).
+            spatial_merge_size = inputs.get("merge_sizes", 1)
 
-    model_mod = sys.modules[type(model).__module__]
+        if hasattr(modeling_module, "get_vision_cu_seqlens"):
+            inputs["cu_seqlens"] = modeling_module.get_vision_cu_seqlens(grid_thw)
 
-    if hasattr(model_mod, "get_vision_cu_seqlens"):
-        inputs["cu_seqlens"] = model_mod.get_vision_cu_seqlens(grid_thw)
+        if hasattr(modeling_module, "get_vision_position_ids"):
+            inputs["position_ids"] = modeling_module.get_vision_position_ids(grid_thw, spatial_merge_size)
 
-    # Vision config attributes can live anywhere in the submodule tree (encoder, transformer,
-    # embeddings, …) — walk to find them rather than asking models to mirror state on the
-    # outer module just so the exporter can read it.
-    spatial_merge_size = _find_submodule_attr(model, "spatial_merge_size")
-    if spatial_merge_size is None:
-        # Video-Llama-3 carries per-image merge sizes as an input tensor; PaddleOCR-VL has none
-        # (the encoder hard-codes `1` because spatial merging happens in the projector).
-        spatial_merge_size = inputs.get("merge_sizes", 1)
+        window_size = _find_submodule_attr(model, "window_size")
+        patch_size = _find_submodule_attr(model, "patch_size")
+        if hasattr(modeling_module, "get_vision_window_index") and window_size is not None and patch_size is not None:
+            inputs["window_index"], inputs["cu_window_seqlens"] = modeling_module.get_vision_window_index(
+                grid_thw, spatial_merge_size, window_size, patch_size
+            )
 
-    if hasattr(model_mod, "get_vision_position_ids"):
-        inputs["position_ids"] = model_mod.get_vision_position_ids(grid_thw, spatial_merge_size)
-
-    window_size = _find_submodule_attr(model, "window_size")
-    patch_size = _find_submodule_attr(model, "patch_size")
-    if hasattr(model_mod, "get_vision_window_index") and window_size is not None and patch_size is not None:
-        inputs["window_index"], inputs["cu_window_seqlens"] = model_mod.get_vision_window_index(
-            grid_thw, spatial_merge_size, window_size, patch_size
-        )
-
-    num_grid_per_side = _find_submodule_attr(model, "num_grid_per_side")
-    if hasattr(model_mod, "get_vision_bilinear_indices_and_weights") and num_grid_per_side is not None:
-        inputs["bilinear_indices"], inputs["bilinear_weights"] = model_mod.get_vision_bilinear_indices_and_weights(
-            grid_thw, num_grid_per_side, spatial_merge_size
-        )
+        num_grid_per_side = _find_submodule_attr(model, "num_grid_per_side")
+        if hasattr(modeling_module, "get_vision_bilinear_indices_and_weights") and num_grid_per_side is not None:
+            inputs["bilinear_indices"], inputs["bilinear_weights"] = (
+                modeling_module.get_vision_bilinear_indices_and_weights(
+                    grid_thw, num_grid_per_side, spatial_merge_size
+                )
+            )
 
 
 def _precompute_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
     """Precompute audio encoder inputs that use untraceable ops (.tolist(), nonzero(), loops)."""
-    model_mod = sys.modules[type(model).__module__]
+    modeling_module = sys.modules[type(model).__module__]
 
-    if not hasattr(model_mod, "chunk_and_pad_features"):
+    if not hasattr(modeling_module, "chunk_and_pad_features"):
         return
 
     if "input_features" not in inputs or "feature_lens" not in inputs:
@@ -365,23 +389,25 @@ def _precompute_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> 
     feature_lens = inputs.pop("feature_lens")
     input_features = inputs.pop("input_features")
 
-    padded_feature, chunk_lengths = model_mod.chunk_and_pad_features(input_features, feature_lens, model.n_window)
+    padded_feature, chunk_lengths = modeling_module.chunk_and_pad_features(
+        input_features, feature_lens, model.n_window
+    )
     inputs["padded_feature"] = padded_feature
     inputs["chunk_lengths"] = chunk_lengths
 
-    if hasattr(model_mod, "get_audio_cu_seqlens"):
-        fn = model_mod.get_audio_cu_seqlens
+    if hasattr(modeling_module, "get_audio_cu_seqlens"):
+        fn = modeling_module.get_audio_cu_seqlens
         fn_params = set(inspect.signature(fn).parameters)
         if "feature_lens" in fn_params:
             inputs["cu_seqlens"] = fn(chunk_lengths, feature_lens, model.n_window_infer, model.n_window)
         else:
             inputs["cu_seqlens"] = fn(chunk_lengths)
 
-    if hasattr(model_mod, "get_valid_indices"):
-        inputs["valid_indices"] = model_mod.get_valid_indices(chunk_lengths)
+    if hasattr(modeling_module, "get_valid_indices"):
+        inputs["valid_indices"] = modeling_module.get_valid_indices(chunk_lengths)
 
-    if hasattr(model_mod, "get_pool_indices"):
-        inputs["pool_indices"] = model_mod.get_pool_indices(feature_lens)
+    if hasattr(modeling_module, "get_pool_indices"):
+        inputs["pool_indices"] = modeling_module.get_pool_indices(feature_lens)
 
 
 @contextlib.contextmanager
