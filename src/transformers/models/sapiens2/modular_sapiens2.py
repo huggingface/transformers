@@ -56,6 +56,7 @@ from ..dinov3_vit.modeling_dinov3_vit import (
 )
 
 
+# TODO(guarin): Check if we can drop cv2 dependency. Ideally re-use as much as possible from ViTPoseProcessor.
 if is_cv2_available():
     import cv2
 
@@ -715,12 +716,22 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             labels[idx] = label
         return labels
 
-    def _bbox_coco_to_center_scale(self, bbox: np.ndarray, padding: float = 1.0):
+    # TODO(guarin): Check all the pose pre- and post-processing steps and try to unify with ViTPoseProcessor where possible.
+    def _bbox_coco_to_center_scale(self, bbox: np.ndarray, padding: float = 1.25):
         """Convert COCO bbox (x, y, w, h) to center and scale for affine warp."""
         x, y, w, h = bbox[:4].astype(np.float32)
         center = np.array([x + w * 0.5, y + h * 0.5], dtype=np.float32)
         scale = np.array([w * padding, h * padding], dtype=np.float32)
         return center, scale
+
+    def _fix_aspect_ratio(self, scale: np.ndarray) -> np.ndarray:
+        """Adjust scale so the crop aspect ratio matches the model input size."""
+        aspect_ratio = self.size["width"] / self.size["height"]
+        sw, sh = scale
+        if sw > sh * aspect_ratio:
+            return np.array([sw, sw / aspect_ratio], dtype=scale.dtype)
+        else:
+            return np.array([sh * aspect_ratio, sh], dtype=scale.dtype)
 
     def _get_udp_warp_matrix(self, center: np.ndarray, scale: np.ndarray, output_size: tuple[int, int]) -> np.ndarray:
         """Compute affine warp matrix (rot=0). Port of get_udp_warp_matrix from sapiens2 pose."""
@@ -739,7 +750,9 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         self, image_np: np.ndarray, warp_mat: np.ndarray, output_size: tuple[int, int]
     ) -> np.ndarray:
         """Warp-affine crop a HWC uint8 numpy array. output_size = (width, height)."""
-        return cv2.warpAffine(image_np, warp_mat, output_size, flags=cv2.INTER_LINEAR)
+        scale_factor = min(np.linalg.norm(warp_mat[0, :2]), np.linalg.norm(warp_mat[1, :2]))
+        flags = cv2.INTER_AREA if scale_factor < 1.0 else cv2.INTER_CUBIC
+        return cv2.warpAffine(image_np, warp_mat, output_size, flags=flags)
 
     def _gaussian_blur(self, heatmaps: np.ndarray, kernel: int = 11) -> np.ndarray:
         """Gaussian blur per-keypoint heatmap, preserving the original max value."""
@@ -830,6 +843,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
                 for bbox in image_boxes:
                     bbox_np = np.array(bbox, dtype=np.float32)
                     center, scale = self._bbox_coco_to_center_scale(bbox_np)
+                    scale = self._fix_aspect_ratio(scale)
                     warp_mat = self._get_udp_warp_matrix(center, scale, output_size)
                     crop_np = self._apply_affine_crop(image_np, warp_mat, output_size)
                     crops.append(torch.from_numpy(crop_np).permute(2, 0, 1).to(image.device))
@@ -898,25 +912,21 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         heatmaps_np = outputs.heatmaps.cpu().numpy()  # (N_total, K, H_hm, W_hm)
         flattened_boxes = [bbox for image_boxes in boxes for bbox in image_boxes]
 
-        input_size = np.array([self.size["width"], self.size["height"]], dtype=np.float32)
         _, K, H_hm, W_hm = heatmaps_np.shape
         heatmap_size = np.array([W_hm - 1, H_hm - 1], dtype=np.float32)
 
         person_results = []
         for i, bbox in enumerate(flattened_boxes):
             center, scale = self._bbox_coco_to_center_scale(np.array(bbox, dtype=np.float32))
-            heatmap_i = heatmaps_np[i]  # (K, H_hm, W_hm)
+            scale = self._fix_aspect_ratio(scale)
+            heatmap_i = heatmaps_np[i].copy()  # copy to avoid mutating caller's tensor
 
             locs, scores_i = self._get_heatmap_maximum(heatmap_i)  # (K, 2), (K,)
             locs = locs[None]  # (1, K, 2) for refine signature
             locs = self._refine_keypoints_dark_udp(locs, heatmap_i, blur_kernel_size)
             locs = locs[0]  # (K, 2)
 
-            # Heatmap space → crop/input space
-            locs = locs / heatmap_size * input_size
-
-            # Crop space → image space
-            locs = locs / input_size * scale + center - 0.5 * scale
+            locs = locs / heatmap_size * scale + center - 0.5 * scale
 
             keypoints = torch.tensor(locs, dtype=torch.float32)
             scores = torch.tensor(scores_i, dtype=torch.float32)

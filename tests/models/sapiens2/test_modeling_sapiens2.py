@@ -462,26 +462,44 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
 
         image_processor = self.default_image_processor
         image = prepare_img()
-        _, img_height, img_width = image.shape
-        # Person bbox in xyxy format covering the full COCO test image
-        boxes = [[[0, 0, img_width, img_height]]]
+
+        # person bbox in COCO format (x, y, w, h)
+        boxes = [[[2.7080630e02, 5.7221174e-01, 2.9409006e02, 3.7946970e02]]]
         inputs = image_processor(image, boxes=boxes, return_tensors="pt").to(torch_device)
 
         with torch.no_grad():
             outputs = model(**inputs)
 
-        self.assertEqual(outputs.heatmaps.shape, torch.Size([1, model.config.num_labels, 256, 192]))
+        heatmaps = outputs.heatmaps
+        self.assertEqual(heatmaps.shape, torch.Size([1, model.config.num_labels, 256, 192]))
+        expected_heatmaps = torch.tensor(
+            [
+                [6.52787e-05, 9.09248e-05, 2.26033e-04],
+                [7.08279e-04, 4.39873e-04, 7.57689e-04],
+                [9.51157e-05, 1.61983e-04, -5.80908e-05],
+            ],
+            device=torch_device,
+        )
+        torch.testing.assert_close(heatmaps[0, 0, :3, :3], expected_heatmaps, rtol=1e-3, atol=1e-3)
 
         results = image_processor.post_process_pose_estimation(outputs, boxes=boxes)
         self.assertEqual(len(results), 1)
         self.assertEqual(len(results[0]), 1)
         person = results[0][0]
-        # All keypoint x-coordinates should be within the image width
-        self.assertTrue(person["keypoints"][:, 0].min().item() >= 0)
-        self.assertTrue(person["keypoints"][:, 0].max().item() <= img_width)
-        # All keypoint y-coordinates should be within the image height
-        self.assertTrue(person["keypoints"][:, 1].min().item() >= 0)
-        self.assertTrue(person["keypoints"][:, 1].max().item() <= img_height)
+
+        keypoints = person["keypoints"]
+        expected_keypoints = torch.tensor(
+            [
+                [364.33920111, 97.92528764],
+                [373.25104943, 80.97749201],
+                [353.21072316, 83.38954486],
+            ]
+        )
+        torch.testing.assert_close(keypoints[:3], expected_keypoints, rtol=1e-3, atol=1e-3)
+
+        scores = person["scores"]
+        expected_scores = torch.tensor([1.0007433, 0.9987416, 1.0015154])
+        torch.testing.assert_close(scores[:3], expected_scores, rtol=1e-3, atol=1e-3)
 
 
 @require_torch
