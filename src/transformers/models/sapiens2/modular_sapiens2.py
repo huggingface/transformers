@@ -661,7 +661,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         """
         if boxes is not None:
             requires_backends(self, ["cv2"])
-        return super().preprocess(images, segmentation_maps, boxes=boxes, **kwargs)
+        return super().preprocess(images, segmentation_maps, boxes, **kwargs)
 
     def _preprocess_image_like_inputs(
         self,
