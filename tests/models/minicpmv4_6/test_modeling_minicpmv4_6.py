@@ -96,7 +96,7 @@ class MiniCPMV4_6VisionText2TextModelTester(VLMModelTester):
     def _target_sizes(self, batch_size):
         h_patches = self.image_size // self.patch_size
         w_patches = self.image_size // self.patch_size
-        return torch.tensor([[h_patches, w_patches]] * batch_size, dtype=torch.int32)
+        return torch.tensor([[h_patches, w_patches]] * batch_size, dtype=torch.int32, device=torch_device)
 
     def create_pixel_values(self):
         return self._navit_pixel_values(self.batch_size)
