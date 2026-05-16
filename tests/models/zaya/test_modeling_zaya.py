@@ -40,30 +40,16 @@ class ZayaModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = ZayaModel
 
-    def __init__(self, parent):
+    def __init__(self, parent, **kwargs):
         super().__init__(
             parent=parent,
-            batch_size=2,
-            seq_length=7,
-            vocab_size=128,
-            hidden_size=32,
-            num_hidden_layers=2,
-            num_attention_heads=4,
-            num_key_value_heads=2,
+            num_hidden_layers=4,
             moe_intermediate_size=32,
+            num_experts_per_tok=1,
+            layer_types=["hybrid", "hybrid_sliding", "hybrid", "hybrid_sliding"],
+            sliding_window=64,
+            **kwargs,
         )
-        self.head_dim = 8
-        self.num_experts = 4
-        self.num_experts_per_tok = 1
-        self.router_hidden_size = 4
-        self.tie_word_embeddings = False
-        self.rope_parameters = {
-            "hybrid": {
-                "rope_theta": 10000,
-                "rope_type": "default",
-                "partial_rotary_factor": 0.5,
-            },
-        }
 
 
 @require_torch
@@ -101,17 +87,6 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertEqual(layer.conv_states.shape, conv_shape)
             self.assertEqual(layer.recurrent_states.shape, recurrent_shape)
 
-    def is_pipeline_test_to_skip(
-        self,
-        pipeline_test_case_name,
-        config_class,
-        model_architecture,
-        tokenizer_name,
-        image_processor_name,
-        feature_extractor_name,
-        processor_name,
-    ):
-        return True
 
     @unittest.skip("ZAYA uses key/query normalization which is not equivalent under padding-free packing.")
     def test_eager_padding_matches_padding_free_with_position_ids(self):
@@ -121,8 +96,11 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
-    @unittest.skip("ZAYA uses MoE routing; equivalent-output comparisons are not stable for this architecture.")
-    def test_model_outputs_equivalence(self, **kwargs):
+    @unittest.skip(
+        "ZAYA follows the original SWA behavior where sliding attention only applies the local causal pattern;"
+        "See https://github.com/huggingface/transformers/pull/45862#discussion_r3249556316"
+    )
+    def test_left_padding_compatibility(self):
         pass
 
     def test_attention_outputs(self):
@@ -163,7 +141,6 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
         Copied from Laguna to adapt to per-layer-type rope configs.
         """
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        config.layer_types = ["hybrid", "hybrid_sliding"]
         partial_rotary_factor = config.rope_parameters["hybrid"]["partial_rotary_factor"]
 
         def set_rope_params(rope_params):
@@ -238,10 +215,6 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
             torch.testing.assert_close(yarn_cos_long, original_cos_long)
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(yarn_sin_long, original_sin_long)
-
-    @unittest.skip("ZAYA needs alternating attention and MoE layers in the tiny test configuration.")
-    def test_num_layers_is_small(self):
-        pass
 
     def test_moe_router_logits(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

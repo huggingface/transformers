@@ -116,14 +116,8 @@ class ZayaConfig(PreTrainedConfig):
             raise ValueError("ZAYA currently supports `num_experts_per_tok=1` only.")
         if self.num_attention_heads % self.num_key_value_heads != 0:
             raise ValueError("`num_attention_heads` must be a multiple of `num_key_value_heads`.")
-        if len(self.layer_types) != self.num_hidden_layers:
-            raise ValueError("`layer_types` must have one entry per hidden layer.")
-        if invalid_layer_types := set(self.layer_types) - {"hybrid", "hybrid_sliding"}:
-            raise ValueError(f"`layer_types` contains unsupported values: {sorted(invalid_layer_types)}.")
         if "hybrid_sliding" in self.layer_types and self.sliding_window is None:
             raise ValueError("`sliding_window` must be set when `layer_types` contains `hybrid_sliding`.")
-        if self.sliding_window is not None and self.sliding_window <= 0:
-            raise ValueError("`sliding_window` must be a strictly positive integer.")
 
 
 __all__ = ["ZayaConfig"]

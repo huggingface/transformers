@@ -39,7 +39,7 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..afmoe.modeling_afmoe import AfmoeForCausalLM
 from ..laguna.configuration_laguna import LagunaConfig
-from ..laguna.modeling_laguna import LagunaRotaryEmbedding
+from ..laguna.modeling_laguna import LagunaModel, LagunaRotaryEmbedding
 from ..llama.modeling_llama import LlamaDecoderLayer, LlamaPreTrainedModel, repeat_kv
 from ..phi3.modeling_phi3 import Phi3Attention
 from ..qwen3_5_moe.modeling_qwen3_5_moe import (
@@ -94,7 +94,7 @@ class ZayaConfig(LagunaConfig):
     cca_time1: int = 2
 
     # Fields declared by LagunaConfig but not used by ZAYA.
-    # TP and PP are not tested yet, so remove for now
+    # TODO: add TP/PP plans. TP needs the router mlp, moe experts, and CCA projections to shard consistently; PP needs coverage for the cross-layer router state.
     base_model_tp_plan = AttributeError()
     base_model_pp_plan = AttributeError()
     intermediate_size = AttributeError()
@@ -135,14 +135,8 @@ class ZayaConfig(LagunaConfig):
             raise ValueError("ZAYA currently supports `num_experts_per_tok=1` only.")
         if self.num_attention_heads % self.num_key_value_heads != 0:
             raise ValueError("`num_attention_heads` must be a multiple of `num_key_value_heads`.")
-        if len(self.layer_types) != self.num_hidden_layers:
-            raise ValueError("`layer_types` must have one entry per hidden layer.")
-        if invalid_layer_types := set(self.layer_types) - {"hybrid", "hybrid_sliding"}:
-            raise ValueError(f"`layer_types` contains unsupported values: {sorted(invalid_layer_types)}.")
         if "hybrid_sliding" in self.layer_types and self.sliding_window is None:
             raise ValueError("`sliding_window` must be set when `layer_types` contains `hybrid_sliding`.")
-        if self.sliding_window is not None and self.sliding_window <= 0:
-            raise ValueError("`sliding_window` must be a strictly positive integer.")
 
 
 class ZayaRotaryEmbedding(LagunaRotaryEmbedding):
@@ -163,8 +157,6 @@ class ZayaCCAProjection(nn.Module):
     Values are built from `v_proj_current(hidden_states[:, t])` and a delayed `v_proj_delayed`: during prefill token
     `t` uses `v_proj_delayed(hidden_states[:, t - 1])`, while decoding reads the previous delayed value projection
     from **the recurrent cache**.
-
-    Final q/k states are L2-normalized to sqrt(head_dim). `temp` is the learned per-KV-head scale applied to keys.
     """
 
     def __init__(self, config: ZayaConfig, layer_idx: int):
@@ -226,7 +218,7 @@ class ZayaCCAProjection(nn.Module):
         qk_states = torch.cat([projected_queries, projected_keys], dim=-1)
 
         query_residual = projected_queries.view(*hidden_shape)
-        key_residual = projected_keys.view(*input_shape, -1, self.head_dim).transpose(1, 2)
+        key_residual = projected_keys.view(*hidden_shape).transpose(1, 2)
         key_residual = repeat_kv(key_residual, self.num_key_value_groups).transpose(1, 2)
         query_residual = (query_residual + key_residual) * 0.5
         key_residual = query_residual.view(*input_shape, -1, self.num_key_value_groups, self.head_dim).mean(dim=-2)
@@ -252,6 +244,8 @@ class ZayaCCAProjection(nn.Module):
         query = qk_states[..., :query_hidden_size].view(*hidden_shape) + query_residual
         key = qk_states[..., query_hidden_size:].view(*hidden_shape) + key_residual
 
+        # The value path carries half of each value head from the current token and half from the previous token.
+        # During cached decoding, `recurrent_v_state` is the previous token's delayed projection.
         value_current = self.v_proj_current(hidden_states)
         delayed_v_state = self.v_proj_delayed(hidden_states)
         if use_precomputed_states:
@@ -269,9 +263,13 @@ class ZayaCCAProjection(nn.Module):
 
 
 class ZayaQKNorm(nn.Module):
-    def __init__(self, config: ZayaConfig, scaling: float):
+    """
+    L2-normalizes q/k states to sqrt(head_dim) and applies ZAYA's learned per-KV-head key scale.
+    """
+
+    def __init__(self, config: ZayaConfig):
         super().__init__()
-        self.head_dim_scale = scaling**-1
+        self.head_dim_scale = config.head_dim**0.5
         self.temp = nn.Parameter(torch.zeros(config.num_key_value_heads))
 
     def forward(self, query_states: torch.Tensor, key_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -298,7 +296,7 @@ class ZayaAttention(Phi3Attention):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.qk_norm = ZayaQKNorm(config, self.scaling)
+        self.qk_norm = ZayaQKNorm(config)
         self.qkv_proj = ZayaCCAProjection(
             config=self.config,
             layer_idx=layer_idx,
@@ -312,7 +310,7 @@ class ZayaAttention(Phi3Attention):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        batch_size, seq_length, _ = hidden_states.shape
+        input_shape = hidden_states.shape[:-1]
 
         mask_mapping = attention_mask or {}
         causal_mask = mask_mapping.get("causal")
@@ -347,7 +345,7 @@ class ZayaAttention(Phi3Attention):
             **kwargs,
         )
 
-        attn_output = attn_output.view(batch_size, seq_length, -1)
+        attn_output = attn_output.view(*input_shape, -1)
         attn_output = self.o_proj(attn_output)
 
         return attn_output, attn_weights
@@ -381,9 +379,9 @@ class ZayaDecoderLayer(LlamaDecoderLayer):
         )
 
         residual = self.post_attention_residual_scale(hidden_states, residual)
-        hidden_states = self.post_attention_layernorm(residual.to(dtype=self.post_attention_layernorm.weight.dtype))
+        hidden_states = self.post_attention_layernorm(residual)
 
-        hidden_states, prev_router_hidden_states, _ = self.mlp(
+        hidden_states, prev_router_hidden_states = self.mlp(
             hidden_states,
             prev_router_hidden_states,
         )
@@ -494,17 +492,15 @@ class ZayaExperts(Qwen3MoeExperts):
 class ZayaSparseMoeBlock(nn.Module):
     def __init__(self, config, layer_idx: int):
         super().__init__()
-        self.config = config
-        self.hidden_dim = config.hidden_size
-        self.gate = ZayaRouter(self.config, layer_idx)
-        self.experts = ZayaExperts(self.config)
+        self.gate = ZayaRouter(config, layer_idx)
+        self.experts = ZayaExperts(config)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         prev_router_hidden_states: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor]:
-        router_logits, router_probs, router_indices, prev_router_hidden_states = self.gate(
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        _, router_probs, router_indices, prev_router_hidden_states = self.gate(
             hidden_states, router_states=prev_router_hidden_states
         )
 
@@ -513,13 +509,11 @@ class ZayaSparseMoeBlock(nn.Module):
         expert_output = self.experts(hidden_states_flat, router_indices, router_probs)
         expert_output = expert_output.view(batch_size, seq_length, emb_dim)
 
-        return expert_output, prev_router_hidden_states, router_logits
+        return expert_output, prev_router_hidden_states
 
 
 class ZayaPreTrainedModel(LlamaPreTrainedModel):
     config: ZayaConfig
-    config_class = ZayaConfig
-    _no_split_modules = ["ZayaDecoderLayer"]
     # ZAYA generation uses the native hybrid dynamic cache, which is not a compileable cache.
     _can_compile_fullgraph = False
     _can_record_outputs = {
@@ -545,7 +539,7 @@ class ZayaPreTrainedModel(LlamaPreTrainedModel):
             if module.use_eda:
                 init.ones_(module.router_states_scale)
             init.zeros_(module.balancing_biases)
-            module.balancing_biases[-1] = -1.0
+            module.balancing_biases[-1] = -1.0  # ignore: trf012
         elif isinstance(module, ZayaExperts):
             std = self.config.initializer_range
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
@@ -561,31 +555,13 @@ class ZayaPreTrainedModel(LlamaPreTrainedModel):
 
 
 @auto_docstring
-class ZayaModel(ZayaPreTrainedModel):
+class ZayaModel(LagunaModel):
     def __init__(self, config: ZayaConfig):
         super().__init__(config)
-        self.padding_idx = config.pad_token_id
-        self.vocab_size = config.vocab_size
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList(
-            [ZayaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-
-        self.gradient_checkpointing = False
-
+        del self.norm
         self.input_hidden_states_scale = nn.Parameter(torch.ones(config.hidden_size))
         self.input_hidden_states_bias = nn.Parameter(torch.zeros(config.hidden_size))
         self.final_norm = ZayaRMSNorm(self.config.hidden_size, eps=self.config.rms_norm_eps)
-
-        self.rotary_emb = ZayaRotaryEmbedding(config=config)
-
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     @merge_with_config_defaults
     @capture_outputs
@@ -619,18 +595,23 @@ class ZayaModel(ZayaPreTrainedModel):
                 "ZAYA CCA projection requires a 2D `attention_mask` to mask padding tokens before convolution."
             )
 
-        causal_mask_mapping = self._update_causal_mask(
-            attention_mask,
-            inputs_embeds,
-            position_ids,
-            past_key_values,
-        )
-        padding_mask = attention_mask[:, -inputs_embeds.shape[1] :] if attention_mask is not None else None
-
-        # ZAYA's hybrid cache is not compileable, so generation keeps `attention_mask` as the original 2D padding mask.
-        # CCA projection only needs it during multi-token prefill; single-token decoding uses the cached convolution state.
-        if inputs_embeds.shape[1] == 1:
-            padding_mask = None
+        mask_kwargs = {
+            "config": self.config,
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+        }
+        # Original ZAYA SWA only applies the local causal pattern; padding tokens are zeroed before the CCA projection.
+        sliding_mask_kwargs = {**mask_kwargs, "attention_mask": None}
+        mask_creation_functions = {
+            "hybrid": lambda: create_causal_mask(**mask_kwargs),
+            "hybrid_sliding": lambda: create_sliding_window_causal_mask(**sliding_mask_kwargs),
+        }
+        causal_mask_mapping = {
+            layer_type: mask_creation_functions[layer_type]() for layer_type in set(self.config.layer_types)
+        }
+        cca_mask = self._update_cca_mask(attention_mask, past_key_values, inputs_embeds)
 
         hidden_states = inputs_embeds
 
@@ -643,50 +624,36 @@ class ZayaModel(ZayaPreTrainedModel):
 
         prev_router_hidden_states = None
 
-        for layer_n, decoder_layer in enumerate(self.layers):
-            layer_type = self.config.layer_types[layer_n]
-            emb_to_use = position_embeddings[layer_type]
-            mask_mapping = {"causal": causal_mask_mapping[layer_type], "padding": padding_mask}
+        for idx, decoder_layer in enumerate(self.layers):
+            layer_type = self.config.layer_types[idx]
             hidden_states, prev_router_hidden_states = decoder_layer(
                 hidden_states,
                 prev_router_hidden_states,
-                attention_mask=mask_mapping,
+                attention_mask={"causal": causal_mask_mapping[layer_type], "padding": cca_mask},
                 past_key_values=past_key_values,
-                position_embeddings=emb_to_use,
+                position_embeddings=position_embeddings[layer_type],
                 **kwargs,
             )
 
-        hidden_states = self.final_norm(hidden_states.to(dtype=self.final_norm.weight.dtype))
+        hidden_states = self.final_norm(hidden_states)
 
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
         )
 
-    def _update_causal_mask(
-        self,
-        attention_mask: torch.Tensor,
-        input_tensor: torch.Tensor,
-        position_ids: torch.Tensor,
-        past_key_values: Cache,
-    ):
-        mask_kwargs = {
-            "config": self.config,
-            "inputs_embeds": input_tensor,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "position_ids": position_ids,
-        }
-        # Original ZAYA SWA only applies the local causal pattern; padding tokens are zeroed before the CCA projection.
-        sliding_mask_kwargs = {**mask_kwargs, "attention_mask": None}
-        mask_creation_functions = {
-            "hybrid": lambda: create_causal_mask(**mask_kwargs),
-            "hybrid_sliding": lambda: create_sliding_window_causal_mask(**sliding_mask_kwargs),
-        }
-        causal_mask_mapping = {}
-        for layer_type in set(self.config.layer_types):
-            causal_mask_mapping[layer_type] = mask_creation_functions[layer_type]()
-        return causal_mask_mapping
+    def _update_cca_mask(self, attention_mask, past_key_values, inputs_embeds):
+        """
+        No need to zero padding states when cached convolution states are already available or all inputs are valid.
+        """
+        cca_mask = attention_mask
+        if (past_key_values is not None and past_key_values.has_previous_state()) or (
+            attention_mask is not None and torch.all(attention_mask == 1)
+        ):
+            cca_mask = None
+        elif attention_mask is not None:
+            cca_mask = attention_mask[:, -inputs_embeds.shape[1] :]
+        return cca_mask
 
 
 @auto_docstring(checkpoint="Zyphra/ZAYA1-8B")
