@@ -529,15 +529,14 @@ class VJEPA2Encoder(nn.Module):
         )
 
         if config.hierarchical_layers is not None:
-            self.norms_block = nn.ModuleList(
-                [nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) for _ in config.hierarchical_layers]
+            self.distillation_layers = config.hierarchical_layers[-config.num_distillation_outputs:]
+            self.distillation_norms = nn.ModuleList(
+                [nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) for _ in self.distillation_layers]
             )
-            n_dist = config.num_distillation_outputs
-            self._extraction_layers = config.hierarchical_layers[-n_dist:]
             self.layernorm = None
         else:
-            self.norms_block = None
-            self._extraction_layers = None
+            self.distillation_layers = None
+            self.distillation_norms = None
             self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.gradient_checkpointing = False
@@ -545,29 +544,23 @@ class VJEPA2Encoder(nn.Module):
     def forward(
         self,
         pixel_values_videos: torch.Tensor | None = None,
-        return_hierarchical: bool = True,
         **kwargs: Unpack[TransformersKwargs],
     ) -> VJEPA2EncoderOutput:
         hidden_states = self.embeddings(pixel_values_videos)
 
         hierarchical_outputs = []
-
         for i, layer_module in enumerate(self.layer):
-            layer_outputs = layer_module(hidden_states, None, **kwargs)
-            hidden_states = layer_outputs[0]
+            hidden_states = layer_module(hidden_states, None, **kwargs)[0]
+            if self.distillation_norms is not None and i in self.distillation_layers:
+                norm_idx = self.distillation_layers.index(i)
+                hierarchical_outputs.append(self.distillation_norms[norm_idx](hidden_states))
 
-            if self.norms_block is not None and self._extraction_layers is not None:
-                if i in self._extraction_layers:
-                    norm_idx = self.config.hierarchical_layers.index(i)
-                    hierarchical_outputs.append(self.norms_block[norm_idx](hidden_states))
-
-        if self.norms_block is not None:
-            if return_hierarchical and len(hierarchical_outputs) > 1:
-                hierarchical_hidden_state = torch.cat(hierarchical_outputs, dim=-1)
-            elif hierarchical_outputs:
-                hierarchical_hidden_state = hierarchical_outputs[-1]
-            else:
-                hierarchical_hidden_state = None
+        if self.distillation_norms is not None:
+            hierarchical_hidden_state = (
+                torch.cat(hierarchical_outputs, dim=-1)
+                if len(hierarchical_outputs) > 1
+                else hierarchical_outputs[0]
+            )
         else:
             hidden_states = self.layernorm(hidden_states)
             hierarchical_hidden_state = None
@@ -605,12 +598,13 @@ class VJEPA2PredictorEmbeddings(nn.Module):
 
         self.config = config
 
-        n_dist = config.num_distillation_outputs
-        encoder_output_dim = config.hidden_size * n_dist
-
         if config.num_distillation_outputs > 1:
             self.predictor_embeddings = nn.Sequential(
-                nn.Linear(encoder_output_dim, config.hidden_size, bias=True),
+                nn.Linear(
+                    config.hidden_size * config.num_distillation_outputs,
+                    config.hidden_size,
+                    bias=True,
+                ),
                 nn.GELU(),
                 nn.Linear(config.hidden_size, config.pred_hidden_size, bias=True),
             )
@@ -710,12 +704,11 @@ class VJEPA2Predictor(nn.Module):
         )
         self.layernorm = nn.LayerNorm(config.pred_hidden_size, eps=config.layer_norm_eps)
 
-        n_hier = len(config.hierarchical_layers) if config.hierarchical_layers else 1
-        if config.teacher_embed_dim is not None:
-            out_embed_dim = config.teacher_embed_dim // n_hier
-        else:
-            out_embed_dim = config.hidden_size
-        proj_output_dim = n_hier * out_embed_dim
+        proj_output_dim = (
+            config.teacher_embed_dim
+            if config.teacher_embed_dim is not None
+            else config.num_distillation_outputs * config.hidden_size
+        )
 
         self.proj = nn.Linear(config.pred_hidden_size, proj_output_dim, bias=True)
 
@@ -1082,10 +1075,8 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
 
         is_image = self.config.use_image_patch_embedder and pixel_values_videos.shape[1] == 1
 
-        needs_hierarchical = not skip_predictor and self.config.num_distillation_outputs > 1
         encoder_outputs: VJEPA2EncoderOutput = self.encoder(
             pixel_values_videos=pixel_values_videos,
-            return_hierarchical=needs_hierarchical,
             **kwargs,
         )
         sequence_output = encoder_outputs.last_hidden_state
@@ -1144,17 +1135,14 @@ class VJEPA2ForVideoClassification(VJEPA2PreTrainedModel):
     def __init__(self, config: VJEPA2Config):
         super().__init__(config)
 
-        if config.num_distillation_outputs > 1:
-            raise ValueError(
-                f"Classification heads for hierarchical distillation outputs "
-                f"(num_distillation_outputs={config.num_distillation_outputs}) are not yet supported. "
-                f"Use VJEPA2Model for feature extraction instead."
-            )
-
         self.num_labels = config.num_labels
         self.vjepa2 = VJEPA2Model(config)
 
-        # Classifier head
+        # Classifier head. The pooler consumes `outputs.last_hidden_state` (dim
+        # config.hidden_size), which is the post-loop encoder sequence even for V-JEPA 2.1
+        # configs with hierarchical layers. Hierarchical/distillation features live on
+        # `outputs.hierarchical_hidden_state` and are not used by the classifier; users who
+        # want them should use VJEPA2Model for feature extraction.
         self.pooler = VJEPA2AttentivePooler(config)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels, bias=True)
 

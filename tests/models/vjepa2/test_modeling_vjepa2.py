@@ -268,6 +268,39 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertEqual(outputs.predictor_output.last_hidden_state.shape, (1, 1, 128))
         self.assertEqual(outputs.predictor_output.context_predictions.shape, (1, 1, 128))
 
+    def test_classification_head_with_hierarchical_distillation(self):
+        """Wiring-only smoke test: classification head must instantiate and forward without
+        error when num_distillation_outputs > 1. Does not validate feature quality — the
+        pooler consumes last_hidden_state (post-loop, unnormalized for 2.1), which is the
+        documented behavior per the review's "let users experiment" direction.
+        """
+        num_labels = 5
+        config = VJEPA2Config(
+            crop_size=16,
+            frames_per_clip=2,
+            hidden_size=32,
+            num_attention_heads=2,
+            num_hidden_layers=4,
+            mlp_ratio=1.0,
+            pred_hidden_size=16,
+            pred_num_attention_heads=2,
+            pred_num_hidden_layers=2,
+            pred_num_mask_tokens=8,
+            use_rope_interleave=True,
+            use_modality_embeddings=True,
+            interpolate_rope=True,
+            use_image_patch_embedder=True,
+            num_distillation_outputs=4,
+            hierarchical_layers=[0, 1, 2, 3],
+            num_labels=num_labels,
+        )
+        model = VJEPA2ForVideoClassification(config).to(torch_device).eval()
+
+        pixel_values = torch.randn(1, 2, 3, 16, 16, device=torch_device)
+        with torch.no_grad():
+            outputs = model(pixel_values)
+        self.assertEqual(outputs.logits.shape, (1, num_labels))
+
     @slow
     def test_model_from_pretrained(self):
         model = VJEPA2Model.from_pretrained(VJEPA_HF_MODEL)
