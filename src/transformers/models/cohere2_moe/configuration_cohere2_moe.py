@@ -16,8 +16,7 @@
 
 import warnings
 
-from ...configuration_utils import PretrainedConfig, layer_type_validation
-from ...modeling_rope_utils import rope_config_validation
+from ...configuration_utils import PretrainedConfig
 
 
 def make_pattern(num_layers: int, pattern: int) -> list[str]:
@@ -260,7 +259,8 @@ class Cohere2MoeConfig(PretrainedConfig):
         self.head_dim = head_dim
 
         # Validate the correctness of rotary position embeddings parameters
-        rope_config_validation(self)
+        self.standardize_rope_params()
+        self.validate_rope()
 
         # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
         self._sliding_window_pattern = kwargs.get("sliding_window_pattern", 4)
@@ -268,13 +268,11 @@ class Cohere2MoeConfig(PretrainedConfig):
         if self.layer_types is None:
             first_k_dense_replace = getattr(self, "first_k_dense_replace", 0)
             prefix_dense_sliding_window_pattern = getattr(self, "prefix_dense_sliding_window_pattern", 1)
-            # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
-            self._sliding_window_pattern = getattr(self, "sliding_window_pattern", 4)
             prefix_layers = make_pattern(first_k_dense_replace, prefix_dense_sliding_window_pattern)
             rest_layers = make_pattern(self.num_hidden_layers - first_k_dense_replace, self._sliding_window_pattern)
             self.layer_types = prefix_layers + rest_layers
 
-        layer_type_validation(self.layer_types)
+        self.validate_layer_type()
 
         if len(self.layer_types) != self.num_hidden_layers:
             raise ValueError(
