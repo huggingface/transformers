@@ -357,6 +357,7 @@ class CtsmDecoderLayer(nn.Module):
 
     def __init__(self, config: CtsmConfig, layer_idx: int):
         super().__init__()
+        # TimesFM wires `TimesFmAttention`; CTSM needs RoPE-aware attention.
         self.self_attn = CtsmAttention(config, layer_idx=layer_idx)
         self.mlp = CtsmMLP(config)
         self.input_layernorm = CtsmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -441,12 +442,12 @@ class CtsmPreTrainedModel(PreTrainedModel):
     main_input_name = "past_values"
     input_modalities = ("time",)
     _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_flex_attn = True
     _can_record_outputs = {
         "hidden_states": CtsmDecoderLayer,
         "attentions": CtsmAttention,
     }
-    _supports_flash_attn = True
-    _supports_flex_attn = True
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -494,11 +495,8 @@ class CtsmModel(CtsmPreTrainedModel):
         if self.config.use_positional_embedding:
             self.position_emb = CtsmPositionalEmbedding(config=config)
 
-        # Parent only creates `position_emb` when `use_positional_embedding=True`; for CTSM the rotary
-        # embedding takes its place, so drop it if it was instantiated.
-        if hasattr(self, "position_emb"):
-            del self.position_emb
-
+        # The parent only instantiates `position_emb` when `use_positional_embedding=True`, which is
+        # `False` by default on `CtsmConfig` because CTSM uses rotary position embeddings instead.
         self.rotary_emb = CtsmRotaryEmbedding(config)
 
         self.multi_resolution = (
@@ -774,17 +772,21 @@ class CtsmModel(CtsmPreTrainedModel):
         num_coarse_patches: int,
         dtype: torch.dtype,
     ) -> torch.Tensor:
-        """Reuse TimesFM's padding+causal 4D mask, then open the coarse-coarse block to bidirectional."""
-        attention_mask = self._prepare_4d_attention_mask(
-            attention_mask=patch_padding,
-            sequence_length=patch_padding.shape[1],
-            dtype=dtype,
-            device=patch_padding.device,
-            is_causal=True,
-        )
+        """Build a causal mask with bidirectional attention inside the coarse block."""
+        sequence_length = patch_padding.shape[1]
+        min_value = torch.finfo(dtype).min
+
+        padding_mask = patch_padding.to(dtype).view(patch_padding.shape[0], 1, 1, -1) * min_value
+        causal_mask = torch.triu(
+            torch.full((sequence_length, sequence_length), min_value, dtype=dtype, device=patch_padding.device),
+            diagonal=1,
+        ).view(1, 1, sequence_length, sequence_length)
+
+        # Key difference vs TimesFM: coarse-resolution patches can attend bidirectionally among themselves,
+        # while the special/fine tokens keep the causal structure.
         if num_coarse_patches > 0:
-            attention_mask[..., :num_coarse_patches, :num_coarse_patches] = 0.0
-        return attention_mask
+            causal_mask[..., :num_coarse_patches, :num_coarse_patches] = 0.0
+        return torch.minimum(padding_mask, causal_mask)
 
     def _build_incremental_attention_mask(
         self, bsz: int, num_new: int, past_length: int, dtype: torch.dtype, device: torch.device
@@ -967,11 +969,12 @@ class CtsmModel(CtsmPreTrainedModel):
 class CtsmModelForPrediction(CtsmPreTrainedModel):
     """CTSM model with a multi-resolution prediction head and autoregressive multi-resolution decoding.
 
-    For horizons that require autoregressive decoding (``horizon_len > config.horizon_length``) the
-    prediction class reuses a key/value cache across AR steps: the first step runs the full forward
-    and populates a [`DynamicCache`], subsequent steps feed only the newly-appended fine patches
-    through the stack and attend to the cached K/V for every earlier position. Two caveats, matching
-    how a KV cache is made to fit CTSM's architecture:
+    For horizons that require autoregressive decoding (``horizon_len > config.horizon_length``), the default
+    path follows the original implementation and recomputes the full multi-resolution context at each step.
+    The prediction class can optionally reuse a key/value cache across AR steps: the first step runs the full
+    forward and populates a [`DynamicCache`], subsequent steps feed only the newly-appended fine patches through
+    the stack and attend to the cached K/V for every earlier position. Two caveats, matching how a KV cache is
+    made to fit CTSM's architecture:
 
     * Stream-level normalization statistics (``loc_fine``, ``scale_fine``) are frozen to the values
       computed on the first step. This is a small approximation: in the untracked reference,
@@ -1074,7 +1077,7 @@ class CtsmModelForPrediction(CtsmPreTrainedModel):
         r"""
         past_values (`Sequence[torch.Tensor]`):
             Either a list of 1-D fine-resolution tensors (the coarse stream is derived by mean-aggregating over
-            `agg_factor` consecutive points) or a list of `(coarse, fine)` pairs if both streams are provided.
+            `aggregation_factor` consecutive points) or a list of `(coarse, fine)` pairs if both streams are provided.
         future_values (`torch.Tensor`, *optional*):
             Optional fine-resolution ground truth used to compute the loss.
         horizon_len (`int`, *optional*):
@@ -1083,10 +1086,9 @@ class CtsmModelForPrediction(CtsmPreTrainedModel):
         freq (`Sequence[int]` or `torch.Tensor`, *optional*):
             Frequency indices. Defaults to zeros.
         use_cache (`bool`, *optional*):
-            Whether to use a key/value cache across autoregressive decode steps. Defaults to `True` when
-            `horizon_len > config.horizon_length` (i.e. when AR decoding is needed) and `False` otherwise.
-            Set to `False` to force a full recompute at every AR step (matches the original reference
-            behaviour; slower but avoids the stream-stats-freezing approximation).
+            Whether to use a key/value cache across autoregressive decode steps. Defaults to `False`, matching
+            the original reference behavior: full recompute at every AR step. Set to `True` to opt into the
+            faster cached path with frozen stream-normalization statistics.
         """
         device = self.horizon_ff_layer.input_layer.weight.device
         horizon_len = horizon_len or self.config.horizon_length
@@ -1121,10 +1123,10 @@ class CtsmModelForPrediction(CtsmPreTrainedModel):
         coarse_buffer = torch.zeros((bsz, 0), dtype=torch.float32, device=device)
 
         if use_cache is None:
-            use_cache = num_decode_patches > 1
+            use_cache = False
         pending_new_fine: torch.Tensor | None = None
 
-        for step_idx in range(num_decode_patches):
+        for _ in range(num_decode_patches):
             if past_key_values is None:
                 # First step (or after cache invalidation): full forward. The coarse block in the cache
                 # stays frozen at the initial state — only the fine block grows via subsequent incremental
@@ -1275,21 +1277,21 @@ class CtsmModelForPrediction(CtsmPreTrainedModel):
                 series = torch.as_tensor(item, dtype=torch.float32, device=device).reshape(-1)
                 coarse, fine = self._build_multi_resolution(series, aggregation_factor, coarse_len, fine_len)
 
-            coarse_n = coarse.shape[0]
-            if coarse_n >= coarse_len:
+            num_coarse_values = coarse.shape[0]
+            if num_coarse_values >= coarse_len:
                 coarse_batch[i] = coarse[-coarse_len:]
-            elif coarse_n > 0:
-                coarse_batch[i, coarse_len - coarse_n :] = coarse
-                coarse_pad[i, : coarse_len - coarse_n] = 1.0
+            elif num_coarse_values > 0:
+                coarse_batch[i, coarse_len - num_coarse_values :] = coarse
+                coarse_pad[i, : coarse_len - num_coarse_values] = 1.0
             else:
                 coarse_pad[i] = 1.0
 
-            fine_n = fine.shape[0]
-            if fine_n >= fine_len:
+            num_fine_values = fine.shape[0]
+            if num_fine_values >= fine_len:
                 fine_batch[i] = fine[-fine_len:]
-            elif fine_n > 0:
-                fine_batch[i, fine_len - fine_n :] = fine
-                fine_pad[i, : fine_len - fine_n] = 1.0
+            elif num_fine_values > 0:
+                fine_batch[i, fine_len - num_fine_values :] = fine
+                fine_pad[i, : fine_len - num_fine_values] = 1.0
             else:
                 fine_pad[i] = 1.0
 

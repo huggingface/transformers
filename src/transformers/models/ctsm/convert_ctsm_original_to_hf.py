@@ -38,9 +38,9 @@ CTSM_CHECKPOINT_FILENAME = "torch_model.pt"
 CTSM_1_0_QUANTILES = [0.01, 0.05, 0.1, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.75, 0.8, 0.9, 0.95, 0.99]
 
 
-def _layer_mapping(num_layers: int, hidden_size: int) -> dict[str, str | tuple[str, int]]:
-    """Return a mapping `old_key -> new_key` (or `(new_prefix, split_idx)` for fused QKV)."""
-    mapping: dict[str, str | tuple[str, int]] = {
+def _layer_mapping(num_layers: int, hidden_size: int) -> dict[str, str | tuple[str, str]]:
+    """Return a mapping `old_key -> new_key` (or `(new_prefix, split_kind)` for fused QKV)."""
+    mapping: dict[str, str | tuple[str, str]] = {
         # input tokenizer (residual block)
         "input_ff_layer.hidden_layer.0.weight": "model.input_ff_layer.input_layer.weight",
         "input_ff_layer.hidden_layer.0.bias": "model.input_ff_layer.input_layer.bias",

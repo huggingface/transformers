@@ -13,14 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-11-25 and added to Hugging Face Transformers on 2026-04-17.*
-
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
+*This model was released on 2025-11-25 and added to Hugging Face Transformers on 2026-05-16.*
 
 # CTSM
 
@@ -86,8 +79,8 @@ outputs = model(past_values=[(coarse, fine)], horizon_len=128)
 
 ## Usage tips
 
-- For `horizon_len > config.horizon_length`, [`CtsmModelForPrediction`] runs an autoregressive multi-resolution decode loop, using a [`DynamicCache`] by default (opt out with `use_cache=False`). Each step feeds only the newly-appended fine patches through the stack and attends to cached K/V for every earlier position.
-- Stream-normalization statistics are frozen to their step-1 values so that cached K/V remains valid; the coarse block is pinned and the cache is rebuilt if the concatenated sequence would outgrow `max_position_embeddings`.
+- For `horizon_len > config.horizon_length`, [`CtsmModelForPrediction`] runs an autoregressive multi-resolution decode loop. By default it matches the original implementation and recomputes the full multi-resolution context at each step.
+- Set `use_cache=True` to opt into a faster [`DynamicCache`] path. In that path, stream-normalization statistics are frozen to their step-1 values so cached K/V remains valid; the coarse block is pinned and the cache is rebuilt if the concatenated sequence would outgrow `max_position_embeddings`.
 
 ## CtsmConfig
 
