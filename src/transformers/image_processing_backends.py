@@ -421,6 +421,9 @@ class TorchvisionBackend(BaseImageProcessor):
         if do_pad:
             processed_images = self.pad(processed_images, pad_size=pad_size, disable_grouping=disable_grouping)
 
+        if return_tensors is not None:
+            processed_images = torch.stack(processed_images)
+
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
 
@@ -674,6 +677,9 @@ class PilBackend(BaseImageProcessor):
 
         if do_pad:
             processed_images = self.pad(processed_images, pad_size=pad_size)
+
+        if return_tensors is not None:
+            processed_images = np.array(processed_images)
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
