@@ -68,10 +68,9 @@ def _prepare_compressor_attention_mask(attention_mask: torch.Tensor | None, kv: 
         return None
 
     seq_len = kv.shape[1]
-    if attention_mask.shape[1] > seq_len:
-        attention_mask = attention_mask[:, -seq_len:]
-    elif attention_mask.shape[1] < seq_len:
+    if attention_mask.shape[1] < seq_len:
         attention_mask = F.pad(attention_mask, (seq_len - attention_mask.shape[1], 0), value=1)
+    attention_mask = attention_mask[:, -seq_len:]
     return attention_mask.to(device=kv.device, dtype=torch.bool)
 
 
