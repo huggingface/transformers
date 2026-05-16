@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import copy
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -91,17 +90,18 @@ class VJEPA2PatchEmbeddings3D(nn.Module):
         self,
         config: VJEPA2Config,
         hidden_size: int = 1024,
+        tubelet_size: int | None = None,
     ):
         super().__init__()
         self.patch_size = config.patch_size
-        self.tubelet_size = config.tubelet_size
+        self.tubelet_size = tubelet_size if tubelet_size is not None else config.tubelet_size
         self.hidden_size = hidden_size
 
         self.proj = nn.Conv3d(
             in_channels=config.in_chans,
             out_channels=hidden_size,
-            kernel_size=(config.tubelet_size, config.patch_size, config.patch_size),
-            stride=(config.tubelet_size, config.patch_size, config.patch_size),
+            kernel_size=(self.tubelet_size, config.patch_size, config.patch_size),
+            stride=(self.tubelet_size, config.patch_size, config.patch_size),
         )
 
     @staticmethod
@@ -130,9 +130,9 @@ class VJEPA2Embeddings(nn.Module):
         self.patch_embeddings = VJEPA2PatchEmbeddings3D(config, hidden_size=hidden_size)
 
         if config.use_image_patch_embedder:
-            img_config = copy.copy(config)
-            img_config.tubelet_size = 1
-            self.patch_embeddings_img = VJEPA2PatchEmbeddings3D(img_config, hidden_size=hidden_size)
+            self.patch_embeddings_img = VJEPA2PatchEmbeddings3D(
+                config, hidden_size=hidden_size, tubelet_size=1
+            )
         else:
             self.patch_embeddings_img = None
 
@@ -230,13 +230,15 @@ class VJEPA2RopeAttention(nn.Module):
         config: VJEPA2Config,
         hidden_size: int = 1024,
         num_attention_heads: int = 16,
-        is_predictor: bool = False,
+        interpolate_rope: bool | None = None,
     ):
         super().__init__()
         self.config = config
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
-        self.is_predictor = is_predictor
+        self.interpolate_rope = (
+            interpolate_rope if interpolate_rope is not None else config.interpolate_rope
+        )
         if hidden_size % num_attention_heads != 0:
             raise ValueError(
                 f"The hidden size {(hidden_size,)} is not a multiple of the number of attention "
@@ -293,7 +295,7 @@ class VJEPA2RopeAttention(nn.Module):
         height_ids = self._get_height_pos(ids)
         width_ids = (ids - tokens_per_frame * frame_ids) - tokens_per_row * height_ids
 
-        if self.config.interpolate_rope and not self.is_predictor and self.grid_size > 1:
+        if self.interpolate_rope and self.grid_size > 1:
             h_scale = (self.pretrained_grid_size - 1.0) / max(self.grid_size - 1.0, 1.0)
             w_scale = (self.pretrained_grid_size - 1.0) / max(self.grid_size - 1.0, 1.0)
             height_ids = height_ids.float() * h_scale
@@ -411,7 +413,7 @@ class VJEPA2Layer(GradientCheckpointingLayer):
         hidden_size: int = 1024,
         num_attention_heads: int = 16,
         mlp_ratio: float = 4.0,
-        is_predictor: bool = False,
+        interpolate_rope: bool | None = None,
     ):
         super().__init__()
         self.config = config
@@ -420,7 +422,9 @@ class VJEPA2Layer(GradientCheckpointingLayer):
         self.mlp_ratio = mlp_ratio
 
         self.norm1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
-        self.attention = VJEPA2RopeAttention(config, hidden_size, num_attention_heads, is_predictor=is_predictor)
+        self.attention = VJEPA2RopeAttention(
+            config, hidden_size, num_attention_heads, interpolate_rope=interpolate_rope
+        )
         self.drop_path = VJEPA2DropPath(drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
         self.norm2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
         self.mlp = VJEPA2MLP(config, hidden_size=hidden_size, mlp_ratio=mlp_ratio)
@@ -644,7 +648,7 @@ class VJEPA2Predictor(nn.Module):
                     hidden_size=config.pred_hidden_size,
                     num_attention_heads=config.pred_num_attention_heads,
                     mlp_ratio=config.pred_mlp_ratio,
-                    is_predictor=True,
+                    interpolate_rope=False,
                 )
                 for i in range(config.pred_num_hidden_layers)
             ]
