@@ -200,6 +200,13 @@ def get_vjepa2_config(model_name):
 
 def convert_encoder_keys(model_state_dict, og_encoder_state_dict, config):
     emb_dim = config.hidden_size
+    # Meta's checkpoint stores one norm per entry in hierarchical_layers; the HF model only
+    # keeps the last `num_distillation_outputs` of them as `encoder.distillation_norms`.
+    if config.hierarchical_layers is not None:
+        n_hier = len(config.hierarchical_layers)
+        first_kept = n_hier - config.num_distillation_outputs
+    else:
+        first_kept = None
     for key, val in og_encoder_state_dict.copy().items():
         val = og_encoder_state_dict.pop(key)
         key = key.replace("module.backbone.", "")
@@ -214,7 +221,13 @@ def convert_encoder_keys(model_state_dict, og_encoder_state_dict, config):
         if key.startswith("patch_embed_img."):
             key = key.replace("patch_embed_img.", "encoder.embeddings.patch_embeddings_img.")
         if key.startswith("norms_block."):
-            key = "encoder." + key
+            # norms_block.{i} → encoder.distillation_norms.{i - first_kept}, dropping
+            # the leading n_hier - num_distillation_outputs norms.
+            parts = key.split(".", 2)  # ["norms_block", "{i}", "{weight|bias}"]
+            i = int(parts[1])
+            if first_kept is None or i < first_kept:
+                continue  # drop unused norm
+            key = f"encoder.distillation_norms.{i - first_kept}.{parts[2]}"
         if key.startswith("norm."):
             key = key.replace("norm.", "encoder.layernorm.")
         if key == "img_mod_embed":
