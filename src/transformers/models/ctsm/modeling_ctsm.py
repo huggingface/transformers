@@ -30,6 +30,7 @@ import torch.nn.functional as F
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
+from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -766,38 +767,19 @@ class CtsmModel(CtsmPreTrainedModel):
         patch_padding = torch.min(patched_pads, dim=-1)[0]
         return embeddings, patch_padding
 
-    def _build_attention_mask(
-        self,
-        patch_padding: torch.Tensor,
-        num_coarse_patches: int,
-        dtype: torch.dtype,
+    @staticmethod
+    def _block_sequence_ids_for_full_forward(
+        bsz: int, num_coarse_patches: int, num_special: int, num_fine_patches: int, device: torch.device
     ) -> torch.Tensor:
-        """Build a causal mask with bidirectional attention inside the coarse block."""
-        sequence_length = patch_padding.shape[1]
-        min_value = torch.finfo(dtype).min
-
-        padding_mask = patch_padding.to(dtype).view(patch_padding.shape[0], 1, 1, -1) * min_value
-        causal_mask = torch.triu(
-            torch.full((sequence_length, sequence_length), min_value, dtype=dtype, device=patch_padding.device),
-            diagonal=1,
-        ).view(1, 1, sequence_length, sequence_length)
-
-        # Key difference vs TimesFM: coarse-resolution patches can attend bidirectionally among themselves,
-        # while the special/fine tokens keep the causal structure.
-        if num_coarse_patches > 0:
-            causal_mask[..., :num_coarse_patches, :num_coarse_patches] = 0.0
-        return torch.minimum(padding_mask, causal_mask)
-
-    def _build_incremental_attention_mask(
-        self, bsz: int, num_new: int, past_length: int, dtype: torch.dtype, device: torch.device
-    ) -> torch.Tensor:
-        """Mask for the incremental (cached) path: new fine Qs attend to all cached K/V plus causal within the new block."""
-        min_value = torch.finfo(dtype).min
-        mask = torch.zeros((bsz, 1, num_new, past_length + num_new), dtype=dtype, device=device)
-        if num_new > 1:
-            causal_new = torch.triu(torch.full((num_new, num_new), min_value, dtype=dtype, device=device), diagonal=1)
-            mask[:, :, :, past_length:] = causal_new
-        return mask
+        """Block ids for `create_causal_mask`: coarse positions share group ``0`` (bidirectional among themselves),
+        the special token and fine positions are ``-1`` (strictly causal)."""
+        block_ids = torch.cat(
+            [
+                torch.zeros(num_coarse_patches, dtype=torch.long, device=device),
+                torch.full((num_special + num_fine_patches,), -1, dtype=torch.long, device=device),
+            ]
+        )
+        return block_ids.unsqueeze(0).expand(bsz, -1)
 
     def _full_forward(
         self,
@@ -863,11 +845,23 @@ class CtsmModel(CtsmPreTrainedModel):
             freq = freq.to(device=device, dtype=torch.long)
         model_input = model_input + self.freq_emb(freq)
 
-        attention_mask = self._build_attention_mask(patch_padding, num_coarse_patches, model_input.dtype)
         position_ids = torch.arange(model_input.shape[1], device=device, dtype=torch.long).unsqueeze(0).expand(bsz, -1)
         position_embeddings = self.rotary_emb(model_input, position_ids)
 
         past_key_values = DynamicCache(config=self.config) if use_cache else None
+
+        # Causal everywhere, with a bidirectional carve-out for the coarse block. The 2D `attention_mask` follows
+        # the HF convention (1 = real, 0 = padded) and is the inverse of our internal `patch_padding`.
+        attention_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=model_input,
+            attention_mask=(patch_padding == 0).to(torch.long),
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+            block_sequence_ids=self._block_sequence_ids_for_full_forward(
+                bsz, num_coarse_patches, num_special, num_fine_patches, device
+            ),
+        )
 
         hidden_states = model_input
         for layer in self.layers[: self.config.num_hidden_layers]:
@@ -924,7 +918,6 @@ class CtsmModel(CtsmPreTrainedModel):
         new_embeddings, new_patch_padding = self._patchify(fine_normalized, past_values_fine_padding)
         bsz, num_new, _ = new_embeddings.shape
         device = new_embeddings.device
-        dtype = new_embeddings.dtype
 
         if self.config.use_resolution_embeddings:
             mr_idx = torch.full((bsz, num_new), 2, dtype=torch.long, device=device)
@@ -944,7 +937,15 @@ class CtsmModel(CtsmPreTrainedModel):
         )
         position_embeddings = self.rotary_emb(new_embeddings, position_ids)
 
-        attention_mask = self._build_incremental_attention_mask(bsz, num_new, past_length, dtype, device)
+        # Plain causal mask: each new fine Q attends to all cached K/V (whose bidirectional coarse-block
+        # structure was baked in by the prior full forward) and causally within the newly-added block.
+        attention_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=new_embeddings,
+            attention_mask=None,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+        )
 
         hidden_states = new_embeddings
         for layer in self.layers[: self.config.num_hidden_layers]:

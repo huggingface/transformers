@@ -260,9 +260,12 @@ class CtsmModelTest(ModelTesterMixin, unittest.TestCase):
         # Long enough to trigger AR (horizon > config.horizon_length).
         horizon_len = config.horizon_length * 3
         with torch.no_grad():
+            out_default = model(**inputs_dict, horizon_len=horizon_len)
             out_full = model(**inputs_dict, horizon_len=horizon_len, use_cache=False)
             out_cache = model(**inputs_dict, horizon_len=horizon_len, use_cache=True)
 
+        self.assertTrue(torch.allclose(out_default.mean_predictions, out_full.mean_predictions, atol=1e-5))
+        self.assertTrue(torch.allclose(out_default.full_predictions, out_full.full_predictions, atol=1e-5))
         # First horizon_length predictions must match bit-exactly (step 1 is identical in both paths).
         step1 = config.horizon_length
         self.assertTrue(
