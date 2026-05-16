@@ -181,9 +181,7 @@ class VJEPA2Embeddings(nn.Module):
         self.patch_embeddings = VJEPA2PatchEmbeddings3D(config, hidden_size=hidden_size)
 
         if config.use_image_patch_embedder:
-            self.patch_embeddings_img = VJEPA2PatchEmbeddings3D(
-                config, hidden_size=hidden_size, tubelet_size=1
-            )
+            self.patch_embeddings_img = VJEPA2PatchEmbeddings3D(config, hidden_size=hidden_size, tubelet_size=1)
         else:
             self.patch_embeddings_img = None
 
@@ -287,9 +285,7 @@ class VJEPA2RopeAttention(nn.Module):
         self.config = config
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
-        self.interpolate_rope = (
-            interpolate_rope if interpolate_rope is not None else config.interpolate_rope
-        )
+        self.interpolate_rope = interpolate_rope if interpolate_rope is not None else config.interpolate_rope
         if hidden_size % num_attention_heads != 0:
             raise ValueError(
                 f"The hidden size {(hidden_size,)} is not a multiple of the number of attention "
@@ -529,7 +525,7 @@ class VJEPA2Encoder(nn.Module):
         )
 
         if config.hierarchical_layers is not None:
-            self.distillation_layers = config.hierarchical_layers[-config.num_distillation_outputs:]
+            self.distillation_layers = config.hierarchical_layers[-config.num_distillation_outputs :]
             self.distillation_norms = nn.ModuleList(
                 [nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) for _ in self.distillation_layers]
             )
@@ -557,9 +553,7 @@ class VJEPA2Encoder(nn.Module):
 
         if self.distillation_norms is not None:
             hierarchical_hidden_state = (
-                torch.cat(hierarchical_outputs, dim=-1)
-                if len(hierarchical_outputs) > 1
-                else hierarchical_outputs[0]
+                torch.cat(hierarchical_outputs, dim=-1) if len(hierarchical_outputs) > 1 else hierarchical_outputs[0]
             )
         else:
             hidden_states = self.layernorm(hidden_states)
@@ -765,9 +759,7 @@ class VJEPA2Predictor(nn.Module):
         hidden_states = self.unsort_tokens(hidden_states, argsort)
 
         target_predictions = self.proj(hidden_states[:, N_ctxt:])
-        context_predictions = (
-            self.proj_context(hidden_states[:, :N_ctxt]) if self.proj_context is not None else None
-        )
+        context_predictions = self.proj_context(hidden_states[:, :N_ctxt]) if self.proj_context is not None else None
 
         return VJEPA2PredictorOutput(
             last_hidden_state=target_predictions,
@@ -1089,9 +1081,7 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
             target_mask = [torch.arange(N, device=pixel_values_videos.device).unsqueeze(0).repeat((B, 1))]
 
         if not skip_predictor:
-            predictor_input = (
-                hierarchical_hidden_state if hierarchical_hidden_state is not None else sequence_output
-            )
+            predictor_input = hierarchical_hidden_state if hierarchical_hidden_state is not None else sequence_output
             predictor_outputs: VJEPA2PredictorOutput = self.predictor(
                 encoder_hidden_states=predictor_input,
                 context_mask=context_mask,

@@ -273,18 +273,18 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         VJEPA2EncoderOutput / VJEPA2PredictorOutput dataclasses for both V-JEPA 2 and 2.1
         configs. Catches breakage in the OutputRecorder plumbing introduced by the new
         output dataclasses."""
-        common_kwargs = dict(
-            crop_size=16,
-            frames_per_clip=2,
-            hidden_size=32,
-            num_attention_heads=2,
-            num_hidden_layers=3,
-            mlp_ratio=1.0,
-            pred_hidden_size=16,
-            pred_num_attention_heads=2,
-            pred_num_hidden_layers=2,
-            pred_num_mask_tokens=8,
-        )
+        common_kwargs = {
+            "crop_size": 16,
+            "frames_per_clip": 2,
+            "hidden_size": 32,
+            "num_attention_heads": 2,
+            "num_hidden_layers": 3,
+            "mlp_ratio": 1.0,
+            "pred_hidden_size": 16,
+            "pred_num_attention_heads": 2,
+            "pred_num_hidden_layers": 2,
+            "pred_num_mask_tokens": 8,
+        }
         for label, config in [
             ("v2", VJEPA2Config(**common_kwargs)),
             (
