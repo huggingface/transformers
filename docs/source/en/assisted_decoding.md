@@ -162,6 +162,25 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 'Hugging Face is an open-source company that is dedicated to creating a better world through technology.'
 ```
 
+### Static ensemble verification
+
+Standard speculative decoding is *lossless* — it guarantees the output distribution matches the target model exactly. [Static ensemble verification](https://arxiv.org/abs/2604.07622) relaxes this by verifying against a mixture of the target and draft distributions, increasing the acceptance rate (faster inference) at the cost of making the output distribution a mixture rather than the exact target distribution. A recommended starting value is `0.7`.
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
+model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B", dtype="auto")
+assistant_model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-135M", dtype="auto")
+inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt")
+
+outputs = model.generate(**inputs, assistant_model=assistant_model, assistant_ensemble_weight=0.7, do_sample=True)
+tokenizer.batch_decode(outputs, skip_special_tokens=True)
+```
+
+This requires candidate logits from the assistant model and is not supported with prompt lookup decoding.
+
 ## Resources
 
 - Read the [Assisted Generation: a new direction toward low-latency text generation](https://huggingface.co/blog/assisted-generation) blog post for more context about text generation latency and assisted generation.

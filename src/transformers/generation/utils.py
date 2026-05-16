@@ -977,6 +977,14 @@ class GenerationMixin(ContinuousMixin):
                 logits_processor=logits_processor,
             )
         elif generation_config.prompt_lookup_num_tokens is not None:
+            if (
+                generation_config.assistant_ensemble_weight is not None
+                and generation_config.assistant_ensemble_weight < 1.0
+            ):
+                raise ValueError(
+                    "`assistant_ensemble_weight < 1.0` requires candidate logits from the assistant model. "
+                    "It is not supported with prompt lookup decoding."
+                )
             candidate_generator = PromptLookupCandidateGenerator(
                 eos_token_id=generation_config._eos_token_tensor,
                 num_output_tokens=generation_config.prompt_lookup_num_tokens,
@@ -3626,6 +3634,7 @@ class GenerationMixin(ContinuousMixin):
             # 3. Select the accepted tokens. There are two possible cases:
             # Case 1: `do_sample=True` and we have logits for the candidates (originally from speculative decoding)
             # 👉 Apply algorithm 1 from the speculative decoding paper (https://huggingface.co/papers/2211.17192).
+            assistant_ensemble_weight = generation_config.assistant_ensemble_weight
             if do_sample and candidate_logits is not None:
                 valid_tokens, n_matches = _speculative_sampling(
                     candidate_input_ids,
@@ -3633,6 +3642,7 @@ class GenerationMixin(ContinuousMixin):
                     candidate_length,
                     new_logits,
                     is_done_candidate,
+                    assistant_ensemble_weight=assistant_ensemble_weight,
                 )
 
             # Case 2: all other cases (originally from assisted generation) 👉 Compare the tokens selected from the
@@ -3643,7 +3653,21 @@ class GenerationMixin(ContinuousMixin):
                     probs = new_logits.softmax(dim=-1)
                     selected_tokens = torch.multinomial(probs[0, :, :], num_samples=1).squeeze(1)[None, :]
                 else:
-                    selected_tokens = new_logits.argmax(dim=-1)
+                    # Greedy decoding: with ensemble weight, compare against argmax(v) instead of argmax(p)
+                    if (
+                        assistant_ensemble_weight is not None
+                        and assistant_ensemble_weight < 1.0
+                        and candidate_logits is not None
+                    ):
+                        w = assistant_ensemble_weight
+                        p_probs = new_logits[:, :candidate_length, :].softmax(dim=-1)
+                        q_probs = candidate_logits.softmax(dim=-1)
+                        nu_probs = w * p_probs + (1.0 - w) * q_probs
+                        # For the bonus token position (candidate_length), use target distribution
+                        bonus_logits = new_logits[:, candidate_length:, :]
+                        selected_tokens = torch.cat([nu_probs.argmax(dim=-1), bonus_logits.argmax(dim=-1)], dim=-1)
+                    else:
+                        selected_tokens = new_logits.argmax(dim=-1)
 
                 candidate_new_tokens = candidate_input_ids[:, cur_len:]
                 n_matches = ((~(candidate_new_tokens == selected_tokens[:, :-1])).cumsum(dim=-1) < 1).sum()
@@ -3859,10 +3883,15 @@ def _speculative_sampling(
     candidate_length,
     new_logits,
     is_done_candidate,
+    assistant_ensemble_weight=None,
 ):
     """
     Applies sampling as in the speculative decoding paper (https://huggingface.co/papers/2211.17192, algorithm 1). Returns
     the selected tokens, as well as the number of candidate matches.
+
+    When `assistant_ensemble_weight` is set to a value in (0, 1), applies static ensemble verification from
+    DIVERSED (https://arxiv.org/abs/2604.07622), which relaxes the verification distribution to
+    v(x) = w * p(x) + (1 - w) * q(x), increasing acceptance rate at the cost of controlled distributional bias.
 
     NOTE: Unless otherwise stated, the variable names match those in the paper.
     """
@@ -3873,7 +3902,13 @@ def _speculative_sampling(
     q_i = q[:, torch.arange(candidate_length), new_candidate_input_ids].squeeze(0, 1)
     p = new_logits.softmax(dim=-1)
     p_i = p[:, torch.arange(candidate_length), new_candidate_input_ids].squeeze(0, 1)
-    probability_ratio = p_i / q_i
+
+    # Compute acceptance ratio. With ensemble weight w < 1, use v(x)/q(x) = 1 - w + w*(p(x)/q(x))
+    if assistant_ensemble_weight is not None and assistant_ensemble_weight < 1.0:
+        w = assistant_ensemble_weight
+        probability_ratio = 1.0 - w + w * (p_i / q_i)
+    else:
+        probability_ratio = p_i / q_i
 
     # When probability_ratio > 1 (i.e. q_i(x) < p_i(x), or "assistant probability of the candidate token is smaller
     # than the model probability for the same token"), keep the token. Otherwise reject with p = 1 - probability_ratio
@@ -3894,8 +3929,15 @@ def _speculative_sampling(
         p_n_plus_1 = p[:, n_matches, :]
         if n_matches < gamma:
             q_n_plus_1 = q[:, n_matches, :]
+            # Note: with ensemble weight w < 1, the fallback [v-q]+ = w*[p-q]+ normalizes to the same
+            # distribution as [p-q]+, so we compute the standard fallback directly for numerical stability.
             p_prime = torch.clamp((p_n_plus_1 - q_n_plus_1), min=0)
-            p_prime.div_(p_prime.sum())
+            p_prime_sum = p_prime.sum()
+            if p_prime_sum <= torch.finfo(p_prime.dtype).tiny:
+                # Fallback to target distribution if residual is numerically zero
+                p_prime = p_n_plus_1
+            else:
+                p_prime.div_(p_prime_sum)
         else:
             p_prime = p_n_plus_1
         t = torch.multinomial(p_prime, num_samples=1).squeeze(1)[None, :]
