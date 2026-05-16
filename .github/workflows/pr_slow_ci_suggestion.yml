@@ -32,13 +32,27 @@ jobs:
           fetch-depth: "0"
           persist-credentials: false
 
-      # Pass attacker-controlled inputs through env vars so they are never expanded
-      # into the shell or JS source by GitHub Actions `${{ ... }}` templating.
+      # Refetch the PR file list from the API instead of receiving it as an
+      # input from `get-pr-info.yml`. The previous approaches either expanded
+      # attacker-controlled content into a shell/JS source via `${{ ... }}`
+      # (template injection, fixed in #45956) or passed the full JSON through
+      # an env var (`E2BIG` / "Argument list too long" once the patch payload
+      # exceeds the per-env-var kernel limit, ~128KB). Fetching inside the
+      # action keeps the JSON in Node heap memory and writes it straight to
+      # disk, so it never crosses an execve argv/envp boundary.
       - name: Write pr_files file
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6.4.1
         env:
-          PR_FILES: ${{ needs.get-pr-info.outputs.PR_FILES }}
-        run: |
-          printf '%s\n' "$PR_FILES" > pr_files.txt
+          PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: parseInt(process.env.PR_NUMBER, 10),
+            });
+            fs.writeFileSync('pr_files.txt', JSON.stringify(files));
 
       - name: Get repository content
         id: repo_content
