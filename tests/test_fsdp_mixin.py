@@ -42,16 +42,17 @@ logger = logging.getLogger("transformers.training_test")
 if is_torch_available():
     import torch
     import torch.distributed as dist
-    import torch.distributed.checkpoint as dcp
     import torch.multiprocessing as mp
-    from torch.distributed.checkpoint.default_planner import DefaultLoadPlanner
-    from torch.distributed.checkpoint.state_dict import get_state_dict, set_state_dict
-    from torch.distributed.tensor import DTensor
     from torch.nn.parallel import DistributedDataParallel as DDP
 
     from transformers.distributed import DistributedConfig
     from transformers.distributed.fsdp import apply_fully_shard_data_parallel, initialize_fsdp
     from transformers.distributed.tensor_parallel import replace_layer_number_by_wildcard
+    from transformers.distributed.utils import (
+        gather_full_state_dict,
+        load_optimizer_distributed,
+        save_optimizer_distributed,
+    )
 
 
 # =============================================================================
@@ -210,18 +211,11 @@ def _create_shared_tmpdir(rank):
     return tmpdir_list[0], tmpdir_obj
 
 
-def _gather_fsdp2_state_dict(model):
-    """Gather FSDP2 sharded parameters into full tensors via DTensor.full_tensor()."""
-    state_dict = {}
-    for name, tensor in model.state_dict().items():
-        if isinstance(tensor, DTensor):
-            state_dict[name] = tensor.full_tensor().clone().detach().cpu()
-        else:
-            state_dict[name] = tensor.clone().detach().cpu()
-    return state_dict
-
-
 def _gather_ddp_state_dict(model):
+    # Only rank 0 returns data to match gather_full_state_dict semantics, so the
+    # downstream DDP-vs-FSDP comparison runs once on rank 0 instead of N times.
+    if dist.get_rank() != 0:
+        return {}
     return {k: v.clone().detach().cpu() for k, v in model.module.state_dict().items()}
 
 
@@ -297,43 +291,24 @@ def _save_init_pretrained(rank, config, dtype):
 
 
 def _save_training_state(model, optimizer, training_state_dir):
-    """Save optimizer + RNG states as distcp (for training resume only)."""
-    _, optim_sd = get_state_dict(model, optimizer)
-    training_state = {
-        "optim": optim_sd,
-        "cpu_rng_state": torch.get_rng_state(),
-    }
-    accelerator_rng_state = _get_accelerator_rng_state()
-    if accelerator_rng_state is not None:
-        training_state["accelerator_rng_state"] = accelerator_rng_state
-    dcp.save(training_state, checkpoint_id=training_state_dir)
+    """Save optimizer (canonical DCP path) plus per-rank RNG for resume."""
+    save_optimizer_distributed(model, optimizer, os.path.join(training_state_dir, "optim"))
+    rng = {"cpu": torch.get_rng_state()}
+    accel = _get_accelerator_rng_state()
+    if accel is not None:
+        rng["accel"] = accel
+    torch.save(rng, os.path.join(training_state_dir, f"rng_rank{dist.get_rank()}.pt"))
 
 
 def _load_training_state(model, optimizer, training_state_dir):
-    """Load optimizer + RNG states from distcp (model weights loaded separately via from_pretrained)."""
-    model_sd, optim_sd = get_state_dict(model, optimizer)
-    loaded_training_state = {
-        "optim": optim_sd,
-        "cpu_rng_state": torch.empty_like(torch.get_rng_state()),
-    }
-    accelerator_rng_state = _get_accelerator_rng_state()
-    if accelerator_rng_state is not None:
-        loaded_training_state["accelerator_rng_state"] = torch.empty_like(accelerator_rng_state)
-    # MoE models can have sparse optimizer state (experts not selected yet), so
-    # allow partial optimizer key restoration instead of failing hard on missing keys.
-    dcp.load(
-        loaded_training_state,
-        checkpoint_id=training_state_dir,
-        planner=DefaultLoadPlanner(allow_partial_load=True),
+    """Inverse of `_save_training_state`."""
+    load_optimizer_distributed(model, optimizer, os.path.join(training_state_dir, "optim"))
+    rng = torch.load(
+        os.path.join(training_state_dir, f"rng_rank{dist.get_rank()}.pt"), weights_only=False
     )
-    set_state_dict(
-        model,
-        optimizer,
-        model_state_dict=model_sd,
-        optim_state_dict=loaded_training_state["optim"],
-    )
-    torch.set_rng_state(loaded_training_state["cpu_rng_state"])
-    _set_accelerator_rng_state(loaded_training_state.get("accelerator_rng_state"))
+    torch.set_rng_state(rng["cpu"])
+    if "accel" in rng:
+        _set_accelerator_rng_state(rng["accel"])
 
 
 def train_ddp(rank, batches, lr, device, dtype, init_model_dir):
@@ -451,7 +426,7 @@ def train_fsdp2(
 
     combined_losses = pre_ckpt_losses + post_ckpt_losses
     combined_grad_norms = pre_ckpt_grad_norms + post_ckpt_grad_norms
-    combined_state_dict = _gather_fsdp2_state_dict(resumed_model)
+    combined_state_dict = gather_full_state_dict(resumed_model)
 
     return combined_losses, combined_grad_norms, combined_state_dict
 
@@ -491,7 +466,7 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
         output.loss.backward()
         optimizer.step()
 
-    state_dict_before = _gather_fsdp2_state_dict(model)
+    state_dict_before = gather_full_state_dict(model)
 
     tmpdir, tmpdir_obj = _create_shared_tmpdir(rank)
     try:
@@ -508,7 +483,7 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
         if rank == 0:
             tmpdir_obj.cleanup()
 
-    state_dict_after = _gather_fsdp2_state_dict(new_model)
+    state_dict_after = gather_full_state_dict(new_model)
 
     for key in state_dict_before:
         assert key in state_dict_after, f"Key {key} missing after load"
