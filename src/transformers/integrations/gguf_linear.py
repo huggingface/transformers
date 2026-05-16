@@ -1454,9 +1454,13 @@ def setup_for_compile(model, *, mode: str = "reduce-overhead") -> None:
     _dynamo.config.allow_unspec_int_on_nn_module = True
 
     model.generation_config.cache_implementation = "static"
-    # Fuse Q/K/V into one torch op dispatch when q/k/v are GgufLinear with a
-    # supported quant fmt. Patches each attention module in-place, idempotent.
-    apply_fused_qkv(model)
+    # ``apply_fused_qkv`` (multi-matvec QKV) is available but NOT wired in by
+    # default: it forces Qwen2-MoE attention's q/k/v projections onto our
+    # custom op, which breaks the continuous-batching paged-KV path and
+    # doesn't measurably help under torch.compile (dynamo already groups the
+    # three independent matvecs in the same MPS encoder). Opt in via
+    # ``apply_fused_qkv(model)`` if you want the explicit 3 → 1 dispatch on
+    # the eager path.
     # Decode-time KV cache write in one Metal kernel: collapses
     # arange + add + 2× index_put_ into one dispatch. Class-level patch on
     # StaticLayer.update — idempotent.
