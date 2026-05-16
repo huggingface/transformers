@@ -34,6 +34,45 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(
     custom_intro="""
+    VJEPA Encoder output. `last_hidden_state` is the post-loop hidden state, layernormed
+    when no hierarchical layers are configured. `hierarchical_hidden_state` carries the
+    distillation-normed (concatenated) outputs when `hierarchical_layers` is set, and is
+    `None` otherwise.
+    """
+)
+@dataclass
+class VJEPA2EncoderOutput(BaseModelOutput):
+    r"""
+    hierarchical_hidden_state (`torch.FloatTensor`, *optional*):
+        Concatenation of distillation-normed hidden states selected from
+        `config.hierarchical_layers[-config.num_distillation_outputs:]`. Populated only when
+        `config.hierarchical_layers` is set; `None` otherwise. Shape is
+        `(batch_size, sequence_length, num_distillation_outputs * hidden_size)` when
+        multiple outputs are selected, otherwise `(batch_size, sequence_length, hidden_size)`.
+    """
+
+    hierarchical_hidden_state: torch.FloatTensor | None = None
+
+
+@auto_docstring(
+    custom_intro="""
+    VJEPA Predictor output. `last_hidden_state` is the target predictions; `context_predictions`
+    is the projected context tokens when `config.use_context_projection` is True, else `None`.
+    """
+)
+@dataclass
+class VJEPA2PredictorOutput(BaseModelOutput):
+    r"""
+    context_predictions (`torch.FloatTensor`, *optional*):
+        Predictor's projection of the context tokens. Populated only when
+        `config.use_context_projection` is True; `None` otherwise.
+    """
+
+    context_predictions: torch.FloatTensor | None = None
+
+
+@auto_docstring(
+    custom_intro="""
     VJEPA Predictor outputs that also contains the masked encoder outputs
     """
 )
@@ -44,6 +83,11 @@ class VJEPA2WithMaskedInputPredictorOutput(ModelOutput):
         The masked hidden state of the model.
     target_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*, returned when `target_mask` is provided which is applied on VJEPA2Encoder outputs):
         The target hidden state of the model.
+    context_predictions (`torch.FloatTensor`, *optional*):
+        Predictor's projection of the context tokens, populated only when
+        `config.use_context_projection` is True.
+    hierarchical_hidden_state (`torch.FloatTensor`, *optional*):
+        Mirror of `VJEPA2EncoderOutput.hierarchical_hidden_state` for downstream visibility.
     """
 
     last_hidden_state: torch.FloatTensor
@@ -51,6 +95,8 @@ class VJEPA2WithMaskedInputPredictorOutput(ModelOutput):
     hidden_states: tuple[torch.FloatTensor, ...] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
     target_hidden_state: torch.FloatTensor | None = None
+    context_predictions: torch.FloatTensor | None = None
+    hierarchical_hidden_state: torch.FloatTensor | None = None
 
 
 @auto_docstring(
@@ -66,6 +112,10 @@ class VJEPA2WithMaskedInputModelOutput(ModelOutput):
         The masked hidden state of the model.
     predictor_output (`VJEPA2WithMaskedInputPredictorOutput`, *optional*):
         The output from the Predictor module.
+    hierarchical_hidden_state (`torch.FloatTensor`, *optional*):
+        Mirror of `VJEPA2EncoderOutput.hierarchical_hidden_state` so callers using
+        `skip_predictor=True` (where `predictor_output` is `None`) can still reach the
+        hierarchical features.
     """
 
     last_hidden_state: torch.FloatTensor
@@ -73,6 +123,7 @@ class VJEPA2WithMaskedInputModelOutput(ModelOutput):
     hidden_states: tuple[torch.FloatTensor, ...] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
     predictor_output: VJEPA2WithMaskedInputPredictorOutput | None = None
+    hierarchical_hidden_state: torch.FloatTensor | None = None
 
     def to_tuple(self):
         output = list(super().to_tuple())
@@ -496,7 +547,7 @@ class VJEPA2Encoder(nn.Module):
         pixel_values_videos: torch.Tensor | None = None,
         return_hierarchical: bool = True,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput:
+    ) -> VJEPA2EncoderOutput:
         hidden_states = self.embeddings(pixel_values_videos)
 
         hierarchical_outputs = []
@@ -512,14 +563,18 @@ class VJEPA2Encoder(nn.Module):
 
         if self.norms_block is not None:
             if return_hierarchical and len(hierarchical_outputs) > 1:
-                hidden_states = torch.cat(hierarchical_outputs, dim=-1)
+                hierarchical_hidden_state = torch.cat(hierarchical_outputs, dim=-1)
             elif hierarchical_outputs:
-                hidden_states = hierarchical_outputs[-1]
-        elif self.layernorm is not None:
+                hierarchical_hidden_state = hierarchical_outputs[-1]
+            else:
+                hierarchical_hidden_state = None
+        else:
             hidden_states = self.layernorm(hidden_states)
+            hierarchical_hidden_state = None
 
-        return BaseModelOutput(
+        return VJEPA2EncoderOutput(
             last_hidden_state=hidden_states,
+            hierarchical_hidden_state=hierarchical_hidden_state,
         )
 
 
@@ -695,7 +750,7 @@ class VJEPA2Predictor(nn.Module):
         target_mask: list[torch.Tensor],
         is_image: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput:
+    ) -> VJEPA2PredictorOutput:
         encoder_hidden_states = apply_masks(encoder_hidden_states, context_mask)
         _, N_ctxt, D = encoder_hidden_states.shape
         hidden_states, position_masks = self.embeddings(encoder_hidden_states, context_mask, target_mask)
@@ -716,18 +771,14 @@ class VJEPA2Predictor(nn.Module):
         hidden_states = self.layernorm(hidden_states)
         hidden_states = self.unsort_tokens(hidden_states, argsort)
 
-        if self.config.use_context_projection and self.proj_context is not None:
-            context_tokens = hidden_states[:, :N_ctxt]
-            target_tokens = hidden_states[:, N_ctxt:]
-            target_tokens = self.proj(target_tokens)
-            context_tokens = self.proj_context(context_tokens)
-            hidden_states = torch.cat([context_tokens, target_tokens], dim=1)
-        else:
-            hidden_states = hidden_states[:, N_ctxt:]
-            hidden_states = self.proj(hidden_states)
+        target_predictions = self.proj(hidden_states[:, N_ctxt:])
+        context_predictions = (
+            self.proj_context(hidden_states[:, :N_ctxt]) if self.proj_context is not None else None
+        )
 
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
+        return VJEPA2PredictorOutput(
+            last_hidden_state=target_predictions,
+            context_predictions=context_predictions,
         )
 
 
@@ -1032,12 +1083,13 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
         is_image = self.config.use_image_patch_embedder and pixel_values_videos.shape[1] == 1
 
         needs_hierarchical = not skip_predictor and self.config.num_distillation_outputs > 1
-        encoder_outputs: BaseModelOutput = self.encoder(
+        encoder_outputs: VJEPA2EncoderOutput = self.encoder(
             pixel_values_videos=pixel_values_videos,
             return_hierarchical=needs_hierarchical,
             **kwargs,
         )
         sequence_output = encoder_outputs.last_hidden_state
+        hierarchical_hidden_state = encoder_outputs.hierarchical_hidden_state
 
         if context_mask is None and target_mask is None:
             B = pixel_values_videos.size(0)
@@ -1046,8 +1098,11 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
             target_mask = [torch.arange(N, device=pixel_values_videos.device).unsqueeze(0).repeat((B, 1))]
 
         if not skip_predictor:
-            predictor_outputs: BaseModelOutput = self.predictor(
-                encoder_hidden_states=sequence_output,
+            predictor_input = (
+                hierarchical_hidden_state if hierarchical_hidden_state is not None else sequence_output
+            )
+            predictor_outputs: VJEPA2PredictorOutput = self.predictor(
+                encoder_hidden_states=predictor_input,
                 context_mask=context_mask,
                 target_mask=target_mask,
                 is_image=is_image,
@@ -1058,6 +1113,8 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
                 target_hidden_state=apply_masks(sequence_output, target_mask),
                 hidden_states=predictor_outputs.hidden_states,
                 attentions=predictor_outputs.attentions,
+                context_predictions=predictor_outputs.context_predictions,
+                hierarchical_hidden_state=hierarchical_hidden_state,
             )
         else:
             predictor_output = None
@@ -1068,6 +1125,7 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
             predictor_output=predictor_output,
+            hierarchical_hidden_state=hierarchical_hidden_state,
         )
 
         return encoder_output

@@ -223,11 +223,14 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pixel_values = torch.randn(1, 2, 3, 16, 16, device=torch_device)
         with torch.no_grad():
             outputs = model(pixel_values)
-        # n_dist=1: encoder returns single-norm (hidden_size)
+        # last_hidden_state is the post-loop encoder sequence (dim hidden_size)
         self.assertEqual(outputs.last_hidden_state.shape, (1, 1, 32))
-        # predictor with use_context_projection: context + target tokens
-        # proj_output_dim = n_hier(4) * (teacher_embed_dim(64) // n_hier(4)) = 64
-        self.assertEqual(outputs.predictor_output.last_hidden_state.shape, (1, 2, 64))
+        # hierarchical_hidden_state holds the single distillation-normed output (dim hidden_size)
+        self.assertEqual(outputs.hierarchical_hidden_state.shape, (1, 1, 32))
+        # predictor target predictions; proj_output_dim = teacher_embed_dim = 64
+        # last_hidden_state holds targets only; context goes to context_predictions.
+        self.assertEqual(outputs.predictor_output.last_hidden_state.shape, (1, 1, 64))
+        self.assertEqual(outputs.predictor_output.context_predictions.shape, (1, 1, 64))
 
     def test_model_2_1_multi_distillation(self):
         """Fast test: 2.1 config with num_distillation_outputs=4 (multi-layer predictor embed)."""
@@ -255,10 +258,15 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pixel_values = torch.randn(1, 2, 3, 16, 16, device=torch_device)
         with torch.no_grad():
             outputs = model(pixel_values)
-        # n_dist=4: encoder returns concatenated hierarchical (hidden_size * 4)
-        self.assertEqual(outputs.last_hidden_state.shape, (1, 1, 128))
-        # proj_output_dim = n_hier(4) * hidden_size(32) = 128
-        self.assertEqual(outputs.predictor_output.last_hidden_state.shape, (1, 2, 128))
+        # last_hidden_state is the post-loop encoder sequence (dim hidden_size)
+        self.assertEqual(outputs.last_hidden_state.shape, (1, 1, 32))
+        # hierarchical_hidden_state is the concatenated distillation-normed outputs
+        # (num_distillation_outputs(4) * hidden_size(32) = 128)
+        self.assertEqual(outputs.hierarchical_hidden_state.shape, (1, 1, 128))
+        # proj_output_dim = num_distillation_outputs(4) * hidden_size(32) = 128
+        # last_hidden_state holds targets only; context goes to context_predictions.
+        self.assertEqual(outputs.predictor_output.last_hidden_state.shape, (1, 1, 128))
+        self.assertEqual(outputs.predictor_output.context_predictions.shape, (1, 1, 128))
 
     @slow
     def test_model_from_pretrained(self):
