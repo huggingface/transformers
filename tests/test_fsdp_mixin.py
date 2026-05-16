@@ -64,10 +64,26 @@ NUM_STEPS = 20
 LR = 3e-4
 SEED = 42
 FSDP_TOP_MODEL_NAMES = {
-    # FSDP coverage is gated on models declaring `base_model_fsdp_plan` + class-level
-    # `_fsdp_plan`. Roll out to more models in follow-up PRs.
+    # FSDP coverage is gated on models declaring `base_model_fsdp_plan` (config) +
+    # class-level `_fsdp_plan` (head class). Listed here are models whose test
+    # class extends `CausalLMModelTest` (so they pick up the FSDP mixin) and
+    # which use the standard embed_tokens / layers.* / norm naming.
+    # Dense
+    "llama",
+    "mistral",
     "qwen3",
+    "phi",
+    "olmo3",
+    "gemma2",
+    # MoE
     "mixtral",
+    "qwen3_moe",
+    "qwen2_moe",
+    "qwen3_5_moe",
+    "deepseek_v2",
+    "gpt_oss",
+    "glm_moe_dsa",
+    "glm4_moe_lite",
 }
 
 

@@ -92,6 +92,14 @@ class SolarOpenConfig(PreTrainedConfig):
         "layers.*.mlp.experts": "moe_experts_allreduce",
         "norm": "activation",
     }
+
+    # FSDP2 plan. Bundled with other parallel plans for consistency; the applier walks
+    # this dict to decide what fully_shard each module gets.
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
     head_dim: int = 128
 
     def __post_init__(self, **kwargs):

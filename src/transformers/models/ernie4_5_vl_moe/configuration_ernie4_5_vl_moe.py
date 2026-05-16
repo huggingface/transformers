@@ -100,6 +100,14 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
+    # FSDP2 plan. Bundled with other parallel plans for consistency; the applier walks
+    # this dict to decide what fully_shard each module gets.
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
+
     vocab_size: int = 103424
     pad_token_id: int | None = None
     bos_token_id: int | None = None

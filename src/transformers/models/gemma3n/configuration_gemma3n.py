@@ -93,6 +93,14 @@ class Gemma3nTextConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
+    # FSDP2 plan. Bundled with other parallel plans for consistency; the applier walks
+    # this dict to decide what fully_shard each module gets.
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
+
     vocab_size: int = 262_400
     hidden_size: int = 2048
     intermediate_size: int | list[int] = 16_384
