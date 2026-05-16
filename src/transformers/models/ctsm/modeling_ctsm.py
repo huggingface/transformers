@@ -53,6 +53,11 @@ class CtsmOutput(BaseModelOutput):
         Stream-level mean used to normalize the coarse-resolution context.
     scale_coarse (`torch.Tensor` of shape `(batch_size,)`):
         Stream-level standard deviation of the coarse-resolution context.
+    loc_fine_patch (`torch.Tensor` of shape `(batch_size,)`):
+        Per-first-patch mean of the (already stream-normalized) fine context, used as the second
+        denormalization stage when projecting the horizon head's output back to the original scale.
+    scale_fine_patch (`torch.Tensor` of shape `(batch_size,)`):
+        Per-first-patch standard deviation matching `loc_fine_patch`.
     num_coarse_patches (`int`):
         Number of patches (including the optional special token) preceding the fine-resolution block.
     num_fine_patches (`int`):
@@ -68,6 +73,8 @@ class CtsmOutput(BaseModelOutput):
 
     loc_coarse: torch.Tensor | None = None
     scale_coarse: torch.Tensor | None = None
+    loc_fine_patch: torch.Tensor | None = None
+    scale_fine_patch: torch.Tensor | None = None
     num_coarse_patches: int | None = None
     num_fine_patches: int | None = None
     past_key_values: Cache | None = None
@@ -279,10 +286,12 @@ class CtsmAttention(nn.Module):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
+        # Reference applies per-dim Q scaling *before* RoPE. The two operations don't commute when the
+        # learned scaling differs across the two halves of head_dim that RoPE pairs up, so order matters.
+        query_states = self._scale_query(query_states)
+
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        query_states = self._scale_query(query_states)
 
         # Key difference vs `TimesFmAttention`: optionally append the new K/V to a running
         # `past_key_values` cache so the long-horizon AR loop in `CtsmModelForPrediction`
@@ -301,7 +310,7 @@ class CtsmAttention(nn.Module):
             value_states,
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
-            # `scaling=1.0` because per-dim Q scaling is already applied above via `_scale_query`.
+            # `scaling=1.0` because per-dim Q scaling is applied above (before RoPE) via `_scale_query`.
             scaling=1.0,
             **kwargs,
         )
@@ -538,6 +547,8 @@ class CtsmModel(CtsmPreTrainedModel):
         use_cache: bool | None = None,
         loc_fine: torch.Tensor | None = None,
         scale_fine: torch.Tensor | None = None,
+        loc_fine_patch: torch.Tensor | None = None,
+        scale_fine_patch: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CtsmOutput:
         r"""
@@ -567,6 +578,11 @@ class CtsmModel(CtsmPreTrainedModel):
             Fine-stream mean used for stream normalization. Required in incremental mode.
         scale_fine (`torch.Tensor` of shape `(batch_size,)`, *optional*):
             Fine-stream standard deviation used for stream normalization. Required in incremental mode.
+        loc_fine_patch (`torch.Tensor` of shape `(batch_size,)`, *optional*):
+            Per-first-patch mean (TimesFM-style) frozen from the initial full forward. Required in
+            incremental mode so new fine patches share the cached K/V's normalized space.
+        scale_fine_patch (`torch.Tensor` of shape `(batch_size,)`, *optional*):
+            Per-first-patch standard deviation matching `loc_fine_patch`.
         """
         if past_key_values is None:
             return self._full_forward(
@@ -585,6 +601,8 @@ class CtsmModel(CtsmPreTrainedModel):
             past_key_values=past_key_values,
             loc_fine=loc_fine,
             scale_fine=scale_fine,
+            loc_fine_patch=loc_fine_patch,
+            scale_fine_patch=scale_fine_patch,
             **kwargs,
         )
 
@@ -754,18 +772,36 @@ class CtsmModel(CtsmPreTrainedModel):
         return normalized, mu.squeeze(-1), sigma.squeeze(-1)
 
     def _patchify(
-        self, past_values: torch.Tensor, past_values_padding: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Patchify an already stream-normalized stream and project through the input tokenizer."""
+        self,
+        past_values: torch.Tensor,
+        past_values_padding: torch.Tensor,
+        external_patch_stats: tuple[torch.Tensor, torch.Tensor] | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
+        """Patchify a (stream-normalized) stream, apply TimesFM's per-first-patch normalization,
+        and project through the input tokenizer. The per-first-patch ``(mu, sigma)`` are returned
+        so the horizon head's output can be denormalized through both levels later.
+
+        ``external_patch_stats`` lets the incremental decode path reuse the per-first-patch stats
+        frozen by the initial full forward, so new fine patches share the cached K/V's normalized space.
+        """
         bsz = past_values.shape[0]
         patched_inputs = past_values.view(bsz, -1, self.config.patch_length)
         patched_pads = past_values_padding.view(bsz, -1, self.config.patch_length)
 
+        # CTSM's stream-normalized input is the analogue of TimesFM's raw input here, so we reuse the
+        # parent's per-first-patch transform to match the reference's two-stage normalization.
+        patched_inputs = patched_inputs * (1.0 - patched_pads)
+        if external_patch_stats is None:
+            patched_inputs, patch_stats = self._forward_transform(patched_inputs, patched_pads)
+        else:
+            mu, sigma = external_patch_stats
+            patched_inputs = (patched_inputs - mu[:, None, None]) / sigma[:, None, None]
+            patch_stats = external_patch_stats
         patched_inputs = patched_inputs * (1.0 - patched_pads)
         concat_inputs = torch.cat([patched_inputs, patched_pads], dim=-1)
         embeddings = self.input_ff_layer(concat_inputs)
         patch_padding = torch.min(patched_pads, dim=-1)[0]
-        return embeddings, patch_padding
+        return embeddings, patch_padding, patch_stats
 
     @staticmethod
     def _block_sequence_ids_for_full_forward(
@@ -813,8 +849,10 @@ class CtsmModel(CtsmPreTrainedModel):
             past_values_fine, past_values_fine_padding, tolerance=self.config.tolerance
         )
 
-        coarse_embeddings, coarse_patch_padding = self._patchify(coarse_normalized, past_values_coarse_padding)
-        fine_embeddings, fine_patch_padding = self._patchify(fine_normalized, past_values_fine_padding)
+        coarse_embeddings, coarse_patch_padding, _ = self._patchify(coarse_normalized, past_values_coarse_padding)
+        fine_embeddings, fine_patch_padding, (fine_patch_mu, fine_patch_sigma) = self._patchify(
+            fine_normalized, past_values_fine_padding
+        )
 
         bsz, num_coarse_patches, hidden_size = coarse_embeddings.shape
         num_fine_patches = fine_embeddings.shape[1]
@@ -880,6 +918,8 @@ class CtsmModel(CtsmPreTrainedModel):
             scale=scale_fine,
             loc_coarse=loc_coarse,
             scale_coarse=scale_coarse,
+            loc_fine_patch=fine_patch_mu,
+            scale_fine_patch=fine_patch_sigma,
             num_coarse_patches=num_coarse_patches + num_special,
             num_fine_patches=num_fine_patches,
             past_key_values=past_key_values,
@@ -893,12 +933,19 @@ class CtsmModel(CtsmPreTrainedModel):
         past_key_values: Cache,
         loc_fine: torch.Tensor | None,
         scale_fine: torch.Tensor | None,
+        loc_fine_patch: torch.Tensor | None = None,
+        scale_fine_patch: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CtsmOutput:
         if loc_fine is None or scale_fine is None:
             raise ValueError(
                 "`loc_fine` and `scale_fine` must be supplied together with `past_key_values` so that the new fine "
                 "values are normalized on the same scale as the cached ones."
+            )
+        if loc_fine_patch is None or scale_fine_patch is None:
+            raise ValueError(
+                "`loc_fine_patch` and `scale_fine_patch` must be supplied in incremental mode so the new fine "
+                "patches share the cached K/V's per-first-patch normalization."
             )
         if past_values_fine.shape[1] % self.config.patch_length != 0:
             raise ValueError(
@@ -915,7 +962,11 @@ class CtsmModel(CtsmPreTrainedModel):
         fine_normalized = fine_normalized * (1.0 - past_values_fine_padding)
         fine_normalized = fine_normalized.clamp(-1000.0, 1000.0)
 
-        new_embeddings, new_patch_padding = self._patchify(fine_normalized, past_values_fine_padding)
+        new_embeddings, new_patch_padding, _ = self._patchify(
+            fine_normalized,
+            past_values_fine_padding,
+            external_patch_stats=(loc_fine_patch, scale_fine_patch),
+        )
         bsz, num_new, _ = new_embeddings.shape
         device = new_embeddings.device
 
@@ -962,6 +1013,8 @@ class CtsmModel(CtsmPreTrainedModel):
             last_hidden_state=hidden_states,
             loc=loc_fine,
             scale=scale_fine,
+            loc_fine_patch=loc_fine_patch,
+            scale_fine_patch=scale_fine_patch,
             num_fine_patches=num_new,
             past_key_values=past_key_values,
         )
@@ -1121,6 +1174,8 @@ class CtsmModelForPrediction(CtsmPreTrainedModel):
         past_key_values: Cache | None = None
         frozen_loc_fine: torch.Tensor | None = None
         frozen_scale_fine: torch.Tensor | None = None
+        frozen_loc_fine_patch: torch.Tensor | None = None
+        frozen_scale_fine_patch: torch.Tensor | None = None
         coarse_buffer = torch.zeros((bsz, 0), dtype=torch.float32, device=device)
 
         if use_cache is None:
@@ -1144,6 +1199,8 @@ class CtsmModelForPrediction(CtsmPreTrainedModel):
                 past_key_values = last_outputs.past_key_values
                 frozen_loc_fine = last_outputs.loc
                 frozen_scale_fine = last_outputs.scale
+                frozen_loc_fine_patch = last_outputs.loc_fine_patch
+                frozen_scale_fine_patch = last_outputs.scale_fine_patch
             else:
                 # Incremental: only the fine values newly appended last step go through the stack.
                 mean_patch, quant_patch, last_outputs = self._decode_step_incremental(
@@ -1152,6 +1209,8 @@ class CtsmModelForPrediction(CtsmPreTrainedModel):
                     past_key_values=past_key_values,
                     loc_fine=frozen_loc_fine,
                     scale_fine=frozen_scale_fine,
+                    loc_fine_patch=frozen_loc_fine_patch,
+                    scale_fine_patch=frozen_scale_fine_patch,
                     **kwargs,
                 )
 
@@ -1306,6 +1365,15 @@ class CtsmModelForPrediction(CtsmPreTrainedModel):
         num_outputs = 1 + len(self.config.quantiles)
         head = head.view(bsz, self.config.horizon_length, num_outputs)
 
+        # Two-stage denormalization, mirroring the official reference: the head's output is in
+        # (per-first-patch ∘ stream)-normalized space because `_patchify` applies TimesFM's
+        # `_forward_transform` on top of the stream-level `_normalize_with_pad`. Undo per-first-patch
+        # first, then undo the stream normalization.
+        if outputs.loc_fine_patch is not None and outputs.scale_fine_patch is not None:
+            mu_fp = outputs.loc_fine_patch[:, None, None]
+            sigma_fp = outputs.scale_fine_patch[:, None, None]
+            head = head * sigma_fp + mu_fp
+
         loc = outputs.loc[:, None, None]
         scale = outputs.scale[:, None, None]
         mean_patch = head[..., 0] * scale[..., 0] + loc[..., 0]
@@ -1344,6 +1412,8 @@ class CtsmModelForPrediction(CtsmPreTrainedModel):
         past_key_values: Cache,
         loc_fine: torch.Tensor,
         scale_fine: torch.Tensor,
+        loc_fine_patch: torch.Tensor,
+        scale_fine_patch: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor, CtsmOutput]:
         """Append `new_fine_values` to the cached state and run only the new positions through the stack."""
@@ -1353,6 +1423,8 @@ class CtsmModelForPrediction(CtsmPreTrainedModel):
             past_key_values=past_key_values,
             loc_fine=loc_fine,
             scale_fine=scale_fine,
+            loc_fine_patch=loc_fine_patch,
+            scale_fine_patch=scale_fine_patch,
             **kwargs,
         )
         mean_patch, quant_patch = self._project_last_fine(outputs, outputs.last_hidden_state.shape[1] - 1)
