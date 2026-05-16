@@ -70,6 +70,13 @@ class MixtralConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+
+    # FSDP2 plan (see Qwen3Config.base_model_fsdp_plan for shape rationale).
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
     attribute_map = {"num_experts": "num_local_experts"}
 
     vocab_size: int = 32000

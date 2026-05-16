@@ -141,9 +141,7 @@ def _load_tp_and_reference_models(model_path, model_class, enable_sequence_paral
         tuple: (model_tp, model_ref, device)
     """
     tp_size = dist.get_world_size()
-    distributed_config = DistributedConfig(
-        tp_size=tp_size, tp_plan="auto", enable_sequence_parallel=enable_sequence_parallel
-    )
+    distributed_config = DistributedConfig(tp_size=tp_size, enable_sequence_parallel=enable_sequence_parallel)
     model_tp = model_class.from_pretrained(
         model_path, distributed_config=distributed_config, attn_implementation="sdpa"
     )
@@ -159,10 +157,6 @@ def _load_tp_and_reference_models(model_path, model_class, enable_sequence_paral
 def _get_active_tp_plan(model_tp):
     distributed_config = getattr(model_tp.config, "distributed_config", None)
     tp_plan = getattr(distributed_config, "tp_plan", None)
-
-    if tp_plan == "auto":
-        return getattr(model_tp, "_tp_plan", None) or {}
-
     return tp_plan or getattr(model_tp, "_tp_plan", None) or {}
 
 
@@ -351,7 +345,9 @@ def _test_tp_generation_quantized_impl(_rank, model_path, model_class, max_new_t
     quantization_config = TorchAoConfig(Float8WeightOnlyConfig())
 
     model_tp = model_class.from_pretrained(
-        model_path, distributed_config=DistributedConfig(tp_plan="auto"), quantization_config=quantization_config
+        model_path,
+        distributed_config=DistributedConfig(tp_size=dist.get_world_size()),
+        quantization_config=quantization_config,
     )
     dist.barrier()
 
@@ -407,7 +403,6 @@ def _load_ep_and_reference_models(model_path, model_class):
         model_path,
         distributed_config=DistributedConfig(
             tp_size=tp_size,
-            tp_plan="auto",
             enable_expert_parallel=True,
         ),
     )

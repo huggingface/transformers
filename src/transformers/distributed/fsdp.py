@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from ..utils import is_torch_available, is_torch_greater_or_equal, logging, strtobool
 from ..utils.quantization_config import QuantizationMethod
+from .tensor_parallel import replace_layer_number_by_wildcard
 
 
 if TYPE_CHECKING:
@@ -76,7 +77,8 @@ def initialize_fsdp(
     This function is called when the model is loaded and fsdp_plan is set.
 
     Args:
-        fsdp_plan: Optional FSDP config dict with an explicit "mode".
+        fsdp_plan: Optional FSDP config dict. Manual mode is signaled by the
+            presence of a ``"modules"`` key; otherwise auto mode is used.
         device_mesh: Optional pre-created DeviceMesh for FSDP.
         device_map: Optional device map.
 
@@ -153,70 +155,8 @@ def initialize_fsdp(
     return device_map, device_mesh, fsdp_size
 
 
-def get_transformer_block_classes(model):
-    """
-    Identifies transformer block classes in a model for FSDP wrapping.
-    These are typically the repeated layers that benefit from FSDP sharding.
-
-    Returns a set of module classes that should be wrapped with fully_shard().
-    """
-    block_classes = set()
-
-    # Common transformer block class names
-    block_names = {
-        "DecoderLayer",
-        "EncoderLayer",
-        "TransformerBlock",
-        "Block",
-        "Layer",
-    }
-
-    for module in model.modules():
-        class_name = module.__class__.__name__
-        # Use endswith to avoid false positives (e.g. "Layer" matching "LayerNorm")
-        for block_name in block_names:
-            if class_name.endswith(block_name):
-                block_classes.add(type(module))
-                break
-
-    # Filter out nested block classes (e.g. SparseMoeBlock inside DecoderLayer).
-    # We only want to FSDP-wrap the outermost block classes. If a class like
-    # MoeBlock only ever appears inside a DecoderLayer, we skip it.
-    if len(block_classes) > 1:
-        # Collect the dotted module paths for each candidate class.
-        # i.e: {DecoderLayer: ["layers.0", "layers.1"],
-        #        MoeBlock: ["layers.0.moe", "layers.1.moe"]}
-        paths_by_class = {}
-        for name, module in model.named_modules():
-            cls = type(module)
-            if cls in block_classes:
-                paths_by_class.setdefault(cls, []).append(name)
-
-        def _is_nested_inside_other_class(cls):
-            # A class is "inner" if every one of its instances lives under
-            # an instance of a different candidate class in the module tree.
-            paths = paths_by_class.get(cls, [])
-            if not paths:
-                return False
-            for path in paths:
-                has_parent = any(
-                    path.startswith(parent_path + ".")
-                    for other_cls, parent_paths in paths_by_class.items()
-                    if other_cls is not cls
-                    for parent_path in parent_paths
-                )
-                if not has_parent:
-                    return False
-            return True
-
-        # Keep only the outer (non-nested) classes.
-        block_classes = {cls for cls in block_classes if not _is_nested_inside_other_class(cls)}
-
-    return block_classes
-
-
-def _get_auto_policy_kwargs(fsdp_plan: dict[str, Any]) -> dict[str, Any]:
-    """Parse auto-mode fsdp_plan into fully_shard policy kwargs."""
+def _get_policy_kwargs(fsdp_plan: dict[str, Any]) -> dict[str, Any]:
+    """Parse `cpu_offload` / `mixed_precision` flags from the user fsdp_plan into fully_shard kwargs."""
     policy_kwargs = {}
     if fsdp_plan.get("cpu_offload"):
         policy_kwargs["offload_policy"] = CPUOffloadPolicy()
@@ -227,75 +167,6 @@ def _get_auto_policy_kwargs(fsdp_plan: dict[str, Any]) -> dict[str, Any]:
             output_dtype=None,
         )
     return policy_kwargs
-
-
-def _auto_shard_input_embedding(input_embed, is_weights_tied: bool, device_mesh, auto_policy_kwargs):
-    # Shard input embeddings (only when not tied).
-    # When tied, the shared weight is grouped with the final norm in step 3.
-    if input_embed is None or is_weights_tied:
-        return
-    fully_shard(input_embed, mesh=device_mesh, reshard_after_forward=True, **auto_policy_kwargs)
-    logger.debug(f"Applied fully_shard to input embeddings ({type(input_embed).__name__})")
-
-
-def _auto_shard_transformer_blocks(model, block_classes, device_mesh, auto_policy_kwargs):
-    for name, module in model.named_modules():
-        if type(module) in block_classes:
-            fully_shard(module, mesh=device_mesh, reshard_after_forward=True, **auto_policy_kwargs)
-            logger.debug(f"Applied fully_shard to {name} ({type(module).__name__})")
-
-
-def _find_final_norm(model, decoder_layer_names):
-    """Find the final normalization layer before the output head.
-
-    Searches only within the base model scope (e.g. ``model.*``) so that
-    norms inside the output head / prediction head (e.g. ``lm_head.norm``)
-    are excluded.
-    """
-    base_prefix = model.base_model_prefix  # e.g. "model"
-    final_norm = None
-    for name, module in model.named_modules():
-        if "Norm" not in type(module).__name__:
-            continue
-        # Only consider norms inside the base model (skip root-level heads like lm_head)
-        if base_prefix and not name.startswith(base_prefix + ".") and name != base_prefix:
-            continue
-        if any(name.startswith(layer_name + ".") for layer_name in decoder_layer_names):
-            continue
-        final_norm = module
-    return final_norm
-
-
-def _auto_get_tail_modules(model, decoder_layer_names, input_embed, output_embed, is_weights_tied: bool) -> list:
-    # Group final norm + output head.
-    # NOTE(3outeille): Small optimization by forcing reshard_after_forward=False for the final norm and output head.
-    # Otherwise, that would mean reshard/freeing full params after the last forward and immediately re-all-gathering
-    # them in the backward pass, which is wasteful. Better to keep them gathered for reuse.
-    # Untied: [final_norm, lm_head]
-    # Tied:   [final_norm, embed_tokens] - embed_tokens.weight IS lm_head.weight.
-    tail_modules = []
-
-    final_norm = _find_final_norm(model, decoder_layer_names)
-
-    if final_norm is not None:
-        tail_modules.append(final_norm)
-
-    if is_weights_tied:
-        if input_embed is not None:
-            tail_modules.append(input_embed)
-    elif output_embed is not None:
-        tail_modules.append(output_embed)
-
-    return tail_modules
-
-
-def _auto_shard_tail_modules(tail_modules, device_mesh, auto_policy_kwargs):
-    if len(tail_modules) > 1:
-        fully_shard(tail_modules, mesh=device_mesh, reshard_after_forward=False, **auto_policy_kwargs)
-        logger.debug(f"Applied fully_shard to {[type(m).__name__ for m in tail_modules]} grouped (reshard=False)")
-    elif len(tail_modules) == 1:
-        fully_shard(tail_modules[0], mesh=device_mesh, reshard_after_forward=False, **auto_policy_kwargs)
-        logger.debug(f"Applied fully_shard to {type(tail_modules[0]).__name__} (reshard=False)")
 
 
 def _parse_manual_plan_entry(
@@ -377,20 +248,6 @@ def _iter_manual_plan_targets(model, pattern, name_to_module, already_sharded_na
         yield name, module
 
 
-def _parse_fsdp_plan_mode(fsdp_plan: dict[str, Any]) -> Literal["auto", "manual"]:
-    if isinstance(fsdp_plan, str):
-        fsdp_plan = {"mode": fsdp_plan}
-
-    if not isinstance(fsdp_plan, dict):
-        raise ValueError(f"fsdp_plan must be a dict with a 'mode' key, got {type(fsdp_plan)}")
-
-    mode = fsdp_plan.get("mode")
-    if mode not in {"auto", "manual"}:
-        raise ValueError("fsdp_plan['mode'] must be either 'auto' or 'manual'.")
-
-    return mode
-
-
 def _get_manual_plan_modules(fsdp_plan: dict[str, Any]) -> dict[str, list[str]]:
     modules = fsdp_plan.get("modules")
     if not isinstance(modules, dict):
@@ -398,33 +255,81 @@ def _get_manual_plan_modules(fsdp_plan: dict[str, Any]) -> dict[str, list[str]]:
     return modules
 
 
+def is_tail_pair(entries) -> bool:
+    """Match the canonical tail pair: one final norm + the output head (or tied embedding)."""
+    if len(entries) != 2:
+        return False
+    names = [name for name, _ in entries]
+    has_norm = any(n == "norm" or n.endswith(".norm") for n in names)
+    has_head = any(n in {"lm_head", "embed_tokens"} or n.endswith((".lm_head", ".embed_tokens")) for n in names)
+    return has_norm and has_head
+
+
+def tied_source_path(model) -> str | None:
+    """Return the dotted path of the input embedding module (the tied source)."""
+    input_embed = getattr(model, "get_input_embeddings", lambda: None)()
+    if input_embed is None:
+        return None
+    for name, module in model.named_modules():
+        if module is input_embed:
+            return name
+    return None
+
+
+def _resolve_plan_key(name_to_module: dict, key: str):
+    """Resolve a plan key into the matching (name, module) pairs.
+
+    Supports exact module names and tp_plan-style wildcards (via
+    ``replace_layer_number_by_wildcard``).
+    """
+    if key in name_to_module:
+        return [(key, name_to_module[key])]
+    return [(name, mod) for name, mod in name_to_module.items() if replace_layer_number_by_wildcard(name) == key]
+
+
+def _iter_plan_targets(model, plan, is_weights_tied: bool, tied_source: str | None):
+    """Yield ``(name, module, strategy)`` for every module the plan applies to.
+
+    Expands wildcards via ``_resolve_plan_key`` and pre-applies tying rules:
+    skips the standalone tied-source entry, and rewrites a keep ``"lm_head"``
+    entry to the tied source so the shared parameter is wrapped once.
+    """
+    name_to_module = dict(model.named_modules())
+    for key, strategy in plan.items():
+        if is_weights_tied and key == tied_source:
+            continue
+        if is_weights_tied and key == "lm_head" and strategy == "keep_full_weight" and tied_source is not None:
+            yield tied_source, name_to_module[tied_source], strategy
+            continue
+        for name, module in _resolve_plan_key(name_to_module, key):
+            yield name, module, strategy
+
+
 def apply_fully_shard_data_parallel(
     model,
     fsdp_mesh,
-    fsdp_plan: dict[str, Any] | str | None,
+    fsdp_plan: dict[str, Any] | None,
 ):
     """
-    Apply FSDP2 (fully_shard) to a model following TorchTitan's approach.
-    fsdp_plan:
-        Explicit FSDP config dict with a required "mode" key, or a string
-        shorthand such as "auto" or "manual".
+    Apply FSDP2 (fully_shard) to a model.
 
-        Auto mode:
-        fsdp_plan = "auto"
+    When ``fsdp_plan`` is ``None`` or doesn't contain a ``"modules"`` key, the
+    model-declared ``model._fsdp_plan`` drives sharding. Policies (`cpu_offload`,
+    `mixed_precision`) from ``fsdp_plan`` are applied on top.
 
-        Auto mode (equivalent):
-        fsdp_plan = {"mode": "auto"}
+    When ``fsdp_plan`` has a ``"modules"`` key, the user fully specifies the
+    layout (manual mode).
 
-        Auto mode with optional policies:
-        fsdp_plan = {"mode": "auto", "cpu_offload": False, "mixed_precision": True}
+    Examples:
+        # Plan-driven (uses model._fsdp_plan).
+        fsdp_plan = None
+        fsdp_plan = {"cpu_offload": True, "mixed_precision": True}
 
-        Manual mode:
+        # Manual override.
         fsdp_plan = {
-            "mode": "manual",
             "modules": {
                 "model.embed_tokens": ["free_full_weight"],
-                "model.layers.0.self_attn": ["free_full_weight", "cpu_offload", "mixed_precision"],
-                "model.layers.0.mlp": ["free_full_weight"],
+                "model.layers.0.mlp": ["free_full_weight", "cpu_offload", "mixed_precision"],
                 "model.norm": ["keep_full_weight"],
                 "lm_head": ["keep_full_weight"],
             },
@@ -437,10 +342,7 @@ def apply_fully_shard_data_parallel(
         raise OSError("FSDP2 requires torch>=2.5")
 
     if fsdp_plan is None:
-        return model
-
-    if fsdp_plan == "auto":
-        fsdp_plan = {"mode": fsdp_plan}
+        fsdp_plan = {}
 
     input_embed = getattr(model, "get_input_embeddings", lambda: None)()
     output_embed = getattr(model, "get_output_embeddings", lambda: None)()
@@ -452,39 +354,50 @@ def apply_fully_shard_data_parallel(
         and input_embed.weight is output_embed.weight
     )
 
-    mode = _parse_fsdp_plan_mode(fsdp_plan)
+    if not isinstance(fsdp_plan, dict):
+        raise ValueError(f"fsdp_plan must be a dict, got {type(fsdp_plan)}")
+    is_manual = "modules" in fsdp_plan
 
-    if mode == "auto":
-        auto_policy_kwargs = _get_auto_policy_kwargs(fsdp_plan)
+    if not is_manual:
+        policy_kwargs = _get_policy_kwargs(fsdp_plan)
 
-        block_classes = get_transformer_block_classes(model)
-        # Need to collect decoder layer names for norm detection.
-        decoder_layer_names = {name for name, module in model.named_modules() if type(module) in block_classes}
-
-        if not block_classes:
-            logger.warning(
-                "Could not auto-detect transformer block classes for FSDP. Applying FSDP only to root module."
+        plan = getattr(model, "_fsdp_plan", None) or {}
+        if not plan:
+            raise ValueError(
+                f"{type(model).__name__} has no `_fsdp_plan` declared. Either set "
+                "`base_model_fsdp_plan` on the config and `_fsdp_plan` on the head class, "
+                "or pass an explicit `fsdp_plan={'modules': {...}}` manual override."
             )
+
+        tied_source = tied_source_path(model) if is_weights_tied else None
+        keep_buffer: list[tuple[str, Any]] = []
+
+        for name, module, strategy in _iter_plan_targets(model, plan, is_weights_tied, tied_source):
+            if strategy == "keep_full_weight":
+                keep_buffer.append((name, module))
+                continue
+            fully_shard(module, mesh=fsdp_mesh, reshard_after_forward=True, **policy_kwargs)
+            logger.debug(f"Applied fully_shard to {name} (reshard=True)")
+
+        # Optimization: when the keep buffer is exactly the (final_norm, lm_head/embed)
+        # tail pair, bundle them into one fully_shard so that we dont need to do all-gather during backward pass.
+        if is_tail_pair(keep_buffer):
+            keep_names = [n for n, _ in keep_buffer]
+            keep_modules = [m for _, m in keep_buffer]
+            fully_shard(keep_modules, mesh=fsdp_mesh, reshard_after_forward=False, **policy_kwargs)
+            logger.debug(f"Grouped tail {keep_names} (reshard=False)")
         else:
-            _auto_shard_input_embedding(input_embed, is_weights_tied, fsdp_mesh, auto_policy_kwargs)
-
-            _auto_shard_transformer_blocks(model, block_classes, fsdp_mesh, auto_policy_kwargs)
-
-            tail_modules = _auto_get_tail_modules(
-                model, decoder_layer_names, input_embed, output_embed, is_weights_tied
-            )
-            _auto_shard_tail_modules(tail_modules, fsdp_mesh, auto_policy_kwargs)
+            for name, module in keep_buffer:
+                fully_shard(module, mesh=fsdp_mesh, reshard_after_forward=False, **policy_kwargs)
+                logger.debug(f"Applied fully_shard to {name} (reshard=False)")
 
         # Shard root model
-        fully_shard(model, mesh=fsdp_mesh, **auto_policy_kwargs)
+        fully_shard(model, mesh=fsdp_mesh, **policy_kwargs)
 
-        logger.info(
-            f"FSDP2 applied to model: {len(block_classes)} block type(s), {len(decoder_layer_names)} decoder layers"
-        )
+        logger.info(f"FSDP2 applied to model via _fsdp_plan: {len(plan)} entries")
 
     else:
         # fsdp_plan = {
-        #     "mode": "manual",
         #     "modules": {
         #         "model.layers.0.self_attn": ["free_full_weight"],       # reshard_after_forward=True
         #         "model.norm": ["keep_full_weight"],                      # reshard_after_forward=False

@@ -468,15 +468,12 @@ def apply_tensor_parallel(model, tp_mesh, tp_plan):
     for ``parallelize_module``. Plan values are string names looked up in
     ``ALL_PARALLEL_STYLES``.
     """
+    distributed_config = getattr(model.config, "distributed_config", None)
+    sp_requested = getattr(distributed_config, "enable_sequence_parallel", False)
+    sp_supported = getattr(model.config, "base_model_sp_plan", None) is not None
+    enable_sp = sp_requested and sp_supported
+
     if tp_plan is None:
-        return model
-
-    if tp_plan == "auto":
-        distributed_config = getattr(model.config, "distributed_config", None)
-        sp_requested = getattr(distributed_config, "enable_sequence_parallel", False)
-        sp_supported = getattr(model.config, "base_model_sp_plan", None) is not None
-
-        enable_sp = sp_requested and sp_supported
         if enable_sp:
             tp_plan = dict(model._sp_plan or {})
         else:

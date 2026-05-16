@@ -50,12 +50,8 @@ if is_torch_available():
     from torch.nn.parallel import DistributedDataParallel as DDP
 
     from transformers.distributed import DistributedConfig
-    from transformers.distributed.fsdp import (
-        _find_final_norm,
-        apply_fully_shard_data_parallel,
-        get_transformer_block_classes,
-        initialize_fsdp,
-    )
+    from transformers.distributed.fsdp import apply_fully_shard_data_parallel, initialize_fsdp
+    from transformers.distributed.tensor_parallel import replace_layer_number_by_wildcard
 
 
 # =============================================================================
@@ -68,28 +64,10 @@ NUM_STEPS = 20
 LR = 3e-4
 SEED = 42
 FSDP_TOP_MODEL_NAMES = {
-    # Dense
-    "gpt2",
+    # FSDP coverage is gated on models declaring `base_model_fsdp_plan` + class-level
+    # `_fsdp_plan`. Roll out to more models in follow-up PRs.
     "qwen3",
-    "phi",
-    "llama",
-    "modernbert_decoder",
-    "olmo3",
-    "phi3",
-    "mistral",
-    "lfm2",
-    "gemma2",
-    # MoE
-    "gpt_oss",
-    "glm_moe_dsa",
-    "qwen3_moe",
-    "glm4_moe_lite",
-    "qwen3_5_moe",
-    "deepseek_v2",
-    "qwen3_next",
     "mixtral",
-    "qwen2_moe",
-    "phimoe",
 }
 
 
@@ -231,18 +209,15 @@ def _gather_ddp_state_dict(model):
     return {k: v.clone().detach().cpu() for k, v in model.module.state_dict().items()}
 
 
-def _build_manual_fsdp_plan(config, device, policy_options=None):
-    """Build a default manual FSDP2 plan from model structure."""
-    policy_options = policy_options or []
-    set_seed(SEED)
-    model = AutoModelForCausalLM.from_config(config).to(device)
-    named_modules = dict(model.named_modules())
-    id_to_name = {id(module): name for name, module in named_modules.items()}
-    block_classes = get_transformer_block_classes(model)
+def _resolve_fsdp_plan_paths(model):
+    """Expand model._fsdp_plan into (paths, strategy) entries.
 
-    decoder_layer_names = {name for name, module in named_modules.items() if type(module) in block_classes}
-    layer_prefixes = {".".join(name.split(".")[:-1]) for name in decoder_layer_names}
-    assert layer_prefixes, "Expected at least one decoder layer prefix for manual FSDP plan."
+    Wildcard keys are expanded via ``replace_layer_number_by_wildcard``. When
+    weights are tied, the standalone embed_tokens entry is skipped and any
+    ``"lm_head"`` keep entry is rewritten to the tied source path (the keep
+    group will wrap the shared parameter once).
+    """
+    plan = model._fsdp_plan
 
     input_embed = model.get_input_embeddings()
     output_embed = model.get_output_embeddings()
@@ -253,27 +228,44 @@ def _build_manual_fsdp_plan(config, device, policy_options=None):
         and hasattr(output_embed, "weight")
         and input_embed.weight is output_embed.weight
     )
-    embed_name = id_to_name.get(id(input_embed)) if input_embed is not None else None
-    output_name = id_to_name.get(id(output_embed)) if output_embed is not None else None
-    final_norm = _find_final_norm(model, decoder_layer_names)
-    norm_name = id_to_name.get(id(final_norm)) if final_norm is not None else None
-
-    module_plan = {name: ["free_full_weight", *policy_options] for name in layer_prefixes}
-
-    if norm_name:
-        module_plan[norm_name] = ["keep_full_weight", *policy_options]
-
+    tied_source = None
     if weights_tied:
-        if embed_name:
-            module_plan[embed_name] = ["keep_full_weight", *policy_options]
-    else:
-        if embed_name:
-            module_plan[embed_name] = ["free_full_weight", *policy_options]
-        if output_name:
-            module_plan[output_name] = ["keep_full_weight", *policy_options]
+        for name, mod in model.named_modules():
+            if mod is input_embed:
+                tied_source = name
+                break
+
+    name_to_module = dict(model.named_modules())
+    entries: list[tuple[list[str], str]] = []
+    for key, strategy in plan.items():
+        if weights_tied and key == tied_source:
+            continue
+        if weights_tied and key == "lm_head" and strategy == "keep_full_weight":
+            entries.append(([tied_source], strategy))
+            continue
+
+        if key in name_to_module:
+            entries.append(([key], strategy))
+            continue
+        matched = [name for name in name_to_module if replace_layer_number_by_wildcard(name) == key]
+        if matched:
+            entries.append((matched, strategy))
+    return entries
+
+
+def _build_manual_fsdp_plan(config, device, policy_options=None):
+    """Build a manual FSDP2 plan by expanding model._fsdp_plan."""
+    policy_options = policy_options or []
+    set_seed(SEED)
+    model = AutoModelForCausalLM.from_config(config).to(device)
+
+    module_plan: dict[str, list[str]] = {}
+    for paths, strategy in _resolve_fsdp_plan_paths(model):
+        for path in paths:
+            module_plan[path] = [strategy, *policy_options]
 
     del model
-    return {"mode": "manual", "modules": module_plan}
+    return {"modules": module_plan}
 
 
 def _save_init_pretrained(rank, config, dtype):
@@ -460,7 +452,7 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
 
     batches = _build_repeated_training_batches(config, device, 3)
 
-    distributed_config = DistributedConfig(fsdp_size=dist.get_world_size(), fsdp_plan="auto")
+    distributed_config = DistributedConfig(fsdp_size=dist.get_world_size())
 
     init_tmpdir, init_tmpdir_obj = _save_init_pretrained(rank, config, torch.float32)
     try:
@@ -518,7 +510,7 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
 
 def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_word_embeddings):
     """
-    Verify that apply_fully_shard_data_parallel(fsdp_plan={"mode": "auto"}) wraps exactly the right modules.
+    Verify that apply_fully_shard_data_parallel(fsdp_plan=None) wraps exactly the right modules.
 
     Expected FSDP targets:
     UNTIED                              TIED
@@ -533,45 +525,25 @@ def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_wor
     config = config_class.from_dict(config_dict)
     config.tie_word_embeddings = tie_word_embeddings
 
-    auto_plan = {"mode": "auto"}
-    device_map, device_mesh, _ = initialize_fsdp(fsdp_plan=auto_plan)
+    auto_plan = None
+    device_map, device_mesh, _ = initialize_fsdp(fsdp_plan={})
 
     set_seed(SEED)
     model = AutoModelForCausalLM.from_config(config).to(device_map)
 
-    block_classes = get_transformer_block_classes(model)
-    assert block_classes, "get_transformer_block_classes found no block classes"
-
-    decoder_layer_names = {name for name, module in model.named_modules() if type(module) in block_classes}
-    assert len(decoder_layer_names) > 0, "Expected at least one transformer block instance"
-
-    id_to_name = {id(module): name for name, module in model.named_modules()}
-
-    input_embed = model.get_input_embeddings()
-    output_embed = model.get_output_embeddings()
-    final_norm = _find_final_norm(model, decoder_layer_names)
-    weights_tied = (
-        input_embed is not None
-        and output_embed is not None
-        and hasattr(input_embed, "weight")
-        and hasattr(output_embed, "weight")
-        and input_embed.weight is output_embed.weight
-    )
-
-    embed_name = id_to_name.get(id(input_embed))
-    output_name = id_to_name.get(id(output_embed))
-    norm_name = id_to_name.get(id(final_norm))
-
-    expected_targets = {""} | decoder_layer_names | {embed_name} | {norm_name}
-    if not weights_tied:
-        expected_targets |= {output_name}
+    # Expected FSDP targets come from model._fsdp_plan: every resolved path gets a
+    # fully_shard call (keep_full_weight entries are bundled into one group, but each
+    # member still appears as an FSDP-wrapped module in named_modules), plus the root.
+    expected_targets = {""}
+    for paths, _strategy in _resolve_fsdp_plan_paths(model):
+        expected_targets.update(paths)
 
     model = apply_fully_shard_data_parallel(model, device_mesh, fsdp_plan=auto_plan)
 
     actual_targets = {name for name, module in model.named_modules() if type(module).__name__.startswith("FSDP")}
 
     if rank == 0:
-        logger.debug(f"  Weights tied: {weights_tied}")
+        logger.debug(f"  Weights tied: {config.tie_word_embeddings}")
         logger.debug(f"  Expected FSDP targets: {sorted(expected_targets)}")
         logger.debug(f"  Actual FSDP targets:   {sorted(actual_targets)}")
 
@@ -607,7 +579,6 @@ def _test_fsdp2_plan_vs_ddp_impl(
 
     if plan_mode == "auto":
         fsdp_plan = {
-            "mode": "auto",
             "cpu_offload": "cpu_offload" in policy_options,
             "mixed_precision": "mixed_precision" in policy_options,
         }
@@ -774,28 +745,22 @@ class FSDPTesterMixin(ABC):
     # =========================================================================
 
     @is_fsdp_test
-    def test_get_transformer_block_classes(self):
-        """get_transformer_block_classes() finds >= 1 block class for the model."""
+    def test_fsdp_plan_declared(self):
+        """The model exposes a non-empty `_fsdp_plan` derived from config + class-level overrides."""
         self._skip_if_fsdp_disabled()
         self._skip_if_fsdp_model_not_selected()
         start_time = time.perf_counter()
-        logger.info("[FSDP] Starting test: test_get_transformer_block_classes")
+        logger.info("[FSDP] Starting test: test_fsdp_plan_declared")
         status = "FAIL"
         try:
             config = self.model_tester.get_config()
             model = self._create_model_on_meta(config)
 
-            block_classes = get_transformer_block_classes(model)
-            self.assertTrue(len(block_classes) > 0, f"No block classes found for {type(config).__name__}")
-
-            for cls in block_classes:
-                count = sum(1 for m in model.modules() if type(m) is cls)
-                self.assertGreater(count, 0, f"Block class {cls.__name__} has no instances in model")
+            plan = getattr(model, "_fsdp_plan", None)
+            self.assertTrue(plan, f"No _fsdp_plan declared for {type(model).__name__}")
             status = "PASS"
         finally:
-            logger.info(
-                "[FSDP] %s test: test_get_transformer_block_classes (%.1fs)", status, time.perf_counter() - start_time
-            )
+            logger.info("[FSDP] %s test: test_fsdp_plan_declared (%.1fs)", status, time.perf_counter() - start_time)
 
     @is_fsdp_test
     @require_fsdp

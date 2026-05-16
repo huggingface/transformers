@@ -83,6 +83,15 @@ class Qwen3Config(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
+    # FSDP2 plan. Values are sharding strategies; policies (cpu_offload, mixed_precision)
+    # live on DistributedConfig.fsdp_plan. All entries marked `keep_full_weight` are bundled
+    # into a single fully_shard([...]) call at apply time so they share one all-gather.
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
+
     vocab_size: int = 151936
     hidden_size: int = 4096
     intermediate_size: int = 22016

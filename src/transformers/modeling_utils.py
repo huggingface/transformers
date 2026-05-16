@@ -1379,13 +1379,24 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # before the instance attribute shadows them — task-head plans live on the head class.
         cls_tp_plan = getattr(self, "_tp_plan", None) or {}
         cls_sp_plan = getattr(self, "_sp_plan", None) or {}
-        self._tp_plan, self._sp_plan, self._ep_plan, self._pp_plan = dict(cls_tp_plan), dict(cls_sp_plan), {}, {}
-        # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
+        cls_fsdp_plan = getattr(self, "_fsdp_plan", None) or {}
+        self._tp_plan, self._sp_plan, self._ep_plan, self._pp_plan, self._fsdp_plan = (
+            dict(cls_tp_plan),
+            dict(cls_sp_plan),
+            {},
+            {},
+            dict(cls_fsdp_plan),
+        )
+        # If current model is a base model, attach `base_model_*_plan` from config
         if self.base_model is self:
             self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else {}
             self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
             self._sp_plan = self.config.base_model_sp_plan.copy() if self.config.base_model_sp_plan is not None else {}
             self._ep_plan = self.config.base_model_ep_plan.copy() if self.config.base_model_ep_plan is not None else {}
+            self._fsdp_plan = (
+                self.config.base_model_fsdp_plan.copy() if self.config.base_model_fsdp_plan is not None else {}
+            )
+
         # Current submodel should register its tied weights
         self.all_tied_weights_keys = self.get_expanded_tied_weights_keys(all_submodels=False)
         # Current submodel should register its `_keep_in_fp32_modules`
@@ -1411,6 +1422,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 self._sp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_pp_plan", None):
                 self._pp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+            if plan := getattr(module, "_fsdp_plan", None):
+                self._fsdp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             # Always attach the keys of the children (if the children's config says to NOT tie, then it's empty)
             if tied_keys := getattr(module, "all_tied_weights_keys", None):
                 self.all_tied_weights_keys.update({f"{name}.{k}": f"{name}.{v}" for k, v in tied_keys.copy().items()})
@@ -3998,9 +4011,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 device placement or dispatch. Launch with `torchrun --nproc_per_node=N script.py`.
 
                 Accepts `tp_size`, `tp_plan`, `fsdp_size`, `fsdp_plan`. When a size is specified without a
-                plan, the plan defaults to `"auto"`. `tp_plan="auto"` uses the model's predefined tensor
-                parallel sharding plan. `fsdp_plan="auto"` wraps each transformer layer individually with
-                FSDP2 (`fully_shard`). Both plans also accept a `dict` for manual control: `tp_plan` maps
+                plan, the plan defaults to the model's predefined behavior: TP uses the model's predefined
+                tensor parallel sharding plan, FSDP wraps each transformer layer individually with FSDP2
+                (`fully_shard`). Both plans also accept a `dict` for manual control: `tp_plan` maps
                 parameter names to parallel styles (e.g. `{"model.layers.*.self_attn.q_proj": "colwise"}`),
                 `fsdp_plan` maps module names to wrap (e.g. `{"model.layers.0": {}, "model.layers.1": {}}`).
 
@@ -4312,7 +4325,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
 
         # Finalize model weight initialization
-        active_tp_plan = getattr(model, "_tp_plan", None) if getattr(distributed_config, "tp_plan", None) else None
+        active_tp_plan = (
+            getattr(model, "_tp_plan", None) if getattr(distributed_config, "tp_size", None) is not None else None
+        )
         load_config = LoadStateDictConfig(
             pretrained_model_name_or_path=pretrained_model_name_or_path,
             ignore_mismatched_sizes=ignore_mismatched_sizes,

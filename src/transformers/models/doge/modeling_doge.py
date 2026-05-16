@@ -719,6 +719,7 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_allgather"}
     _sp_plan = {"lm_head": "colwise_loss_parallel"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     def __init__(self, config):
         super().__init__(config)
