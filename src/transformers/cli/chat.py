@@ -23,8 +23,12 @@ from typing import Annotated, Any
 from urllib.parse import urljoin, urlparse
 
 import httpx
-import requests
 import typer
+
+try:
+    import requests
+except ImportError:
+    requests = None
 import yaml
 from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput
 
@@ -209,6 +213,12 @@ class RichInterface:
         self._console.print()
 
     def print_model_load(self, model: str):
+        if requests is None:
+            self._console.print(
+                "[bold red]Error: 'requests' package is required for serving mode.[/bold red] "
+                "Install it with: pip install requests"
+            )
+            return
         response = requests.post(f"{self.base_url.rstrip('/')}/load_model", json={"model": model}, stream=True)
         response.raise_for_status()
 
