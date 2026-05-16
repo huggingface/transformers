@@ -224,7 +224,11 @@ class DeepseekV4HCACache(DynamicSlidingWindowLayer):
         first_window_position = self.entry_count[name] * self.compress_rate
         if attention_mask is None:
             attention_mask = torch.ones(kv.shape[:2], dtype=torch.bool, device=kv.device)
-        buffered_kv, buffered_gate, buffered_mask = self.buffer_kv[name], self.buffer_gate[name], self.buffer_mask[name]
+        buffered_kv, buffered_gate, buffered_mask = (
+            self.buffer_kv[name],
+            self.buffer_gate[name],
+            self.buffer_mask[name],
+        )
         if buffered_kv is not None and buffered_kv.shape[1]:
             kv = torch.cat([buffered_kv, kv], dim=1)
             gate = torch.cat([buffered_gate, gate], dim=1)
@@ -553,7 +557,9 @@ class DeepseekV4Indexer(nn.Module):
             compressed_mask = torch.zeros((batch, 0), dtype=torch.bool, device=chunk_kv.device)
 
         compressed_kv = (
-            compressed if cache_layer is None else cache_layer.update_compressor_states("indexer", compressed, compressed_mask)
+            compressed
+            if cache_layer is None
+            else cache_layer.update_compressor_states("indexer", compressed, compressed_mask)
         )
         compressed_mask = compressed_mask if cache_layer is None else cache_layer.compressed_mask["indexer"]
 
