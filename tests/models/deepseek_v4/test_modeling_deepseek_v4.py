@@ -26,8 +26,15 @@ if is_torch_available():
         AutoConfig,
         AutoModelForCausalLM,
         AutoTokenizer,
+        DeepseekV4Config,
         DeepseekV4Model,
         FineGrainedFP8Config,
+    )
+    from transformers.cache_utils import DynamicCache
+    from transformers.models.deepseek_v4.modeling_deepseek_v4 import (
+        DeepseekV4CSACompressor,
+        DeepseekV4HCACompressor,
+        DeepseekV4Indexer,
     )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -200,6 +207,127 @@ class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
     )
     def test_left_padding_compatibility(self):
         pass
+
+    def _get_compressor_test_config(self):
+        return DeepseekV4Config(
+            vocab_size=99,
+            hidden_size=16,
+            moe_intermediate_size=16,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=8,
+            q_lora_rank=8,
+            num_experts_per_tok=1,
+            n_routed_experts=2,
+            n_shared_experts=1,
+            layer_types=["heavily_compressed_attention", "compressed_sparse_attention"],
+            mlp_layer_types=["moe", "moe"],
+            compress_rates={"compressed_sparse_attention": 4, "heavily_compressed_attention": 4},
+            partial_rotary_factor=0.5,
+            sliding_window=4,
+            o_groups=1,
+            o_lora_rank=8,
+            index_n_heads=2,
+            index_head_dim=4,
+            index_topk=2,
+            hc_mult=1,
+            hc_sinkhorn_iters=2,
+        )
+
+    def _get_masked_pad_compressor_inputs(self, config):
+        torch.manual_seed(0)
+        hidden_states = torch.randn(2, 4, config.hidden_size, device=torch_device)
+        hidden_states_with_different_pad = hidden_states.clone()
+        hidden_states_with_different_pad[1, -1] = torch.randn(config.hidden_size, device=torch_device) * 100
+        q_residual = torch.randn(2, 4, config.q_lora_rank, device=torch_device)
+        position_ids = torch.arange(4, device=torch_device).unsqueeze(0).expand(2, -1)
+        attention_mask = torch.tensor([[1, 1, 1, 1], [1, 1, 1, 0]], device=torch_device)
+        return hidden_states, hidden_states_with_different_pad, q_residual, position_ids, attention_mask
+
+    @parameterized.expand([(DeepseekV4HCACompressor, 0), (DeepseekV4CSACompressor, 1)])
+    def test_compressor_ignores_masked_padding_tokens(self, compressor_class, layer_idx):
+        config = self._get_compressor_test_config()
+        compressor = compressor_class(config).to(torch_device).eval()
+        hidden_states, hidden_states_with_different_pad, q_residual, position_ids, attention_mask = (
+            self._get_masked_pad_compressor_inputs(config)
+        )
+
+        with torch.no_grad():
+            compressed_kv, _ = compressor(
+                hidden_states, q_residual, position_ids, None, layer_idx, attention_mask=attention_mask
+            )
+            compressed_kv_with_different_pad, _ = compressor(
+                hidden_states_with_different_pad,
+                q_residual,
+                position_ids,
+                None,
+                layer_idx,
+                attention_mask=attention_mask,
+            )
+
+        torch.testing.assert_close(compressed_kv[1], compressed_kv_with_different_pad[1])
+
+    @parameterized.expand([(DeepseekV4HCACompressor, 0), (DeepseekV4CSACompressor, 1)])
+    def test_cached_compressor_ignores_masked_padding_tokens(self, compressor_class, layer_idx):
+        config = self._get_compressor_test_config()
+        compressor = compressor_class(config).to(torch_device).eval()
+        cache = DynamicCache(config=config)
+        cache_with_different_pad = DynamicCache(config=config)
+        hidden_states, hidden_states_with_different_pad, q_residual, position_ids, attention_mask = (
+            self._get_masked_pad_compressor_inputs(config)
+        )
+
+        with torch.no_grad():
+            compressor(
+                hidden_states[:, :2],
+                q_residual[:, :2],
+                position_ids[:, :2],
+                cache,
+                layer_idx,
+                attention_mask=attention_mask[:, :2],
+            )
+            compressed_kv, _ = compressor(
+                hidden_states[:, 2:],
+                q_residual[:, 2:],
+                position_ids[:, 2:],
+                cache,
+                layer_idx,
+                attention_mask=attention_mask[:, 2:],
+            )
+            compressor(
+                hidden_states_with_different_pad[:, :2],
+                q_residual[:, :2],
+                position_ids[:, :2],
+                cache_with_different_pad,
+                layer_idx,
+                attention_mask=attention_mask[:, :2],
+            )
+            compressed_kv_with_different_pad, _ = compressor(
+                hidden_states_with_different_pad[:, 2:],
+                q_residual[:, 2:],
+                position_ids[:, 2:],
+                cache_with_different_pad,
+                layer_idx,
+                attention_mask=attention_mask[:, 2:],
+            )
+
+        torch.testing.assert_close(compressed_kv[1], compressed_kv_with_different_pad[1])
+
+    def test_csa_indexer_ignores_masked_padding_tokens(self):
+        config = self._get_compressor_test_config()
+        indexer = DeepseekV4Indexer(config).to(torch_device).eval()
+        hidden_states, hidden_states_with_different_pad, q_residual, position_ids, attention_mask = (
+            self._get_masked_pad_compressor_inputs(config)
+        )
+
+        with torch.no_grad():
+            top_k_indices = indexer(hidden_states, q_residual, position_ids, None, 1, attention_mask=attention_mask)
+            top_k_indices_with_different_pad = indexer(
+                hidden_states_with_different_pad, q_residual, position_ids, None, 1, attention_mask=attention_mask
+            )
+
+        torch.testing.assert_close(top_k_indices[1, :-1], top_k_indices_with_different_pad[1, :-1])
 
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False

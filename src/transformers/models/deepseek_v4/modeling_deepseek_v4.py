@@ -185,6 +185,8 @@ class DeepseekV4HCACache(DynamicSlidingWindowLayer):
       * `buffer_kv[name]` / `buffer_gate[name]` — source tokens that arrived
         between two full windows; once the buffer hits `compress_rate` tokens
         the compressor closes a window, emits one entry, and drains the buffer.
+      * `buffer_mask[name]` / `compressed_mask[name]` — per-source-token and
+        per-compressed-entry validity flags derived from the user attention mask.
       * `entry_count[name]` — number of compressed entries emitted so far, so
         `entry_count[name] * compress_rate` is the absolute position of the
         *next* window's first source token. Tracked separately from
@@ -198,7 +200,9 @@ class DeepseekV4HCACache(DynamicSlidingWindowLayer):
         self.compress_rate = config.compress_rates["heavily_compressed_attention"]
         self.buffer_kv: dict[str, torch.Tensor | None] = {"compressor": None}
         self.buffer_gate: dict[str, torch.Tensor | None] = {"compressor": None}
+        self.buffer_mask: dict[str, torch.Tensor | None] = {"compressor": None}
         self.compressed_kv: dict[str, torch.Tensor | None] = {"compressor": None}
+        self.compressed_mask: dict[str, torch.Tensor | None] = {"compressor": None}
         self.entry_count: dict[str, int] = {"compressor": 0}
 
     def update(self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs):
@@ -216,8 +220,8 @@ class DeepseekV4HCACache(DynamicSlidingWindowLayer):
         return full, full
 
     def store_compression_weights(
-        self, name: str, kv: torch.Tensor, gate: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor, int]:
+        self, name: str, kv: torch.Tensor, gate: torch.Tensor, attention_mask: torch.Tensor | None = None
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, int]:
         r"""
         Concatenate the new projected `(kv, gate)` (paper §2.3.2 eqs. 20–21:
         `C = H·W^{KV}`, `Z = H·W^Z`) for entry `name` with what's already in
@@ -229,25 +233,42 @@ class DeepseekV4HCACache(DynamicSlidingWindowLayer):
         `compress_rate` tokens.
         """
         first_window_position = self.entry_count[name] * self.compress_rate
-        buffered_kv, buffered_gate = self.buffer_kv[name], self.buffer_gate[name]
+        if attention_mask is None:
+            attention_mask = torch.ones(kv.shape[:2], dtype=torch.bool, device=kv.device)
+        buffered_kv, buffered_gate, buffered_mask = (
+            self.buffer_kv[name],
+            self.buffer_gate[name],
+            self.buffer_mask[name],
+        )
         if buffered_kv is not None and buffered_kv.shape[1]:
             kv = torch.cat([buffered_kv, kv], dim=1)
             gate = torch.cat([buffered_gate, gate], dim=1)
+            attention_mask = torch.cat([buffered_mask, attention_mask], dim=1)
         # only return the longest prefix that's a multiple of compress_rate; the rest stays in the buffer for next time
         usable = (kv.shape[1] // self.compress_rate) * self.compress_rate
-        self.buffer_kv[name], self.buffer_gate[name] = kv[:, usable:], gate[:, usable:]
-        return kv[:, :usable], gate[:, :usable], first_window_position
+        self.buffer_kv[name], self.buffer_gate[name], self.buffer_mask[name] = (
+            kv[:, usable:],
+            gate[:, usable:],
+            attention_mask[:, usable:],
+        )
+        return kv[:, :usable], gate[:, :usable], attention_mask[:, :usable], first_window_position
 
-    def update_compressor_states(self, name: str, compressed: torch.Tensor) -> torch.Tensor:
+    def update_compressor_states(
+        self, name: str, compressed: torch.Tensor, compressed_mask: torch.Tensor | None = None
+    ) -> torch.Tensor:
         r"""
         Append freshly emitted compressed entries to `compressed_kv[name]`
         (`C^{Comp}`, paper §2.3.2 eq. 23), bump `entry_count[name]`, and
         return the running `compressed_kv[name]`.
         """
+        if compressed_mask is None:
+            compressed_mask = torch.ones(compressed.shape[:2], dtype=torch.bool, device=compressed.device)
         if self.compressed_kv[name] is None:
             self.compressed_kv[name] = compressed
+            self.compressed_mask[name] = compressed_mask
         elif compressed.shape[1] > 0:
             self.compressed_kv[name] = torch.cat([self.compressed_kv[name], compressed], dim=1)
+            self.compressed_mask[name] = torch.cat([self.compressed_mask[name], compressed_mask], dim=1)
         self.entry_count[name] += compressed.shape[1]
         return self.compressed_kv[name]
 
@@ -278,26 +299,31 @@ class DeepseekV4CSACache(DeepseekV4HCACache):
         self.compress_rate = config.compress_rates["compressed_sparse_attention"]
         self.buffer_kv["indexer"] = None
         self.buffer_gate["indexer"] = None
+        self.buffer_mask["indexer"] = None
         self.compressed_kv["indexer"] = None
+        self.compressed_mask["indexer"] = None
         self.entry_count["indexer"] = 0
         self.overlap_kv: dict[str, torch.Tensor | None] = {"compressor": None, "indexer": None}
         self.overlap_gate: dict[str, torch.Tensor | None] = {"compressor": None, "indexer": None}
+        self.overlap_mask: dict[str, torch.Tensor | None] = {"compressor": None, "indexer": None}
 
     def update_overlap_state(
-        self, name: str, chunk_kv: torch.Tensor, chunk_gate: torch.Tensor, head_dim: int
-    ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
+        self, name: str, chunk_kv: torch.Tensor, chunk_gate: torch.Tensor, chunk_mask: torch.Tensor, head_dim: int
+    ) -> tuple[torch.Tensor | None, torch.Tensor | None, torch.Tensor | None]:
         r"""
         Read the `name` entry's prior window's Ca slice (saved on the previous
         forward call) and persist the *current* call's last-window Ca slice for
         the next call. Only the `:head_dim` slice (Ca) is ever consumed
         downstream — Cb has already been folded into the previous window's
         emitted compressed entry — so we store half what `chunk[:, -1]` holds.
-        Returns `(prior_kv, prior_gate)` — both `None` on the very first call.
+        Returns `(prior_kv, prior_gate, prior_mask)` — all `None` on the very
+        first call.
         """
-        prior_kv, prior_gate = self.overlap_kv[name], self.overlap_gate[name]
+        prior_kv, prior_gate, prior_mask = self.overlap_kv[name], self.overlap_gate[name], self.overlap_mask[name]
         self.overlap_kv[name] = chunk_kv[:, -1, :, :head_dim].clone()
         self.overlap_gate[name] = chunk_gate[:, -1, :, :head_dim].clone()
-        return prior_kv, prior_gate
+        self.overlap_mask[name] = chunk_mask[:, -1].clone()
+        return prior_kv, prior_gate, prior_mask
 
 
 class DeepseekV4GroupedLinear(nn.Linear):
@@ -359,6 +385,33 @@ def apply_rotary_pos_emb(
     return torch.cat([nope, rotated], dim=-1)
 
 
+def _prepare_compressor_attention_mask(attention_mask: torch.Tensor | None, kv: torch.Tensor) -> torch.Tensor | None:
+    if attention_mask is None or attention_mask.ndim != 2:
+        return None
+
+    seq_len = kv.shape[1]
+    if attention_mask.shape[1] > seq_len:
+        attention_mask = attention_mask[:, -seq_len:]
+    elif attention_mask.shape[1] < seq_len:
+        attention_mask = F.pad(attention_mask, (seq_len - attention_mask.shape[1], 0), value=1)
+    return attention_mask.to(device=kv.device, dtype=torch.bool)
+
+
+def _masked_compressor_pool(
+    kv: torch.Tensor, gate: torch.Tensor, attention_mask: torch.Tensor | None, norm: nn.Module
+) -> tuple[torch.Tensor, torch.Tensor]:
+    if attention_mask is None:
+        valid_window = torch.ones(kv.shape[:2], dtype=torch.bool, device=kv.device)
+    else:
+        valid_window = attention_mask.any(dim=2)
+        gate = gate.masked_fill(~attention_mask.unsqueeze(-1), float("-inf"))
+        gate = torch.where(valid_window.unsqueeze(-1).unsqueeze(-1), gate, torch.zeros_like(gate))
+
+    pooled = (kv * gate.softmax(dim=2, dtype=torch.float32).to(kv.dtype)).sum(dim=2)
+    pooled = pooled.masked_fill(~valid_window.unsqueeze(-1), 0)
+    return norm(pooled), valid_window
+
+
 class DeepseekV4HCACompressor(nn.Module):
     """
     Heavily Compressed Attention compressor (paper §2.3.2, eqs. 20–23). compresses
@@ -398,16 +451,22 @@ class DeepseekV4HCACompressor(nn.Module):
         position_ids: torch.Tensor,
         past_key_values: Cache | None,
         layer_idx: int,
+        attention_mask: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         batch, _, _ = hidden_states.shape
         cache_layer: DeepseekV4HCACache = past_key_values.layers[layer_idx] if past_key_values is not None else None
         kv = self.kv_proj(hidden_states)
         gate = self.gate_proj(hidden_states)
+        compressor_mask = _prepare_compressor_attention_mask(attention_mask, kv)
         if cache_layer is None:
             usable = (kv.shape[1] // self.compress_rate) * self.compress_rate
-            chunk_kv, chunk_gate, first_window_position = kv[:, :usable], gate[:, :usable], 0
+            chunk_kv, chunk_gate = kv[:, :usable], gate[:, :usable]
+            chunk_mask = compressor_mask[:, :usable] if compressor_mask is not None else None
+            first_window_position = 0
         else:
-            chunk_kv, chunk_gate, first_window_position = cache_layer.store_compression_weights("compressor", kv, gate)
+            chunk_kv, chunk_gate, chunk_mask, first_window_position = cache_layer.store_compression_weights(
+                "compressor", kv, gate, compressor_mask
+            )
 
         if chunk_kv.shape[1] > 0:  # there were at least self.compress_rate tokens
             n_windows = chunk_kv.shape[1] // self.compress_rate
@@ -415,33 +474,36 @@ class DeepseekV4HCACompressor(nn.Module):
             chunk_gate = chunk_gate.view(batch, n_windows, self.compress_rate, -1) + self.position_bias.to(
                 chunk_gate.dtype
             )
-            compressed = self.kv_norm(
-                (chunk_kv * chunk_gate.softmax(dim=2, dtype=torch.float32).to(chunk_kv.dtype)).sum(dim=2)
-            )
+            chunk_mask = chunk_mask.view(batch, n_windows, self.compress_rate) if chunk_mask is not None else None
+            compressed, compressed_mask = _masked_compressor_pool(chunk_kv, chunk_gate, chunk_mask, self.kv_norm)
             positions = torch.arange(n_windows, device=compressed.device)
             positions = (positions * self.compress_rate + first_window_position).unsqueeze(0).expand(batch, -1)
             cos, sin = self.rotary_emb(compressed, position_ids=positions, layer_type=self.rope_layer_type)
             compressed = apply_rotary_pos_emb(compressed.unsqueeze(1), cos, sin).squeeze(1)
         else:
             compressed = chunk_kv.new_zeros((batch, 0, self.head_dim))
+            compressed_mask = torch.zeros((batch, 0), dtype=torch.bool, device=chunk_kv.device)
 
         if cache_layer is not None:
-            compressed = cache_layer.update_compressor_states("compressor", compressed)
+            compressed = cache_layer.update_compressor_states("compressor", compressed, compressed_mask)
+            compressed_mask = cache_layer.compressed_mask["compressor"]
         compressed_kv = compressed.unsqueeze(1)
 
         compressed_len = compressed_kv.shape[2]
         seq_len = position_ids.shape[1]
-        if seq_len == 1 or compressed_len == 0:
+        if compressed_len == 0:
             return compressed_kv, None
 
         # query `t` may only see cache entries at pos `w` t > w * compress_rate (ex: t=7, w=2 t does not attend to it).
         entry_indices = torch.arange(compressed_len, device=compressed_kv.device)
-        causal_threshold = (position_ids + 1) // self.compress_rate  # [B, S]
         block_bias = compressed_kv.new_zeros((batch, 1, seq_len, compressed_len))
-        block_bias = block_bias.masked_fill(
-            entry_indices.view(1, 1, 1, -1) >= causal_threshold.unsqueeze(1).unsqueeze(-1),
-            float("-inf"),
-        )
+        if seq_len > 1:
+            causal_threshold = (position_ids + 1) // self.compress_rate  # [B, S]
+            block_bias = block_bias.masked_fill(
+                entry_indices.view(1, 1, 1, -1) >= causal_threshold.unsqueeze(1).unsqueeze(-1),
+                float("-inf"),
+            )
+        block_bias = block_bias.masked_fill(~compressed_mask[:, None, None, :], float("-inf"))
         return compressed_kv, block_bias
 
 
@@ -499,41 +561,57 @@ class DeepseekV4Indexer(nn.Module):
         position_ids: torch.Tensor,
         past_key_values: Cache | None,
         layer_idx: int,
+        attention_mask: torch.Tensor | None = None,
     ) -> torch.LongTensor:
         batch, seq_len, _ = hidden_states.shape
         cache_layer: DeepseekV4CSACache = past_key_values.layers[layer_idx] if past_key_values is not None else None
         kv = self.kv_proj(hidden_states)
         gate = self.gate_proj(hidden_states)
+        compressor_mask = _prepare_compressor_attention_mask(attention_mask, kv)
 
         if cache_layer is None:
             usable = (kv.shape[1] // self.compress_rate) * self.compress_rate
-            chunk_kv, chunk_gate, first_window_position = kv[:, :usable], gate[:, :usable], 0
+            chunk_kv, chunk_gate = kv[:, :usable], gate[:, :usable]
+            chunk_mask = compressor_mask[:, :usable] if compressor_mask is not None else None
+            first_window_position = 0
         else:
-            chunk_kv, chunk_gate, first_window_position = cache_layer.store_compression_weights("indexer", kv, gate)
+            chunk_kv, chunk_gate, chunk_mask, first_window_position = cache_layer.store_compression_weights(
+                "indexer", kv, gate, compressor_mask
+            )
 
         if chunk_kv.shape[1] > 0:
             n_windows = chunk_kv.shape[1] // self.compress_rate
             ratio = self.compress_rate
             chunk_kv = chunk_kv.view(batch, n_windows, ratio, -1)
             chunk_gate = chunk_gate.view(batch, n_windows, ratio, -1) + self.position_bias.to(chunk_gate.dtype)
+            chunk_mask = (
+                chunk_mask.view(batch, n_windows, ratio)
+                if chunk_mask is not None
+                else torch.ones((batch, n_windows, ratio), dtype=torch.bool, device=chunk_kv.device)
+            )
 
             # Same Ca / Cb overlap layout as the outer CSA compressor, at index_head_dim.
             new_kv = chunk_kv.new_zeros((batch, n_windows, 2 * ratio, self.head_dim))
             new_gate = chunk_gate.new_full((batch, n_windows, 2 * ratio, self.head_dim), float("-inf"))
+            new_mask = torch.zeros((batch, n_windows, 2 * ratio), dtype=torch.bool, device=chunk_kv.device)
             new_kv[:, :, ratio:] = chunk_kv[..., self.head_dim :]
             new_gate[:, :, ratio:] = chunk_gate[..., self.head_dim :]
+            new_mask[:, :, ratio:] = chunk_mask
             if n_windows > 1:
                 new_kv[:, 1:, :ratio] = chunk_kv[:, :-1, :, : self.head_dim]
                 new_gate[:, 1:, :ratio] = chunk_gate[:, :-1, :, : self.head_dim]
+                new_mask[:, 1:, :ratio] = chunk_mask[:, :-1]
             if cache_layer is not None:
-                prior_kv, prior_gate = cache_layer.update_overlap_state("indexer", chunk_kv, chunk_gate, self.head_dim)
+                prior_kv, prior_gate, prior_mask = cache_layer.update_overlap_state(
+                    "indexer", chunk_kv, chunk_gate, chunk_mask, self.head_dim
+                )
                 if prior_kv is not None:
                     new_kv[:, 0, :ratio] = prior_kv.to(new_kv.dtype)
                     new_gate[:, 0, :ratio] = prior_gate.to(new_gate.dtype)
+                    new_mask[:, 0, :ratio] = prior_mask.to(new_mask.device)
 
-            compressed = self.kv_norm(
-                (new_kv * new_gate.softmax(dim=2, dtype=torch.float32).to(new_kv.dtype)).sum(dim=2)
-            )
+            compressed, _ = _masked_compressor_pool(new_kv, new_gate, new_mask, self.kv_norm)
+            compressed_mask = chunk_mask.any(dim=2)
             positions = torch.arange(n_windows, device=compressed.device)
             positions = positions * self.compress_rate + first_window_position
             positions = positions.unsqueeze(0).expand(batch, -1)
@@ -541,10 +619,14 @@ class DeepseekV4Indexer(nn.Module):
             compressed = apply_rotary_pos_emb(compressed.unsqueeze(1), cos, sin).squeeze(1)
         else:
             compressed = chunk_kv.new_zeros((batch, 0, self.head_dim))
+            compressed_mask = torch.zeros((batch, 0), dtype=torch.bool, device=chunk_kv.device)
 
         compressed_kv = (
-            compressed if cache_layer is None else cache_layer.update_compressor_states("indexer", compressed)
+            compressed
+            if cache_layer is None
+            else cache_layer.update_compressor_states("indexer", compressed, compressed_mask)
         )
+        compressed_mask = compressed_mask if cache_layer is None else cache_layer.compressed_mask["indexer"]
 
         cos_q, sin_q = self.rotary_emb(hidden_states, position_ids=position_ids, layer_type=self.rope_layer_type)
         q = self.q_b_proj(q_residual).view(batch, seq_len, -1, self.head_dim).transpose(1, 2)
@@ -567,10 +649,11 @@ class DeepseekV4Indexer(nn.Module):
         if compressed_len > 0:
             causal_threshold = (position_ids + 1) // self.compress_rate  # [B, S]
             entry_indices = torch.arange(compressed_len, device=index_scores.device)
-            future_mask = entry_indices.view(1, 1, -1) >= causal_threshold.unsqueeze(-1)  # [B, S, T]
-            index_scores = index_scores.masked_fill(future_mask, float("-inf"))
+            visible = (entry_indices.view(1, 1, -1) < causal_threshold.unsqueeze(-1)) & compressed_mask.unsqueeze(1)
+            index_scores = index_scores.masked_fill(~visible, float("-inf"))
             top_k_indices = index_scores.topk(top_k, dim=-1).indices  # [B, S, k]
-            invalid = top_k_indices >= causal_threshold.unsqueeze(-1)
+            selected_visible = visible.gather(-1, top_k_indices)
+            invalid = ~selected_visible
             return torch.where(invalid, torch.full_like(top_k_indices, -1), top_k_indices)
 
         return index_scores.topk(top_k, dim=-1).indices
@@ -617,23 +700,34 @@ class DeepseekV4CSACompressor(nn.Module):
         position_ids: torch.Tensor,
         past_key_values: Cache | None,
         layer_idx: int,
+        attention_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         batch, seq_len, _ = hidden_states.shape
         cache_layer: DeepseekV4CSACache = past_key_values.layers[layer_idx] if past_key_values is not None else None
         kv = self.kv_proj(hidden_states)
         gate = self.gate_proj(hidden_states)
+        compressor_mask = _prepare_compressor_attention_mask(attention_mask, kv)
 
         if cache_layer is None:
             usable = (kv.shape[1] // self.compress_rate) * self.compress_rate
-            chunk_kv, chunk_gate, first_window_position = kv[:, :usable], gate[:, :usable], 0
+            chunk_kv, chunk_gate = kv[:, :usable], gate[:, :usable]
+            chunk_mask = compressor_mask[:, :usable] if compressor_mask is not None else None
+            first_window_position = 0
         else:
-            chunk_kv, chunk_gate, first_window_position = cache_layer.store_compression_weights("compressor", kv, gate)
+            chunk_kv, chunk_gate, chunk_mask, first_window_position = cache_layer.store_compression_weights(
+                "compressor", kv, gate, compressor_mask
+            )
 
         if chunk_kv.shape[1] > 0:
             n_windows = chunk_kv.shape[1] // self.compress_rate
             ratio = self.compress_rate
             chunk_kv = chunk_kv.view(batch, n_windows, ratio, -1)
             chunk_gate = chunk_gate.view(batch, n_windows, ratio, -1) + self.position_bias.to(chunk_gate.dtype)
+            chunk_mask = (
+                chunk_mask.view(batch, n_windows, ratio)
+                if chunk_mask is not None
+                else torch.ones((batch, n_windows, ratio), dtype=torch.bool, device=chunk_kv.device)
+            )
 
             # Lay out the two series in [B, n_win, 2*ratio, head_dim]: Cb
             # (`[..., head_dim:]`) goes in the second half (current window),
@@ -643,24 +737,27 @@ class DeepseekV4CSACompressor(nn.Module):
             # calls the cache fills it with the saved Ca slice.
             new_kv = chunk_kv.new_zeros((batch, n_windows, 2 * ratio, self.head_dim))
             new_gate = chunk_gate.new_full((batch, n_windows, 2 * ratio, self.head_dim), float("-inf"))
+            new_mask = torch.zeros((batch, n_windows, 2 * ratio), dtype=torch.bool, device=chunk_kv.device)
             new_kv[:, :, ratio:] = chunk_kv[..., self.head_dim :]
             new_gate[:, :, ratio:] = chunk_gate[..., self.head_dim :]
+            new_mask[:, :, ratio:] = chunk_mask
             if n_windows > 1:
                 new_kv[:, 1:, :ratio] = chunk_kv[:, :-1, :, : self.head_dim]
                 new_gate[:, 1:, :ratio] = chunk_gate[:, :-1, :, : self.head_dim]
+                new_mask[:, 1:, :ratio] = chunk_mask[:, :-1]
             if cache_layer is not None:
-                prior_kv, prior_gate = cache_layer.update_overlap_state(
-                    "compressor", chunk_kv, chunk_gate, self.head_dim
+                prior_kv, prior_gate, prior_mask = cache_layer.update_overlap_state(
+                    "compressor", chunk_kv, chunk_gate, chunk_mask, self.head_dim
                 )
                 if prior_kv is not None:
                     new_kv[:, 0, :ratio] = prior_kv.to(new_kv.dtype)
                     new_gate[:, 0, :ratio] = prior_gate.to(new_gate.dtype)
+                    new_mask[:, 0, :ratio] = prior_mask.to(new_mask.device)
 
             # Softmax in fp32 for stability (logits in bf16/fp16 can collapse pairs that
             # only differ by a small amount, especially with large window widths).
-            compressed = self.kv_norm(
-                (new_kv * new_gate.softmax(dim=2, dtype=torch.float32).to(new_kv.dtype)).sum(dim=2)
-            )
+            compressed, _ = _masked_compressor_pool(new_kv, new_gate, new_mask, self.kv_norm)
+            compressed_mask = chunk_mask.any(dim=2)
             positions = torch.arange(n_windows, device=compressed.device)
             positions = positions * self.compress_rate + first_window_position
             positions = positions.unsqueeze(0).expand(batch, -1)
@@ -668,9 +765,10 @@ class DeepseekV4CSACompressor(nn.Module):
             compressed = apply_rotary_pos_emb(compressed.unsqueeze(1), cos, sin).squeeze(1)
         else:
             compressed = chunk_kv.new_zeros((batch, 0, self.head_dim))
+            compressed_mask = torch.zeros((batch, 0), dtype=torch.bool, device=chunk_kv.device)
 
         if cache_layer is not None:
-            compressed = cache_layer.update_compressor_states("compressor", compressed)
+            compressed = cache_layer.update_compressor_states("compressor", compressed, compressed_mask)
         compressed_kv = compressed.unsqueeze(1)
 
         # Lightning Indexer: gather top-`index_topk` compressed entries per query.
@@ -678,7 +776,9 @@ class DeepseekV4CSACompressor(nn.Module):
         # Ex: for query at index 5, m=4, and `index_topk=1024`, 1024 index are return but only 2 should be
         # attended to. The indexer marks the rest with `-1`; we clamp before the gather and keep the `valid`
         # to drop them from the per-query block mask afterwards.
-        top_k_indices = self.indexer(hidden_states, q_residual, position_ids, past_key_values, layer_idx)  # [B, S, k]
+        top_k_indices = self.indexer(
+            hidden_states, q_residual, position_ids, past_key_values, layer_idx, attention_mask=attention_mask
+        )  # [B, S, k]
         compressed_len = compressed_kv.shape[2]
         valid = top_k_indices >= 0  # [B, S, k]
         # Per-query block bias: query `t` may only see the cache entries that are <= `seq_len // m`
@@ -792,6 +892,7 @@ class DeepseekV4Attention(nn.Module):
         position_embeddings: dict[str, tuple[torch.Tensor, torch.Tensor]] | tuple[torch.Tensor, torch.Tensor],
         position_ids: torch.Tensor,
         attention_mask: torch.Tensor | None,
+        compressor_attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
@@ -815,7 +916,12 @@ class DeepseekV4Attention(nn.Module):
         block_bias = None
         if self.compressor is not None:  # Compressed KV (CSA or HCA)
             compressed_kv, block_bias = self.compressor(
-                hidden_states, q_residual, position_ids, past_key_values, self.layer_idx
+                hidden_states,
+                q_residual,
+                position_ids,
+                past_key_values,
+                self.layer_idx,
+                attention_mask=compressor_attention_mask,
             )
             kv = torch.cat([kv, compressed_kv], dim=2)
 
@@ -1281,7 +1387,9 @@ class DeepseekV4Model(DeepseekV4PreTrainedModel):
             # mask, so use the prebuilt one directly. Otherwise build it here.
         if isinstance(attention_mask, dict):
             causal_mask = next(iter(attention_mask.values()))
+            compressor_attention_mask = None
         else:
+            compressor_attention_mask = attention_mask
             causal_mask = create_sliding_window_causal_mask(
                 config=self.config,
                 inputs_embeds=inputs_embeds,
@@ -1301,6 +1409,7 @@ class DeepseekV4Model(DeepseekV4PreTrainedModel):
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 attention_mask=causal_mask,
+                compressor_attention_mask=compressor_attention_mask,
                 input_ids=input_ids,
                 past_key_values=past_key_values,
                 **kwargs,
