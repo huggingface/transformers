@@ -268,6 +268,58 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertEqual(outputs.predictor_output.last_hidden_state.shape, (1, 1, 128))
         self.assertEqual(outputs.predictor_output.context_predictions.shape, (1, 1, 128))
 
+    def test_output_hidden_states_and_attentions_plumbing(self):
+        """Verify output_hidden_states / output_attentions still populate tuples on the new
+        VJEPA2EncoderOutput / VJEPA2PredictorOutput dataclasses for both V-JEPA 2 and 2.1
+        configs. Catches breakage in the OutputRecorder plumbing introduced by the new
+        output dataclasses."""
+        common_kwargs = dict(
+            crop_size=16,
+            frames_per_clip=2,
+            hidden_size=32,
+            num_attention_heads=2,
+            num_hidden_layers=3,
+            mlp_ratio=1.0,
+            pred_hidden_size=16,
+            pred_num_attention_heads=2,
+            pred_num_hidden_layers=2,
+            pred_num_mask_tokens=8,
+        )
+        for label, config in [
+            ("v2", VJEPA2Config(**common_kwargs)),
+            (
+                "v2.1",
+                VJEPA2Config(
+                    use_rope_interleave=True,
+                    use_modality_embeddings=True,
+                    interpolate_rope=True,
+                    use_context_projection=True,
+                    use_image_patch_embedder=True,
+                    teacher_embed_dim=64,
+                    num_distillation_outputs=1,
+                    hierarchical_layers=[0, 1, 2],
+                    **common_kwargs,
+                ),
+            ),
+        ]:
+            with self.subTest(label):
+                # Use eager attention so the OutputRecorder can capture attention weights;
+                # sdpa does not expose them by design.
+                config._attn_implementation = "eager"
+                model = VJEPA2Model(config).to(torch_device).eval()
+                pixel_values = torch.randn(1, 2, 3, 16, 16, device=torch_device)
+                with torch.no_grad():
+                    outputs = model(pixel_values, output_hidden_states=True, output_attentions=True)
+                # Encoder-level tuples are populated by OutputRecorder on the new dataclasses.
+                self.assertIsInstance(outputs.hidden_states, tuple)
+                self.assertIsInstance(outputs.attentions, tuple)
+                self.assertEqual(len(outputs.hidden_states), config.num_hidden_layers + 1)
+                self.assertEqual(len(outputs.attentions), config.num_hidden_layers)
+                # Predictor-level tuples are not currently captured (the OutputRecorder is
+                # scoped to encoder layers); treat None as the documented behavior.
+                self.assertIsNone(outputs.predictor_output.hidden_states)
+                self.assertIsNone(outputs.predictor_output.attentions)
+
     def test_classification_head_with_hierarchical_distillation(self):
         """Wiring-only smoke test: classification head must instantiate and forward without
         error when num_distillation_outputs > 1. Does not validate feature quality — the

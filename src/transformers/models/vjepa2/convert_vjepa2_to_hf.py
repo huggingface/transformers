@@ -396,15 +396,17 @@ def convert_and_test_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, pus
         predictor_mask = context_mask
         original_predictor_outputs = original_predictor(original_encoder_outputs, context_mask, predictor_mask)
         outputs = model(pixel_values_videos, context_mask=context_mask, target_mask=predictor_mask)
-        assert torch.allclose(outputs.last_hidden_state, original_encoder_outputs, atol=1e-3)
+        hf_encoder = (
+            outputs.hierarchical_hidden_state
+            if outputs.hierarchical_hidden_state is not None
+            else outputs.last_hidden_state
+        )
+        assert torch.allclose(hf_encoder, original_encoder_outputs, atol=1e-3)
         predictor_outputs = outputs.predictor_output
         if is_2_1 and config.use_context_projection:
             og_target, og_context = original_predictor_outputs
-            N_ctxt = context_mask[0].shape[1]
-            hf_context = predictor_outputs.last_hidden_state[:, :N_ctxt]
-            hf_target = predictor_outputs.last_hidden_state[:, N_ctxt:]
-            assert torch.allclose(hf_target, og_target, atol=1e-2)
-            assert torch.allclose(hf_context, og_context, atol=1e-2)
+            assert torch.allclose(predictor_outputs.last_hidden_state, og_target, atol=1e-2)
+            assert torch.allclose(predictor_outputs.context_predictions, og_context, atol=1e-2)
         else:
             assert torch.allclose(predictor_outputs.last_hidden_state, original_predictor_outputs, atol=1e-3)
         # test partial mask
@@ -418,15 +420,17 @@ def convert_and_test_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, pus
             predictor_mask,
         )
         outputs = model(pixel_values_videos, context_mask=context_mask, target_mask=predictor_mask)
-        assert torch.allclose(outputs.last_hidden_state, original_encoder_outputs, atol=1e-3)
+        hf_encoder = (
+            outputs.hierarchical_hidden_state
+            if outputs.hierarchical_hidden_state is not None
+            else outputs.last_hidden_state
+        )
+        assert torch.allclose(hf_encoder, original_encoder_outputs, atol=1e-3)
         predictor_outputs = outputs.predictor_output
         if is_2_1 and config.use_context_projection:
             og_target, og_context = original_predictor_outputs
-            N_ctxt = context_mask[0].shape[1]
-            hf_context = predictor_outputs.last_hidden_state[:, :N_ctxt]
-            hf_target = predictor_outputs.last_hidden_state[:, N_ctxt:]
-            assert torch.allclose(hf_target, og_target, atol=1e-2)
-            assert torch.allclose(hf_context, og_context, atol=1e-2)
+            assert torch.allclose(predictor_outputs.last_hidden_state, og_target, atol=1e-2)
+            assert torch.allclose(predictor_outputs.context_predictions, og_context, atol=1e-2)
         else:
             assert torch.allclose(predictor_outputs.last_hidden_state, original_predictor_outputs, atol=1e-3)
 
