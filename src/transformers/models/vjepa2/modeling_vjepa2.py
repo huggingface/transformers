@@ -1128,11 +1128,7 @@ class VJEPA2ForVideoClassification(VJEPA2PreTrainedModel):
         self.num_labels = config.num_labels
         self.vjepa2 = VJEPA2Model(config)
 
-        # Classifier head. The pooler consumes `outputs.last_hidden_state` (dim
-        # config.hidden_size), which is the post-loop encoder sequence even for V-JEPA 2.1
-        # configs with hierarchical layers. Hierarchical/distillation features live on
-        # `outputs.hierarchical_hidden_state` and are not used by the classifier; users who
-        # want them should use VJEPA2Model for feature extraction.
+        # 2.1 hierarchical features are intentionally not pooled here; users wanting them should call VJEPA2Model directly.
         self.pooler = VJEPA2AttentivePooler(config)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels, bias=True)
 

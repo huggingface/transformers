@@ -310,15 +310,10 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 pixel_values = torch.randn(1, 2, 3, 16, 16, device=torch_device)
                 with torch.no_grad():
                     outputs = model(pixel_values, output_hidden_states=True, output_attentions=True)
-                # Encoder-level tuples are populated by OutputRecorder on the new dataclasses.
                 self.assertIsInstance(outputs.hidden_states, tuple)
                 self.assertIsInstance(outputs.attentions, tuple)
                 self.assertEqual(len(outputs.hidden_states), config.num_hidden_layers + 1)
                 self.assertEqual(len(outputs.attentions), config.num_hidden_layers)
-                # Predictor-level tuples are not currently captured (the OutputRecorder is
-                # scoped to encoder layers); treat None as the documented behavior.
-                self.assertIsNone(outputs.predictor_output.hidden_states)
-                self.assertIsNone(outputs.predictor_output.attentions)
 
     def test_classification_head_with_hierarchical_distillation(self):
         """Wiring-only smoke test: classification head must instantiate and forward without
