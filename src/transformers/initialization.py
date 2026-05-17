@@ -59,7 +59,9 @@ def uniform_(
     tensor: torch.Tensor, a: float = 0.0, b: float = 1.0, generator: torch.Generator | None = None
 ) -> torch.Tensor:
     if not getattr(tensor, "_is_hf_initialized", False):
-        return _run_init_with_fp32_cpu_fallback(tensor, TORCH_INIT_FUNCTIONS["uniform_"], a=a, b=b, generator=generator)
+        return _run_init_with_fp32_cpu_fallback(
+            tensor, TORCH_INIT_FUNCTIONS["uniform_"], a=a, b=b, generator=generator
+        )
     return tensor
 
 
