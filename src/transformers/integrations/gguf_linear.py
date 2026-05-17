@@ -99,58 +99,13 @@ def _load_kernels_direct(repo: str):
 
 
 def _register_fake_impls(ns_name: str) -> None:
-    """Register meta / fake-tensor implementations for our custom ops so they
-    can run under ``torch.compile`` (AOTAutograd's analysis pass needs to
-    shape-infer custom ops on FakeTensors before partitioning). Each fake
-    just validates inputs and returns None — the ops are all in-place
-    (output buffer is a pre-allocated arg).
+    """Currently a no-op: every Metal kernel we still wire in (``mul_mat_vec``
+    / ``mul_mat`` / ``mul_mat_id`` / ``dequantize_*``) is invoked from a
+    Python forward that dynamo treats as a single opaque call, so no
+    AOTAutograd FakeTensor analysis runs. The function is kept as a hook
+    for follow-up fusion ops that *do* need a registered Meta impl.
     """
-    import torch
-
-    def _rmsnorm_meta(x, weight, out, eps):
-        return None
-
-    def _multi_mv_meta(qweights, x, outputs, fmts):
-        return None
-
-    def _moe_decode_meta(hidden, top_k_index, top_k_weights, gate_qw, up_qw,
-                         down_qw, gate_buf, up_buf, pair_out, output,
-                         gate_fmt_code, up_fmt_code, down_fmt_code):
-        return None
-
-    def _moe_silu_meta(gate_qw, up_qw, down_qw, x, ids, gate_buf, up_buf, out,
-                       g, u, d):
-        return None
-
-    def _kv_update_meta(keys_cache, values_cache, new_keys, new_values, position):
-        return None
-
-    def _mlp_silu_meta(gate_qw, up_qw, down_qw, x, gate_buf, up_buf, out, g, u, d):
-        return None
-
-    fakes = {
-        "rmsnorm_f32": _rmsnorm_meta,
-        "gguf_mul_mat_vec_multi_f32": _multi_mv_meta,
-        "gguf_moe_decode_f32": _moe_decode_meta,
-        "gguf_moe_silu_f32": _moe_silu_meta,
-        "kv_update_decode_f32": _kv_update_meta,
-        "gguf_mlp_silu_f32": _mlp_silu_meta,
-    }
-    # Library.impl is the contract for C++ TORCH_LIBRARY ops. Open a FRAGMENT
-    # library on the same namespace and add Meta + CompositeExplicitAutograd
-    # impls so AOTAutograd's FakeTensor analysis pass can shape-check.
-    try:
-        lib = torch.library.Library(ns_name, "FRAGMENT")  # type: ignore[arg-type]
-    except RuntimeError:
-        return
-    ns_ops = getattr(torch.ops, ns_name)
-    for op_name, fn in fakes.items():
-        if not hasattr(ns_ops, op_name):
-            continue
-        try:
-            lib.impl(op_name, fn, "Meta")
-        except RuntimeError:
-            pass  # already registered
+    return
 
 
 def _load_kernels_local_so(so_path: str):
@@ -355,25 +310,13 @@ class GgufLinear(nn.Module):
         if x.shape[-1] != self.in_features:
             raise ValueError(f"Last dim of x must be {self.in_features}, got {x.shape[-1]}")
 
-        # Avoid eager dispatches when the cast / reshape / contiguous are no-ops.
-        # Each ATen call below costs ~30 µs in eager — with ~120 GgufLinear
-        # calls per decode token (24 layers × Q/K/V/O + router + lm_head),
-        # skipping no-ops at the Python level saves several ms per token.
-        if x.dim() == 2:
-            x_flat = x
-        else:
-            x_flat = x.reshape(-1, self.in_features)
-        if not x_flat.is_contiguous():
-            x_flat = x_flat.contiguous()
-        if x_flat.dtype != torch.float32:
-            x_flat = x_flat.to(torch.float32)
         batch_shape = x.shape[:-1]
+        x_flat = x.reshape(-1, self.in_features).contiguous().to(torch.float32)
         N = x_flat.shape[0]
 
-        is_mps = x.device.type == "mps"
-        if is_mps:
-            # ``_bind_kernels`` populates these once per module; lazy-fetch on
-            # the first forward if it hasn't run yet (state-dict load path).
+        if x.device.type == "mps":
+            # ``_bind_kernels`` is called by ``replace_with_gguf_linear``;
+            # lazy-fetch covers the state-dict load path that bypasses it.
             mv_op = self._mv_op
             mat_op = self._mat_op
             if mv_op is None and mat_op is None:
@@ -383,16 +326,11 @@ class GgufLinear(nn.Module):
             if mv_op is None and mat_op is None:
                 return self._dequant_forward(x)
 
-            qw = self.qweight  # already on the right device after model.to(...)
+            qw = self.qweight
             if N == 1 and mv_op is not None:
                 y = torch.empty(self.out_features, dtype=torch.float32, device=x.device)
-                # x_flat is (1, K). The matvec kernel expects a flat (K,) input;
-                # `view(-1)` is a strides-only no-dispatch reshape on contiguous.
                 mv_op(qw, x_flat.view(-1), y)
-                if len(batch_shape) != 1 or batch_shape[0] != 1:
-                    y = y.reshape(*batch_shape, self.out_features)
-                else:
-                    y = y.unsqueeze(0)
+                y = y.reshape(*batch_shape, self.out_features)
             elif N % 32 == 0 and mat_op is not None:
                 y = torch.empty(N * self.out_features, dtype=torch.float32, device=x.device)
                 mat_op(qw, x_flat, y)
@@ -410,12 +348,7 @@ class GgufLinear(nn.Module):
             y = self._dequant_forward(x)
 
         if self.bias is not None:
-            # `.to(device).to(dtype)` is a no-op when bias is already on the
-            # matching device + dtype (typical after `.to(mps)` at load time).
-            b = self.bias
-            if b.device != y.device or b.dtype != y.dtype:
-                b = b.to(device=y.device, dtype=y.dtype)
-            y = y + b
+            y = y + self.bias.to(y.device).to(y.dtype)
         return y
 
     def _dequant_forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -780,9 +713,6 @@ def _prepare_id_kernel_refs(mod: nn.Module) -> None:
     if metal is None:
         return
     ops = metal._ops
-    fmt_to_code = {"q4_K": 0, "q5_0": 1, "q5_1": 2, "q8_0": 3}
-    fmt_codes = []
-    all_supported = True
     for proj, fmt_attr, cache_attr in (
         ("gate", "_gate_fmt", "_id_op_gate"),
         ("up",   "_up_fmt",   "_id_op_up"),
@@ -799,37 +729,10 @@ def _prepare_id_kernel_refs(mod: nn.Module) -> None:
         # on every call (see GgufLinear._bind_kernels for the rationale).
         op = getattr(op, "default", op)
         setattr(mod, cache_attr, op)
-        if fmt in fmt_to_code:
-            fmt_codes.append(fmt_to_code[fmt])
-        else:
-            all_supported = False
 
-    # ``gguf_moe_silu_f32`` fuses gate+up+silu+down into one torch op
-    # dispatch (4 kernels on one encoder). On the per-call microbench it
-    # measured slower than the per-projection path; in the model bench
-    # it's a different question because layer-to-layer pipelining changes
-    # the cost equation. Wired in unconditionally — controlled via the
-    # ``TRANSFORMERS_GGUF_MOE_FUSED=0`` env var if it ever regresses.
-    if all_supported and os.environ.get("TRANSFORMERS_GGUF_MOE_FUSED", "1") != "0":
-        fused = getattr(ops, "gguf_moe_silu_f32", None)
-        if fused is not None and hasattr(ops, "gguf_moe_silu_f32"):
-            mod._moe_silu_op = getattr(fused, "default", fused)
-            mod._moe_silu_fmt_codes = fmt_codes
-
-    # ``gguf_moe_decode_f32`` collapses the entire ``gguf_bmm_experts_forward``
-    # Python wrapper into one torch op call. Skipped at dynamo trace time so
-    # compile can still see the constituent ops; the wrapper detects that
-    # via ``torch.compiler.is_compiling()``.
-    if all_supported and os.environ.get("TRANSFORMERS_GGUF_MOE_DECODE", "1") != "0":
-        decode = getattr(ops, "gguf_moe_decode_f32", None)
-        if decode is not None and hasattr(ops, "gguf_moe_decode_f32"):
-            mod._moe_decode_op = getattr(decode, "default", decode)
-            mod._moe_decode_fmt_codes = fmt_codes
-
-    # Pre-allocate decode-shape scratch buffers so the wrapper's per-call
-    # ``if _scratch_key != cache_key: torch.empty(...)`` branch never
-    # triggers a dynamo recompile (which it does on attr mutation:
-    # None → tuple). Without this the compile re-traces on every call.
+    # Pre-allocate decode-shape scratch buffers so the wrapper never calls
+    # ``torch.empty`` from inside dynamo's compiled graph (the attr
+    # mutation on first call triggers a full re-trace on the second).
     # Registered as non-persistent buffers so ``model.to(device)`` moves
     # them along with the qweights.
     H = mod.hidden_dim
@@ -838,15 +741,14 @@ def _prepare_id_kernel_refs(mod: nn.Module) -> None:
     dev = mod.gate_proj_q.device
     S_dec = top_k  # decode-time S (num_tokens=1)
     # Drop any prior buffers (re-entrant safety; this fn can run multiple times).
-    for name in ("_gate_buf", "_up_buf", "_pair_out", "_decode_out_buf"):
+    for name in ("_gate_buf", "_up_buf", "_pair_out"):
         if name in mod._buffers:
             del mod._buffers[name]
-    mod.register_buffer("_gate_buf",       torch.empty(S_dec, I, dtype=torch.float32, device=dev), persistent=False)
-    mod.register_buffer("_up_buf",         torch.empty(S_dec, I, dtype=torch.float32, device=dev), persistent=False)
-    mod.register_buffer("_pair_out",       torch.empty(S_dec, H, dtype=torch.float32, device=dev), persistent=False)
-    mod.register_buffer("_decode_out_buf", torch.empty(1,     H, dtype=torch.float32, device=dev), persistent=False)
-    mod._scratch_S    = S_dec
-    mod._scratch_T    = 1
+    mod.register_buffer("_gate_buf", torch.empty(S_dec, I, dtype=torch.float32, device=dev), persistent=False)
+    mod.register_buffer("_up_buf",   torch.empty(S_dec, I, dtype=torch.float32, device=dev), persistent=False)
+    mod.register_buffer("_pair_out", torch.empty(S_dec, H, dtype=torch.float32, device=dev), persistent=False)
+    mod._scratch_S = S_dec
+    mod._scratch_T = 1
 
 
 def _row_permute_attn_q_bytes(qbytes_flat: torch.Tensor, num_heads: int,
@@ -991,374 +893,6 @@ def is_gguf_linear_enabled() -> bool:
     return os.environ.get("TRANSFORMERS_GGUF_LINEAR", "0") not in ("0", "", "false", "False")
 
 
-# ---------------------------------------------------------------------------
-# QKV-fusion: one torch op dispatch for Q/K/V matvec via the multi op
-# ---------------------------------------------------------------------------
-#
-# Decode-time profiling on Apple Silicon shows ~50–100 µs of overhead per
-# torch.ops call (Python → C++ trampoline + dispatcher + MPSStream
-# bookkeeping) on top of ~20 µs of actual Metal kernel work. With 4
-# projections per attention block (q/k/v/o) × 24 layers, that's ~10 ms /
-# token of pure dispatcher cost — most of our gap to llama.cpp.
-#
-# ``gguf_mul_mat_vec_multi_f32`` encodes N matvecs onto one MPS command
-# encoder via one torch op dispatch. For Qwen2-MoE attention we collapse
-# q/k/v into one op (3 → 1); the post-attention o_proj remains separate
-# because hidden→attn-out crosses the SDPA call.
-
-# Maps GgufLinear._fmt string → int code matching dequantize.mm kMvTable.
-_FUSED_MV_FMT_CODE = {
-    "q4_0":   0, "q5_0":   1, "q5_1":   2, "q8_0":   3,
-    "q4_K":   4, "q5_K":   5, "q6_K":   6,
-    "iq4_nl": 7, "iq4_xs": 8,
-}
-
-
-def _fused_qkv_forward(self, hidden_states, position_embeddings=None,
-                       attention_mask=None, past_key_values=None, **kwargs):
-    """Replacement for ``Qwen2MoeAttention.forward`` that fuses q/k/v projections
-    into one ``gguf_mul_mat_vec_multi_f32`` call during decode.
-
-    Falls through to ``self._orig_forward`` when any of:
-      - prefill (N > 1) — multi-matvec only supports vec inputs
-      - non-MPS device
-      - q/k/v aren't all GgufLinear with compatible fmts
-      - the multi op isn't available
-    """
-    from ..models.qwen2_moe.modeling_qwen2_moe import (  # local: model-specific patch
-        ALL_ATTENTION_FUNCTIONS, apply_rotary_pos_emb, eager_attention_forward,
-    )
-
-    q_lin, k_lin, v_lin = self.q_proj, self.k_proj, self.v_proj
-    multi_op = getattr(self, "_qkv_multi_op", None)
-    # Decode-only fast path: shape-static under torch.compile.
-    last_dim = hidden_states.shape[-1]
-    flat_n = hidden_states.numel() // last_dim
-    if (
-        multi_op is None
-        or flat_n != 1
-        or hidden_states.device.type != "mps"
-        or not isinstance(q_lin, GgufLinear)
-        or not isinstance(k_lin, GgufLinear)
-        or not isinstance(v_lin, GgufLinear)
-    ):
-        return self._orig_forward(
-            hidden_states,
-            position_embeddings=position_embeddings,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            **kwargs,
-        )
-
-    input_shape = hidden_states.shape[:-1]
-    hidden_shape = (*input_shape, -1, self.head_dim)
-    x_flat = hidden_states.reshape(-1).contiguous().to(torch.float32)
-
-    dev = hidden_states.device
-    q_out = torch.empty(q_lin.out_features, dtype=torch.float32, device=dev)
-    k_out = torch.empty(k_lin.out_features, dtype=torch.float32, device=dev)
-    v_out = torch.empty(v_lin.out_features, dtype=torch.float32, device=dev)
-
-    multi_op(
-        [q_lin.qweight, k_lin.qweight, v_lin.qweight],
-        x_flat,
-        [q_out, k_out, v_out],
-        self._qkv_fmt_codes,
-    )
-
-    # Bias add (qkv_bias on Qwen2-MoE is True for q/k/v).
-    if q_lin.bias is not None: q_out = q_out + q_lin.bias.to(dev).to(torch.float32)
-    if k_lin.bias is not None: k_out = k_out + k_lin.bias.to(dev).to(torch.float32)
-    if v_lin.bias is not None: v_out = v_out + v_lin.bias.to(dev).to(torch.float32)
-
-    query_states = q_out.reshape(*input_shape, q_lin.out_features).view(hidden_shape).transpose(1, 2)
-    key_states   = k_out.reshape(*input_shape, k_lin.out_features).view(hidden_shape).transpose(1, 2)
-    value_states = v_out.reshape(*input_shape, v_lin.out_features).view(hidden_shape).transpose(1, 2)
-
-    cos, sin = position_embeddings
-    query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-    if past_key_values is not None:
-        key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-
-    attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
-        self.config._attn_implementation, eager_attention_forward
-    )
-
-    attn_output, attn_weights = attention_interface(
-        self,
-        query_states,
-        key_states,
-        value_states,
-        attention_mask,
-        dropout=0.0 if not self.training else self.attention_dropout,
-        scaling=self.scaling,
-        **kwargs,
-    )
-
-    attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-    attn_output = self.o_proj(attn_output)
-    return attn_output, attn_weights
-
-
-def _fused_rmsnorm_forward(self, hidden_states):
-    """Replacement for ``Qwen2MoeRMSNorm.forward`` that runs one fused Metal
-    kernel instead of (.to(fp32) + pow + mean + add + rsqrt + mul + mul + .to(dtype)).
-
-    Under torch.compile we keep the Python path so dynamo+inductor can trace
-    the constituent ops (AOTAutograd's FakeTensor analysis can't shape-check
-    our custom op without a registered abstract impl). Eager path uses the
-    fused kernel.
-    """
-    op = self._rmsnorm_op
-    if (op is None
-            or torch.compiler.is_compiling()
-            or hidden_states.device.type != "mps"
-            or hidden_states.dtype != torch.float32):
-        # Original Qwen2MoeRMSNorm body.
-        input_dtype = hidden_states.dtype
-        h = hidden_states.to(torch.float32)
-        var = h.pow(2).mean(-1, keepdim=True)
-        h = h * torch.rsqrt(var + self.variance_epsilon)
-        return self.weight * h.to(input_dtype)
-    out = torch.empty_like(hidden_states)
-    w = self._rmsnorm_weight
-    op(hidden_states, w, out, float(self.variance_epsilon))
-    return out
-
-
-def apply_fused_rmsnorm(model: nn.Module) -> int:
-    """Patch every RMSNorm-shaped module to use a single Metal kernel.
-
-    Recognises any module that exposes a ``weight`` Parameter and a
-    ``variance_epsilon`` float — covers Qwen2MoeRMSNorm and the other
-    Llama-family RMSNorms transformers ships under different class names.
-    """
-    metal = _ensure_metal_kernels()
-    if metal is None:
-        return 0
-    ops = metal._ops
-    if not hasattr(ops, "rmsnorm_f32"):
-        return 0
-    op = ops.rmsnorm_f32
-    op = getattr(op, "default", op)
-
-    import types as _types
-    patched = 0
-    for mod in model.modules():
-        cls_name = mod.__class__.__name__
-        if "RMSNorm" not in cls_name:
-            continue
-        if not (hasattr(mod, "weight") and hasattr(mod, "variance_epsilon")):
-            continue
-        if getattr(mod, "_rmsnorm_op", None) is op:
-            continue
-        mod._rmsnorm_op = op
-        # Strip tensor subclass off the weight — GGUFQuantizedTensor wraps the
-        # raw bytes at load time and its __torch_dispatch__ doesn't know about
-        # our custom ops, which raises a "Multiple dispatch failed" error.
-        # ``torch.as_tensor`` on a Parameter produces a plain Tensor that
-        # shares storage, so weight updates (if any) stay visible.
-        mod._rmsnorm_weight = torch.as_tensor(mod.weight.data)
-        mod.forward = _types.MethodType(_fused_rmsnorm_forward, mod)
-        patched += 1
-    return patched
-
-
-_FUSED_MV_FMT_CODE_ALL = {
-    "q4_0":   0, "q5_0":   1, "q5_1":   2, "q8_0":   3,
-    "q4_K":   4, "q5_K":   5, "q6_K":   6,
-    "iq4_nl": 7, "iq4_xs": 8,
-}
-
-
-def _fused_mlp_forward(self, hidden_states):
-    """Replacement for ``Qwen2MoeMLP.forward`` (shared_expert path) that
-    runs gate + up + SwiGLU + down in one ``gguf_mlp_silu_f32`` torch op
-    dispatch.
-
-    Falls through to the original Python path under dynamo trace, when
-    input shape doesn't match the pre-allocated scratch, or when one of
-    the projections isn't a GgufLinear with a kMvTable-supported fmt.
-    """
-    op = self._mlp_silu_op
-    last_dim = hidden_states.shape[-1]
-    flat_n = hidden_states.numel() // last_dim
-    if (op is None
-            or torch.compiler.is_compiling()
-            or flat_n != 1
-            or hidden_states.device.type != "mps"):
-        # Original Qwen2MoeMLP forward.
-        gate = self.gate_proj(hidden_states)
-        up = self.up_proj(hidden_states)
-        return self.down_proj(self.act_fn(gate) * up)
-
-    x = hidden_states.reshape(-1).contiguous()
-    if x.dtype != torch.float32:
-        x = x.to(torch.float32)
-    op(self.gate_proj.qweight, self.up_proj.qweight, self.down_proj.qweight,
-       x, self._mlp_gate_buf, self._mlp_up_buf, self._mlp_out_buf,
-       *self._mlp_fmt_codes)
-    return self._mlp_out_buf.view(*hidden_states.shape[:-1], -1)
-
-
-def apply_fused_mlp(model: nn.Module) -> int:
-    """Patch every ``Qwen2MoeMLP``-shaped module (gate / up / down all
-    GgufLinear with a supported fmt) to run the gate+up+silu+down chain
-    via one ``gguf_mlp_silu_f32`` op call instead of 3 separate
-    GgufLinear dispatches.
-
-    Recognises any module that exposes ``gate_proj`` / ``up_proj`` /
-    ``down_proj`` attributes that are all GgufLinear instances. Targets
-    the SparseMoeBlock's ``shared_expert`` on Qwen2-MoE / Qwen3-MoE.
-
-    Returns the number of MLP modules patched. Idempotent.
-    """
-    metal = _ensure_metal_kernels()
-    if metal is None:
-        return 0
-    ops = metal._ops
-    if not hasattr(ops, "gguf_mlp_silu_f32"):
-        return 0
-    op = ops.gguf_mlp_silu_f32
-    op = getattr(op, "default", op)
-
-    import types as _types
-    patched = 0
-    for mod in model.modules():
-        if not (hasattr(mod, "gate_proj") and hasattr(mod, "up_proj")
-                and hasattr(mod, "down_proj") and hasattr(mod, "act_fn")):
-            continue
-        g, u, d = mod.gate_proj, mod.up_proj, mod.down_proj
-        if not (isinstance(g, GgufLinear) and isinstance(u, GgufLinear)
-                and isinstance(d, GgufLinear)):
-            continue
-        try:
-            codes = [_FUSED_MV_FMT_CODE_ALL[g._fmt],
-                     _FUSED_MV_FMT_CODE_ALL[u._fmt],
-                     _FUSED_MV_FMT_CODE_ALL[d._fmt]]
-        except KeyError:
-            continue
-        if getattr(mod, "_mlp_silu_op", None) is op:
-            continue
-        # Pre-allocate scratch + output buffers as non-persistent buffers.
-        dev = g.qweight.device
-        I = g.out_features
-        H = d.out_features
-        for name in ("_mlp_gate_buf", "_mlp_up_buf", "_mlp_out_buf"):
-            if name in mod._buffers:
-                del mod._buffers[name]
-        mod.register_buffer("_mlp_gate_buf", torch.empty(I, dtype=torch.float32, device=dev), persistent=False)
-        mod.register_buffer("_mlp_up_buf",   torch.empty(I, dtype=torch.float32, device=dev), persistent=False)
-        mod.register_buffer("_mlp_out_buf",  torch.empty(H, dtype=torch.float32, device=dev), persistent=False)
-        mod._mlp_silu_op = op
-        mod._mlp_fmt_codes = codes
-        mod._orig_mlp_forward = mod.forward
-        mod.forward = _types.MethodType(_fused_mlp_forward, mod)
-        patched += 1
-    return patched
-
-
-def apply_fused_kv_update(model: nn.Module) -> int:
-    """Patch each ``StaticLayer.update`` on the model's KV cache so decode
-    (kv_length=1) writes both K and V via one ``kv_update_decode_f32``
-    custom-op call instead of the Python arange + add + 2× index_put_ chain.
-
-    Returns the number of layers patched. Only takes effect after the cache
-    is created and assigned to the model — typical call order:
-        m = AutoModelForCausalLM.from_pretrained(...).to('mps').eval()
-        m.generation_config.cache_implementation = 'static'
-        apply_fused_qkv(m)
-        # cache built lazily by generate() — patch happens via a deeper hook
-        # registered globally on the StaticLayer class.
-    """
-    metal = _ensure_metal_kernels()
-    if metal is None:
-        return 0
-    ops = metal._ops
-    if not hasattr(ops, "kv_update_decode_f32"):
-        return 0
-    kv_op = getattr(ops, "kv_update_decode_f32")
-    kv_op = getattr(kv_op, "default", kv_op)
-
-    # Patch the StaticLayer class globally so any StaticCache instance that
-    # generate() creates after this call uses the fast path. We keep the
-    # original implementation as a fallback for shapes other than decode.
-    from ..cache_utils import StaticLayer
-    if getattr(StaticLayer, "_gguf_kv_update_patched", False):
-        return 0  # already patched
-
-    _orig_update = StaticLayer.update
-
-    def fast_update(self, key_states, value_states, *args, **kwargs):
-        if not self.is_initialized:
-            self.lazy_initialization(key_states, value_states)
-        kv_length = key_states.shape[-2]
-        # Decode fast path: one Metal kernel call, no arange / index_put_.
-        if (kv_length == 1
-                and key_states.device.type == "mps"
-                and key_states.dtype == torch.float32):
-            # cumulative_length is the current cache fill (== next write index).
-            # Cast to int32 once — the kernel reads a scalar int.
-            pos = self.cumulative_length
-            if pos.dtype != torch.int32:
-                pos32 = pos.to(torch.int32)
-            else:
-                pos32 = pos
-            kv_op(self.keys, self.values, key_states, value_states, pos32)
-            self.cumulative_length.add_(1)
-            return self.keys, self.values
-        return _orig_update(self, key_states, value_states, *args, **kwargs)
-
-    StaticLayer.update = fast_update
-    StaticLayer._gguf_kv_update_patched = True
-    return 1
-
-
-def apply_fused_qkv(model: nn.Module) -> int:
-    """Patch every attention module whose q/k/v are all :class:`GgufLinear`
-    to run the multi-matvec op in one torch dispatch during decode.
-
-    Returns the number of attention modules patched. Idempotent.
-    """
-    metal = _ensure_metal_kernels()
-    if metal is None:
-        return 0
-    ops = metal._ops
-    if not hasattr(ops, "gguf_mul_mat_vec_multi_f32"):
-        return 0
-    multi_op = ops.gguf_mul_mat_vec_multi_f32
-    multi_op = getattr(multi_op, "default", multi_op)
-
-    import types as _types
-    patched = 0
-    for name, mod in list(model.named_modules()):
-        # Look for the q_proj/k_proj/v_proj/o_proj signature.
-        if not (hasattr(mod, "q_proj") and hasattr(mod, "k_proj")
-                and hasattr(mod, "v_proj") and hasattr(mod, "o_proj")):
-            continue
-        q, k, v = mod.q_proj, mod.k_proj, mod.v_proj
-        if not (isinstance(q, GgufLinear) and isinstance(k, GgufLinear)
-                and isinstance(v, GgufLinear)):
-            continue
-        # All three projections must share a supported kMvTable fmt code.
-        try:
-            codes = [_FUSED_MV_FMT_CODE[q._fmt], _FUSED_MV_FMT_CODE[k._fmt],
-                     _FUSED_MV_FMT_CODE[v._fmt]]
-        except KeyError:
-            continue
-
-        if getattr(mod, "_qkv_multi_op", None) is multi_op:
-            continue  # already patched
-
-        mod._qkv_multi_op = multi_op
-        mod._qkv_fmt_codes = codes
-        mod._orig_forward = mod.forward
-        mod.forward = _types.MethodType(_fused_qkv_forward, mod)
-        patched += 1
-    return patched
-
-
 def fast_greedy_decode(model, input_ids: "torch.Tensor", max_new_tokens: int) -> "torch.Tensor":
     """Tight greedy-decoding loop that matches llama.cpp throughput on Apple Silicon.
 
@@ -1454,22 +988,4 @@ def setup_for_compile(model, *, mode: str = "reduce-overhead") -> None:
     _dynamo.config.allow_unspec_int_on_nn_module = True
 
     model.generation_config.cache_implementation = "static"
-    # ``apply_fused_qkv`` (multi-matvec QKV) is available but NOT wired in by
-    # default: it forces Qwen2-MoE attention's q/k/v projections onto our
-    # custom op, which breaks the continuous-batching paged-KV path and
-    # doesn't measurably help under torch.compile (dynamo already groups the
-    # three independent matvecs in the same MPS encoder). Opt in via
-    # ``apply_fused_qkv(model)`` if you want the explicit 3 → 1 dispatch on
-    # the eager path.
-    # Decode-time KV cache write in one Metal kernel: collapses
-    # arange + add + 2× index_put_ into one dispatch. Class-level patch on
-    # StaticLayer.update — idempotent.
-    apply_fused_kv_update(model)
-    # MLP fusion (``apply_fused_mlp``) is available but NOT wired in: under
-    # torch.compile it regresses by ~6 tok/s because dynamo can no longer
-    # optimise across the now-opaque custom op. Opt-in for callers running
-    # without compile where they want fewer dispatcher round-trips.
-    # Fused RMSNorm kernel kept available (see ``apply_fused_rmsnorm``) but
-    # *not* wired in by default — microbench shows MPSGraph already auto-fuses
-    # the Python RMSNorm into ~1-2 kernels, so the custom kernel is a wash.
     model.forward = _torch.compile(model.forward, mode=mode, dynamic=False)

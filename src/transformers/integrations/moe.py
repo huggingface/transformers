@@ -513,75 +513,19 @@ def gguf_bmm_experts_forward(
     device = hidden_states.device
     S = num_tokens * num_top_k
 
-    # ---- gguf_moe_decode_f32 fast path -------------------------------------
-    # Single torch op call absorbs the entire MoE block. Skipped under dynamo
-    # tracing so compile still sees the constituent ops. Scratch buffers are
-    # pre-allocated at swap time (``_prepare_id_kernel_refs``) as non-
-    # persistent buffers — ``.to(device)`` moves them. Buffer size assumes
-    # decode shape (S = top_k, num_tokens = 1); larger shapes (prefill) fall
-    # through to the Python wrapper below.
-    decode_op = getattr(self, "_moe_decode_op", None)
-    decode_codes = getattr(self, "_moe_decode_fmt_codes", None)
-    if (decode_op is not None and decode_codes is not None
-            and not torch.compiler.is_compiling()
-            and getattr(self, "_scratch_S", None) == S
-            and getattr(self, "_scratch_T", None) == num_tokens):
-        hidden = hidden_states if hidden_states.dtype == torch.float32 else hidden_states.to(torch.float32)
-        decode_op(
-            hidden, top_k_index, top_k_weights,
-            self.gate_proj_q.view(-1), self.up_proj_q.view(-1), self.down_proj_q.view(-1),
-            self._gate_buf, self._up_buf, self._pair_out,
-            self._decode_out_buf,
-            *decode_codes,
-        )
-        out_buf = self._decode_out_buf
-        return out_buf if out_buf.dtype == hidden_states.dtype else out_buf.to(hidden_states.dtype)
-
-    # Cached at swap time by ``_prepare_id_kernel_refs``. The fused op
-    # (``_moe_silu_op``) handles all three mul_mat_ids + the SwiGLU in one
-    # torch-op call when available; the per-projection ops are kept as a
-    # fallback for builds that only ship the individual kernels.
-    fused_op = getattr(self, "_moe_silu_op", None)
-    fused_fmt_codes = getattr(self, "_moe_silu_fmt_codes", None)
     op_gate = getattr(self, "_id_op_gate", None)
     op_up   = getattr(self, "_id_op_up",   None)
     op_down = getattr(self, "_id_op_down", None)
-    use_fused = fused_op is not None and fused_fmt_codes is not None
     use_id_kernel = op_gate is not None and op_up is not None and op_down is not None
 
-    # Per-decode-step Python-overhead trims (each torch.Tensor.* op below
-    # is a ~30 µs ATen dispatch in eager — 24 layers × call → adds up fast):
-    #   - skip `.to(fp32)` when already fp32 (model loaded in fp32 — typical)
-    #   - skip `.contiguous()` when already contiguous
-    #   - `top_k_index` is already int (often int64); convert directly to int32
-    selected = hidden_states.repeat_interleave(num_top_k, dim=0)  # (S, H)
-    if selected.dtype != torch.float32:
-        selected = selected.to(torch.float32)
-    if not selected.is_contiguous():
-        selected = selected.contiguous()
-    # expert_ids_long was reshape+clamp+to(long)+to(int32). clamp is only there
-    # for routers that emit OOB indices — skip when guaranteed in-range (already
-    # an int and < num_experts). Skip to(long) entirely; we only need int32.
-    if top_k_index.dtype == torch.int32:
-        ids32 = top_k_index.reshape(-1)
-    else:
-        ids32 = top_k_index.reshape(-1).to(torch.int32)
-    expert_ids_long = ids32  # kept for fallback branch's _gather_dequant call
-    if top_k_weights.dtype != torch.float32:
-        sample_weights = top_k_weights.reshape(-1).to(torch.float32)
-    else:
-        sample_weights = top_k_weights.reshape(-1)
+    selected = hidden_states.repeat_interleave(num_top_k, dim=0).to(torch.float32).contiguous()
+    ids32 = top_k_index.reshape(-1).to(torch.int32)
+    sample_weights = top_k_weights.reshape(-1).to(torch.float32)
 
-    # `view(-1)` is a strides-only no-copy op (~5 µs dispatch). We don't
-    # cache it because cached views don't follow ``model.to(device)``.
-    gate_qw = self.gate_proj_q.view(-1)
-    up_qw   = self.up_proj_q.view(-1)
-    down_qw = self.down_proj_q.view(-1)
-
-    # Pre-allocated scratch buffers (decode shape) — see
-    # ``_prepare_id_kernel_refs`` for the registration. For non-decode
-    # shapes (prefill with num_tokens > 1) we allocate on demand without
-    # mutating module state so dynamo doesn't trip a recompile.
+    # Pre-allocated scratch buffers for the decode shape are set at swap time
+    # (see ``_prepare_id_kernel_refs``). Larger shapes (prefill, batched) fall
+    # back to per-call ``torch.empty`` — does NOT mutate any module attribute,
+    # so dynamo doesn't re-trace on the second call.
     if (getattr(self, "_scratch_S", None) == S
             and getattr(self, "_scratch_T", None) == num_tokens):
         gate_buf, up_buf, out = self._gate_buf, self._up_buf, self._pair_out
@@ -590,26 +534,26 @@ def gguf_bmm_experts_forward(
         up_buf   = torch.empty(S, I, dtype=torch.float32, device=device)
         out      = torch.empty(S, H, dtype=torch.float32, device=device)
 
-    if use_fused:
-        fused_op(gate_qw, up_qw, down_qw, selected, ids32,
-                 gate_buf, up_buf, out, *fused_fmt_codes)
-    elif use_id_kernel:
+    if use_id_kernel:
+        gate_qw = self.gate_proj_q.view(-1)
+        up_qw   = self.up_proj_q.view(-1)
+        down_qw = self.down_proj_q.view(-1)
         op_gate(gate_qw, selected, ids32, gate_buf)
         op_up  (up_qw,   selected, ids32, up_buf)
         inter = (self.act_fn(gate_buf) * up_buf).contiguous()
         op_down(down_qw, inter, ids32, out)
     else:
-        # Fallback: per-projection batched dequant + bmm. `_gather_dequant`
+        # Fallback: per-projection batched dequant + bmm. ``_gather_dequant``
         # uses ``.index_select(0, ids)`` which requires int64.
-        expert_ids_long = ids32.to(torch.long) if ids32.dtype != torch.long else ids32
-        gate_w = self._gather_dequant(self.gate_proj_q, expert_ids_long,
+        ids_long = ids32.to(torch.long)
+        gate_w = self._gather_dequant(self.gate_proj_q, ids_long,
                                       self.gate_quant, self._gate_fmt, I, H)
-        up_w   = self._gather_dequant(self.up_proj_q, expert_ids_long,
+        up_w   = self._gather_dequant(self.up_proj_q, ids_long,
                                       self.up_quant, self._up_fmt, I, H)
         gate = torch.bmm(selected.unsqueeze(1), gate_w.transpose(-1, -2)).squeeze(1)
         up   = torch.bmm(selected.unsqueeze(1),   up_w.transpose(-1, -2)).squeeze(1)
         inter = (self.act_fn(gate) * up).contiguous()
-        down_w = self._gather_dequant(self.down_proj_q, expert_ids_long,
+        down_w = self._gather_dequant(self.down_proj_q, ids_long,
                                       self.down_quant, self._down_fmt, H, I)
         out = torch.bmm(inter.unsqueeze(1), down_w.transpose(-1, -2)).squeeze(1)
 
