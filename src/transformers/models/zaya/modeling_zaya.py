@@ -462,7 +462,7 @@ class ZayaDecoderLayer(GradientCheckpointingLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states = self.input_layernorm(residual.to(dtype=self.input_layernorm.weight.dtype))
 
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
@@ -473,7 +473,7 @@ class ZayaDecoderLayer(GradientCheckpointingLayer):
         )
 
         residual = self.post_attention_residual_scale(hidden_states, residual)
-        hidden_states = self.post_attention_layernorm(residual)
+        hidden_states = self.post_attention_layernorm(residual.to(dtype=self.post_attention_layernorm.weight.dtype))
 
         hidden_states, prev_router_hidden_states = self.mlp(
             hidden_states,
@@ -494,12 +494,10 @@ class ZayaResidualScaling(nn.Module):
         self.residual_bias = nn.Parameter(torch.zeros(hidden_size))
 
     def forward(self, hidden_states: torch.Tensor, residual: torch.Tensor):
-        output_dtype = hidden_states.dtype
+        # Keep the residual stream in fp32 to match the original ZAYA `residual_in_fp32` path.
         hidden_states = (hidden_states + self.hidden_states_bias) * self.hidden_states_scale
-        # Matches the original ZAYA `residual_in_fp32` path.
-        residual = residual.to(torch.float32)
         residual = (residual + self.residual_bias) * self.residual_scale
-        return (hidden_states + residual).to(output_dtype)
+        return hidden_states + residual
 
 
 class ZayaRouterMLP(nn.Module):
@@ -770,7 +768,10 @@ class ZayaModel(ZayaPreTrainedModel):
             for layer_type in set(self.config.layer_types)
         }
 
-        hidden_states = (hidden_states + self.input_hidden_states_bias) * self.input_hidden_states_scale
+        # Keep the residual stream in fp32 to match the original ZAYA `residual_in_fp32` path.
+        hidden_states = ((hidden_states + self.input_hidden_states_bias) * self.input_hidden_states_scale).to(
+            torch.float32
+        )
 
         prev_router_hidden_states = None
 
@@ -785,7 +786,7 @@ class ZayaModel(ZayaPreTrainedModel):
                 **kwargs,
             )
 
-        hidden_states = self.final_norm(hidden_states)
+        hidden_states = self.final_norm(hidden_states.to(dtype=self.final_norm.weight.dtype))
 
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
