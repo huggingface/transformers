@@ -32,10 +32,10 @@ from transformers.utils import is_torch_available
 
 if is_torch_available():
     import torch
+
     from transformers.integrations.gguf_linear import (
         GgufLinear,
         gguf_linear_supports,
-        replace_with_gguf_linear,
     )
 
 
@@ -80,9 +80,11 @@ class GgufLinearForwardTest(unittest.TestCase):
         layer.qweight.copy_(torch.frombuffer(bytearray(qb), dtype=torch.uint8))
 
         # Reference: dequant the same bytes, then run torch's nn.linear
-        W_ref = dequantize_gguf_tensor(
-            layer.qweight, getattr(gguf.GGMLQuantizationType, quant_type), device="cpu"
-        ).reshape(M, K).to(torch.float32)
+        W_ref = (
+            dequantize_gguf_tensor(layer.qweight, getattr(gguf.GGMLQuantizationType, quant_type), device="cpu")
+            .reshape(M, K)
+            .to(torch.float32)
+        )
 
         torch.manual_seed(0)
         for B in batch_sizes:
@@ -118,14 +120,24 @@ class GgufLinearSwapTest(unittest.TestCase):
         qb1 = _random_q4_K_bytes(H, K, seed=1)
         qb2 = _random_q4_K_bytes(M, H, seed=2)
 
-        W1_ref = dequantize_gguf_tensor(
-            torch.frombuffer(bytearray(qb1), dtype=torch.uint8),
-            gguf.GGMLQuantizationType.Q4_K, device="cpu",
-        ).reshape(H, K).to(torch.float32)
-        W2_ref = dequantize_gguf_tensor(
-            torch.frombuffer(bytearray(qb2), dtype=torch.uint8),
-            gguf.GGMLQuantizationType.Q4_K, device="cpu",
-        ).reshape(M, H).to(torch.float32)
+        W1_ref = (
+            dequantize_gguf_tensor(
+                torch.frombuffer(bytearray(qb1), dtype=torch.uint8),
+                gguf.GGMLQuantizationType.Q4_K,
+                device="cpu",
+            )
+            .reshape(H, K)
+            .to(torch.float32)
+        )
+        W2_ref = (
+            dequantize_gguf_tensor(
+                torch.frombuffer(bytearray(qb2), dtype=torch.uint8),
+                gguf.GGMLQuantizationType.Q4_K,
+                device="cpu",
+            )
+            .reshape(M, H)
+            .to(torch.float32)
+        )
 
         baseline = nn.Sequential(nn.Linear(K, H, bias=False), nn.ReLU(), nn.Linear(H, M, bias=False))
         baseline[0].weight.data.copy_(W1_ref)
@@ -331,15 +343,24 @@ class GgufQwen2MoeExpertsSerializationTest(unittest.TestCase):
 def _build_synthetic_llama_gguf(path, *, H=64, I=128, L=2, V=256, num_heads=2, seed=0):
     """Write a tiny well-formed Q4_0 llama GGUF file for round-trip tests."""
     import gguf
-    from gguf import GGUFWriter, GGMLQuantizationType as Q
+    from gguf import GGMLQuantizationType as Q
+    from gguf import GGUFWriter
 
     rng = np.random.default_rng(seed)
     w = GGUFWriter(path, arch="llama")
-    w.add_block_count(L); w.add_embedding_length(H); w.add_feed_forward_length(I)
-    w.add_head_count(num_heads); w.add_head_count_kv(num_heads); w.add_context_length(64)
-    w.add_rope_dimension_count(H // num_heads); w.add_layer_norm_rms_eps(1e-6); w.add_vocab_size(V)
+    w.add_block_count(L)
+    w.add_embedding_length(H)
+    w.add_feed_forward_length(I)
+    w.add_head_count(num_heads)
+    w.add_head_count_kv(num_heads)
+    w.add_context_length(64)
+    w.add_rope_dimension_count(H // num_heads)
+    w.add_layer_norm_rms_eps(1e-6)
+    w.add_vocab_size(V)
     w.add_tokenizer_model("gpt2")
-    w.add_token_list(["<unk>"] * V); w.add_token_types([1] * V); w.add_token_merges([])
+    w.add_token_list(["<unk>"] * V)
+    w.add_token_types([1] * V)
+    w.add_token_merges([])
 
     def add_q40(name, shape):
         a = rng.standard_normal(shape).astype(np.float32) * 0.1
@@ -359,9 +380,12 @@ def _build_synthetic_llama_gguf(path, *, H=64, I=128, L=2, V=256, num_heads=2, s
             add_q40(f"blk.{i}.{kind}.weight", (I, H))
         add_q40(f"blk.{i}.ffn_down.weight", (H, I))
         add_f32(f"blk.{i}.attn_norm.weight", (H,))
-        add_f32(f"blk.{i}.ffn_norm.weight",  (H,))
+        add_f32(f"blk.{i}.ffn_norm.weight", (H,))
 
-    w.write_header_to_file(); w.write_kv_data_to_file(); w.write_tensors_to_file(); w.close()
+    w.write_header_to_file()
+    w.write_kv_data_to_file()
+    w.write_tensors_to_file()
+    w.close()
     return path
 
 
@@ -382,6 +406,7 @@ class GgufSaveRoundtripTest(unittest.TestCase):
 
     def test_byte_preserved_roundtrip(self):
         import tempfile
+
         from transformers import AutoModelForCausalLM
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -401,7 +426,9 @@ class GgufSaveRoundtripTest(unittest.TestCase):
         """Override the F32 norms to F16 on save — verifies the policy DSL routes
         the right tensors and the file size shrinks accordingly."""
         import tempfile
+
         import gguf
+
         from transformers import AutoModelForCausalLM
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -413,8 +440,11 @@ class GgufSaveRoundtripTest(unittest.TestCase):
             r = gguf.GGUFReader(rt)
             for t in r.tensors:
                 if "_norm" in t.name:
-                    self.assertEqual(t.tensor_type, gguf.GGMLQuantizationType.F16,
-                                     msg=f"{t.name}: expected F16, got {t.tensor_type}")
+                    self.assertEqual(
+                        t.tensor_type,
+                        gguf.GGMLQuantizationType.F16,
+                        msg=f"{t.name}: expected F16, got {t.tensor_type}",
+                    )
 
             # Forward equivalence within F32→F16 noise.
             m2 = AutoModelForCausalLM.from_pretrained(tmp, gguf_file="rt-f16.gguf", gguf_linear=True)
@@ -426,8 +456,9 @@ class GgufSaveRoundtripTest(unittest.TestCase):
     def test_save_gguf_handles_missing_quantizer(self):
         """``save_pretrained_gguf`` errors clearly when given a model that
         wasn't loaded from a .gguf (no hf_to_gguf map, no source rename rules)."""
-        from transformers.integrations.gguf_save import save_pretrained_gguf
         import tempfile
+
+        from transformers.integrations.gguf_save import save_pretrained_gguf
 
         class _Stub:
             config = type("C", (), {"model_type": "definitely_not_a_real_arch"})()

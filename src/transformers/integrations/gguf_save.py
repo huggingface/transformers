@@ -25,11 +25,9 @@ output bytes (gate/up = Q4_K, down = Q8_0 or Q5_0 — preserved verbatim).
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import torch
-
-from .gguf_dequant import GGUFQuantizedTensor
 
 
 if TYPE_CHECKING:
@@ -41,7 +39,7 @@ if TYPE_CHECKING:
 _KEEP = "_keep_"
 
 
-def _resolve_quant(name: str, original_quant: Optional[str], policy: dict) -> str:
+def _resolve_quant(name: str, original_quant: str | None, policy: dict) -> str:
     """Pick the target GGUF quant for one tensor.
 
     Lookup order: longest matching pattern key in ``policy`` (regex match against
@@ -111,7 +109,7 @@ def _collect_gguf_module_bytes(
         elif isinstance(module, GgufQwen2MoeExperts):
             for proj, buf_name, bytes_per, quant in (
                 ("gate", "gate_proj_q", module._gate_bytes_per, module.gate_quant),
-                ("up",   "up_proj_q",   module._up_bytes_per,   module.up_quant),
+                ("up", "up_proj_q", module._up_bytes_per, module.up_quant),
                 ("down", "down_proj_q", module._down_bytes_per, module.down_quant),
             ):
                 buf = getattr(module, buf_name).detach().cpu().numpy()
@@ -160,17 +158,20 @@ def _reverse_rename_map(model, quantizer=None) -> dict[str, str]:
         copied.quantization_operation = None
         safe.append(copied)
     reverses = [t.reverse_transform() for t in safe]
-    inv_renamings  = [t for t in reverses if isinstance(t, WeightRenaming) and not isinstance(t, WeightConverter)]
+    inv_renamings = [t for t in reverses if isinstance(t, WeightRenaming) and not isinstance(t, WeightConverter)]
     inv_converters = [t for t in reverses if isinstance(t, WeightConverter)]
 
     mapping: dict[str, str] = {}
     prefix = getattr(model, "base_model_prefix", "") or ""
-    meta_state_dict = {k: None for k in model.state_dict().keys()}
+    meta_state_dict = dict.fromkeys(model.state_dict().keys())
     for hf_name in meta_state_dict:
         try:
             gguf_name, _ = rename_source_key(
-                hf_name, inv_renamings, inv_converters,
-                prefix=prefix, meta_state_dict=meta_state_dict,
+                hf_name,
+                inv_renamings,
+                inv_converters,
+                prefix=prefix,
+                meta_state_dict=meta_state_dict,
             )
         except Exception:
             continue
@@ -179,10 +180,10 @@ def _reverse_rename_map(model, quantizer=None) -> dict[str, str]:
 
 
 def save_pretrained_gguf(
-    model: "PreTrainedModel",
+    model: PreTrainedModel,
     path: str,
     *,
-    quant_config: Optional[dict] = None,
+    quant_config: dict | None = None,
     quantizer=None,
 ) -> str:
     """Write ``model`` to ``path`` as a GGUF file.
@@ -217,7 +218,6 @@ def save_pretrained_gguf(
 
     hf_to_gguf = _reverse_rename_map(model, quantizer)
     module_bytes, absorbed_state_keys = _collect_gguf_module_bytes(model)
-    gguf_to_hf = {g: h for h, g in hf_to_gguf.items()}
 
     # Per-tensor original quant types from the quantizer's loaded GGUF tensors.
     # Falls back to the value stashed on the live GgufLinear / GgufQwen2MoeExperts.
@@ -246,7 +246,6 @@ def save_pretrained_gguf(
                 continue
             try:
                 if isinstance(val, list):
-                    sub = GGUFValueType(vtype) if isinstance(vtype, int) else None
                     writer.add_array(key, val)
                 else:
                     writer.add_key_value(key, val, GGUFValueType(vtype))
@@ -292,7 +291,8 @@ def save_pretrained_gguf(
             row_bytes = raw_u8.size // max(M, 1)
             arr = raw_u8.reshape(M, row_bytes) if row_bytes else raw_u8
             writer.add_tensor(
-                gguf_name, arr,
+                gguf_name,
+                arr,
                 raw_dtype=getattr(gguf.GGMLQuantizationType, qt_str),
             )
 
@@ -314,7 +314,8 @@ def save_pretrained_gguf(
         row_bytes = arr.size // M
         arr = arr.reshape(M, row_bytes)
         writer.add_tensor(
-            gguf_name, arr,
+            gguf_name,
+            arr,
             raw_dtype=getattr(gguf.GGMLQuantizationType, qt_str),
         )
 
@@ -335,10 +336,10 @@ def save_pretrained_gguf(
         # F32 / F16 / BF16 don't go through gguf.quants.quantize — they map to
         # GGML float dtypes directly.
         if target in ("F32", "F16", "BF16"):
-            np_dtype = {"F32": np.float32, "F16": np.float16, "BF16": "bfloat16"}[target]
             cpu = hf_tensor.detach().to(torch.float32 if target == "F32" else torch.float16).cpu().numpy()
             writer.add_tensor(
-                gguf_name, cpu,
+                gguf_name,
+                cpu,
                 raw_dtype=getattr(gguf.GGMLQuantizationType, target),
             )
             continue
@@ -355,7 +356,8 @@ def save_pretrained_gguf(
                 "either pick a Q4_0/Q5_0/Q5_1/Q8_0/F16 target or leave it at F32."
             ) from e
         writer.add_tensor(
-            gguf_name, packed,
+            gguf_name,
+            packed,
             raw_dtype=getattr(gguf.GGMLQuantizationType, target),
         )
 

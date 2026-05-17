@@ -126,7 +126,7 @@ class GGUFQuantizer(HfQuantizer):
 
         # Always compute the hf→gguf map (needed by save_pretrained_gguf even
         # when ``linear_mode=False``).
-        for gguf_name, _tensor in self.gguf_tensors.items():
+        for gguf_name in self.gguf_tensors:
             try:
                 hf_name, _ = rename_source_key(
                     gguf_name,

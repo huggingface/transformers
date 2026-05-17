@@ -29,14 +29,14 @@ CPU/CUDA: no fast path today; falls back to ``dequantize_gguf_tensor`` +
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import torch
 import torch.nn as nn
 
 
 if TYPE_CHECKING:
-    import gguf
+    pass
 
 
 # ---------------------------------------------------------------------------
@@ -68,6 +68,7 @@ def _load_kernels_direct(repo: str):
     """
     import torch
     from huggingface_hub import snapshot_download
+
     try:
         from kernels.utils import build_variant
     except Exception:
@@ -78,7 +79,9 @@ def _load_kernels_direct(repo: str):
     variant = build_variant() if callable(build_variant) else build_variant
     # `**` to grab the nested package files the kernels package itself misses.
     repo_dir = snapshot_download(repo, allow_patterns=[f"build/{variant}/**"])
-    import os, re
+    import os
+    import re
+
     var_dir = os.path.join(repo_dir, "build", variant)
     # The canonical .so name lives in ``_ops.py``: ``from . import _<ns>``.
     # Read it to pin the right .so when several builds are shipped side-by-side.
@@ -112,8 +115,8 @@ def _load_kernels_local_so(so_path: str):
     """Load a locally-built kernel .so directly. ``TRANSFORMERS_GGUF_METAL_KERNELS_SO``
     points at a path like ``.../result-bundle/torchXY-metal-aarch64-darwin/_gguf_dequant_*.abi3.so``.
     Used for local development without round-tripping through the Hub."""
-    import re
     import torch
+
     torch.ops.load_library(so_path)
     fname = os.path.basename(so_path).split(".")[0]  # `_gguf_dequant_<rev>`
     # `torch.ops.load_library` registers ops under the TORCH_EXTENSION_NAME the
@@ -142,11 +145,12 @@ def _ensure_metal_kernels():
         try:
             _GGUF_METAL_KERNELS = _load_kernels_local_so(local_so)
             return _GGUF_METAL_KERNELS
-        except Exception:
-            pass  # fall through to Hub path
+        except Exception:  # noqa: S110 — fall through to Hub path
+            pass
     repo = os.environ.get("TRANSFORMERS_GGUF_METAL_KERNELS_REPO", "ArthurZ/gguf-kernels")
     try:
         from kernels import get_kernel  # type: ignore[import-not-found]
+
         _GGUF_METAL_KERNELS = get_kernel(repo)
     except Exception:
         try:
@@ -159,13 +163,13 @@ def _ensure_metal_kernels():
 # Per quant type: (block bytes, block elems). Format names match the suffix of
 # the ``mul_mat_<fmt>_f32`` and ``mul_mat_vec_<fmt>_f32`` ops in the kernel.
 _QUANT_INFO: dict[str, tuple[int, int]] = {
-    "Q4_0":   (18, 32),
-    "Q5_0":   (22, 32),
-    "Q5_1":   (24, 32),
-    "Q8_0":   (34, 32),
-    "Q4_K":   (144, 256),
-    "Q5_K":   (176, 256),
-    "Q6_K":   (210, 256),
+    "Q4_0": (18, 32),
+    "Q5_0": (22, 32),
+    "Q5_1": (24, 32),
+    "Q8_0": (34, 32),
+    "Q4_K": (144, 256),
+    "Q5_K": (176, 256),
+    "Q6_K": (210, 256),
     "IQ4_NL": (18, 32),
     "IQ4_XS": (136, 256),
 }
@@ -213,18 +217,14 @@ class GgufLinear(nn.Module):
         out_features: int,
         quant_type: str = "Q4_K",
         bias: bool = False,
-        device: Optional[torch.device | str] = None,
+        device: torch.device | str | None = None,
     ):
         super().__init__()
         if quant_type not in _QUANT_INFO:
-            raise NotImplementedError(
-                f"GgufLinear only supports {sorted(_QUANT_INFO)} today, got {quant_type}"
-            )
+            raise NotImplementedError(f"GgufLinear only supports {sorted(_QUANT_INFO)} today, got {quant_type}")
         block_bytes, block_elems = _QUANT_INFO[quant_type]
         if in_features % block_elems != 0:
-            raise ValueError(
-                f"in_features must be a multiple of {block_elems} for {quant_type}, got {in_features}"
-            )
+            raise ValueError(f"in_features must be a multiple of {block_elems} for {quant_type}, got {in_features}")
 
         self.in_features = in_features
         self.out_features = out_features
@@ -276,8 +276,7 @@ class GgufLinear(nn.Module):
             v = state.get(name)
             if v is not None and v != getattr(self, name):
                 raise ValueError(
-                    f"GgufLinear {name} mismatch on load: state has {v}, "
-                    f"module has {getattr(self, name)}"
+                    f"GgufLinear {name} mismatch on load: state has {v}, module has {getattr(self, name)}"
                 )
 
     def _bind_kernels(self) -> None:
@@ -302,7 +301,7 @@ class GgufLinear(nn.Module):
         mat_name = f"mul_mat_{self._fmt}_f32"
         mv_packet = getattr(ops, mv_name, None) if hasattr(ops, mv_name) else None
         mat_packet = getattr(ops, mat_name, None) if hasattr(ops, mat_name) else None
-        self._mv_op  = getattr(mv_packet, "default", mv_packet) if mv_packet is not None else None
+        self._mv_op = getattr(mv_packet, "default", mv_packet) if mv_packet is not None else None
         self._mat_op = getattr(mat_packet, "default", mat_packet) if mat_packet is not None else None
 
     @torch.no_grad()
@@ -349,6 +348,13 @@ class GgufLinear(nn.Module):
 
         if self.bias is not None:
             y = y + self.bias.to(y.device).to(y.dtype)
+        # The Metal matvec/matmul kernels produce fp32. Cast back to the input
+        # dtype so callers that picked an fp16/bf16 model see fp16/bf16 outputs
+        # — letting the KV cache stay in the model's chosen precision instead
+        # of being silently widened to fp32 (which masked the effect of
+        # ``dtype=torch.float16`` on the cache size + bandwidth).
+        if y.dtype != x.dtype:
+            y = y.to(x.dtype)
         return y
 
     def _dequant_forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -358,9 +364,7 @@ class GgufLinear(nn.Module):
         from ..integrations.gguf_dequant import dequantize_gguf_tensor
 
         qt = getattr(gguf.GGMLQuantizationType, self.quant_type)
-        w = dequantize_gguf_tensor(self.qweight, qt, device=x.device).reshape(
-            self.out_features, self.in_features
-        )
+        w = dequantize_gguf_tensor(self.qweight, qt, device=x.device).reshape(self.out_features, self.in_features)
         return torch.nn.functional.linear(x.to(w.dtype), w)
 
 
@@ -409,9 +413,7 @@ class GgufQwen2MoeExperts(nn.Module):
         super().__init__()
         for label, qt in (("gate", gate_quant), ("up", up_quant), ("down", down_quant)):
             if qt not in _QUANT_INFO:
-                raise NotImplementedError(
-                    f"GgufQwen2MoeExperts {label}_quant {qt} not in {sorted(_QUANT_INFO)}"
-                )
+                raise NotImplementedError(f"GgufQwen2MoeExperts {label}_quant {qt} not in {sorted(_QUANT_INFO)}")
         self.num_experts = config.num_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.moe_intermediate_size
@@ -429,8 +431,8 @@ class GgufQwen2MoeExperts(nn.Module):
 
         # gate / up : (intermediate, hidden);  down : (hidden, intermediate)
         self._gate_bytes_per = _bytes_per_expert(gate_quant, self.intermediate_dim, self.hidden_dim)
-        self._up_bytes_per   = _bytes_per_expert(up_quant,   self.intermediate_dim, self.hidden_dim)
-        self._down_bytes_per = _bytes_per_expert(down_quant, self.hidden_dim,        self.intermediate_dim)
+        self._up_bytes_per = _bytes_per_expert(up_quant, self.intermediate_dim, self.hidden_dim)
+        self._down_bytes_per = _bytes_per_expert(down_quant, self.hidden_dim, self.intermediate_dim)
 
         # Per-expert byte buffers stored as ``(num_experts, bytes_per_expert)``
         # 2D tensors so the batched-mm forward can ``buf[expert_ids]`` natively
@@ -452,6 +454,7 @@ class GgufQwen2MoeExperts(nn.Module):
         )
 
         from ..activations import ACT2FN
+
         self.act_fn = ACT2FN[config.hidden_act]
         # Used by the moe.py ``ExpertsInterface`` dispatcher. Setting it via
         # the parent config (in :func:`replace_qwen2_moe_experts`) is what
@@ -482,17 +485,16 @@ class GgufQwen2MoeExperts(nn.Module):
         }
 
     def set_extra_state(self, state: dict) -> None:
-        for name in ("gate_quant", "up_quant", "down_quant",
-                     "num_experts", "hidden_dim", "intermediate_dim"):
+        for name in ("gate_quant", "up_quant", "down_quant", "num_experts", "hidden_dim", "intermediate_dim"):
             v = state.get(name)
             if v is not None and v != getattr(self, name):
                 raise ValueError(
-                    f"GgufQwen2MoeExperts {name} mismatch on load: "
-                    f"state has {v!r}, module has {getattr(self, name)!r}"
+                    f"GgufQwen2MoeExperts {name} mismatch on load: state has {v!r}, module has {getattr(self, name)!r}"
                 )
 
-    def _gather_dequant(self, buf_2d: torch.Tensor, expert_ids: torch.Tensor, quant_name: str, fmt: str,
-                        M: int, K: int) -> torch.Tensor:
+    def _gather_dequant(
+        self, buf_2d: torch.Tensor, expert_ids: torch.Tensor, quant_name: str, fmt: str, M: int, K: int
+    ) -> torch.Tensor:
         """Gather + dequant the selected experts in one shot.
 
         ``buf_2d`` is ``(num_experts, bytes_per_expert)`` uint8; the gather
@@ -513,7 +515,9 @@ class GgufQwen2MoeExperts(nn.Module):
                 return out.view(S, M, K)
 
         import gguf
+
         from ..integrations.gguf_dequant import dequantize_gguf_tensor
+
         qt = getattr(gguf.GGMLQuantizationType, quant_name)
         return dequantize_gguf_tensor(flat, qt, device=flat.device).view(S, M, K)
 
@@ -579,12 +583,16 @@ def _qwen2_moe_factory(mod, info, device):
     ``Qwen3MoeExperts`` / ``MiniMaxM2Experts`` module + a per-projection quant
     info dict. All three share the same fused-expert layout."""
 
-    config = type("C", (), dict(
-        num_experts=mod.num_experts,
-        hidden_size=mod.hidden_dim,
-        moe_intermediate_size=mod.intermediate_dim,
-        hidden_act=getattr(mod.act_fn, "_name", None) or "silu",
-    ))()
+    config = type(
+        "C",
+        (),
+        {
+            "num_experts": mod.num_experts,
+            "hidden_size": mod.hidden_dim,
+            "moe_intermediate_size": mod.intermediate_dim,
+            "hidden_act": getattr(mod.act_fn, "_name", None) or "silu",
+        },
+    )()
     return GgufQwen2MoeExperts(
         config,
         gate_quant=info["gate_quant"],
@@ -598,9 +606,9 @@ def _qwen2_moe_factory(mod, info, device):
 # Add new entries here as new fused-MoE architectures land. The factory must
 # accept ``(mod, info, device)`` and return a module with ``gate_proj_q`` /
 # ``up_proj_q`` / ``down_proj_q`` uint8 buffers (the byte-routing pattern).
-_FUSED_MOE_REGISTRY: dict[str, "callable"] = {
-    "Qwen2MoeExperts":  _qwen2_moe_factory,
-    "Qwen3MoeExperts":  _qwen2_moe_factory,
+_FUSED_MOE_REGISTRY: dict[str, callable] = {
+    "Qwen2MoeExperts": _qwen2_moe_factory,
+    "Qwen3MoeExperts": _qwen2_moe_factory,
     "MiniMaxM2Experts": _qwen2_moe_factory,
     # Future: "GptOssExperts": _gpt_oss_factory,
 }
@@ -665,9 +673,7 @@ def replace_qwen2_moe_experts(
             continue
 
         ok = True
-        for buf_name, key in [("gate_proj_q", "gate_bytes"),
-                              ("up_proj_q",   "up_bytes"),
-                              ("down_proj_q", "down_bytes")]:
+        for buf_name, key in [("gate_proj_q", "gate_bytes"), ("up_proj_q", "up_bytes"), ("down_proj_q", "down_bytes")]:
             src = info[key].detach().contiguous().view(torch.uint8)
             dst = getattr(new, buf_name)
             # 2D buffer is (num_experts, bytes_per_expert) — reshape the source.
@@ -715,7 +721,7 @@ def _prepare_id_kernel_refs(mod: nn.Module) -> None:
     ops = metal._ops
     for proj, fmt_attr, cache_attr in (
         ("gate", "_gate_fmt", "_id_op_gate"),
-        ("up",   "_up_fmt",   "_id_op_up"),
+        ("up", "_up_fmt", "_id_op_up"),
         ("down", "_down_fmt", "_id_op_down"),
     ):
         fmt = getattr(mod, fmt_attr, None)
@@ -745,14 +751,15 @@ def _prepare_id_kernel_refs(mod: nn.Module) -> None:
         if name in mod._buffers:
             del mod._buffers[name]
     mod.register_buffer("_gate_buf", torch.empty(S_dec, I, dtype=torch.float32, device=dev), persistent=False)
-    mod.register_buffer("_up_buf",   torch.empty(S_dec, I, dtype=torch.float32, device=dev), persistent=False)
+    mod.register_buffer("_up_buf", torch.empty(S_dec, I, dtype=torch.float32, device=dev), persistent=False)
     mod.register_buffer("_pair_out", torch.empty(S_dec, H, dtype=torch.float32, device=dev), persistent=False)
     mod._scratch_S = S_dec
     mod._scratch_T = 1
 
 
-def _row_permute_attn_q_bytes(qbytes_flat: torch.Tensor, num_heads: int,
-                              out_features: int, bytes_per_row: int) -> torch.Tensor:
+def _row_permute_attn_q_bytes(
+    qbytes_flat: torch.Tensor, num_heads: int, out_features: int, bytes_per_row: int
+) -> torch.Tensor:
     """Reverse llama.cpp's Q-projection row interleave on a flat byte buffer.
 
     Mirrors :class:`ReversePermuteAttnQ` operating on fp32 rows: it reshapes
@@ -762,8 +769,7 @@ def _row_permute_attn_q_bytes(qbytes_flat: torch.Tensor, num_heads: int,
     has no Python impl.
     """
     assert qbytes_flat.numel() == out_features * bytes_per_row, (
-        f"byte count mismatch: {qbytes_flat.numel()} vs "
-        f"{out_features}×{bytes_per_row}"
+        f"byte count mismatch: {qbytes_flat.numel()} vs {out_features}×{bytes_per_row}"
     )
     dim = out_features // num_heads // 2
     assert out_features == num_heads * dim * 2
@@ -772,8 +778,9 @@ def _row_permute_attn_q_bytes(qbytes_flat: torch.Tensor, num_heads: int,
     return permuted.view(-1)
 
 
-def _row_permute_attn_k_bytes(qbytes_flat: torch.Tensor, num_kv_heads: int,
-                              out_features: int, bytes_per_row: int) -> torch.Tensor:
+def _row_permute_attn_k_bytes(
+    qbytes_flat: torch.Tensor, num_kv_heads: int, out_features: int, bytes_per_row: int
+) -> torch.Tensor:
     """Mirror :func:`_row_permute_attn_q_bytes` for K projections (different head count)."""
     return _row_permute_attn_q_bytes(qbytes_flat, num_kv_heads, out_features, bytes_per_row)
 
@@ -781,7 +788,7 @@ def _row_permute_attn_k_bytes(qbytes_flat: torch.Tensor, num_kv_heads: int,
 def replace_with_gguf_linear(
     model: nn.Module,
     weight_info_by_name: dict[str, dict],
-    modules_to_not_convert: Optional[set[str]] = None,
+    modules_to_not_convert: set[str] | None = None,
 ) -> int:
     """Walk `model` and swap each ``nn.Linear`` whose weight name appears in
     ``weight_info_by_name`` for a :class:`GgufLinear`.
@@ -808,7 +815,6 @@ def replace_with_gguf_linear(
 
     Returns the number of layers swapped.
     """
-    import gguf
 
     modules_to_not_convert = modules_to_not_convert or set()
     swapped = 0
@@ -839,9 +845,7 @@ def replace_with_gguf_linear(
             # (Q4_K / Q5_K / Q6_K) where ``gguf.quantize`` has no Python impl.
             cfg = getattr(model, "config", None)
             num_heads = getattr(cfg, "num_attention_heads", None) if cfg else None
-            num_kv_heads = (
-                getattr(cfg, "num_key_value_heads", num_heads) if cfg else None
-            )
+            num_kv_heads = getattr(cfg, "num_key_value_heads", num_heads) if cfg else None
             if num_heads is None:
                 continue  # no config → conservative fall-through
             raw = info["bytes"]
@@ -850,9 +854,7 @@ def replace_with_gguf_linear(
             bytes_per_row = nblocks_per_row * block_bytes
             heads = num_heads if permute_kind == "q" else num_kv_heads
             try:
-                qbytes_t = _row_permute_attn_q_bytes(
-                    qbytes_src, heads, mod.out_features, bytes_per_row
-                )
+                qbytes_t = _row_permute_attn_q_bytes(qbytes_src, heads, mod.out_features, bytes_per_row)
             except AssertionError:
                 continue
         else:
@@ -861,9 +863,9 @@ def replace_with_gguf_linear(
 
         if qbytes_t.numel() != expected_nbytes:
             import warnings
+
             warnings.warn(
-                f"GgufLinear: skip {name} — bytes size mismatch "
-                f"({qbytes_t.numel()} vs expected {expected_nbytes})",
+                f"GgufLinear: skip {name} — bytes size mismatch ({qbytes_t.numel()} vs expected {expected_nbytes})",
                 stacklevel=2,
             )
             continue
@@ -893,7 +895,7 @@ def is_gguf_linear_enabled() -> bool:
     return os.environ.get("TRANSFORMERS_GGUF_LINEAR", "0") not in ("0", "", "false", "False")
 
 
-def fast_greedy_decode(model, input_ids: "torch.Tensor", max_new_tokens: int) -> "torch.Tensor":
+def fast_greedy_decode(model, input_ids: torch.Tensor, max_new_tokens: int) -> torch.Tensor:
     """Tight greedy-decoding loop that matches llama.cpp throughput on Apple Silicon.
 
     ``generate()``'s per-step overhead is significant: it allocates a fresh
@@ -918,14 +920,14 @@ def fast_greedy_decode(model, input_ids: "torch.Tensor", max_new_tokens: int) ->
     (prompt + generated), shape (B, prefill_len + max_new_tokens).
     """
     import torch
+
     from ..cache_utils import StaticCache
 
     device = input_ids.device
     B, prefill_len = input_ids.shape
     max_kv = prefill_len + max_new_tokens
     param_dtype = next(model.parameters()).dtype
-    cache = StaticCache(config=model.config, max_batch_size=B,
-                        max_cache_len=max_kv, device=device, dtype=param_dtype)
+    cache = StaticCache(config=model.config, max_batch_size=B, max_cache_len=max_kv, device=device, dtype=param_dtype)
 
     # Output token buffer (B, total) filled in-place — no per-step concat /
     # clone. Slot 0..prefill_len-1 holds the prompt.
@@ -936,20 +938,21 @@ def fast_greedy_decode(model, input_ids: "torch.Tensor", max_new_tokens: int) ->
     with torch.inference_mode():
         # Prefill.
         cp_prefill = torch.arange(0, prefill_len, device=device, dtype=torch.long)
-        out = model(input_ids=input_ids, past_key_values=cache,
-                    cache_position=cp_prefill, use_cache=True)
-        torch.argmax(out.logits[:, -1], dim=-1, keepdim=True,
-                     out=out_tokens[:, prefill_len:prefill_len + 1])
+        out = model(input_ids=input_ids, past_key_values=cache, cache_position=cp_prefill, use_cache=True)
+        torch.argmax(out.logits[:, -1], dim=-1, keepdim=True, out=out_tokens[:, prefill_len : prefill_len + 1])
 
         # Pre-allocate the single-position cache_position tensor reused below.
         cp_buf = torch.zeros(1, dtype=torch.long, device=device)
         for i in range(max_new_tokens - 1):
             cp_buf.fill_(prefill_len + i)
             cur_slot = prefill_len + i
-            out = model(input_ids=out_tokens[:, cur_slot:cur_slot + 1],
-                        past_key_values=cache, cache_position=cp_buf, use_cache=True)
-            torch.argmax(out.logits[:, -1], dim=-1, keepdim=True,
-                         out=out_tokens[:, cur_slot + 1:cur_slot + 2])
+            out = model(
+                input_ids=out_tokens[:, cur_slot : cur_slot + 1],
+                past_key_values=cache,
+                cache_position=cp_buf,
+                use_cache=True,
+            )
+            torch.argmax(out.logits[:, -1], dim=-1, keepdim=True, out=out_tokens[:, cur_slot + 1 : cur_slot + 2])
     return out_tokens
 
 

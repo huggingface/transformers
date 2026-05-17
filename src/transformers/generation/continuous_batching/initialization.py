@@ -173,6 +173,7 @@ def resolve_compile_configs(
     # cleanly per shape; the recompile budget set by ``cache_size_limit=512``
     # covers the variable prefill lengths).
     import torch as _torch
+
     _is_mps = _torch.backends.mps.is_available() and not _torch.cuda.is_available()
     _default_mode = "reduce-overhead" if _is_mps else "max-autotune-no-cudagraphs"
     _varlen_dynamic = not _is_mps

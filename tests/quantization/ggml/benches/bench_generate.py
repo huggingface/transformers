@@ -1,15 +1,23 @@
+# ruff: noqa: E402  # benches set env before importing transformers
 """Benchmark Qwen1.5-MoE-A2.7B Q4_K_M under transformers (eager + compile)."""
-import argparse, os, time, warnings
+
+import argparse
+import os
+import time
+import warnings
+
+
 warnings.filterwarnings("ignore")
 import torch
 import torch._dynamo
+
+
 torch._dynamo.config.cache_size_limit = 512
 torch._dynamo.config.recompile_limit = 512
 # Stop dynamo from specialising on integer attributes of nn.Module instances
 # (most importantly the DynamicCache layer_idx, which would otherwise cause
 # one recompile per layer per generate() call — 24 useless recompiles).
 torch._dynamo.config.allow_unspec_int_on_nn_module = True
-import numpy as np
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
@@ -17,13 +25,19 @@ def time_decode(model, input_ids, n_new, *, label):
     model.eval()
     with torch.inference_mode():
         # Warmup (also primes the KV cache shape for compile)
-        _ = model.generate(input_ids, max_new_tokens=4, do_sample=False, use_cache=True,
-                           pad_token_id=model.config.eos_token_id or 0)
+        _ = model.generate(
+            input_ids, max_new_tokens=4, do_sample=False, use_cache=True, pad_token_id=model.config.eos_token_id or 0
+        )
         if input_ids.device.type == "mps":
             torch.mps.synchronize()
         t0 = time.perf_counter()
-        out = model.generate(input_ids, max_new_tokens=n_new, do_sample=False, use_cache=True,
-                             pad_token_id=model.config.eos_token_id or 0)
+        out = model.generate(
+            input_ids,
+            max_new_tokens=n_new,
+            do_sample=False,
+            use_cache=True,
+            pad_token_id=model.config.eos_token_id or 0,
+        )
         if input_ids.device.type == "mps":
             torch.mps.synchronize()
         t1 = time.perf_counter()
@@ -47,8 +61,7 @@ def main():
 
     t = time.perf_counter()
     tok = AutoTokenizer.from_pretrained(args.repo)
-    model = AutoModelForCausalLM.from_pretrained(repo_path, gguf_file=gguf_file, gguf_linear=True,
-                                                 dtype=torch.float32)
+    model = AutoModelForCausalLM.from_pretrained(repo_path, gguf_file=gguf_file, gguf_linear=True, dtype=torch.float32)
     model = model.to(args.device)
     # Static KV cache so the compiled graph's shapes are constant during
     # decode — without this, the cache length grows each token and dynamo
@@ -68,6 +81,7 @@ def main():
 
     # Toggle to eager (one-at-a-time per-expert dispatch) and bench.
     from transformers.integrations.gguf_linear import GgufQwen2MoeExperts
+
     for m in model.modules():
         if isinstance(m, GgufQwen2MoeExperts):
             m._experts_implementation = "eager"
@@ -80,7 +94,8 @@ def main():
     if args.compile:
         # Fuse Q/K/V into a single multi-matvec op call where possible.
         if os.environ.get("BENCH_NO_QKV_FUSION", "0") not in ("1", "true", "True"):
-            from transformers.integrations.gguf_linear import apply_fused_qkv, apply_fused_kv_update
+            from transformers.integrations.gguf_linear import apply_fused_kv_update, apply_fused_qkv
+
             n_fused = apply_fused_qkv(model)
             n_kv = apply_fused_kv_update(model)
             print(f"fused QKV on {n_fused}, KV-update patched: {n_kv}")
@@ -97,13 +112,9 @@ def main():
         elif scope == "model":
             # Compile the inner LM (no lm_head). The head is a single matvec
             # that compile can't accelerate much.
-            model.model.forward = torch.compile(
-                model.model.forward, mode=compile_mode, dynamic=False
-            )
+            model.model.forward = torch.compile(model.model.forward, mode=compile_mode, dynamic=False)
         else:
-            model.forward = torch.compile(
-                model.forward, mode=compile_mode, dynamic=False, fullgraph=False
-            )
+            model.forward = torch.compile(model.forward, mode=compile_mode, dynamic=False, fullgraph=False)
         print(f"compile mode: {compile_mode} scope: {scope}")
         # Compile takes a few iters to warm up
         time_decode(model, ids, 8, label="compile warmup")

@@ -514,7 +514,7 @@ def gguf_bmm_experts_forward(
     S = num_tokens * num_top_k
 
     op_gate = getattr(self, "_id_op_gate", None)
-    op_up   = getattr(self, "_id_op_up",   None)
+    op_up = getattr(self, "_id_op_up", None)
     op_down = getattr(self, "_id_op_down", None)
     use_id_kernel = op_gate is not None and op_up is not None and op_down is not None
 
@@ -526,35 +526,31 @@ def gguf_bmm_experts_forward(
     # (see ``_prepare_id_kernel_refs``). Larger shapes (prefill, batched) fall
     # back to per-call ``torch.empty`` — does NOT mutate any module attribute,
     # so dynamo doesn't re-trace on the second call.
-    if (getattr(self, "_scratch_S", None) == S
-            and getattr(self, "_scratch_T", None) == num_tokens):
+    if getattr(self, "_scratch_S", None) == S and getattr(self, "_scratch_T", None) == num_tokens:
         gate_buf, up_buf, out = self._gate_buf, self._up_buf, self._pair_out
     else:
         gate_buf = torch.empty(S, I, dtype=torch.float32, device=device)
-        up_buf   = torch.empty(S, I, dtype=torch.float32, device=device)
-        out      = torch.empty(S, H, dtype=torch.float32, device=device)
+        up_buf = torch.empty(S, I, dtype=torch.float32, device=device)
+        out = torch.empty(S, H, dtype=torch.float32, device=device)
 
     if use_id_kernel:
         gate_qw = self.gate_proj_q.view(-1)
-        up_qw   = self.up_proj_q.view(-1)
+        up_qw = self.up_proj_q.view(-1)
         down_qw = self.down_proj_q.view(-1)
         op_gate(gate_qw, selected, ids32, gate_buf)
-        op_up  (up_qw,   selected, ids32, up_buf)
+        op_up(up_qw, selected, ids32, up_buf)
         inter = (self.act_fn(gate_buf) * up_buf).contiguous()
         op_down(down_qw, inter, ids32, out)
     else:
         # Fallback: per-projection batched dequant + bmm. ``_gather_dequant``
         # uses ``.index_select(0, ids)`` which requires int64.
         ids_long = ids32.to(torch.long)
-        gate_w = self._gather_dequant(self.gate_proj_q, ids_long,
-                                      self.gate_quant, self._gate_fmt, I, H)
-        up_w   = self._gather_dequant(self.up_proj_q, ids_long,
-                                      self.up_quant, self._up_fmt, I, H)
+        gate_w = self._gather_dequant(self.gate_proj_q, ids_long, self.gate_quant, self._gate_fmt, I, H)
+        up_w = self._gather_dequant(self.up_proj_q, ids_long, self.up_quant, self._up_fmt, I, H)
         gate = torch.bmm(selected.unsqueeze(1), gate_w.transpose(-1, -2)).squeeze(1)
-        up   = torch.bmm(selected.unsqueeze(1),   up_w.transpose(-1, -2)).squeeze(1)
+        up = torch.bmm(selected.unsqueeze(1), up_w.transpose(-1, -2)).squeeze(1)
         inter = (self.act_fn(gate) * up).contiguous()
-        down_w = self._gather_dequant(self.down_proj_q, ids_long,
-                                      self.down_quant, self._down_fmt, H, I)
+        down_w = self._gather_dequant(self.down_proj_q, ids_long, self.down_quant, self._down_fmt, H, I)
         out = torch.bmm(inter.unsqueeze(1), down_w.transpose(-1, -2)).squeeze(1)
 
     weighted = out * sample_weights.unsqueeze(-1)
