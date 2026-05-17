@@ -390,3 +390,37 @@ class PatchMistralRegexHubCallTests(unittest.TestCase):
                 "not-a-real/hub-id",
             )
         self.assertIsNotNone(result)
+
+
+@require_tokenizers
+class OOVTokenHandlingTests(unittest.TestCase):
+    """
+    Tests for graceful handling of out-of-vocabulary token ids in convert_ids_to_tokens.
+    Regression tests for https://github.com/huggingface/transformers/issues/29159
+    """
+
+    def _get_tokenizer(self):
+        from tokenizers import Tokenizer
+        from tokenizers.models import WordLevel
+        import tokenizers.pre_tokenizers as pre_tokenizers
+        tok = Tokenizer(WordLevel({"[UNK]": 0, "hello": 1, "world": 2}, unk_token="[UNK]"))
+        tok.pre_tokenizer = pre_tokenizers.Whitespace()
+        return PreTrainedTokenizerFast(tokenizer_object=tok)
+
+    def test_oov_single_id_returns_empty_string(self):
+        """OOV single token id should return empty string, not None."""
+        tokenizer = self._get_tokenizer()
+        result = tokenizer.convert_ids_to_tokens(9999)
+        self.assertEqual(result, "")
+
+    def test_oov_in_list_is_skipped(self):
+        """OOV token ids in a list should be skipped gracefully."""
+        tokenizer = self._get_tokenizer()
+        result = tokenizer.convert_ids_to_tokens([1, 9999, 2])
+        self.assertEqual(result, ["hello", "world"])
+
+    def test_valid_ids_unaffected(self):
+        """Valid token ids should still work correctly after the fix."""
+        tokenizer = self._get_tokenizer()
+        result = tokenizer.convert_ids_to_tokens([0, 1, 2])
+        self.assertEqual(result, ["[UNK]", "hello", "world"])
