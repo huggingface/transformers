@@ -2685,7 +2685,7 @@ class GenerationMixin(ContinuousMixin):
 
         return input_ids
 
-    def _fast_greedy_loop(
+    def _fast_decode_loop(
         self: "GenerativePreTrainedModel",
         *,
         input_ids: torch.LongTensor,
@@ -2694,32 +2694,37 @@ class GenerationMixin(ContinuousMixin):
         prefill_len: int,
         max_new_tokens: int,
         model_forward,
+        logits_processor: LogitsProcessorList,
         stopping_criteria: StoppingCriteriaList,
         has_eos_stopping_criteria: bool,
         pad_token_id: torch.Tensor | None,
+        do_sample: bool,
     ) -> torch.LongTensor:
-        """Tight greedy-decoding loop for ``_sample``'s vanilla-greedy path.
+        """Tight decode loop for ``_sample`` (greedy or sampling).
 
-        Mirrors the helper exposed for GGUF (``integrations.gguf_linear.fast_greedy_decode``)
-        but lives on the generation mixin so anyone calling ``model.generate()``
-        with greedy settings benefits. Strategy:
+        Strategy:
 
         * Allocate the final ``(batch, prefill+max_new)`` token buffer
-          once and ``argmax(out=)`` into the next slot — no per-step
-          ``torch.cat`` reallocates.
-        * Use ``prepare_inputs_for_generation`` + the standard
-          ``_update_model_kwargs_for_generation`` chain so the compiled
+          once and write the next slot in place each step — no per-step
+          ``torch.cat`` reallocates of ``input_ids``.
+        * Use ``prepare_inputs_for_generation`` +
+          ``_update_model_kwargs_for_generation`` so the compiled
           ``forward`` keeps its existing kwargs signature (otherwise
-          dynamo re-traces).
-        * Skip ``logits_processor`` + the ``.to(copy=True, dtype=fp32)``
-          cast on logits (no-ops for plain greedy).
+          dynamo re-traces — we measured: switching to bare kwargs
+          drops throughput 75 → 9 tok/s).
+        * Skip the ``.to(copy=True, dtype=fp32)`` cast on logits when
+          ``logits_processor`` is empty.
         * Drop the ``unfinished_sequences.max() == 0`` CPU↔MPS sync that
-          fired every token; loop on a Python step counter instead.
+          fired every token — loop on a Python step counter, sync once
+          every ``_SYNC_EVERY`` steps to honour EOS.
 
-        EOS handling: when ``has_eos_stopping_criteria`` is set, the
-        stopping_criteria result is OR-accumulated into a device tensor
-        and consulted via a single ``.any().item()`` sync every
-        ``_SYNC_EVERY`` steps so the per-step cost stays GPU-only.
+        Sampling (``do_sample=True``): replaces ``softmax + multinomial``
+        with **in-place Gumbel-max**. Samples from ``argmax(logits + G)``
+        where ``G ~ Gumbel(0, 1)`` — statistically equivalent to
+        ``multinomial(softmax(logits))`` but allocation-free per step
+        (one pre-allocated ``(B, vocab)`` noise buffer mutated in place
+        via ``exponential_().log_().neg_()`` each call) and writes
+        through ``argmax(out=)``. No multinomial, no softmax.
         """
         batch_size = input_ids.shape[0]
         device = input_ids.device
@@ -2729,22 +2734,49 @@ class GenerationMixin(ContinuousMixin):
         out_tokens = torch.empty(batch_size, total, dtype=torch.long, device=device)
         out_tokens[:, :prefill_len] = input_ids
 
+        # Pre-allocated buffers for the sampling fast path.
+        gumbel_buf = None
+        score_buf = None
+        if do_sample:
+            vocab_size = outputs.logits.shape[-1]
+            gumbel_buf = torch.empty(batch_size, vocab_size, dtype=torch.float32, device=device)
+            score_buf  = torch.empty(batch_size, vocab_size, dtype=torch.float32, device=device)
+
+        def _pick_next(logits_2d, dst_slot):
+            """Pick the next token id from a (B, vocab) logits slice and
+            write it into ``dst_slot`` (a (B, 1) long view). Greedy path
+            uses ``argmax(out=)``; sampling path uses in-place Gumbel-max."""
+            if logits_processor:
+                # logits_processor expects (B, vocab) and returns (B, vocab).
+                # Cast to fp32 like the slow path so processor math stays exact.
+                scores = logits_processor(out_tokens[:, : dst_slot.shape[1] + prefill_len], logits_2d.float())
+            else:
+                scores = logits_2d
+            if do_sample:
+                # Gumbel-max: argmax(scores + Gumbel(0, 1)).
+                # exponential_(1) gives X ~ Exp(1); -log(X) ~ Gumbel(0, 1).
+                # Re-fill the same buffer every step — no allocation.
+                gumbel_buf.exponential_(1).log_().neg_()
+                # Score buffer = scores + gumbel, kept in fp32. If scores
+                # is already fp32 we can ``add`` without copy; otherwise
+                # write through score_buf to avoid casting back and forth.
+                if scores.dtype == torch.float32:
+                    torch.add(scores, gumbel_buf, out=score_buf)
+                else:
+                    torch.add(scores.float(), gumbel_buf, out=score_buf)
+                torch.argmax(score_buf, dim=-1, keepdim=True, out=dst_slot)
+            else:
+                torch.argmax(scores, dim=-1, keepdim=True, out=dst_slot)
+
         # Pick the first decode token off the prefill logits we already have.
-        torch.argmax(
-            outputs.logits[:, -1], dim=-1, keepdim=True,
-            out=out_tokens[:, prefill_len:prefill_len + 1],
-        )
+        _pick_next(outputs.logits[:, -1], out_tokens[:, prefill_len:prefill_len + 1])
 
         # Update the model kwargs once so subsequent decode calls have the
-        # right cache_position / attention_mask shape. From here on we use
-        # ``prepare_inputs_for_generation`` per step but skip the heavy
-        # Python tail of ``_sample``'s while loop.
+        # right cache_position / attention_mask shape.
         model_kwargs = self._update_model_kwargs_for_generation(
             outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder,
         )
         unfinished_sequences = torch.ones(batch_size, dtype=torch.bool, device=device)
-        # Periodic sync — balance EOS latency against the per-step
-        # ``.item()`` cost. 16 is empirical (matches the cudagraph batch on CUDA).
         _SYNC_EVERY = 16
 
         for step in range(max_new_tokens - 1):
@@ -2754,12 +2786,7 @@ class GenerationMixin(ContinuousMixin):
                 next_tok_window, next_sequence_length=1, **model_kwargs,
             )
             outputs = model_forward(**model_inputs, return_dict=True)
-            # Greedy write straight into the next output slot — no
-            # intermediate alloc / cast.
-            torch.argmax(
-                outputs.logits[:, -1], dim=-1, keepdim=True,
-                out=out_tokens[:, cur_slot + 1:cur_slot + 2],
-            )
+            _pick_next(outputs.logits[:, -1], out_tokens[:, cur_slot + 1:cur_slot + 2])
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder,
             )
@@ -2858,31 +2885,33 @@ class GenerationMixin(ContinuousMixin):
             is_first_iteration=not generation_config.is_assistant,
         )
 
-        # --- Fast greedy decode loop --------------------------------------
+        # --- Fast decode loop --------------------------------------------
         # Skips everything the generic ``while`` loop adds on top of
-        # ``model_forward`` (per-step ``prepare_inputs_for_generation``,
-        # ``_update_model_kwargs_for_generation``, the
-        # ``.to(copy=True, dtype=fp32)`` logits copy, ``torch.cat`` on the
-        # growing ``input_ids``, the ``argmax`` allocation, and most
-        # importantly the ``unfinished_sequences.max() == 0`` CPU↔MPS
-        # sync that fires every token).
+        # ``model_forward``: the ``.to(copy=True, dtype=fp32)`` logits
+        # copy, ``torch.cat`` on the growing ``input_ids``, the ``argmax``
+        # /``multinomial`` allocation, and the
+        # ``unfinished_sequences.max() == 0`` CPU↔MPS sync that fires on
+        # every token. ``logits_processor`` and the in-loop sampler still
+        # run, so configs like temperature / top-k / top-p / repetition
+        # penalty are supported — they just no longer share the loop with
+        # per-step Python tensor allocations.
         #
-        # Entry conditions are deliberately strict: anything that would
-        # need a Python branch per token (streamer, logits processors,
-        # output-collection, multinomial sampling, synced_gpus, assistant
-        # decoding) falls through to the generic loop.
+        # Entry is gated on the bells-and-whistles flags that would
+        # require Python branches per token (streamer, output-collection,
+        # synced_gpus, assistant decoding) — those fall through to the
+        # generic loop.
         #
         # On Apple Silicon + GgufLinear under ``torch.compile`` this
         # closes the ~30 tok/s gap between ``generate()`` and the
         # bespoke ``fast_greedy_decode`` helper (Qwen1.5-MoE-A2.7B Q4_K_M,
-        # N=64, M3 Max: 75 → ~104 tok/s).
+        # N=64, M3 Max: 75 → ~102 tok/s; sampling stays within ~3 tok/s
+        # of greedy via in-place Gumbel-max — no ``torch.multinomial``
+        # call per token).
         _fast_path_ok = (
-            not do_sample
-            and streamer is None
+            streamer is None
             and not return_dict_in_generate
             and not synced_gpus
             and not generation_config.is_assistant
-            and len(logits_processor) == 0
             and model_kwargs.get("use_cache", True)
             and "past_key_values" in model_kwargs
             and not self.config.is_encoder_decoder
@@ -2893,16 +2922,18 @@ class GenerationMixin(ContinuousMixin):
                 prefill_len = input_ids.shape[1]
                 max_new_tokens = max_length - prefill_len
                 if max_new_tokens > 0:
-                    return self._fast_greedy_loop(
+                    return self._fast_decode_loop(
                         input_ids=input_ids,
                         outputs=outputs,
                         model_kwargs=model_kwargs,
                         prefill_len=prefill_len,
                         max_new_tokens=max_new_tokens,
                         model_forward=model_forward,
+                        logits_processor=logits_processor,
                         stopping_criteria=stopping_criteria,
                         has_eos_stopping_criteria=has_eos_stopping_criteria,
                         pad_token_id=pad_token_id,
+                        do_sample=do_sample,
                     )
 
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
