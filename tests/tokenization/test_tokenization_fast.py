@@ -400,9 +400,9 @@ class OOVTokenHandlingTests(unittest.TestCase):
     """
 
     def _get_tokenizer(self):
+        import tokenizers.pre_tokenizers as pre_tokenizers
         from tokenizers import Tokenizer
         from tokenizers.models import WordLevel
-        import tokenizers.pre_tokenizers as pre_tokenizers
         tok = Tokenizer(WordLevel({"[UNK]": 0, "hello": 1, "world": 2}, unk_token="[UNK]"))
         tok.pre_tokenizer = pre_tokenizers.Whitespace()
         return PreTrainedTokenizerFast(tokenizer_object=tok)
