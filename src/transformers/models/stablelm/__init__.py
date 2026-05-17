@@ -18,8 +18,14 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_stablelm import *
-    from .modeling_stablelm import *
+    from .configuration_stablelm import StableLmConfig
+    from .modeling_stablelm import (
+        StableLmForCausalLM,
+        StableLmForSequenceClassification,
+        StableLmForTokenClassification,
+        StableLmModel,
+        StableLmPreTrainedModel,
+    )
 else:
     import sys
 

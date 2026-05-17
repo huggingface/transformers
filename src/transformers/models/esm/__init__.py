@@ -18,10 +18,16 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_esm import *
-    from .modeling_esm import *
-    from .modeling_esmfold import *
-    from .tokenization_esm import *
+    from .configuration_esm import EsmConfig
+    from .modeling_esm import (
+        EsmForMaskedLM,
+        EsmForSequenceClassification,
+        EsmForTokenClassification,
+        EsmModel,
+        EsmPreTrainedModel,
+    )
+    from .modeling_esmfold import EsmFoldPreTrainedModel, EsmForProteinFolding
+    from .tokenization_esm import EsmTokenizer
 else:
     import sys
 

@@ -18,9 +18,17 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_deberta_v2 import *
-    from .modeling_deberta_v2 import *
-    from .tokenization_deberta_v2 import *
+    from .configuration_deberta_v2 import DebertaV2Config
+    from .modeling_deberta_v2 import (
+        DebertaV2ForMaskedLM,
+        DebertaV2ForMultipleChoice,
+        DebertaV2ForQuestionAnswering,
+        DebertaV2ForSequenceClassification,
+        DebertaV2ForTokenClassification,
+        DebertaV2Model,
+        DebertaV2PreTrainedModel,
+    )
+    from .tokenization_deberta_v2 import DebertaV2Tokenizer
 else:
     import sys
 

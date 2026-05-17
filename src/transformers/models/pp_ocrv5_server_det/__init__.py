@@ -18,9 +18,13 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_pp_ocrv5_server_det import *
-    from .image_processing_pp_ocrv5_server_det import *
-    from .modeling_pp_ocrv5_server_det import *
+    from .configuration_pp_ocrv5_server_det import PPOCRV5ServerDetConfig
+    from .image_processing_pp_ocrv5_server_det import PPOCRV5ServerDetImageProcessor
+    from .modeling_pp_ocrv5_server_det import (
+        PPOCRV5ServerDetForObjectDetection,
+        PPOCRV5ServerDetModel,
+        PPOCRV5ServerDetPreTrainedModel,
+    )
 else:
     import sys
 

@@ -18,12 +18,18 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_owlvit import *
+    from .configuration_owlvit import OwlViTConfig, OwlViTTextConfig, OwlViTVisionConfig
     from .feature_extraction_owlvit import *
-    from .image_processing_owlvit import *
-    from .image_processing_pil_owlvit import *
-    from .modeling_owlvit import *
-    from .processing_owlvit import *
+    from .image_processing_owlvit import OwlViTImageProcessor
+    from .image_processing_pil_owlvit import OwlViTImageProcessorPil
+    from .modeling_owlvit import (
+        OwlViTForObjectDetection,
+        OwlViTModel,
+        OwlViTPreTrainedModel,
+        OwlViTTextModel,
+        OwlViTVisionModel,
+    )
+    from .processing_owlvit import OwlViTProcessor
 else:
     import sys
 

@@ -18,11 +18,18 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_speecht5 import *
-    from .feature_extraction_speecht5 import *
-    from .modeling_speecht5 import *
-    from .processing_speecht5 import *
-    from .tokenization_speecht5 import *
+    from .configuration_speecht5 import SpeechT5Config, SpeechT5HifiGanConfig
+    from .feature_extraction_speecht5 import SpeechT5FeatureExtractor
+    from .modeling_speecht5 import (
+        SpeechT5ForSpeechToSpeech,
+        SpeechT5ForSpeechToText,
+        SpeechT5ForTextToSpeech,
+        SpeechT5HifiGan,
+        SpeechT5Model,
+        SpeechT5PreTrainedModel,
+    )
+    from .processing_speecht5 import SpeechT5Processor
+    from .tokenization_speecht5 import SpeechT5Tokenizer
 else:
     import sys
 

@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_pop2piano import *
-    from .modeling_pop2piano import *
+    from .configuration_pop2piano import Pop2PianoConfig
+    from .modeling_pop2piano import Pop2PianoForConditionalGeneration, Pop2PianoPreTrainedModel
 else:
     import sys
 

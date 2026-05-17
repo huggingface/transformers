@@ -18,8 +18,17 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_squeezebert import *
-    from .modeling_squeezebert import *
+    from .configuration_squeezebert import SqueezeBertConfig
+    from .modeling_squeezebert import (
+        SqueezeBertForMaskedLM,
+        SqueezeBertForMultipleChoice,
+        SqueezeBertForQuestionAnswering,
+        SqueezeBertForSequenceClassification,
+        SqueezeBertForTokenClassification,
+        SqueezeBertModel,
+        SqueezeBertModule,
+        SqueezeBertPreTrainedModel,
+    )
     from .tokenization_squeezebert import SqueezeBertTokenizer, SqueezeBertTokenizerFast
 else:
     import sys

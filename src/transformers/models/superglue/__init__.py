@@ -18,10 +18,10 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_superglue import *
-    from .image_processing_pil_superglue import *
-    from .image_processing_superglue import *
-    from .modeling_superglue import *
+    from .configuration_superglue import SuperGlueConfig
+    from .image_processing_pil_superglue import SuperGlueImageProcessorPil
+    from .image_processing_superglue import SuperGlueImageProcessor
+    from .modeling_superglue import SuperGlueForKeypointMatching, SuperGluePreTrainedModel
 else:
     import sys
 

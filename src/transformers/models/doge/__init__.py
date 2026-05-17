@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_doge import *
-    from .modeling_doge import *
+    from .configuration_doge import DogeConfig
+    from .modeling_doge import DogeForCausalLM, DogeForSequenceClassification, DogeModel, DogePreTrainedModel
 else:
     import sys
 

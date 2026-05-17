@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_falcon_h1 import *
-    from .modeling_falcon_h1 import *
+    from .configuration_falcon_h1 import FalconH1Config
+    from .modeling_falcon_h1 import FalconH1ForCausalLM, FalconH1Model, FalconH1PreTrainedModel
 else:
     import sys
 

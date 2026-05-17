@@ -18,8 +18,13 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_convnextv2 import *
-    from .modeling_convnextv2 import *
+    from .configuration_convnextv2 import ConvNextV2Config
+    from .modeling_convnextv2 import (
+        ConvNextV2Backbone,
+        ConvNextV2ForImageClassification,
+        ConvNextV2Model,
+        ConvNextV2PreTrainedModel,
+    )
 else:
     import sys
 

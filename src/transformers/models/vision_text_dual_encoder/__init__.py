@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_vision_text_dual_encoder import *
-    from .modeling_vision_text_dual_encoder import *
-    from .processing_vision_text_dual_encoder import *
+    from .configuration_vision_text_dual_encoder import VisionTextDualEncoderConfig
+    from .modeling_vision_text_dual_encoder import VisionTextDualEncoderModel
+    from .processing_vision_text_dual_encoder import VisionTextDualEncoderProcessor
 else:
     import sys
 

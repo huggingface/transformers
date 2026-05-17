@@ -18,10 +18,10 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_rag import *
-    from .modeling_rag import *
-    from .retrieval_rag import *
-    from .tokenization_rag import *
+    from .configuration_rag import RagConfig
+    from .modeling_rag import RagModel, RagPreTrainedModel, RagSequenceForGeneration, RagTokenForGeneration
+    from .retrieval_rag import RagRetriever
+    from .tokenization_rag import RagTokenizer
 else:
     import sys
 

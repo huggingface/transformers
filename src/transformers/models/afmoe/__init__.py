@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_afmoe import *
-    from .modeling_afmoe import *
+    from .configuration_afmoe import AfmoeConfig
+    from .modeling_afmoe import AfmoeForCausalLM, AfmoeModel, AfmoePreTrainedModel
 else:
     import sys
 

@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_groupvit import *
-    from .modeling_groupvit import *
+    from .configuration_groupvit import GroupViTConfig, GroupViTTextConfig, GroupViTVisionConfig
+    from .modeling_groupvit import GroupViTModel, GroupViTPreTrainedModel, GroupViTTextModel, GroupViTVisionModel
 else:
     import sys
 

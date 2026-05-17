@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_mimi import *
-    from .modeling_mimi import *
+    from .configuration_mimi import MimiConfig
+    from .modeling_mimi import MimiModel, MimiPreTrainedModel
 else:
     import sys
 

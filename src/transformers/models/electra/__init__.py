@@ -19,8 +19,18 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from ..bert.tokenization_bert import BertTokenizer as ElectraTokenizer
-    from .configuration_electra import *
-    from .modeling_electra import *
+    from .configuration_electra import ElectraConfig
+    from .modeling_electra import (
+        ElectraForCausalLM,
+        ElectraForMaskedLM,
+        ElectraForMultipleChoice,
+        ElectraForPreTraining,
+        ElectraForQuestionAnswering,
+        ElectraForSequenceClassification,
+        ElectraForTokenClassification,
+        ElectraModel,
+        ElectraPreTrainedModel,
+    )
 else:
     import sys
 

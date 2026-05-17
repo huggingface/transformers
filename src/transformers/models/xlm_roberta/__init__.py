@@ -18,9 +18,18 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_xlm_roberta import *
-    from .modeling_xlm_roberta import *
-    from .tokenization_xlm_roberta import *
+    from .configuration_xlm_roberta import XLMRobertaConfig
+    from .modeling_xlm_roberta import (
+        XLMRobertaForCausalLM,
+        XLMRobertaForMaskedLM,
+        XLMRobertaForMultipleChoice,
+        XLMRobertaForQuestionAnswering,
+        XLMRobertaForSequenceClassification,
+        XLMRobertaForTokenClassification,
+        XLMRobertaModel,
+        XLMRobertaPreTrainedModel,
+    )
+    from .tokenization_xlm_roberta import XLMRobertaTokenizer
     from .tokenization_xlm_roberta_fast import *
 else:
     import sys

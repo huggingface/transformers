@@ -18,8 +18,14 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_deepseek_v3 import *
-    from .modeling_deepseek_v3 import *
+    from .configuration_deepseek_v3 import DeepseekV3Config
+    from .modeling_deepseek_v3 import (
+        DeepseekV3ForCausalLM,
+        DeepseekV3ForSequenceClassification,
+        DeepseekV3ForTokenClassification,
+        DeepseekV3Model,
+        DeepseekV3PreTrainedModel,
+    )
 else:
     import sys
 

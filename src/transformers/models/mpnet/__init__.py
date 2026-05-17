@@ -18,9 +18,18 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_mpnet import *
-    from .modeling_mpnet import *
-    from .tokenization_mpnet import *
+    from .configuration_mpnet import MPNetConfig
+    from .modeling_mpnet import (
+        MPNetForMaskedLM,
+        MPNetForMultipleChoice,
+        MPNetForQuestionAnswering,
+        MPNetForSequenceClassification,
+        MPNetForTokenClassification,
+        MPNetLayer,
+        MPNetModel,
+        MPNetPreTrainedModel,
+    )
+    from .tokenization_mpnet import MPNetTokenizer
 else:
     import sys
 

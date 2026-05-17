@@ -20,8 +20,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_hgnet_v2 import *
-    from .modeling_hgnet_v2 import *
+    from .configuration_hgnet_v2 import HGNetV2Config
+    from .modeling_hgnet_v2 import HGNetV2Backbone, HGNetV2ForImageClassification, HGNetV2PreTrainedModel
 else:
     import sys
 

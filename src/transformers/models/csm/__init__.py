@@ -18,9 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_csm import *
-    from .modeling_csm import *
-    from .processing_csm import *
+    from .configuration_csm import CsmConfig, CsmDepthDecoderConfig
+    from .modeling_csm import (
+        CsmBackboneModel,
+        CsmDepthDecoderForCausalLM,
+        CsmDepthDecoderModel,
+        CsmForConditionalGeneration,
+        CsmPreTrainedModel,
+    )
+    from .processing_csm import CsmProcessor
 else:
     import sys
 

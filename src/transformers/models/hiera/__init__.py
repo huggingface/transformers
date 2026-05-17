@@ -18,8 +18,14 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_hiera import *
-    from .modeling_hiera import *
+    from .configuration_hiera import HieraConfig
+    from .modeling_hiera import (
+        HieraBackbone,
+        HieraForImageClassification,
+        HieraForPreTraining,
+        HieraModel,
+        HieraPreTrainedModel,
+    )
 else:
     import sys
 

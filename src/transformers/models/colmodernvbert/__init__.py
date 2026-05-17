@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_colmodernvbert import *
-    from .modeling_colmodernvbert import *
-    from .processing_colmodernvbert import *
+    from .configuration_colmodernvbert import ColModernVBertConfig
+    from .modeling_colmodernvbert import ColModernVBertForRetrieval, ColModernVBertPreTrainedModel
+    from .processing_colmodernvbert import ColModernVBertProcessor
 else:
     import sys
 

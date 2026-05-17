@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_informer import *
-    from .modeling_informer import *
+    from .configuration_informer import InformerConfig
+    from .modeling_informer import InformerForPrediction, InformerModel, InformerPreTrainedModel
 else:
     import sys
 

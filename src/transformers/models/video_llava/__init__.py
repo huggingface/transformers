@@ -18,10 +18,10 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_video_llava import *
-    from .image_processing_video_llava import *
-    from .modeling_video_llava import *
-    from .processing_video_llava import *
+    from .configuration_video_llava import VideoLlavaConfig
+    from .image_processing_video_llava import VideoLlavaImageProcessor
+    from .modeling_video_llava import VideoLlavaForConditionalGeneration, VideoLlavaModel, VideoLlavaPreTrainedModel
+    from .processing_video_llava import VideoLlavaProcessor
 else:
     import sys
 

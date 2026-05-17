@@ -20,9 +20,14 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_pp_ocrv5_server_rec import *
-    from .image_processing_pp_ocrv5_server_rec import *
-    from .modeling_pp_ocrv5_server_rec import *
+    from .configuration_pp_ocrv5_server_rec import PPOCRV5ServerRecConfig
+    from .image_processing_pp_ocrv5_server_rec import PPOCRV5ServerRecImageProcessor
+    from .modeling_pp_ocrv5_server_rec import (
+        PPOCRV5ServerRecEncoderWithSVTR,
+        PPOCRV5ServerRecForTextRecognition,
+        PPOCRV5ServerRecModel,
+        PPOCRV5ServerRecPreTrainedModel,
+    )
 else:
     import sys
 

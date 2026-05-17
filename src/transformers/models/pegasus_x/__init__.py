@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_pegasus_x import *
-    from .modeling_pegasus_x import *
+    from .configuration_pegasus_x import PegasusXConfig
+    from .modeling_pegasus_x import PegasusXForConditionalGeneration, PegasusXModel, PegasusXPreTrainedModel
 else:
     import sys
 

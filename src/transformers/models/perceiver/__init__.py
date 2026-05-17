@@ -18,11 +18,22 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_perceiver import *
-    from .image_processing_perceiver import *
-    from .image_processing_pil_perceiver import *
-    from .modeling_perceiver import *
-    from .tokenization_perceiver import *
+    from .configuration_perceiver import PerceiverConfig
+    from .image_processing_perceiver import PerceiverImageProcessor
+    from .image_processing_pil_perceiver import PerceiverImageProcessorPil
+    from .modeling_perceiver import (
+        PerceiverForImageClassificationConvProcessing,
+        PerceiverForImageClassificationFourier,
+        PerceiverForImageClassificationLearned,
+        PerceiverForMaskedLM,
+        PerceiverForMultimodalAutoencoding,
+        PerceiverForOpticalFlow,
+        PerceiverForSequenceClassification,
+        PerceiverLayer,
+        PerceiverModel,
+        PerceiverPreTrainedModel,
+    )
+    from .tokenization_perceiver import PerceiverTokenizer
 else:
     import sys
 

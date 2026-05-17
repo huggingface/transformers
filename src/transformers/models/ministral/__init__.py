@@ -18,8 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_ministral import *
-    from .modeling_ministral import *
+    from .configuration_ministral import MinistralConfig
+    from .modeling_ministral import (
+        MinistralForCausalLM,
+        MinistralForQuestionAnswering,
+        MinistralForSequenceClassification,
+        MinistralForTokenClassification,
+        MinistralModel,
+        MinistralPreTrainedModel,
+    )
 else:
     import sys
 

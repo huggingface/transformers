@@ -18,9 +18,18 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_flaubert import *
-    from .modeling_flaubert import *
-    from .tokenization_flaubert import *
+    from .configuration_flaubert import FlaubertConfig
+    from .modeling_flaubert import (
+        FlaubertForMultipleChoice,
+        FlaubertForQuestionAnswering,
+        FlaubertForQuestionAnsweringSimple,
+        FlaubertForSequenceClassification,
+        FlaubertForTokenClassification,
+        FlaubertModel,
+        FlaubertPreTrainedModel,
+        FlaubertWithLMHeadModel,
+    )
+    from .tokenization_flaubert import FlaubertTokenizer
 else:
     import sys
 

@@ -18,8 +18,16 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_unispeech_sat import *
-    from .modeling_unispeech_sat import *
+    from .configuration_unispeech_sat import UniSpeechSatConfig
+    from .modeling_unispeech_sat import (
+        UniSpeechSatForAudioFrameClassification,
+        UniSpeechSatForCTC,
+        UniSpeechSatForPreTraining,
+        UniSpeechSatForSequenceClassification,
+        UniSpeechSatForXVector,
+        UniSpeechSatModel,
+        UniSpeechSatPreTrainedModel,
+    )
 else:
     import sys
 

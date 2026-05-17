@@ -18,8 +18,17 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_xmod import *
-    from .modeling_xmod import *
+    from .configuration_xmod import XmodConfig
+    from .modeling_xmod import (
+        XmodForCausalLM,
+        XmodForMaskedLM,
+        XmodForMultipleChoice,
+        XmodForQuestionAnswering,
+        XmodForSequenceClassification,
+        XmodForTokenClassification,
+        XmodModel,
+        XmodPreTrainedModel,
+    )
 else:
     import sys
 

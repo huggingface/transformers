@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_moonshine import *
-    from .modeling_moonshine import *
+    from .configuration_moonshine import MoonshineConfig
+    from .modeling_moonshine import MoonshineForConditionalGeneration, MoonshineModel, MoonshinePreTrainedModel
 else:
     import sys
 

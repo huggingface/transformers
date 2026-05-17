@@ -18,7 +18,7 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .tokenization_barthez import *
+    from .tokenization_barthez import BarthezTokenizer
 else:
     import sys
 

@@ -18,10 +18,14 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_granite_speech import *
-    from .feature_extraction_granite_speech import *
-    from .modeling_granite_speech import *
-    from .processing_granite_speech import *
+    from .configuration_granite_speech import GraniteSpeechConfig, GraniteSpeechEncoderConfig
+    from .feature_extraction_granite_speech import GraniteSpeechFeatureExtractor
+    from .modeling_granite_speech import (
+        GraniteSpeechCTCEncoder,
+        GraniteSpeechForConditionalGeneration,
+        GraniteSpeechPreTrainedModel,
+    )
+    from .processing_granite_speech import GraniteSpeechProcessor
 else:
     import sys
 

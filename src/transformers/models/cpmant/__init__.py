@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_cpmant import *
-    from .modeling_cpmant import *
-    from .tokenization_cpmant import *
+    from .configuration_cpmant import CpmAntConfig
+    from .modeling_cpmant import CpmAntForCausalLM, CpmAntModel, CpmAntPreTrainedModel
+    from .tokenization_cpmant import CpmAntTokenizer
 else:
     import sys
 

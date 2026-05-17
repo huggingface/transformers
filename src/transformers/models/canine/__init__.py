@@ -18,9 +18,17 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_canine import *
-    from .modeling_canine import *
-    from .tokenization_canine import *
+    from .configuration_canine import CanineConfig
+    from .modeling_canine import (
+        CanineForMultipleChoice,
+        CanineForQuestionAnswering,
+        CanineForSequenceClassification,
+        CanineForTokenClassification,
+        CanineLayer,
+        CanineModel,
+        CaninePreTrainedModel,
+    )
+    from .tokenization_canine import CanineTokenizer
 else:
     import sys
 

@@ -18,11 +18,18 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_aria import *
-    from .image_processing_aria import *
-    from .image_processing_pil_aria import *
-    from .modeling_aria import *
-    from .processing_aria import *
+    from .configuration_aria import AriaConfig, AriaTextConfig
+    from .image_processing_aria import AriaImageProcessor
+    from .image_processing_pil_aria import AriaImageProcessorPil
+    from .modeling_aria import (
+        AriaForConditionalGeneration,
+        AriaModel,
+        AriaPreTrainedModel,
+        AriaTextForCausalLM,
+        AriaTextModel,
+        AriaTextPreTrainedModel,
+    )
+    from .processing_aria import AriaProcessor
 
 else:
     import sys

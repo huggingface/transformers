@@ -18,12 +18,20 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_clip import *
-    from .image_processing_clip import *
-    from .image_processing_pil_clip import *
-    from .modeling_clip import *
-    from .processing_clip import *
-    from .tokenization_clip import *
+    from .configuration_clip import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
+    from .image_processing_clip import CLIPImageProcessor
+    from .image_processing_pil_clip import CLIPImageProcessorPil
+    from .modeling_clip import (
+        CLIPForImageClassification,
+        CLIPModel,
+        CLIPPreTrainedModel,
+        CLIPTextModel,
+        CLIPTextModelWithProjection,
+        CLIPVisionModel,
+        CLIPVisionModelWithProjection,
+    )
+    from .processing_clip import CLIPProcessor
+    from .tokenization_clip import CLIPTokenizer
 else:
     import sys
 

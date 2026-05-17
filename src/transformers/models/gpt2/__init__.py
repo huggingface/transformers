@@ -18,9 +18,17 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_gpt2 import *
-    from .modeling_gpt2 import *
-    from .tokenization_gpt2 import *
+    from .configuration_gpt2 import GPT2Config
+    from .modeling_gpt2 import (
+        GPT2DoubleHeadsModel,
+        GPT2ForQuestionAnswering,
+        GPT2ForSequenceClassification,
+        GPT2ForTokenClassification,
+        GPT2LMHeadModel,
+        GPT2Model,
+        GPT2PreTrainedModel,
+    )
+    from .tokenization_gpt2 import GPT2Tokenizer
 else:
     import sys
 

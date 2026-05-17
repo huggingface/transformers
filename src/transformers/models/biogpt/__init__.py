@@ -18,9 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_biogpt import *
-    from .modeling_biogpt import *
-    from .tokenization_biogpt import *
+    from .configuration_biogpt import BioGptConfig
+    from .modeling_biogpt import (
+        BioGptForCausalLM,
+        BioGptForSequenceClassification,
+        BioGptForTokenClassification,
+        BioGptModel,
+        BioGptPreTrainedModel,
+    )
+    from .tokenization_biogpt import BioGptTokenizer
 else:
     import sys
 

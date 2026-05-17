@@ -18,11 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_grounding_dino import *
-    from .image_processing_grounding_dino import *
-    from .image_processing_pil_grounding_dino import *
-    from .modeling_grounding_dino import *
-    from .processing_grounding_dino import *
+    from .configuration_grounding_dino import GroundingDinoConfig
+    from .image_processing_grounding_dino import GroundingDinoImageProcessor
+    from .image_processing_pil_grounding_dino import GroundingDinoImageProcessorPil
+    from .modeling_grounding_dino import (
+        GroundingDinoForObjectDetection,
+        GroundingDinoModel,
+        GroundingDinoPreTrainedModel,
+    )
+    from .processing_grounding_dino import GroundingDinoProcessor
 else:
     import sys
 

@@ -18,12 +18,18 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_siglip import *
-    from .image_processing_pil_siglip import *
-    from .image_processing_siglip import *
-    from .modeling_siglip import *
-    from .processing_siglip import *
-    from .tokenization_siglip import *
+    from .configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
+    from .image_processing_pil_siglip import SiglipImageProcessorPil
+    from .image_processing_siglip import SiglipImageProcessor
+    from .modeling_siglip import (
+        SiglipForImageClassification,
+        SiglipModel,
+        SiglipPreTrainedModel,
+        SiglipTextModel,
+        SiglipVisionModel,
+    )
+    from .processing_siglip import SiglipProcessor
+    from .tokenization_siglip import SiglipTokenizer
 else:
     import sys
 

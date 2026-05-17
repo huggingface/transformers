@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_mamba2 import *
-    from .modeling_mamba2 import *
+    from .configuration_mamba2 import Mamba2Config
+    from .modeling_mamba2 import Mamba2ForCausalLM, Mamba2Model, Mamba2PreTrainedModel
 else:
     import sys
 

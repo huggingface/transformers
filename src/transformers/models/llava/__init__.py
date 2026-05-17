@@ -18,11 +18,11 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_llava import *
-    from .image_processing_llava import *
-    from .image_processing_pil_llava import *
-    from .modeling_llava import *
-    from .processing_llava import *
+    from .configuration_llava import LlavaConfig
+    from .image_processing_llava import LlavaImageProcessor
+    from .image_processing_pil_llava import LlavaImageProcessorPil
+    from .modeling_llava import LlavaForConditionalGeneration, LlavaModel, LlavaPreTrainedModel
+    from .processing_llava import LlavaProcessor
 else:
     import sys
 

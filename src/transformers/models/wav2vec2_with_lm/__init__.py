@@ -18,7 +18,7 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .processing_wav2vec2_with_lm import *
+    from .processing_wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
 else:
     import sys
 

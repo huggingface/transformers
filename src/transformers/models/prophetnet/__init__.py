@@ -18,9 +18,16 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_prophetnet import *
-    from .modeling_prophetnet import *
-    from .tokenization_prophetnet import *
+    from .configuration_prophetnet import ProphetNetConfig
+    from .modeling_prophetnet import (
+        ProphetNetDecoder,
+        ProphetNetEncoder,
+        ProphetNetForCausalLM,
+        ProphetNetForConditionalGeneration,
+        ProphetNetModel,
+        ProphetNetPreTrainedModel,
+    )
+    from .tokenization_prophetnet import ProphetNetTokenizer
 else:
     import sys
 

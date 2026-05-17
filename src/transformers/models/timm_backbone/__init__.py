@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_timm_backbone import *
-    from .modeling_timm_backbone import *
+    from .configuration_timm_backbone import TimmBackboneConfig
+    from .modeling_timm_backbone import TimmBackbone
 else:
     import sys
 

@@ -18,8 +18,16 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_wav2vec2_conformer import *
-    from .modeling_wav2vec2_conformer import *
+    from .configuration_wav2vec2_conformer import Wav2Vec2ConformerConfig
+    from .modeling_wav2vec2_conformer import (
+        Wav2Vec2ConformerForAudioFrameClassification,
+        Wav2Vec2ConformerForCTC,
+        Wav2Vec2ConformerForPreTraining,
+        Wav2Vec2ConformerForSequenceClassification,
+        Wav2Vec2ConformerForXVector,
+        Wav2Vec2ConformerModel,
+        Wav2Vec2ConformerPreTrainedModel,
+    )
 else:
     import sys
 

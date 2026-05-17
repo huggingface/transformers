@@ -18,8 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_diffllama import *
-    from .modeling_diffllama import *
+    from .configuration_diffllama import DiffLlamaConfig
+    from .modeling_diffllama import (
+        DiffLlamaForCausalLM,
+        DiffLlamaForQuestionAnswering,
+        DiffLlamaForSequenceClassification,
+        DiffLlamaForTokenClassification,
+        DiffLlamaModel,
+        DiffLlamaPreTrainedModel,
+    )
 else:
     import sys
 

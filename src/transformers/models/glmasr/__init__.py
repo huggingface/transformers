@@ -19,9 +19,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_glmasr import *
-    from .modeling_glmasr import *
-    from .processing_glmasr import *
+    from .configuration_glmasr import GlmAsrConfig, GlmAsrEncoderConfig
+    from .modeling_glmasr import GlmAsrEncoder, GlmAsrForConditionalGeneration, GlmAsrPreTrainedModel
+    from .processing_glmasr import GlmAsrProcessor
 else:
     import sys
 

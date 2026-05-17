@@ -18,10 +18,10 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_sam2_video import *
-    from .modeling_sam2_video import *
-    from .processing_sam2_video import *
-    from .video_processing_sam2_video import *
+    from .configuration_sam2_video import Sam2VideoConfig, Sam2VideoMaskDecoderConfig, Sam2VideoPromptEncoderConfig
+    from .modeling_sam2_video import Sam2VideoInferenceSession, Sam2VideoModel, Sam2VideoPreTrainedModel
+    from .processing_sam2_video import Sam2VideoProcessor
+    from .video_processing_sam2_video import Sam2VideoVideoProcessor
 else:
     import sys
 

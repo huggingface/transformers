@@ -18,10 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_convnext import *
-    from .image_processing_convnext import *
-    from .image_processing_pil_convnext import *
-    from .modeling_convnext import *
+    from .configuration_convnext import ConvNextConfig
+    from .image_processing_convnext import ConvNextImageProcessor
+    from .image_processing_pil_convnext import ConvNextImageProcessorPil
+    from .modeling_convnext import (
+        ConvNextBackbone,
+        ConvNextForImageClassification,
+        ConvNextModel,
+        ConvNextPreTrainedModel,
+    )
 else:
     import sys
 

@@ -22,8 +22,13 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_apertus import *
-    from .modeling_apertus import *
+    from .configuration_apertus import ApertusConfig
+    from .modeling_apertus import (
+        ApertusForCausalLM,
+        ApertusForTokenClassification,
+        ApertusModel,
+        ApertusPreTrainedModel,
+    )
 else:
     import sys
 

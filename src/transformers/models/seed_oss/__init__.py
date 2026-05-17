@@ -18,8 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_seed_oss import *
-    from .modeling_seed_oss import *
+    from .configuration_seed_oss import SeedOssConfig
+    from .modeling_seed_oss import (
+        SeedOssForCausalLM,
+        SeedOssForQuestionAnswering,
+        SeedOssForSequenceClassification,
+        SeedOssForTokenClassification,
+        SeedOssModel,
+        SeedOssPreTrainedModel,
+    )
 else:
     import sys
 

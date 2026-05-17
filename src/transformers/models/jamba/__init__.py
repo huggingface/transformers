@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_jamba import *
-    from .modeling_jamba import *
+    from .configuration_jamba import JambaConfig
+    from .modeling_jamba import JambaForCausalLM, JambaForSequenceClassification, JambaModel, JambaPreTrainedModel
 else:
     import sys
 

@@ -18,10 +18,20 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_funnel import *
+    from .configuration_funnel import FunnelConfig
     from .convert_funnel_original_tf_checkpoint_to_pytorch import *
-    from .modeling_funnel import *
-    from .tokenization_funnel import *
+    from .modeling_funnel import (
+        FunnelBaseModel,
+        FunnelForMaskedLM,
+        FunnelForMultipleChoice,
+        FunnelForPreTraining,
+        FunnelForQuestionAnswering,
+        FunnelForSequenceClassification,
+        FunnelForTokenClassification,
+        FunnelModel,
+        FunnelPreTrainedModel,
+    )
+    from .tokenization_funnel import FunnelTokenizer
 else:
     import sys
 

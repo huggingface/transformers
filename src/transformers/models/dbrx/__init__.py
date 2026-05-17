@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_dbrx import *
-    from .modeling_dbrx import *
+    from .configuration_dbrx import DbrxConfig
+    from .modeling_dbrx import DbrxForCausalLM, DbrxModel, DbrxPreTrainedModel
 else:
     import sys
 

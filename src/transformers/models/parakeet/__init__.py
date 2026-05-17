@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_parakeet import *
-    from .feature_extraction_parakeet import *
-    from .modeling_parakeet import *
+    from .configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig
+    from .feature_extraction_parakeet import ParakeetFeatureExtractor
+    from .modeling_parakeet import ParakeetEncoder, ParakeetForCTC, ParakeetPreTrainedModel
     from .tokenization_parakeet_fast import *
 else:
     import sys

@@ -18,12 +18,33 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_data2vec_audio import *
-    from .configuration_data2vec_text import *
-    from .configuration_data2vec_vision import *
-    from .modeling_data2vec_audio import *
-    from .modeling_data2vec_text import *
-    from .modeling_data2vec_vision import *
+    from .configuration_data2vec_audio import Data2VecAudioConfig
+    from .configuration_data2vec_text import Data2VecTextConfig
+    from .configuration_data2vec_vision import Data2VecVisionConfig
+    from .modeling_data2vec_audio import (
+        Data2VecAudioForAudioFrameClassification,
+        Data2VecAudioForCTC,
+        Data2VecAudioForSequenceClassification,
+        Data2VecAudioForXVector,
+        Data2VecAudioModel,
+        Data2VecAudioPreTrainedModel,
+    )
+    from .modeling_data2vec_text import (
+        Data2VecTextForCausalLM,
+        Data2VecTextForMaskedLM,
+        Data2VecTextForMultipleChoice,
+        Data2VecTextForQuestionAnswering,
+        Data2VecTextForSequenceClassification,
+        Data2VecTextForTokenClassification,
+        Data2VecTextModel,
+        Data2VecTextPreTrainedModel,
+    )
+    from .modeling_data2vec_vision import (
+        Data2VecVisionForImageClassification,
+        Data2VecVisionForSemanticSegmentation,
+        Data2VecVisionModel,
+        Data2VecVisionPreTrainedModel,
+    )
 else:
     import sys
 

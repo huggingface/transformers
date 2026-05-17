@@ -20,8 +20,13 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_pp_ocrv5_mobile_rec import *
-    from .modeling_pp_ocrv5_mobile_rec import *
+    from .configuration_pp_ocrv5_mobile_rec import PPOCRV5MobileRecConfig
+    from .modeling_pp_ocrv5_mobile_rec import (
+        PPOCRV5MobileRecEncoderWithSVTR,
+        PPOCRV5MobileRecForTextRecognition,
+        PPOCRV5MobileRecModel,
+        PPOCRV5MobileRecPreTrainedModel,
+    )
 else:
     import sys
 

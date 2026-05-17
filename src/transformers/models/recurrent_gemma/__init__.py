@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_recurrent_gemma import *
-    from .modeling_recurrent_gemma import *
+    from .configuration_recurrent_gemma import RecurrentGemmaConfig
+    from .modeling_recurrent_gemma import RecurrentGemmaForCausalLM, RecurrentGemmaModel, RecurrentGemmaPreTrainedModel
 else:
     import sys
 

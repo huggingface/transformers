@@ -18,9 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_splinter import *
-    from .modeling_splinter import *
-    from .tokenization_splinter import *
+    from .configuration_splinter import SplinterConfig
+    from .modeling_splinter import (
+        SplinterForPreTraining,
+        SplinterForQuestionAnswering,
+        SplinterLayer,
+        SplinterModel,
+        SplinterPreTrainedModel,
+    )
+    from .tokenization_splinter import SplinterTokenizer
     from .tokenization_splinter_fast import *
 else:
     import sys

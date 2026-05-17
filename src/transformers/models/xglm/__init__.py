@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_xglm import *
-    from .modeling_xglm import *
-    from .tokenization_xglm import *
+    from .configuration_xglm import XGLMConfig
+    from .modeling_xglm import XGLMForCausalLM, XGLMModel, XGLMPreTrainedModel
+    from .tokenization_xglm import XGLMTokenizer
 else:
     import sys
 

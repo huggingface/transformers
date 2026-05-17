@@ -18,10 +18,17 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_clap import *
-    from .feature_extraction_clap import *
-    from .modeling_clap import *
-    from .processing_clap import *
+    from .configuration_clap import ClapAudioConfig, ClapConfig, ClapTextConfig
+    from .feature_extraction_clap import ClapFeatureExtractor
+    from .modeling_clap import (
+        ClapAudioModel,
+        ClapAudioModelWithProjection,
+        ClapModel,
+        ClapPreTrainedModel,
+        ClapTextModel,
+        ClapTextModelWithProjection,
+    )
+    from .processing_clap import ClapProcessor
 else:
     import sys
 

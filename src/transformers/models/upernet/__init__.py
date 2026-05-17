@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_upernet import *
-    from .modeling_upernet import *
+    from .configuration_upernet import UperNetConfig
+    from .modeling_upernet import UperNetForSemanticSegmentation, UperNetPreTrainedModel
 else:
     import sys
 

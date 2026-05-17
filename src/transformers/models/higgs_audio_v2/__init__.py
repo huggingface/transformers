@@ -18,10 +18,14 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_higgs_audio_v2 import *
+    from .configuration_higgs_audio_v2 import HiggsAudioV2Config
     from .generation_higgs_audio_v2 import *
-    from .modeling_higgs_audio_v2 import *
-    from .processing_higgs_audio_v2 import *
+    from .modeling_higgs_audio_v2 import (
+        HiggsAudioV2ForConditionalGeneration,
+        HiggsAudioV2Model,
+        HiggsAudioV2PreTrainedModel,
+    )
+    from .processing_higgs_audio_v2 import HiggsAudioV2Processor
 else:
     import sys
 

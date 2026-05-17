@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_x_clip import *
-    from .modeling_x_clip import *
-    from .processing_x_clip import *
+    from .configuration_x_clip import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfig
+    from .modeling_x_clip import XCLIPModel, XCLIPPreTrainedModel, XCLIPTextModel, XCLIPVisionModel
+    from .processing_x_clip import XCLIPProcessor
 else:
     import sys
 

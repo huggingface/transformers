@@ -19,9 +19,17 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_sam3_tracker_video import *
-    from .modeling_sam3_tracker_video import *
-    from .processing_sam3_tracker_video import *
+    from .configuration_sam3_tracker_video import (
+        Sam3TrackerVideoConfig,
+        Sam3TrackerVideoMaskDecoderConfig,
+        Sam3TrackerVideoPromptEncoderConfig,
+    )
+    from .modeling_sam3_tracker_video import (
+        Sam3TrackerVideoInferenceSession,
+        Sam3TrackerVideoModel,
+        Sam3TrackerVideoPreTrainedModel,
+    )
+    from .processing_sam3_tracker_video import Sam3TrackerVideoProcessor
 else:
     import sys
 

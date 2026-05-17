@@ -18,10 +18,18 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_sam3 import *
-    from .image_processing_sam3 import *
-    from .modeling_sam3 import *
-    from .processing_sam3 import *
+    from .configuration_sam3 import (
+        Sam3Config,
+        Sam3DETRDecoderConfig,
+        Sam3DETREncoderConfig,
+        Sam3GeometryEncoderConfig,
+        Sam3MaskDecoderConfig,
+        Sam3VisionConfig,
+        Sam3ViTConfig,
+    )
+    from .image_processing_sam3 import Sam3ImageProcessor
+    from .modeling_sam3 import Sam3Model, Sam3PreTrainedModel, Sam3VisionModel, Sam3ViTModel
+    from .processing_sam3 import Sam3Processor
 else:
     import sys
 

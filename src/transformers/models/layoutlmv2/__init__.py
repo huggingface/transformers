@@ -18,13 +18,20 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_layoutlmv2 import *
+    from .configuration_layoutlmv2 import LayoutLMv2Config
     from .feature_extraction_layoutlmv2 import *
-    from .image_processing_layoutlmv2 import *
-    from .image_processing_pil_layoutlmv2 import *
-    from .modeling_layoutlmv2 import *
-    from .processing_layoutlmv2 import *
-    from .tokenization_layoutlmv2 import *
+    from .image_processing_layoutlmv2 import LayoutLMv2ImageProcessor
+    from .image_processing_pil_layoutlmv2 import LayoutLMv2ImageProcessorPil
+    from .modeling_layoutlmv2 import (
+        LayoutLMv2ForQuestionAnswering,
+        LayoutLMv2ForSequenceClassification,
+        LayoutLMv2ForTokenClassification,
+        LayoutLMv2Layer,
+        LayoutLMv2Model,
+        LayoutLMv2PreTrainedModel,
+    )
+    from .processing_layoutlmv2 import LayoutLMv2Processor
+    from .tokenization_layoutlmv2 import LayoutLMv2Tokenizer
 else:
     import sys
 

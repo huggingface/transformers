@@ -18,9 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_florence2 import *
-    from .modeling_florence2 import *
-    from .processing_florence2 import *
+    from .configuration_florence2 import Florence2Config, Florence2VisionConfig
+    from .modeling_florence2 import (
+        Florence2ForConditionalGeneration,
+        Florence2Model,
+        Florence2PreTrainedModel,
+        Florence2VisionBackbone,
+        Florence2VisionPreTrainedModel,
+    )
+    from .processing_florence2 import Florence2Processor
 else:
     import sys
 

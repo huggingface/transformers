@@ -18,11 +18,18 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_clvp import *
-    from .feature_extraction_clvp import *
-    from .modeling_clvp import *
-    from .processing_clvp import *
-    from .tokenization_clvp import *
+    from .configuration_clvp import ClvpConfig, ClvpDecoderConfig, ClvpEncoderConfig
+    from .feature_extraction_clvp import ClvpFeatureExtractor
+    from .modeling_clvp import (
+        ClvpDecoder,
+        ClvpEncoder,
+        ClvpForCausalLM,
+        ClvpModel,
+        ClvpModelForConditionalGeneration,
+        ClvpPreTrainedModel,
+    )
+    from .processing_clvp import ClvpProcessor
+    from .tokenization_clvp import ClvpTokenizer
 else:
     import sys
 

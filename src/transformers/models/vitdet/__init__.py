@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_vitdet import *
-    from .modeling_vitdet import *
+    from .configuration_vitdet import VitDetConfig
+    from .modeling_vitdet import VitDetBackbone, VitDetModel, VitDetPreTrainedModel
 else:
     import sys
 

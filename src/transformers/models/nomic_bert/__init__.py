@@ -19,8 +19,14 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_nomic_bert import *
-    from .modeling_nomic_bert import *
+    from .configuration_nomic_bert import NomicBertConfig
+    from .modeling_nomic_bert import (
+        NomicBertForMaskedLM,
+        NomicBertForSequenceClassification,
+        NomicBertForTokenClassification,
+        NomicBertModel,
+        NomicBertPreTrainedModel,
+    )
 else:
     import sys
 

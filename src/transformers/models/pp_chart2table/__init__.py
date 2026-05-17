@@ -19,10 +19,10 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_pp_chart2table import *
-    from .image_processing_pil_pp_chart2table import *
-    from .image_processing_pp_chart2table import *
-    from .processing_pp_chart2table import *
+    from .configuration_pp_chart2table import PPChart2TableConfig
+    from .image_processing_pil_pp_chart2table import PPChart2TableImageProcessorPil
+    from .image_processing_pp_chart2table import PPChart2TableImageProcessor
+    from .processing_pp_chart2table import PPChart2TableProcessor
 else:
     import sys
 

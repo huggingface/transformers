@@ -18,9 +18,18 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_fastspeech2_conformer import *
-    from .modeling_fastspeech2_conformer import *
-    from .tokenization_fastspeech2_conformer import *
+    from .configuration_fastspeech2_conformer import (
+        FastSpeech2ConformerConfig,
+        FastSpeech2ConformerHifiGanConfig,
+        FastSpeech2ConformerWithHifiGanConfig,
+    )
+    from .modeling_fastspeech2_conformer import (
+        FastSpeech2ConformerHifiGan,
+        FastSpeech2ConformerModel,
+        FastSpeech2ConformerPreTrainedModel,
+        FastSpeech2ConformerWithHifiGan,
+    )
+    from .tokenization_fastspeech2_conformer import FastSpeech2ConformerTokenizer
 else:
     import sys
 

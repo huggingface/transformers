@@ -18,10 +18,10 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_mgp_str import *
-    from .modeling_mgp_str import *
-    from .processing_mgp_str import *
-    from .tokenization_mgp_str import *
+    from .configuration_mgp_str import MgpstrConfig
+    from .modeling_mgp_str import MgpstrForSceneTextRecognition, MgpstrModel, MgpstrPreTrainedModel
+    from .processing_mgp_str import MgpstrProcessor
+    from .tokenization_mgp_str import MgpstrTokenizer
 else:
     import sys
 

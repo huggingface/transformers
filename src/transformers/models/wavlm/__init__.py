@@ -18,8 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_wavlm import *
-    from .modeling_wavlm import *
+    from .configuration_wavlm import WavLMConfig
+    from .modeling_wavlm import (
+        WavLMForAudioFrameClassification,
+        WavLMForCTC,
+        WavLMForSequenceClassification,
+        WavLMForXVector,
+        WavLMModel,
+        WavLMPreTrainedModel,
+    )
 else:
     import sys
 

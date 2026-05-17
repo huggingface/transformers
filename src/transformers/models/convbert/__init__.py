@@ -19,9 +19,18 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from ..bert.tokenization_bert import BertTokenizer as ConvBertTokenizerFast
-    from .configuration_convbert import *
-    from .modeling_convbert import *
-    from .tokenization_convbert import *
+    from .configuration_convbert import ConvBertConfig
+    from .modeling_convbert import (
+        ConvBertForMaskedLM,
+        ConvBertForMultipleChoice,
+        ConvBertForQuestionAnswering,
+        ConvBertForSequenceClassification,
+        ConvBertForTokenClassification,
+        ConvBertLayer,
+        ConvBertModel,
+        ConvBertPreTrainedModel,
+    )
+    from .tokenization_convbert import ConvBertTokenizer
 else:
     import sys
 

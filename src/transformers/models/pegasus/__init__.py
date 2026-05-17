@@ -18,9 +18,14 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_pegasus import *
-    from .modeling_pegasus import *
-    from .tokenization_pegasus import *
+    from .configuration_pegasus import PegasusConfig
+    from .modeling_pegasus import (
+        PegasusForCausalLM,
+        PegasusForConditionalGeneration,
+        PegasusModel,
+        PegasusPreTrainedModel,
+    )
+    from .tokenization_pegasus import PegasusTokenizer
 else:
     import sys
 

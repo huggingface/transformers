@@ -19,8 +19,12 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_moonshine_streaming import *
-    from .modeling_moonshine_streaming import *
+    from .configuration_moonshine_streaming import MoonshineStreamingConfig, MoonshineStreamingEncoderConfig
+    from .modeling_moonshine_streaming import (
+        MoonshineStreamingForConditionalGeneration,
+        MoonshineStreamingModel,
+        MoonshineStreamingPreTrainedModel,
+    )
 else:
     import sys
 

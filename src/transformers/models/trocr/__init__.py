@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_trocr import *
-    from .modeling_trocr import *
-    from .processing_trocr import *
+    from .configuration_trocr import TrOCRConfig
+    from .modeling_trocr import TrOCRForCausalLM, TrOCRPreTrainedModel
+    from .processing_trocr import TrOCRProcessor
 else:
     import sys
 

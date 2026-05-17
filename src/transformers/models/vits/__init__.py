@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_vits import *
-    from .modeling_vits import *
-    from .tokenization_vits import *
+    from .configuration_vits import VitsConfig
+    from .modeling_vits import VitsModel, VitsPreTrainedModel
+    from .tokenization_vits import VitsTokenizer
 else:
     import sys
 

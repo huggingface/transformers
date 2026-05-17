@@ -19,8 +19,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_glm_moe_dsa import *
-    from .modeling_glm_moe_dsa import *
+    from .configuration_glm_moe_dsa import GlmMoeDsaConfig
+    from .modeling_glm_moe_dsa import GlmMoeDsaForCausalLM, GlmMoeDsaModel, GlmMoeDsaPreTrainedModel
 else:
     import sys
 

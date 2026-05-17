@@ -19,8 +19,12 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_granitemoehybrid import *
-    from .modeling_granitemoehybrid import *
+    from .configuration_granitemoehybrid import GraniteMoeHybridConfig
+    from .modeling_granitemoehybrid import (
+        GraniteMoeHybridForCausalLM,
+        GraniteMoeHybridModel,
+        GraniteMoeHybridPreTrainedModel,
+    )
 else:
     import sys
 

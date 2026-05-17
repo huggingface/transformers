@@ -18,8 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_seamless_m4t_v2 import *
-    from .modeling_seamless_m4t_v2 import *
+    from .configuration_seamless_m4t_v2 import SeamlessM4Tv2Config
+    from .modeling_seamless_m4t_v2 import (
+        SeamlessM4Tv2ForSpeechToSpeech,
+        SeamlessM4Tv2ForSpeechToText,
+        SeamlessM4Tv2ForTextToSpeech,
+        SeamlessM4Tv2ForTextToText,
+        SeamlessM4Tv2Model,
+        SeamlessM4Tv2PreTrainedModel,
+    )
 else:
     import sys
 

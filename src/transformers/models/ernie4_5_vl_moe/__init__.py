@@ -18,12 +18,32 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_ernie4_5_vl_moe import *
-    from .image_processing_ernie4_5_vl_moe import *
-    from .image_processing_pil_ernie4_5_vl_moe import *
-    from .modeling_ernie4_5_vl_moe import *
-    from .processing_ernie4_5_vl_moe import *
-    from .video_processing_ernie4_5_vl_moe import *
+    from .configuration_ernie4_5_vl_moe import (
+        Ernie4_5_VL_MoeConfig,
+        Ernie4_5_VL_MoeTextConfig,
+        Ernie4_5_VL_MoeVisionConfig,
+        Ernie4_5_VLMoeConfig,
+        Ernie4_5_VLMoeTextConfig,
+        Ernie4_5_VLMoeVisionConfig,
+    )
+    from .image_processing_ernie4_5_vl_moe import Ernie4_5_VL_MoeImageProcessor, Ernie4_5_VLMoeImageProcessor
+    from .image_processing_pil_ernie4_5_vl_moe import Ernie4_5_VL_MoeImageProcessorPil, Ernie4_5_VLMoeImageProcessorPil
+    from .modeling_ernie4_5_vl_moe import (
+        Ernie4_5_VL_MoeForConditionalGeneration,
+        Ernie4_5_VL_MoeModel,
+        Ernie4_5_VL_MoePreTrainedModel,
+        Ernie4_5_VL_MoeTextModel,
+        Ernie4_5_VL_MoeVariableResolutionResamplerModel,
+        Ernie4_5_VL_MoeVisionTransformerPretrainedModel,
+        Ernie4_5_VLMoeForConditionalGeneration,
+        Ernie4_5_VLMoeModel,
+        Ernie4_5_VLMoePreTrainedModel,
+        Ernie4_5_VLMoeTextModel,
+        Ernie4_5_VLMoeVariableResolutionResamplerModel,
+        Ernie4_5_VLMoeVisionTransformerPretrainedModel,
+    )
+    from .processing_ernie4_5_vl_moe import Ernie4_5_VLMoeProcessor
+    from .video_processing_ernie4_5_vl_moe import Ernie4_5_VLMoeVideoProcessor
 else:
     import sys
 

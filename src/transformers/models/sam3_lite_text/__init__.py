@@ -19,8 +19,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_sam3_lite_text import *
-    from .modeling_sam3_lite_text import *
+    from .configuration_sam3_lite_text import (
+        Sam3LiteTextConfig,
+        Sam3LiteTextDETRDecoderConfig,
+        Sam3LiteTextDETREncoderConfig,
+        Sam3LiteTextGeometryEncoderConfig,
+        Sam3LiteTextMaskDecoderConfig,
+        Sam3LiteTextTextConfig,
+    )
+    from .modeling_sam3_lite_text import Sam3LiteTextModel, Sam3LiteTextPreTrainedModel, Sam3LiteTextTextModel
 else:
     import sys
 

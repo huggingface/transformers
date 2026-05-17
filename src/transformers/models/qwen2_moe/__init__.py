@@ -18,8 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_qwen2_moe import *
-    from .modeling_qwen2_moe import *
+    from .configuration_qwen2_moe import Qwen2MoeConfig
+    from .modeling_qwen2_moe import (
+        Qwen2MoeForCausalLM,
+        Qwen2MoeForQuestionAnswering,
+        Qwen2MoeForSequenceClassification,
+        Qwen2MoeForTokenClassification,
+        Qwen2MoeModel,
+        Qwen2MoePreTrainedModel,
+    )
 else:
     import sys
 

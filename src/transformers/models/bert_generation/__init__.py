@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_bert_generation import *
-    from .modeling_bert_generation import *
-    from .tokenization_bert_generation import *
+    from .configuration_bert_generation import BertGenerationConfig
+    from .modeling_bert_generation import BertGenerationDecoder, BertGenerationEncoder, BertGenerationPreTrainedModel
+    from .tokenization_bert_generation import BertGenerationTokenizer
 else:
     import sys
 

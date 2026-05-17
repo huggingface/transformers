@@ -18,10 +18,10 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_lfm2_vl import *
-    from .image_processing_lfm2_vl import *
-    from .modeling_lfm2_vl import *
-    from .processing_lfm2_vl import *
+    from .configuration_lfm2_vl import Lfm2VlConfig
+    from .image_processing_lfm2_vl import Lfm2VlImageProcessor
+    from .modeling_lfm2_vl import Lfm2VlForConditionalGeneration, Lfm2VlModel, Lfm2VlPreTrainedModel
+    from .processing_lfm2_vl import Lfm2VlProcessor
 else:
     import sys
 

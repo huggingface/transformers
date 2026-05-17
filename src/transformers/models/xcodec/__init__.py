@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_xcodec import *
-    from .modeling_xcodec import *
+    from .configuration_xcodec import XcodecConfig
+    from .modeling_xcodec import XcodecModel, XcodecPreTrainedModel
 else:
     import sys
 

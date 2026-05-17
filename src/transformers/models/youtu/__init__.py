@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_youtu import *
-    from .modeling_youtu import *
+    from .configuration_youtu import YoutuConfig
+    from .modeling_youtu import YoutuForCausalLM, YoutuModel, YoutuPreTrainedModel
 else:
     import sys
 

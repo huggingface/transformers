@@ -18,9 +18,17 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_t5 import *
-    from .modeling_t5 import *
-    from .tokenization_t5 import *
+    from .configuration_t5 import T5Config
+    from .modeling_t5 import (
+        T5EncoderModel,
+        T5ForConditionalGeneration,
+        T5ForQuestionAnswering,
+        T5ForSequenceClassification,
+        T5ForTokenClassification,
+        T5Model,
+        T5PreTrainedModel,
+    )
+    from .tokenization_t5 import T5Tokenizer
 else:
     import sys
 

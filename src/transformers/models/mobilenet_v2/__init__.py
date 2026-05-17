@@ -18,10 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_mobilenet_v2 import *
-    from .image_processing_mobilenet_v2 import *
-    from .image_processing_pil_mobilenet_v2 import *
-    from .modeling_mobilenet_v2 import *
+    from .configuration_mobilenet_v2 import MobileNetV2Config
+    from .image_processing_mobilenet_v2 import MobileNetV2ImageProcessor
+    from .image_processing_pil_mobilenet_v2 import MobileNetV2ImageProcessorPil
+    from .modeling_mobilenet_v2 import (
+        MobileNetV2ForImageClassification,
+        MobileNetV2ForSemanticSegmentation,
+        MobileNetV2Model,
+        MobileNetV2PreTrainedModel,
+    )
 else:
     import sys
 

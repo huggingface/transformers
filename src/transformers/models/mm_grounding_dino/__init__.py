@@ -18,8 +18,12 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_mm_grounding_dino import *
-    from .modeling_mm_grounding_dino import *
+    from .configuration_mm_grounding_dino import MMGroundingDinoConfig
+    from .modeling_mm_grounding_dino import (
+        MMGroundingDinoForObjectDetection,
+        MMGroundingDinoModel,
+        MMGroundingDinoPreTrainedModel,
+    )
 else:
     import sys
 

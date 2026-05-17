@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_omdet_turbo import *
-    from .modeling_omdet_turbo import *
-    from .processing_omdet_turbo import *
+    from .configuration_omdet_turbo import OmDetTurboConfig
+    from .modeling_omdet_turbo import OmDetTurboForObjectDetection, OmDetTurboPreTrainedModel
+    from .processing_omdet_turbo import OmDetTurboProcessor
 else:
     import sys
 

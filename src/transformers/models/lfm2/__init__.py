@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_lfm2 import *
-    from .modeling_lfm2 import *
+    from .configuration_lfm2 import Lfm2Config
+    from .modeling_lfm2 import Lfm2ForCausalLM, Lfm2Model, Lfm2PreTrainedModel
 else:
     import sys
 

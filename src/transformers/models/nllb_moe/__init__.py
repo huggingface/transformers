@@ -18,8 +18,14 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_nllb_moe import *
-    from .modeling_nllb_moe import *
+    from .configuration_nllb_moe import NllbMoeConfig
+    from .modeling_nllb_moe import (
+        NllbMoeForConditionalGeneration,
+        NllbMoeModel,
+        NllbMoePreTrainedModel,
+        NllbMoeSparseMLP,
+        NllbMoeTop2Router,
+    )
 else:
     import sys
 

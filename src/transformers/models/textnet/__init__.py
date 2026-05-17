@@ -18,10 +18,10 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_textnet import *
-    from .image_processing_pil_textnet import *
-    from .image_processing_textnet import *
-    from .modeling_textnet import *
+    from .configuration_textnet import TextNetConfig
+    from .image_processing_pil_textnet import TextNetImageProcessorPil
+    from .image_processing_textnet import TextNetImageProcessor
+    from .modeling_textnet import TextNetBackbone, TextNetForImageClassification, TextNetModel, TextNetPreTrainedModel
 else:
     import sys
 

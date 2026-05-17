@@ -18,8 +18,17 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_visual_bert import *
-    from .modeling_visual_bert import *
+    from .configuration_visual_bert import VisualBertConfig
+    from .modeling_visual_bert import (
+        VisualBertForMultipleChoice,
+        VisualBertForPreTraining,
+        VisualBertForQuestionAnswering,
+        VisualBertForRegionToPhraseAlignment,
+        VisualBertForVisualReasoning,
+        VisualBertLayer,
+        VisualBertModel,
+        VisualBertPreTrainedModel,
+    )
 else:
     import sys
 

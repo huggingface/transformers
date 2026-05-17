@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_sew_d import *
-    from .modeling_sew_d import *
+    from .configuration_sew_d import SEWDConfig
+    from .modeling_sew_d import SEWDForCTC, SEWDForSequenceClassification, SEWDModel, SEWDPreTrainedModel
 else:
     import sys
 

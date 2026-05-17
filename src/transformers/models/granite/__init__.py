@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_granite import *
-    from .modeling_granite import *
+    from .configuration_granite import GraniteConfig
+    from .modeling_granite import GraniteForCausalLM, GraniteModel, GranitePreTrainedModel
 else:
     import sys
 

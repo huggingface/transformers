@@ -18,11 +18,11 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_yolos import *
+    from .configuration_yolos import YolosConfig
     from .feature_extraction_yolos import *
-    from .image_processing_pil_yolos import *
-    from .image_processing_yolos import *
-    from .modeling_yolos import *
+    from .image_processing_pil_yolos import YolosImageProcessorPil
+    from .image_processing_yolos import YolosImageProcessor
+    from .modeling_yolos import YolosForObjectDetection, YolosModel, YolosPreTrainedModel
 else:
     import sys
 

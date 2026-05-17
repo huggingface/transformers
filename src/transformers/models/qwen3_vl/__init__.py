@@ -18,10 +18,16 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_qwen3_vl import *
-    from .modeling_qwen3_vl import *
-    from .processing_qwen3_vl import *
-    from .video_processing_qwen3_vl import *
+    from .configuration_qwen3_vl import Qwen3VLConfig, Qwen3VLTextConfig
+    from .modeling_qwen3_vl import (
+        Qwen3VLForConditionalGeneration,
+        Qwen3VLModel,
+        Qwen3VLPreTrainedModel,
+        Qwen3VLTextModel,
+        Qwen3VLVisionModel,
+    )
+    from .processing_qwen3_vl import Qwen3VLProcessor
+    from .video_processing_qwen3_vl import Qwen3VLVideoProcessor
 else:
     import sys
 

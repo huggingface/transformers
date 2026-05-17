@@ -18,8 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_bigbird_pegasus import *
-    from .modeling_bigbird_pegasus import *
+    from .configuration_bigbird_pegasus import BigBirdPegasusConfig
+    from .modeling_bigbird_pegasus import (
+        BigBirdPegasusForCausalLM,
+        BigBirdPegasusForConditionalGeneration,
+        BigBirdPegasusForQuestionAnswering,
+        BigBirdPegasusForSequenceClassification,
+        BigBirdPegasusModel,
+        BigBirdPegasusPreTrainedModel,
+    )
 else:
     import sys
 

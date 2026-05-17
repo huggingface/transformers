@@ -18,11 +18,18 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_mllama import *
-    from .image_processing_mllama import *
-    from .image_processing_pil_mllama import *
-    from .modeling_mllama import *
-    from .processing_mllama import *
+    from .configuration_mllama import MllamaConfig
+    from .image_processing_mllama import MllamaImageProcessor
+    from .image_processing_pil_mllama import MllamaImageProcessorPil
+    from .modeling_mllama import (
+        MllamaForCausalLM,
+        MllamaForConditionalGeneration,
+        MllamaModel,
+        MllamaPreTrainedModel,
+        MllamaTextModel,
+        MllamaVisionModel,
+    )
+    from .processing_mllama import MllamaProcessor
 else:
     import sys
 
