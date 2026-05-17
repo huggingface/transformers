@@ -129,8 +129,11 @@ class GGUFQuantizer(HfQuantizer):
         for gguf_name, _tensor in self.gguf_tensors.items():
             try:
                 hf_name, _ = rename_source_key(
-                    gguf_name, renamings, converters,
-                    prefix=prefix, meta_state_dict=meta_state_dict,
+                    gguf_name,
+                    renamings,
+                    converters,
+                    prefix=prefix,
+                    meta_state_dict=meta_state_dict,
                 )
             except Exception:
                 continue
@@ -148,19 +151,36 @@ class GGUFQuantizer(HfQuantizer):
                 continue
             try:
                 hf_name, _ = rename_source_key(
-                    gguf_name, renamings, converters,
-                    prefix=prefix, meta_state_dict=meta_state_dict,
+                    gguf_name,
+                    renamings,
+                    converters,
+                    prefix=prefix,
+                    meta_state_dict=meta_state_dict,
                 )
             except Exception:
                 continue
-            # GGUF stores attn_q / attn_k weights in llama.cpp's permuted layout.
-            # Mark them so the swap helper round-trips via gguf-py instead of copying
-            # the bytes verbatim (which would give wrong matmul output).
+            # Older GGUFs (llama-1 / llama-2 era) store attn_q / attn_k in
+            # llama.cpp's head-permuted layout — applying the permute reversal
+            # here is correct.  Modern exporters for Qwen2/3-MoE (and a few
+            # others) instead ship Q/K already in HF layout; reverse-permuting
+            # those corrupts the matmul ~140% relative.  Skip whenever the
+            # rename pipeline didn't go through ``_ROPE_ATTN_CONVERTERS`` (the
+            # only path that signals "this arch was permuted on export").
+            converter_targets = {
+                c.target_patterns
+                for c in converters
+                if hasattr(c, "operations")
+                and any(type(op).__name__.startswith("ReversePermuteAttn") for op in c.operations)
+            }
+            arch_uses_rope_permute = (
+                ".self_attn.q_proj.weight" in converter_targets or ".self_attn.k_proj.weight" in converter_targets
+            )
             permute = None
-            if ".attn_q." in gguf_name:
-                permute = "q"
-            elif ".attn_k." in gguf_name:
-                permute = "k"
+            if arch_uses_rope_permute:
+                if ".attn_q." in gguf_name:
+                    permute = "q"
+                elif ".attn_k." in gguf_name:
+                    permute = "k"
             weight_info_by_name[hf_name] = {
                 "quant_type": qt.name if hasattr(qt, "name") else str(qt),
                 "bytes": tensor,
@@ -200,7 +220,7 @@ class GGUFQuantizer(HfQuantizer):
         # tensor — e.g. gate/up = Q4_K but down = Q8_0.
         kind_to_keys = {
             "ffn_gate_exps": ("gate_bytes", "gate_quant"),
-            "ffn_up_exps":   ("up_bytes",   "up_quant"),
+            "ffn_up_exps": ("up_bytes", "up_quant"),
             "ffn_down_exps": ("down_bytes", "down_quant"),
         }
         groups: dict[str, dict] = {}
@@ -210,8 +230,11 @@ class GGUFQuantizer(HfQuantizer):
                     continue
                 try:
                     hf_name, _ = rename_source_key(
-                        gguf_name, renamings, converters,
-                        prefix=prefix, meta_state_dict=meta_state_dict,
+                        gguf_name,
+                        renamings,
+                        converters,
+                        prefix=prefix,
+                        meta_state_dict=meta_state_dict,
                     )
                 except Exception:
                     break
@@ -224,9 +247,9 @@ class GGUFQuantizer(HfQuantizer):
                 break
 
         complete = {
-            p: info for p, info in groups.items()
-            if all(k in info for k in ("gate_bytes", "up_bytes", "down_bytes",
-                                       "gate_quant", "up_quant", "down_quant"))
+            p: info
+            for p, info in groups.items()
+            if all(k in info for k in ("gate_bytes", "up_bytes", "down_bytes", "gate_quant", "up_quant", "down_quant"))
         }
         if complete:
             replace_qwen2_moe_experts(model, complete)

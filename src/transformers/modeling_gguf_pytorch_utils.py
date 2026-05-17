@@ -257,11 +257,18 @@ if is_torch_available():
     ]
 
     # --- Qwen2-MoE / Qwen3-MoE (shared experts + merged gate_up_proj) ----------
+    # NB: modern Qwen2/3-MoE GGUFs ship Q/K projection weights already in HF
+    # layout (no llama.cpp-style head permute) — applying ``ReversePermuteAttn*``
+    # here would corrupt the matmul output ~140% relative.  Tested against
+    # gdax/Qwen1.5-MoE-A2.7B_gguf: max abs diff to the HF reference is
+    # 3.8e-2 (Q4_K quantization noise) without the permute, 1.27 with it.
     _QWEN2_MOE_CONVERTERS = [
         _BLK_PREFIX,
         WeightRenaming(r"^token_embd\.weight", "model.embed_tokens.weight"),
         WeightRenaming(r"^output_norm\.weight", "model.norm.weight"),
         WeightRenaming(r"^output\.weight", "lm_head.weight"),
+        WeightRenaming(r"\.attn_q\.weight", ".self_attn.q_proj.weight"),
+        WeightRenaming(r"\.attn_k\.weight", ".self_attn.k_proj.weight"),
         WeightRenaming(r"\.attn_v\.weight", ".self_attn.v_proj.weight"),
         WeightRenaming(r"\.attn_output\.weight", ".self_attn.o_proj.weight"),
         WeightRenaming(r"\.attn_(q|k|v)\.bias", r".self_attn.\1_proj.bias"),
@@ -270,7 +277,6 @@ if is_torch_available():
         WeightRenaming(r"\.ffn_(gate|up|down)_shexp\.weight", r".mlp.shared_expert.\1_proj.weight"),
         WeightRenaming(r"\.ffn_gate_inp\.weight", ".mlp.gate.weight"),
         WeightRenaming(r"\.ffn_down_exps\.weight", ".mlp.experts.down_proj"),
-        *_ROPE_ATTN_CONVERTERS,
         WeightConverter(
             source_patterns=r"\.ffn_gate_inp_shexp",
             target_patterns=".mlp.shared_expert_gate",
