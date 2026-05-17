@@ -23,6 +23,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 # ---------------------------------------------------------------------------
 
 _PAGED_DECODE_OP = None
+_KV_PAGED_WRITE_OP = None
 
 
 def _get_mps_paged_decode_op():
@@ -44,6 +45,27 @@ def _get_mps_paged_decode_op():
     op = mod._ops.paged_decode_attention_f32
     _PAGED_DECODE_OP = getattr(op, "default", op)
     return _PAGED_DECODE_OP
+
+
+def _get_mps_kv_paged_write_op():
+    """Return the cached ``kv_paged_write_f32`` torch op handle (single-dispatch
+    paged KV write). Falls back to ``None`` if absent — callers must do the
+    write via index_put_ in that case."""
+    global _KV_PAGED_WRITE_OP
+    if _KV_PAGED_WRITE_OP is not None:
+        return _KV_PAGED_WRITE_OP if _KV_PAGED_WRITE_OP is not False else None
+    try:
+        from .gguf_linear import _ensure_metal_kernels
+    except Exception:
+        _KV_PAGED_WRITE_OP = False
+        return None
+    mod = _ensure_metal_kernels()
+    if mod is None or not hasattr(mod._ops, "kv_paged_write_f32"):
+        _KV_PAGED_WRITE_OP = False
+        return None
+    op = mod._ops.kv_paged_write_f32
+    _KV_PAGED_WRITE_OP = getattr(op, "default", op)
+    return _KV_PAGED_WRITE_OP
 
 
 def _mps_block_table_path(
@@ -82,21 +104,24 @@ def _mps_block_table_path(
     if seq_lens.dtype != torch.int32:
         seq_lens = seq_lens.to(torch.int32)
 
-    # Compute the absolute cache slot to write per request from the block
-    # table — the new token lives at position seq_lens-1 within the
-    # request's KV sequence, which maps to
-    # ``block_table[b, pos // block_size] * block_size + pos % block_size``.
     block_size = cache.block_size
-    write_pos = seq_lens.to(torch.long) - 1                             # (B,)
-    block_in_seq = write_pos // block_size
-    block_id = block_table.to(torch.long).gather(1, block_in_seq.unsqueeze(1)).squeeze(1)
-    write_slot = block_id * block_size + (write_pos % block_size)
+    # Pack new K/V into cache layout: (1, H_KV, B, D) → (B, H_KV, D).
+    key_w = key.transpose(1, 2).squeeze(0).contiguous()
+    value_w = value.transpose(1, 2).squeeze(0).contiguous()
 
-    # Pack new K/V into cache layout and write at the computed slots.
-    key_w = key.transpose(1, 2).squeeze(0)     # (total_q, H_KV, head_dim)
-    value_w = value.transpose(1, 2).squeeze(0)
-    k_cache.index_put_((write_slot,), key_w)
-    v_cache.index_put_((write_slot,), value_w)
+    write_op = _get_mps_kv_paged_write_op()
+    if write_op is not None:
+        # Fused kernel: compute write_slot on-device and write K/V in one
+        # Metal dispatch — replaces the 4-op Python chain below.
+        write_op(k_cache, v_cache, key_w, value_w, block_table, seq_lens, block_size)
+    else:
+        # Eager fallback: 4 torch ops + 2 index_put_.
+        write_pos = seq_lens.to(torch.long) - 1
+        block_in_seq = write_pos // block_size
+        block_id = block_table.to(torch.long).gather(1, block_in_seq.unsqueeze(1)).squeeze(1)
+        write_slot = block_id * block_size + (write_pos % block_size)
+        k_cache.index_put_((write_slot,), key_w)
+        v_cache.index_put_((write_slot,), value_w)
 
     # paged_decode_attention_f32 takes Q (B, H_Q, head_dim).
     q_in = query.permute(2, 1, 0, 3).squeeze(-2).contiguous()  # (B, H_Q, head_dim)
