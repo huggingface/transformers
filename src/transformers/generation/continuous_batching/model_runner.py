@@ -289,7 +289,17 @@ class ModelRunner:
             if use_cuda_graph:
                 self._capture_graph(forward_fn, self.inputs_and_outputs.compute_stream, *forward_fn_args)
             else:
-                with torch.cuda.stream(self.inputs_and_outputs.compute_stream):
+                # On non-CUDA accelerators (MPS, CPU) ``compute_stream`` is None;
+                # ``torch.cuda.stream(None)`` would fall through to a stack that
+                # calls ``torch.mps.current_device()`` (which doesn't exist),
+                # so use a nullcontext to mirror the other CB call sites that
+                # already handle this case.
+                stream_ctx = (
+                    torch.cuda.stream(self.inputs_and_outputs.compute_stream)
+                    if self.inputs_and_outputs.compute_stream is not None
+                    else nullcontext()
+                )
+                with stream_ctx:
                     forward_fn(*forward_fn_args)
             duration = time.perf_counter() - start
             logger.debug(f"Warmup completed in {duration:.2f}s")
