@@ -14,6 +14,7 @@
 """Resolves a `ContinuousBatchingConfig` into a fully-specified config ready for cache and runner creation. Each
 helper mutates the config in place; `resolve_continuous_batching_config` orchestrates them in the required order."""
 
+import os
 from copy import deepcopy
 from math import ceil
 
@@ -96,6 +97,20 @@ def resolve_without_hints(cb_config: ContinuousBatchingConfig) -> None:
         cb_config.max_cached_graphs = 32
 
 
+def _mps_paged_decode_available() -> bool:
+    """Is the MPS paged-decode-attention kernel loaded?  Decode fast path
+    on MPS hangs on ``paged_decode_attention_f32`` from
+    ``ArthurZ/gguf-kernels`` (see ``integrations.sdpa_paged``)."""
+    try:
+        import torch as _t
+        if not _t.backends.mps.is_available():
+            return False
+        from ...integrations.sdpa_paged import _get_mps_paged_decode_op
+        return _get_mps_paged_decode_op() is not None
+    except Exception:
+        return False
+
+
 def ensure_decode_fast_path_is_available(
     config: PretrainedConfig, cb_config: ContinuousBatchingConfig, user_requested: bool
 ) -> None:
@@ -103,7 +118,7 @@ def ensure_decode_fast_path_is_available(
     available, and no user-provided max blocks per request, set it to the fallback default."""
     # Then, if the decode fast path is not turned off, check if it is available
     if cb_config.max_blocks_per_request != 0:
-        # NOTE: block table should be available with FA2 and FA3, but there seems to be an issue with FA2 atm
+        # Path A: CUDA / FA3 — use flash_attn_with_kvcache.
         if is_flash_attention_requested(config, version=3):
             flash_attn_with_kvcache = lazy_import_paged_flash_attention(config._attn_implementation)[1]
             conditions = [
@@ -118,12 +133,22 @@ def ensure_decode_fast_path_is_available(
                         f"because at least one condition is not met: {conditions}."
                     )
                 cb_config.max_blocks_per_request = 0
+        # Path B: MPS + ``paged|sdpa`` — use our Metal paged-decode kernel
+        # (see ``integrations.sdpa_paged``). Off by default until the
+        # integration is bench-validated; opt in via env var.
+        elif (os.environ.get("TRANSFORMERS_MPS_PAGED_DECODE", "0") not in ("0", "", "false", "False")
+              and config._attn_implementation in ("paged|sdpa", "sdpa")
+              and _mps_paged_decode_available()):
+            # Block-table decode is supported via the MPS kernel; keep
+            # ``max_blocks_per_request`` as set.
+            pass
         # Specific warning for attn implementation other than FA3
         else:
             if user_requested:
                 logger.warning(
                     f"Although {cb_config.max_blocks_per_request = }, the decode fast path is not available "
-                    f"because the attention implementation is not FA3. Got {config._attn_implementation = }."
+                    f"because the attention implementation is not FA3 or MPS+sdpa with the gguf-kernels "
+                    f"paged_decode_attention kernel. Got {config._attn_implementation = }."
                 )
             cb_config.max_blocks_per_request = 0
 
