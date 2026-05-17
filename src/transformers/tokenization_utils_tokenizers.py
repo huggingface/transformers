@@ -765,15 +765,22 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             `str` or `list[str]`: The decoded token(s).
         """
         if isinstance(ids, int):
-            return self._tokenizer.id_to_token(ids)
+            token = self._tokenizer.id_to_token(ids)
+            if token is None:
+                logger.warning(f"Token id {ids} is out of vocabulary (vocab size: {self.vocab_size}). Returning empty string.")
+                return ""
+            return token
         tokens = []
-        # self.all_special_ids is an @property which may be slow, so only compute it once before the loop
         ids_to_skip = set(self.all_special_ids) if skip_special_tokens else set()
         for index in ids:
             index = int(index)
             if index in ids_to_skip:
                 continue
-            tokens.append(self._tokenizer.id_to_token(index))
+            token = self._tokenizer.id_to_token(index)
+            if token is None:
+                logger.warning(f"Token id {index} is out of vocabulary (vocab size: {self.vocab_size}). Skipping.")
+                continue
+            tokens.append(token)
         return tokens
 
     def tokenize(self, text: str, pair: str | None = None, add_special_tokens: bool = False, **kwargs) -> list[str]:
