@@ -28,15 +28,13 @@ class Zaya1VLProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
-            "return_mm_token_type_ids": False,
+            "return_mm_token_type_ids": True,
         },
     }
 
 
 @auto_docstring
 class Zaya1VLProcessor(ProcessorMixin):
-    valid_kwargs = Zaya1VLProcessorKwargs
-
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.image_token = getattr(tokenizer, "image_token", "<image>")
         self.image_token_id = getattr(tokenizer, "image_token_id", None) or tokenizer.convert_tokens_to_ids(
@@ -141,7 +139,7 @@ class Zaya1VLProcessor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        return ProcessorMixin.model_input_names.fget(self)
+        return self.image_processor.model_input_names + self.tokenizer.model_input_names
 
 
 __all__ = ["Zaya1VLProcessor"]

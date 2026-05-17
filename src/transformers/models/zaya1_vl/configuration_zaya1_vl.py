@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import inspect
 from typing import Any, Literal
 
 from huggingface_hub.dataclasses import strict
@@ -31,8 +32,6 @@ from ...utils import auto_docstring
 @strict
 class Zaya1VLVisionConfig(PreTrainedConfig):
     r"""
-    tokens_per_second (`int`, *optional*, defaults to 2):
-        Temporal token rate used by the Qwen2.5-VL vision encoder.
     window_size (`int`, *optional*, defaults to 112):
         Window size used by the Qwen2.5-VL vision encoder.
     out_hidden_size (`int`, *optional*, defaults to 2048):
@@ -54,7 +53,6 @@ class Zaya1VLVisionConfig(PreTrainedConfig):
     patch_size: int | list[int] | tuple[int, int] = 14
     spatial_merge_size: int = 2
     temporal_patch_size: int | list[int] | tuple[int, int] = 1
-    tokens_per_second: int = 2
     window_size: int = 112
     out_hidden_size: int = 2048
     fullatt_block_indexes: list[int] | tuple[int, ...] = (7, 15, 23, 31)
@@ -153,17 +151,8 @@ class Zaya1VLTextConfig(PreTrainedConfig):
             raise ValueError("ZAYA1_VL_TEXT currently supports `num_experts_per_tok=1` only.")
         if self.num_attention_heads % self.num_key_value_heads != 0:
             raise ValueError("`num_attention_heads` must be a multiple of `num_key_value_heads`.")
-        if len(self.layer_types) != self.num_hidden_layers:
-            raise ValueError("`layer_types` must have one entry per hidden layer.")
-        if invalid_layer_types := set(self.layer_types) - {"hybrid", "hybrid_sliding"}:
-            raise ValueError(f"`layer_types` contains unsupported values: {sorted(invalid_layer_types)}.")
         if "hybrid_sliding" in self.layer_types and self.sliding_window is None:
             raise ValueError("`sliding_window` must be set when `layer_types` contains `hybrid_sliding`.")
-        if self.sliding_window is not None and self.sliding_window <= 0:
-            raise ValueError("`sliding_window` must be a strictly positive integer.")
-        for rank_name in ("vision_lora_rank_attn", "vision_lora_rank_mlp"):
-            if self.vision_lora and getattr(self, rank_name) <= 0:
-                raise ValueError(f"`{rank_name}` must be positive when `vision_lora=True`.")
 
 
 @auto_docstring(checkpoint="Zyphra/ZAYA1-VL-8B")
@@ -188,9 +177,11 @@ class Zaya1VLConfig(PreTrainedConfig):
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
+
     image_token_id: int = 262147
     vision_start_token_id: int = 255999
     vision_end_token_id: int = 256000
+
     tie_word_embeddings: bool = True
     output_router_logits: bool = False
 
@@ -200,10 +191,17 @@ class Zaya1VLConfig(PreTrainedConfig):
         elif self.vision_config is None:
             self.vision_config = self.sub_configs["vision_config"]()
 
+        # Hub configs are saved as flat dicts so we pop some of kwargs to init `TextConfig`
+        text_params = inspect.signature(self.sub_configs["text_config"].__init__).parameters.keys()
+        text_params = list(text_params) + ["rope_parameters", "rope_scaling", "rope_theta"]
+        text_kwargs = {key: kwargs.pop(key) for key in text_params if key in kwargs}
+
         if isinstance(self.text_config, dict):
             self.text_config = self.sub_configs["text_config"](**self.text_config)
         elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"]()
+            # Hub configs are saved as flat dicts so we pop some of kwargs to init `TextConfig`
+            text_kwargs["dtype"] = kwargs.get("torch_dtype", kwargs.get("dtype"))  # don't pop the dtype
+            self.text_config = self.sub_configs["text_config"](**text_kwargs)
 
         super().__post_init__(**kwargs)
 

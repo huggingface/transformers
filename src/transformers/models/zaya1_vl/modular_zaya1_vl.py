@@ -20,30 +20,29 @@ import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
-from ...activations import ACT2FN
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import MoeModelOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...processing_utils import MultiModalData, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils import TransformersKwargs, auto_docstring
 from ..llama.modeling_llama import repeat_kv
 from ..llava.modeling_llava import LlavaModel
 from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VisionTransformerPretrainedModel
-from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
+from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
+from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor, Qwen2VLProcessorKwargs
 from ..qwen3_5_moe.modeling_qwen3_5_moe import apply_rotary_pos_emb
 from ..zaya.configuration_zaya import ZayaConfig
 from ..zaya.modeling_zaya import (
     ZayaAttention,
     ZayaCCAProjection,
     ZayaDecoderLayer,
+    ZayaExperts,
     ZayaForCausalLM,
     ZayaModel,
     ZayaPreTrainedModel,
@@ -51,23 +50,12 @@ from ..zaya.modeling_zaya import (
     ZayaSparseMoeBlock,
     eager_attention_forward,
 )
-from ..zaya.modeling_zaya import (
-    ZayaQKNorm as Zaya1VLQKNorm,
-)
-from ..zaya.modeling_zaya import (
-    ZayaResidualScaling as Zaya1VLResidualScaling,
-)
-from ..zaya.modeling_zaya import (
-    ZayaRouter as Zaya1VLRouter,
-)
 
 
 @auto_docstring(checkpoint="Zyphra/ZAYA1-VL-8B")
 @strict
 class Zaya1VLVisionConfig(Qwen2_5_VLVisionConfig):
     r"""
-    tokens_per_second (`int`, *optional*, defaults to 2):
-        Temporal token rate used by the Qwen2.5-VL vision encoder.
     window_size (`int`, *optional*, defaults to 112):
         Window size used by the Qwen2.5-VL vision encoder.
     out_hidden_size (`int`, *optional*, defaults to 2048):
@@ -77,11 +65,13 @@ class Zaya1VLVisionConfig(Qwen2_5_VLVisionConfig):
     """
 
     model_type = "zaya1_vl_vision"
+    base_config_key = "vision_config"
 
     hidden_size: int = 1280
     temporal_patch_size: int | list[int] | tuple[int, int] = 1
-    tokens_per_second: int = 2
     out_hidden_size: int = 2048
+
+    tokens_per_second = AttributeError()
 
 
 @auto_docstring(checkpoint="Zyphra/ZAYA1-VL-8B")
@@ -112,16 +102,10 @@ class Zaya1VLTextConfig(ZayaConfig):
     vision_lora_rank_attn: int = 8
     vision_lora_rank_mlp: int = 32
 
-    def validate_architecture(self):
-        super().validate_architecture()
-        for rank_name in ("vision_lora_rank_attn", "vision_lora_rank_mlp"):
-            if self.vision_lora and getattr(self, rank_name) <= 0:
-                raise ValueError(f"`{rank_name}` must be positive when `vision_lora=True`.")
-
 
 @auto_docstring(checkpoint="Zyphra/ZAYA1-VL-8B")
 @strict
-class Zaya1VLConfig(PreTrainedConfig):
+class Zaya1VLConfig(Qwen2VLConfig):
     r"""
     text_config (`dict` or `Zaya1VLTextConfig`, *optional*):
         Configuration for the ZAYA text decoder.
@@ -137,47 +121,40 @@ class Zaya1VLConfig(PreTrainedConfig):
 
     model_type = "zaya1_vl"
     sub_configs = {"vision_config": Zaya1VLVisionConfig, "text_config": Zaya1VLTextConfig}
-    keys_to_ignore_at_inference = ["past_key_values"]
 
-    text_config: dict | PreTrainedConfig | None = None
-    vision_config: dict | PreTrainedConfig | None = None
     image_token_id: int = 262147
     vision_start_token_id: int = 255999
     vision_end_token_id: int = 256000
+    video_token_id = AttributeError()
+
     tie_word_embeddings: bool = True
     output_router_logits: bool = False
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"]()
-
-        super().__post_init__(**kwargs)
 
 
 class Zaya1VLRotaryEmbedding(ZayaRotaryEmbedding):
     pass
 
 
-def _apply_masked_lora(
-    hidden_states: torch.Tensor, lora_a: nn.Linear, lora_b: nn.Linear, image_mask: torch.Tensor
-) -> torch.Tensor:
-    lora_output = lora_b(lora_a(hidden_states))
-    return lora_output * image_mask.to(dtype=lora_output.dtype).unsqueeze(-1)
-
-
 def _make_lora_pair(in_features: int, rank: int, out_features: int) -> tuple[nn.Linear, nn.Linear]:
     return nn.Linear(in_features, rank, bias=False), nn.Linear(rank, out_features, bias=False)
 
 
-def _empty_expert_param(num_experts: int, *shape: int) -> nn.Parameter:
-    return nn.Parameter(torch.empty(num_experts, *shape))
+def _apply_masked_lora(
+    output: torch.Tensor,
+    hidden_states: torch.Tensor,
+    lora_a: nn.Linear | torch.Tensor,
+    lora_b: nn.Linear | torch.Tensor,
+    mask: torch.Tensor | None,
+) -> torch.Tensor:
+    if mask is None:
+        return output
+    indices = mask.nonzero(as_tuple=True)
+    if indices[0].numel() == 0:
+        return output
+    hidden_states = hidden_states[indices]
+    hidden_states = F.linear(hidden_states, lora_a) if isinstance(lora_a, torch.Tensor) else lora_a(hidden_states)
+    hidden_states = F.linear(hidden_states, lora_b) if isinstance(lora_b, torch.Tensor) else lora_b(hidden_states)
+    return output.index_put(indices, hidden_states.to(output.dtype), accumulate=True)
 
 
 class Zaya1VLCCAProjection(ZayaCCAProjection):
@@ -212,17 +189,20 @@ class Zaya1VLCCAProjection(ZayaCCAProjection):
 
         projected_queries = self.q_proj(hidden_states)
         projected_keys = self.k_proj(hidden_states)
+
         if self.config.vision_lora and image_mask is not None:
-            projected_queries = projected_queries + _apply_masked_lora(
-                hidden_states, self.q_lora_a, self.q_lora_b, image_mask
+            # visual specific: apply LoRA only on vision-token positions
+            projected_queries = _apply_masked_lora(
+                projected_queries, hidden_states, self.q_lora_a, self.q_lora_b, image_mask
             )
-            projected_keys = projected_keys + _apply_masked_lora(
-                hidden_states, self.k_lora_a, self.k_lora_b, image_mask
+            projected_keys = _apply_masked_lora(
+                projected_keys, hidden_states, self.k_lora_a, self.k_lora_b, image_mask
             )
+
         qk_states = torch.cat([projected_queries, projected_keys], dim=-1)
 
         query_residual = projected_queries.view(*hidden_shape)
-        key_residual = projected_keys.view(*input_shape, -1, self.head_dim).transpose(1, 2)
+        key_residual = projected_keys.view(*hidden_shape).transpose(1, 2)
         key_residual = repeat_kv(key_residual, self.num_key_value_groups).transpose(1, 2)
         query_residual = (query_residual + key_residual) * 0.5
         key_residual = query_residual.view(*input_shape, -1, self.num_key_value_groups, self.head_dim).mean(dim=-2)
@@ -250,13 +230,16 @@ class Zaya1VLCCAProjection(ZayaCCAProjection):
 
         value_current = self.v_proj_current(hidden_states)
         delayed_v_state = self.v_proj_delayed(hidden_states)
+
         if self.config.vision_lora and image_mask is not None:
-            value_current = value_current + _apply_masked_lora(
-                hidden_states, self.v_current_lora_a, self.v_current_lora_b, image_mask
+            # visual specific: apply LoRA only on vision-token positions
+            value_current = _apply_masked_lora(
+                value_current, hidden_states, self.v_current_lora_a, self.v_current_lora_b, image_mask
             )
-            delayed_v_state = delayed_v_state + _apply_masked_lora(
-                hidden_states, self.v_delayed_lora_a, self.v_delayed_lora_b, image_mask
+            delayed_v_state = _apply_masked_lora(
+                delayed_v_state, hidden_states, self.v_delayed_lora_a, self.v_delayed_lora_b, image_mask
             )
+
         if use_precomputed_states:
             recurrent_v_state = past_key_values.layers[self.layer_idx].recurrent_states.unsqueeze(1)
         else:
@@ -274,7 +257,6 @@ class Zaya1VLCCAProjection(ZayaCCAProjection):
 class Zaya1VLAttention(ZayaAttention):
     def __init__(self, config: Zaya1VLTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.qkv_proj = Zaya1VLCCAProjection(config=config, layer_idx=layer_idx)
         if config.vision_lora:
             self.o_lora_a, self.o_lora_b = _make_lora_pair(
                 config.num_attention_heads * self.head_dim, config.vision_lora_rank_attn, config.hidden_size
@@ -289,7 +271,7 @@ class Zaya1VLAttention(ZayaAttention):
         image_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        batch_size, seq_length, _ = hidden_states.shape
+        input_shape = hidden_states.shape[:-1]
 
         mask_mapping = attention_mask or {}
         causal_mask = mask_mapping.get("causal")
@@ -325,42 +307,49 @@ class Zaya1VLAttention(ZayaAttention):
             **kwargs,
         )
 
-        attn_output = attn_output.view(batch_size, seq_length, -1)
+        attn_output = attn_output.view(*input_shape, -1)
         output = self.o_proj(attn_output)
+
         if self.config.vision_lora and image_mask is not None:
-            output = output + _apply_masked_lora(attn_output, self.o_lora_a, self.o_lora_b, image_mask)
+            # visual specific: apply LoRA only on vision-token positions
+            output = _apply_masked_lora(output, attn_output, self.o_lora_a, self.o_lora_b, image_mask)
 
         return output, attn_weights
 
 
-class Zaya1VLExperts(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.num_experts = config.num_experts
-        self.hidden_dim = config.hidden_size
-        self.intermediate_dim = config.moe_intermediate_size
-        self.gate_up_proj = _empty_expert_param(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim)
-        self.down_proj = _empty_expert_param(self.num_experts, self.hidden_dim, self.intermediate_dim)
-        self.act_fn = ACT2FN[config.hidden_act]
+def identity_decorator(cls):
+    """
+    modular transformers need new decorators to overwrite the old ones e.g. use_experts_implementation;
+    this decorator is just used to skip them.
+    """
+    return cls
+
+
+@identity_decorator
+class Zaya1VLExperts(ZayaExperts):
+    def __init__(self, config: Zaya1VLTextConfig):
+        super().__init__(config)
         self.vision_lora = config.vision_lora
         if self.vision_lora:
-            self.lora_gate_up_proj_a = _empty_expert_param(
-                self.num_experts, config.vision_lora_rank_mlp, self.hidden_dim
+            self.lora_gate_up_proj_a = nn.Parameter(
+                torch.empty(self.num_experts, config.vision_lora_rank_mlp, self.hidden_dim)
             )
-            self.lora_gate_up_proj_b = _empty_expert_param(
-                self.num_experts, 2 * self.intermediate_dim, config.vision_lora_rank_mlp
+            self.lora_gate_up_proj_b = nn.Parameter(
+                torch.empty(self.num_experts, 2 * self.intermediate_dim, config.vision_lora_rank_mlp)
             )
-            self.lora_down_proj_a = _empty_expert_param(
-                self.num_experts, config.vision_lora_rank_mlp, self.intermediate_dim
+            self.lora_down_proj_a = nn.Parameter(
+                torch.empty(self.num_experts, config.vision_lora_rank_mlp, self.intermediate_dim)
             )
-            self.lora_down_proj_b = _empty_expert_param(self.num_experts, self.hidden_dim, config.vision_lora_rank_mlp)
+            self.lora_down_proj_b = nn.Parameter(
+                torch.empty(self.num_experts, self.hidden_dim, config.vision_lora_rank_mlp)
+            )
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         top_k_index: torch.Tensor,
         top_k_weights: torch.Tensor,
-        image_mask: torch.Tensor | None = None,
+        image_mask_flat: torch.Tensor | None = None,
     ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
         with torch.no_grad():
@@ -373,21 +362,33 @@ class Zaya1VLExperts(nn.Module):
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
             gate_up = F.linear(current_state, self.gate_up_proj[expert_idx])
-            if self.vision_lora and image_mask is not None:
-                lora_gate_up = F.linear(
-                    F.linear(current_state, self.lora_gate_up_proj_a[expert_idx]),
+
+            image_mask_curr_expert = None
+            if self.vision_lora and image_mask_curr_expert is not None:
+                image_mask_curr_expert = image_mask_flat[token_idx]
+                # visual specific: apply expert LoRA only on vision-token positions
+                gate_up = _apply_masked_lora(
+                    gate_up,
+                    current_state,
+                    self.lora_gate_up_proj_a[expert_idx],
                     self.lora_gate_up_proj_b[expert_idx],
+                    image_mask_curr_expert,
                 )
-                gate_up = gate_up + lora_gate_up * image_mask[token_idx, None].to(lora_gate_up.dtype)
+
             gate, up = gate_up.chunk(2, dim=-1)
             current_hidden_states = self.act_fn(gate) * up
             down = F.linear(current_hidden_states, self.down_proj[expert_idx])
-            if self.vision_lora and image_mask is not None:
-                lora_down = F.linear(
-                    F.linear(current_hidden_states, self.lora_down_proj_a[expert_idx]),
+
+            if image_mask_curr_expert is not None:
+                # visual specific: apply expert LoRA only on vision-token positions
+                down = _apply_masked_lora(
+                    down,
+                    current_hidden_states,
+                    self.lora_down_proj_a[expert_idx],
                     self.lora_down_proj_b[expert_idx],
+                    image_mask_curr_expert,
                 )
-                down = down + lora_down * image_mask[token_idx, None].to(lora_down.dtype)
+
             down = down * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, down.to(final_hidden_states.dtype))
 
@@ -395,34 +396,28 @@ class Zaya1VLExperts(nn.Module):
 
 
 class Zaya1VLSparseMoeBlock(ZayaSparseMoeBlock):
-    def __init__(self, config, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.experts = Zaya1VLExperts(self.config)
-
     def forward(
         self,
         hidden_states: torch.Tensor,
         prev_router_hidden_states: torch.Tensor | None = None,
         image_mask: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor]:
-        router_logits, router_probs, router_indices, prev_router_hidden_states = self.gate(
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        _, router_probs, router_indices, prev_router_hidden_states = self.gate(
             hidden_states, router_states=prev_router_hidden_states
         )
 
         batch_size, seq_length, emb_dim = hidden_states.shape
         hidden_states_flat = hidden_states.view(batch_size * seq_length, emb_dim)
         image_mask_flat = image_mask.reshape(batch_size * seq_length) if image_mask is not None else None
-        expert_output = self.experts(hidden_states_flat, router_indices, router_probs, image_mask=image_mask_flat)
+        expert_output = self.experts(hidden_states_flat, router_indices, router_probs, image_mask_flat=image_mask_flat)
         expert_output = expert_output.view(batch_size, seq_length, emb_dim)
 
-        return expert_output, prev_router_hidden_states, router_logits
+        return expert_output, prev_router_hidden_states
 
 
 class Zaya1VLDecoderLayer(ZayaDecoderLayer):
     def __init__(self, config: Zaya1VLTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.self_attn = Zaya1VLAttention(config=config, layer_idx=layer_idx)
-        self.mlp = Zaya1VLSparseMoeBlock(config, layer_idx)
 
     def forward(
         self,
@@ -433,7 +428,7 @@ class Zaya1VLDecoderLayer(ZayaDecoderLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         image_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
 
@@ -447,9 +442,9 @@ class Zaya1VLDecoderLayer(ZayaDecoderLayer):
         )
 
         residual = self.post_attention_residual_scale(hidden_states, residual)
-        hidden_states = self.post_attention_layernorm(residual.to(dtype=self.post_attention_layernorm.weight.dtype))
+        hidden_states = self.post_attention_layernorm(residual)
 
-        hidden_states, prev_router_hidden_states, router_logits = self.mlp(
+        hidden_states, prev_router_hidden_states = self.mlp(
             hidden_states,
             prev_router_hidden_states,
             image_mask=image_mask,
@@ -457,64 +452,30 @@ class Zaya1VLDecoderLayer(ZayaDecoderLayer):
 
         hidden_states = self.post_mlp_residual_scale(hidden_states, residual)
 
-        return hidden_states, prev_router_hidden_states, router_logits
+        return hidden_states, prev_router_hidden_states
 
 
 class Zaya1VLPreTrainedModel(ZayaPreTrainedModel):
     _no_split_modules = ["Zaya1VLDecoderLayer", "Qwen2_5_VLVisionBlock"]
     input_modalities = ("image", "text")
 
-    @torch.no_grad()
     def _init_weights(self, module):
-        PreTrainedModel._init_weights(self, module)
-        if isinstance(module, Zaya1VLResidualScaling):
-            nn.init.ones_(module.hidden_states_scale)
-            nn.init.zeros_(module.hidden_states_bias)
-            nn.init.ones_(module.residual_scale)
-            nn.init.zeros_(module.residual_bias)
-        elif isinstance(module, Zaya1VLTextModel):
-            nn.init.ones_(module.input_hidden_states_scale)
-            nn.init.zeros_(module.input_hidden_states_bias)
-        elif isinstance(module, Zaya1VLQKNorm):
-            nn.init.zeros_(module.temp)
-        elif isinstance(module, Zaya1VLRouter):
-            if module.use_eda:
-                nn.init.ones_(module.router_states_scale)
-            nn.init.zeros_(module.balancing_biases)
-            module.balancing_biases[-1] = -1.0
-        elif isinstance(module, Zaya1VLExperts):
-            std = getattr(self.config, "text_config", self.config).initializer_range
-            nn.init.normal_(module.gate_up_proj, mean=0.0, std=std)
-            nn.init.normal_(module.down_proj, mean=0.0, std=std)
+        super()._init_weights(self, module)
+
+        # specific for visual expert lora
+        if isinstance(module, Zaya1VLExperts):
             if module.vision_lora:
                 lora_param_names = "lora_gate_up_proj_a", "lora_gate_up_proj_b", "lora_down_proj_a", "lora_down_proj_b"
                 for param_name in lora_param_names:
-                    nn.init.normal_(getattr(module, param_name), mean=0.0, std=std)
-        elif isinstance(module, Zaya1VLRotaryEmbedding):
-            for layer_type in module.layer_types:
-                rope_init_fn = module.compute_default_rope_parameters
-                if module.rope_type[layer_type] != "default":
-                    rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type[layer_type]]
-                curr_inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
-                getattr(module, f"{layer_type}_inv_freq").copy_(curr_inv_freq)
-                getattr(module, f"{layer_type}_original_inv_freq").copy_(curr_inv_freq)
+                    init.normal_(getattr(module, param_name), mean=0.0, std=0.02)
 
 
-@auto_docstring
 class Zaya1VLTextModel(ZayaModel):
     config: Zaya1VLTextConfig
 
     def __init__(self, config: Zaya1VLTextConfig):
         super().__init__(config)
-        self.layers = nn.ModuleList(
-            [Zaya1VLDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-        self.rotary_emb = Zaya1VLRotaryEmbedding(config=config)
-        self.post_init()
 
-    @merge_with_config_defaults
-    @capture_outputs
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -524,7 +485,6 @@ class Zaya1VLTextModel(ZayaModel):
         inputs_embeds: torch.FloatTensor | None = None,
         image_mask: torch.Tensor | None = None,
         use_cache: bool | None = None,
-        output_router_logits: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         r"""
@@ -533,9 +493,6 @@ class Zaya1VLTextModel(ZayaModel):
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if output_router_logits is None:
-            output_router_logits = self.config.output_router_logits
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -553,10 +510,24 @@ class Zaya1VLTextModel(ZayaModel):
                 "ZAYA CCA projection requires a 2D `attention_mask` to mask padding tokens before convolution."
             )
 
-        causal_mask_mapping = self._update_causal_mask(attention_mask, inputs_embeds, position_ids, past_key_values)
-        padding_mask = attention_mask[:, -inputs_embeds.shape[1] :] if attention_mask is not None else None
+        mask_kwargs = {
+            "config": self.config,
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+        }
+        # Original ZAYA SWA only applies the local causal pattern; padding tokens are zeroed before the CCA projection.
+        sliding_mask_kwargs = {**mask_kwargs, "attention_mask": None}
+        mask_creation_functions = {
+            "hybrid": lambda: create_causal_mask(**mask_kwargs),
+            "hybrid_sliding": lambda: create_sliding_window_causal_mask(**sliding_mask_kwargs),
+        }
+        causal_mask_mapping = {
+            layer_type: mask_creation_functions[layer_type]() for layer_type in set(self.config.layer_types)
+        }
+        cca_mask = self._update_cca_mask(attention_mask, past_key_values, inputs_embeds)
         if inputs_embeds.shape[1] == 1:
-            padding_mask = None
             image_mask = None
 
         hidden_states = inputs_embeds
@@ -567,7 +538,6 @@ class Zaya1VLTextModel(ZayaModel):
 
         hidden_states = (hidden_states + self.input_hidden_states_bias) * self.input_hidden_states_scale
         prev_router_hidden_states = None
-        all_router_logits = () if output_router_logits else None
 
         for layer_n, decoder_layer in enumerate(self.layers):
             layer_type = self.config.layer_types[layer_n]
@@ -575,8 +545,8 @@ class Zaya1VLTextModel(ZayaModel):
             if image_mask is not None and causal_mask is not None and causal_mask.shape[-1] == image_mask.shape[-1]:
                 image_pair_mask = image_mask[:, None, :, None] & image_mask[:, None, None, :]
                 causal_mask = causal_mask.clone().masked_fill(image_pair_mask, 0)
-            mask_mapping = {"causal": causal_mask, "padding": padding_mask}
-            hidden_states, prev_router_hidden_states, router_logits = decoder_layer(
+            mask_mapping = {"causal": causal_mask, "padding": cca_mask}
+            hidden_states, prev_router_hidden_states = decoder_layer(
                 hidden_states,
                 prev_router_hidden_states,
                 attention_mask=mask_mapping,
@@ -585,22 +555,18 @@ class Zaya1VLTextModel(ZayaModel):
                 image_mask=image_mask,
                 **kwargs,
             )
-            if output_router_logits:
-                all_router_logits += (router_logits,)
 
-        hidden_states = self.final_norm(hidden_states.to(dtype=self.final_norm.weight.dtype))
+        hidden_states = self.final_norm(hidden_states)
 
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
-            router_logits=all_router_logits,
         )
 
 
 class Zaya1VLVisionModel(Qwen2_5_VisionTransformerPretrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.tokens_per_second = config.tokens_per_second
 
 
 @auto_docstring
@@ -623,8 +589,6 @@ class Zaya1VLModel(LlavaModel, Zaya1VLPreTrainedModel):
         pixel_values = pixel_values.type(self.visual.dtype)
         return self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs).pooler_output
 
-    @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -635,7 +599,6 @@ class Zaya1VLModel(LlavaModel, Zaya1VLPreTrainedModel):
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_router_logits: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         r"""
@@ -645,7 +608,7 @@ class Zaya1VLModel(LlavaModel, Zaya1VLPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        visual_pos_masks = None
+        image_mask = None
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
@@ -656,7 +619,7 @@ class Zaya1VLModel(LlavaModel, Zaya1VLPreTrainedModel):
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features.unsqueeze(0)
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
-            visual_pos_masks = image_mask[..., 0]
+            image_mask = image_mask[..., 0]
 
         return self.language_model(
             input_ids=None,
@@ -664,9 +627,8 @@ class Zaya1VLModel(LlavaModel, Zaya1VLPreTrainedModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            image_mask=visual_pos_masks,
+            image_mask=image_mask,
             use_cache=use_cache,
-            output_router_logits=output_router_logits,
             **kwargs,
         )
 
@@ -676,8 +638,7 @@ class Zaya1VLForConditionalGeneration(ZayaForCausalLM, Zaya1VLPreTrainedModel):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: Zaya1VLConfig):
-        Zaya1VLPreTrainedModel.__init__(self, config)
-        self.model = Zaya1VLModel(config)
+        super().__init__(self, config)
         self.vocab_size = config.text_config.vocab_size
         self.lm_head = nn.Linear(
             config.text_config.hidden_size, config.text_config.vocab_size, bias=config.text_config.lm_head_bias
@@ -719,19 +680,12 @@ class Zaya1VLForConditionalGeneration(ZayaForCausalLM, Zaya1VLPreTrainedModel):
         return model_inputs
 
 
-class Zaya1VLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-        },
-    }
+class Zaya1VLProcessorKwargs(Qwen2VLProcessorKwargs):
+    pass
 
 
 @auto_docstring
 class Zaya1VLProcessor(Qwen2VLProcessor):
-    valid_kwargs = Zaya1VLProcessorKwargs
-
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.image_token = getattr(tokenizer, "image_token", "<image>")
         self.image_token_id = getattr(tokenizer, "image_token_id", None) or tokenizer.convert_tokens_to_ids(
@@ -808,7 +762,7 @@ class Zaya1VLProcessor(Qwen2VLProcessor):
 
     @property
     def model_input_names(self):
-        return ProcessorMixin.model_input_names.fget(self)
+        return self.image_processor.model_input_names + self.tokenizer.model_input_names
 
 
 __all__ = [
