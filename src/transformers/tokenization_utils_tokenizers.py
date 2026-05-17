@@ -767,7 +767,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if isinstance(ids, int):
             token = self._tokenizer.id_to_token(ids)
             if token is None:
-                logger.warning(f"Token id {ids} is out of vocabulary (vocab size: {self.vocab_size}). Returning empty string.")
+                logger.warning(
+                    f"Token id {ids} is out of vocabulary (vocab size: {self.vocab_size}). Returning empty string."
+                )
                 return ""
             return token
         tokens = []
