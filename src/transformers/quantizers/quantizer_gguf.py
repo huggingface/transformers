@@ -166,15 +166,20 @@ class GGUFQuantizer(HfQuantizer):
             # those corrupts the matmul ~140% relative.  Skip whenever the
             # rename pipeline didn't go through ``_ROPE_ATTN_CONVERTERS`` (the
             # only path that signals "this arch was permuted on export").
-            converter_targets = {
-                c.target_patterns
-                for c in converters
-                if hasattr(c, "operations")
-                and any(type(op).__name__.startswith("ReversePermuteAttn") for op in c.operations)
-            }
-            arch_uses_rope_permute = (
-                ".self_attn.q_proj.weight" in converter_targets or ".self_attn.k_proj.weight" in converter_targets
-            )
+            #
+            # NB: ``target_patterns`` may be a str or a list (multi-input fused
+            # converters carry a list of targets) — normalize before scanning.
+            arch_uses_rope_permute = False
+            for c in converters:
+                if not hasattr(c, "operations"):
+                    continue
+                if not any(type(op).__name__.startswith("ReversePermuteAttn") for op in c.operations):
+                    continue
+                tp = c.target_patterns
+                targets = tp if isinstance(tp, (list, tuple)) else [tp]
+                if any(t == ".self_attn.q_proj.weight" or t == ".self_attn.k_proj.weight" for t in targets):
+                    arch_uses_rope_permute = True
+                    break
             permute = None
             if arch_uses_rope_permute:
                 if ".attn_q." in gguf_name:
