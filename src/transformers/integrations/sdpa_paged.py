@@ -69,8 +69,14 @@ def _get_mps_kv_paged_write_op():
 
 
 def _mps_block_table_path(
-    module, query, key, value, cache: PagedAttentionCache,
-    block_table_full: torch.Tensor, cu_seq_lens_k: torch.Tensor, **_,
+    module,
+    query,
+    key,
+    value,
+    cache: PagedAttentionCache,
+    block_table_full: torch.Tensor,
+    cu_seq_lens_k: torch.Tensor,
+    **_,
 ) -> torch.Tensor:
     """Decode-only block-table fast path. Writes the current token's K/V
     into the paged cache then runs ``paged_decode_attention_f32`` reading
@@ -91,7 +97,6 @@ def _mps_block_table_path(
     batch_size = query.size(2)
     H_Q = query.size(1)
     head_dim = query.size(3)
-    H_KV = key.size(1)
 
     group_idx, layer_idx_in_group = cache.layer_index_to_group_indices[module.layer_idx]
     k_cache = cache.key_cache[layer_idx_in_group]
@@ -128,7 +133,7 @@ def _mps_block_table_path(
     out = torch.empty(batch_size, H_Q, head_dim, dtype=q_in.dtype, device=q_in.device)
     scale = getattr(module, "scaling", None)
     if scale is None:
-        scale = 1.0 / (head_dim ** 0.5)
+        scale = 1.0 / (head_dim**0.5)
     op(q_in, k_cache, v_cache, block_table, seq_lens, out, block_size, float(scale))
     return out.unsqueeze(0)  # (1, B, H_Q, head_dim)
 
@@ -155,18 +160,28 @@ def sdpa_attention_paged_forward(
     # kernel — 134 µs/call at (B=4, H_Q=16, head_dim=128, S=50) vs ~16 ms
     # per layer for the gather-then-SDPA path. Bit-equivalent output.
     import os as _os
+
     _fast_disabled = _os.environ.get("TRANSFORMERS_MPS_PAGED_DECODE_DISABLE", "0") != "0"
-    _fast_eligible = (not _fast_disabled
-            and cache is not None and block_table is not None
-            and query.device.type == "mps"
-            and _get_mps_paged_decode_op() is not None)
+    _fast_eligible = (
+        not _fast_disabled
+        and cache is not None
+        and block_table is not None
+        and query.device.type == "mps"
+        and _get_mps_paged_decode_op() is not None
+    )
     if _fast_eligible:
         cu_seq_lens_k = kwargs.get("cu_seq_lens_k")
         if isinstance(cu_seq_lens_k, dict):
             layer_type = "sliding_attention" if getattr(module, "sliding_window", False) else "full_attention"
             cu_seq_lens_k = cu_seq_lens_k[layer_type]
         attn_output = _mps_block_table_path(
-            module, query, key, value, cache, block_table, cu_seq_lens_k,
+            module,
+            query,
+            key,
+            value,
+            cache,
+            block_table,
+            cu_seq_lens_k,
         )
         return attn_output, None
 
@@ -192,7 +207,9 @@ def sdpa_attention_paged_forward(
     key = key.contiguous()
     value = value.contiguous()
     attn_output = torch.nn.functional.scaled_dot_product_attention(
-        query, key, value,
+        query,
+        key,
+        value,
         attn_mask=causal_mask,
         dropout_p=dropout,
         scale=scaling,

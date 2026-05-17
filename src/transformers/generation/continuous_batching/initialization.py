@@ -103,9 +103,11 @@ def _mps_paged_decode_available() -> bool:
     ``ArthurZ/gguf-kernels`` (see ``integrations.sdpa_paged``)."""
     try:
         import torch as _t
+
         if not _t.backends.mps.is_available():
             return False
         from ...integrations.sdpa_paged import _get_mps_paged_decode_op
+
         return _get_mps_paged_decode_op() is not None
     except Exception:
         return False
@@ -136,9 +138,11 @@ def ensure_decode_fast_path_is_available(
         # Path B: MPS + ``paged|sdpa`` — use our Metal paged-decode kernel
         # (see ``integrations.sdpa_paged``). Off by default until the
         # integration is bench-validated; opt in via env var.
-        elif (os.environ.get("TRANSFORMERS_MPS_PAGED_DECODE", "0") not in ("0", "", "false", "False")
-              and config._attn_implementation in ("paged|sdpa", "sdpa")
-              and _mps_paged_decode_available()):
+        elif (
+            os.environ.get("TRANSFORMERS_MPS_PAGED_DECODE", "0") not in ("0", "", "false", "False")
+            and config._attn_implementation in ("paged|sdpa", "sdpa")
+            and _mps_paged_decode_available()
+        ):
             # Block-table decode is supported via the MPS kernel; keep
             # ``max_blocks_per_request`` as set.
             pass
