@@ -8,14 +8,18 @@ on:
     paths:
       - 'src/transformers/models/*/modeling_*'
 
+permissions:
+  contents: read
+
 jobs:
   notify_new_model:
     name: Notify new model
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: Check new model
         shell: bash
         run: |
