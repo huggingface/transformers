@@ -303,9 +303,7 @@ def _save_training_state(model, optimizer, training_state_dir):
 def _load_training_state(model, optimizer, training_state_dir):
     """Inverse of `_save_training_state`."""
     load_optimizer_distributed(model, optimizer, os.path.join(training_state_dir, "optim"))
-    rng = torch.load(
-        os.path.join(training_state_dir, f"rng_rank{dist.get_rank()}.pt"), weights_only=False
-    )
+    rng = torch.load(os.path.join(training_state_dir, f"rng_rank{dist.get_rank()}.pt"), weights_only=False)
     torch.set_rng_state(rng["cpu"])
     if "accel" in rng:
         _set_accelerator_rng_state(rng["accel"])
