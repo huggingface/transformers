@@ -529,7 +529,9 @@ def _process_flash_attention_kwargs(
             Determines if the deterministic option introduced in flash_attn>=2.4.1 is enabled.
         s_aux (`torch.Tensor`, *optional*):
             Attention sink auxiliary that adds a `bias` to the attention calculation via an additional head.
-    Return:
+        supports_mapping (`dict[str, bool]`, *optional*):
+            Mapping indicating whether each flash attention feature is supported by the active backend.
+    Returns:
         flash_kwargs (`dict`):
             A dict of kwargs that are requested and supported.
     """
