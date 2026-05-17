@@ -39,11 +39,27 @@ TORCH_INIT_FUNCTIONS = {
 }
 
 
+def _run_init_with_fp32_cpu_fallback(tensor: torch.Tensor, init_fn, *args, **kwargs) -> torch.Tensor:
+    """
+    Initialize low-precision CPU tensors through float32, then cast back.
+
+    Some torch versions can produce NaNs when sampling random values directly in
+    float16/bfloat16 on CPU. Initializing in float32 first is more stable.
+    """
+    if tensor.device.type == "cpu" and tensor.dtype in (torch.float16, torch.bfloat16):
+        tmp = torch.empty_like(tensor, dtype=torch.float32, device=tensor.device)
+        init_fn(tmp, *args, **kwargs)
+        with torch.no_grad():
+            tensor.copy_(tmp.to(dtype=tensor.dtype))
+        return tensor
+    return init_fn(tensor, *args, **kwargs)
+
+
 def uniform_(
     tensor: torch.Tensor, a: float = 0.0, b: float = 1.0, generator: torch.Generator | None = None
 ) -> torch.Tensor:
     if not getattr(tensor, "_is_hf_initialized", False):
-        return TORCH_INIT_FUNCTIONS["uniform_"](tensor, a=a, b=b, generator=generator)
+        return _run_init_with_fp32_cpu_fallback(tensor, TORCH_INIT_FUNCTIONS["uniform_"], a=a, b=b, generator=generator)
     return tensor
 
 
@@ -51,7 +67,9 @@ def normal_(
     tensor: torch.Tensor, mean: float = 0.0, std: float = 1.0, generator: torch.Generator | None = None
 ) -> torch.Tensor:
     if not getattr(tensor, "_is_hf_initialized", False):
-        return TORCH_INIT_FUNCTIONS["normal_"](tensor, mean=mean, std=std, generator=generator)
+        return _run_init_with_fp32_cpu_fallback(
+            tensor, TORCH_INIT_FUNCTIONS["normal_"], mean=mean, std=std, generator=generator
+        )
     return tensor
 
 
@@ -87,13 +105,17 @@ def dirac_(tensor: torch.Tensor, groups: int = 1) -> torch.Tensor:
 
 def xavier_uniform_(tensor: torch.Tensor, gain: float = 1.0, generator: torch.Generator | None = None) -> torch.Tensor:
     if not getattr(tensor, "_is_hf_initialized", False):
-        return TORCH_INIT_FUNCTIONS["xavier_uniform_"](tensor, gain=gain, generator=generator)
+        return _run_init_with_fp32_cpu_fallback(
+            tensor, TORCH_INIT_FUNCTIONS["xavier_uniform_"], gain=gain, generator=generator
+        )
     return tensor
 
 
 def xavier_normal_(tensor: torch.Tensor, gain: float = 1.0, generator: torch.Generator | None = None) -> torch.Tensor:
     if not getattr(tensor, "_is_hf_initialized", False):
-        return TORCH_INIT_FUNCTIONS["xavier_normal_"](tensor, gain=gain, generator=generator)
+        return _run_init_with_fp32_cpu_fallback(
+            tensor, TORCH_INIT_FUNCTIONS["xavier_normal_"], gain=gain, generator=generator
+        )
     return tensor
 
 
@@ -105,8 +127,13 @@ def kaiming_uniform_(
     generator: torch.Generator | None = None,
 ) -> torch.Tensor:
     if not getattr(tensor, "_is_hf_initialized", False):
-        return TORCH_INIT_FUNCTIONS["kaiming_uniform_"](
-            tensor, a=a, mode=mode, nonlinearity=nonlinearity, generator=generator
+        return _run_init_with_fp32_cpu_fallback(
+            tensor,
+            TORCH_INIT_FUNCTIONS["kaiming_uniform_"],
+            a=a,
+            mode=mode,
+            nonlinearity=nonlinearity,
+            generator=generator,
         )
     return tensor
 
@@ -119,8 +146,13 @@ def kaiming_normal_(
     generator: torch.Generator | None = None,
 ) -> torch.Tensor:
     if not getattr(tensor, "_is_hf_initialized", False):
-        return TORCH_INIT_FUNCTIONS["kaiming_normal_"](
-            tensor, a=a, mode=mode, nonlinearity=nonlinearity, generator=generator
+        return _run_init_with_fp32_cpu_fallback(
+            tensor,
+            TORCH_INIT_FUNCTIONS["kaiming_normal_"],
+            a=a,
+            mode=mode,
+            nonlinearity=nonlinearity,
+            generator=generator,
         )
     return tensor
 
@@ -134,7 +166,9 @@ def trunc_normal_(
     generator: torch.Generator | None = None,
 ) -> torch.Tensor:
     if not getattr(tensor, "_is_hf_initialized", False):
-        return TORCH_INIT_FUNCTIONS["trunc_normal_"](tensor, mean=mean, std=std, a=a, b=b, generator=generator)
+        return _run_init_with_fp32_cpu_fallback(
+            tensor, TORCH_INIT_FUNCTIONS["trunc_normal_"], mean=mean, std=std, a=a, b=b, generator=generator
+        )
     return tensor
 
 
@@ -144,7 +178,9 @@ def orthogonal_(
     generator: torch.Generator | None = None,
 ) -> torch.Tensor:
     if not getattr(tensor, "_is_hf_initialized", False):
-        return TORCH_INIT_FUNCTIONS["orthogonal_"](tensor, gain=gain, generator=generator)
+        return _run_init_with_fp32_cpu_fallback(
+            tensor, TORCH_INIT_FUNCTIONS["orthogonal_"], gain=gain, generator=generator
+        )
     return tensor
 
 
@@ -152,7 +188,9 @@ def sparse_(
     tensor: torch.Tensor, sparsity: float, std: float = 0.01, generator: torch.Generator | None = None
 ) -> torch.Tensor:
     if not getattr(tensor, "_is_hf_initialized", False):
-        return TORCH_INIT_FUNCTIONS["sparse_"](tensor, sparsity=sparsity, std=std, generator=generator)
+        return _run_init_with_fp32_cpu_fallback(
+            tensor, TORCH_INIT_FUNCTIONS["sparse_"], sparsity=sparsity, std=std, generator=generator
+        )
     return tensor
 
 

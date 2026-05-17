@@ -2174,6 +2174,20 @@ class ModelUtilsTest(TestCasePlus):
         for k, v in model.state_dict().items():
             self.assertTrue(v.device.type == "cpu", f"{k} is not on cpu!")
 
+    def test_missing_keys_init_is_finite_in_low_precision(self):
+        temp = tempfile.TemporaryDirectory()
+        model = BaseModelWithMissingKeys(PreTrainedConfig()).to(dtype=torch.float16)
+
+        model.config.save_pretrained(temp.name)
+        state_dict = model.state_dict()
+        del state_dict["linear.weight"], state_dict["linear.bias"]
+        safe_save_file(state_dict, Path(temp.name) / "model.safetensors", metadata={"format": "pt"})
+
+        loaded_model = BaseModelWithMissingKeys.from_pretrained(temp.name)
+        self.assertEqual(loaded_model.linear.weight.dtype, torch.float16)
+        self.assertFalse(torch.isnan(loaded_model.linear.weight).any().item())
+        self.assertFalse(torch.isnan(loaded_model.linear_2.weight).any().item())
+
     def test_device_map_works_with_unexpected_keys(self):
         """Test that if a parameter is specified in `_keys_to_ignore_on_load_unexpected` and is actually
         present in the checkpoint, it will correctly be removed from the weights we load, especially those
