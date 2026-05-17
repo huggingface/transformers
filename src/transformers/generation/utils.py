@@ -2740,19 +2740,25 @@ class GenerationMixin(ContinuousMixin):
         if do_sample:
             vocab_size = outputs.logits.shape[-1]
             gumbel_buf = torch.empty(batch_size, vocab_size, dtype=torch.float32, device=device)
-            score_buf  = torch.empty(batch_size, vocab_size, dtype=torch.float32, device=device)
+            score_buf = torch.empty(batch_size, vocab_size, dtype=torch.float32, device=device)
 
-        def _pick_next(logits_2d, dst_slot):
+        def _pick_next(logits_2d, dst_slot, history_len):
             """Pick the next token id from a (B, vocab) logits slice and
             write it into ``dst_slot`` (a (B, 1) long view). Greedy path
-            uses ``argmax(out=)``; sampling path uses in-place Gumbel-max."""
+            uses ``argmax(out=)``; sampling path uses in-place Gumbel-max.
+
+            ``history_len`` is the number of tokens already populated in
+            ``out_tokens`` (i.e. the columns the logits_processor is
+            allowed to read — must exclude ``dst_slot``, which holds
+            uninitialized memory until this call writes to it)."""
             if logits_processor:
                 # logits_processor expects (B, vocab) and returns (B, vocab).
                 # Cast to fp32 like the slow path so processor math stays exact.
-                scores = logits_processor(out_tokens[:, : dst_slot.shape[1] + prefill_len], logits_2d.float())
+                scores = logits_processor(out_tokens[:, :history_len], logits_2d.float())
             else:
                 scores = logits_2d
             if do_sample:
+                assert gumbel_buf is not None and score_buf is not None
                 # Gumbel-max: argmax(scores + Gumbel(0, 1)).
                 # exponential_(1) gives X ~ Exp(1); -log(X) ~ Gumbel(0, 1).
                 # Re-fill the same buffer every step — no allocation.
@@ -2769,12 +2775,14 @@ class GenerationMixin(ContinuousMixin):
                 torch.argmax(scores, dim=-1, keepdim=True, out=dst_slot)
 
         # Pick the first decode token off the prefill logits we already have.
-        _pick_next(outputs.logits[:, -1], out_tokens[:, prefill_len:prefill_len + 1])
+        _pick_next(outputs.logits[:, -1], out_tokens[:, prefill_len : prefill_len + 1], prefill_len)
 
         # Update the model kwargs once so subsequent decode calls have the
         # right cache_position / attention_mask shape.
         model_kwargs = self._update_model_kwargs_for_generation(
-            outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder,
+            outputs,
+            model_kwargs,
+            is_encoder_decoder=self.config.is_encoder_decoder,
         )
         unfinished_sequences = torch.ones(batch_size, dtype=torch.bool, device=device)
         _SYNC_EVERY = 16
@@ -2783,12 +2791,16 @@ class GenerationMixin(ContinuousMixin):
             cur_slot = prefill_len + step
             next_tok_window = out_tokens[:, : cur_slot + 1]
             model_inputs = self.prepare_inputs_for_generation(
-                next_tok_window, next_sequence_length=1, **model_kwargs,
+                next_tok_window,
+                next_sequence_length=1,
+                **model_kwargs,
             )
             outputs = model_forward(**model_inputs, return_dict=True)
-            _pick_next(outputs.logits[:, -1], out_tokens[:, cur_slot + 1:cur_slot + 2])
+            _pick_next(outputs.logits[:, -1], out_tokens[:, cur_slot + 1 : cur_slot + 2], cur_slot + 1)
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder,
+                outputs,
+                model_kwargs,
+                is_encoder_decoder=self.config.is_encoder_decoder,
             )
             if has_eos_stopping_criteria:
                 done = stopping_criteria(out_tokens[:, : cur_slot + 2], None)
@@ -2796,7 +2808,7 @@ class GenerationMixin(ContinuousMixin):
                 if (step % _SYNC_EVERY) == _SYNC_EVERY - 1:
                     if not unfinished_sequences.any().item():
                         if pad_token_id is not None:
-                            out_tokens[:, cur_slot + 2:] = pad_token_id
+                            out_tokens[:, cur_slot + 2 :] = pad_token_id
                         return out_tokens[:, : cur_slot + 2]
         return out_tokens
 
