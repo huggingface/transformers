@@ -165,6 +165,18 @@ def resolve_compile_configs(
 ) -> None:
     """Resolve if the compile configs for varlen and decode paths, modifying these attributes in place if needed.
     Default config use full compile over regional compile, because the throughput is significantly higher (~15%)"""
+    # MPS doesn't have Triton kernels to autotune, so ``max-autotune-no-cudagraphs``
+    # burns compile time for no gain on Apple Silicon. ``reduce-overhead`` is the
+    # recipe ``setup_for_compile`` uses for ``model.generate()`` and reaches
+    # 1.32-1.37x llama.cpp parity on the same models. Detect MPS and switch
+    # default mode + drop the dynamic varlen graph (MPS inductor specializes
+    # cleanly per shape; the recompile budget set by ``cache_size_limit=512``
+    # covers the variable prefill lengths).
+    import torch as _torch
+    _is_mps = _torch.backends.mps.is_available() and not _torch.cuda.is_available()
+    _default_mode = "reduce-overhead" if _is_mps else "max-autotune-no-cudagraphs"
+    _varlen_dynamic = not _is_mps
+
     # For each config, priority is: explicit config, default config, fallback config, None
     if cb_config.varlen_compile_config is None:
         if cb_config.use_default_compile_configs:
@@ -172,7 +184,7 @@ def resolve_compile_configs(
             if is_flash_attn:
                 varlen_config = None
             else:
-                varlen_config = CompileConfig(mode="max-autotune-no-cudagraphs", fullgraph=True, dynamic=True)
+                varlen_config = CompileConfig(mode=_default_mode, fullgraph=True, dynamic=_varlen_dynamic)
         elif fallback_compile_config is not None:
             varlen_config = fallback_compile_config
         else:
@@ -183,7 +195,7 @@ def resolve_compile_configs(
     if cb_config.decode_compile_config is None:
         if cb_config.use_default_compile_configs:
             # Paged attention is wrapped in @torch.compiler.disable so we can't use fullgraph
-            decode_config = CompileConfig(mode="max-autotune-no-cudagraphs", fullgraph=False, dynamic=False)
+            decode_config = CompileConfig(mode=_default_mode, fullgraph=False, dynamic=False)
         elif fallback_compile_config is not None:
             decode_config = fallback_compile_config
         else:
