@@ -291,7 +291,7 @@ class StaticLayer(CacheLayerMixin):
         super().__init__()
         self.max_cache_len = max_cache_len
         # Very important that it's a tensor here, to avoid recompiling when we update it and use it to create positions
-        self.cumulative_length = torch.tensor([0], dtype=int)
+        self.cumulative_length = torch.tensor(0, dtype=torch.int64)
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         """
@@ -377,7 +377,7 @@ class StaticLayer(CacheLayerMixin):
 
     def get_seq_length(self) -> int:
         """Returns the sequence length of the cached states."""
-        return self.cumulative_length if self.is_initialized else 0
+        return self.cumulative_length.item() if self.is_initialized else 0
 
     def get_max_cache_shape(self) -> int:
         """Return the maximum cache shape of the cache"""

@@ -108,6 +108,35 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(cached_keys.shape == (1, 1, 10, 128))
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
 
+    def test_static_cache_get_seq_length_returns_int(self):
+        """
+        Regression test for https://github.com/huggingface/transformers/issues/45987
+        StaticCache.get_seq_length() must return a plain Python int, not a Tensor,
+        to satisfy its -> int type contract and be interchangeable with DynamicCache.
+        """
+        config = LlamaConfig(num_attention_heads=32)
+        cache = StaticCache(config=config, max_cache_len=10)
+
+        # Before any update: should return 0 (int)
+        seq_len = cache.get_seq_length()
+        self.assertIsInstance(seq_len, int, "get_seq_length() must return int before initialization")
+        self.assertEqual(seq_len, 0)
+
+        # After an update: should still return a plain int
+        random_keys = torch.rand((1, 32, 3, 128))
+        random_values = torch.rand((1, 32, 3, 128))
+        cache.update(random_keys, random_values, 0)
+
+        seq_len = cache.get_seq_length()
+        self.assertIsInstance(seq_len, int, "get_seq_length() must return int after initialization")
+        self.assertEqual(seq_len, 3)
+
+        # Consistent with DynamicCache
+        dynamic_cache = DynamicCache()
+        dynamic_cache.update(random_keys, random_values, 0)
+        self.assertIsInstance(dynamic_cache.get_seq_length(), int)
+        self.assertEqual(cache.get_seq_length(), dynamic_cache.get_seq_length())
+
 
 def _skip_on_failed_cache_prerequisites(test, cache_implementation):
     """Function to skip tests on failed cache prerequisites, given a cache implementation"""
