@@ -52,7 +52,7 @@ from ..lw_detr.modeling_lw_detr import (
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="stevenbucaille/rf-detr-base")
+@auto_docstring(checkpoint="Roboflow/rf-detr-base")
 @strict
 class RfDetrDinov2Config(Dinov2Config):
     r"""
@@ -103,7 +103,7 @@ class RfDetrDinov2Config(Dinov2Config):
         BackboneConfigMixin.__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="stevenbucaille/rf-detr-base")
+@auto_docstring(checkpoint="Roboflow/rf-detr-base")
 @strict
 class RfDetrConfig(LwDetrConfig):
     r"""
@@ -159,10 +159,10 @@ class RfDetrConfig(LwDetrConfig):
     ```python
     >>> from transformers import RfDetrConfig, RfDetrModel
 
-    >>> # Initializing a LW-DETR stevenbucaille/RfDetr_small_60e_coco style configuration
+    >>> # Initializing a RF-DETR roboflow/rf-detr-base style configuration
     >>> configuration = RfDetrConfig()
 
-    >>> # Initializing a model (with random weights) from the stevenbucaille/RfDetr_small_60e_coco style configuration
+    >>> # Initializing a model (with random weights) from the Roboflow/rf-detr-base style configuration
     >>> model = RfDetrModel(configuration)
 
     >>> # Accessing the model configuration
@@ -548,12 +548,12 @@ class RfDetrPreTrainedModel(LwDetrPreTrainedModel):
             nn.init.constant_(module.segmentation_bias, 0.0)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the RfDetr backbone-decoder model.
     """
 )
+@dataclass
 class RfDetrModelOutput(ModelOutput):
     r"""
     init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
@@ -610,6 +610,7 @@ class RfDetrModel(LwDetrModel):
 
         # Step 2.
         enc_outputs_class_proposals = self.enc_out_class_embed[group_id](object_query)
+        invalid_mask = invalid_mask.to(enc_outputs_class_proposals.device)
         enc_outputs_class_proposals = enc_outputs_class_proposals.masked_fill(invalid_mask, float("-inf"))
         delta_bbox = self.enc_out_bbox_embed[group_id](object_query)
 
@@ -667,8 +668,8 @@ class RfDetrModel(LwDetrModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("stevenbucaille/rfdetr_small_60e_coco")
-        >>> model = RfDetrModel.from_pretrained("stevenbucaille/rfdetr_small_60e_coco")
+        >>> image_processor = AutoImageProcessor.from_pretrained("Roboflow/rf-detr-base")
+        >>> model = RfDetrModel.from_pretrained("Roboflow/rf-detr-base")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
@@ -862,8 +863,8 @@ class RfDetrForObjectDetection(LwDetrForObjectDetection):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("stevenbucaille/rf-detr-base")
-        >>> model = RfDetrForObjectDetection.from_pretrained("stevenbucaille/rf-detr-base")
+        >>> image_processor = AutoImageProcessor.from_pretrained("Roboflow/rf-detr-base")
+        >>> model = RfDetrForObjectDetection.from_pretrained("Roboflow/rf-detr-base")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -934,12 +935,12 @@ class RfDetrForObjectDetection(LwDetrForObjectDetection):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`RfDetrForInstanceSegmentation`].
     """
 )
+@dataclass
 class RfDetrInstanceSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
