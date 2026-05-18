@@ -224,8 +224,6 @@ class HrmTextModelTest(CausalLMModelTest, unittest.TestCase):
             check_hidden_states_output(inputs_dict, config, model_class)
 
 
-# TODO(vasqu) add/unblock integration tests
-@unittest.skip(reason="not released yet")
 @require_torch_accelerator
 class HrmTextIntegrationTest(unittest.TestCase):
     def setUp(self):
@@ -237,12 +235,11 @@ class HrmTextIntegrationTest(unittest.TestCase):
 
     @slow
     def test_greedy_generation(self):
-        expected_texts = Expectations(
+        EXPECTED_TEXT = Expectations(
             {
-                ("cuda", 9): "The capital of France isParis",
+                ("cuda", None): "The capital of France isParis",
             }
-        )
-        EXPECTED_TEXT = expected_texts.get_expectation()
+        ).get_expectation()
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         model = HrmTextForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16, device_map="auto")
@@ -251,3 +248,29 @@ class HrmTextIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**model_inputs, max_new_tokens=4, do_sample=False)
         generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(generated_text, EXPECTED_TEXT)
+
+    @slow
+    def test_forward_logits(self):
+        EXPECTED_LOGITS = Expectations(
+            {
+                ("cuda", (8, 6)): torch.tensor(
+                    [[-6.8750, -5.0000, -7.0625], [-5.3750, -3.2656, -4.5938], [2.1875, 2.2031, 2.5625]],
+                    dtype=torch.bfloat16,
+                ),
+            }
+        ).get_expectation()
+
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        model = HrmTextForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16, device_map="auto")
+        input_text = ["<|im_start|><|object_ref_start|>The capital of France is<|im_end|>"]
+        model_inputs = tokenizer(input_text, return_tensors="pt", add_special_tokens=False).to(model.device)
+
+        with torch.no_grad():
+            logits = model(**model_inputs).logits
+
+        torch.testing.assert_close(
+            logits[0, -3:, -3:].cpu(),
+            EXPECTED_LOGITS,
+            atol=1e-3,
+            rtol=1e-3,
+        )
