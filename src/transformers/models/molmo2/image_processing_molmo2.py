@@ -246,7 +246,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         src = chw_normalized.permute(1, 2, 0)  # → HWC
 
         n_crops = tiling_h * tiling_w
-        crop_arr = torch.empty((n_crops, crop_size, crop_size, 3), dtype=src.dtype)
+        crop_arr = torch.empty((n_crops, crop_size, crop_size, 3), dtype=src.dtype, device=src.device)
         patch_idx_arr = torch.empty((n_crops, crop_patch_h, crop_patch_w), dtype=torch.int32)
         on_crop = 0
         for i in range(tiling_h):

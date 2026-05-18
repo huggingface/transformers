@@ -1147,7 +1147,6 @@ class Molmo2Model(Molmo2PreTrainedModel):
                 token_type_ids,
                 has_multimodal_inputs=images is not None,
                 is_training=self.training,
-                is_first_iteration=not use_cache,
             )
 
         outputs = self.language_model(
