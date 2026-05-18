@@ -161,7 +161,7 @@ After the mapping is generated, verify the model type appears in the relevant ma
 
 ## Testing
 
-Add tests for each vision processing component in the model test directory.
+Add tests for each vision processing component in the model test directory. Image and video processor tests follow the same pattern. Inherit from the shared mixin, indicate the fast and slow processing classes when automatic discovery isn't enough, provide model-specific init kwargs, and override the input name when the model uses a non-default output key.
 
 ### Image processor tests
 
