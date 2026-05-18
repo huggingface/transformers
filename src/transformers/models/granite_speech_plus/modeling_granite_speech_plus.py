@@ -48,21 +48,6 @@ from .configuration_granite_speech_plus import GraniteSpeechPlusConfig, GraniteS
 logger = logging.get_logger(__name__)
 
 
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for Granite Speech outputs, with hidden states and attentions.
-    """
-)
-class GraniteSpeechPlusModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    audio_hidden_states (`torch.FloatTensor`, *optional*):
-        Projected audio hidden states.
-    """
-
-    audio_hidden_states: torch.FloatTensor | None = None
-
-
 ### Projector
 class GraniteSpeechPlusEncoderProjector(nn.Module):
     def __init__(self, config: GraniteSpeechPlusConfig):
@@ -120,6 +105,21 @@ class GraniteSpeechPlusPreTrainedModel(PreTrainedModel):
             relpos_dist = seq.view(-1, 1) - seq.view(1, -1)
             attention_dists = torch.clamp(relpos_dist, -context_size, context_size) + module.config.max_pos_emb
             init.copy_(module.attention_dists, attention_dists)
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for Granite Speech outputs, with hidden states and attentions.
+    """
+)
+class GraniteSpeechPlusModelOutputWithPast(BaseModelOutputWithPast):
+    r"""
+    audio_hidden_states (`torch.FloatTensor`, *optional*):
+        Projected audio hidden states.
+    """
+
+    audio_hidden_states: torch.FloatTensor | None = None
 
 
 @auto_docstring(
