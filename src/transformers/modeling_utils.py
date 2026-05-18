@@ -1101,6 +1101,14 @@ class EmbeddingAccessMixin:
         model = getattr(self, "model", None)
         if model is not None and hasattr(model, name):
             return getattr(model, name)
+        # 4) Multimodal LMs that wrap a text sub-model at `self.language_model`.
+        language_model = getattr(self, "language_model", None)
+        if (
+            language_model is not None
+            and language_model is not self
+            and hasattr(language_model, "get_input_embeddings")
+        ):
+            return language_model.get_input_embeddings()
 
         base_model = getattr(self, "base_model", None)
         if base_model is not None and base_model is not self and hasattr(base_model, "get_input_embeddings"):
@@ -1132,7 +1140,14 @@ class EmbeddingAccessMixin:
         # 3) encoder/decoder and VLMs like `Gemma3nForConditionalGeneration`
         elif (model := getattr(self, "model", None)) is not None and hasattr(model, name):
             setattr(model, name, value)
-        # 4) recurse once into the registered *base* model (e.g. for encoder/decoder)
+        # 4) Multimodal LMs that wrap a text sub-model at `self.language_model`.
+        elif (
+            (language_model := getattr(self, "language_model", None)) is not None
+            and language_model is not self
+            and hasattr(language_model, "set_input_embeddings")
+        ):
+            language_model.set_input_embeddings(value)
+        # 5) recurse once into the registered *base* model (e.g. for encoder/decoder)
         elif (
             (base_model := getattr(self, "base_model", None)) is not None
             and base_model is not self
