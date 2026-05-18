@@ -899,6 +899,7 @@ class VideoPrismForVideoClassification(VideoPrismPreTrainedModel):
             pixel_values_videos=pixel_values_videos, interpolate_pos_encoding=interpolate_pos_encoding, **kwargs
         )
         sequence_output = vision_model_outputs.last_hidden_state
+        kwargs["softcap"] = None
         pooled_output = self.head(sequence_output, **kwargs)[0]
         logits = self.classifier(pooled_output)
         loss = None

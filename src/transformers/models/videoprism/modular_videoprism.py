@@ -55,8 +55,6 @@ class VideoPrismVisionConfig(VivitConfig):
         The number of frames in the input video.
     tubelet_size (`List[int]`, *optional*, defaults to `[1, 18, 18]`):
         The size of the tubelet patch.
-    pooler_output_size (<fill_type>):
-        <fill_docstring>
     num_spatial_layers (`int`, *optional*, defaults to 12):
         Number of spatial transformer blocks.
     num_temporal_layers (`int`, *optional*, defaults to 4):
@@ -72,6 +70,7 @@ class VideoPrismVisionConfig(VivitConfig):
     model_type = "videoprism_vision_model"
     base_config_key = "vision_config"
     pooler_act = AttributeError()
+    pooler_output_size = AttributeError()
     image_size: int | list[int] | tuple[int, int] = 288
     num_frames: int = 16
     tubelet_size: list[int] | tuple[int, ...] = (1, 18, 18)
@@ -95,6 +94,8 @@ class VideoPrismVisionConfig(VivitConfig):
 @strict
 class VideoPrismTextConfig(SiglipTextConfig):
     r"""
+    num_text_layers (`int`, *optional*, defaults to 12):
+        Number of text transformer blocks.
     apply_l2norm (`bool`, *optional*, defaults to `True`):
         Whether to apply L2 normalization to the output of VideoPrismTextEncoder.
     attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
