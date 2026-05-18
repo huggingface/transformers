@@ -309,12 +309,6 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
         self.multi_modal_projector = VibeVoiceAsrMultiModalProjector(config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
-        # Acoustic/semantic tokenizers are run under no_grad in `get_audio_features`; freeze
-        # their parameters so grad-checkpointing and training sanity checks don't flag them.
-        for p in self.acoustic_tokenizer_encoder.parameters():
-            p.requires_grad_(False)
-        for p in self.semantic_tokenizer_encoder.parameters():
-            p.requires_grad_(False)
 
     def get_input_embeddings(self):
         return self.language_model.get_input_embeddings()
