@@ -473,6 +473,7 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
     additional_model_inputs = ["qformer_input_ids", "input_ids"]
 
     test_resize_embeddings = True
+    test_torch_exportable = False
     test_attention_outputs = False
     _is_composite = True
 

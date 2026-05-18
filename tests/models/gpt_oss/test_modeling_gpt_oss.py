@@ -70,6 +70,14 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = GptOssModelTester
 
     @require_kernels
+    def test_kernelize_does_not_crash(self):
+        """Regression test #45799: `kernelize` should not crash with `use_kernelized_func` + `use_kernel_func_from_hub`."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = GptOssModel(config).to(device=torch_device)
+        # This used to raise TypeError because apply_rotary_pos_emb was not wrapped as nn.Module
+        model.use_kernels = True
+
+    @require_kernels
     @pytest.mark.flash_attn_test
     @require_torch_gpu
     def test_default_flash_implementation_auto_correction(self):
