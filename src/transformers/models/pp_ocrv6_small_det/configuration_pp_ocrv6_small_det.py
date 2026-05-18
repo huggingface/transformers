@@ -68,6 +68,9 @@ class PPOCRV6SmallDetConfig(PreTrainedConfig):
             default_config_type="pp_lcnet_v4",
             **kwargs,
         )
+
+        # For object detection pipeline compatibility: single class "text"
+        self.id2label = {0: "text"} if self.id2label is None else self.id2label
         super().__post_init__(**kwargs)
 
 

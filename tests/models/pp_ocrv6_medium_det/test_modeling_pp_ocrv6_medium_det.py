@@ -242,6 +242,7 @@ class PPOCRV6MediumDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
 
+# TODO: vasqu
 @require_torch
 @require_vision
 @require_cv2

@@ -24,6 +24,7 @@ import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...backbone_utils import load_backbone
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -154,11 +155,12 @@ class PPOCRV6SmallDetSqueezeExcitationModule(nn.Module):
         return residual * hidden_states
 
 
-class PPOCRV6SmallDetDepthwiseSeparableConvLayer(nn.Module):
+class PPOCRV6SmallDetDepthwiseSeparableConvLayer(GradientCheckpointingLayer):
     """
-    Depthwise Separable Convolution Layer
-    Core component of lightweight models (e.g., MobileNet, PP-LCNet) that significantly reduces
-    the number of parameters and computational cost.
+    The differences from PPLCNetDepthwiseSeparableConvLayer are:
+    1. Uses standard 2D convolutions instead of the original custom convolution layer.
+    2. Has slightly different default settings.
+    3. Adds a residual connection at the end.
     """
 
     def __init__(
@@ -244,7 +246,7 @@ class PPOCRV6SmallDetNeck(nn.Module):
                 )
             )
 
-    def forward(self, feature_maps: list[torch.Tensor]) -> torch.Tensor:
+    def forward(self, feature_maps):
         fused = []
         for conv, feature in zip(self.insert_conv, feature_maps):  # [p2, p3, p4, p5]
             hidden_states = conv(feature)

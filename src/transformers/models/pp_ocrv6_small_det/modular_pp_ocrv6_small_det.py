@@ -14,7 +14,6 @@
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import (
@@ -25,9 +24,11 @@ from ...utils import (
     auto_docstring,
     logging,
 )
+from ..pp_lcnet.modeling_pp_lcnet import PPLCNetDepthwiseSeparableConvLayer
 from ..pp_ocrv5_mobile_det.configuration_pp_ocrv5_mobile_det import PPOCRV5MobileDetConfig
 from ..pp_ocrv5_mobile_det.modeling_pp_ocrv5_mobile_det import (
     PPOCRV5MobileDetHead,
+    PPOCRV5MobileDetNeck,
     PPOCRV5MobileDetResidualSqueezeExcitationLayer,
     PPOCRV5MobileDetSqueezeExcitationModule,
 )
@@ -71,6 +72,9 @@ class PPOCRV6SmallDetConfig(PPOCRV5MobileDetConfig):
             default_config_type="pp_lcnet_v4",
             **kwargs,
         )
+
+        # For object detection pipeline compatibility: single class "text"
+        self.id2label = {0: "text"} if self.id2label is None else self.id2label
         PreTrainedConfig.__post_init__(**kwargs)
 
 
@@ -82,11 +86,12 @@ class PPOCRV6SmallDetSqueezeExcitationModule(PPOCRV5MobileDetSqueezeExcitationMo
     pass
 
 
-class PPOCRV6SmallDetDepthwiseSeparableConvLayer(nn.Module):
+class PPOCRV6SmallDetDepthwiseSeparableConvLayer(PPLCNetDepthwiseSeparableConvLayer):
     """
-    Depthwise Separable Convolution Layer
-    Core component of lightweight models (e.g., MobileNet, PP-LCNet) that significantly reduces
-    the number of parameters and computational cost.
+    The differences from PPLCNetDepthwiseSeparableConvLayer are:
+    1. Uses standard 2D convolutions instead of the original custom convolution layer.
+    2. Has slightly different default settings.
+    3. Adds a residual connection at the end.
     """
 
     def __init__(
@@ -126,13 +131,13 @@ class PPOCRV6SmallDetResidualSqueezeExcitationLayer(PPOCRV5MobileDetResidualSque
     pass
 
 
-class PPOCRV6SmallDetNeck(nn.Module):
+class PPOCRV6SmallDetNeck(PPOCRV5MobileDetNeck):
     """
     The only difference from PPOCRV5MobileDetNeck is the module used by input_conv.
     """
 
     def __init__(self, config: PPOCRV6SmallDetConfig):
-        super().__init__()
+        nn.Module.__init__(self)
         self.interpolate_mode = config.interpolate_mode
 
         self.insert_conv = nn.ModuleList()
@@ -151,31 +156,6 @@ class PPOCRV6SmallDetNeck(nn.Module):
                     config.neck_out_channels, config.neck_out_channels, config.dilated_kernel_size, config.reduction
                 )
             )
-
-    def forward(self, feature_maps: list[torch.Tensor]) -> torch.Tensor:
-        fused = []
-        for conv, feature in zip(self.insert_conv, feature_maps):  # [p2, p3, p4, p5]
-            hidden_states = conv(feature)
-            fused.append(hidden_states)
-
-        for i in range(2, -1, -1):  # p4 -> p3-> p2
-            fused[i] = fused[i] + F.interpolate(fused[i + 1], scale_factor=2, mode=self.interpolate_mode)
-
-        features = []
-        for conv, feat in zip(self.input_conv, [fused[0], fused[1], fused[2], fused[3]]):
-            features.append(conv(feat))
-
-        processed = []
-        upsample_scales = [1, 2, 4, 8]  # p2, p3, p4, p5
-        for feat, scale in zip(features, upsample_scales):
-            if scale != 1:
-                hidden_states = F.interpolate(feat, scale_factor=scale, mode=self.interpolate_mode)
-            else:
-                hidden_states = feat
-            processed.append(hidden_states)
-
-        fused_feature_map = torch.cat(processed[::-1], dim=1)  # [p5, p4, p3, p2]
-        return fused_feature_map
 
 
 @auto_docstring(custom_intro="PPOCR6SmallRec model for text recognition tasks.")

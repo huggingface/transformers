@@ -234,9 +234,11 @@ class PPOCRV6TinyRecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
             check_hidden_states_output(inputs_dict.copy(), config, model_class)
 
 
+# TODO: vasqu
 @require_torch
 @require_vision
 @slow
+@unittest.skip(reason="PP-OCRv6_tiny_rec_safetensors weights have not been uploaded yet.")
 class PPOCRV6TinyRecModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         model_path = "PaddlePaddle/PP-OCRv6_tiny_rec_safetensors"

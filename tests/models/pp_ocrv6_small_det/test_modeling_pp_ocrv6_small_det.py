@@ -228,6 +228,7 @@ class PPOCRV6SmallDetModelTest(ModelTesterMixin, unittest.TestCase):
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
 
+# TODO: vasqu
 @require_cv2
 @require_torch
 @require_vision
