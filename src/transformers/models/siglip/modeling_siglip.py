@@ -59,12 +59,12 @@ class SiglipVisionModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for text model's outputs that also contains a pooling of the last hidden states.
     """
 )
+@dataclass
 # Copied from transformers.models.clip.modeling_clip.CLIPTextModelOutput with CLIP->Siglip
 class SiglipTextModelOutput(ModelOutput):
     r"""

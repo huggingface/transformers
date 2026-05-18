@@ -509,6 +509,7 @@ def torch_chunk_gated_delta_rule(
     initial_state=None,
     output_final_state=False,
     use_qk_l2norm_in_kernel=False,
+    **kwargs,
 ):
     initial_dtype = query.dtype
     if use_qk_l2norm_in_kernel:
@@ -915,7 +916,7 @@ class OlmoHybridPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["OlmoHybridAttentionDecoderLayer", "OlmoHybridLinearAttentionDecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _keys_to_ignore_on_load_unexpected = [r"^mtp.*"]
@@ -994,7 +995,7 @@ class OlmoHybridModel(OlmoHybridPreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             position_ids=position_ids,

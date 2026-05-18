@@ -56,7 +56,7 @@ CHECKER_CONFIG = {
     "label": "Repository structure",
     # Approximate: the checker also introspects the live transformers module at runtime
     # (e.g. dir(transformers.models), CONFIG_MAPPING_NAMES) and walks tests/ broadly.
-    "file_globs": [
+    "cache_globs": [
         "src/transformers/models/**/*.py",
         "src/transformers/models/auto/*.py",
         "src/transformers/**/__init__.py",
@@ -830,6 +830,24 @@ def find_tested_models(test_file: str) -> set[str]:
             else:
                 continue
             model_tested.add(tested_class)
+
+    # Same as above, but for ALMModelTester. Audio-LMs typically only set `conditional_generation_class`
+    # (no base_model_class). `GraniteSpeechModelTester` is listed because `GraniteSpeechPlusForConditionalGenerationModelTester`
+    # uses `ALMModelTester` indirectly through it; in the future we may want to resolve inheritance properly.
+    audio_class_match = re.search(r"class \w+\((?:ALMModelTester|GraniteSpeechModelTester)\)", content)
+    if audio_class_match is not None:
+        audio_content = content[audio_class_match.start() :]
+        for test_class_type in [
+            "config_class",
+            "conditional_generation_class",
+            "base_model_class",
+            "sequence_classification_class",
+        ]:
+            tested_class = re.findall(rf"{test_class_type}\s+=.*", audio_content)
+            if tested_class:
+                tested_class = tested_class[0].split("=")[1].strip()
+                if tested_class != "None":
+                    model_tested.add(tested_class)
 
     return model_tested
 
