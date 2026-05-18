@@ -844,146 +844,6 @@ class Deimv2SpatialTuningAdapter(nn.Module):
         return hidden_states_2, hidden_states_3, hidden_states_4
 
 
-class Deimv2FrozenBatchNorm2d(nn.Module):
-    """
-    BatchNorm2d where the batch statistics and the affine parameters are fixed.
-
-    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
-    torchvision.models.resnet[18,34,50,101] produce nans.
-    """
-
-    def __init__(self, n):
-        super().__init__()
-        self.register_buffer("weight", torch.ones(n))
-        self.register_buffer("bias", torch.zeros(n))
-        self.register_buffer("running_mean", torch.zeros(n))
-        self.register_buffer("running_var", torch.ones(n))
-
-    def _load_from_state_dict(
-        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-    ):
-        num_batches_tracked_key = prefix + "num_batches_tracked"
-        if num_batches_tracked_key in state_dict:
-            del state_dict[num_batches_tracked_key]
-
-        super()._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-        )
-
-    def forward(self, x):
-        # move reshapes to the beginning
-        # to make it user-friendly
-        weight = self.weight.reshape(1, -1, 1, 1)
-        bias = self.bias.reshape(1, -1, 1, 1)
-        running_var = self.running_var.reshape(1, -1, 1, 1)
-        running_mean = self.running_mean.reshape(1, -1, 1, 1)
-        epsilon = 1e-5
-        scale = weight * (running_var + epsilon).rsqrt()
-        bias = bias - running_mean * scale
-        return x * scale + bias
-
-
-def replace_batch_norm(model):
-    r"""
-    Recursively replace all `torch.nn.BatchNorm2d` with `Deimv2FrozenBatchNorm2d`.
-
-    Args:
-        model (torch.nn.Module):
-            input model
-    """
-    for name, module in model.named_children():
-        if isinstance(module, nn.BatchNorm2d):
-            new_module = Deimv2FrozenBatchNorm2d(module.num_features)
-
-            if module.weight.device != torch.device("meta"):
-                new_module.weight.copy_(module.weight)
-                new_module.bias.copy_(module.bias)
-                new_module.running_mean.copy_(module.running_mean)
-                new_module.running_var.copy_(module.running_var)
-
-            model._modules[name] = new_module
-
-        if len(list(module.children())) > 0:
-            replace_batch_norm(module)
-
-
-class Deimv2ConvEncoder(nn.Module):
-    """
-    Convolutional backbone using the modeling_deimv2_resnet.py.
-
-    nn.BatchNorm2d layers are replaced by Deimv2FrozenBatchNorm2d as defined above.
-    https://github.com/lyuwenyu/RT-DETR/blob/main/Deimv2_pytorch/src/nn/backbone/presnet.py#L142
-    """
-
-    def __init__(self, config):
-        super().__init__()
-
-        backbone = load_backbone(config)
-
-        if config.freeze_backbone_batch_norms:
-            # replace batch norm by frozen batch norm
-            with torch.no_grad():
-                replace_batch_norm(backbone)
-        self.model = backbone
-        self.intermediate_channel_sizes = self.model.channels
-        self.encoder_input_proj = nn.ModuleList(
-            [
-                Deimv2ConvNormLayer(config, in_channel, config.encoder_hidden_dim, 1, 1)
-                if config.encoder_type != "lite"
-                else nn.Identity()
-                for in_channel in self.intermediate_channel_sizes
-            ]
-        )
-
-    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> list[torch.Tensor]:
-        features = self.model(pixel_values, **kwargs).feature_maps
-        return [proj(feat) for proj, feat in zip(self.encoder_input_proj, features)]
-
-
-class Deimv2DINOv3ConvEncoder(nn.Module):
-    def __init__(self, config: Deimv2Config):
-        super().__init__()
-        self.backbone = load_backbone(config)
-
-        self.spatial_tuning_adapter = Deimv2SpatialTuningAdapter(config)
-
-        embed_dim = config.backbone_config.hidden_size
-        hidden_dim = config.encoder_hidden_dim
-        spatial_tuning_adapter_channels = config.spatial_tuning_adapter_inplanes
-        self.fusion_proj = nn.ModuleList(
-            [
-                Deimv2ConvNormLayer(config, embed_dim + spatial_tuning_adapter_channels * 2, hidden_dim, 1, 1),
-                Deimv2ConvNormLayer(config, embed_dim + spatial_tuning_adapter_channels * 4, hidden_dim, 1, 1),
-                Deimv2ConvNormLayer(config, embed_dim + spatial_tuning_adapter_channels * 4, hidden_dim, 1, 1),
-            ]
-        )
-
-    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> list[torch.Tensor]:
-        backbone_output = self.backbone(pixel_values, **kwargs)
-        feature_maps = backbone_output.feature_maps
-
-        patch_size = self.backbone.config.patch_size
-        height_patches = pixel_values.shape[2] // patch_size
-        width_patches = pixel_values.shape[3] // patch_size
-
-        semantic_features = []
-        num_scales = len(feature_maps)
-        for i, feat in enumerate(feature_maps):
-            resize_height = int(height_patches * 2 ** (num_scales - 2 - i))
-            resize_width = int(width_patches * 2 ** (num_scales - 2 - i))
-            spatial = F.interpolate(feat, size=[resize_height, resize_width], mode="bilinear", align_corners=False)
-            semantic_features.append(spatial)
-
-        detail_features = self.spatial_tuning_adapter(pixel_values)
-
-        outputs = []
-        for i, (semantic_feature, detail_feature) in enumerate(zip(semantic_features, detail_features)):
-            fused = torch.cat([semantic_feature, detail_feature], dim=1)
-            outputs.append(self.fusion_proj[i](fused))
-
-        return outputs
-
-
 class Deimv2Integral(nn.Module):
     """
     A static layer that calculates integral results from a distribution.
@@ -1201,6 +1061,144 @@ class Deimv2PreTrainedModel(PreTrainedModel):
             init.constant_(module.up_proj.bias, 0)
             init.xavier_uniform_(module.down_proj.weight)
             init.constant_(module.down_proj.bias, 0)
+
+
+class Deimv2FrozenBatchNorm2d(nn.Module):
+    """
+    BatchNorm2d where the batch statistics and the affine parameters are fixed.
+
+    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
+    torchvision.models.resnet[18,34,50,101] produce nans.
+    """
+
+    def __init__(self, n):
+        super().__init__()
+        self.register_buffer("weight", torch.ones(n))
+        self.register_buffer("bias", torch.zeros(n))
+        self.register_buffer("running_mean", torch.zeros(n))
+        self.register_buffer("running_var", torch.ones(n))
+
+    def _load_from_state_dict(
+        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+    ):
+        num_batches_tracked_key = prefix + "num_batches_tracked"
+        if num_batches_tracked_key in state_dict:
+            del state_dict[num_batches_tracked_key]
+
+        super()._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+        )
+
+    def forward(self, x):
+        # move reshapes to the beginning
+        # to make it user-friendly
+        weight = self.weight.reshape(1, -1, 1, 1)
+        bias = self.bias.reshape(1, -1, 1, 1)
+        running_var = self.running_var.reshape(1, -1, 1, 1)
+        running_mean = self.running_mean.reshape(1, -1, 1, 1)
+        epsilon = 1e-5
+        scale = weight * (running_var + epsilon).rsqrt()
+        bias = bias - running_mean * scale
+        return x * scale + bias
+
+
+def replace_batch_norm(model):
+    r"""
+    Recursively replace all `torch.nn.BatchNorm2d` with `Deimv2FrozenBatchNorm2d`.
+
+    Args:
+        model (torch.nn.Module):
+            input model
+    """
+    for name, module in model.named_children():
+        if isinstance(module, nn.BatchNorm2d):
+            new_module = Deimv2FrozenBatchNorm2d(module.num_features)
+
+            if module.weight.device != torch.device("meta"):
+                new_module.weight.copy_(module.weight)
+                new_module.bias.copy_(module.bias)
+                new_module.running_mean.copy_(module.running_mean)
+                new_module.running_var.copy_(module.running_var)
+
+            model._modules[name] = new_module
+
+        if len(list(module.children())) > 0:
+            replace_batch_norm(module)
+
+
+# This follows DFineConvEncoder, with optional projections added after the backbone features.
+class Deimv2ConvEncoder(Deimv2PreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        backbone = load_backbone(config)
+
+        if config.freeze_backbone_batch_norms:
+            # replace batch norm by frozen batch norm
+            with torch.no_grad():
+                replace_batch_norm(backbone)
+        self.model = backbone
+        self.intermediate_channel_sizes = self.model.channels
+        self.encoder_input_proj = nn.ModuleList(
+            [
+                Deimv2ConvNormLayer(config, in_channel, config.encoder_hidden_dim, 1, 1)
+                if config.encoder_type != "lite"
+                else nn.Identity()
+                for in_channel in self.intermediate_channel_sizes
+            ]
+        )
+
+        self.post_init()
+
+    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> list[torch.Tensor]:
+        features = self.model(pixel_values, **kwargs).feature_maps
+        return [proj(feat) for proj, feat in zip(self.encoder_input_proj, features)]
+
+
+class Deimv2DINOv3ConvEncoder(Deimv2PreTrainedModel):
+    def __init__(self, config: Deimv2Config):
+        super().__init__(config)
+        self.backbone = load_backbone(config)
+
+        self.spatial_tuning_adapter = Deimv2SpatialTuningAdapter(config)
+
+        embed_dim = config.backbone_config.hidden_size
+        hidden_dim = config.encoder_hidden_dim
+        spatial_tuning_adapter_channels = config.spatial_tuning_adapter_inplanes
+        self.fusion_proj = nn.ModuleList(
+            [
+                Deimv2ConvNormLayer(config, embed_dim + spatial_tuning_adapter_channels * 2, hidden_dim, 1, 1),
+                Deimv2ConvNormLayer(config, embed_dim + spatial_tuning_adapter_channels * 4, hidden_dim, 1, 1),
+                Deimv2ConvNormLayer(config, embed_dim + spatial_tuning_adapter_channels * 4, hidden_dim, 1, 1),
+            ]
+        )
+
+        self.post_init()
+
+    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> list[torch.Tensor]:
+        backbone_output = self.backbone(pixel_values, **kwargs)
+        feature_maps = backbone_output.feature_maps
+
+        patch_size = self.backbone.config.patch_size
+        height_patches = pixel_values.shape[2] // patch_size
+        width_patches = pixel_values.shape[3] // patch_size
+
+        semantic_features = []
+        num_scales = len(feature_maps)
+        for i, feat in enumerate(feature_maps):
+            resize_height = int(height_patches * 2 ** (num_scales - 2 - i))
+            resize_width = int(width_patches * 2 ** (num_scales - 2 - i))
+            spatial = F.interpolate(feat, size=[resize_height, resize_width], mode="bilinear", align_corners=False)
+            semantic_features.append(spatial)
+
+        detail_features = self.spatial_tuning_adapter(pixel_values)
+
+        outputs = []
+        for i, (semantic_feature, detail_feature) in enumerate(zip(semantic_features, detail_features)):
+            fused = torch.cat([semantic_feature.to(detail_feature.device), detail_feature], dim=1)
+            outputs.append(self.fusion_proj[i](fused))
+
+        return outputs
 
 
 class Deimv2LiteEncoder(Deimv2PreTrainedModel):
@@ -2066,6 +2064,7 @@ class Deimv2ObjectDetectionOutput(ModelOutput):
     """
 )
 class Deimv2ForObjectDetection(Deimv2PreTrainedModel):
+    _no_split_modules = None  # Restrictions are collected from self.model during post_init.
     _tied_weights_keys = {
         r"bbox_embed.(?![0])\d+": r"bbox_embed.0",
         r"class_embed.(?![0])\d+": r"^class_embed.0",
