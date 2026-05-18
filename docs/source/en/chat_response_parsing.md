@@ -258,9 +258,9 @@ The available parsers are:
 | Parser       | Produces      | Useful `content_args`                                                                           |
 |--------------|---------------|-------------------------------------------------------------------------------------------------|
 | `text`       | string        | `strip` (default `true`). Set to `false` to preserve trailing whitespace                        |
-| `int`        | int           | `strip` (default `true`)                                                                        |
-| `float`      | float         | `strip` (default `true`)                                                                        |
-| `bool`       | bool          | `strip` (default `true`); accepts `"true"`/`"1"` (case-insensitive) as true                     |
+| `int`        | int           | (no args)                                                                                       |
+| `float`      | float         | (no args)                                                                                       |
+| `bool`       | bool          | (no args); accepts `"true"`/`"1"` (case-insensitive) as true                                    |
 | `json`       | any           | `allow_non_json`, `unquoted_keys`, `string_delims: [[open, close],...]`                         |
 | `xml-inline` | dict          | `tag_pattern` (regex w/ named groups `key`/`value`), `value_parser`, `merge_duplicates`         |
 | `kv-lines`   | dict          | `line_sep`, `kv_sep`, `value_parser`, `strip` (default `true`)                                  |
