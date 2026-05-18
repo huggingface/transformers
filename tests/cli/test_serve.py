@@ -2402,6 +2402,13 @@ class TestReasoningGemma(_TestReasoningBase, unittest.TestCase):
 
     MODEL = "google/gemma-4-E2B-it"
 
+    @classmethod
+    def setUpClass(cls):
+        # Gemma 4's chat template gates thinking on `enable_thinking`; default is "false".
+        cls.serve, port = _start_serve(reasoning="on")
+        cls.base_url = f"http://localhost:{port}"
+        cls.client = OpenAI(base_url=f"{cls.base_url}/v1", api_key="unused")
+
 
 @slow
 @require_librosa
