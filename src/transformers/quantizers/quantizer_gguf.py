@@ -59,9 +59,7 @@ class GGUFQuantizer(HfQuantizer):
         # disk. The ``gguf_file=`` path is pre-quantized; the on-the-fly path
         # (driven by ``GgufQuantizeConfig``) loads a normal fp16/bf16 checkpoint
         # and quantizes after weight loading.
-        on_the_fly = quantization_config is not None and getattr(
-            quantization_config, "quant_method", None
-        ) == "gguf"
+        on_the_fly = quantization_config is not None and getattr(quantization_config, "quant_method", None) == "gguf"
         kwargs.setdefault("pre_quantized", not on_the_fly)
         super().__init__(quantization_config=quantization_config, **kwargs)
         self.weight_mapping = list(weight_mapping or [])

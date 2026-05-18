@@ -818,8 +818,11 @@ def _flash_attention_forward(
             cu_q = torch.arange(0, (B + 1) * S_q, S_q, dtype=torch.int32, device=q.device)
             cu_k = torch.arange(0, (B + 1) * S_k, S_k, dtype=torch.int32, device=q.device)
             out = flash_varlen_fn(
-                q, k, v,
-                cu_seqlens_q=cu_q, cu_seqlens_k=cu_k,
+                q,
+                k,
+                v,
+                cu_seqlens_q=cu_q,
+                cu_seqlens_k=cu_k,
                 **flash_kwargs(max_seqlen_q=S_q, max_seqlen_k=S_k),
             )
             if isinstance(out, tuple):
