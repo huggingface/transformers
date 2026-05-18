@@ -90,7 +90,6 @@ _RESPONSE_TEMPLATE = {
                 "string_delims": [['<|"|>', '<|"|>']],
             },
             "transform": "{type: 'function', function: {name: name, arguments: content}}",
-},
         },
         "content": {
             "close": ["<turn|>", "<|tool_response>", "<eos>"],
