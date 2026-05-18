@@ -1155,6 +1155,12 @@ class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, Generati
     def get_encoder(self):
         return self.model.get_encoder()
 
+    def get_input_embeddings(self):
+        raise AttributeError("The PPFormulaNetModel does not have an `input_embedding` attribute.")
+
+    def set_input_embeddings(self):
+        raise AttributeError("The PPFormulaNetModel does not have an `input_embedding` attribute.")
+
 
 __all__ = [
     "PPFormulaNetModel",
