@@ -15,11 +15,6 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2020-10-08 and added to Hugging Face Transformers on 2022-09-14.*
 
-<div style="float: right;">
- <div class="flex flex-wrap space-x-1">
-  <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
- </div>
-</div>
 
 # Deformable DETR
 
@@ -43,13 +38,13 @@ The example below demonstrates how to perform object detection with the [`Pipeli
 <hfoption id="Pipeline">
 
 ```python
+
 from transformers import pipeline
-import torch
+
 
 pipeline = pipeline(
-    "object-detection", 
+    "object-detection",
     model="SenseTime/deformable-detr",
-    dtype=torch.float16,
     device_map=0
 )
 
@@ -60,19 +55,21 @@ pipeline("http://images.cocodataset.org/val2017/000000039769.jpg")
 <hfoption id="AutoModel">
 
 ```python
-from transformers import AutoImageProcessor, AutoModelForObjectDetection
-from PIL import Image
 import requests
 import torch
+from PIL import Image
+
+from transformers import AutoImageProcessor, AutoModelForObjectDetection
+
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 
 image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
-model = AutoModelForObjectDetection.from_pretrained("SenseTime/deformable-detr")
+model = AutoModelForObjectDetection.from_pretrained("SenseTime/deformable-detr", device_map="auto")
 
 # prepare image for the model
-inputs = image_processor(images=image, return_tensors="pt")
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)

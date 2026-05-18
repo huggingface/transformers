@@ -17,7 +17,6 @@ rendered properly in your Markdown viewer.
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
 </div>
@@ -37,13 +36,12 @@ The example below demonstrates how to predict the `<mask>` token with [`Pipeline
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="fill-mask",
     model="FacebookAI/xlm-roberta-base",
-    dtype=torch.float16,
     device=0
 )
 # Example in French
@@ -54,15 +52,16 @@ pipeline("Bonjour, je suis un modèle <mask>.")
 <hfoption id="AutoModel">
 
 ```python
-from transformers import AutoModelForMaskedLM, AutoTokenizer
 import torch
+
+from transformers import AutoModelForMaskedLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "FacebookAI/xlm-roberta-base"
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "FacebookAI/xlm-roberta-base",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -101,7 +100,6 @@ quantization_config = BitsAndBytesConfig(
 tokenizer = AutoTokenizer.from_pretrained("facebook/xlm-roberta-large")
 model = AutoModelForMaskedLM.from_pretrained(
     "facebook/xlm-roberta-large",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="flash_attention_2",
     quantization_config=quantization_config

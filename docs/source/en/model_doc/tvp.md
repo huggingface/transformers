@@ -13,9 +13,6 @@ specific language governing permissions and limitations under the License.
 
 # TVP
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -52,8 +49,8 @@ The following example shows how to run temporal video grounding using [`TvpProce
 import av
 import cv2
 import numpy as np
-import torch
 from huggingface_hub import hf_hub_download
+
 from transformers import AutoProcessor, TvpForVideoGrounding
 
 
@@ -113,7 +110,7 @@ def decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps
     Returns:
         frames (tensor): decoded frames from the video.
     '''
-    assert clip_idx >= -2, "Not a valid clip_idx {}".format(clip_idx)
+    assert clip_idx >= -2, f"Not a valid clip_idx {clip_idx}"
     frames, fps = pyav_decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps)
     clip_size = sampling_rate * num_frames / target_fps * fps
     index = np.linspace(0, clip_size - 1, num_frames)
@@ -124,7 +121,7 @@ def decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps
 
 
 file = hf_hub_download(repo_id="Intel/tvp_demo", filename="AK2KG.mp4", repo_type="dataset")
-model = TvpForVideoGrounding.from_pretrained("Intel/tvp-base")
+model = TvpForVideoGrounding.from_pretrained("Intel/tvp-base", device_map="auto")
 
 decoder_kwargs = dict(
     container=av.open(file, metadata_errors="ignore"),

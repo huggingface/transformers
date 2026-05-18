@@ -17,7 +17,6 @@ rendered properly in your Markdown viewer.
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -38,14 +37,15 @@ You can find all the checkpoints under the [PI0](https://huggingface.co/collecti
 
 ## Usage examples
 
-```py
+```python
 import torch
+
+from transformers import PI0ForConditionalGeneration, PI0Processor
 from transformers.image_utils import load_image
-from transformers import PI0Processor, PI0ForConditionalGeneration
+
 
 model = PI0ForConditionalGeneration.from_pretrained(
     "lerobot/pi0_base",
-    dtype=torch.float32,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -53,7 +53,7 @@ processor = PI0Processor.from_pretrained("google/paligemma2-3b-mix-224")
 
 prompt = "Pick up the object"
 image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/vla_pi0.jpg")
-inputs = processor(image, prompt, return_tensors="pt")
+inputs = processor(image, prompt, return_tensors="pt").to(model.device)
 
 state = torch.randn(1, 32) # change with actual robot state
 actions = model.sample_actions(**inputs, state=state, num_steps=3)

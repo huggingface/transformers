@@ -18,7 +18,6 @@ rendered properly in your Markdown viewer.
 # ColModernVBert
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
@@ -34,12 +33,14 @@ The model was introduced in [ModernVBERT: Towards Smaller Visual Document Retrie
 
 ```python
 import torch
-from PIL import Image
 from huggingface_hub import hf_hub_download
-from transformers import ColModernVBertProcessor, ColModernVBertForRetrieval
+from PIL import Image
+
+from transformers import ColModernVBertForRetrieval, ColModernVBertProcessor
+
 
 processor = ColModernVBertProcessor.from_pretrained("ModernVBERT/colmodernvbert-hf")
-model = ColModernVBertForRetrieval.from_pretrained("ModernVBERT/colmodernvbert-hf")
+model = ColModernVBertForRetrieval.from_pretrained("ModernVBERT/colmodernvbert-hf", device_map="auto")
 
 # Load the test dataset
 queries = [
