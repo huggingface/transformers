@@ -9,25 +9,24 @@
 
 Three load paths:
 
-* ``from_pretrained(repo, gguf_file=...)`` on MPS with ``use_kernels=True``:
-  modules swap to :class:`GgufLinear` / :class:`GgufExperts` at meta time.
-  Bytes flow through the existing rename pipeline, then a final byte-copy
-  step lands the raw GGUF blocks in the swapped buffers (TODO: integrate via
-  a target-aware ConversionOp so the post-load copy goes away entirely).
-* ``from_pretrained(repo, gguf_file=..., dtype=...)`` or non-MPS / no kernels:
-  ``GGUFDequantize`` is injected and the model loads as a standard
-  ``nn.Linear`` chain in the chosen dtype.
+* ``from_pretrained(repo, gguf_file=...)`` on MPS: modules swap to
+  :class:`GgufLinear` / :class:`GgufExperts` at meta time. Bytes flow through
+  the standard rename pipeline via the target-aware :class:`GGUFDequantize`
+  (which passes uint8 bytes straight to the swapped buffers) and the experts
+  merge converter is rewritten in-place to per-projection renames so the
+  whole load is one machinery — no post-load fix-up.
+* ``from_pretrained(repo, gguf_file=..., dtype=...)`` or non-MPS:
+  :class:`GGUFDequantize` dequantizes and the model loads as a standard
+  ``nn.Linear`` chain in the requested dtype.
 * ``from_pretrained(repo, quantization_config=GgufQuantizeConfig(...))``:
-  load fp16/bf16 normally, then ``GGUFQuantize`` (the ``GGUFDequantize``
-  reverse op) quantizes matching Linears on the fly and the meta-time swap
-  drops in :class:`GgufLinear` modules.
+  load fp16/bf16 normally; :class:`GGUFQuantize` (the
+  :class:`GGUFDequantize` reverse op) packs matching Linears on the fly and
+  the meta-time swap drops in :class:`GgufLinear` modules.
 """
 
 from __future__ import annotations
 
 import logging
-
-import torch
 
 from .base import HfQuantizer
 
@@ -89,12 +88,25 @@ class GGUFQuantizer(HfQuantizer):
     def update_weight_conversions(self, weight_conversions):
         """Inject :class:`GGUFDequantize` at the head of every weight converter +
         attach it as the ``quantization_operation`` on every rename — mirrors
-        ``Fp8Quantizer.update_weight_conversions``."""
+        ``Fp8Quantizer.update_weight_conversions``.
+
+        Linear-mode-specific rewrite: the GGUF rename rules for MoE archs ship a
+        merge ``WeightConverter`` (``ffn_gate_exps + ffn_up_exps → gate_up_proj``)
+        whose target doesn't exist on the swapped :class:`GgufExperts` (which
+        keeps gate/up as separate ``gate_proj_q`` / ``up_proj_q`` byte buffers).
+        Replace that merge with three plain :class:`WeightRenaming` entries so
+        the rename pipeline lands bytes directly into the per-projection
+        buffers via the target-aware :class:`GGUFDequantize`. Down-proj's
+        existing ``ffn_down_exps → mlp.experts.down_proj`` rename gets its
+        target rewritten to ``...down_proj_q``.
+        """
         from ..core_model_loading import WeightConverter, WeightRenaming
         from ..gguf_conversion_ops import GGUFDequantize
 
+        rewritten_mapping = self._rewrite_experts_mapping() if self.linear_mode else self.weight_mapping
+
         injected = []
-        for conv in self.weight_mapping:
+        for conv in rewritten_mapping:
             if isinstance(conv, WeightConverter):
                 conv = WeightConverter(
                     source_patterns=conv._original_source_patterns,
@@ -105,6 +117,36 @@ class GGUFQuantizer(HfQuantizer):
                 conv.quantization_operation = GGUFDequantize(self)
             injected.append(conv)
         return injected + list(weight_conversions)
+
+    def _rewrite_experts_mapping(self):
+        """Return a copy of ``self.weight_mapping`` with the experts merge
+        ``WeightConverter`` replaced by per-projection ``WeightRenaming`` entries
+        and ``ffn_down_exps`` retargeted at the ``GgufExperts`` byte buffer."""
+        from ..core_model_loading import WeightConverter, WeightRenaming
+
+        out: list = []
+        for conv in self.weight_mapping:
+            if isinstance(conv, WeightConverter):
+                srcs = list(conv.source_patterns)
+                has_gate = any("ffn_gate_exps" in s for s in srcs)
+                has_up = any("ffn_up_exps" in s for s in srcs)
+                if has_gate and has_up:
+                    # Drop the merge converter; emit per-projection renames.
+                    gate_src = next(s for s in srcs if "ffn_gate_exps" in s)
+                    up_src = next(s for s in srcs if "ffn_up_exps" in s)
+                    out.append(WeightRenaming(gate_src, ".mlp.experts.gate_proj_q"))
+                    out.append(WeightRenaming(up_src, ".mlp.experts.up_proj_q"))
+                    continue
+                out.append(conv)
+                continue
+            if isinstance(conv, WeightRenaming):
+                # Retarget ``ffn_down_exps → mlp.experts.down_proj`` to the
+                # GgufExperts buffer name.
+                if any("ffn_down_exps" in s for s in conv._original_source_patterns):
+                    out.append(WeightRenaming(conv._original_source_patterns[0], ".mlp.experts.down_proj_q"))
+                    continue
+            out.append(conv)
+        return out
 
     def get_quantize_ops(self):
         """On-the-fly path: the loader calls this when ``param_needs_quantization``
@@ -145,20 +187,14 @@ class GGUFQuantizer(HfQuantizer):
         replace_with_gguf_linear(model, quant_info_by_target)
 
     def postprocess_model(self, model, **kwargs):
-        """Run the base post-process, then (for pre-quantized MoE only) copy
-        ``ffn_*_exps`` bytes into the swapped ``GgufExperts`` buffers, and apply
-        good generation defaults when the GgufLinear swap is in effect.
-
-        Dense ``GgufLinear`` targets need no fix-up here: :class:`GGUFDequantize`
-        is target-aware (see :mod:`gguf_conversion_ops`) and lands raw bytes
-        directly into ``GgufLinear.weight`` through the rename pipeline. The
-        MoE case still goes through this fix-up because the GGUF rename rules
-        ship a merge ``WeightConverter`` (``ffn_gate_exps + ffn_up_exps →
-        gate_up_proj``) whose target doesn't exist on the swapped module."""
+        """Run the base post-process, then apply good generation defaults when
+        the GgufLinear swap is in effect. Byte routing for both
+        :class:`GgufLinear` and :class:`GgufExperts` happens through the rename
+        pipeline (target-aware :class:`GGUFDequantize` +
+        :meth:`_rewrite_experts_mapping`) — no post-load byte copy."""
         super().postprocess_model(model, **kwargs)
-        if self.linear_mode and self.gguf_tensors:
-            self._copy_experts_bytes(model)
         if self.linear_mode:
+            self._bind_experts_kernels(model)
             self._apply_generation_defaults(model)
         return model
 
@@ -259,53 +295,16 @@ class GGUFQuantizer(HfQuantizer):
         }
         return info
 
-    def _copy_experts_bytes(self, model) -> None:
-        """Copy ``ffn_{gate,up,down}_exps`` bytes from the source .gguf into the
-        swapped :class:`GgufExperts` buffers. Necessary because the GGUF rename
-        pipeline ships a merge :class:`WeightConverter`
-        (``gate+up → gate_up_proj``) whose target doesn't exist on the swapped
-        expert module — so the rename path can't land these bytes on its own.
-        Dense :class:`GgufLinear` targets don't need this fix-up;
-        :class:`GGUFDequantize` is target-aware and passes uint8 bytes straight
-        to ``GgufLinear.weight``.
-        """
-        from ..core_model_loading import WeightConverter, WeightRenaming, rename_source_key
+    def _bind_experts_kernels(self, model) -> None:
+        """Resolve ``mul_mat_id_<fmt>_f32`` kernel refs + pre-allocate decode
+        scratch buffers on every swapped :class:`GgufExperts` module. Called
+        after weight loading (the rename pipeline already populated the byte
+        buffers via the target-aware :class:`GGUFDequantize`)."""
         from ..integrations.gguf_kernels import bind_id_kernel_refs
         from ..integrations.gguf_linear import GgufExperts
 
-        renamings = [e for e in self.weight_mapping if isinstance(e, WeightRenaming)]
-        converters = [e for e in self.weight_mapping if isinstance(e, WeightConverter)]
-        meta_state_dict = model.state_dict()
-        prefix = getattr(model, "base_model_prefix", "") or ""
-
-        for gguf_name, tensor in self.gguf_tensors.items():
-            if ".ffn_gate_exps." in gguf_name:
-                kind = "gate_proj_q"
-            elif ".ffn_up_exps." in gguf_name:
-                kind = "up_proj_q"
-            elif ".ffn_down_exps." in gguf_name:
-                kind = "down_proj_q"
-            else:
-                continue
-            try:
-                hf_name, _ = rename_source_key(
-                    gguf_name, renamings, converters, prefix=prefix, meta_state_dict=meta_state_dict
-                )
-            except Exception:
-                continue
-            parent = hf_name.rsplit(".", 1)[0]
-            try:
-                module = model.get_submodule(parent)
-            except AttributeError:
-                continue
-            if not isinstance(module, GgufExperts):
-                continue
-            dst = getattr(module, kind)
-            src = tensor.detach().contiguous().view(torch.uint8).reshape(-1)
-            if dst.numel() != src.numel():
-                continue
-            dst.view(-1).copy_(src.to(dst.device))
-            if kind == "down_proj_q":
+        for _, module in model.named_modules():
+            if isinstance(module, GgufExperts):
                 bind_id_kernel_refs(module)
 
     def _apply_generation_defaults(self, model) -> None:

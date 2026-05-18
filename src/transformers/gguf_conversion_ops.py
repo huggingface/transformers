@@ -87,7 +87,7 @@ class GGUFDequantize(ConversionOps):
         import torch
 
         from .integrations.gguf_dequant import GGUFQuantizedTensor, dequantize_gguf_tensor
-        from .integrations.gguf_linear import GgufLinear
+        from .integrations.gguf_linear import GgufExperts, GgufLinear
 
         # Resolve the live target module via ``model`` + ``full_layer_name`` (both
         # threaded into every op's convert kwargs by ``WeightConverter.convert`` /
@@ -101,7 +101,16 @@ class GGUFDequantize(ConversionOps):
                 target_module = model.get_submodule(parent_path)
             except (AttributeError, KeyError):
                 target_module = None
-        pass_through = isinstance(target_module, GgufLinear)
+        pass_through = isinstance(target_module, (GgufLinear, GgufExperts))
+        # Look up the live target buffer so we can reshape bytes to match its
+        # shape — GgufLinear has a flat ``(n_bytes,)`` buffer; GgufExperts has
+        # a 2D ``(num_experts, bytes_per_expert)`` buffer. Same op, both paths.
+        target_buffer = None
+        if pass_through and model is not None:
+            try:
+                target_buffer = model.get_parameter_or_buffer(full_layer_name)
+            except (AttributeError, KeyError):
+                target_buffer = None
 
         out = {}
         for key, tensors in input_dict.items():
@@ -111,8 +120,12 @@ class GGUFDequantize(ConversionOps):
                 if not isinstance(t, GGUFQuantizedTensor):
                     processed.append(t)
                 elif pass_through:
-                    # Flatten the raw uint8 byte buffer to match GgufLinear.weight's shape.
-                    processed.append(t.data.detach().contiguous().view(torch.uint8).reshape(-1))
+                    bytes_t = t.data.detach().contiguous().view(torch.uint8)
+                    if target_buffer is not None and bytes_t.numel() == target_buffer.numel():
+                        bytes_t = bytes_t.reshape(target_buffer.shape)
+                    else:
+                        bytes_t = bytes_t.reshape(-1)
+                    processed.append(bytes_t)
                 else:
                     processed.append(dequantize_gguf_tensor(t, t.quant_type, device=t.device))
             out[key] = processed if isinstance(tensors, list) else processed[0]
