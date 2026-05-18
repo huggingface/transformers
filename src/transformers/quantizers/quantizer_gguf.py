@@ -86,27 +86,19 @@ class GGUFQuantizer(HfQuantizer):
         return GGUFDequantize(self)
 
     def update_weight_conversions(self, weight_conversions):
-        """Inject :class:`GGUFDequantize` at the head of every weight converter +
-        attach it as the ``quantization_operation`` on every rename — mirrors
-        ``Fp8Quantizer.update_weight_conversions``.
-
-        Linear-mode-specific rewrite: the GGUF rename rules for MoE archs ship a
-        merge ``WeightConverter`` (``ffn_gate_exps + ffn_up_exps → gate_up_proj``)
-        whose target doesn't exist on the swapped :class:`GgufExperts` (which
-        keeps gate/up as separate ``gate_proj_q`` / ``up_proj_q`` byte buffers).
-        Replace that merge with three plain :class:`WeightRenaming` entries so
-        the rename pipeline lands bytes directly into the per-projection
-        buffers via the target-aware :class:`GGUFDequantize`. Down-proj's
-        existing ``ffn_down_exps → mlp.experts.down_proj`` rename gets its
-        target rewritten to ``...down_proj_q``.
-        """
+        """Inject :class:`GGUFDequantize` at the head of every weight converter
+        + attach it as the ``quantization_operation`` on every rename — same
+        shape as ``Fp8Quantizer.update_weight_conversions``. No experts-specific
+        rewrite needed: :class:`GgufExperts` exposes the same ``gate_up_proj`` /
+        ``down_proj`` buffer names as ``MixtralExperts`` / ``Qwen2MoeExperts``,
+        so the GGUF merge converter (``ffn_gate_exps + ffn_up_exps →
+        gate_up_proj``) lands its uint8 ``Concatenate(dim=1)`` output directly
+        into the swapped buffer through the target-aware op."""
         from ..core_model_loading import WeightConverter, WeightRenaming
         from ..gguf_conversion_ops import GGUFDequantize
 
-        rewritten_mapping = self._rewrite_experts_mapping() if self.linear_mode else self.weight_mapping
-
         injected = []
-        for conv in rewritten_mapping:
+        for conv in self.weight_mapping:
             if isinstance(conv, WeightConverter):
                 conv = WeightConverter(
                     source_patterns=conv._original_source_patterns,
@@ -117,36 +109,6 @@ class GGUFQuantizer(HfQuantizer):
                 conv.quantization_operation = GGUFDequantize(self)
             injected.append(conv)
         return injected + list(weight_conversions)
-
-    def _rewrite_experts_mapping(self):
-        """Return a copy of ``self.weight_mapping`` with the experts merge
-        ``WeightConverter`` replaced by per-projection ``WeightRenaming`` entries
-        and ``ffn_down_exps`` retargeted at the ``GgufExperts`` byte buffer."""
-        from ..core_model_loading import WeightConverter, WeightRenaming
-
-        out: list = []
-        for conv in self.weight_mapping:
-            if isinstance(conv, WeightConverter):
-                srcs = list(conv.source_patterns)
-                has_gate = any("ffn_gate_exps" in s for s in srcs)
-                has_up = any("ffn_up_exps" in s for s in srcs)
-                if has_gate and has_up:
-                    # Drop the merge converter; emit per-projection renames.
-                    gate_src = next(s for s in srcs if "ffn_gate_exps" in s)
-                    up_src = next(s for s in srcs if "ffn_up_exps" in s)
-                    out.append(WeightRenaming(gate_src, ".mlp.experts.gate_proj_q"))
-                    out.append(WeightRenaming(up_src, ".mlp.experts.up_proj_q"))
-                    continue
-                out.append(conv)
-                continue
-            if isinstance(conv, WeightRenaming):
-                # Retarget ``ffn_down_exps → mlp.experts.down_proj`` to the
-                # GgufExperts buffer name.
-                if any("ffn_down_exps" in s for s in conv._original_source_patterns):
-                    out.append(WeightRenaming(conv._original_source_patterns[0], ".mlp.experts.down_proj_q"))
-                    continue
-            out.append(conv)
-        return out
 
     def get_quantize_ops(self):
         """On-the-fly path: the loader calls this when ``param_needs_quantization``
@@ -245,18 +207,21 @@ class GGUFQuantizer(HfQuantizer):
         return info
 
     def _build_quant_info_from_gguf_file(self, model) -> dict[str, dict]:
-        """For each gguf tensor name, find the corresponding hf module path
-        (Linear or fused-experts) and record its quant type."""
+        """Build the per-module quant info by walking the live model + reading
+        per-tensor quant types out of :attr:`gguf_tensors`. Populates
+        :attr:`hf_to_gguf` as a side effect (consumed by ``save_gguf``)."""
+        import torch.nn as nn
+
         from ..core_model_loading import WeightConverter, WeightRenaming, rename_source_key
-        from ..integrations.gguf_linear import gguf_linear_supports
+        from ..integrations.gguf_linear import MODEL_TYPE_TO_GGUF_EXPERTS, gguf_linear_supports
 
         renamings = [e for e in self.weight_mapping if isinstance(e, WeightRenaming)]
         converters = [e for e in self.weight_mapping if isinstance(e, WeightConverter)]
         meta_state_dict = model.state_dict()
         prefix = getattr(model, "base_model_prefix", "") or ""
 
-        # Map each gguf name to its hf-target param name + quant_type.
-        gguf_to_hf: dict[str, tuple[str, str]] = {}
+        # Single pass: rename every gguf tensor name and record its quant type.
+        hf_quant: dict[str, str] = {}
         for gguf_name, tensor in self.gguf_tensors.items():
             qt = getattr(tensor, "quant_type", None)
             if qt is None or not gguf_linear_supports(qt):
@@ -268,31 +233,23 @@ class GGUFQuantizer(HfQuantizer):
             except Exception:
                 continue
             self.hf_to_gguf[hf_name] = gguf_name
-            gguf_to_hf[gguf_name] = (hf_name, qt.name if hasattr(qt, "name") else str(qt))
+            hf_quant[hf_name] = qt.name if hasattr(qt, "name") else str(qt)
 
-        # Linear targets: ``<module>.weight`` -> {"quant_type": "Q4_K"}
-        # Experts targets: group ffn_gate_exps / ffn_up_exps / ffn_down_exps by
-        # the shared parent path (``...mlp.experts``).
+        # Walk the model and pick up Linear targets + (when the model_type has
+        # a registered fused-expert class) fused-expert modules by structure
+        # (``gate_up_proj`` + ``down_proj`` parameters, same as MixtralExperts).
+        experts_cls = MODEL_TYPE_TO_GGUF_EXPERTS.get(getattr(model.config, "model_type", None))
         info: dict[str, dict] = {}
-        for gguf_name, (hf_name, quant_type) in gguf_to_hf.items():
-            if ".ffn_gate_exps." in gguf_name:
-                key, slot = hf_name.rsplit(".", 1)[0], "gate_quant"
-            elif ".ffn_up_exps." in gguf_name:
-                key, slot = hf_name.rsplit(".", 1)[0], "up_quant"
-            elif ".ffn_down_exps." in gguf_name:
-                key, slot = hf_name.rsplit(".", 1)[0], "down_quant"
-            else:
-                # Plain Linear weight -> module path (strip ``.weight`` suffix)
-                if hf_name.endswith(".weight"):
-                    info[hf_name[: -len(".weight")]] = {"quant_type": quant_type}
-                continue
-            info.setdefault(key, {})[slot] = quant_type
-        # Drop incomplete experts triples (missing gate/up/down).
-        info = {
-            k: v
-            for k, v in info.items()
-            if "quant_type" in v or all(s in v for s in ("gate_quant", "up_quant", "down_quant"))
-        }
+        for name, mod in model.named_modules():
+            if isinstance(mod, nn.Linear):
+                qt = hf_quant.get(f"{name}.weight")
+                if qt is not None:
+                    info[name] = {"quant_type": qt}
+            elif experts_cls is not None and hasattr(mod, "gate_up_proj") and hasattr(mod, "down_proj"):
+                gate_up = hf_quant.get(f"{name}.gate_up_proj")
+                down = hf_quant.get(f"{name}.down_proj")
+                if gate_up is not None and down is not None:
+                    info[name] = {"gate_up_quant": gate_up, "down_quant": down}
         return info
 
     def _bind_experts_kernels(self, model) -> None:

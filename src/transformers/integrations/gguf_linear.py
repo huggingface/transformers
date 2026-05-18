@@ -179,58 +179,59 @@ class GgufLinear(nn.Module):
 
 
 class GgufExperts(nn.Module):
-    """Drop-in for fused-expert MoE modules (``Qwen2MoeExperts`` etc.) holding
-    gate / up / down weights as raw GGUF block bytes. Each projection carries
-    its own quant type (Q4_K_M ships gate/up = Q4_K, down = Q8_0, etc.)."""
+    """Drop-in for fused-expert MoE modules (``MixtralExperts`` /
+    ``Qwen2MoeExperts`` / ``DeepseekV3NaiveMoe`` — same layout). Holds the
+    same buffers names as the unswapped module (``gate_up_proj`` + ``down_proj``),
+    but as raw uint8 GGUF bytes — so the standard GGUF rename pipeline's merge
+    ``WeightConverter`` (``ffn_gate_exps + ffn_up_exps → gate_up_proj``) lands
+    bytes here without any per-quantizer rewrite.
+
+    ``gate_quant`` is assumed equal to ``up_quant`` (the merge can only run
+    when both halves share a quant type — Q4_K_M ships them both as Q4_K).
+    ``down_quant`` may differ (Q4_K_M ships down as Q8_0).
+    """
 
     def __init__(
         self,
         config,
-        gate_quant: str,
-        up_quant: str,
+        gate_up_quant: str,
         down_quant: str,
         device=None,
     ):
         super().__init__()
-        for label, qt in (("gate", gate_quant), ("up", up_quant), ("down", down_quant)):
+        for label, qt in (("gate_up", gate_up_quant), ("down", down_quant)):
             if qt not in _QUANT_INFO:
                 raise NotImplementedError(f"GgufExperts {label}_quant {qt} not in {sorted(_QUANT_INFO)}")
         self.config = config
         self.num_experts = config.num_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.moe_intermediate_size
-        self.gate_quant, self.up_quant, self.down_quant = gate_quant, up_quant, down_quant
-        self._gate_fmt = _KERNEL_FMT[gate_quant]
-        self._up_fmt = _KERNEL_FMT[up_quant]
+        self.gate_up_quant, self.down_quant = gate_up_quant, down_quant
+        self._gate_up_fmt = _KERNEL_FMT[gate_up_quant]
         self._down_fmt = _KERNEL_FMT[down_quant]
 
-        def _bytes_per(qt: str, M: int, K: int) -> int:
-            bb, be = _QUANT_INFO[qt]
-            if K % be != 0:
-                raise ValueError(f"{qt}: K={K} must be a multiple of {be}")
-            return M * (K // be) * bb
+        # Same buffer names as MixtralExperts / Qwen2MoeExperts — uint8 bytes.
+        # ``gate_up_proj``: rows = 2 * intermediate (gate first, then up — that's the
+        # output of the merge converter's ``Concatenate(dim=1)`` over gate+up uint8
+        # byte tensors), cols (in bytes) = hidden_dim / block_elems * block_bytes.
+        gate_up_rows = 2 * self.intermediate_dim
+        gate_up_bytes_per_row = (self.hidden_dim // _QUANT_INFO[gate_up_quant][1]) * _QUANT_INFO[gate_up_quant][0]
+        down_bytes_per_row = (self.intermediate_dim // _QUANT_INFO[down_quant][1]) * _QUANT_INFO[down_quant][0]
+        self.register_buffer(
+            "gate_up_proj",
+            torch.empty(
+                self.num_experts, gate_up_rows, gate_up_bytes_per_row, dtype=torch.uint8, device=device or "cpu"
+            ),
+            persistent=True,
+        )
+        self.register_buffer(
+            "down_proj",
+            torch.empty(
+                self.num_experts, self.hidden_dim, down_bytes_per_row, dtype=torch.uint8, device=device or "cpu"
+            ),
+            persistent=True,
+        )
 
-        # gate / up : (intermediate, hidden);  down : (hidden, intermediate)
-        gate_bytes = _bytes_per(gate_quant, self.intermediate_dim, self.hidden_dim)
-        up_bytes = _bytes_per(up_quant, self.intermediate_dim, self.hidden_dim)
-        down_bytes = _bytes_per(down_quant, self.hidden_dim, self.intermediate_dim)
-        # 2D ``(num_experts, bytes_per_expert)`` buffers so the bmm forward can
-        # ``buf[expert_ids]`` natively into an ``(S, bytes_per_expert)`` gather.
-        self.register_buffer(
-            "gate_proj_q",
-            torch.empty(self.num_experts, gate_bytes, dtype=torch.uint8, device=device or "cpu"),
-            persistent=True,
-        )
-        self.register_buffer(
-            "up_proj_q",
-            torch.empty(self.num_experts, up_bytes, dtype=torch.uint8, device=device or "cpu"),
-            persistent=True,
-        )
-        self.register_buffer(
-            "down_proj_q",
-            torch.empty(self.num_experts, down_bytes, dtype=torch.uint8, device=device or "cpu"),
-            persistent=True,
-        )
         from ..activations import ACT2FN
 
         self.act_fn = ACT2FN[config.hidden_act]
@@ -238,13 +239,13 @@ class GgufExperts(nn.Module):
         self.has_gate = True
         self.has_bias = False
         self.is_transposed = False
-        self.is_concatenated = False
+        self.is_concatenated = True
 
     def extra_repr(self) -> str:
         return (
             f"num_experts={self.num_experts}, hidden_dim={self.hidden_dim}, "
             f"intermediate_dim={self.intermediate_dim}, "
-            f"gate={self.gate_quant}, up={self.up_quant}, down={self.down_quant}"
+            f"gate_up={self.gate_up_quant}, down={self.down_quant}"
         )
 
     @torch.no_grad()
@@ -305,14 +306,13 @@ def gguf_bmm_experts_forward(
     device = hidden_states.device
     S = num_tokens * num_top_k
 
-    op_gate = getattr(self, "_id_op_gate", None)
-    op_up = getattr(self, "_id_op_up", None)
+    op_gate_up = getattr(self, "_id_op_gate_up", None)
     op_down = getattr(self, "_id_op_down", None)
-    if op_gate is None or op_up is None or op_down is None:
+    if op_gate_up is None or op_down is None:
         # Bind on first call if the module was constructed without the kernel
         # cache (state-dict load path bypasses the meta-time swap).
         bind_id_kernel_refs(self)
-        op_gate, op_up, op_down = self._id_op_gate, self._id_op_up, self._id_op_down
+        op_gate_up, op_down = self._id_op_gate_up, self._id_op_down
 
     selected = hidden_states.repeat_interleave(num_top_k, dim=0).to(torch.float32).contiguous()
     ids32 = top_k_index.reshape(-1).to(torch.int32)
@@ -326,11 +326,19 @@ def gguf_bmm_experts_forward(
         up_buf = torch.empty(S, I_dim, dtype=torch.float32, device=device)
         out = torch.empty(S, H, dtype=torch.float32, device=device)
 
-    gate_qw = self.gate_proj_q.view(-1)
-    up_qw = self.up_proj_q.view(-1)
-    down_qw = self.down_proj_q.view(-1)
-    op_gate(gate_qw, selected, ids32, gate_buf)
-    op_up(up_qw, selected, ids32, up_buf)
+    # ``gate_up_proj`` packs ``[gate; up]`` along the row axis (the standard
+    # MixtralExperts layout, produced naturally by the GGUF merge converter's
+    # ``Concatenate(dim=1)`` on uint8 byte tensors). Split into per-projection
+    # byte halves at kernel-call time. Each half is per-expert-contiguous
+    # (gate0 / gate1 / … gateN, up0 / up1 / … upN — interleaved per expert,
+    # since concat is on dim 1 = row axis within each expert's block).
+    gate_up_bytes = self.gate_up_proj.view(self.num_experts, -1)
+    half = gate_up_bytes.shape[1] // 2
+    gate_qw = gate_up_bytes[:, :half].contiguous().view(-1)
+    up_qw = gate_up_bytes[:, half:].contiguous().view(-1)
+    down_qw = self.down_proj.view(-1)
+    op_gate_up(gate_qw, selected, ids32, gate_buf)
+    op_gate_up(up_qw, selected, ids32, up_buf)
     inter = (self.act_fn(gate_buf) * up_buf).contiguous()
     op_down(down_qw, inter, ids32, out)
 
@@ -358,17 +366,18 @@ def replace_with_gguf_linear(
 
     ``quant_info_by_target[name]`` carries the per-module quant info:
 
-    * For an ``nn.Linear`` (key = full module name, e.g. ``model.layers.0.self_attn.q_proj``)::
+    * For an ``nn.Linear`` (key = full module name)::
 
           {"quant_type": "Q4_K"}
 
     * For a fused-expert module (key = parent path, e.g. ``model.layers.0.mlp.experts``)::
 
-          {"gate_quant": "Q4_K", "up_quant": "Q4_K", "down_quant": "Q8_0"}
+          {"gate_up_quant": "Q4_K", "down_quant": "Q8_0"}
 
-    The actual bytes are NOT loaded here — they flow through the
-    :class:`~transformers.gguf_conversion_ops.GGUFQuantize` /
-    byte-passthrough conversion pipeline at weight-load time.
+    The actual bytes flow through the GGUF rename pipeline at weight-load time
+    (the merge ``WeightConverter`` for ``gate_up_proj`` + the
+    ``ffn_down_exps → down_proj`` rename, both routed through the target-aware
+    :class:`~transformers.gguf_conversion_ops.GGUFDequantize`).
 
     Returns the number of modules swapped.
     """
@@ -394,11 +403,10 @@ def replace_with_gguf_linear(
                 bias=mod.bias is not None,
                 device=mod.weight.device,
             )
-        elif experts_cls is not None and "gate_quant" in info:
+        elif experts_cls is not None and "gate_up_quant" in info:
             new_module = experts_cls(
                 config=getattr(mod, "config", model.config),
-                gate_quant=info["gate_quant"],
-                up_quant=info["up_quant"],
+                gate_up_quant=info["gate_up_quant"],
                 down_quant=info["down_quant"],
                 device=_first_device(mod),
             )
