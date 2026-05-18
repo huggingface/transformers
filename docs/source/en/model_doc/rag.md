@@ -43,7 +43,9 @@ from transformers import RagRetriever, RagSequenceForGeneration, RagTokenizer
 
 tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
 retriever = RagRetriever.from_pretrained(
-    "facebook/dpr-ctx_encoder-single-nq-base", dataset="wiki_dpr", index_name="compressed"
+    "facebook/rag-sequence-nq",
+    dataset="wiki_dpr",
+    index_name="compressed"
 )
 
 model = RagSequenceForGeneration.from_pretrained(
@@ -51,7 +53,10 @@ model = RagSequenceForGeneration.from_pretrained(
     retriever=retriever,
     attn_implementation="flash_attention_2",
  device_map="auto")
-input_dict = tokenizer.prepare_seq2seq_batch("How many people live in Paris?", return_tensors="pt").to(model.device)
+input_dict = tokenizer.prepare_seq2seq_batch(
+    "How many people live in Paris?",
+    return_tensors="pt"
+).to(model.device)
 generated = model.generate(input_ids=input_dict["input_ids"])
 print(tokenizer.batch_decode(generated, skip_special_tokens=True)[0])
 ```
