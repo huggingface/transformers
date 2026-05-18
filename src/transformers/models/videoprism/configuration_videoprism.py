@@ -36,6 +36,8 @@ class VideoPrismVisionConfig(PreTrainedConfig):
         The number of frames in the input video.
     tubelet_size (`List[int]`, *optional*, defaults to `[1, 18, 18]`):
         The size of the tubelet patch.
+    pooler_output_size (<fill_type>):
+        <fill_docstring>
     num_spatial_layers (`int`, *optional*, defaults to 12):
         Number of spatial transformer blocks.
     num_temporal_layers (`int`, *optional*, defaults to 4):
@@ -49,7 +51,6 @@ class VideoPrismVisionConfig(PreTrainedConfig):
     """
 
     model_type = "videoprism_vision_model"
-
     image_size: int | list[int] | tuple[int, int] = 288
     num_frames: int = 16
     tubelet_size: list[int] | tuple[int, ...] = (1, 18, 18)
@@ -64,6 +65,7 @@ class VideoPrismVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-06
     qkv_bias: bool = True
+    pooler_output_size: int | None = None
     base_config_key = "vision_config"
     num_spatial_layers: int = 12
     num_temporal_layers: int = 4
@@ -71,11 +73,17 @@ class VideoPrismVisionConfig(PreTrainedConfig):
     num_auxiliary_layers: int = 2
     apply_l2norm: bool = True
 
+    def __post_init__(self, **kwargs):
+        self.pooler_output_size = self.pooler_output_size if self.pooler_output_size else self.hidden_size
+        super().__post_init__(**kwargs)
+
 
 @auto_docstring(checkpoint="google/videoprism-lvt-base-f16r288")
 @strict
 class VideoPrismTextConfig(PreTrainedConfig):
     r"""
+    num_text_layers (<fill_type>):
+        <fill_docstring>
     apply_l2norm (`bool`, *optional*, defaults to `True`):
         Whether to apply L2 normalization to the output of VideoPrismTextEncoder.
     attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
@@ -98,6 +106,7 @@ class VideoPrismTextConfig(PreTrainedConfig):
     pad_token_id: int | None = 1
     bos_token_id: int | None = 49406
     eos_token_id: int | list[int] | None = 49407
+    num_text_layers: int = 12
     attention_probs_dropout_prob: float | int = 0.0
     apply_l2norm: bool = True
     qkv_bias: bool = True
