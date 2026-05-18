@@ -427,7 +427,14 @@ class Molmo2IntegrationTest(unittest.TestCase):
     def test_preprocessing(self):
         inputs = self.build_inputs()
 
-        for key in ("input_ids", "pixel_values", "image_token_pooling", "image_grids", "image_num_crops", "token_type_ids"):
+        for key in (
+            "input_ids",
+            "pixel_values",
+            "image_token_pooling",
+            "image_grids",
+            "image_num_crops",
+            "token_type_ids",
+        ):
             self.assertIn(key, inputs)
 
         self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 7, 729, 588]))
