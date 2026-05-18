@@ -34,6 +34,8 @@
         title: Add a model with modular transformers
       - local: add_vision_processing_components
         title: Add vision processing components
+      - local: add_audio_processing_components
+        title: Add audio processing components
       - local: modeling_rules
         title: Model structure rules
       - local: model_output_tracing
