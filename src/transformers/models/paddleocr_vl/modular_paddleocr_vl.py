@@ -933,12 +933,6 @@ class PaddleOCRVLModel(Qwen2VLModel):
 
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.language_model.embed_tokens = value
-
     def get_video_features(self):
         raise AttributeError("PaddleOCRVLModel does not support video.")
 
