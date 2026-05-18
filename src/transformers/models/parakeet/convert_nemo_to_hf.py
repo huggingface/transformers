@@ -282,7 +282,7 @@ def load_and_convert_state_dict(model_files):
 
 def write_ctc_model(encoder_config, converted_state_dict, output_dir, push_to_repo_id=None, revision=None):
     """Write CTC model using encoder config and converted state dict."""
-    model_config = ParakeetCTCConfig.from_encoder_config(encoder_config)
+    model_config = ParakeetCTCConfig(encoder_config=encoder_config)
 
     print("Loading the checkpoint in a Parakeet CTC model.")
     with torch.device("meta"):
