@@ -233,7 +233,7 @@ In addition to opening and closing delimiters, you can also specify `repeats`, w
 and the delimiters can match multiple times. This is most common for parallel tool calling, when a model emits
 multiple tool calls simultaneously.
 
-Finally, you can specify `optional: false` for fields that must be present. If parsing finishes and an optional field
+Finally, you can specify `optional: false` for fields that must be present. If parsing finishes and a non optional field
 was never opened, we raise an error instead of silently omitting the field.
 
 The end of generation will close and finalize any open regions, even if their closing delimiter was not seen.
