@@ -19,6 +19,7 @@
 """Image processor class for Qwen2-VL."""
 
 import math
+import warnings
 from collections.abc import Iterable
 
 import torch
@@ -70,11 +71,57 @@ def smart_resize(
 
     3. The aspect ratio of the image is maintained as closely as possible.
 
+    Before resizing, this function also:
+    - Auto-detects available GPU VRAM and lowers max_pixels if needed to avoid OOM.
+    - Estimates the number of visual tokens and warns if the image is too large.
+    - Raises an error if the image would exceed a safe token hard limit.
     """
     if max(height, width) / min(height, width) > 200:
         raise ValueError(
             f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
         )
+
+    # --- Option 1: Auto GPU VRAM check ---
+    # Automatically lower max_pixels based on available GPU memory to prevent OOM.
+    try:
+        if torch.cuda.is_available():
+            vram_bytes = torch.cuda.get_device_properties(0).total_memory
+            vram_gb = vram_bytes / (1024 ** 3)
+            # Safe estimate: ~1024*28*28 pixels per 16GB VRAM
+            gpu_safe_max = int((vram_gb / 16) * 1024 * 28 * 28)
+            if gpu_safe_max < max_pixels:
+                warnings.warn(
+                    f"Detected GPU with {vram_gb:.1f}GB VRAM. "
+                    f"Reducing max_pixels from {max_pixels} to {gpu_safe_max} "
+                    f"to avoid OOM. Pass max_pixels explicitly to override.",
+                    UserWarning,
+                )
+                max_pixels = gpu_safe_max
+    except Exception:
+        pass  # GPU check is optional, never block execution
+
+    # --- Option 3: Token count estimate, warn & hard limit ---
+    # Estimate visual tokens before resize and alert user if too many.
+    estimated_tokens = (height * width) / (factor * factor)
+    TOKEN_WARN_THRESHOLD = 5000
+    TOKEN_HARD_LIMIT = 16384
+
+    if estimated_tokens > TOKEN_HARD_LIMIT:
+        raise ValueError(
+            f"Image resolution ({height}x{width}) would generate ~{int(estimated_tokens)} visual tokens, "
+            f"exceeding the hard limit of {TOKEN_HARD_LIMIT}. "
+            f"Please resize the image or set a lower max_pixels value when loading the processor."
+        )
+    elif estimated_tokens > TOKEN_WARN_THRESHOLD:
+        warnings.warn(
+            f"Image resolution ({height}x{width}) will generate ~{int(estimated_tokens)} visual tokens. "
+            f"This may cause slow inference or OOM on consumer GPUs. "
+            f"Consider setting max_pixels <= {int(TOKEN_WARN_THRESHOLD * factor * factor)} "
+            f"when loading the processor.",
+            UserWarning,
+        )
+
+    # --- Original resize logic ---
     h_bar = round(height / factor) * factor
     w_bar = round(width / factor) * factor
     if h_bar * w_bar > max_pixels:
