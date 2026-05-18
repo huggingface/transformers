@@ -102,15 +102,6 @@ class GGUFDequantize(ConversionOps):
             except (AttributeError, KeyError):
                 target_module = None
         pass_through = isinstance(target_module, (GgufLinear, GgufExperts))
-        # Look up the live target buffer so we can reshape bytes to match its
-        # shape — GgufLinear has a flat ``(n_bytes,)`` buffer; GgufExperts has
-        # a 2D ``(num_experts, bytes_per_expert)`` buffer. Same op, both paths.
-        target_buffer = None
-        if pass_through and model is not None:
-            try:
-                target_buffer = model.get_parameter_or_buffer(full_layer_name)
-            except (AttributeError, KeyError):
-                target_buffer = None
 
         out = {}
         for key, tensors in input_dict.items():
@@ -120,12 +111,17 @@ class GGUFDequantize(ConversionOps):
                 if not isinstance(t, GGUFQuantizedTensor):
                     processed.append(t)
                 elif pass_through:
-                    bytes_t = t.data.detach().contiguous().view(torch.uint8)
-                    if target_buffer is not None and bytes_t.numel() == target_buffer.numel():
-                        bytes_t = bytes_t.reshape(target_buffer.shape)
-                    else:
-                        bytes_t = bytes_t.reshape(-1)
-                    processed.append(bytes_t)
+                    # Preserve the source's native 2D ``(out, bytes_per_row)`` shape
+                    # (or 3D for fused experts ``(num_experts, M, bytes_per_row)``)
+                    # so downstream ops in the converter chain can do row-axis
+                    # work on the bytes — most importantly :class:`ReversePermuteAttnQ`
+                    # / ``K`` for rope-permuted attention projections in Llama-style
+                    # GGUFs (their reshape splits ``shape[0]`` and leaves the
+                    # column axis untouched, so it works on uint8 byte rows
+                    # exactly the way it works on fp32 element rows). The loader
+                    # handles the final assignment shape — it skips shape checks
+                    # when an hf_quantizer is active.
+                    processed.append(t.data.detach().contiguous().view(torch.uint8))
                 else:
                     processed.append(dequantize_gguf_tensor(t, t.quant_type, device=t.device))
             out[key] = processed if isinstance(tensors, list) else processed[0]
@@ -153,18 +149,11 @@ class GGUFQuantize(ConversionOps):
     def __deepcopy__(self, memo):
         return GGUFQuantize(self.hf_quantizer)
 
-    def _resolve_quant_type(self) -> str:
-        quant_type = None
-        cfg = getattr(self.hf_quantizer, "quantization_config", None)
-        if cfg is not None:
-            quant_type = getattr(cfg, "quant_type", None)
-        return quant_type or "Q4_0"
-
     def _quantize_one(self, key: str, value):
         import gguf
         import torch
 
-        quant_type = self._resolve_quant_type()
+        quant_type = getattr(getattr(self.hf_quantizer, "quantization_config", None), "quant_type", None) or "Q4_0"
         ggml_type = getattr(gguf.GGMLQuantizationType, quant_type)
         # gguf-py expects a numpy array in fp32.
         fp = value.detach().to("cpu", dtype=torch.float32).contiguous().numpy()

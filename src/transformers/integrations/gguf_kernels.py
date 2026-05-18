@@ -7,7 +7,7 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 """Tiny loader for the ``ArthurZ/gguf-kernels`` Metal kernel package.
 
-Owns the ``_ensure_metal_kernels`` cache + the kernel-ref helper used by the
+Owns the ``ensure_metal_kernels`` cache + the kernel-ref helper used by the
 fused-expert ``GgufExperts`` path. Lives in its own module so ``gguf_linear``
 doesn't have to grow a kernel-loading prelude — the helper will ultimately
 move into the kernels package itself.
@@ -38,12 +38,29 @@ class _DirectKernelHandle:
         self._ops = ops
 
 
-def _load_kernels_direct(repo: str) -> _DirectKernelHandle:
-    """``snapshot_download`` the .so for the current torch variant and load it."""
+def ensure_metal_kernels(repo: str = "ArthurZ/gguf-kernels"):
+    """Return the loaded kernels handle, caching across calls. Raises
+    :class:`RuntimeError` on failure — there is no slow fallback path.
+
+    TODO: migrate to ``kernels-community/gguf-kernels`` so ``kernels.get_kernel``
+    can load it directly. Until then we ``snapshot_download`` the .so for the
+    current torch variant — same effect, slightly more code, no slow fallback.
+    """
+    global _GGUF_METAL_KERNELS, _GGUF_METAL_LOADED
+    if _GGUF_METAL_LOADED:
+        if _GGUF_METAL_KERNELS is None:
+            raise RuntimeError(
+                f"GGUF metal kernels failed to load earlier in this process. Reinstall / pre-fetch {repo!r} and retry."
+            )
+        return _GGUF_METAL_KERNELS
+    _GGUF_METAL_LOADED = True
     import os
     import re
 
-    from huggingface_hub import snapshot_download
+    try:
+        from huggingface_hub import snapshot_download
+    except ImportError as exc:
+        raise RuntimeError("`huggingface_hub` is required to fetch GGUF metal kernels.") from exc
 
     try:
         from kernels.utils import build_variant
@@ -54,51 +71,26 @@ def _load_kernels_direct(repo: str) -> _DirectKernelHandle:
             return f"torch{int(major)}{int(minor)}-metal-aarch64-darwin"
 
     variant = build_variant() if callable(build_variant) else build_variant
-    repo_dir = snapshot_download(repo, allow_patterns=[f"build/{variant}/**"])
-    var_dir = os.path.join(repo_dir, "build", variant)
-    ops_py = os.path.join(var_dir, "_ops.py")
-    with open(ops_py) as f:
-        m = re.search(r"from \. import (\w+)", f.read())
-    if not m:
-        raise FileNotFoundError(f"No `from . import` directive in {ops_py}")
-    ns_name = m.group(1)
-    so = os.path.join(var_dir, f"{ns_name}.abi3.so")
-    if not os.path.exists(so):
-        raise FileNotFoundError(f"Canonical .so missing: {so}")
-    torch.ops.load_library(so)
-    return _DirectKernelHandle(getattr(torch.ops, ns_name))
-
-
-def ensure_metal_kernels(repo: str = "ArthurZ/gguf-kernels"):
-    """Return the loaded kernels handle, caching across calls.
-
-    Raises :class:`RuntimeError` on failure — there is no slow fallback path.
-    """
-    global _GGUF_METAL_KERNELS, _GGUF_METAL_LOADED
-    if _GGUF_METAL_LOADED:
-        if _GGUF_METAL_KERNELS is None:
-            raise RuntimeError(
-                f"GGUF metal kernels failed to load earlier in this process. Reinstall / pre-fetch {repo!r} and retry."
-            )
-        return _GGUF_METAL_KERNELS
-    _GGUF_METAL_LOADED = True
-    last_err: Exception | None = None
     try:
-        from kernels import get_kernel
-
-        _GGUF_METAL_KERNELS = get_kernel(repo)
-        return _GGUF_METAL_KERNELS
-    except Exception as exc:
-        last_err = exc
-    try:
-        _GGUF_METAL_KERNELS = _load_kernels_direct(repo)
+        repo_dir = snapshot_download(repo, allow_patterns=[f"build/{variant}/**"])
+        var_dir = os.path.join(repo_dir, "build", variant)
+        ops_py = os.path.join(var_dir, "_ops.py")
+        with open(ops_py) as f:
+            m = re.search(r"from \. import (\w+)", f.read())
+        if m is None:
+            raise FileNotFoundError(f"No `from . import` directive in {ops_py}")
+        ns_name = m.group(1)
+        so = os.path.join(var_dir, f"{ns_name}.abi3.so")
+        if not os.path.exists(so):
+            raise FileNotFoundError(f"Canonical .so missing: {so}")
+        torch.ops.load_library(so)
+        _GGUF_METAL_KERNELS = _DirectKernelHandle(getattr(torch.ops, ns_name))
         return _GGUF_METAL_KERNELS
     except Exception as exc:
         raise RuntimeError(
-            f"Could not load GGUF metal kernels from {repo!r}. The fast GGUF path requires this "
-            f"package on Apple Silicon. Either install `kernels` (`pip install kernels`) or make "
-            f"sure the .so for your torch build is available locally. Underlying error: {exc!r}"
-        ) from last_err or exc
+            f"Could not load GGUF metal kernels from {repo!r}: {exc!r}. Check Hub access / authentication "
+            f"and that your torch build is supported."
+        ) from exc
 
 
 def bind_id_kernel_refs(mod: nn.Module) -> None:

@@ -573,35 +573,6 @@ def _maybe_auto_detect_gguf(pretrained_model_name_or_path: str, **download_kwarg
     return ggufs[0] if len(ggufs) == 1 else None
 
 
-def _resolve_gguf_target_device(device_map) -> str:
-    """Infer the dominant device.type for the upcoming load — used by the GGUF
-    branch to decide whether to keep weights native (MPS) or dequantize on load
-    (CUDA / CPU until matching GGUF kernels exist for those backends)."""
-    if device_map is None:
-        if torch.backends.mps.is_available():
-            return "mps"
-        if torch.cuda.is_available():
-            return "cuda"
-        return "cpu"
-    if isinstance(device_map, str):
-        if device_map in ("auto", "balanced", "balanced_low_0", "sequential"):
-            if torch.backends.mps.is_available():
-                return "mps"
-            if torch.cuda.is_available():
-                return "cuda"
-            return "cpu"
-        return torch.device(device_map).type
-    if isinstance(device_map, dict):
-        for dev in device_map.values():
-            if dev in (None, "disk"):
-                continue
-            try:
-                return torch.device(dev).type
-            except (TypeError, RuntimeError):
-                continue
-    return "cpu"
-
-
 def _get_resolved_checkpoint_files(
     pretrained_model_name_or_path: str | os.PathLike | None,
     variant: str | None,
@@ -4225,16 +4196,22 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if "experts_implementation" in kwargs:
             config._experts_implementation = kwargs.pop("experts_implementation")
 
-        hf_quantizer, config, device_map = get_hf_quantizer(
-            config, quantization_config, device_map, weights_only, user_agent
-        )
+        # ``gguf_file=`` is shorthand for ``quantization_config=GgufQuantizeConfig(gguf_file=...)``.
+        # Building that config here lets the standard ``get_hf_quantizer`` dispatch
+        # below own quantizer construction — no GGUF special-case after this point.
+        if gguf_file is not None:
+            from .utils.quantization_config import GgufQuantizeConfig
 
-        if gguf_file:
-            if hf_quantizer is not None:
+            if quantization_config is None:
+                quantization_config = GgufQuantizeConfig(gguf_file=gguf_file, dequantize=dtype_was_explicit)
+            elif isinstance(quantization_config, GgufQuantizeConfig):
+                if quantization_config.gguf_file is None:
+                    quantization_config.gguf_file = gguf_file
+                if dtype_was_explicit:
+                    quantization_config.dequantize = True
+            else:
                 raise ValueError(
-                    "Cannot combine `gguf_file=` with `quantization_config=`. Pass a GGUF file to load a "
-                    "pre-quantized checkpoint, or pass `quantization_config=GgufQuantizeConfig(...)` to "
-                    "quantize a non-GGUF checkpoint on the fly — not both."
+                    "Cannot combine `gguf_file=` with a non-GGUF `quantization_config=`. Drop one of them."
                 )
             if device_map is not None and (
                 (isinstance(device_map, dict) and "disk" in device_map.values()) or "disk" in device_map
@@ -4243,6 +4220,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     "One or more modules is configured to be mapped to disk. Disk offload is not supported for models "
                     "loaded from GGUF files."
                 )
+
+        hf_quantizer, config, device_map = get_hf_quantizer(
+            config, quantization_config, device_map, weights_only, user_agent
+        )
 
         # ``use_kernels`` controls the model-wide kernel resolver (attention /
         # RMSNorm / ...); it's independent from the GGUF kernels, which load
@@ -4269,26 +4250,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             tqdm_class=tqdm_class,
         )
 
-        if gguf_file:
-            from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
-            from .quantizers.quantizer_gguf import GGUFQuantizer
-
-            gguf_parsed = load_gguf_checkpoint(checkpoint_files[0], return_tensors=True)
-            state_dict = gguf_parsed["tensors"]
-            target_device = _resolve_gguf_target_device(device_map)
-            # TODO: lift the MPS-only gate once CUDA / CPU GGUF kernels exist
-            # (we have a Metal kernels package today; matching CUDA kernels are
-            # planned). For now MPS is the only fast path.
-            #
-            # Explicit ``dtype=`` always forces the dequant path, regardless of
-            # device. Otherwise: swap to GgufLinear on MPS, dequant elsewhere.
-            linear_mode = (target_device == "mps") and not dtype_was_explicit
-            hf_quantizer = GGUFQuantizer(
-                weight_mapping=gguf_parsed.get("weight_mapping", []),
-                linear_mode=linear_mode,
-                gguf_tensors=gguf_parsed["tensors"],
-                gguf_kv=gguf_parsed.get("raw_kv", {}),
-            )
+        # Quantizers that own an on-disk state load (today only GGUF) get a hook
+        # to do it themselves — no transformers-side GGUF branch. The hook only
+        # fires when the quantizer has a file to load (``gguf_file=`` path); the
+        # on-the-fly path leaves the standard safetensors loader alone.
+        if gguf_file is not None and hf_quantizer is not None and hasattr(hf_quantizer, "load_checkpoint_state"):
+            state_dict = hf_quantizer.load_checkpoint_state(checkpoint_files[0])
 
         is_quantized = hf_quantizer is not None
 

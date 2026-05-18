@@ -1118,6 +1118,16 @@ class GgufQuantizeConfig(QuantizationConfigMixin):
             quantizable `nn.Linear` is converted.
         modules_to_not_convert (`list[str]`, *optional*):
             Explicit skip list (substring match against module names).
+        gguf_file (`str`, *optional*):
+            Path or repo-relative filename of the source `.gguf` to load. Set
+            automatically by `from_pretrained` when the caller passes
+            `gguf_file=`. When set, the quantizer pre-loads the file from
+            `_get_resolved_checkpoint_files` instead of running the on-the-fly
+            quantize path.
+        dequantize (`bool`, *optional*, defaults to `False`):
+            Force the dequantize-on-load path even with a GGUF source. Set
+            automatically when `from_pretrained` receives an explicit `dtype=`,
+            so the caller-requested precision wins over native GGUF kernels.
     """
 
     def __init__(
@@ -1125,12 +1135,16 @@ class GgufQuantizeConfig(QuantizationConfigMixin):
         quant_type: str = "Q4_0",
         modules_to_convert: list[str] | None = None,
         modules_to_not_convert: list[str] | None = None,
+        gguf_file: str | None = None,
+        dequantize: bool = False,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.GGUF
         self.quant_type = quant_type
         self.modules_to_convert = modules_to_convert
         self.modules_to_not_convert = modules_to_not_convert
+        self.gguf_file = gguf_file
+        self.dequantize = dequantize
         self.post_init()
 
     def post_init(self):

@@ -34,45 +34,60 @@ from .base import HfQuantizer
 logger = logging.getLogger(__name__)
 
 
+def _resolve_target_device(device_map) -> str:
+    """Infer the dominant ``device.type`` for the upcoming load — used to gate
+    the GgufLinear swap on MPS until CUDA / CPU GGUF kernels exist."""
+    import torch
+
+    if device_map is None:
+        return "mps" if torch.backends.mps.is_available() else ("cuda" if torch.cuda.is_available() else "cpu")
+    if isinstance(device_map, str):
+        if device_map in ("auto", "balanced", "balanced_low_0", "sequential"):
+            return "mps" if torch.backends.mps.is_available() else ("cuda" if torch.cuda.is_available() else "cpu")
+        return torch.device(device_map).type
+    if isinstance(device_map, dict):
+        for dev in device_map.values():
+            if dev in (None, "disk"):
+                continue
+            try:
+                return torch.device(dev).type
+            except (TypeError, RuntimeError):
+                continue
+    return "cpu"
+
+
 class GGUFQuantizer(HfQuantizer):
     """GGUF quantizer."""
 
     requires_calibration = False
 
-    def __init__(
-        self,
-        quantization_config=None,
-        weight_mapping=None,
-        linear_mode=False,
-        gguf_tensors=None,
-        gguf_kv=None,
-        **kwargs,
-    ):
-        on_the_fly = quantization_config is not None and getattr(quantization_config, "quant_method", None) == "gguf"
-        if quantization_config is None:
-            # ``gguf_file=`` path: the base class needs a config to record on the
-            # model so ``model.quantization_method`` etc. can be set. Attach the
-            # default so callers don't have to pass one explicitly.
-            from ..utils.quantization_config import GgufQuantizeConfig
+    def __init__(self, quantization_config, **kwargs):
+        from ..utils.quantization_config import GgufQuantizeConfig
 
+        if quantization_config is None:
             quantization_config = GgufQuantizeConfig()
+        # On-the-fly path = caller passed a ``GgufQuantizeConfig`` without a
+        # source file (we're packing a live fp16/bf16 checkpoint). ``gguf_file=``
+        # path = config carries a source file (we're loading existing GGUF bytes).
+        on_the_fly = getattr(quantization_config, "gguf_file", None) is None
         kwargs.setdefault("pre_quantized", not on_the_fly)
         super().__init__(quantization_config=quantization_config, **kwargs)
-        self.weight_mapping = list(weight_mapping or [])
-        # ``linear_mode``: when True, modules are swapped to GgufLinear / GgufExperts
-        # at meta time and run the metal kernels on raw bytes. Always True for the
-        # on-the-fly path (the quant config implies we want the kernels).
-        self.linear_mode = bool(linear_mode) or on_the_fly
+        # Re-annotate with the concrete type so attribute accesses (``quant_type``,
+        # ``modules_to_convert``, ``dequantize``, …) type-check without casts.
+        self.quantization_config: GgufQuantizeConfig = quantization_config
         self.on_the_fly = on_the_fly
-        # ``{gguf_name: GGUFQuantizedTensor}`` map populated by modeling_utils for
-        # the ``gguf_file=`` path. Empty for on-the-fly.
-        self.gguf_tensors: dict = dict(gguf_tensors or {})
-        # Reverse rename map (hf_target -> gguf_source), filled lazily during the
-        # post-load byte-copy step. Consumed by ``save_gguf``.
+        # ``linear_mode`` is the on-the-fly default and the gguf_file default on
+        # MPS without explicit dequant; ``_process_model_before_weight_loading``
+        # finalizes it once it can see the live ``device_map``.
+        self.linear_mode = on_the_fly
+        # GGUF file state — populated by :meth:`load_checkpoint_state` when the
+        # gguf_file path is active. Empty for the on-the-fly path.
+        self.weight_mapping: list = []
+        self.gguf_tensors: dict = {}
+        self.gguf_kv: dict = {}
+        # Reverse rename map (hf_target -> gguf_source), filled during
+        # ``_build_quant_info_from_gguf_file``. Consumed by ``save_gguf``.
         self.hf_to_gguf: dict[str, str] = {}
-        # Raw GGUF key-value snapshot from the source file (replayed verbatim by
-        # ``save_gguf`` so the round-trip preserves tokenizer / block_count / ...).
-        self.gguf_kv: dict = dict(gguf_kv or {})
 
     # ---- HfQuantizer hooks ----------------------------------------------------
 
@@ -138,9 +153,32 @@ class GGUFQuantizer(HfQuantizer):
         # else (norms, lm_head, embeddings) is left alone.
         return isinstance(module, GgufLinear) and not param_name.endswith(".bias") and isinstance(module, nn.Module)
 
-    def _process_model_before_weight_loading(self, model, **kwargs):
+    def load_checkpoint_state(self, gguf_path: str):
+        """Pre-load the ``.gguf`` file's tensors + rename map + KV metadata.
+
+        Called by :func:`PreTrainedModel.from_pretrained` for the gguf_file path
+        after :func:`_get_resolved_checkpoint_files` resolves the file. Returns
+        the state-dict (``{gguf_name: GGUFQuantizedTensor}``) that the standard
+        loader needs — GGUF isn't a safetensors format, so this hook gives the
+        quantizer ownership of the on-disk → in-memory state load.
+        """
+        from ..modeling_gguf_pytorch_utils import load_gguf_checkpoint
+
+        parsed = load_gguf_checkpoint(gguf_path, return_tensors=True)
+        self.weight_mapping = list(parsed.get("weight_mapping", []) or [])
+        self.gguf_tensors = parsed["tensors"]
+        self.gguf_kv = parsed.get("raw_kv", {}) or {}
+        return parsed["tensors"]
+
+    def _process_model_before_weight_loading(self, model, device_map=None, **kwargs):
         """Swap ``nn.Linear`` / fused-expert modules in place at meta time.
-        Mirrors :func:`replace_with_fp8_linear` in the FP8 quantizer."""
+
+        For the gguf_file path, finalize ``self.linear_mode`` here — we need
+        ``device_map`` to decide MPS vs not. Explicit ``dequantize=True`` (set by
+        ``from_pretrained`` when the caller passed ``dtype=``) forces dequant.
+        """
+        if not self.on_the_fly:
+            self.linear_mode = _resolve_target_device(device_map) == "mps" and not self.quantization_config.dequantize
         if not self.linear_mode:
             return
         from ..integrations.gguf_linear import replace_with_gguf_linear
@@ -177,50 +215,44 @@ class GGUFQuantizer(HfQuantizer):
     # ---- Internals ------------------------------------------------------------
 
     def _build_quant_info(self, model) -> dict[str, dict]:
-        """Map each module-name target to its quant info, ready for
-        :func:`replace_with_gguf_linear`. The on-the-fly path uses the config's
-        ``modules_to_convert`` glob + the single ``quant_type``; the
-        ``gguf_file=`` path reads per-tensor quant types out of
-        :attr:`gguf_tensors` and renames source names to module-name targets."""
+        """Walk the live model and emit one entry per module that should swap.
+
+        On-the-fly path (``GgufQuantizeConfig`` without a source file): every
+        :class:`nn.Linear` matching ``modules_to_convert`` gets the config's
+        single ``quant_type``.
+
+        gguf_file path: per-tensor quant types come from :attr:`gguf_tensors`
+        after renaming the GGUF source names through ``self.weight_mapping``.
+        :attr:`hf_to_gguf` is filled here as a side effect (consumed by
+        ``save_gguf``).
+        """
+        import torch.nn as nn
+
+        from ..integrations.gguf_linear import MODEL_TYPE_TO_GGUF_EXPERTS
+
         if self.on_the_fly:
-            return self._build_quant_info_on_the_fly(model)
-        return self._build_quant_info_from_gguf_file(model)
+            import fnmatch
 
-    def _build_quant_info_on_the_fly(self, model) -> dict[str, dict]:
-        import fnmatch
+            cfg = self.quantization_config
+            include = cfg.modules_to_convert
+            exclude = set(cfg.modules_to_not_convert or [])
+            return {
+                name: {"quant_type": cfg.quant_type}
+                for name, mod in model.named_modules()
+                if isinstance(mod, nn.Linear)
+                and (include is None or any(fnmatch.fnmatchcase(name, pat) for pat in include))
+                and not any(skip in name for skip in exclude)
+            }
 
-        import torch.nn as nn
-
-        cfg = self.quantization_config
-        include = getattr(cfg, "modules_to_convert", None)
-        exclude = set(getattr(cfg, "modules_to_not_convert", None) or [])
-        quant_type = getattr(cfg, "quant_type", "Q4_0")
-        info: dict[str, dict] = {}
-        for name, mod in model.named_modules():
-            if not isinstance(mod, nn.Linear):
-                continue
-            if include is not None and not any(fnmatch.fnmatchcase(name, pat) for pat in include):
-                continue
-            if any(skip in name for skip in exclude):
-                continue
-            info[name] = {"quant_type": quant_type}
-        return info
-
-    def _build_quant_info_from_gguf_file(self, model) -> dict[str, dict]:
-        """Build the per-module quant info by walking the live model + reading
-        per-tensor quant types out of :attr:`gguf_tensors`. Populates
-        :attr:`hf_to_gguf` as a side effect (consumed by ``save_gguf``)."""
-        import torch.nn as nn
-
+        # gguf_file path: rename gguf sources → hf targets → record quant_type.
         from ..core_model_loading import WeightConverter, WeightRenaming, rename_source_key
-        from ..integrations.gguf_linear import MODEL_TYPE_TO_GGUF_EXPERTS, gguf_linear_supports
+        from ..integrations.gguf_linear import gguf_linear_supports
 
         renamings = [e for e in self.weight_mapping if isinstance(e, WeightRenaming)]
         converters = [e for e in self.weight_mapping if isinstance(e, WeightConverter)]
         meta_state_dict = model.state_dict()
         prefix = getattr(model, "base_model_prefix", "") or ""
 
-        # Single pass: rename every gguf tensor name and record its quant type.
         hf_quant: dict[str, str] = {}
         for gguf_name, tensor in self.gguf_tensors.items():
             qt = getattr(tensor, "quant_type", None)
@@ -235,9 +267,6 @@ class GGUFQuantizer(HfQuantizer):
             self.hf_to_gguf[hf_name] = gguf_name
             hf_quant[hf_name] = qt.name if hasattr(qt, "name") else str(qt)
 
-        # Walk the model and pick up Linear targets + (when the model_type has
-        # a registered fused-expert class) fused-expert modules by structure
-        # (``gate_up_proj`` + ``down_proj`` parameters, same as MixtralExperts).
         experts_cls = MODEL_TYPE_TO_GGUF_EXPERTS.get(getattr(model.config, "model_type", None))
         info: dict[str, dict] = {}
         for name, mod in model.named_modules():

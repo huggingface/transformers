@@ -26,20 +26,20 @@ from __future__ import annotations
 import torch
 
 
-_ARCH_BY_MODEL_TYPE: dict[str, str] = {
-    "llama": "llama",
+# GGUF's arch tag mostly matches HF ``model_type``; only the underscore-stripped
+# / aliased exceptions need entries here.
+_ARCH_OVERRIDES: dict[str, str] = {
     "llama4": "llama",
-    "qwen2": "qwen2",
+    "mistral": "llama",
     "qwen2_moe": "qwen2moe",
-    "qwen3": "qwen3",
     "qwen3_moe": "qwen3moe",
     "minimax_m2": "minimax",
-    "mistral": "llama",
 }
 
 
 def _arch_from_config(config) -> str:
-    return _ARCH_BY_MODEL_TYPE.get(getattr(config, "model_type", "llama"), getattr(config, "model_type", "llama"))
+    model_type = getattr(config, "model_type", "llama")
+    return _ARCH_OVERRIDES.get(model_type, model_type)
 
 
 def _replay_kv(writer, kv: dict | None) -> None:

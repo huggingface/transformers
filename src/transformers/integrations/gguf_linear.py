@@ -64,6 +64,17 @@ def gguf_linear_supports(quant_type) -> bool:
     return name in _QUANT_INFO
 
 
+def _read_first(config, *attrs: str):
+    """Return ``config.<first_attr_that_exists>`` — MoE configs across archs spell
+    the same idea differently (``num_experts`` / ``num_local_experts`` /
+    ``n_routed_experts``; ``moe_intermediate_size`` / ``intermediate_size``)."""
+    for a in attrs:
+        v = getattr(config, a, None)
+        if v is not None:
+            return v
+    raise AttributeError(f"GgufExperts: config has none of {attrs}; got {type(config).__name__}")
+
+
 def _fmt(quant_type) -> str:
     name = quant_type.name if hasattr(quant_type, "name") else str(quant_type)
     return _KERNEL_FMT[name]
@@ -146,23 +157,20 @@ class GgufLinear(nn.Module):
         x_flat = x.reshape(-1, self.in_features).contiguous().to(torch.float32)
         N = x_flat.shape[0]
         qw = self.weight
+        # Pick the kernel by batch size: matvec when N==1, matmul otherwise. The
+        # matmul kernel requires N % 32 == 0; non-aligned batches loop per-row
+        # over matvec (rare in practice — most call sites land aligned).
         if N == 1:
             y = torch.empty(self.out_features, dtype=torch.float32, device=x.device)
             mv_op(qw, x_flat.view(-1), y)
-            y = y.reshape(*batch_shape, self.out_features)
         elif N % 32 == 0:
             y = torch.empty(N * self.out_features, dtype=torch.float32, device=x.device)
             mat_op(qw, x_flat, y)
-            y = y.view(N, self.out_features).reshape(*batch_shape, self.out_features)
         else:
-            # Non-aligned batches: per-row matvec. Rare in practice (most call sites
-            # are aligned to the kernel's tile multiple already); no slow dequant path.
-            rows = []
+            y = torch.empty(N * self.out_features, dtype=torch.float32, device=x.device)
             for i in range(N):
-                row_y = torch.empty(self.out_features, dtype=torch.float32, device=x.device)
-                mv_op(qw, x_flat[i].reshape(-1), row_y)
-                rows.append(row_y)
-            y = torch.stack(rows, dim=0).reshape(*batch_shape, self.out_features)
+                mv_op(qw, x_flat[i].reshape(-1), y[i * self.out_features : (i + 1) * self.out_features])
+        y = y.view(N, self.out_features).reshape(*batch_shape, self.out_features)
         if self.bias is not None:
             y = y + self.bias.to(y.device).to(y.dtype)
         # Metal matvec / matmul emit fp32. Cast back to the caller's dtype so the
@@ -203,9 +211,10 @@ class GgufExperts(nn.Module):
             if qt not in _QUANT_INFO:
                 raise NotImplementedError(f"GgufExperts {label}_quant {qt} not in {sorted(_QUANT_INFO)}")
         self.config = config
-        self.num_experts = config.num_experts
+        # Different MoE archs spell these differently — read every known name.
+        self.num_experts = _read_first(config, "num_experts", "num_local_experts", "n_routed_experts")
         self.hidden_dim = config.hidden_size
-        self.intermediate_dim = config.moe_intermediate_size
+        self.intermediate_dim = _read_first(config, "moe_intermediate_size", "intermediate_size")
         self.gate_up_quant, self.down_quant = gate_up_quant, down_quant
         self._gate_up_fmt = _KERNEL_FMT[gate_up_quant]
         self._down_fmt = _KERNEL_FMT[down_quant]
