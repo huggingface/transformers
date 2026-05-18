@@ -97,12 +97,27 @@ try:
                 layer_name="Llama4TextMoe",
             )
         },
+        "SwiGLUMLP": {
+            "cuda": {
+                Mode.INFERENCE: LayerRepository(
+                    repo_id="kernels-community/liger-kernels",
+                    layer_name="LigerSwiGLUMLP",
+                ),
+                Mode.TRAINING: LayerRepository(
+                    repo_id="kernels-community/liger-kernels",
+                    layer_name="LigerSwiGLUMLP",
+                ),
+            }
+        },
         "RMSNorm": {
             "cuda": {
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/liger-kernels",
                     layer_name="LigerRMSNorm",
-                    # revision="pure-layer-test",
+                ),
+                Mode.TRAINING: LayerRepository(
+                    repo_id="kernels-community/liger-kernels",
+                    layer_name="LigerRMSNorm",
                 ),
             },
             "rocm": {
