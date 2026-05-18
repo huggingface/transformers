@@ -372,7 +372,7 @@ class RagRetriever:
     ...     "facebook/dpr-ctx_encoder-single-nq-base", dataset="wiki_dpr", index_name="compressed"
     ... )
 
-    >>> # To load your own indexed dataset built with the datasets library. More info on how to build the indexed dataset in examples/rag/use_own_knowledge_dataset.py
+    >>> # To load your own indexed dataset built with the datasets library.
     >>> from transformers import RagRetriever
 
     >>> dataset = (
@@ -380,7 +380,7 @@ class RagRetriever:
     ... )  # dataset must be a datasets.Datasets object with columns "title", "text" and "embeddings", and it must have a supported index (e.g., Faiss or other index types depending on your setup)
     >>> retriever = RagRetriever.from_pretrained("facebook/dpr-ctx_encoder-single-nq-base", indexed_dataset=dataset)
 
-    >>> # To load your own indexed dataset built with the datasets library that was saved on disk. More info in examples/rag/use_own_knowledge_dataset.py
+    >>> # To load your own indexed dataset built with the datasets library that was saved on disk.
     >>> from transformers import RagRetriever
 
     >>> dataset_path = "path/to/my/dataset"  # dataset saved via *dataset.save_to_disk(...)*
