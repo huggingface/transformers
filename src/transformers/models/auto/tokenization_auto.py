@@ -165,7 +165,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("hubert", "Wav2Vec2CTCTokenizer"),
         ("ibert", "RobertaTokenizer"),
         ("idefics", "LlamaTokenizer" if is_tokenizers_available() else None),
-        ("idefics2", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("idefics2", "LlamaTokenizer" if is_tokenizers_available() else None),
         ("instructblip", "TokenizersBackend" if is_tokenizers_available() else None),
         ("instructblipvideo", "TokenizersBackend" if is_tokenizers_available() else None),
         ("internvl", "Qwen2Tokenizer" if is_tokenizers_available() else None),

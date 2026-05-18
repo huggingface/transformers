@@ -13,7 +13,7 @@
 # limitations under the License.
 """Tokenization classes for XLNet model."""
 
-from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import AddedToken, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
 from ...tokenization_utils_base import _get_prepend_scheme

@@ -13,7 +13,7 @@
 # limitations under the License
 """Tokenization classes for Camembert model."""
 
-from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
 from ...tokenization_python import AddedToken
@@ -138,7 +138,7 @@ class CamembertTokenizer(TokenizersBackend):
                 pre_tokenizers.WhitespaceSplit(),
                 pre_tokenizers.Metaspace(replacement=SPIECE_UNDERLINE, prepend_scheme=prepend_scheme, split=True),
             ]
-        )   
+        )
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
 
         super().__init__(

@@ -94,12 +94,12 @@ class XGLMTokenizer(TokenizersBackend):
         self._tokenizer = Tokenizer(Unigram(vocab=self._vocab, unk_id=3, byte_fallback=False))
 
         #  {"type": "Replace", "pattern": {"Regex": " {2,}"}, "content": " "}]}
-        normalizers_ = [normalizers.Replace(Regex(r" {2,}"), " ")]    
-                        
+        normalizers_ = [normalizers.Replace(Regex(r" {2,}"), " ")]
+
         if _spm_precompiled_charsmap is not None:
             normalizers_.insert(0, normalizers.Precompiled(_spm_precompiled_charsmap))
 
-        self._tokenizer.normalizer = normalizers.Sequence(normalizers_) 
+        self._tokenizer.normalizer = normalizers.Sequence(normalizers_)
 
         prepend_scheme = "always" if add_prefix_space else "never"
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
