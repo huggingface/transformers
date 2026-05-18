@@ -13,16 +13,16 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Multimodal Processors
+# Multimodal processors
 
-A processor combines multiple input processing components — an image processor, tokenizer, feature extractor, video processor — into a single object with a unified `__call__` interface. For generative multimodal models this means encoding inputs along with placeholder tokens; for other models like [`CLIP`] it means encoding each modality independently and returning a merged input dictionary. In both cases the processor handles modality-specific preprocessing, batching, and padding so the model receives consistently formatted tensors.
+A processor combines a tokenizer with one or more modality processors, such as an image processor, video processor, or feature extractor. It exposes a single `__call__` method that routes each input to the right component and merges the outputs into one dictionary.
 
-For models that interleave visual inputs with text, [`ProcessorMixin`] additionally handles the placeholder token pattern: special tokens embedded in the prompt — e.g. `<image>`, `<video>`, `<audio>` — are replaced by expanded strings of N repeated soft tokens, optionally wrapped in begin/end-of-modality boundary tokens. The number of repetitions is model-specific and depends on the input itself (image resolution, video frame count, audio duration) — this is what `replace_image_token` / `replace_video_token` / `replace_audio_token` compute. Each processor exposes the placeholder token and its vocabulary ID via `self.image_token` / `self.image_token_id`, with video and audio following the same pattern.
+Some multimodal models interleave text with images, videos, or audio. For these models, [`ProcessorMixin`] can replace placeholder tokens like `<image>`, `<video>`, and `<audio>` with the token pattern expected by the model.
 
 
 ## Adding a new processor
 
-Define your processor class first by creating `src/transformers/models/<model>/processing_<my_model_name>.py` and subclass `ProcessorMixin`. Make sure to define a `TypedDict` object with default values and assign it as `cls.valid_processor_kwargs`
+Define a processor class by creating `src/transformers/models/<model>/processing_<my_model_name>.py` and subclass `ProcessorMixin`. Make sure to define a `TypedDict` object with default values and assign it as `cls.valid_processor_kwargs`
 
 ```python
 from ...processing_utils import ProcessorMixin, ProcessingKwargs, Unpack
@@ -48,9 +48,9 @@ class MyModelProcessor(ProcessorMixin):
         )
 ```
 
-Then implement `replace_<modality>_token` if needed. It receives the full output dict from the subprocessor and the index of the current input, and returns the expanded replacement string for that input. The replacement string is whatever your model expects in the input sequence.
+Implement `replace_<modality>_token` if needed. It receives the full output dict from the subprocessor and the index of the current input, and returns the expanded replacement string for that input. The replacement string is whatever the model expects in the input sequence.
 
-If your model does not use placeholder repetition at all (no `image_token` defined), you do not need to override this method — just leave `self.image_token` unset and the base class skips replacement entirely.
+If the model does not use placeholder repetition at all (no `image_token` defined), you do not need to override this method. Leave `self.image_token` unset and the base class skips replacement entirely.
 
 ```python
 def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
@@ -59,13 +59,10 @@ def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
 ```
 
 
-Optionally override `prepare_inputs_layout` and `validate_inputs` methods. If your model requires a specific input structure before processing begins, such as re-ordering images as a nested list, or a model-specific validation on top of the common checks.
+Optionally override `prepare_inputs_layout` and `validate_inputs` methods. If the model requires a specific input structure before processing begins, such as re-ordering images as a nested list, or a model-specific validation on top of the common checks.
 
 ```python
 def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
-    images, text, videos, audio = super().prepare_inputs_layout(
-        images=images, text=text, videos=videos, audio=audio, **kwargs
-    )
     # Call `super()` to apply common preparation steps first 
     images, text, videos, audio = super().prepare_inputs_layout(images, text, videos, audio)
     if images is not None:
@@ -89,20 +86,20 @@ def validate_inputs(self, images=None, text=None, videos=None, audio=None, **kwa
 
 ## Testing
 
-All multimodal processors should have a test class that inherits from [`ProcessorTestMixin`]. This mixin provides a standard suite covering tokenization, image processing, batching, and round-trip encoding.
+All multimodal processors should have a test class that inherits from [`ProcessorTesterMixin`]. This mixin provides a standard suite covering tokenization, image processing, batching, and round-trip encoding.
 
 ```python
-# tests/models/my_model_name/test_processor_{{my_model_name}}.py
+# tests/models/my_model_name/test_processor_<my_model_name>.py
 
 from transformers.testing_utils import require_vision
 from transformers.utils import is_vision_available
-from ...test_processing_common import ProcessorTestMixin
+from ...test_processing_common import ProcessorTesterMixin
 
 if is_vision_available():
     from transformers import MyModelProcessor
 
 @require_vision
-class MyModelProcessorTest(ProcessorTestMixin, unittest.TestCase):
+class MyModelProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = MyModelProcessor
 
     def get_processor(self):
