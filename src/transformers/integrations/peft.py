@@ -658,8 +658,6 @@ class PeftAdapterMixin:
 
         device_map = getattr(self, "hf_device_map", {"": self.device})
 
-        # If the model is tensor parallel, we handle the sharding of the state dict here since the logic in `self._load_pretrained_model`
-        # is not compatible with the way PEFT adapter should be sharded.
         has_tp_adapters = False
         for module in self.modules():
             tp_info = getattr(module, "_tp_info", None)
@@ -734,9 +732,6 @@ class PeftAdapterMixin:
             expected_keys=[n for n, _ in self.named_parameters()],
         )
 
-        if peft_config.inference_mode:
-            self._set_peft_inference_mode()
-
         adapter_key_markers = {adapter_name}
         if peft_config is not None and getattr(peft_config, "peft_type", None) is not None:
             adapter_key_markers.add(peft_config.peft_type.value.lower())
@@ -762,6 +757,9 @@ class PeftAdapterMixin:
 
             prepare_model_for_compiled_hotswap(self, config=peft_config, **self._prepare_peft_hotswap_kwargs)
             self._prepare_peft_hotswap_kwargs = None
+
+        if peft_config.inference_mode:
+            self._set_peft_inference_mode()
 
         return loading_info
 
