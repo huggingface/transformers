@@ -25,6 +25,7 @@ from urllib.parse import urljoin, urlparse
 import httpx
 import typer
 
+
 try:
     import requests
 except ImportError:
