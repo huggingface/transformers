@@ -864,7 +864,6 @@ class Deimv2Model(DFineModel):
 
 
 class Deimv2ForObjectDetection(DFineForObjectDetection):
-    _no_split_modules = None  # Don't have the same restriction as DFine
 
     @property
     def _tied_weights_keys(self):
