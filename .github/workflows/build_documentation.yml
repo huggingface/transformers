@@ -9,6 +9,9 @@ on:
       - v*-release
       - use_templates
 
+permissions:
+  contents: read
+
 jobs:
    build:
     uses: huggingface/doc-builder/.github/workflows/build_main_documentation.yml@2430c1ec91d04667414e2fa31ecfc36c153ea391  # main
