@@ -455,7 +455,7 @@ class Molmo2IntegrationTest(unittest.TestCase):
 
         model = Molmo2ForConditionalGeneration.from_pretrained(
             self.model_id,
-            torch_dtype=torch.bfloat16,
+            torch_dtype=torch.float32,
             device_map=torch_device,
         )
         model.eval()
@@ -470,14 +470,25 @@ class Molmo2IntegrationTest(unittest.TestCase):
         self.assertEqual(logits.shape[1], device_inputs["input_ids"].shape[1])
 
         expected_last_logits = torch.tensor(
-            [-10.375, -5.8125, -10.9375, -10.25, -16.75, -14.5, -11.1875, -9.625, -11.5625, -9.1875],
+            [
+                -10.443631,
+                -6.061066,
+                -11.089376,
+                -10.382135,
+                -16.847486,
+                -14.479667,
+                -11.206448,
+                -9.839166,
+                -11.699806,
+                -9.23956,
+            ],
             dtype=torch.float32,
         )
         torch.testing.assert_close(
             logits[0, -1, :10].cpu().float(),
             expected_last_logits,
-            atol=3e-1,
-            rtol=5e-2,
+            atol=1e-2,
+            rtol=1e-2,
         )
         self.assertEqual(logits[0, -1].argmax().item(), 641)
 
@@ -486,7 +497,7 @@ class Molmo2IntegrationTest(unittest.TestCase):
 
         model = Molmo2ForConditionalGeneration.from_pretrained(
             self.model_id,
-            torch_dtype=torch.bfloat16,
+            torch_dtype=torch.float32,
             device_map=torch_device,
         )
         model.eval()
@@ -494,13 +505,12 @@ class Molmo2IntegrationTest(unittest.TestCase):
         device_inputs = {k: v.to(torch_device) if hasattr(v, "to") else v for k, v in inputs.items()}
 
         with torch.no_grad():
-            generated_ids = model.generate(**device_inputs, max_new_tokens=64, do_sample=False)
+            generated_ids = model.generate(**device_inputs, max_new_tokens=10, do_sample=False)
 
         input_len = device_inputs["input_ids"].shape[1]
         generated_text = self.processor.batch_decode(generated_ids[:, input_len:], skip_special_tokens=True)[0]
-        generated_text = generated_text.strip()
-        for expected_text in ("In this captivating image", "cat", "snowy landscape"):
-            self.assertIn(expected_text, generated_text)
+        EXPECTED_TEXT = "In this captivating image, a large, chubby cat"  # fmt: skip
+        self.assertEqual(generated_text.strip(), EXPECTED_TEXT)
 
 
 @slow
@@ -583,13 +593,12 @@ class Molmo2O7BIntegrationTest(unittest.TestCase):
         device_inputs = {k: v.to(torch_device) if hasattr(v, "to") else v for k, v in inputs.items()}
 
         with torch.no_grad():
-            generated_ids = model.generate(**device_inputs, max_new_tokens=64, do_sample=False)
+            generated_ids = model.generate(**device_inputs, max_new_tokens=10, do_sample=False)
 
         input_len = device_inputs["input_ids"].shape[1]
         generated_text = self.processor.batch_decode(generated_ids[:, input_len:], skip_special_tokens=True)[0]
-        generated_text = generated_text.strip()
-        for expected_text in ("In this captivating image", "cat", "snowy landscape"):
-            self.assertIn(expected_text, generated_text)
+        EXPECTED_TEXT = "In this captivating image, a small, chubby cat"  # fmt: skip
+        self.assertEqual(generated_text.strip(), EXPECTED_TEXT)
 
 
 @slow
@@ -672,13 +681,12 @@ class Molmo2_8BIntegrationTest(unittest.TestCase):
         device_inputs = {k: v.to(torch_device) if hasattr(v, "to") else v for k, v in inputs.items()}
 
         with torch.no_grad():
-            generated_ids = model.generate(**device_inputs, max_new_tokens=64, do_sample=False)
+            generated_ids = model.generate(**device_inputs, max_new_tokens=10, do_sample=False)
 
         input_len = device_inputs["input_ids"].shape[1]
         generated_text = self.processor.batch_decode(generated_ids[:, input_len:], skip_special_tokens=True)[0]
-        generated_text = generated_text.strip()
-        for expected_text in ("In this captivating image", "snow leopard", "snowy landscape"):
-            self.assertIn(expected_text, generated_text)
+        EXPECTED_TEXT = "In this captivating image, a snow leopard is captured"  # fmt: skip
+        self.assertEqual(generated_text.strip(), EXPECTED_TEXT)
 
     def test_generation_video_qa(self):
         """Test video question answering for Molmo2-8B."""
