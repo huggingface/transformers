@@ -1071,6 +1071,8 @@
         title: GLM-ASR
       - local: model_doc/granite_speech
         title: GraniteSpeech
+      - local: model_doc/granite_speech_nar
+        title: GraniteSpeechNar
       - local: model_doc/granite_speech_plus
         title: GraniteSpeechPlus
       - local: model_doc/higgs_audio_v2

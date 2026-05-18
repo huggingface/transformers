@@ -226,7 +226,7 @@ class GraniteSpeechNarPreTrainedModel(PreTrainedModel):
     input_modalities = ("audio",)
 
 
-class GraniteSpeechNarBidirectionalAttention(GraniteAttention):
+class GraniteSpeechNarAttention(GraniteAttention):
     """GraniteAttention with is_causal=False for bidirectional attention."""
 
     is_causal = False
@@ -236,18 +236,18 @@ class GraniteSpeechNarBidirectionalAttention(GraniteAttention):
         self.is_causal = False
 
 
-class GraniteSpeechNarBidirectionalDecoderLayer(GraniteDecoderLayer):
+class GraniteSpeechNarDecoderLayer(GraniteDecoderLayer):
     """GraniteDecoderLayer using bidirectional attention."""
 
     def __init__(self, config, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.self_attn = GraniteSpeechNarBidirectionalAttention(config=config, layer_idx=layer_idx)
+        self.self_attn = GraniteSpeechNarAttention(config=config, layer_idx=layer_idx)
 
 
-class GraniteSpeechNarBidirectionalGraniteModel(GraniteModel):
+class GraniteSpeechNarModel(GraniteModel):
     """GraniteModel with bidirectional (non-causal) attention.
 
-    Uses GraniteSpeechNarBidirectionalDecoderLayer which sets is_causal=False,
+    Uses GraniteSpeechNarDecoderLayer which sets is_causal=False,
     and replaces create_causal_mask() with create_bidirectional_mask() so all
     attention backends (SDPA, FA2, eager, flex) get a proper non-causal mask.
     """
@@ -255,10 +255,7 @@ class GraniteSpeechNarBidirectionalGraniteModel(GraniteModel):
     def __init__(self, config):
         super().__init__(config)
         self.layers = nn.ModuleList(
-            [
-                GraniteSpeechNarBidirectionalDecoderLayer(config, layer_idx)
-                for layer_idx in range(config.num_hidden_layers)
-            ]
+            [GraniteSpeechNarDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
 
     def forward(
@@ -331,6 +328,7 @@ class GraniteSpeechNarCTCEncoder(GraniteSpeechNarPreTrainedModel):
         output_hidden_states: bool | None = None,
         labels: torch.Tensor | None = None,
         label_lengths: torch.Tensor | None = None,
+        **kwargs,
     ) -> GraniteSpeechNarEncoderOutput:
         if attention_mask is None:
             attention_mask = torch.ones(input_features.shape[:-1], dtype=torch.bool, device=input_features.device)
@@ -405,12 +403,18 @@ class GraniteSpeechNarCTCEncoder(GraniteSpeechNarPreTrainedModel):
         )
 
 
-class GraniteSpeechNarLanguageModel(GraniteForCausalLM):
+@auto_docstring(
+    custom_intro="""
+    The bidirectional language model component of GraniteSpeechNar, used internally
+    to refine CTC predictions in a single non-autoregressive pass.
+    """
+)
+class GraniteSpeechNarLM(GraniteForCausalLM):
     """GraniteForCausalLM with a bidirectional (non-causal) backbone."""
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = GraniteSpeechNarBidirectionalGraniteModel(config)
+        self.model = GraniteSpeechNarModel(config)
 
 
 @auto_docstring(
@@ -430,7 +434,7 @@ class GraniteSpeechNarForASR(GraniteSpeechNarPreTrainedModel):
         text_config = config.text_config
         if hasattr(config, "_attn_implementation"):
             text_config._attn_implementation = config._attn_implementation
-        self.language_model = GraniteSpeechNarLanguageModel._from_config(text_config)
+        self.language_model = GraniteSpeechNarLM._from_config(text_config)
 
         self.post_init()
 
@@ -489,6 +493,7 @@ class GraniteSpeechNarForASR(GraniteSpeechNarPreTrainedModel):
         labels: torch.Tensor | None = None,
         label_lengths: torch.Tensor | None = None,
         output_encoder_logits: bool = False,
+        **kwargs,
     ) -> GraniteSpeechNarOutput:
         r"""
         Args:
@@ -641,9 +646,9 @@ class GraniteSpeechNarForASR(GraniteSpeechNarPreTrainedModel):
 
 
 __all__ = [
-    "GraniteSpeechNarBidirectionalGraniteModel",
+    "GraniteSpeechNarModel",
     "GraniteSpeechNarCTCEncoder",
     "GraniteSpeechNarForASR",
-    "GraniteSpeechNarLanguageModel",
+    "GraniteSpeechNarLM",
     "GraniteSpeechNarPreTrainedModel",
 ]

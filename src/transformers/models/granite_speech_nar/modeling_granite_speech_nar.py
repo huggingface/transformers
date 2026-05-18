@@ -441,7 +441,7 @@ def eager_attention_forward(
 
 
 @use_kernelized_func(apply_rotary_pos_emb)
-class GraniteSpeechNarBidirectionalAttention(nn.Module):
+class GraniteSpeechNarAttention(nn.Module):
     """GraniteAttention with is_causal=False for bidirectional attention."""
 
     is_causal = False
@@ -547,13 +547,13 @@ class GraniteSpeechNarMLP(nn.Module):
         return down_proj
 
 
-class GraniteSpeechNarBidirectionalDecoderLayer(GradientCheckpointingLayer):
+class GraniteSpeechNarDecoderLayer(GradientCheckpointingLayer):
     """GraniteDecoderLayer using bidirectional attention."""
 
     def __init__(self, config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = GraniteSpeechNarBidirectionalAttention(config=config, layer_idx=layer_idx)
+        self.self_attn = GraniteSpeechNarAttention(config=config, layer_idx=layer_idx)
 
         self.mlp = GraniteSpeechNarMLP(config)
         self.input_layernorm = GraniteSpeechNarRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -679,10 +679,10 @@ class GraniteSpeechNarRotaryEmbedding(nn.Module):
 
 
 @auto_docstring
-class GraniteSpeechNarBidirectionalGraniteModel(GraniteSpeechNarPreTrainedModel):
+class GraniteSpeechNarModel(GraniteSpeechNarPreTrainedModel):
     """GraniteModel with bidirectional (non-causal) attention.
 
-    Uses GraniteSpeechNarBidirectionalDecoderLayer which sets is_causal=False,
+    Uses GraniteSpeechNarDecoderLayer which sets is_causal=False,
     and replaces create_causal_mask() with create_bidirectional_mask() so all
     attention backends (SDPA, FA2, eager, flex) get a proper non-causal mask.
     """
@@ -694,10 +694,7 @@ class GraniteSpeechNarBidirectionalGraniteModel(GraniteSpeechNarPreTrainedModel)
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [
-                GraniteSpeechNarBidirectionalDecoderLayer(config, layer_idx)
-                for layer_idx in range(config.num_hidden_layers)
-            ]
+            [GraniteSpeechNarDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = GraniteSpeechNarRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = GraniteSpeechNarRotaryEmbedding(config=config)
@@ -794,6 +791,7 @@ class GraniteSpeechNarCTCEncoder(GraniteSpeechNarPreTrainedModel):
         output_hidden_states: bool | None = None,
         labels: torch.Tensor | None = None,
         label_lengths: torch.Tensor | None = None,
+        **kwargs,
     ) -> GraniteSpeechNarEncoderOutput:
         if attention_mask is None:
             attention_mask = torch.ones(input_features.shape[:-1], dtype=torch.bool, device=input_features.device)
@@ -868,8 +866,13 @@ class GraniteSpeechNarCTCEncoder(GraniteSpeechNarPreTrainedModel):
         )
 
 
-@auto_docstring
-class GraniteSpeechNarLanguageModel(GraniteSpeechNarPreTrainedModel, GenerationMixin):
+@auto_docstring(
+    custom_intro="""
+    The bidirectional language model component of GraniteSpeechNar, used internally
+    to refine CTC predictions in a single non-autoregressive pass.
+    """
+)
+class GraniteSpeechNarLM(GraniteSpeechNarPreTrainedModel, GenerationMixin):
     """GraniteForCausalLM with a bidirectional (non-causal) backbone."""
 
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
@@ -878,7 +881,7 @@ class GraniteSpeechNarLanguageModel(GraniteSpeechNarPreTrainedModel, GenerationM
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = GraniteSpeechNarBidirectionalGraniteModel(config)
+        self.model = GraniteSpeechNarModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
@@ -903,9 +906,9 @@ class GraniteSpeechNarLanguageModel(GraniteSpeechNarPreTrainedModel, GenerationM
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, GraniteSpeechNarLanguageModel
+        >>> from transformers import AutoTokenizer, GraniteSpeechNarLM
 
-        >>> model = GraniteSpeechNarLanguageModel.from_pretrained("meta-granite_speech_nar/GraniteSpeechNar-2-7b-hf")
+        >>> model = GraniteSpeechNarLM.from_pretrained("meta-granite_speech_nar/GraniteSpeechNar-2-7b-hf")
         >>> tokenizer = AutoTokenizer.from_pretrained("meta-granite_speech_nar/GraniteSpeechNar-2-7b-hf")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
@@ -961,7 +964,7 @@ class GraniteSpeechNarForASR(GraniteSpeechNarPreTrainedModel):
         text_config = config.text_config
         if hasattr(config, "_attn_implementation"):
             text_config._attn_implementation = config._attn_implementation
-        self.language_model = GraniteSpeechNarLanguageModel._from_config(text_config)
+        self.language_model = GraniteSpeechNarLM._from_config(text_config)
 
         self.post_init()
 
@@ -1020,6 +1023,7 @@ class GraniteSpeechNarForASR(GraniteSpeechNarPreTrainedModel):
         labels: torch.Tensor | None = None,
         label_lengths: torch.Tensor | None = None,
         output_encoder_logits: bool = False,
+        **kwargs,
     ) -> GraniteSpeechNarOutput:
         r"""
         Args:
@@ -1172,9 +1176,9 @@ class GraniteSpeechNarForASR(GraniteSpeechNarPreTrainedModel):
 
 
 __all__ = [
-    "GraniteSpeechNarBidirectionalGraniteModel",
+    "GraniteSpeechNarModel",
     "GraniteSpeechNarCTCEncoder",
     "GraniteSpeechNarForASR",
-    "GraniteSpeechNarLanguageModel",
+    "GraniteSpeechNarLM",
     "GraniteSpeechNarPreTrainedModel",
 ]
