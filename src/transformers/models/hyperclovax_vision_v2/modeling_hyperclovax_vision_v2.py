@@ -86,7 +86,6 @@ class HCXVisionV2Model(HCXVisionV2PreTrainedModel):
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     _can_compile_fullgraph = False
-    config: HCXVisionV2Config
 
     def __init__(self, config: HCXVisionV2Config):
         super().__init__(config)

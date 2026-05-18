@@ -125,9 +125,7 @@ class HCXVisionV2PreTrainedModel(VideoLlama3PreTrainedModel):
 
 
 @auto_docstring
-class HCXVisionV2Model(VideoLlama3Model):
-    config: HCXVisionV2Config
-
+class HCXVisionV2Model(HCXVisionV2PreTrainedModel, VideoLlama3Model):
     def __init__(self, config: HCXVisionV2Config):
         super().__init__(config)
 
