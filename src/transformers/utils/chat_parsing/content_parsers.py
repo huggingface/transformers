@@ -21,15 +21,15 @@ def _text(text: str, args: dict) -> str:
 
 
 def _int(text: str, args: dict) -> int:
-    return int(_text(text, args))
+    return int(text.strip())
 
 
 def _float(text: str, args: dict) -> float:
-    return float(_text(text, args))
+    return float(text.strip())
 
 
 def _bool(text: str, args: dict) -> bool:
-    return _text(text, args).lower() in ("true", "1")
+    return text.strip().lower() in ("true", "1")
 
 
 # Sentinel characters for lax-JSON string pre-extraction — ASCII control chars
