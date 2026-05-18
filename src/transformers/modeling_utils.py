@@ -1110,6 +1110,7 @@ class EmbeddingAccessMixin:
         ):
             return language_model.get_input_embeddings()
 
+        # 5) recurse once into the registered *base* model (e.g. for encoder/decoder)
         base_model = getattr(self, "base_model", None)
         if base_model is not None and base_model is not self and hasattr(base_model, "get_input_embeddings"):
             return base_model.get_input_embeddings()
