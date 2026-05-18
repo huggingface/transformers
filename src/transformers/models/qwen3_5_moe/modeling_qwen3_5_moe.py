@@ -147,7 +147,9 @@ class Qwen3_5MoeTextRotaryEmbedding(nn.Module):
         # So we expand the inv_freq to shape (3, ...)
         if position_ids.ndim == 2:
             position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
-        inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
+        inv_freq_expanded = (
+            self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1).to(x.device)
+        )
         position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
@@ -247,6 +249,7 @@ def torch_chunk_gated_delta_rule(
     initial_state=None,
     output_final_state=False,
     use_qk_l2norm_in_kernel=False,
+    **kwargs,
 ):
     initial_dtype = query.dtype
     if use_qk_l2norm_in_kernel:
@@ -432,6 +435,7 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
         hidden_states: torch.Tensor,
         cache_params: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
 
@@ -483,7 +487,7 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
                     weight=self.conv1d.weight.squeeze(1),
                     bias=self.conv1d.bias,
                     activation=self.activation,
-                    seq_idx=None,
+                    seq_idx=kwargs.get("seq_idx"),
                 )
             else:
                 mixed_qkv = F.silu(self.conv1d(mixed_qkv)[:, :, : mixed_qkv.shape[-1]])
@@ -523,7 +527,6 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
             )
-
         else:
             core_attn_out, last_recurrent_state = self.chunk_gated_delta_rule(
                 query,
@@ -534,6 +537,8 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
                 initial_state=recurrent_state if use_precomputed_states else None,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
+                # The chunked FLA kernel takes a single `cu_seqlens` arg; for packed self-attention this matches q-side lengths.
+                cu_seqlens=kwargs.get("cu_seq_lens_q"),
             )
 
         # Update cache
@@ -860,6 +865,7 @@ class Qwen3_5MoeDecoderLayer(GradientCheckpointingLayer):
                 hidden_states=hidden_states,
                 cache_params=past_key_values,
                 attention_mask=attention_mask,
+                **kwargs,
             )
         elif self.layer_type == "full_attention":
             # Self Attention
