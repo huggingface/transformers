@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2026-04-30.*
+*This model was released on {release_date} and added to Hugging Face Transformers on 2026-05-11.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -23,9 +23,9 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-# HyperCLOVAX Vision V2 [[hyperclovax-vision-v2]]
+# HyperCLOVAX Vision V2
 
-HyperCLOVAX Vision V2는 NAVER가 개발한 비전-언어 멀티모달 모델입니다. MuP 스케일링과 post-norm (Peri-LN) 레이어를 갖춘 [Granite](./granite) 아키텍처 기반의 HyperCLOVAX 언어 모델과 [Qwen2.5-VL](./qwen2_5_vl) 비전 인코더를 결합한 구조입니다. 텍스트, 이미지, 비디오 입력을 지원하며, 내장된 thinking 토큰(`<think>...</think>`)을 통한 연쇄 추론(chain-of-thought reasoning) 기능을 제공합니다.
+HyperCLOVAX Vision V2는 NAVER가 개발한 비전-언어 멀티모달 모델입니다. [HyperClovaX](./hyperclovax.md) 언어 모델 백본과 [Qwen2.5-VL](./qwen2_5_vl) 비전 인코더를 결합한 구조입니다. 텍스트, 이미지, 비디오 입력을 지원하며, 내장된 thinking 토큰(`<think>...</think>`)을 통한 연쇄 추론(chain-of-thought reasoning) 기능을 제공합니다.
 
 원본 HyperCLOVAX-SEED-Think-32B 체크포인트는 [naver-hyperclovax/HyperCLOVAX-SEED-Think-32B](https://huggingface.co/naver-hyperclovax/HyperCLOVAX-SEED-Think-32B) 페이지에서 확인할 수 있습니다.
 
@@ -38,14 +38,11 @@ HyperCLOVAX Vision V2는 NAVER가 개발한 비전-언어 멀티모달 모델입
 <hfoption id="이미지 입력">
 
 ```python
-import torch
 from transformers import HCXVisionV2ForConditionalGeneration, HCXVisionV2Processor
 
 model = HCXVisionV2ForConditionalGeneration.from_pretrained(
     "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
-    torch_dtype=torch.bfloat16,
     device_map="auto",
-    attn_implementation="sdpa",
 )
 processor = HCXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
 
@@ -88,14 +85,11 @@ print(output_text)
 <hfoption id="비디오 입력">
 
 ```python
-import torch
 from transformers import HCXVisionV2ForConditionalGeneration, HCXVisionV2Processor
 
 model = HCXVisionV2ForConditionalGeneration.from_pretrained(
     "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
-    torch_dtype=torch.bfloat16,
     device_map="auto",
-    attn_implementation="sdpa",
 )
 processor = HCXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
 
@@ -148,13 +142,11 @@ print(output_text)
 아래 예시는 [bitsandbytes](../quantization/bitsandbytes)를 사용하여 모델을 4-bit로 로드합니다.
 
 ```python
-import torch
 from transformers import BitsAndBytesConfig, HCXVisionV2ForConditionalGeneration, HCXVisionV2Processor
 
 quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 model = HCXVisionV2ForConditionalGeneration.from_pretrained(
     "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
-    torch_dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config,
 )
@@ -251,13 +243,11 @@ processor = HCXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-
 - HyperCLOVAX 언어 모델 백본만을 사용한 텍스트 전용 추론에는 [`HyperCLOVAXForCausalLM`]을 사용하세요:
 
     ```python
-    import torch
     from transformers import HyperCLOVAXForCausalLM, AutoTokenizer
 
     tokenizer = AutoTokenizer.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
     model = HyperCLOVAXForCausalLM.from_pretrained(
         "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
-        torch_dtype=torch.bfloat16,
         device_map="auto",
     )
     inputs = tokenizer("HyperCLOVAX는", return_tensors="pt").to(model.device)

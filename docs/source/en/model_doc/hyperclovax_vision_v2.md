@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2026-05-11.*
+*This model was released on {release_date} and added to Hugging Face Transformers on 2026-05-18.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 # HyperCLOVAX Vision V2
 
-HyperCLOVAX Vision V2 is a multimodal vision-language model developed by NAVER. It combines the HyperCLOVAX language model backbone — based on the [Granite](./granite) architecture with optional post-norm (Peri-LN) layers for MuP scaling — with a [Qwen2.5-VL](./qwen2_5_vl) vision encoder. The model supports text, image, and video inputs and is capable of chain-of-thought reasoning via built-in thinking tokens (`<think>...</think>`).
+HyperCLOVAX Vision V2 is a multimodal vision-language model developed by NAVER. It combines the [HyperClovaX](./hyperclovax.md) language model backbone with a [Qwen2.5-VL](./qwen2_5_vl) vision encoder. The model supports text, image, and video inputs and is capable of chain-of-thought reasoning via built-in thinking tokens (`<think>...</think>`).
 
 You can find the original HyperCLOVAX-SEED-Think-32B checkpoint on the [naver-hyperclovax/HyperCLOVAX-SEED-Think-32B](https://huggingface.co/naver-hyperclovax/HyperCLOVAX-SEED-Think-32B) page.
 
@@ -38,14 +38,11 @@ The example below demonstrates how to generate text based on an image with [`HCX
 <hfoption id="Image input">
 
 ```python
-import torch
 from transformers import HCXVisionV2ForConditionalGeneration, HCXVisionV2Processor
 
 model = HCXVisionV2ForConditionalGeneration.from_pretrained(
     "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
-    torch_dtype=torch.bfloat16,
     device_map="auto",
-    attn_implementation="sdpa",
 )
 processor = HCXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
 
@@ -88,14 +85,11 @@ print(output_text)
 <hfoption id="Video input">
 
 ```python
-import torch
 from transformers import HCXVisionV2ForConditionalGeneration, HCXVisionV2Processor
 
 model = HCXVisionV2ForConditionalGeneration.from_pretrained(
     "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
-    torch_dtype=torch.bfloat16,
     device_map="auto",
-    attn_implementation="sdpa",
 )
 processor = HCXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
 
@@ -148,13 +142,11 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to load the model in 4-bit.
 
 ```python
-import torch
 from transformers import BitsAndBytesConfig, HCXVisionV2ForConditionalGeneration, HCXVisionV2Processor
 
 quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 model = HCXVisionV2ForConditionalGeneration.from_pretrained(
     "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
-    torch_dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config,
 )
@@ -251,13 +243,11 @@ processor = HCXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-
 - For text-only inference with the HyperCLOVAX language model backbone, use [`HyperCLOVAXForCausalLM`]:
 
     ```python
-    import torch
     from transformers import HyperCLOVAXForCausalLM, AutoTokenizer
 
     tokenizer = AutoTokenizer.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
     model = HyperCLOVAXForCausalLM.from_pretrained(
         "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
-        torch_dtype=torch.bfloat16,
         device_map="auto",
     )
     inputs = tokenizer("HyperCLOVAX is", return_tensors="pt").to(model.device)
@@ -273,7 +263,6 @@ processor = HCXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-
 
 [[autodoc]] HCXVisionV2Processor
     - __call__
-
 
 ## HCXVisionV2Model
 

@@ -817,11 +817,9 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "hyperclovax_vision_v2": [
-            WeightRenaming(r"^model.language_model.lm_head", "lm_head"),
-            WeightRenaming(r"^model.mm_projector", "model.projector"),
-            WeightRenaming(r"^model.language_model.model.layers", "model.language_model.layers"),
-            WeightRenaming(r"^model.language_model.model.embed_tokens", "model.language_model.embed_tokens"),
-            WeightRenaming(r"^model.language_model.model.norm", "model.language_model.norm"),
+            WeightRenaming(r"^model.language_model.lm_head", r"lm_head"),
+            WeightRenaming(r"^model.mm_projector", r"model.projector"),
+            WeightRenaming(r"^model.language_model.model", r"model.language_model"),
         ],
         "nomic_bert": [
             WeightRenaming(r"encoder.layers", r"layers"),

@@ -30,8 +30,8 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..auto.modeling_auto import AutoModel
+from ..exaone4_5.processing_exaone4_5 import Exaone4_5_Processor
 from ..gemma3.modeling_gemma3 import Gemma3ForSequenceClassification
-from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor, Qwen2VLProcessorKwargs
 from ..video_llama_3.modeling_video_llama_3 import VideoLlama3Model, VideoLlama3PreTrainedModel
 
 
@@ -107,24 +107,9 @@ class HCXVisionV2Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-class HCXVisionV2ProcessorKwargs(Qwen2VLProcessorKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,  # HCX does not use mm_token_type_ids
-        },
-    }
-
-
 @auto_docstring
-class HCXVisionV2Processor(Qwen2VLProcessor):
-    @property
-    def model_input_names(self):
-        return (
-            self.tokenizer.model_input_names
-            + self.image_processor.model_input_names
-            + self.video_processor.model_input_names
-        )
+class HCXVisionV2Processor(Exaone4_5_Processor):
+    pass
 
 
 @auto_docstring
@@ -137,18 +122,10 @@ class HCXVisionV2PreTrainedModel(VideoLlama3PreTrainedModel):
         "attentions": "HyperCLOVAXAttention",
     }
 
-    def _init_weights(self, module):
-        super()._init_weights(module)
-
 
 @auto_docstring
 class HCXVisionV2Model(VideoLlama3Model):
     config: HCXVisionV2Config
-    _no_split_modules = ["HyperCLOVAXDecoderLayer"]
-    _can_record_outputs = {
-        "hidden_states": "HyperCLOVAXDecoderLayer",
-        "attentions": "HyperCLOVAXAttention",
-    }
 
     def __init__(self, config: HCXVisionV2Config):
         super().__init__(config)
@@ -159,6 +136,15 @@ class HCXVisionV2Model(VideoLlama3Model):
 
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
+
+    def get_rope_index(self):
+        raise AttributeError("HyperCLOVAX Vision V2 does not need 3D positions")
+
+    def get_vision_position_ids(self):
+        raise AttributeError("HyperCLOVAX Vision V2 does not need 3D positions")
+
+    def compute_3d_position_ids(self):
+        raise AttributeError("HyperCLOVAX Vision V2 does not need 3D positions")
 
     @can_return_tuple
     @auto_docstring
