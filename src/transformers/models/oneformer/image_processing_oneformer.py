@@ -296,7 +296,6 @@ class OneFormerImageProcessor(TorchvisionBackend):
     do_rescale = True
     do_normalize = True
     default_to_square = False
-    do_center_crop = False
     do_convert_rgb = True
     rescale_factor = 1 / 255
     ignore_index = None

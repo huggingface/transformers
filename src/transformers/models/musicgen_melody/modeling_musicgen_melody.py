@@ -373,6 +373,7 @@ class MusicgenMelodyPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
+        super()._init_weights(module)
         std = self.config.initializer_factor
         if isinstance(module, nn.Linear):
             init.normal_(module.weight, mean=0.0, std=std)
@@ -1178,6 +1179,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
     @torch.no_grad()
     def _init_weights(self, module):
+        super()._init_weights(module)
         # MusicgenMelodyForConditionalGeneration is made of PreTrainedModels that have already been initialized
         # Projection layers still need to be initialized.
         std = self.decoder.config.initializer_factor

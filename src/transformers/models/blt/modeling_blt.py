@@ -443,6 +443,7 @@ class BltPreTrainedModel(PreTrainedModel):
         - Scale is ~ 1 / sqrt(model_dim) (or 1 / sqrt(hidden_dim) for FFN outputs).
         - Norm layers are set to weight = 1, bias = 0.
         """
+        super()._init_weights(module)
         class_name = module.__class__.__name__
 
         # Norms: RMSNorm / LayerNorm

@@ -436,6 +436,7 @@ class LasrPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
+        super()._init_weights(module)
 
     def _get_subsampling_output_length(self, input_lengths: torch.Tensor):
         encoder_config = self.config.encoder_config if isinstance(self.config, LasrCTCConfig) else self.config

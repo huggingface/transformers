@@ -1139,6 +1139,7 @@ class LongT5PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         factor = self.config.initializer_factor  # Used for testing weights initialization
         if isinstance(module, LongT5LayerNorm):
             init.constant_(module.weight, factor * 1.0)

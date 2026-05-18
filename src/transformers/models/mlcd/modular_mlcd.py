@@ -304,6 +304,7 @@ class MLCDPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         factor = self.config.initializer_factor
         if isinstance(module, MLCDVisionEmbeddings):
             factor = self.config.initializer_factor

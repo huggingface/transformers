@@ -298,7 +298,6 @@ class Llama4ImageProcessor(TorchvisionBackend):
     image_mean = [0.5, 0.5, 0.5]
     image_std = [0.5, 0.5, 0.5]
     size = {"height": 336, "width": 336}
-    do_resize = True
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True

@@ -431,12 +431,6 @@ class Glm4vMoePreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, Glm4vMoeTextTopkRouter):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            init.zeros_(module.e_score_correction_bias)
-        elif isinstance(module, Glm4vMoeTextNaiveMoe):
-            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
-            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
         if isinstance(module, Glm4vMoeVisionRotaryEmbedding):
             inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
             init.copy_(module.inv_freq, inv_freq)

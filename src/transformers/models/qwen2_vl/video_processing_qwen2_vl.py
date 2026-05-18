@@ -77,7 +77,6 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
     do_resize = True
     do_rescale = True
     do_normalize = True
-    do_convert_rgb = True
     patch_size = 14
     temporal_patch_size = 2
     merge_size = 2

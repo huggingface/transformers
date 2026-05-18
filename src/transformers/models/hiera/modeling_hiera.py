@@ -773,6 +773,7 @@ class HieraPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module) -> None:
         """Initialize the weights"""
+        super()._init_weights(module)
         std = self.config.initializer_range
 
         if isinstance(module, HieraEmbeddings):

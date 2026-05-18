@@ -516,6 +516,7 @@ class WavLMPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         # gumbel softmax requires special init
         if isinstance(module, WavLMGumbelVectorQuantizer):
             init.normal_(module.weight_proj.weight, mean=0.0, std=1)

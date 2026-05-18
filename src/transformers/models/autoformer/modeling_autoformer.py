@@ -798,6 +798,7 @@ class AutoformerPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
+        super()._init_weights(module)
         std = self.config.init_std
         if isinstance(module, (nn.Linear, nn.Conv1d)):
             init.normal_(module.weight, mean=0.0, std=std)

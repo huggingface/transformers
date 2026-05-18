@@ -567,168 +567,6 @@ class PPDocLayoutV2TextEmbeddings(nn.Module):
         return embeddings
 
 
-@use_kernel_forward_from_hub("MultiScaleDeformableAttention")
-class MultiScaleDeformableAttention(nn.Module):
-    def forward(
-        self,
-        value: Tensor,
-        value_spatial_shapes: Tensor,
-        value_spatial_shapes_list: list[tuple],
-        level_start_index: Tensor,
-        sampling_locations: Tensor,
-        attention_weights: Tensor,
-        im2col_step: int,
-    ):
-        batch_size, _, num_heads, hidden_dim = value.shape
-        _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
-        value_list = value.split([height * width for height, width in value_spatial_shapes_list], dim=1)
-        sampling_grids = 2 * sampling_locations - 1
-        sampling_value_list = []
-        for level_id, (height, width) in enumerate(value_spatial_shapes_list):
-            # batch_size, height*width, num_heads, hidden_dim
-            # -> batch_size, height*width, num_heads*hidden_dim
-            # -> batch_size, num_heads*hidden_dim, height*width
-            # -> batch_size*num_heads, hidden_dim, height, width
-            value_l_ = (
-                value_list[level_id]
-                .flatten(2)
-                .transpose(1, 2)
-                .reshape(batch_size * num_heads, hidden_dim, height, width)
-            )
-            # batch_size, num_queries, num_heads, num_points, 2
-            # -> batch_size, num_heads, num_queries, num_points, 2
-            # -> batch_size*num_heads, num_queries, num_points, 2
-            sampling_grid_l_ = sampling_grids[:, :, :, level_id].transpose(1, 2).flatten(0, 1)
-            # batch_size*num_heads, hidden_dim, num_queries, num_points
-            sampling_value_l_ = nn.functional.grid_sample(
-                value_l_,
-                sampling_grid_l_,
-                mode="bilinear",
-                padding_mode="zeros",
-                align_corners=False,
-            )
-            sampling_value_list.append(sampling_value_l_)
-        # (batch_size, num_queries, num_heads, num_levels, num_points)
-        # -> (batch_size, num_heads, num_queries, num_levels, num_points)
-        # -> (batch_size, num_heads, 1, num_queries, num_levels*num_points)
-        attention_weights = attention_weights.transpose(1, 2).reshape(
-            batch_size * num_heads, 1, num_queries, num_levels * num_points
-        )
-        output = (
-            (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights)
-            .sum(-1)
-            .view(batch_size, num_heads * hidden_dim, num_queries)
-        )
-        return output.transpose(1, 2).contiguous()
-
-
-class PPDocLayoutV2MultiscaleDeformableAttention(nn.Module):
-    """
-    Multiscale deformable attention as proposed in Deformable DETR.
-    """
-
-    def __init__(self, config: PPDocLayoutV2Config, num_heads: int, n_points: int):
-        super().__init__()
-
-        self.attn = MultiScaleDeformableAttention()
-
-        if config.d_model % num_heads != 0:
-            raise ValueError(
-                f"embed_dim (d_model) must be divisible by num_heads, but got {config.d_model} and {num_heads}"
-            )
-        dim_per_head = config.d_model // num_heads
-        # check if dim_per_head is power of 2
-        if not ((dim_per_head & (dim_per_head - 1) == 0) and dim_per_head != 0):
-            warnings.warn(
-                "You'd better set embed_dim (d_model) in PPDocLayoutV2MultiscaleDeformableAttention to make the"
-                " dimension of each attention head a power of 2 which is more efficient in the authors' CUDA"
-                " implementation."
-            )
-
-        self.im2col_step = 64
-
-        self.d_model = config.d_model
-        self.n_levels = config.num_feature_levels
-        self.n_heads = num_heads
-        self.n_points = n_points
-
-        self.sampling_offsets = nn.Linear(config.d_model, num_heads * self.n_levels * n_points * 2)
-        self.attention_weights = nn.Linear(config.d_model, num_heads * self.n_levels * n_points)
-        self.value_proj = nn.Linear(config.d_model, config.d_model)
-        self.output_proj = nn.Linear(config.d_model, config.d_model)
-
-        self.disable_custom_kernels = config.disable_custom_kernels
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        position_embeddings: torch.Tensor | None = None,
-        reference_points=None,
-        spatial_shapes=None,
-        spatial_shapes_list=None,
-        level_start_index=None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        # add position embeddings to the hidden states before projecting to queries and keys
-        if position_embeddings is not None:
-            hidden_states = hidden_states + position_embeddings
-
-        batch_size, num_queries, _ = hidden_states.shape
-        batch_size, sequence_length, _ = encoder_hidden_states.shape
-        total_elements = sum(height * width for height, width in spatial_shapes_list)
-        torch_compilable_check(
-            total_elements == sequence_length,
-            "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
-        )
-
-        value = self.value_proj(encoder_hidden_states)
-        if attention_mask is not None:
-            # we invert the attention_mask
-            value = value.masked_fill(~attention_mask[..., None], float(0))
-        value = value.view(batch_size, sequence_length, self.n_heads, self.d_model // self.n_heads)
-        sampling_offsets = self.sampling_offsets(hidden_states).view(
-            batch_size, num_queries, self.n_heads, self.n_levels, self.n_points, 2
-        )
-        attention_weights = self.attention_weights(hidden_states).view(
-            batch_size, num_queries, self.n_heads, self.n_levels * self.n_points
-        )
-        attention_weights = F.softmax(attention_weights, -1).view(
-            batch_size, num_queries, self.n_heads, self.n_levels, self.n_points
-        )
-        # batch_size, num_queries, n_heads, n_levels, n_points, 2
-        num_coordinates = reference_points.shape[-1]
-        if num_coordinates == 2:
-            offset_normalizer = torch.stack([spatial_shapes[..., 1], spatial_shapes[..., 0]], -1)
-            sampling_locations = (
-                reference_points[:, :, None, :, None, :]
-                + sampling_offsets / offset_normalizer[None, None, None, :, None, :]
-            )
-        elif num_coordinates == 4:
-            sampling_locations = (
-                reference_points[:, :, None, :, None, :2]
-                + sampling_offsets / self.n_points * reference_points[:, :, None, :, None, 2:] * 0.5
-            )
-        else:
-            raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
-
-        output = self.attn(
-            value,
-            spatial_shapes,
-            spatial_shapes_list,
-            level_start_index,
-            sampling_locations,
-            attention_weights,
-            self.im2col_step,
-        )
-
-        output = self.output_proj(output)
-
-        return output, attention_weights
-
-
 @auto_docstring
 class PPDocLayoutV2PreTrainedModel(PreTrainedModel):
     config: PPDocLayoutV2Config
@@ -744,65 +582,7 @@ class PPDocLayoutV2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, PPDocLayoutV2ForObjectDetection):
-            if module.model.decoder.class_embed is not None:
-                for layer in module.model.decoder.class_embed:
-                    prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
-                    bias = float(-math.log((1 - prior_prob) / prior_prob))
-                    init.xavier_uniform_(layer.weight)
-                    init.constant_(layer.bias, bias)
-
-            if module.model.decoder.bbox_embed is not None:
-                for layer in module.model.decoder.bbox_embed:
-                    init.constant_(layer.layers[-1].weight, 0)
-                    init.constant_(layer.layers[-1].bias, 0)
-
-        elif isinstance(module, PPDocLayoutV2MultiscaleDeformableAttention):
-            init.constant_(module.sampling_offsets.weight, 0.0)
-            default_dtype = torch.get_default_dtype()
-            thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
-                2.0 * math.pi / module.n_heads
-            )
-            grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
-            grid_init = (
-                (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
-                .view(module.n_heads, 1, 1, 2)
-                .repeat(1, module.n_levels, module.n_points, 1)
-            )
-            for i in range(module.n_points):
-                grid_init[:, :, i, :] *= i + 1
-
-            init.copy_(module.sampling_offsets.bias, grid_init.view(-1))
-            init.constant_(module.attention_weights.weight, 0.0)
-            init.constant_(module.attention_weights.bias, 0.0)
-            init.xavier_uniform_(module.value_proj.weight)
-            init.constant_(module.value_proj.bias, 0.0)
-            init.xavier_uniform_(module.output_proj.weight)
-            init.constant_(module.output_proj.bias, 0.0)
-
-        elif isinstance(module, PPDocLayoutV2Model):
-            prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
-            bias = float(-math.log((1 - prior_prob) / prior_prob))
-            init.xavier_uniform_(module.enc_score_head.weight)
-            init.constant_(module.enc_score_head.bias, bias)
-
-        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-            if getattr(module, "running_mean", None) is not None:
-                init.zeros_(module.running_mean)
-                init.ones_(module.running_var)
-                init.zeros_(module.num_batches_tracked)
-
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-
-        if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
-            init.xavier_uniform_(module.weight_embedding.weight)
-        if hasattr(module, "denoising_class_embed") and self.config.num_denoising > 0:
-            init.xavier_uniform_(module.denoising_class_embed.weight)
+        super()._init_weights(module)
         if isinstance(module, PPDocLayoutV2TextEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         if isinstance(module, nn.Embedding):
@@ -1427,6 +1207,168 @@ class PPDocLayoutV2CSPRepLayer(nn.Module):
         hidden_state_1 = self.bottlenecks(hidden_state_1)
         hidden_state_2 = self.conv2(hidden_state)
         return self.conv3(hidden_state_1 + hidden_state_2)
+
+
+@use_kernel_forward_from_hub("MultiScaleDeformableAttention")
+class MultiScaleDeformableAttention(nn.Module):
+    def forward(
+        self,
+        value: Tensor,
+        value_spatial_shapes: Tensor,
+        value_spatial_shapes_list: list[tuple],
+        level_start_index: Tensor,
+        sampling_locations: Tensor,
+        attention_weights: Tensor,
+        im2col_step: int,
+    ):
+        batch_size, _, num_heads, hidden_dim = value.shape
+        _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
+        value_list = value.split([height * width for height, width in value_spatial_shapes_list], dim=1)
+        sampling_grids = 2 * sampling_locations - 1
+        sampling_value_list = []
+        for level_id, (height, width) in enumerate(value_spatial_shapes_list):
+            # batch_size, height*width, num_heads, hidden_dim
+            # -> batch_size, height*width, num_heads*hidden_dim
+            # -> batch_size, num_heads*hidden_dim, height*width
+            # -> batch_size*num_heads, hidden_dim, height, width
+            value_l_ = (
+                value_list[level_id]
+                .flatten(2)
+                .transpose(1, 2)
+                .reshape(batch_size * num_heads, hidden_dim, height, width)
+            )
+            # batch_size, num_queries, num_heads, num_points, 2
+            # -> batch_size, num_heads, num_queries, num_points, 2
+            # -> batch_size*num_heads, num_queries, num_points, 2
+            sampling_grid_l_ = sampling_grids[:, :, :, level_id].transpose(1, 2).flatten(0, 1)
+            # batch_size*num_heads, hidden_dim, num_queries, num_points
+            sampling_value_l_ = nn.functional.grid_sample(
+                value_l_,
+                sampling_grid_l_,
+                mode="bilinear",
+                padding_mode="zeros",
+                align_corners=False,
+            )
+            sampling_value_list.append(sampling_value_l_)
+        # (batch_size, num_queries, num_heads, num_levels, num_points)
+        # -> (batch_size, num_heads, num_queries, num_levels, num_points)
+        # -> (batch_size, num_heads, 1, num_queries, num_levels*num_points)
+        attention_weights = attention_weights.transpose(1, 2).reshape(
+            batch_size * num_heads, 1, num_queries, num_levels * num_points
+        )
+        output = (
+            (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights)
+            .sum(-1)
+            .view(batch_size, num_heads * hidden_dim, num_queries)
+        )
+        return output.transpose(1, 2).contiguous()
+
+
+class PPDocLayoutV2MultiscaleDeformableAttention(nn.Module):
+    """
+    Multiscale deformable attention as proposed in Deformable DETR.
+    """
+
+    def __init__(self, config: PPDocLayoutV2Config, num_heads: int, n_points: int):
+        super().__init__()
+
+        self.attn = MultiScaleDeformableAttention()
+
+        if config.d_model % num_heads != 0:
+            raise ValueError(
+                f"embed_dim (d_model) must be divisible by num_heads, but got {config.d_model} and {num_heads}"
+            )
+        dim_per_head = config.d_model // num_heads
+        # check if dim_per_head is power of 2
+        if not ((dim_per_head & (dim_per_head - 1) == 0) and dim_per_head != 0):
+            warnings.warn(
+                "You'd better set embed_dim (d_model) in PPDocLayoutV2MultiscaleDeformableAttention to make the"
+                " dimension of each attention head a power of 2 which is more efficient in the authors' CUDA"
+                " implementation."
+            )
+
+        self.im2col_step = 64
+
+        self.d_model = config.d_model
+        self.n_levels = config.num_feature_levels
+        self.n_heads = num_heads
+        self.n_points = n_points
+
+        self.sampling_offsets = nn.Linear(config.d_model, num_heads * self.n_levels * n_points * 2)
+        self.attention_weights = nn.Linear(config.d_model, num_heads * self.n_levels * n_points)
+        self.value_proj = nn.Linear(config.d_model, config.d_model)
+        self.output_proj = nn.Linear(config.d_model, config.d_model)
+
+        self.disable_custom_kernels = config.disable_custom_kernels
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        position_embeddings: torch.Tensor | None = None,
+        reference_points=None,
+        spatial_shapes=None,
+        spatial_shapes_list=None,
+        level_start_index=None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        # add position embeddings to the hidden states before projecting to queries and keys
+        if position_embeddings is not None:
+            hidden_states = hidden_states + position_embeddings
+
+        batch_size, num_queries, _ = hidden_states.shape
+        batch_size, sequence_length, _ = encoder_hidden_states.shape
+        total_elements = sum(height * width for height, width in spatial_shapes_list)
+        torch_compilable_check(
+            total_elements == sequence_length,
+            "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
+        )
+
+        value = self.value_proj(encoder_hidden_states)
+        if attention_mask is not None:
+            # we invert the attention_mask
+            value = value.masked_fill(~attention_mask[..., None], float(0))
+        value = value.view(batch_size, sequence_length, self.n_heads, self.d_model // self.n_heads)
+        sampling_offsets = self.sampling_offsets(hidden_states).view(
+            batch_size, num_queries, self.n_heads, self.n_levels, self.n_points, 2
+        )
+        attention_weights = self.attention_weights(hidden_states).view(
+            batch_size, num_queries, self.n_heads, self.n_levels * self.n_points
+        )
+        attention_weights = F.softmax(attention_weights, -1).view(
+            batch_size, num_queries, self.n_heads, self.n_levels, self.n_points
+        )
+        # batch_size, num_queries, n_heads, n_levels, n_points, 2
+        num_coordinates = reference_points.shape[-1]
+        if num_coordinates == 2:
+            offset_normalizer = torch.stack([spatial_shapes[..., 1], spatial_shapes[..., 0]], -1)
+            sampling_locations = (
+                reference_points[:, :, None, :, None, :]
+                + sampling_offsets / offset_normalizer[None, None, None, :, None, :]
+            )
+        elif num_coordinates == 4:
+            sampling_locations = (
+                reference_points[:, :, None, :, None, :2]
+                + sampling_offsets / self.n_points * reference_points[:, :, None, :, None, 2:] * 0.5
+            )
+        else:
+            raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
+
+        output = self.attn(
+            value,
+            spatial_shapes,
+            spatial_shapes_list,
+            level_start_index,
+            sampling_locations,
+            attention_weights,
+            self.im2col_step,
+        )
+
+        output = self.output_proj(output)
+
+        return output, attention_weights
 
 
 class PPDocLayoutV2DecoderLayer(nn.Module):

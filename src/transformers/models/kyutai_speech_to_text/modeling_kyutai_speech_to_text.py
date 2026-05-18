@@ -50,45 +50,6 @@ if is_flash_attn_available():
 logger = logging.get_logger(__name__)
 
 
-class KyutaiSpeechToTextFlexibleLinear(nn.Module):
-    def __init__(self, input_size, output_size, num_layers):
-        super().__init__()
-        # Stack the weights for N layers into a single tensor (num_layers, output_size, input_size)
-        self.weight = nn.Parameter(torch.randn(num_layers, output_size, input_size))
-
-    def forward(self, x, layer_idx=None):
-        """
-        `KyutaiSpeechToTextFlexibleLinear` creates one linear layer per codebook. There's multiple ways to use it.
-        In the default case, `sequence_length=num_layers`, so each element of the sequence will be matmul to the weights corresponding to its index on the sequence.
-
-        For more advanced cases, one can specify which codebook's layer(s) to use with `layer_idx`.
-        If `layer_idx` indicates a single integer, all of the element of the sequence will be matmul to this single codebook's layer.
-        But if `layer_idx` is a tensor of shape `(seq_length,)`, it will matmul each i-th element of the input sequence to the corresponding layer `weight[i]`.
-
-
-        Args:
-            x (`torch.FloatTensor): input to the layer of shape `(batch, num_layers, embed_dim)` or of shape `(batch, seq_length, embed_dim)`
-            layer_idx (`torch.Tensor`, *optional*):
-                Can be used to specify which codebook's layers(s) to use.
-                If it's a tensor of shape `(seq_length,)`, will matmul each element of the sequence to the corresponding weights.
-                But if `layer_idx` is a tensor of shape `(seq_length,)`, it will matmul each i-th element of the input sequence to the corresponding layer `weight[i]`.
-        """
-
-        # Use torch.gather to select the corresponding weights for each sample
-        # (codebooks, output_size, hidden_size)
-        selected_weights = torch.index_select(self.weight, 0, layer_idx) if layer_idx is not None else self.weight
-
-        # (1, codebooks, hidden_size, output_size)
-        selected_weights = selected_weights.transpose(1, 2)[None, :, :, :]
-
-        # (batch_size, codebooks, 1, hidden_size) x (1, codebooks, hidden_size, output_size)
-        # -> (batch_size, codebooks, 1, output_size)
-        x = torch.matmul(x[:, :, None, :], selected_weights)
-
-        # (batch_size, codebooks, output_size)
-        return x.squeeze(2)
-
-
 @auto_docstring
 class KyutaiSpeechToTextPreTrainedModel(PreTrainedModel):
     config: KyutaiSpeechToTextConfig
@@ -104,8 +65,6 @@ class KyutaiSpeechToTextPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, KyutaiSpeechToTextFlexibleLinear):
-            init.normal_(module.weight)
         if isinstance(module, KyutaiSpeechToTextEmbeddings):
             audio_tokens_offsets = torch.arange(module.config.num_codebooks) * module.config.codebook_vocab_size
             audio_tokens_offsets += module.config.vocab_size
@@ -249,6 +208,45 @@ class KyutaiSpeechToTextRMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
+
+
+class KyutaiSpeechToTextFlexibleLinear(nn.Module):
+    def __init__(self, input_size, output_size, num_layers):
+        super().__init__()
+        # Stack the weights for N layers into a single tensor (num_layers, output_size, input_size)
+        self.weight = nn.Parameter(torch.randn(num_layers, output_size, input_size))
+
+    def forward(self, x, layer_idx=None):
+        """
+        `KyutaiSpeechToTextFlexibleLinear` creates one linear layer per codebook. There's multiple ways to use it.
+        In the default case, `sequence_length=num_layers`, so each element of the sequence will be matmul to the weights corresponding to its index on the sequence.
+
+        For more advanced cases, one can specify which codebook's layer(s) to use with `layer_idx`.
+        If `layer_idx` indicates a single integer, all of the element of the sequence will be matmul to this single codebook's layer.
+        But if `layer_idx` is a tensor of shape `(seq_length,)`, it will matmul each i-th element of the input sequence to the corresponding layer `weight[i]`.
+
+
+        Args:
+            x (`torch.FloatTensor): input to the layer of shape `(batch, num_layers, embed_dim)` or of shape `(batch, seq_length, embed_dim)`
+            layer_idx (`torch.Tensor`, *optional*):
+                Can be used to specify which codebook's layers(s) to use.
+                If it's a tensor of shape `(seq_length,)`, will matmul each element of the sequence to the corresponding weights.
+                But if `layer_idx` is a tensor of shape `(seq_length,)`, it will matmul each i-th element of the input sequence to the corresponding layer `weight[i]`.
+        """
+
+        # Use torch.gather to select the corresponding weights for each sample
+        # (codebooks, output_size, hidden_size)
+        selected_weights = torch.index_select(self.weight, 0, layer_idx) if layer_idx is not None else self.weight
+
+        # (1, codebooks, hidden_size, output_size)
+        selected_weights = selected_weights.transpose(1, 2)[None, :, :, :]
+
+        # (batch_size, codebooks, 1, hidden_size) x (1, codebooks, hidden_size, output_size)
+        # -> (batch_size, codebooks, 1, output_size)
+        x = torch.matmul(x[:, :, None, :], selected_weights)
+
+        # (batch_size, codebooks, output_size)
+        return x.squeeze(2)
 
 
 class KyutaiSpeechToTextLinear(nn.Module):

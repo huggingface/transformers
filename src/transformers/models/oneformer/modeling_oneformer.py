@@ -2753,6 +2753,7 @@ class OneFormerPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
+        super()._init_weights(module)
         xavier_std = self.config.init_xavier_std
         std = self.config.init_std
         if isinstance(module, OneFormerTransformerModule):

@@ -604,12 +604,6 @@ class MiniMaxPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        std = self.config.initializer_range
-        if isinstance(module, MiniMaxExperts):
-            init.normal_(module.gate_up_proj, mean=0.0, std=std)
-            init.normal_(module.down_proj, mean=0.0, std=std)
-        elif isinstance(module, MiniMaxTopKRouter):
-            init.normal_(module.weight, mean=0.0, std=std)
         if isinstance(module, MiniMaxLightningAttention):
             slope_rate = module.get_slope_rate()
             query_decay, key_decay, diagonal_decay = module.decay_factors(slope_rate)

@@ -802,31 +802,6 @@ class EdgeTamVideoFeedForward(nn.Module):
         return hidden_states
 
 
-class EdgeTamVideoPositionalEmbedding(nn.Module):
-    def __init__(self, config: EdgeTamVideoPromptEncoderConfig):
-        super().__init__()
-        self.scale = config.scale
-        positional_embedding = self.scale * torch.randn((2, config.hidden_size // 2))
-        self.register_buffer("positional_embedding", positional_embedding)
-
-    def forward(self, input_coords, input_shape=None):
-        """Positionally encode points that are normalized to [0,1]."""
-        coordinates = input_coords.clone()
-
-        if input_shape is not None:
-            coordinates[:, :, :, 0] = coordinates[:, :, :, 0] / input_shape[1]
-            coordinates[:, :, :, 1] = coordinates[:, :, :, 1] / input_shape[0]
-        coordinates.to(torch.float32)
-
-        # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
-        coordinates = 2 * coordinates - 1
-        coordinates = coordinates.to(self.positional_embedding.dtype)
-        coordinates = coordinates @ self.positional_embedding
-        coordinates = 2 * np.pi * coordinates
-        # outputs d_1 x ... x d_n x channel shape
-        return torch.cat([torch.sin(coordinates), torch.cos(coordinates)], dim=-1)
-
-
 @auto_docstring
 class EdgeTamVideoPreTrainedModel(PreTrainedModel):
     config_class = EdgeTamVideoConfig
@@ -839,25 +814,7 @@ class EdgeTamVideoPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, EdgeTamVideoModel):
-            if module.no_memory_positional_encoding is not None:
-                init.zeros_(module.no_memory_positional_encoding)
-            if module.memory_temporal_positional_encoding is not None:
-                init.zeros_(module.memory_temporal_positional_encoding)
-            if module.no_object_pointer is not None:
-                init.zeros_(module.no_object_pointer)
-            if module.occlusion_spatial_embedding_parameter is not None:
-                init.zeros_(module.occlusion_spatial_embedding_parameter)
-        if isinstance(module, EdgeTamVideoMemoryFuserCXBlock):
-            if module.scale is not None:
-                init.zeros_(module.scale)
-        elif isinstance(module, EdgeTamVideoVisionRotaryEmbedding):
-            inv_freq = module.create_inv_freq()
-            init.copy_(module.rope_embeddings_cos, inv_freq.cos())
-            init.copy_(module.rope_embeddings_sin, inv_freq.sin())
-        elif isinstance(module, EdgeTamVideoPositionalEmbedding):
-            init.normal_(module.positional_embedding, std=module.scale)
+        super()._init_weights()
         if isinstance(module, EdgeTamVideoVisionRotaryEmbedding):
             inv_freq = module.create_inv_freq()
             init.copy_(module.rope_embeddings_cos, inv_freq.cos())
@@ -1613,6 +1570,31 @@ class EdgeTamVideoSegmentationOutput(ModelOutput):
     pred_masks: torch.FloatTensor | None = None
     object_score_logits: torch.FloatTensor | None = None
     frame_idx: int | None = None
+
+
+class EdgeTamVideoPositionalEmbedding(nn.Module):
+    def __init__(self, config: EdgeTamVideoPromptEncoderConfig):
+        super().__init__()
+        self.scale = config.scale
+        positional_embedding = self.scale * torch.randn((2, config.hidden_size // 2))
+        self.register_buffer("positional_embedding", positional_embedding)
+
+    def forward(self, input_coords, input_shape=None):
+        """Positionally encode points that are normalized to [0,1]."""
+        coordinates = input_coords.clone()
+
+        if input_shape is not None:
+            coordinates[:, :, :, 0] = coordinates[:, :, :, 0] / input_shape[1]
+            coordinates[:, :, :, 1] = coordinates[:, :, :, 1] / input_shape[0]
+        coordinates.to(torch.float32)
+
+        # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
+        coordinates = 2 * coordinates - 1
+        coordinates = coordinates.to(self.positional_embedding.dtype)
+        coordinates = coordinates @ self.positional_embedding
+        coordinates = 2 * np.pi * coordinates
+        # outputs d_1 x ... x d_n x channel shape
+        return torch.cat([torch.sin(coordinates), torch.cos(coordinates)], dim=-1)
 
 
 class EdgeTamVideoMaskEmbedding(nn.Module):

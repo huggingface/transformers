@@ -67,7 +67,6 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
     do_resize = True
     do_rescale = True
     do_normalize = True
-    do_convert_rgb = True
     do_sample_frames = True
     patch_size = 14
     temporal_patch_size = 2

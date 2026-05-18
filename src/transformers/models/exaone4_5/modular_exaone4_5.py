@@ -196,6 +196,7 @@ class Exaone4_5_PreTrainedModel(Exaone4PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
 
     def _init_weights(self, module):
+        super()._init_weights(module)
         PreTrainedModel._init_weights(module)
         if isinstance(module, Exaone4_5_VisionRotaryEmbedding):
             inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))

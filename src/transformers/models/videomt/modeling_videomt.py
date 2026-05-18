@@ -19,7 +19,6 @@
 # limitations under the License.
 
 import collections.abc
-import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -28,7 +27,6 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput, is_scipy_available, requires_backends
 from ...modeling_layers import GradientCheckpointingLayer
@@ -377,6 +375,80 @@ class VideomtForUniversalSegmentationOutput(ModelOutput):
     last_hidden_state: torch.FloatTensor | None = None
     hidden_states: tuple[torch.FloatTensor] | None = None
     attentions: tuple[torch.FloatTensor] | None = None
+
+
+@auto_docstring
+class VideomtPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config: VideomtConfig
+    base_model_prefix = "videomt"
+    main_input_name = "pixel_values_videos"
+    input_modalities = ("video",)
+    supports_gradient_checkpointing = False
+    _no_split_modules = ["VideomtLayer"]
+    _supports_sdpa = True
+    _can_record_outputs = {
+        "hidden_states": VideomtLayer,
+        "attentions": VideomtAttention,
+    }
+
+    @torch.no_grad()
+    def _init_weights(self, module: nn.Module) -> None:
+        super()._init_weights(module)
+        if isinstance(module, VideomtEmbeddings):
+            nn.init.zeros_(module.mask_token)
+
+
+class VideomtLayerNorm2d(nn.LayerNorm):
+    def __init__(self, num_channels, eps=1e-6, affine=True):
+        super().__init__(num_channels, eps=eps, elementwise_affine=affine)
+
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state = hidden_state.permute(0, 2, 3, 1)
+        hidden_state = F.layer_norm(hidden_state, self.normalized_shape, self.weight, self.bias, self.eps)
+        hidden_state = hidden_state.permute(0, 3, 1, 2)
+        return hidden_state
+
+
+class VideomtScaleLayer(nn.Module):
+    def __init__(self, config: VideomtConfig):
+        super().__init__()
+        hidden_size = config.hidden_size
+        self.conv1 = nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=2, stride=2)
+        self.activation = ACT2FN[config.hidden_act]
+        self.conv2 = nn.Conv2d(
+            hidden_size,
+            hidden_size,
+            kernel_size=3,
+            padding=1,
+            groups=hidden_size,
+            bias=False,
+        )
+
+        self.layernorm2d = VideomtLayerNorm2d(hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.conv1(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        hidden_states = self.conv2(hidden_states)
+        hidden_states = self.layernorm2d(hidden_states)
+        return hidden_states
+
+
+class VideomtScaleBlock(nn.Module):
+    def __init__(self, config: VideomtConfig):
+        super().__init__()
+        self.num_blocks = config.num_upscale_blocks
+        self.block = nn.ModuleList([VideomtScaleLayer(config) for _ in range(self.num_blocks)])
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        for block in self.block:
+            hidden_states = block(hidden_states)
+        return hidden_states
 
 
 # Adapted from https://github.com/facebookresearch/detectron2/blob/main/projects/PointRend/point_rend/point_features.py
@@ -928,107 +1000,6 @@ class VideomtLoss(nn.Module):
 
         num_masks = torch.clamp(num_masks / world_size, min=1)
         return num_masks
-
-
-@auto_docstring
-class VideomtPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config: VideomtConfig
-    base_model_prefix = "videomt"
-    main_input_name = "pixel_values_videos"
-    input_modalities = ("video",)
-    supports_gradient_checkpointing = False
-    _no_split_modules = ["VideomtLayer"]
-    _supports_sdpa = True
-    _can_record_outputs = {
-        "hidden_states": VideomtLayer,
-        "attentions": VideomtAttention,
-    }
-
-    @torch.no_grad()
-    def _init_weights(self, module: nn.Module) -> None:
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            init.kaiming_uniform_(module.weight, a=math.sqrt(5))
-            if module.bias is not None:
-                fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(module.weight)
-                bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
-                init.uniform_(module.bias, -bound, bound)
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=1)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, VideomtLayerScale):
-            if hasattr(module, "lambda1"):
-                init.constant_(module.lambda1, self.config.layerscale_value)
-        elif isinstance(module, VideomtEmbeddings):
-            init.trunc_normal_(module.cls_token, mean=0.0, std=std)
-            init.zeros_(module.register_tokens)
-            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-        elif isinstance(module, VideomtLoss):
-            empty_weight = torch.ones(module.num_labels + 1)
-            empty_weight[-1] = module.eos_coef
-            init.copy_(module.empty_weight, empty_weight)
-        elif isinstance(module, VideomtForUniversalSegmentation):
-            init.ones_(module.attn_mask_probs)
-        if isinstance(module, VideomtEmbeddings):
-            nn.init.zeros_(module.mask_token)
-
-
-class VideomtLayerNorm2d(nn.LayerNorm):
-    def __init__(self, num_channels, eps=1e-6, affine=True):
-        super().__init__(num_channels, eps=eps, elementwise_affine=affine)
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state = hidden_state.permute(0, 2, 3, 1)
-        hidden_state = F.layer_norm(hidden_state, self.normalized_shape, self.weight, self.bias, self.eps)
-        hidden_state = hidden_state.permute(0, 3, 1, 2)
-        return hidden_state
-
-
-class VideomtScaleLayer(nn.Module):
-    def __init__(self, config: VideomtConfig):
-        super().__init__()
-        hidden_size = config.hidden_size
-        self.conv1 = nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=2, stride=2)
-        self.activation = ACT2FN[config.hidden_act]
-        self.conv2 = nn.Conv2d(
-            hidden_size,
-            hidden_size,
-            kernel_size=3,
-            padding=1,
-            groups=hidden_size,
-            bias=False,
-        )
-
-        self.layernorm2d = VideomtLayerNorm2d(hidden_size)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.conv1(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        hidden_states = self.conv2(hidden_states)
-        hidden_states = self.layernorm2d(hidden_states)
-        return hidden_states
-
-
-class VideomtScaleBlock(nn.Module):
-    def __init__(self, config: VideomtConfig):
-        super().__init__()
-        self.num_blocks = config.num_upscale_blocks
-        self.block = nn.ModuleList([VideomtScaleLayer(config) for _ in range(self.num_blocks)])
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        for block in self.block:
-            hidden_states = block(hidden_states)
-        return hidden_states
 
 
 class VideomtMaskHead(nn.Module):

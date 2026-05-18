@@ -195,98 +195,6 @@ class PeAudioContrastiveHead(nn.Module):
         return self.proj(self.layer_norm(x))
 
 
-class PeAudioMaskedGroupNorm(nn.GroupNorm):
-    def forward(self, x, padding_mask=None):
-        if padding_mask is None:
-            return super().forward(x)
-
-        batch_size, hidden_size, seq_len = x.shape
-        group_size = hidden_size // self.num_groups
-        grouped_shape = (batch_size, -1, group_size, seq_len)
-
-        x_grouped = x.view(grouped_shape)
-        padding_mask_grouped = padding_mask.reshape(grouped_shape).bool()
-
-        mean = torch.masked.mean(x_grouped, mask=padding_mask_grouped, dim=(2, 3), keepdim=True)
-        var = torch.masked.var(x_grouped, mask=padding_mask_grouped, dim=(2, 3), keepdim=True, unbiased=False)
-
-        x_norm = (x_grouped - mean) / torch.sqrt(var + self.eps)
-        x_norm = x_norm.view(x.shape)
-
-        if self.affine:
-            x_norm = x_norm * self.weight.view(1, -1, 1) + self.bias.view(1, -1, 1)
-
-        return x_norm * padding_mask
-
-
-class PeAudioConvBlock1d(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.groupnorm = PeAudioMaskedGroupNorm(num_groups=1, num_channels=config.hidden_size)
-        self.activation = nn.SiLU()
-        self.project = nn.Conv1d(
-            in_channels=config.hidden_size,
-            out_channels=config.hidden_size,
-            kernel_size=3,
-            padding="same",
-        )
-
-    def forward(self, x, padding_mask=None):
-        x = self.groupnorm(x, padding_mask=padding_mask)
-        x = self.activation(x)
-        return self.project(x)
-
-
-class PeAudioResnetBlock1d(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.block1 = PeAudioConvBlock1d(config)
-        self.block2 = PeAudioConvBlock1d(config)
-
-    def forward(self, hidden_states, padding_mask=None):
-        """
-        Args:
-            hidden_states: (batch_size, seq_len, hidden_size)
-            padding_mask: (batch_size, seq_len)
-        Returns:
-            hidden_states: (batch_size, seq_len, hidden_size)
-        """
-        # transpose for convolutions
-        # (batch_size, seq_len, hidden_size) -> (batch_size, hidden_size, seq_len)
-        hidden_states = hidden_states.transpose(1, 2)
-
-        if padding_mask is not None:
-            padding_mask = padding_mask.unsqueeze(1).expand_as(hidden_states)
-
-        residual = hidden_states
-        hidden_states = self.block1(hidden_states, padding_mask=padding_mask)
-        hidden_states = self.block2(hidden_states, padding_mask=padding_mask)
-        hidden_states = residual + hidden_states
-
-        return hidden_states.transpose(1, 2)
-
-
-class PeAudioEncoderPatchEmbedder(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.resnet_block = PeAudioResnetBlock1d(config)
-        self.class_embedding = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-
-    def forward(self, inputs_embeds, padding_mask=None):
-        # Embedding step: prepend class token and run the ResNet block.
-        hidden_states = torch.cat(
-            [self.class_embedding.expand(inputs_embeds.size(0), -1, -1), inputs_embeds],
-            dim=1,
-        )
-
-        if padding_mask is not None:
-            # TODO: any reason why we take padding_mask[0] and not just 1?
-            padding_mask = torch.cat([padding_mask[:, [0]], padding_mask], dim=1)
-
-        hidden_states = self.resnet_block(hidden_states, padding_mask=padding_mask)
-        return hidden_states, padding_mask
-
-
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -512,16 +420,6 @@ class PeAudioPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-
-        if hasattr(self.config, "initializer_range"):
-            std = self.config.initializer_range
-        else:
-            # 0.02 is the standard default value across the library
-            std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
-
-        if isinstance(module, PeAudioEncoderPatchEmbedder):
-            embed_dim = module.class_embedding.shape[-1]
-            init.normal_(module.class_embedding, mean=0.0, std=embed_dim**-0.5 * std)
         if isinstance(module, nn.Conv1d):
             init.trunc_normal_(module.weight, std=0.02)
             init.constant_(module.bias, 0)
@@ -551,6 +449,98 @@ class PeAudioEncoderOutput(BaseModelOutputWithPooling):
 
     codec_features: torch.FloatTensor | None = None
     output_mask: tuple[torch.FloatTensor] | None = None
+
+
+class PeAudioMaskedGroupNorm(nn.GroupNorm):
+    def forward(self, x, padding_mask=None):
+        if padding_mask is None:
+            return super().forward(x)
+
+        batch_size, hidden_size, seq_len = x.shape
+        group_size = hidden_size // self.num_groups
+        grouped_shape = (batch_size, -1, group_size, seq_len)
+
+        x_grouped = x.view(grouped_shape)
+        padding_mask_grouped = padding_mask.reshape(grouped_shape).bool()
+
+        mean = torch.masked.mean(x_grouped, mask=padding_mask_grouped, dim=(2, 3), keepdim=True)
+        var = torch.masked.var(x_grouped, mask=padding_mask_grouped, dim=(2, 3), keepdim=True, unbiased=False)
+
+        x_norm = (x_grouped - mean) / torch.sqrt(var + self.eps)
+        x_norm = x_norm.view(x.shape)
+
+        if self.affine:
+            x_norm = x_norm * self.weight.view(1, -1, 1) + self.bias.view(1, -1, 1)
+
+        return x_norm * padding_mask
+
+
+class PeAudioConvBlock1d(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.groupnorm = PeAudioMaskedGroupNorm(num_groups=1, num_channels=config.hidden_size)
+        self.activation = nn.SiLU()
+        self.project = nn.Conv1d(
+            in_channels=config.hidden_size,
+            out_channels=config.hidden_size,
+            kernel_size=3,
+            padding="same",
+        )
+
+    def forward(self, x, padding_mask=None):
+        x = self.groupnorm(x, padding_mask=padding_mask)
+        x = self.activation(x)
+        return self.project(x)
+
+
+class PeAudioResnetBlock1d(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.block1 = PeAudioConvBlock1d(config)
+        self.block2 = PeAudioConvBlock1d(config)
+
+    def forward(self, hidden_states, padding_mask=None):
+        """
+        Args:
+            hidden_states: (batch_size, seq_len, hidden_size)
+            padding_mask: (batch_size, seq_len)
+        Returns:
+            hidden_states: (batch_size, seq_len, hidden_size)
+        """
+        # transpose for convolutions
+        # (batch_size, seq_len, hidden_size) -> (batch_size, hidden_size, seq_len)
+        hidden_states = hidden_states.transpose(1, 2)
+
+        if padding_mask is not None:
+            padding_mask = padding_mask.unsqueeze(1).expand_as(hidden_states)
+
+        residual = hidden_states
+        hidden_states = self.block1(hidden_states, padding_mask=padding_mask)
+        hidden_states = self.block2(hidden_states, padding_mask=padding_mask)
+        hidden_states = residual + hidden_states
+
+        return hidden_states.transpose(1, 2)
+
+
+class PeAudioEncoderPatchEmbedder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.resnet_block = PeAudioResnetBlock1d(config)
+        self.class_embedding = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+
+    def forward(self, inputs_embeds, padding_mask=None):
+        # Embedding step: prepend class token and run the ResNet block.
+        hidden_states = torch.cat(
+            [self.class_embedding.expand(inputs_embeds.size(0), -1, -1), inputs_embeds],
+            dim=1,
+        )
+
+        if padding_mask is not None:
+            # TODO: any reason why we take padding_mask[0] and not just 1?
+            padding_mask = torch.cat([padding_mask[:, [0]], padding_mask], dim=1)
+
+        hidden_states = self.resnet_block(hidden_states, padding_mask=padding_mask)
+        return hidden_states, padding_mask
 
 
 class PeAudioEncoderRotaryEmbedding(nn.Module):

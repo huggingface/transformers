@@ -100,6 +100,9 @@ SPECIAL_CASES_TO_ALLOW = {
     "ShieldGemma2Config": ["mm_tokens_per_image", "vision_config"],
     "Llama4VisionConfig": ["multi_modal_projector_bias", "norm_eps"],
     "ModernBertConfig": ["local_attention", "reference_compile"],
+    # Used at runtime by the parent RTDetrPreTrainedModel._init_weights via super() chain,
+    # which the in-directory static scan does not follow.
+    "PPDocLayoutV2Config": ["initializer_bias_prior_prob"],
     "ModernBertDecoderConfig": ["global_attn_every_n_layers", "local_attention", "local_rope_theta"],
     "SmolLM3Config": ["no_rope_layer_interval"],
     "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],

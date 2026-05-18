@@ -1116,8 +1116,6 @@ class GraniteMoeHybridPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, GraniteMoeHybridParallelExperts):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         if isinstance(module, GraniteMoeHybridMambaLayer):
             init.ones_(module.dt_bias)
             init.copy_(module.A_log, torch.log(torch.arange(1, module.num_heads + 1)))

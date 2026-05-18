@@ -727,6 +727,7 @@ class GroupViTPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
 
+        super()._init_weights(module)
         init_range = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.normal_(module.weight, mean=0.0, std=init_range)

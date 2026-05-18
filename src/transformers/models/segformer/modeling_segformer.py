@@ -371,6 +371,12 @@ class SegformerPreTrainedModel(PreTrainedModel):
     }
     _input_embed_layer = "patch_embeddings"
 
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        super()._init_weights(module)
+        raise NotImplementedError("No need to override this method")
+
 
 @auto_docstring
 class SegformerModel(SegformerPreTrainedModel):

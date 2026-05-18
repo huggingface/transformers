@@ -522,6 +522,7 @@ class SegformerPreTrainedModel(ViTPreTrainedModel):
     }
 
     def _init_weights(self, module):
+        super()._init_weights(module)
         raise NotImplementedError("No need to override this method")
 
 

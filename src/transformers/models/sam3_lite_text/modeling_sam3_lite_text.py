@@ -355,6 +355,7 @@ class Sam3LiteTextPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
+        super()._init_weights(module)
         if isinstance(module, Sam3LiteTextTextPositionEmbedding):
             init.normal_(module.position_embedding, std=module.position_embedding.shape[-1] ** -0.5)
         elif isinstance(module, Sam3LiteTextTextModel):
