@@ -69,6 +69,7 @@ class HCXVisionV2Config(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):
             model_type = self.vision_config.get("model_type", "qwen2_5_vl_vision")
+            # The Hub config uses the full Qwen2.5-VL type for the vision transformer.
             model_type = "qwen2_5_vl_vision" if model_type == "qwen2_5_vl" else model_type
             self.vision_config["model_type"] = model_type
             self.vision_config = CONFIG_MAPPING[model_type](**self.vision_config)
