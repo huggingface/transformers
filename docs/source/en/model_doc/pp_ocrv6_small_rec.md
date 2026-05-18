@@ -110,7 +110,3 @@ for result in results:
 ## PPOCRV6SmallRecEncoderWithSVTR
 
 [[autodoc]] PPOCRV6SmallRecEncoderWithSVTR
-
-## PPOCRV6SmallRecImageProcessor
-
-[[autodoc]] PPOCRV6SmallRecImageProcessor

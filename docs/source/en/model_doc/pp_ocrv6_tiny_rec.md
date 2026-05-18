@@ -106,7 +106,3 @@ for result in results:
 ## PPOCRV6TinyRecModel
 
 [[autodoc]] PPOCRV6TinyRecModel
-
-## PPOCRV6TinyRecImageProcessor
-
-[[autodoc]] PPOCRV6TinyRecImageProcessor
