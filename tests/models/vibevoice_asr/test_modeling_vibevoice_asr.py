@@ -209,16 +209,17 @@ class VibeVoiceAsrForConditionalGenerationModelTest(ModelTesterMixin, Generation
                 model_sdpa = model_class.from_pretrained(tmpdirname)
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
-                text_attn = "sdpa" if model.language_model._supports_sdpa else "eager"
+                language_model_sdpa = model_sdpa.base_model.language_model
+                text_attn = "sdpa" if language_model_sdpa._supports_sdpa else "eager"
 
                 self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-                self.assertTrue(model.language_model.config._attn_implementation == text_attn)
+                self.assertTrue(language_model_sdpa.config._attn_implementation == text_attn)
 
                 # Eager
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.eval().to(torch_device)
                 self.assertTrue(model_eager.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.language_model.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.base_model.language_model.config._attn_implementation == "eager")
 
                 for _, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
