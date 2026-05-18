@@ -314,6 +314,39 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
+## Tensor parallelism
+
+For models too large to fit on a single GPU, shard the weights across devices with tensor parallelism. Load the model with `tp_plan="auto"` and continuous batching reads the tensor parallel size from the model to size the paged KV cache per shard. See [Tensor parallelism](./tensor_parallelism) for the list of supported architectures and how sharding works.
+
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.generation import ContinuousBatchingConfig, GenerationConfig
+
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-32B",
+    attn_implementation="paged|flash_attention_2",
+    tp_plan="auto",
+)
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-32B")
+
+inputs = [tokenizer.encode(p) for p in ["Whats up?", "Name a cat breed."]]
+generation_config = GenerationConfig(max_new_tokens=64, eos_token_id=tokenizer.eos_token_id)
+
+outputs = model.generate_batch(inputs=inputs, generation_config=generation_config)
+```
+
+Launch the script with `torchrun`, setting `--nproc-per-node` to the number of GPUs you want to shard across.
+
+```shell
+torchrun --nproc-per-node 4 cb_tp.py
+```
+
+The tensor parallel size must divide the model's `num_key_value_heads` (check the model config). The paged cache raises an error at startup otherwise, so choose an appropriate `--nproc-per-node`.
+
+> [!WARNING]
+> Don't set `device_map` with `tp_plan`. The two conflict because `device_map` places whole modules on specific GPUs, while `tp_plan` shards those same parameters across all GPUs.
+
 ## Sliding window attention
 
 Models with sliding window attention (Mistral, Gemma 2) work with continuous batching. To manually configure a sliding window for fine-tuning or custom experiments, set it in the model config before loading.
