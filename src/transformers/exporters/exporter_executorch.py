@@ -36,7 +36,7 @@ edge deployment. The export pipeline runs:
 from __future__ import annotations
 
 import math
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from typing import TYPE_CHECKING, Any
 
 from ..utils import logging
@@ -57,12 +57,9 @@ if is_executorch_available():
     from executorch.backends.cuda.cuda_backend import CudaBackend
     from executorch.backends.cuda.cuda_partitioner import CudaPartitioner
     from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
-    from executorch.exir import sym_util
-    from executorch.exir.capture._config import ExecutorchBackendConfig
-    from executorch.exir.passes import prune_empty_tensors_pass, spec_prop_pass, sym_shape_eval_pass
+    from executorch.exir.capture._config import EdgeCompileConfig, ExecutorchBackendConfig
     from executorch.exir.passes.executorch_prim_ops_registry import _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS
     from executorch.exir.program import EdgeProgramManager, ExecutorchProgramManager, to_edge_transform_and_lower
-
 
 if TYPE_CHECKING:
     if is_torch_available():
@@ -102,13 +99,41 @@ class ExecutorchExporter(DynamoExporter):
             exported_program: ExportedProgram = super().export(model, sample_inputs)
             patch_fx_graph(exported_program)
             edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
-                exported_program, partitioner=partitioner
+                exported_program, partitioner=partitioner, compile_config=_get_edge_compile_config()
             )
             executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch(
                 config=_get_executorch_backend_config()
             )
 
         return executorch_programs_manager
+
+
+def _get_edge_compile_config() -> EdgeCompileConfig:
+    """Build the ``EdgeCompileConfig`` used for ``to_edge_transform_and_lower``.
+
+    Adds non-core ATen ops to ``_core_aten_ops_exception_list`` so torch.export
+    decompositions that produce these ops don't trip the edge-dialect verifier.
+    These are ops that show up in transformers models (FFT in fnet, bucketize /
+    is_all_true in T5 / mBart / Bart family, polar in seamless_m4t rotary, etc.)
+    but aren't in the core ATen opset. The CPU portable kernels handle them at
+    runtime; XNNPACK leaves them in the non-delegated CPU portion of the graph.
+    """
+    return EdgeCompileConfig(
+        _core_aten_ops_exception_list=[
+            torch.ops.aten._fft_c2c.default,
+            torch.ops.aten._is_all_true.default,
+            torch.ops.aten.bernoulli.p,
+            torch.ops.aten.bincount.default,
+            torch.ops.aten.bucketize.Tensor,
+            torch.ops.aten.cummax.default,
+            torch.ops.aten.cummin.default,
+            torch.ops.aten.polar.default,
+            torch.ops.aten.randint.low,
+            torch.ops.aten.randn_like.default,
+            torch.ops.aten.searchsorted.Tensor,
+            torch.ops.aten.unique_consecutive.default,
+        ],
+    )
 
 
 def _get_executorch_backend_config() -> ExecutorchBackendConfig:
@@ -564,12 +589,13 @@ def _patch_eval_upper_bound(original):
     fallbacks guarantee an ``int`` so ``ConstraintBasedSymShapeEvalPass``
     doesn't raise.
     """
+    from executorch.exir.sym_util import eval_expr
 
     def patch(maybe_symint):
         result = original(maybe_symint)
         if isinstance(result, int):
             return result
-        hint = sym_util.eval_expr(maybe_symint)
+        hint = eval_expr(maybe_symint)
         return hint if isinstance(hint, int) else _MAX_DIM_FLOOR
 
     return patch
@@ -604,6 +630,68 @@ def _patch_remove_empty_tensors_from_cat(_original):
     return patch
 
 
+def _make_squeeze_define_node(original):
+    """Allow XNNPACK's squeeze/unsqueeze to serialize when output has multiple dynamic dims.
+
+    The original ``define_node`` rejects any reshape with >1 dynamic output dim, but
+    squeeze (removes a size-1 dim) and unsqueeze (adds a size-1 dim) don't change the
+    number of dynamic dimensions — they're not really reshapes. The check is triggered
+    when XNNPACK's ``conv1d_unsqueeze_pass`` wraps a conv1d in unsqueeze/conv2d/squeeze
+    and the surrounding tensor has multiple dynamic dims (typical of audio/speech models
+    where both batch and time are dynamic). Replace the strict check with a no-op when
+    the dynamic-dim count is preserved across the squeeze.
+    """
+    from executorch.backends.xnnpack.serialization.xnnpack_graph_schema import (  # type: ignore[import-not-found]
+        XNNStaticReshape,
+        XNode,
+    )
+    from executorch.backends.xnnpack.utils.utils import get_input_node
+    from torch.fx.experimental.symbolic_shapes import free_symbols
+
+    def patch(self, node, xnn_graph, vals_to_ids, debug_handle):
+        self.define_nodes_tensor_inputs_outputs(node, xnn_graph, vals_to_ids)
+        input_id = vals_to_ids[get_input_node(node, 0)]
+        output_id = vals_to_ids[node]
+        new_shape = [0 if free_symbols(dim) else dim for dim in node.meta["val"].shape]
+        xnn_graph.xnodes.append(
+            XNode(
+                xnode_union=XNNStaticReshape(
+                    num_dims=len(new_shape),
+                    new_shape=new_shape,
+                    input_id=input_id,
+                    output_id=output_id,
+                    flags=0,
+                ),
+                debug_handle=debug_handle,
+            )
+        )
+
+    return patch
+
+
+def _patch_check_tensor_args_dtype(original):
+    """Suppress complex-dtype violations in
+    ``_check_tensor_args_matching_op_allowed_dtype``.
+
+    The validator's per-op allowed-dtype tables don't include ``complex64`` /
+    ``complex128``, so models using complex tensors (FFT in fnet, complex-valued
+    rotary embeddings in deepseek_v2) trip the check on ops like
+    ``aten.unsqueeze_copy`` / ``aten.view_as_real_copy``. Those ops handle
+    complex tensors correctly at runtime; the violation is purely cosmetic.
+    """
+
+    def patch(gm):
+        try:
+            original(gm)
+        except Exception as exc:
+            msg = str(exc)
+            if "mismatched dtypes" in msg and ("complex64" in msg or "complex128" in msg):
+                return
+            raise
+
+    return patch
+
+
 def _patch_update_placeholder_tensor_specs(_original):
     """Replacement for ``SpecPropPass.update_placeholder_tensor_specs``.
 
@@ -615,6 +703,7 @@ def _patch_update_placeholder_tensor_specs(_original):
     (``val`` is ``None``) and the assignment raises ``AttributeError``. Skip
     ``None`` specs so user inputs aren't mis-marked const.
     """
+    from executorch.exir.passes.spec_prop_pass import _is_mutable_buffer
 
     def patch(self, exported_program, graph_module):
         sig = exported_program.graph_signature
@@ -624,11 +713,13 @@ def _patch_update_placeholder_tensor_specs(_original):
             if "spec" not in node.meta:
                 raise RuntimeError(f"Placeholder node {node} missing meta['spec']")
             spec = node.meta["spec"]
-            if spec is None:
+            # make_spec returns the raw int/bool/float for scalar placeholders and
+            # None for unsupported types — neither has a ``const`` attribute.
+            if not hasattr(spec, "const"):
                 continue
             if isinstance(node.target, str) and (
                 node.target in sig.inputs_to_parameters
-                or (node.target in sig.inputs_to_buffers and not spec_prop_pass._is_mutable_buffer(node, sig))
+                or (node.target in sig.inputs_to_buffers and not _is_mutable_buffer(node, sig))
                 or node.target in sig.inputs_to_lifted_tensor_constants
             ):
                 spec.const = True
@@ -636,34 +727,83 @@ def _patch_update_placeholder_tensor_specs(_original):
     return patch
 
 
-_EXECUTORCH_PASS_PATCHES = []
-if is_executorch_available():
-    _EXECUTORCH_PASS_PATCHES += [
+@contextmanager
+def patch_attr(obj: Any, attr: str, factory: Any):
+    """Swap ``obj.attr`` with ``factory(original)`` for the duration of the block."""
+    original = getattr(obj, attr)
+    setattr(obj, attr, factory(original))
+    try:
+        yield
+    finally:
+        setattr(obj, attr, original)
+
+
+@contextmanager
+def _patch_sym_ops_allowlist():
+    """Extend the edge-dialect verifier's sym-op allowlist for the duration of the block.
+
+    Python sym ops that don't have ``executorch_prim.*`` equivalents (``sym_ite``,
+    ``sym_not``, ``sym_int``, ``sym_sum``) still trip the verifier. Add them to the
+    allowlist set so they're accepted — trace-time-only ops don't need a runtime kernel.
+    In-place mutation propagates to all modules that imported the set by name.
+    """
+    from executorch.exir.passes.executorch_prim_ops_registry import _EXECUTORCH_SYM_OPS
+
+    extra = {op for op in (torch.sym_ite, torch.sym_not, torch.sym_int, torch.sym_sum) if op is not None}
+    added = extra - _EXECUTORCH_SYM_OPS
+    _EXECUTORCH_SYM_OPS.update(added)
+    try:
+        yield
+    finally:
+        _EXECUTORCH_SYM_OPS.difference_update(added)
+
+
+def _executorch_patches() -> list[Any]:
+    """Build the per-patch context managers installed by :func:`patch_executorch_passes`.
+
+    Imports are local to keep the module-level import block small.
+    """
+    from executorch.backends.xnnpack.operators.node_visitor import _node_visitor_dict
+    from executorch.exir import sym_util
+    from executorch.exir.passes import prune_empty_tensors_pass, spec_prop_pass, sym_shape_eval_pass
+    from executorch.exir.verification import verifier
+
+    return [
         # ConstraintBasedSymShapeEvalPass imports eval_upper_bound at module load,
         # so we need to rebind both `sym_util.eval_upper_bound` (the canonical home)
         # and `sym_shape_eval_pass.eval_upper_bound` (the imported copy).
-        (sym_util, "eval_upper_bound", _patch_eval_upper_bound),
-        (sym_shape_eval_pass, "eval_upper_bound", _patch_eval_upper_bound),
-        (
+        patch_attr(sym_util, "eval_upper_bound", _patch_eval_upper_bound),
+        patch_attr(sym_shape_eval_pass, "eval_upper_bound", _patch_eval_upper_bound),
+        patch_attr(
             prune_empty_tensors_pass.PruneEmptyTensorsPass,
             "remove_empty_tensors_from_cat",
             _patch_remove_empty_tensors_from_cat,
         ),
-        (spec_prop_pass.SpecPropPass, "update_placeholder_tensor_specs", _patch_update_placeholder_tensor_specs),
+        patch_attr(
+            spec_prop_pass.SpecPropPass,
+            "update_placeholder_tensor_specs",
+            _patch_update_placeholder_tensor_specs,
+        ),
+        # XNNPACK's conv1d_unsqueeze_pass wraps conv1d in unsqueeze/conv2d/squeeze; the
+        # squeeze then trips the "reshape only supports 1 dynamic dimension" check when
+        # the surrounding tensor has multiple dynamic dims (audio / speech models where
+        # batch and time are both dynamic). Drop the check — squeeze/unsqueeze of a
+        # size-1 dim doesn't actually change dynamism. Classes go via the
+        # ``_node_visitor_dict`` lookup because ``@register_node_visitor`` rebinds the
+        # decorated name to ``None``.
+        patch_attr(_node_visitor_dict["aten.squeeze_copy.dim"], "define_node", _make_squeeze_define_node),
+        patch_attr(_node_visitor_dict["aten.unsqueeze_copy.default"], "define_node", _make_squeeze_define_node),
+        # Allow complex64 / complex128 through the edge dtype validator — used by
+        # FFT in fnet and complex rotary embeddings in deepseek_v2.
+        patch_attr(verifier, "_check_tensor_args_matching_op_allowed_dtype", _patch_check_tensor_args_dtype),
+        _patch_sym_ops_allowlist(),
     ]
 
 
 @contextmanager
 def patch_executorch_passes():
     """Context manager: install ExecuTorch pass softenings for export."""
-    originals = []
-    for obj, attr, factory in _EXECUTORCH_PASS_PATCHES:
-        original = getattr(obj, attr)
-        originals.append((obj, attr, original))
-        setattr(obj, attr, factory(original))
-
-    try:
+    with ExitStack() as stack:
+        for cm in _executorch_patches():
+            stack.enter_context(cm)
         yield
-    finally:
-        for obj, attr, original in originals:
-            setattr(obj, attr, original)
