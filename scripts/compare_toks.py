@@ -1,7 +1,3 @@
-#compare toks
-
-#compare toks
-
 #!/usr/bin/env python
 import argparse
 import json
@@ -201,7 +197,7 @@ def _compare_results(prev_results, curr_results, prev_label: str = "Prev", curr_
             print(f"    diff_window : {marker}")
             print(f"    pattern     : {pattern}")
 
-    print(f"\n--- Token ID comparison ---")
+    print("\n--- Token ID comparison ---")
     print(f"Samples with different IDs: {len(ids_diffs)}/{n} ({100 * len(ids_diffs) / n:.1f}%)")
     if ids_diff_langs:
         print("ID diffs by language:")
@@ -319,6 +315,3 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-
-
