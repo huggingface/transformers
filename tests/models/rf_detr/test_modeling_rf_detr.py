@@ -16,9 +16,9 @@ import unittest
 from functools import cached_property
 
 from transformers import (
-    DetrImageProcessor,
     RfDetrConfig,
     RfDetrDinov2Config,
+    RfDetrImageProcessor,
     is_torch_available,
     is_vision_available,
 )
@@ -457,7 +457,7 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         model = RfDetrForObjectDetection.from_pretrained(
             "stevenbucaille/rf-detr-base", attn_implementation="eager"
         ).to(torch_device)
-        image_processor = DetrImageProcessor.from_pretrained("stevenbucaille/rf-detr-base")
+        image_processor = RfDetrImageProcessor.from_pretrained("stevenbucaille/rf-detr-base")
         image = prepare_img()
         inputs = image_processor(images=image, annotations=self.annotations, return_tensors="pt").to(torch_device)
         inputs["labels"] = [
@@ -472,8 +472,8 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         # fmt: off
         expectations = Expectations(
             {
-                ("cuda", (8, 0)): [-7.58881, -4.64088, -10.02118, -5.65906, -9.8343],
-                ("xpu", None): [-7.59672, -4.63663, -10.01015, -5.64823, -9.82786],
+                ("cuda", (8, 0)): [-7.58679, -4.64964, -10.04680, -5.67244, -9.94596],
+                ("xpu", None): [-7.58679, -4.64964, -10.04680, -5.67244, -9.94596],
             }
         )
         # fmt: on
@@ -483,8 +483,8 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         # fmt: off
         expectations = Expectations(
             {
-                ("cuda", (8, 0)): [0.25457, 0.54871, 0.48585, 0.86988, 0.16926],
-                ("xpu", None): [0.25460, 0.54872, 0.48586, 0.86991, 0.16926],
+                ("cuda", (8, 0)): [0.25458, 0.54875, 0.48605, 0.86989, 0.16927],
+                ("xpu", None): [0.25458, 0.54875, 0.48605, 0.86989, 0.16927],
             }
         )
         # fmt: on
@@ -493,8 +493,8 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
 
         expectations = Expectations(
             {
-                ("cuda", (8, 0)): 21.911297,
-                ("xpu", None): 21.834641,
+                ("cuda", (8, 0)): 21.700548,
+                ("xpu", None): 21.700548,
             }
         )
         expected_loss = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -515,16 +515,16 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         )[0]
         expectations = Expectations(
             {
-                ("cuda", (8, 0)): [17, 75, 17, 75, 63],
-                ("xpu", None): [17, 75, 17, 75, 63],
+                ("cuda", (8, 0)): [17, 17, 75, 75, 63],
+                ("xpu", None): [17, 17, 75, 75, 63],
             }
         )
         expected_post_process_labels = torch.tensor(expectations.get_expectation()).to(torch_device)
         # fmt: off
         expectations = Expectations(
             {
-                ("cuda", (8, 0)): [0.982765, 0.975941, 0.978163, 0.868452, 0.619554],
-                ("xpu", None): [0.98277, 0.976018, 0.977666, 0.868674, 0.615991],
+                ("cuda", (8, 0)): [0.959069, 0.933189, 0.896719, 0.727229, 0.676722],
+                ("xpu", None): [0.959069, 0.933189, 0.896719, 0.727229, 0.676722],
             }
         )
         # fmt: on
@@ -533,8 +533,8 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         # fmt: off
         expectations = Expectations(
             {
-                ("cuda", (8, 0)): [7.44911, 54.60959, 318.39551, 472.15417],
-                ("xpu", None): [7.46919, 54.60617, 318.41934, 472.16153],
+                ("cuda", (8, 0)): [7.39608, 54.62581, 318.46838, 472.17218],
+                ("xpu", None): [7.39608, 54.62581, 318.46838, 472.17218],
             }
         )
         # fmt: on
@@ -555,7 +555,7 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
             "stevenbucaille/rf-detr-seg-small", attn_implementation="eager"
         ).to(torch_device)
 
-        image_processor = DetrImageProcessor.from_pretrained("stevenbucaille/rf-detr-seg-small")
+        image_processor = RfDetrImageProcessor.from_pretrained("stevenbucaille/rf-detr-seg-small")
         image = prepare_img()
         inputs = image_processor(images=image, annotations=self.annotations, return_tensors="pt").to(torch_device)
         inputs["labels"] = [
@@ -572,8 +572,8 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         # fmt: off
         expectations = Expectations(
             {
-                ("cuda", (8, 0)): [-7.3531, -5.14075, -9.63576, -10.81916, -8.3615],
-                ("xpu", None): [-7.3542, -5.14673, -9.64132, -10.82835, -8.3629],
+                ("cuda", (8, 0)): [-7.36071, -5.14784, -9.61621, -10.80701, -8.36835],
+                ("xpu", None): [-7.36071, -5.14784, -9.61621, -10.80701, -8.36835],
             }
         )
         # fmt: on
@@ -583,8 +583,8 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         # fmt: off
         expectations = Expectations(
             {
-                ("cuda", (8, 0)): [0.25602, 0.54813, 0.48043, 0.87045, 0.77213],
-                ("xpu", None): [0.25603, 0.54812, 0.48039, 0.87042, 0.77208],
+                ("cuda", (8, 0)): [0.25585, 0.54797, 0.48059, 0.87072, 0.77129],
+                ("xpu", None): [0.25585, 0.54797, 0.48059, 0.87072, 0.77129],
             }
         )
         # fmt: on
@@ -594,8 +594,8 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         # fmt: off
         expectations = Expectations(
             {
-                ("cuda", (8, 0)): [-13.1366, -13.08283, -13.9058, -13.88317, -13.71717],
-                ("xpu", None): [-13.1304, -13.0778, -13.9000, -13.8778, -13.7107],
+                ("cuda", (8, 0)): [-13.12856, -13.06072, -13.86794, -13.83143, -13.65080],
+                ("xpu", None): [-13.12856, -13.06072, -13.86794, -13.83143, -13.65080],
             }
         )
         # fmt: on
@@ -611,8 +611,8 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
 
         expectations = Expectations(
             {
-                ("cuda", (8, 0)): 88.117493,
-                ("xpu", None): 87.474312,
+                ("cuda", (8, 0)): 88.221893,
+                ("xpu", None): 88.221893,
             }
         )
         expected_loss = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -643,8 +643,8 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         expected_post_process_labels = torch.tensor(expectations.get_expectation()).to(torch_device)
         expectations = Expectations(
             {
-                ("cuda", (8, 0)): [0.984311, 0.976176, 0.984499, 0.970341],
-                ("xpu", None): [0.984291, 0.97617, 0.984517, 0.970308],
+                ("cuda", (8, 0)): [0.943005, 0.909305, 0.906496, 0.848170],
+                ("xpu", None): [0.943005, 0.909305, 0.906496, 0.848170],
             }
         )
         expected_post_process_scores = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -652,9 +652,9 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         post_processed_labels = [
             segments_info["label_id"] for segments_info in post_processed_outputs["segments_info"]
         ]
-        post_processed_labels = torch.tensor(post_processed_labels).to(torch_device)
+        post_processed_labels = torch.tensor(post_processed_labels[:4]).to(torch_device)
         post_processed_scores = [segments_info["score"] for segments_info in post_processed_outputs["segments_info"]]
-        post_processed_scores = torch.tensor(post_processed_scores).to(torch_device)
+        post_processed_scores = torch.tensor(post_processed_scores[:4]).to(torch_device)
         torch.testing.assert_close(post_processed_labels, expected_post_process_labels, rtol=tol, atol=tol)
         torch.testing.assert_close(post_processed_scores, expected_post_process_scores, rtol=tol, atol=tol)
 

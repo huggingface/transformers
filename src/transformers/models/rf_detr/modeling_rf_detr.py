@@ -25,8 +25,8 @@ from dataclasses import dataclass
 from typing import Any
 
 import torch
+import torch.nn.functional as F
 from torch import Tensor, nn
-from torch.nn import functional as F
 
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
@@ -1647,8 +1647,6 @@ class RfDetrModel(RfDetrPreTrainedModel):
 
         # Step 2.
         enc_outputs_class_proposals = self.enc_out_class_embed[group_id](object_query)
-        invalid_mask = invalid_mask.to(enc_outputs_class_proposals.device)
-        enc_outputs_class_proposals = enc_outputs_class_proposals.masked_fill(invalid_mask, float("-inf"))
         delta_bbox = self.enc_out_bbox_embed[group_id](object_query)
 
         # Step 3.
@@ -1904,10 +1902,7 @@ class RfDetrInstanceSegmentationOutput(ModelOutput):
         unnormalized bounding boxes.
     pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height/4, width/4)`):
         Segmentation masks logits for all queries. See also
-        [`~DetrImageProcessor.post_process_semantic_segmentation`] or
-        [`~DetrImageProcessor.post_process_instance_segmentation`]
-        [`~DetrImageProcessor.post_process_panoptic_segmentation`] to evaluate semantic, instance and panoptic
-        segmentation masks respectively.
+        [`~RfDetrImageProcessor.post_process_instance_segmentation`] to obtain instance segmentation maps.
     auxiliary_outputs (`list[Dict]`, *optional*):
         Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
         and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
