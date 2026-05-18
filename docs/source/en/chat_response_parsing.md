@@ -82,7 +82,7 @@ for event in final_events:
     render(event)
 ```
 
-The parser will emit **events** as text is fed in, which indicate which region is currently being parsed. When
+The parser will emit **events** as text from the generation process is fed in. This indicates which region is currently being generated. When
 the region is complete, it will be emitted in a separate event with the fully parsed content. At the end of generation,
 the `finalize()` method flushes any remaining text and emits any final events, as well as the complete message dict.
 
