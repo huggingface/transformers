@@ -22,6 +22,7 @@ from ...generation.configuration_utils import ContinuousBatchingConfig
 from ...utils.generic import is_flash_attention_requested
 from ...utils.metrics import attach_tracer, traced
 from .cache_manager import BlockManager, CacheAllocator, FullAttentionCacheAllocator, SlidingAttentionCacheAllocator
+from .distributed import DistributedHelper
 from .initialization import resolve_max_memory_percent
 from .requests import RequestState, RequestStatus, get_device_and_memory_breakdown, logger
 
@@ -122,8 +123,9 @@ class PagedAttentionCache:
         config: PreTrainedConfig,
         continuous_batching_config: ContinuousBatchingConfig,
         device: torch.device | str,
+        distributed_helper: DistributedHelper,
+        tp_plan: dict[str, Any],
         dtype: torch.dtype = torch.float16,
-        tp_size: int | None = None,
     ) -> None:
         """Initialize a paged attention cache for efficient memory usage. Also turns in prefix sharing if the model has
         only full attention layers.
@@ -132,8 +134,9 @@ class PagedAttentionCache:
             config: Model configuration
             continuous_batching_config: Continuous batching configuration containing cache parameters
             device: Device for the cache tensors
+            distributed_helper: TP-aware helper. Used to dispatch attention heads and ensure coherent cache size
+            tp_plan: Tensor parallelism plan
             dtype: Data type of the cache
-            tp_size: Tensor parallelism size
         """
         self.config = config
         self.dtype = dtype
@@ -163,14 +166,23 @@ class PagedAttentionCache:
                 self.layer_index_to_group_indices[layer] = (i, j)
                 self.sliding_windows[layer] = sliding_window
 
-        # Handle TP (or dont)
-        if tp_size is not None and tp_size > 1:
+        # Check if the KV heads are part of the TP plan. If they are not, the cache does not need plan for TP.
+        # TODO: this is fragile. If your model fails to TP properly because of this, please open an issue.
+        kv_is_tp = True
+        for key in ["layers.*.self_attn.k_proj", "layers.*.self_attn.v_proj"]:
+            if not (key in tp_plan or "model." + key in tp_plan):
+                kv_is_tp = False
+                break
+
+        # If the KV heads are TP'ed, each KV head is dispatched to a different GPU, so the effective number of KV heads
+        # per GPU is simply divided by the TP size
+        tp_size = distributed_helper.tp_size
+        if tp_size > 1 and kv_is_tp:
             if self.num_key_value_heads % tp_size != 0:
                 raise ValueError(
                     f"Number of key value heads {self.num_key_value_heads} must be divisible by tensor parallel size {tp_size}."
                 )
-            # If the model is using tensor parallelism, we need to adjust the number of heads accordingly.
-            # self.num_key_value_heads //= tp_size # TODO: why is this commented out?
+            self.num_key_value_heads //= tp_size
 
         # Infer number of blocks and max batch tokens
         page_size = self.head_dim * self.num_key_value_heads
@@ -213,6 +225,12 @@ class PagedAttentionCache:
             max_memory_percent=continuous_batching_config.max_memory_percent,
             cache_dtype=self.dtype,
         )
+
+        # For TP, align num_blocks and max_batch_tokens to the minimal value across the TP group
+        if tp_size > 1:
+            sync = torch.tensor([num_blocks, max_batch_tokens], device=self.device, dtype=torch.int64)
+            distributed_helper.tp_all_reduce_min(sync)
+            num_blocks, max_batch_tokens = int(sync[0].item()), int(sync[1].item())
 
         # Add the inferred attributes to the class
         self.num_blocks = num_blocks
@@ -270,7 +288,7 @@ class PagedAttentionCache:
 
         # We only use prefix sharing if the whole model has only full attention layers and block sharing is allowed
         self.use_prefix_sharing = self.allow_block_sharing and group_types == ["full_attention"]
-        self._block_manager = BlockManager(num_blocks, self.block_size)
+        self._block_manager = BlockManager(num_blocks, self.block_size, tp_on=tp_size > 1)
         self._total_prefix_length: int = 0  # a counter to measure the impact of prefix sharing, also used in tests
 
         # For block table support, we lazy init the name of the block table key

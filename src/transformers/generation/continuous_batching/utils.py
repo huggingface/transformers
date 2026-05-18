@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import queue
 from collections import OrderedDict
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -206,6 +207,19 @@ def create_warmup_future_states(
             FutureRequestState(state, has_new_token=True, complete_blocks=0, query_length=num_q_tokens)
         )
     return future_states
+
+
+def drain_queue(request_queue: queue.Queue) -> list[RequestState]:
+    """Drains a queue and returns a list of RequestStates."""
+    new_states: list[RequestState] = []
+    while not request_queue.empty():
+        try:
+            state = request_queue.get_nowait()
+            if state is not None:
+                new_states.append(state)
+        except queue.Empty:
+            break
+    return new_states
 
 
 def get_cuda_pools():  # no type hint because it would make torch 2.4 crash
