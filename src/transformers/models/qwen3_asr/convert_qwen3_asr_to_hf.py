@@ -146,14 +146,9 @@ def clean_config(src_root: Path, model_type: str) -> dict:
         if model_type == "forced_aligner" and "classify_num" in thinker_config:
             config_dict["num_labels"] = thinker_config["classify_num"]
 
-    # Audio config: rename Whisper-style field names to canonical names used by Qwen3ASREncoderConfig.
-    # attribute_map only handles attribute access, not constructor kwargs, so we must rename here.
+    # Audio config: rename Whisper-style field names
     if "audio_config" in config_dict:
-        audio_renames = {
-            "d_model": "hidden_size",
-            "encoder_attention_heads": "num_attention_heads",
-            "encoder_ffn_dim": "intermediate_size",
-        }
+        audio_renames = {"encoder_attention_heads": "num_attention_heads"}
         for old_name, new_name in audio_renames.items():
             if old_name in config_dict["audio_config"]:
                 config_dict["audio_config"][new_name] = config_dict["audio_config"].pop(old_name)

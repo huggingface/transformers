@@ -23,7 +23,7 @@ import re
 
 import numpy as np
 
-from ...audio_utils import AudioInput, make_list_of_audio
+from ...audio_utils import AudioInput, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
@@ -170,7 +170,7 @@ class MusicFlamingoProcessor(ProcessorMixin):
 
         audio_inputs = {}
         if audio is not None:
-            audio = make_list_of_audio(audio)
+            audio = make_list_of_audio_chat_template(audio)
             if len(text) != len(audio):
                 raise ValueError(f"Got {len(text)} text but {len(audio)} audios; they must match 1:1.")
 

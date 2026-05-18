@@ -30,7 +30,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
-from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
+from ..llama.modeling_llama import eager_attention_forward
 from ..qwen2_audio.modeling_qwen2_audio import Qwen2AudioPreTrainedModel
 from ..qwen3_omni_moe.configuration_qwen3_omni_moe import Qwen3OmniMoeAudioEncoderConfig
 from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
@@ -59,22 +59,16 @@ class Qwen3ASREncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
         Dimensionality of the output.
     """
 
-    model_type = "qwen3_asr_audio_encoder"
-    attribute_map = {
-        "d_model": "hidden_size",
-        "encoder_attention_heads": "num_attention_heads",
-        "encoder_ffn_dim": "intermediate_size",
-    }
+    model_type = "qwen3_asr_encoder"
     encoder_layers: int = 24
     num_attention_heads: int = 16
     num_key_value_heads: int = 16
-    intermediate_size: int = 4096
-    hidden_size: int = 1024
+    encoder_ffn_dim: int = 4096
+    d_model: int = 1024
     attention_bias: bool = True
     conv_chunksize = AttributeError()
     encoder_attention_heads = AttributeError()
-    d_model = AttributeError()
-    encoder_ffn_dim = AttributeError()
+    attribute_map = AttributeError()
 
 
 @auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B")
@@ -120,10 +114,10 @@ class Qwen3ASRConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
-            self.audio_config["model_type"] = self.audio_config.get("model_type", "qwen3_asr_audio_encoder")
+            self.audio_config["model_type"] = self.audio_config.get("model_type", "qwen3_asr_encoder")
             self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
         elif self.audio_config is None:
-            self.audio_config = CONFIG_MAPPING["qwen3_asr_audio_encoder"]()
+            self.audio_config = CONFIG_MAPPING["qwen3_asr_encoder"]()
 
         if isinstance(self.text_config, dict):
             self.text_config["model_type"] = self.text_config.get("model_type", "qwen3")
@@ -155,13 +149,29 @@ class Qwen3ASRPreTrainedModel(Qwen2AudioPreTrainedModel):
             position_embeddings = module.compute_default_singular_positional_embedding()
             init.copy_(module.positional_embedding, position_embeddings)
 
+    def _backward_compatibility_gradient_checkpointing(self):
+        # Override to not delete the attribute from the config (like `MBartEncoder`)
+        if self.supports_gradient_checkpointing and getattr(self.config, "gradient_checkpointing", False):
+            self.gradient_checkpointing_enable()
 
-class Qwen3ASRAttention(LlamaAttention):
+
+class Qwen3ASRAttention(nn.Module):
     """Bidirectional multi-head attention with no RoPE"""
 
     def __init__(self, config: Qwen3ASREncoderConfig, layer_idx: int | None = None):
-        super().__init__(config, layer_idx)
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.head_dim = config.d_model // config.num_attention_heads
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
         self.is_causal = False
+
+        self.q_proj = nn.Linear(config.d_model, config.num_attention_heads * self.head_dim, bias=config.attention_bias)
+        self.k_proj = nn.Linear(config.d_model, config.num_key_value_heads * self.head_dim, bias=config.attention_bias)
+        self.v_proj = nn.Linear(config.d_model, config.num_key_value_heads * self.head_dim, bias=config.attention_bias)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.d_model, bias=config.attention_bias)
 
     def forward(
         self,
@@ -213,8 +223,6 @@ class Qwen3ASREncoderLayer(WhisperEncoderLayer):
 )
 class Qwen3ASREncoder(Qwen3OmniMoeAudioEncoder):
     config: Qwen3ASREncoderConfig
-    _no_split_modules = ["Qwen3ASREncoderLayer"]
-    _can_compile_fullgraph = True
     _can_record_outputs = {
         "hidden_states": Qwen3ASREncoderLayer,
         "attentions": Qwen3ASRAttention,
@@ -249,6 +257,7 @@ class Qwen3ASREncoder(Qwen3OmniMoeAudioEncoder):
         chunk_len = self.n_window * 2
         num_chunks = padded_feature_length // chunk_len
 
+        # Unlike `Qwen3OmniMoeAudioEncoder`, padding of chunks is moved to feature extractor
         chunked = (
             input_features.view(batch_size, num_mel_bins, num_chunks, chunk_len)
             .permute(0, 2, 1, 3)
@@ -294,7 +303,7 @@ class Qwen3ASREncoder(Qwen3OmniMoeAudioEncoder):
 class Qwen3ASRModel(Qwen3ASRPreTrainedModel):
     def __init__(self, config: Qwen3ASRConfig):
         super().__init__(config)
-        self.audio_tower = Qwen3ASREncoder(config.audio_config)
+        self.audio_tower = AutoModel.from_config(config.audio_config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
@@ -416,12 +425,7 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
+    @can_return_tuple
     @auto_docstring
     def get_audio_features(
         self,

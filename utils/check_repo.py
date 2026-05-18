@@ -283,7 +283,6 @@ IGNORE_NON_TESTED = (
         "Gemma4VisionModel",  # Building part of a bigger model, tested implicitly
         "Gemma4AudioModel",  # Building part of a bigger model, tested implicitly
         "Sam3LiteTextTextModel",  # Building part of a bigger model, tested implicitly through Sam3LiteTextModel
-        "Qwen3ASRForTokenClassification",  # Base model tested via Qwen3ASRForConditionalGeneration, and outputs via integration tests
         "Exaone4_5_VisionModel",  # Building part of a bigger model
         "Granite4VisionTextModel",  # Building part of bigger (tested) model. Tested implicitly through Granite4VisionModel.
     ]

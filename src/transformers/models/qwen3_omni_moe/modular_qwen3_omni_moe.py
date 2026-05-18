@@ -907,6 +907,12 @@ class Qwen3OmniMoeAudioEncoder(Qwen2_5OmniAudioEncoder):
     def _get_feat_extract_output_lengths(self, input_lengths):
         raise NotImplementedError("Using the standalone function _get_feat_extract_output_lengths instead.")
 
+    def padded_and_mask_function(self, tensor_list, tensor_len, padding_value=0, padding_side="right"):
+        raise NotImplementedError("Not needed")
+
+    def _prepare_attention_mask(self, inputs_tensor: torch.Tensor, cu_seqlens: torch.Tensor) -> torch.Tensor:
+        raise NotImplementedError("Not needed")
+
     def get_input_embeddings(self):
         return self.conv2d1
 

@@ -43,15 +43,12 @@ class Qwen3ASREncoderConfig(PreTrainedConfig):
         Dimensionality of the output.
     """
 
-    model_type = "qwen3_asr_audio_encoder"
-    attribute_map = {
-        "d_model": "hidden_size",
-        "encoder_attention_heads": "num_attention_heads",
-        "encoder_ffn_dim": "intermediate_size",
-    }
+    model_type = "qwen3_asr_encoder"
 
     num_mel_bins: int = 128
     encoder_layers: int = 24
+    encoder_ffn_dim: int = 4096
+    d_model: int = 1024
     dropout: float | int = 0.0
     attention_dropout: float | int = 0.0
     activation_function: str = "gelu"
@@ -66,8 +63,6 @@ class Qwen3ASREncoderConfig(PreTrainedConfig):
     downsample_hidden_size: int = 480
     num_attention_heads: int = 16
     num_key_value_heads: int = 16
-    intermediate_size: int = 4096
-    hidden_size: int = 1024
     attention_bias: bool = True
 
 
@@ -114,10 +109,10 @@ class Qwen3ASRConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
-            self.audio_config["model_type"] = self.audio_config.get("model_type", "qwen3_asr_audio_encoder")
+            self.audio_config["model_type"] = self.audio_config.get("model_type", "qwen3_asr_encoder")
             self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
         elif self.audio_config is None:
-            self.audio_config = CONFIG_MAPPING["qwen3_asr_audio_encoder"]()
+            self.audio_config = CONFIG_MAPPING["qwen3_asr_encoder"]()
 
         if isinstance(self.text_config, dict):
             self.text_config["model_type"] = self.text_config.get("model_type", "qwen3")

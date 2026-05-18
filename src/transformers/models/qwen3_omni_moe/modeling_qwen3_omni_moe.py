@@ -676,25 +676,6 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
     def set_input_embeddings(self, value):
         self.conv2d1 = value
 
-    def _prepare_attention_mask(self, inputs_tensor: torch.Tensor, cu_seqlens: torch.Tensor) -> torch.Tensor:
-        # Flash Attention 2 doesn't need a 4D mask and relies on `cu_seqlens/max_seqlen`
-        # NOTE: the created attention masl only approximates the ragged FA2 attention by
-        # allowing bidirectional attention within `cu_seqlens` blocks, and not attending between
-        # blocks. Though it will not be a 100% match for FA2's `varlen` path
-        if is_flash_attention_requested(self.config):
-            return None
-
-        seq_length = inputs_tensor.shape[0]
-        attention_mask = torch.full(
-            [1, 1, seq_length, seq_length],
-            torch.finfo(inputs_tensor.dtype).min,
-            device=inputs_tensor.device,
-            dtype=inputs_tensor.dtype,
-        )
-        for i in range(1, len(cu_seqlens)):
-            attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = 0
-        return attention_mask
-
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
@@ -767,44 +748,6 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
         hidden_states = self.act(hidden_states)
         hidden_states = self.proj2(hidden_states)
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
-
-    def padded_and_mask_function(self, tensor_list, tensor_len, padding_value=0, padding_side="right"):
-        """
-        Pads a sequence of tensors to their maximum length on indicated `padding_side`.
-        Then prepares a mask so that pad tokens are not attended to.
-        """
-        max_len = tensor_len.max()
-        dim = tensor_list[0].shape[0]
-        padded_tensor = torch.full(
-            size=(len(tensor_list), dim, max_len),
-            fill_value=padding_value,
-            dtype=self.dtype,
-            device=tensor_list[0].device,
-        )
-
-        batch_mask = torch.zeros(
-            (len(tensor_len), max_len),
-            dtype=torch.long,
-            device=padded_tensor.device,
-        )
-        for i, length in enumerate(tensor_len):
-            batch_mask[i, :length] = 1
-            padded_tensor[i, :, :length] = tensor_list[i]
-
-        feature_lens_after_cnn = (tensor_len - 1) // 2 + 1
-        max_len_after_cnn = feature_lens_after_cnn.max()
-        batch_mask_after_cnn = torch.zeros(
-            (len(tensor_len), max_len_after_cnn),
-            dtype=torch.long,
-            device=padded_tensor.device,
-        )
-        for i, length in enumerate(feature_lens_after_cnn):
-            batch_mask_after_cnn[i, :length] = 1
-        return (
-            padded_tensor,
-            batch_mask.unsqueeze(1),
-            batch_mask_after_cnn.bool(),
-        )
 
 
 def rotate_half(x):

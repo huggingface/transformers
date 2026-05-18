@@ -50,11 +50,12 @@ class Qwen3ASRModelTester(ALMModelTester):
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("num_mel_bins", 20)
         kwargs.setdefault("feat_seq_length", 100)
-        kwargs.setdefault("hidden_size", 16)  # shared by audio encoder and text model; must match output_dim
+        kwargs.setdefault("d_model", 16)
+        kwargs.setdefault("hidden_size", 16)
         kwargs.setdefault("encoder_layers", 1)
         kwargs.setdefault("num_attention_heads", 2)
         kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("intermediate_size", 16)
+        kwargs.setdefault("encoder_ffn_dim", 16)
         kwargs.setdefault("output_dim", 16)
         kwargs.setdefault("downsample_hidden_size", 4)
         kwargs.setdefault("head_dim", 8)
@@ -77,7 +78,11 @@ class Qwen3ASRModelTester(ALMModelTester):
 @require_torch
 class Qwen3ASRForConditionalGenerationModelTest(ALMModelTest, unittest.TestCase):
     model_tester_class = Qwen3ASRModelTester
-    all_model_classes = (Qwen3ASRForConditionalGeneration, Qwen3ASRModel) if is_torch_available() else ()
+    all_model_classes = (
+        (Qwen3ASRForConditionalGeneration, Qwen3ASRModel, Qwen3ASRForTokenClassification)
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = (
         {
             "audio-text-to-text": Qwen3ASRForConditionalGeneration,
@@ -98,6 +103,8 @@ class Qwen3ASRForConditionalGenerationModelTest(ALMModelTest, unittest.TestCase)
     test_cpu_offload = False
     test_disk_offload_safetensors = False
     test_disk_offload_bin = False
+
+    # Getting: 'Qwen3ASRForConditionalGeneration' object has no attribute 'hf_device_map'
     test_model_parallelism = False
     test_model_parallel_beam_search = False
 

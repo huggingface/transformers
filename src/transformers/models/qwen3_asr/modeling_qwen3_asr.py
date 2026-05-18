@@ -30,14 +30,13 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GenericForTokenClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
-from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_qwen3_asr import Qwen3ASRConfig, Qwen3ASREncoderConfig
@@ -62,38 +61,10 @@ class Qwen3ASRPreTrainedModel(PreTrainedModel):
             position_embeddings = module.compute_default_singular_positional_embedding()
             init.copy_(module.positional_embedding, position_embeddings)
 
-
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-@use_kernel_func_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
+    def _backward_compatibility_gradient_checkpointing(self):
+        # Override to not delete the attribute from the config (like `MBartEncoder`)
+        if self.supports_gradient_checkpointing and getattr(self.config, "gradient_checkpointing", False):
+            self.gradient_checkpointing_enable()
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -133,7 +104,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class Qwen3ASRAttention(nn.Module):
     """Bidirectional multi-head attention with no RoPE"""
 
@@ -141,24 +111,16 @@ class Qwen3ASRAttention(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.head_dim = config.d_model // config.num_attention_heads
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = False
 
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
-        )
+        self.q_proj = nn.Linear(config.d_model, config.num_attention_heads * self.head_dim, bias=config.attention_bias)
+        self.k_proj = nn.Linear(config.d_model, config.num_key_value_heads * self.head_dim, bias=config.attention_bias)
+        self.v_proj = nn.Linear(config.d_model, config.num_key_value_heads * self.head_dim, bias=config.attention_bias)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.d_model, bias=config.attention_bias)
 
     def forward(
         self,
@@ -283,7 +245,6 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
         "hidden_states": Qwen3ASREncoderLayer,
         "attentions": Qwen3ASRAttention,
     }
-    _can_compile_fullgraph = True
 
     def __init__(self, config: Qwen3ASREncoderConfig):
         super().__init__(config)
@@ -324,25 +285,6 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
     def set_input_embeddings(self, value):
         self.conv2d1 = value
 
-    def _prepare_attention_mask(self, inputs_tensor: torch.Tensor, cu_seqlens: torch.Tensor) -> torch.Tensor:
-        # Flash Attention 2 doesn't need a 4D mask and relies on `cu_seqlens/max_seqlen`
-        # NOTE: the created attention masl only approximates the ragged FA2 attention by
-        # allowing bidirectional attention within `cu_seqlens` blocks, and not attending between
-        # blocks. Though it will not be a 100% match for FA2's `varlen` path
-        if is_flash_attention_requested(self.config):
-            return None
-
-        seq_length = inputs_tensor.shape[0]
-        attention_mask = torch.full(
-            [1, 1, seq_length, seq_length],
-            torch.finfo(inputs_tensor.dtype).min,
-            device=inputs_tensor.device,
-            dtype=inputs_tensor.dtype,
-        )
-        for i in range(1, len(cu_seqlens)):
-            attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = 0
-        return attention_mask
-
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
@@ -363,6 +305,7 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
         chunk_len = self.n_window * 2
         num_chunks = padded_feature_length // chunk_len
 
+        # Unlike `Qwen3OmniMoeAudioEncoder`, padding of chunks is moved to feature extractor
         chunked = (
             input_features.view(batch_size, num_mel_bins, num_chunks, chunk_len)
             .permute(0, 2, 1, 3)
@@ -404,44 +347,6 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
         hidden_states = self.proj2(hidden_states)
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
-    def padded_and_mask_function(self, tensor_list, tensor_len, padding_value=0, padding_side="right"):
-        """
-        Pads a sequence of tensors to their maximum length on indicated `padding_side`.
-        Then prepares a mask so that pad tokens are not attended to.
-        """
-        max_len = tensor_len.max()
-        dim = tensor_list[0].shape[0]
-        padded_tensor = torch.full(
-            size=(len(tensor_list), dim, max_len),
-            fill_value=padding_value,
-            dtype=self.dtype,
-            device=tensor_list[0].device,
-        )
-
-        batch_mask = torch.zeros(
-            (len(tensor_len), max_len),
-            dtype=torch.long,
-            device=padded_tensor.device,
-        )
-        for i, length in enumerate(tensor_len):
-            batch_mask[i, :length] = 1
-            padded_tensor[i, :, :length] = tensor_list[i]
-
-        feature_lens_after_cnn = (tensor_len - 1) // 2 + 1
-        max_len_after_cnn = feature_lens_after_cnn.max()
-        batch_mask_after_cnn = torch.zeros(
-            (len(tensor_len), max_len_after_cnn),
-            dtype=torch.long,
-            device=padded_tensor.device,
-        )
-        for i, length in enumerate(feature_lens_after_cnn):
-            batch_mask_after_cnn[i, :length] = 1
-        return (
-            padded_tensor,
-            batch_mask.unsqueeze(1),
-            batch_mask_after_cnn.bool(),
-        )
-
     @staticmethod
     def _post_cnn_length(lengths: torch.Tensor) -> torch.Tensor:
         """Length after three (k=3, s=2, p=1) convolutions; zero-length input stays zero."""
@@ -465,7 +370,7 @@ def _get_feat_extract_output_lengths(input_lengths, n_window=50):
 class Qwen3ASRModel(Qwen3ASRPreTrainedModel):
     def __init__(self, config: Qwen3ASRConfig):
         super().__init__(config)
-        self.audio_tower = Qwen3ASREncoder(config.audio_config)
+        self.audio_tower = AutoModel.from_config(config.audio_config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
@@ -587,12 +492,7 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
+    @can_return_tuple
     @auto_docstring
     def get_audio_features(
         self,

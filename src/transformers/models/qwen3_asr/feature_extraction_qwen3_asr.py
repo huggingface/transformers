@@ -13,16 +13,12 @@
 # limitations under the License.
 
 import numpy as np
+import torch
 
-from ... import is_torch_available
-from ...audio_utils import mel_filter_bank, spectrogram, window_function
+from ...audio_utils import mel_filter_bank
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
-
-
-if is_torch_available():
-    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -95,32 +91,6 @@ class Qwen3ASRFeatureExtractor(SequenceFeatureExtractor):
             norm="slaney",
             mel_scale="slaney",
         )
-
-    def _np_extract_fbank_features(self, waveform_batch: np.ndarray, device: str) -> np.ndarray:
-        """Compute log-mel spectrograms using a NumPy STFT."""
-        if device != "cpu":
-            raise ValueError(
-                f"Got device `{device}` for feature extraction, but feature extraction on CUDA accelerator "
-                "devices requires torch, which is not installed. Either set `device='cpu'`, or "
-                "install torch according to the official instructions: https://pytorch.org/get-started/locally/"
-            )
-        log_spec_batch = []
-        for waveform in waveform_batch:
-            log_spec = spectrogram(
-                waveform,
-                window_function(self.n_fft, "hann"),
-                frame_length=self.n_fft,
-                hop_length=self.hop_length,
-                power=2.0,
-                dither=self.dither,
-                mel_filters=self.mel_filters,
-                log_mel="log10",
-            )
-            log_spec = log_spec[:, :-1]
-            log_spec = np.maximum(log_spec, log_spec.max() - 8.0)
-            log_spec = (log_spec + 4.0) / 4.0
-            log_spec_batch.append(log_spec)
-        return np.array(log_spec_batch)
 
     def _torch_extract_fbank_features(self, waveform: np.ndarray, device: str = "cpu") -> np.ndarray:
         """Compute log-mel spectrograms using PyTorch's (optionally GPU-accelerated) STFT."""
@@ -231,10 +201,7 @@ class Qwen3ASRFeatureExtractor(SequenceFeatureExtractor):
         )
 
         input_features = padded_inputs.get("input_features").transpose(2, 0, 1)
-        extract_fbank_features = (
-            self._torch_extract_fbank_features if is_torch_available() else self._np_extract_fbank_features
-        )
-        input_features = extract_fbank_features(input_features[0], device)
+        input_features = self._torch_extract_fbank_features(input_features[0], device)
         padded_inputs["input_features"] = input_features
 
         # Rescale raw-sample attention mask to mel-frame resolution.

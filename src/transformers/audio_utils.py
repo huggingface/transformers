@@ -271,6 +271,30 @@ def make_list_of_audio(
     raise ValueError("Invalid input type. Must be a single audio or a list of audio")
 
 
+def make_list_of_audio_chat_template(
+    audio: list[AudioInput] | AudioInput | str | list[str],
+) -> AudioInput:
+    """
+    Ensure that the output is a list of audio. Unlike `make_list_of_audio`, this function also accepts a URL string or
+    local path, as accepted by chat templates.
+
+    Args:
+        audio (`Union[list[AudioInput], AudioInput]`):
+            The input audio. Can be a URL string, local path, numpy/torch array,  or a list of these.
+    Returns:
+        list: A list of audio.
+    """
+
+    # Handle string inputs
+    if isinstance(audio, str):
+        return [audio]
+    if isinstance(audio, (list, tuple)) and audio and all(isinstance(a, str) for a in audio):
+        return list(audio)
+
+    # Handle numpy/torch array inputs
+    return make_list_of_audio(audio)
+
+
 def hertz_to_mel(freq: float | np.ndarray, mel_scale: str = "htk") -> float | np.ndarray:
     """
     Convert frequency from hertz to mels.

@@ -17,7 +17,7 @@ import unicodedata
 
 import numpy as np
 
-from ...audio_utils import AudioInput, make_list_of_audio
+from ...audio_utils import AudioInput, make_list_of_audio, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import TextInput
@@ -69,7 +69,7 @@ FORCED_ALIGNER_LANGUAGES = {
 SUPPORTED_LANGUAGE_NAMES = set(LANGUAGE_CODE_TO_NAME.values())
 
 
-def _resolve_language(language: str | None) -> str | None:
+def resolve_language(language: str | None) -> str | None:
     """Map a language code or name to the canonical full name, with validation.
 
     Accepts language codes (e.g. ``"zh"``, ``"en"``) or full names
@@ -124,15 +124,6 @@ def _get_feat_extract_output_lengths(input_lengths, n_window=50):
     return output_lengths
 
 
-def _prepare_audio_inputs(audio: AudioInput) -> list:
-    """Normalize audio input(s) into a flat list."""
-    if isinstance(audio, str):
-        return [audio]
-    if isinstance(audio, (list, tuple)) and audio and all(isinstance(a, str) for a in audio):
-        return list(audio)
-    return make_list_of_audio(audio)
-
-
 def _prepare_language_inputs(
     language: str | list[str] | None, batch_size: int, allow_broadcast: bool = False
 ) -> list[str | None]:
@@ -140,18 +131,18 @@ def _prepare_language_inputs(
 
     Accepts language codes (e.g. ``"zh"``, ``"en"``) or full names
     (e.g. ``"Chinese"``, ``"English"``). Each value is resolved to the
-    canonical full language name via :func:`_resolve_language`.
+    canonical full language name via :func:`resolve_language`.
     """
     if language is None:
         return [None] * batch_size
     if isinstance(language, str):
-        return [_resolve_language(language)] * batch_size
+        return [resolve_language(language)] * batch_size
     if isinstance(language, (list, tuple)):
         if allow_broadcast and len(language) == 1 and batch_size > 1:
-            return [_resolve_language(language[0])] * batch_size
+            return [resolve_language(language[0])] * batch_size
         if len(language) != batch_size:
             raise ValueError(f"Got {len(language)} language(s) for {batch_size} sample(s); counts must match.")
-        return [_resolve_language(lang) for lang in language]
+        return [resolve_language(lang) for lang in language]
     raise TypeError("`language` must be a string, a list of strings, or `None`.")
 
 
@@ -444,7 +435,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
             [`BatchFeature`]: Processor outputs ready to be passed to
             [`Qwen3ASRForConditionalGeneration.generate`].
         """
-        audio_items = _prepare_audio_inputs(audio)
+        audio_items = make_list_of_audio_chat_template(audio)
         batch_size = len(audio_items)
         if batch_size == 0:
             raise ValueError("`audio` must contain at least one sample.")
@@ -635,7 +626,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
         if isinstance(transcript, str):
             transcript = [transcript]
 
-        audio_items = _prepare_audio_inputs(audio)
+        audio_items = make_list_of_audio_chat_template(audio)
         batch_size = len(audio_items)
         if len(transcript) != batch_size:
             raise ValueError(f"Got {len(transcript)} transcript(s) but {batch_size} audio(s); they must match 1:1.")

@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-01-29 and added to Hugging Face Transformers on 2026-05-13.*
+*This model was released on 2026-01-29 and added to Hugging Face Transformers on 2026-05-18.*
 
 # Qwen3 ASR
 
@@ -100,10 +100,10 @@ output_ids = model.generate(**inputs, max_new_tokens=256)
 generated_ids = output_ids[:, inputs["input_ids"].shape[1]:]
 print(f"Auto-detect: {processor.decode(generated_ids, return_format='transcription_only')[0]}")
 
-# With language hint
+# With language hint 
 inputs = processor.apply_transcription_request(
     audio="https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-ASR-Repo/asr_zh.wav",
-    language="Chinese",
+    language="Chinese",  # or language code "zh"
 ).to(model.device, model.dtype)
 output_ids = model.generate(**inputs, max_new_tokens=256)
 generated_ids = output_ids[:, inputs["input_ids"].shape[1]:]
