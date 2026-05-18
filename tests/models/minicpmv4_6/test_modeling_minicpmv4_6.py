@@ -415,7 +415,10 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         decoded_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        self.assertIn("cat", decoded_text.lower())
+        self.assertEqual(
+            "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
+            decoded_text,
+        )
 
     @slow
     def test_small_model_video_generation(self):
@@ -480,9 +483,11 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         decoded_texts = processor.batch_decode(output[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
 
-        self.assertEqual(len(decoded_texts), 2)
-        for text in decoded_texts:
-            self.assertIn("cat", text.lower())
+        expectation = [
+            "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
+            "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
+        ]
+        self.assertListEqual(decoded_texts, expectation)
 
     @slow
     def test_small_model_vision_generation_batch_mixed(self):
@@ -518,6 +523,8 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         decoded_texts = processor.batch_decode(output[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
 
-        self.assertEqual(len(decoded_texts), 2)
-        self.assertTrue(len(decoded_texts[0]) > 0)
-        self.assertTrue(len(decoded_texts[1]) > 0)
+        expectation = [
+            "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
+            "I'm a model from the MiniCPM series, developed by Modelbest and OpenBMB. For more details, you can visit https://github",
+        ]
+        self.assertListEqual(decoded_texts, expectation)
