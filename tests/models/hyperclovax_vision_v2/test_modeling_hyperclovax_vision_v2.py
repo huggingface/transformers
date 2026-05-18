@@ -234,27 +234,7 @@ class HCXVisionV2ModelTest(VLMModelTest, unittest.TestCase):
             self.assertIsNotNone(outputs)
 
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
-        # Conversion happens only for the `ConditionalGeneration` model, not the base model
-        try:
-            self.all_model_classes = (
-                (
-                    HCXVisionV2ForConditionalGeneration,
-                    HCXVisionV2ForSequenceClassification,
-                )
-                if is_torch_available()
-                else ()
-            )
-            super().test_reverse_loading_mapping(check_keys_were_modified)
-        finally:
-            self.all_model_classes = (
-                (
-                    HCXVisionV2Model,
-                    HCXVisionV2ForConditionalGeneration,
-                    HCXVisionV2ForSequenceClassification,
-                )
-                if is_torch_available()
-                else ()
-            )
+        super().test_reverse_loading_mapping(check_keys_were_modified, skip_base_model=True)
 
     @unittest.skip("Loading nested configs with overwritten `kwargs` isn't supported yet, FIXME @raushan.")
     def test_load_with_mismatched_shapes(self):
