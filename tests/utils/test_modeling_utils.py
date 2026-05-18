@@ -446,7 +446,7 @@ class ModelUtilsTest(TestCasePlus):
             def fake_apply_fsdp(model, fsdp_mesh, fsdp_plan):
                 call_order.append("distribute")
                 self.assertIs(fsdp_mesh, fake_mesh)
-                self.assertEqual(fsdp_plan, "auto")
+                self.assertIsNone(fsdp_plan)
                 return model
 
             def fake_load_pretrained_model(model, state_dict, checkpoint_files, load_config, expected_keys=None):
