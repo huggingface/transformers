@@ -262,14 +262,19 @@ class GgufExperts(nn.Module):
         return fwd(self, hidden_states, top_k_index, top_k_weights)
 
 
-# Registry of fused-expert classes keyed by ``model.config.model_type``. Same
-# entry today for the Qwen2/3 + MiniMaxM2 family — the byte layouts match.
-# Mixtral / DeepSeek-V3 use ``ModuleList[Linear]`` and don't need an entry —
-# their per-expert Linears get the standard ``Linear -> GgufLinear`` swap.
+# Registry of fused-expert classes keyed by ``model.config.model_type``. All
+# entries below use :class:`GgufExperts` because the in-memory layout is the
+# same — a single 3D ``gate_up_proj`` + 3D ``down_proj`` parameter fused on
+# the fly by the GGUF rename pipeline's merge ``WeightConverter``
+# (``ffn_gate_exps + ffn_up_exps → gate_up_proj``). Mixtral / DeepSeek-V3
+# share that layout via ``MixtralExperts`` and ``DeepseekV3NaiveMoe`` (which
+# subclasses MixtralExperts). New fused-expert archs just need an entry here.
 MODEL_TYPE_TO_GGUF_EXPERTS: dict[str, type[nn.Module]] = {
     "qwen2_moe": GgufExperts,
     "qwen3_moe": GgufExperts,
     "minimax_m2": GgufExperts,
+    "mixtral": GgufExperts,
+    "deepseek_v3": GgufExperts,
 }
 
 
