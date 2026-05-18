@@ -509,6 +509,7 @@ def torch_chunk_gated_delta_rule(
     initial_state=None,
     output_final_state=False,
     use_qk_l2norm_in_kernel=False,
+    **kwargs,
 ):
     initial_dtype = query.dtype
     if use_qk_l2norm_in_kernel:

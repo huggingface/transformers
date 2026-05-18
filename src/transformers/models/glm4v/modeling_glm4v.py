@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import itertools
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -40,8 +41,14 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
-from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
+from ...utils.generic import (
+    accepts_precomputed_kwargs,
+    is_flash_attention_requested,
+    maybe_autocast,
+    merge_with_config_defaults,
+)
 from ...utils.output_capturing import capture_outputs
+from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
 from .configuration_glm4v import Glm4vConfig, Glm4vTextConfig, Glm4vVisionConfig
 
 
@@ -110,10 +117,8 @@ class Glm4vVisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-    def forward(self, seqlen: int) -> torch.Tensor:
-        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        freqs = torch.outer(seq, self.inv_freq)
-        return freqs
+    def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
+        return (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
 
 
 class Glm4vVisionPatchMerger(nn.Module):
@@ -180,12 +185,11 @@ class Glm4vVisionEmbeddings(nn.Module):
         )
 
         # Calculate target dimensions for each patch
-        target_h = torch.cat([image_shapes[i, 1].repeat(lengths[i]) for i in range(len(lengths))]).to(
-            device=device, dtype=torch.float32
-        )
-        target_w = torch.cat([image_shapes[i, 2].repeat(lengths[i]) for i in range(len(lengths))]).to(
-            device=device, dtype=torch.float32
-        )
+        num_tokens = embeddings.shape[0]
+        token_positions = torch.arange(num_tokens, device=embeddings.device)
+        seq_ids = (token_positions.unsqueeze(0) >= lengths.cumsum(0).unsqueeze(1)).sum(0)
+        target_h = image_shapes[seq_ids, 1].to(dtype=torch.float32)
+        target_w = image_shapes[seq_ids, 2].to(dtype=torch.float32)
 
         # Normalize coordinates to [-1, 1] range for grid_sample
         norm_w = ((w_coords + 0.5) / target_w) * 2 - 1
@@ -728,33 +732,14 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         self.post_init()
 
     def rot_pos_emb(self, grid_thw):
-        pos_ids = []
-        for t, h, w in grid_thw:
-            hpos_ids = torch.arange(h).unsqueeze(1).expand(-1, w)
-            hpos_ids = hpos_ids.reshape(
-                h // self.spatial_merge_size,
-                self.spatial_merge_size,
-                w // self.spatial_merge_size,
-                self.spatial_merge_size,
-            )
-            hpos_ids = hpos_ids.permute(0, 2, 1, 3)
-            hpos_ids = hpos_ids.flatten()
-
-            wpos_ids = torch.arange(w).unsqueeze(0).expand(h, -1)
-            wpos_ids = wpos_ids.reshape(
-                h // self.spatial_merge_size,
-                self.spatial_merge_size,
-                w // self.spatial_merge_size,
-                self.spatial_merge_size,
-            )
-            wpos_ids = wpos_ids.permute(0, 2, 1, 3)
-            wpos_ids = wpos_ids.flatten()
-            pos_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
-        pos_ids = torch.cat(pos_ids, dim=0)
-        max_grid_size = grid_thw[:, 1:].max()
-        rotary_pos_emb_full = self.rotary_pos_emb(max_grid_size)
-        rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
-        return rotary_pos_emb, pos_ids
+        warnings.warn(
+            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in v5.11. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
+        rotary_pos_emb = self.rotary_pos_emb(position_ids)
+        return rotary_pos_emb, position_ids
 
     @merge_with_config_defaults
     @capture_outputs
@@ -771,28 +756,22 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         Returns:
             `torch.Tensor`: hidden_states.
         """
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+
         hidden_states = self.patch_embed(hidden_states)
         hidden_states = self.post_conv_layernorm(hidden_states)
-        rotary_pos_emb, image_type_ids = self.rot_pos_emb(grid_thw)
-        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
+        rotary_emb = self.rotary_pos_emb(position_ids)
+        emb = torch.cat((rotary_emb, rotary_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
 
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0,
-            # Select dtype based on the following factors:
-            #  - FA2 requires that cu_seqlens_q must have dtype int32
-            #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
-            # See https://github.com/huggingface/transformers/pull/34852 for more information
-            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
-        )
-        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
-        seqlens = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
+        seqlens = cu_seqlens[1:] - cu_seqlens[:-1]
         hidden_states = self.embeddings(
             hidden_states,
             seqlens,
             grid_thw,
-            image_type_ids[:, 0].to(hidden_states.device),
-            image_type_ids[:, 1].to(hidden_states.device),
+            position_ids[:, 0].to(hidden_states.device),
+            position_ids[:, 1].to(hidden_states.device),
         )
 
         for blk in self.blocks:
@@ -1097,6 +1076,7 @@ class Glm4vModel(Glm4vPreTrainedModel):
         mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, mrope_position_deltas
 
+    @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_features(
@@ -1113,12 +1093,12 @@ class Glm4vModel(Glm4vPreTrainedModel):
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         # reshape video_grid_thw -> [b, 3] -> [1, h, w] * frames
-        temp_frames_hw = []
-        video_grid_thw_list = video_grid_thw.tolist()
-        for t, h, w in video_grid_thw_list:
-            repeated_row = torch.tensor([1, h, w]).unsqueeze(0).repeat(t, 1)
-            temp_frames_hw.append(repeated_row)
-        flattened_video_grid_thw = torch.cat(temp_frames_hw, dim=0)
+        t = video_grid_thw[:, 0]
+        hw = video_grid_thw[:, 1:]
+        # repeat each (h,w) row `t` times
+        flattened_hw = torch.repeat_interleave(hw, t, dim=0)
+        prefix_ones = video_grid_thw.new_ones(flattened_hw.shape[0], 1)
+        flattened_video_grid_thw = torch.cat([prefix_ones, flattened_hw], dim=1)
         vision_outputs = self.visual(
             pixel_values_videos, grid_thw=flattened_video_grid_thw, return_dict=True, **kwargs
         )
@@ -1128,6 +1108,7 @@ class Glm4vModel(Glm4vPreTrainedModel):
 
         return vision_outputs
 
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -1273,13 +1254,17 @@ class Glm4vModel(Glm4vPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw, return_dict=True).pooler_output
+            image_embeds = self.get_image_features(
+                pixel_values, image_grid_thw, return_dict=True, **kwargs
+            ).pooler_output
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(input_ids, inputs_embeds, image_features=image_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, return_dict=True).pooler_output
+            video_embeds = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            ).pooler_output
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_features=video_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
@@ -1370,9 +1355,7 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
         """
-        return self.model.get_video_features(
-            pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs
-        )
+        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
 
     @auto_docstring
     def get_image_features(
@@ -1387,7 +1370,7 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        return self.model.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
+        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring
