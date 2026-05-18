@@ -399,7 +399,7 @@ class Molmo2IntegrationTest(unittest.TestCase):
 
     def setUp(self):
         self.processor = Molmo2Processor.from_pretrained(self.model_id)
-        self.prompt = f"{self.processor.tokenizer.bos_token}<|image|>Describe this image."
+        self.prompt = "<|image|>Describe this image."
         self.image = Image.open(requests.get(self.image_url, stream=True).raw)
 
     def tearDown(self):
@@ -507,7 +507,7 @@ class Molmo2O7BIntegrationTest(unittest.TestCase):
 
     def setUp(self):
         self.processor = Molmo2Processor.from_pretrained(self.model_id)
-        self.prompt = f"{self.processor.tokenizer.bos_token}<|image|>Describe this image."
+        self.prompt = "<|image|>Describe this image."
         self.image = Image.open(requests.get(self.image_url, stream=True).raw)
 
     def tearDown(self):
@@ -582,7 +582,7 @@ class Molmo2_8BIntegrationTest(unittest.TestCase):
 
     def setUp(self):
         self.processor = Molmo2Processor.from_pretrained(self.model_id)
-        self.prompt = f"{self.processor.tokenizer.bos_token}<|image|>Describe this image."
+        self.prompt = "<|image|>Describe this image."
         self.image = Image.open(requests.get(self.image_url, stream=True).raw)
 
     def tearDown(self):
