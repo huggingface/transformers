@@ -363,7 +363,6 @@ class MiniCPMV4_6ModelTest(VLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch_accelerator
-@unittest.skip(reason="waiting for release")
 class MiniCPMV4_6IntegrationTest(unittest.TestCase):
     model_id = "openbmb/MiniCPM-V-4_6"
 
@@ -417,6 +416,36 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         decoded_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         self.assertIn("cat", decoded_text.lower())
+
+    @slow
+    def test_small_model_video_generation(self):
+        processor = AutoProcessor.from_pretrained(self.model_id)
+        model = MiniCPMV4_6ForConditionalGeneration.from_pretrained(
+            self.model_id, device_map="auto", dtype=torch.bfloat16
+        )
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "video",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
+                    },
+                    {"type": "text", "text": "What is shown in this video?"},
+                ],
+            }
+        ]
+        inputs = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+        ).to(model.device, dtype=torch.bfloat16)
+
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        decoded_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+        self.assertEqual(
+            "The video shows two tennis players engaged in a match or practice session on an indoor tennis court. The player in the foreground is positioned at the net,",
+            decoded_text,
+        )
 
     @slow
     def test_small_model_vision_generation_batch(self):
