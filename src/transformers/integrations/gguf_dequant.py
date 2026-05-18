@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Inc. team and City96. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team and City96. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -9,9 +9,10 @@
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-"""Pure-PyTorch GGUF dequantization.
 
-Port of city96 / ComfyUI-GGUF (also used by diffusers' GGUF quantizer):
+"""
+!!!!      THIS ENTIRE CODE IS FULLY VENDORED    !!!!!!!!!!!!!
+SOURCES:
 https://github.com/city96/ComfyUI-GGUF/blob/main/dequant.py
 https://github.com/huggingface/diffusers/blob/main/src/diffusers/quantizers/gguf/utils.py
 
