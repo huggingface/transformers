@@ -52,7 +52,7 @@ class AudioFlamingo3EncoderLayer(WhisperEncoderLayer):
 
 
 class AudioFlamingo3PreTrainedModel(Qwen2AudioPreTrainedModel):
-    pass
+    _supports_attention_backend = True
 
 
 @dataclass
@@ -181,7 +181,6 @@ class AudioFlamingo3MultiModalProjector(VoxtralMultiModalProjector):
     """
 )
 class AudioFlamingo3Model(VoxtralModel):
-    _supports_attention_backend = True
     _tp_plan = None
     _pp_plan = None
     _keep_in_fp32_modules_strict = None

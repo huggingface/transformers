@@ -167,6 +167,7 @@ class VibeVoiceAsrPreTrainedModel(VibeVoiceAcousticTokenizerPreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
+    _supports_attention_backend = True
 
 
 @dataclass
@@ -219,8 +220,6 @@ class VibeVoiceAsrCausalLMOutputWithPast(ModelOutput):
     """
 )
 class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
-    _supports_attention_backend = True
-
     def __init__(self, config: VibeVoiceAsrConfig):
         super().__init__(config)
         self.acoustic_tokenizer_encoder = AutoModel.from_config(config.acoustic_tokenizer_encoder_config)

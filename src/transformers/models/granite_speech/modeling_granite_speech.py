@@ -285,6 +285,7 @@ class GraniteSpeechPreTrainedModel(PreTrainedModel):
 
     _supports_flash_attn = False  # `blip_2_qformer` dependency does not allow for this
     _supports_sdpa = True
+    _supports_attention_backend = True
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
@@ -348,8 +349,6 @@ class GraniteSpeechCTCEncoder(GraniteSpeechPreTrainedModel):
     """
 )
 class GraniteSpeechModel(GraniteSpeechPreTrainedModel):
-    _supports_attention_backend = True
-
     def __init__(self, config: GraniteSpeechConfig):
         super().__init__(config)
         self.encoder = GraniteSpeechCTCEncoder(config.encoder_config)
@@ -502,7 +501,6 @@ class GraniteSpeechModel(GraniteSpeechPreTrainedModel):
 )
 @forward_base_model_attrs(version="5.15")
 class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, GenerationMixin):
-    _supports_attention_backend = True
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: GraniteSpeechConfig):
