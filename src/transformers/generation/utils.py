@@ -57,6 +57,7 @@ from .candidate_generator import (
     CandidateGenerator,
     EarlyExitCandidateGenerator,
     PromptLookupCandidateGenerator,
+    SinglePositionMultiTokenCandidateGenerator,
     UniversalSpeculativeDecodingGenerator,
     _prepare_attention_mask,
     _prepare_position_ids,
@@ -567,6 +568,7 @@ class GenerationMixin(ContinuousMixin):
                 attention_mask=attention_mask,
                 past_key_values=model_inputs.get("past_key_values"),
                 position_ids=model_inputs.get(position_ids_key),
+                block_sequence_ids=model_inputs.get("block_sequence_ids"),
                 # The following kwargs are not used in the main function - only on a few models with overloaded `create_masks_for_generate`
                 token_type_ids=model_inputs.get("token_type_ids"),
                 mm_token_type_ids=model_inputs.get("mm_token_type_ids"),
@@ -983,6 +985,26 @@ class GenerationMixin(ContinuousMixin):
                 logits_processor=logits_processor,
                 vocab_size=self.config.get_text_config().vocab_size,
             )
+        # SinglePositionMultiTokenCandidateGenerator requires a target model that can provide, and an assistant model that
+        # can work from a shared_kv_states dictionary. Currently, the only models that can provide this are Gemma 3n and
+        # Gemma 4, and the only model that can work from it is a Gemma 4 Assistant
+        elif assistant_model is not None and assistant_model.__class__.__name__.startswith("Gemma4Assistant"):
+            if not self.__class__.__name__.startswith(("Gemma4", "Gemma3n")):
+                raise ValueError(
+                    f"Expected class name to start with Gemma4 or Gemma3n. Got {self.__class__.__name__}."
+                    " Gemma4Assistant models require a target model that provides a shared_kv_states dictionary."
+                    " Currently, only Gemma4 and Gemma3n provide a shared_kv_states dictionary."
+                )
+
+            candidate_generator = SinglePositionMultiTokenCandidateGenerator(
+                input_ids=input_ids,
+                assistant_model=assistant_model,
+                target_model_input_embeddings=self.get_input_embeddings(),
+                generation_config=generation_config,
+                model_kwargs=model_kwargs,
+                inputs_tensor=inputs_tensor,
+                logits_processor=logits_processor,
+            )
         elif different_tokenizers:
             assistant_model = cast("PreTrainedModel", assistant_model)
             target_tokenizer = cast("PreTrainedTokenizerBase", target_tokenizer)
@@ -1087,8 +1109,20 @@ class GenerationMixin(ContinuousMixin):
                 )
         if generation_config.repetition_penalty is not None and generation_config.repetition_penalty != 1.0:
             processors.append(RepetitionPenaltyLogitsProcessor(penalty=generation_config.repetition_penalty))
+            if not self.config.is_encoder_decoder and (input_ids_seq_length is None or input_ids_seq_length == 0):
+                warnings.warn(
+                    "Passing `repetition_penalty` with `inputs_embeds` and without `input_ids` to `generate` will "
+                    "apply the penalty only to newly generated tokens, not to the prompt.",
+                    UserWarning,
+                )
         if generation_config.no_repeat_ngram_size is not None and generation_config.no_repeat_ngram_size > 0:
             processors.append(NoRepeatNGramLogitsProcessor(generation_config.no_repeat_ngram_size))
+            if not self.config.is_encoder_decoder and (input_ids_seq_length is None or input_ids_seq_length == 0):
+                warnings.warn(
+                    "Passing `no_repeat_ngram_size` with `inputs_embeds` and without `input_ids` to `generate` will "
+                    "apply n-gram constraints only to newly generated tokens, not to the prompt.",
+                    UserWarning,
+                )
         if (
             generation_config.encoder_no_repeat_ngram_size is not None
             and generation_config.encoder_no_repeat_ngram_size > 0
@@ -2006,7 +2040,7 @@ class GenerationMixin(ContinuousMixin):
         cache = model_kwargs.get("past_key_values", model_kwargs.get("cache_params"))
 
         # Base logic
-        valid_hardware = self.device.type in ["cuda", "xpu"] or bool(
+        valid_hardware = self.device.type in ["cuda", "xpu", "neuron", "tpu"] or bool(
             generation_config.compile_config is not None and generation_config.compile_config._compile_all_devices
         )
         # Note: for some models that only use linear attention (e.g. Mamba), even a DynamicCache is compileable since all
@@ -2303,13 +2337,9 @@ class GenerationMixin(ContinuousMixin):
             # others are ignored
             if synced_gpus is not None:
                 logger.warning(f"synced_gpus is not ignored for continuous batching. Got {synced_gpus = }")
-            num_return_sequences = kwargs.get("num_return_sequences", 1)
             num_beams = kwargs.get("num_beams", 1)
-            if num_return_sequences > 1 or num_beams > 1:  # FIXME: remove this once CB supports it (which is planned)
-                logger.warning(
-                    f"num_return_sequences and num_beams are not supported for continuous batching yet. "
-                    f"Got {num_return_sequences = } and {num_beams = }. "
-                )
+            if num_beams > 1:  # FIXME: remove this once CB supports num_beams (which is planned)
+                logger.warning(f"num_beams is not supported for continuous batching yet. Got {num_beams = }. ")
 
             # switch to CB
             outputs = self.generate_batch(
@@ -3528,11 +3558,22 @@ class GenerationMixin(ContinuousMixin):
 
         this_peer_finished = False
         is_first_iteration = True  # to preserve the same API in the output as other generation methods
+        outputs = None
+        n_matches = 0
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             cur_len = input_ids.shape[1]
 
             #  1. Fetch candidate sequences from a `CandidateGenerator` and move to the correct device
-            candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids)
+            if candidate_generator.requires_model_outputs:
+                candidate_input_ids, candidate_logits = candidate_generator.get_candidates(
+                    input_ids,
+                    model_kwargs=model_kwargs,
+                    model_outputs=outputs,
+                    is_first_iteration=is_first_iteration,
+                    n_last_matches=n_matches,
+                )
+            else:
+                candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids)
             candidate_input_ids = candidate_input_ids.to(self.device)
             if candidate_logits is not None:
                 candidate_logits = candidate_logits.to(self.device)
@@ -3565,8 +3606,11 @@ class GenerationMixin(ContinuousMixin):
             if "logits_to_keep" in model_inputs:
                 model_inputs["logits_to_keep"] = candidate_length + 1
 
-            # 2.2. Run a forward pass on the candidate sequence
+            # We usually need to force returning hidden_states and some others if the candidate_generator requires the model's outputs
+            if candidate_generator.requires_model_outputs:
+                model_inputs |= candidate_generator.model_kwargs_overrides
 
+            # 2.2. Run a forward pass on the candidate sequence
             outputs = self(**model_inputs)
 
             # 2.3. Process the new logits
@@ -3746,7 +3790,7 @@ class GenerationMixin(ContinuousMixin):
             use_inputs_embeds = True
         if (cache := model_kwargs.get("past_key_values")) is not None:
             past_length = cache.get_seq_length()
-            # It will be sliced as input_embeds = inputs_embeds[:, -next_sequence_length:, :] in `prepare_inputs_for_generation`
+            # It will be sliced as inputs_embeds = inputs_embeds[:, -next_sequence_length:, :] in `prepare_inputs_for_generation`
             if use_inputs_embeds:
                 next_sequence_length = model_kwargs["inputs_embeds"].shape[1] - past_length
             else:

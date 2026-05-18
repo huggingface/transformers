@@ -19,6 +19,9 @@ import re
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Literal, Optional
 
+from safetensors import safe_open
+
+from .._typing import PeftConfigLike
 from ..conversion_mapping import (
     _MODEL_TO_CONVERSION_PATTERN,
     get_checkpoint_conversion_mapping,
@@ -55,13 +58,14 @@ if is_accelerate_available():
     from accelerate.utils import get_balanced_memory, infer_auto_device_map
 
 # Minimum PEFT version supported for the integration
-MIN_PEFT_VERSION = "0.18.0"
+MIN_PEFT_VERSION = "0.18.2"
 
 
 logger = logging.get_logger(__name__)
 
+
 if TYPE_CHECKING:
-    from ..modeling_utils import LoadStateDictConfig
+    from ..modeling_utils import LoadStateDictConfig, LoadStateDictInfo
 
 
 # TODO: remove once PEFT < 0.19 no longer supported
@@ -233,7 +237,10 @@ def build_peft_weight_mapping(
         return []
 
     # strip "base_model.model" and add adapter name
-    new_weight_conversions = [WeightRenaming("base_model.model.model.", "model.")]
+    new_weight_conversions = [
+        WeightRenaming("base_model.model.model.", "model."),
+        WeightRenaming("base_model.model.", ""),
+    ]
 
     prefixes = set()
     from peft.mapping import PEFT_TYPE_TO_PREFIX_MAPPING
@@ -276,14 +283,14 @@ def build_peft_weight_mapping(
                 # TODO: this assumption may not hold for models != mixtral
                 # For source, we capture the original weights + the lora weights
                 new_source_patterns = []
-                for pat in list(orig_conversion.source_patterns):
+                for pat in list(orig_conversion._original_source_patterns):
                     # we replace the weight pattern to colllect loras
                     pat = pat.rsplit(".", 1)[0]
                     # note: the source state_dict does *not* contain the adapter name
                     new_source_patterns.append(f"{pat}.{lora}.*")
 
                 # the gate_up_proj is the innner PEFT ParamWrapper, so we need to use base_layer
-                pat = orig_conversion.target_patterns[0]
+                pat = orig_conversion._original_target_patterns[0]
                 pat = pat.replace("gate_up_proj", "base_layer")
                 # we make sure the target key is correct, add '.weight' because the parameter is targeted directly
                 new_target_patterns = [f"{pat}.{lora}.{adapter_name}.weight"]
@@ -292,10 +299,10 @@ def build_peft_weight_mapping(
                 new_conversion = orig_conversion.__class__(
                     source_patterns=new_source_patterns,
                     target_patterns=new_target_patterns,
-                    distributed_operation=orig_conversion.distributed_operation,
-                    quantization_operation=orig_conversion.quantization_operation,
                     operations=peft_weight_operations,
                 )
+                new_conversion.distributed_operation = orig_conversion.distributed_operation
+                new_conversion.quantization_operation = orig_conversion.quantization_operation
                 new_weight_conversions.append(new_conversion)
 
         elif len(orig_conversion.target_patterns) == 1 and orig_conversion.target_patterns[0].endswith("down_proj"):
@@ -315,14 +322,14 @@ def build_peft_weight_mapping(
                 # TODO: this assumption may not hold for models != mixtral
                 # For source, we capture the original weights + the lora weights
                 new_source_patterns = []
-                for pat in list(orig_conversion.source_patterns):
+                for pat in list(orig_conversion._original_source_patterns):
                     # we replace the weight pattern to colllect loras
                     pat = pat.rsplit(".", 1)[0]
                     # note: the source state_dict does *not* contain the adapter name
                     new_source_patterns.append(f"{pat}.{lora}.*")
 
                 # the down_proj is the outer PEFT ParamWrapper, so we remove the prefix
-                pat = orig_conversion.target_patterns[0]
+                pat = orig_conversion._original_target_patterns[0]
                 pat = pat.replace(".down_proj", "")
                 # we make sure the target key is correct, add '.weight' because the parameter is targeted directly
                 new_target_patterns = [f"{pat}.{lora}.{adapter_name}.weight"]
@@ -331,10 +338,10 @@ def build_peft_weight_mapping(
                 new_conversion = orig_conversion.__class__(
                     source_patterns=new_source_patterns,
                     target_patterns=new_target_patterns,
-                    distributed_operation=orig_conversion.distributed_operation,
-                    quantization_operation=orig_conversion.quantization_operation,
                     operations=peft_weight_operations,
                 )
+                new_conversion.distributed_operation = orig_conversion.distributed_operation
+                new_conversion.quantization_operation = orig_conversion.quantization_operation
                 new_weight_conversions.append(new_conversion)
 
     return new_weight_conversions
@@ -419,6 +426,7 @@ class PeftAdapterMixin:
 
     _hf_peft_config_loaded = False
     _prepare_peft_hotswap_kwargs: dict | None = None
+    peft_config: dict[str, PeftConfigLike]
 
     def load_adapter(
         self,
@@ -433,7 +441,7 @@ class PeftAdapterMixin:
         adapter_kwargs: dict[str, Any] | None = None,
         load_config: Optional["LoadStateDictConfig"] = None,
         **kwargs,
-    ) -> None:
+    ) -> "LoadStateDictInfo":
         """
         Load adapter weights from file or remote Hub folder. If you are not familiar with adapters and PEFT methods, we
         invite you to read more about them on PEFT official documentation: https://huggingface.co/docs/peft
@@ -498,8 +506,9 @@ class PeftAdapterMixin:
                 `find_adapter_config_file` method.
         """
         from peft import PeftType
+        from peft.utils.save_and_load import _maybe_shard_state_dict_for_tp
 
-        from ..modeling_utils import LoadStateDictConfig, _get_resolved_checkpoint_files
+        from ..modeling_utils import LoadStateDictConfig, _get_resolved_checkpoint_files, load_state_dict
 
         if local_files_only:
             kwargs["local_files_only"] = True
@@ -608,6 +617,46 @@ class PeftAdapterMixin:
             checkpoint_files, sharded_metadata = [], {}
 
         device_map = getattr(self, "hf_device_map", {"": self.device})
+
+        # If the model is tensor parallel, we handle the sharding of the state dict here since the logic in `self._load_pretrained_model`
+        # is not compatible with the way PEFT adapter should be sharded.
+        has_tp_adapters = False
+        for module in self.modules():
+            tp_info = getattr(module, "_tp_info", None)
+            if tp_info is not None:
+                has_tp_adapters = True
+                break
+
+        if has_tp_adapters:
+            all_pointer = set()
+            if adapter_state_dict is not None:
+                merged_state_dict = adapter_state_dict
+            elif (
+                checkpoint_files is not None
+                and checkpoint_files[0].endswith(".safetensors")
+                and adapter_state_dict is None
+            ):
+                merged_state_dict = {}
+                for file in checkpoint_files:
+                    file_pointer = safe_open(file, framework="pt", device="cpu")
+                    all_pointer.add(file_pointer)
+                    for k in file_pointer.keys():
+                        merged_state_dict[k] = file_pointer.get_tensor(k)
+            # Checkpoints are .bin
+            elif checkpoint_files is not None:
+                merged_state_dict = {}
+                for ckpt_file in checkpoint_files:
+                    merged_state_dict.update(load_state_dict(ckpt_file))
+            else:
+                raise ValueError("Neither a state dict nor checkpoint files were found.")
+
+            adapter_state_dict = merged_state_dict
+
+            if any(not isinstance(v, torch.Tensor) for v in adapter_state_dict.values()):
+                raise ValueError("Expected all values in the adapter state dict to be tensors.")
+
+            _maybe_shard_state_dict_for_tp(self, adapter_state_dict, adapter_name)
+
         load_config = replace(
             load_config,
             pretrained_model_name_or_path=peft_model_id,
@@ -615,6 +664,7 @@ class PeftAdapterMixin:
             weight_mapping=peft_weight_conversions,
             device_map=device_map,
         )
+
         loading_info, _ = self._load_pretrained_model(
             model=self,
             state_dict=adapter_state_dict,
@@ -649,6 +699,7 @@ class PeftAdapterMixin:
             loading_info=loading_info,
             logger=logger,
         )
+        return loading_info
 
     def enable_peft_hotswap(
         self, target_rank: int = 128, check_compiled: Literal["error", "warn", "ignore"] = "error"
@@ -1035,7 +1086,10 @@ def _convert_peft_config_moe(peft_config, model_type: str):
     if base_model_type is None:
         return peft_config
 
-    target_module_mapping = _MOE_TARGET_MODULE_MAPPING[base_model_type]
+    target_module_mapping = _MOE_TARGET_MODULE_MAPPING.get(base_model_type)
+    if target_module_mapping is None:
+        # Non-MoE architectures reuse _MODEL_TO_CONVERSION_PATTERN for key renaming only.
+        return peft_config
     fused_targets = _MOE_FUSED_TARGETS.get(base_model_type, {})
 
     peft_config.target_parameters = set(peft_config.target_parameters or [])

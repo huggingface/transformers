@@ -83,6 +83,7 @@ from .utils import (
     is_av_available,
     is_bitsandbytes_available,
     is_bs4_available,
+    is_causal_conv1d_available,
     is_compressed_tensors_available,
     is_cv2_available,
     is_cython_available,
@@ -94,6 +95,7 @@ from .utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_flash_attn_4_available,
+    is_flash_linear_attention_available,
     is_flute_available,
     is_fouroversix_available,
     is_fp_quant_available,
@@ -106,6 +108,7 @@ from .utils import (
     is_hadamard_available,
     is_hqq_available,
     is_huggingface_hub_greater_or_equal,
+    is_ipython_available,
     is_jinja_available,
     is_jmespath_available,
     is_jumanpp_available,
@@ -161,6 +164,7 @@ from .utils import (
     is_torch_optimi_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
+    is_torch_tpu_available,
     is_torch_xla_available,
     is_torch_xpu_available,
     is_torchao_available,
@@ -225,6 +229,34 @@ _VLM_COMMON_MODEL_NAMES_MAP = {
     "text_config_class": "TextConfig",
     "vision_config_class": "VisionConfig",
     "conditional_generation_class": "ForConditionalGeneration",
+}
+
+# Shared text-model defaults for CausalLMModelTester and MultiModalModelTester.
+_TEXT_MODEL_TESTER_DEFAULTS = {
+    "batch_size": 13,
+    "seq_length": 7,
+    "is_training": True,
+    "use_input_mask": True,
+    "use_labels": True,
+    "vocab_size": 99,
+    "hidden_size": 32,
+    "num_hidden_layers": 2,
+    "num_attention_heads": 2,
+    "num_key_value_heads": 2,
+    "intermediate_size": 32,
+    "hidden_act": "gelu",
+    "max_position_embeddings": 512,
+    "pad_token_id": 0,
+    "bos_token_id": 1,
+    "eos_token_id": 2,
+    "expert_interval": 1,
+    "moe_layer_start_index": 0,
+    "moe_intermediate_size": 16,
+    "shared_expert_intermediate_size": 36,
+    "shared_expert_gate": True,
+    "moe_num_shared_experts": 2,
+    "num_experts_per_tok": 2,
+    "num_experts": 8,
 }
 
 
@@ -705,6 +737,32 @@ def require_all_flash_attn(test_case):
     )(test_case)
 
 
+def require_flash_linear_attention(test_case):
+    """
+    Decorator marking a test that requires Flash Linear Attention.
+
+    These tests are skipped when Flash Linear Attention isn't installed.
+    """
+
+    return unittest.skipUnless(
+        is_flash_linear_attention_available(),
+        "test requires `flash-linear-attention`",
+    )(test_case)
+
+
+def require_causal_conv1d(test_case):
+    """
+    Decorator marking a test that requires causal-conv1d.
+
+    These tests are skipped when causal-conv1d isn't installed.
+    """
+
+    return unittest.skipUnless(
+        is_causal_conv1d_available(),
+        "test requires `causal-conv1d`",
+    )(test_case)
+
+
 def require_peft(test_case):
     """
     Decorator marking a test that requires PEFT.
@@ -905,6 +963,13 @@ def require_torch_neuroncore(test_case):
     return unittest.skipUnless(is_torch_neuroncore_available(check_device=False), "test requires PyTorch NeuronCore")(
         test_case
     )
+
+
+def require_torch_tpu(test_case):
+    """
+    Decorator marking a test that requires TPU (in PyTorch via torch_tpu).
+    """
+    return unittest.skipUnless(is_torch_tpu_available(), "test requires PyTorch TPU")(test_case)
 
 
 def require_torch_npu(test_case):
@@ -1177,6 +1242,11 @@ def require_detectron2(test_case):
 def require_faiss(test_case):
     """Decorator marking a test that requires faiss."""
     return unittest.skipUnless(is_faiss_available(), "test requires `faiss`")(test_case)
+
+
+def require_ipython(test_case):
+    """Decorator marking a test that requires IPython. These tests are skipped when IPython isn't installed."""
+    return unittest.skipUnless(is_ipython_available(), "test requires `IPython`")(test_case)
 
 
 def require_optuna(test_case):
@@ -2654,42 +2724,23 @@ def hub_retry(max_attempts: int = 5, wait_before_retry: float | None = 2):
     To decorate tests that download from the Hub. They can fail due to a
     variety of network issues such as timeouts, connection resets, etc.
 
+    Uses exponential backoff starting from `wait_before_retry`.
+
     Args:
         max_attempts (`int`, *optional*, defaults to 5):
             The maximum number of attempts to retry the flaky test.
         wait_before_retry (`float`, *optional*, defaults to 2):
-            If provided, will wait that number of seconds before retrying the test.
+            If provided, the initial delay in seconds before the first retry.
+            Subsequent retries use exponential backoff with jitter.
     """
+    from .utils.generic import retry
 
-    def decorator(test_func_ref):
-        @functools.wraps(test_func_ref)
-        def wrapper(*args, **kwargs):
-            retry_count = 1
-
-            while retry_count < max_attempts:
-                try:
-                    return test_func_ref(*args, **kwargs)
-                # We catch all exceptions related to network issues from httpx
-                except (
-                    httpx.HTTPError,
-                    httpx.RequestError,
-                    httpx.TimeoutException,
-                    httpx.ReadTimeout,
-                    httpx.ConnectError,
-                    httpx.NetworkError,
-                ) as err:
-                    logger.error(
-                        f"Test failed with {err} at try {retry_count}/{max_attempts} as it couldn't connect to the specified Hub repository."
-                    )
-                    if wait_before_retry is not None:
-                        time.sleep(wait_before_retry)
-                    retry_count += 1
-
-            return test_func_ref(*args, **kwargs)
-
-        return wrapper
-
-    return decorator
+    return retry(
+        max_retries=max_attempts,
+        initial_delay=wait_before_retry or 0,
+        jitter=wait_before_retry is not None,
+        exceptions=(httpx.HTTPError,),
+    )
 
 
 def run_first(test_case):

@@ -31,6 +31,7 @@ from ..olmo2.modeling_olmo2 import (
     Olmo2Attention,
     Olmo2DecoderLayer,
     Olmo2ForCausalLM,
+    Olmo2ForSequenceClassification,
     Olmo2Model,
     Olmo2PreTrainedModel,
     Olmo2RMSNorm,
@@ -237,9 +238,14 @@ class Olmo3ForCausalLM(Olmo2ForCausalLM):
     pass
 
 
+class Olmo3ForSequenceClassification(Olmo2ForSequenceClassification):
+    pass
+
+
 __all__ = [
     "Olmo3Config",
     "Olmo3ForCausalLM",
+    "Olmo3ForSequenceClassification",
     "Olmo3Model",
     "Olmo3PreTrainedModel",
 ]

@@ -35,12 +35,12 @@ from .configuration_video_llava import VideoLlavaConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for VideoLlava base model outputs.
     """
 )
+@dataclass
 class VideoLlavaModelOutputWithPast(ModelOutput):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -64,12 +64,12 @@ class VideoLlavaModelOutputWithPast(ModelOutput):
     video_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for VideoLlava causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class VideoLlavaCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -128,7 +128,7 @@ class VideoLlavaPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["VideoLlavaVisionAttention"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _can_compile_fullgraph = True

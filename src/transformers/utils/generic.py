@@ -20,7 +20,9 @@ from __future__ import annotations
 import inspect
 import json
 import os
+import random
 import re
+import time
 import warnings
 from collections import OrderedDict, UserDict
 from collections.abc import Callable, Iterable, MutableMapping
@@ -52,7 +54,16 @@ _registered_model_output_types: set[type[Any]] = set()
 
 
 def _register_model_output_pytree_node(output_type: type[ModelOutput]) -> None:
-    if not _is_torch_available or output_type in _registered_model_output_types:
+    if not _is_torch_available:
+        return
+    import torch
+
+    # AMD CI runs PyTorch 2.8.0+rocm which does not support tracing `set.__contains__`
+    # through TorchDynamo. Skip registration during compilation since the pytree node
+    # is already registered from the preceding eager run.
+    if torch.compiler.is_compiling():
+        return
+    if output_type in _registered_model_output_types:
         return
 
     import torch.utils._pytree as torch_pytree
@@ -281,6 +292,19 @@ def is_flash_attention_requested(
         return re.match(r".*flash.*" + str(version), checked_attention_implementation) is not None
     # Otherwise, just check "flash" is in the attention implementation
     return "flash" in checked_attention_implementation
+
+
+def split_attention_implementation(implementation: str | None) -> tuple[bool, str | None]:
+    """
+    Split the optional `paged|` prefix from an attention implementation string.
+
+    Note that `None` means using the default attention implementation, which is either torch's native `sdpa` or `eager` (if `sdpa` is not implemented for that model).
+    """
+    if implementation is None:
+        return False, None
+
+    is_paged = implementation.startswith("paged|")
+    return is_paged, implementation.removeprefix("paged|")
 
 
 def to_py_obj(obj):
@@ -790,6 +814,8 @@ class TransformersKwargs(TypedDict, total=False):
             Indices of positions of each input sequence tokens.
         is_causal (`bool`, *optional*)
             Can be set to False to enable bi-directional attention, i.e. use decoder Attention modules as encoders.
+        seq_idx (`torch.IntTensor`, *optional*):
+            Sequence index for each token in a flattened packed batch.
     """
 
     num_items_in_batch: torch.Tensor | None
@@ -802,6 +828,7 @@ class TransformersKwargs(TypedDict, total=False):
     max_length_k: int | None
     position_ids: torch.LongTensor | None
     is_causal: bool | None
+    seq_idx: torch.IntTensor | None
 
 
 def is_timm_config_dict(config_dict: dict[str, Any]) -> bool:
@@ -879,6 +906,59 @@ def can_return_tuple(func):
         return output
 
     return wrapper
+
+
+_KNOWN_MODALITIES = ("image", "video", "audio")
+
+
+def accepts_precomputed_kwargs(modality: str):
+    """
+    Decorator for `get_<modality>_features` methods that:
+      - strips the modality prefix from incoming kwargs whose stripped name isn't an existing
+        parameter (e.g. `image_cu_seqlens` → `cu_seqlens`, forwarded via `**kwargs`);
+      - drops kwargs prefixed with another known modality (e.g. `video_*` passed to an
+        image method), so an outer `forward()` can blindly forward `**kwargs` to each
+        modality method without leaking the wrong tensors into the wrong encoder;
+      - leaves everything else untouched (including kwargs that match a named parameter).
+
+    Used so multimodal models can accept arbitrary precomputed tensors (`image_cu_seqlens`,
+    `video_position_ids`, …) without enumerating each one in every signature.
+
+    NOTE: Apply this decorator **only once per modality**, on the innermost base model's
+    `get_<modality>_features` (i.e. on `Model.get_image_features`, not on the outer
+    `ForConditionalGeneration.get_image_features` wrapper). Stacking it at multiple layers
+    causes premature prefix-stripping: the outer layer rewrites `image_foo` → `foo` based
+    on its own (narrower) signature, hiding kwargs that the inner method declares as named
+    parameters. Outer wrappers should just forward `**kwargs` through.
+
+    TODO: these modality-prefixed kwargs (`image_cu_seqlens`, `video_position_ids`, …) are
+    currently power-feature-only — they have no visible declaration in any public signature,
+    so users have to discover them from helper functions or docs. We should find a way to
+    surface them properly (e.g. in `TransformersKwargs`, in a dedicated `MultimodalKwargs`
+    typed dict, or returned grouped from the processor as `BatchFeature.images_data={...}`)
+    so the supported set is discoverable in one place.
+    """
+    prefix = f"{modality}_"
+    other_prefixes = tuple(f"{m}_" for m in _KNOWN_MODALITIES if m != modality)
+
+    def decorator(func):
+        existing_params = set(inspect.signature(func).parameters)
+
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            translated = {}
+            for k, v in kwargs.items():
+                if k.startswith(other_prefixes):
+                    continue
+                if k.startswith(prefix) and k not in existing_params:
+                    translated[k.removeprefix(prefix)] = v
+                else:
+                    translated[k] = v
+            return func(*args, **translated)
+
+        return wrapper
+
+    return decorator
 
 
 def merge_with_config_defaults(func):
@@ -1010,3 +1090,54 @@ class GeneralInterface(MutableMapping):
 
     def valid_keys(self) -> list[str]:
         return list(self.keys())
+
+
+def retry(
+    max_retries=5,
+    initial_delay=1.0,
+    max_delay=30.0,
+    jitter=True,
+    exceptions=(Exception,),
+):
+    """
+    Decorator that retries a function call with exponential backoff.
+
+    Args:
+        max_retries (`int`, *optional*, defaults to 5):
+            Maximum number of retry attempts.
+        initial_delay (`float`, *optional*, defaults to 1.0):
+            Initial delay in seconds before the first retry.
+        max_delay (`float`, *optional*, defaults to 30.0):
+            Maximum delay in seconds between retries.
+        jitter (`bool`, *optional*, defaults to `True`):
+            Whether to add random jitter to the delay.
+        exceptions (`tuple`, *optional*, defaults to `(Exception,)`):
+            Tuple of exception types to catch and retry on.
+    """
+
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            delay = initial_delay
+
+            for attempt in range(1, max_retries + 1):
+                try:
+                    return func(*args, **kwargs)
+                except exceptions as exc:
+                    if attempt == max_retries:
+                        raise
+
+                    sleep_for = min(delay, max_delay)
+                    if jitter:
+                        sleep_for *= random.uniform(0.8, 1.2)
+
+                    logger.info(
+                        f"[{func.__name__}] attempt {attempt}/{max_retries} failed: {exc}\n"
+                        f"Retrying in {sleep_for:.1f}s..."
+                    )
+                    time.sleep(sleep_for)
+                    delay = min(delay * 2, max_delay)
+
+        return wrapper
+
+    return decorator

@@ -307,6 +307,7 @@ class CohereAsrDecoder(MoonshineDecoder):
 
         # Fixed sinusoidal position embedding added to token embeddings, then layernorm
         pos_emb = self.pos_emb(position_ids.squeeze(0))
+        pos_emb = pos_emb.to(inputs_embeds.device)
         inputs_embeds = self.embedding_layernorm(inputs_embeds + pos_emb)
 
         causal_mask = create_causal_mask(

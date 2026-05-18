@@ -33,12 +33,12 @@ logger = logging.get_logger(__name__)
 # General docstring
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of pose estimation models.
     """
 )
+@dataclass
 class VitPoseEstimatorOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
