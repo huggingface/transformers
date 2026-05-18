@@ -15,14 +15,14 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING
 
 
 @auto_docstring
 @strict
-class GraniteSpeechNarEncoderConfig(PretrainedConfig):
+class GraniteSpeechNarEncoderConfig(PreTrainedConfig):
     r"""
     Configuration for the conformer encoder component of GraniteSpeechNar.
 
@@ -92,7 +92,7 @@ class GraniteSpeechNarEncoderConfig(PretrainedConfig):
 
 @auto_docstring
 @strict
-class GraniteSpeechNarProjectorConfig(PretrainedConfig):
+class GraniteSpeechNarProjectorConfig(PreTrainedConfig):
     r"""
     Configuration for the QFormer-based audio projector in GraniteSpeechNar.
 
@@ -140,7 +140,7 @@ class GraniteSpeechNarProjectorConfig(PretrainedConfig):
 
 @auto_docstring
 @strict
-class GraniteSpeechNarConfig(PretrainedConfig):
+class GraniteSpeechNarConfig(PreTrainedConfig):
     r"""
     Configuration for the GraniteSpeechNar non-autoregressive ASR model.
 
@@ -149,6 +149,8 @@ class GraniteSpeechNarConfig(PretrainedConfig):
 
     projector_config (`GraniteSpeechNarProjectorConfig` or `dict`, *optional*):
         Configuration for the QFormer-based audio projector.
+    tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+        Whether the LLM's input and output word embeddings should be tied.
     encoder_layer_indices (`list[int]`, *optional*, defaults to `[4, 8, 12, -1]`):
         Indices of encoder layers whose hidden states are concatenated as projector input.
     scale_projected_embeddings (`bool`, *optional*, defaults to `True`):
@@ -180,9 +182,10 @@ class GraniteSpeechNarConfig(PretrainedConfig):
         "text_config": "AutoConfig",
     }
 
-    encoder_config: dict | PretrainedConfig | None = None
-    projector_config: dict | PretrainedConfig | None = None
-    text_config: dict | PretrainedConfig | None = None
+    encoder_config: dict | PreTrainedConfig | None = None
+    projector_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
+    tie_word_embeddings: bool = True
     encoder_layer_indices: list[int] | None = None
     scale_projected_embeddings: bool = True
     blank_token_id: int | None = None
