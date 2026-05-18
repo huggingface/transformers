@@ -422,3 +422,4 @@ Here are some more resources for the image-text-to-text task.
 - [Image-text-to-text task page](https://huggingface.co/tasks/image-text-to-text) covers model types, use cases, datasets, and more.
 - [Vision Language Models Explained](https://huggingface.co/blog/vlms) is a blog post that covers everything about vision language models and supervised fine-tuning using [TRL](https://huggingface.co/docs/trl/en/index).
 - [Learn how to fine-tune vision language models using TRL](https://huggingface.co/blog/trl-vlm-alignment)
+
