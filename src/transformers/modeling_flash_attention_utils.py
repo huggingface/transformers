@@ -807,8 +807,8 @@ def _flash_attention_forward(
             # so ``model.generate()`` doesn't crash with NoneType.
             if flash_varlen_fn is None:
                 raise RuntimeError(
-                    f"No flash attention function available for the loaded kernel "
-                    f"(neither ``flash_attn_func`` nor ``flash_attn_varlen_func``)."
+                    "No flash attention function available for the loaded kernel "
+                    "(neither ``flash_attn_func`` nor ``flash_attn_varlen_func``)."
                 )
             B, S_q, H_q, D = query_states.shape
             S_k = key_states.shape[1]
