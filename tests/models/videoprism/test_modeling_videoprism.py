@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch VideoPrism model."""
 
+import copy
 import tempfile
 import unittest
 
@@ -110,6 +111,12 @@ class VideoPrismVisionModelTester:
         self.apply_l2norm = apply_l2norm
         self.is_training = is_training
 
+        patch_size = (self.tubelet_size[1], self.tubelet_size[2])
+        image_size = (self.image_size, self.image_size)
+        self.num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.spatial_seq_length = self.num_patches
+        self.temporal_seq_length = self.num_frames
+
         if kwargs:
             for key, value in kwargs.items():
                 setattr(self, key, value)
@@ -203,17 +210,102 @@ class VideoPrismVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(
-        reason="VideoPrismVisionModel exposes spatial/temporal backbone states, not a single hidden_states tuple."
-    )
-    def test_hidden_states_output(self):
-        pass
-
-    @unittest.skip(
-        reason="VideoPrismVisionModel does not expose a single attentions tuple compatible with ModelTesterMixin."
-    )
     def test_attention_outputs(self):
-        pass
+        """ViViT-style attention test for the spatial then temporal VideoPrismVisionModel stack."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+        model_class = VideoPrismVisionModel
+
+        num_spatial_layers = self.model_tester.num_spatial_layers
+        num_temporal_layers = self.model_tester.num_temporal_layers
+        num_patches = self.model_tester.num_patches
+        num_frames = self.model_tester.num_frames
+        num_attention_heads = self.model_tester.num_attention_heads
+
+        inputs_dict["output_attentions"] = True
+        inputs_dict["output_hidden_states"] = False
+        model = model_class._from_config(config, attn_implementation="eager")
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+        attentions = outputs.attentions
+        self.assertEqual(len(attentions), num_spatial_layers + num_temporal_layers)
+
+        del inputs_dict["output_attentions"]
+        config.output_attentions = True
+        model = model_class._from_config(config, attn_implementation="eager")
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+        attentions = outputs.attentions
+        self.assertEqual(len(attentions), num_spatial_layers + num_temporal_layers)
+
+        for layer_idx in range(num_spatial_layers):
+            self.assertListEqual(
+                list(attentions[layer_idx].shape[-3:]),
+                [num_attention_heads, num_patches, num_patches],
+            )
+        for layer_idx in range(num_spatial_layers, num_spatial_layers + num_temporal_layers):
+            self.assertListEqual(
+                list(attentions[layer_idx].shape[-3:]),
+                [num_attention_heads, num_frames, num_frames],
+            )
+
+        inputs_dict["output_attentions"] = True
+        inputs_dict["output_hidden_states"] = True
+        model = model_class._from_config(config, attn_implementation="eager")
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+        self.assertIsNotNone(outputs.attentions)
+        self.assertIsNotNone(outputs.hidden_states)
+        self.assertEqual(len(outputs.attentions), num_spatial_layers + num_temporal_layers)
+        self.assertEqual(
+            len(outputs.hidden_states), 1 + num_spatial_layers + num_temporal_layers
+        )
+
+    def test_hidden_states_output(self):
+        """ViViT-style hidden states test; spatial tokens then temporal tokens per encoder stage."""
+
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class._from_config(config, attn_implementation="eager")
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.hidden_states
+            num_spatial_layers = self.model_tester.num_spatial_layers
+            num_temporal_layers = self.model_tester.num_temporal_layers
+            expected_num_layers = 1 + num_spatial_layers + num_temporal_layers
+            self.assertEqual(len(hidden_states), expected_num_layers)
+
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [self.model_tester.num_patches, self.model_tester.hidden_size],
+            )
+            self.assertListEqual(
+                list(hidden_states[num_spatial_layers].shape[-2:]),
+                [self.model_tester.num_patches, self.model_tester.hidden_size],
+            )
+            self.assertListEqual(
+                list(hidden_states[-1].shape[-2:]),
+                [self.model_tester.num_frames, self.model_tester.hidden_size],
+            )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model_class = VideoPrismVisionModel
+
+        inputs_dict["output_hidden_states"] = True
+        check_hidden_states_output(inputs_dict, config, model_class)
+
+        del inputs_dict["output_hidden_states"]
+        config.output_hidden_states = True
+        check_hidden_states_output(inputs_dict, config, model_class)
 
     @unittest.skip(
         reason="VideoPrismVisionModel does not expose common hidden_states/attentions fields for retain-grad checks."
@@ -301,6 +393,7 @@ class VideoPrismTextModelTester:
             intermediate_size=self.intermediate_size,
             num_attention_heads=self.num_attention_heads,
             num_hidden_layers=self.num_hidden_layers,
+            num_text_layers=self.num_hidden_layers,
             vocab_size=self.vocab_size,
             apply_l2norm=self.apply_l2norm,
             hidden_act=self.hidden_act,
@@ -317,7 +410,10 @@ class VideoPrismTextModelTester:
         model.eval()
         with torch.no_grad():
             result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.encoder_seq_length, self.hidden_size)
+        )
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTester.prepare_config_and_inputs_for_common
     def prepare_config_and_inputs_for_common(self):
