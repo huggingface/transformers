@@ -989,8 +989,6 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
-
         def linear_init_(module_to_init):
             bound = 1 / math.sqrt(module_to_init.weight.shape[0])
             init.uniform_(module_to_init.weight, -bound, bound)

@@ -1207,7 +1207,6 @@ class VitsPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
-        super()._init_weights(module)
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
             init.normal_(module.weight, mean=0.0, std=std)

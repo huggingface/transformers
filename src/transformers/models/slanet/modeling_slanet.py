@@ -51,7 +51,6 @@ class SLANetPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
-        super()._init_weights(module)
 
         # Initialize GRUCell (replicates PyTorch default reset_parameters)
         if isinstance(module, nn.GRUCell):

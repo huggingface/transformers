@@ -60,147 +60,6 @@ class MMGroundingDinoContrastiveEmbedding(nn.Module):
         return new_res
 
 
-@auto_docstring
-class MMGroundingDinoPreTrainedModel(PreTrainedModel):
-    config: MMGroundingDinoConfig
-    base_model_prefix = "model"
-    main_input_name = "pixel_values"
-    input_modalities = ("image", "text")
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, MMGroundingDinoContrastiveEmbedding):
-            init.constant_(module.bias, -math.log((1 - 0.01) / 0.01))
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, MMGroundingDinoDecoder):
-            module.gradient_checkpointing = value
-
-
-class MMGroundingDinoFrozenBatchNorm2d(nn.Module):
-    """
-    BatchNorm2d where the batch statistics and the affine parameters are fixed.
-
-    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
-    torchvision.models.resnet[18,34,50,101] produce nans.
-    """
-
-    def __init__(self, n):
-        super().__init__()
-        self.register_buffer("weight", torch.ones(n))
-        self.register_buffer("bias", torch.zeros(n))
-        self.register_buffer("running_mean", torch.zeros(n))
-        self.register_buffer("running_var", torch.ones(n))
-
-    def _load_from_state_dict(
-        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-    ):
-        num_batches_tracked_key = prefix + "num_batches_tracked"
-        if num_batches_tracked_key in state_dict:
-            del state_dict[num_batches_tracked_key]
-
-        super()._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-        )
-
-    def forward(self, x):
-        # move reshapes to the beginning
-        # to make it user-friendly
-        weight = self.weight.reshape(1, -1, 1, 1)
-        bias = self.bias.reshape(1, -1, 1, 1)
-        running_var = self.running_var.reshape(1, -1, 1, 1)
-        running_mean = self.running_mean.reshape(1, -1, 1, 1)
-        epsilon = 1e-5
-        scale = weight * (running_var + epsilon).rsqrt()
-        bias = bias - running_mean * scale
-        return x * scale + bias
-
-
-def replace_batch_norm(model):
-    r"""
-    Recursively replace all `torch.nn.BatchNorm2d` with `MMGroundingDinoFrozenBatchNorm2d`.
-
-    Args:
-        model (torch.nn.Module):
-            input model
-    """
-    for name, module in model.named_children():
-        if isinstance(module, nn.BatchNorm2d):
-            new_module = MMGroundingDinoFrozenBatchNorm2d(module.num_features)
-
-            if module.weight.device != torch.device("meta"):
-                new_module.weight.copy_(module.weight)
-                new_module.bias.copy_(module.bias)
-                new_module.running_mean.copy_(module.running_mean)
-                new_module.running_var.copy_(module.running_var)
-
-            model._modules[name] = new_module
-
-        if len(list(module.children())) > 0:
-            replace_batch_norm(module)
-
-
-class MMGroundingDinoConvEncoder(nn.Module):
-    """
-    Convolutional backbone, using either the AutoBackbone API or one from the timm library.
-
-    nn.BatchNorm2d layers are replaced by MMGroundingDinoFrozenBatchNorm2d as defined above.
-
-    """
-
-    def __init__(self, config):
-        super().__init__()
-
-        self.config = config
-        backbone = load_backbone(config)
-
-        # replace batch norm by frozen batch norm
-        with torch.no_grad():
-            replace_batch_norm(backbone)
-        self.model = backbone
-        self.intermediate_channel_sizes = self.model.channels
-
-        backbone_model_type = config.backbone_config.model_type
-        if "resnet" in backbone_model_type:
-            for name, parameter in self.model.named_parameters():
-                if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
-                    parameter.requires_grad_(False)
-
-    def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
-        # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values, return_dict=True).feature_maps
-
-        out = []
-        for feature_map in features:
-            # downsample pixel_mask to match shape of corresponding feature_map
-            mask = nn.functional.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
-            out.append((feature_map, mask))
-        return out
-
-
-# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrConvModel with Detr->MMGroundingDino
-class MMGroundingDinoConvModel(nn.Module):
-    """
-    This module adds 2D position embeddings to all intermediate feature maps of the convolutional encoder.
-    """
-
-    def __init__(self, conv_encoder, position_embedding):
-        super().__init__()
-        self.conv_encoder = conv_encoder
-        self.position_embedding = position_embedding
-
-    def forward(self, pixel_values, pixel_mask):
-        # send pixel_values and pixel_mask through backbone to get list of (feature_map, pixel_mask) tuples
-        out = self.conv_encoder(pixel_values, pixel_mask)
-        pos = []
-        for feature_map, mask in out:
-            # position encoding
-            pos.append(self.position_embedding(feature_map, mask).to(feature_map.dtype))
-
-        return out, pos
-
-
 @use_kernel_forward_from_hub("MultiScaleDeformableAttention")
 class MultiScaleDeformableAttention(nn.Module):
     def forward(
@@ -256,35 +115,29 @@ class MultiScaleDeformableAttention(nn.Module):
         return output.transpose(1, 2).contiguous()
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for outputs of the MMGroundingDinoEncoder. This class extends BaseModelOutput, due to:
-    - vision and text last hidden states
-    - vision and text intermediate hidden states
+class MMGroundingDinoLearnedPositionEmbedding(nn.Module):
     """
-)
-@dataclass
-class MMGroundingDinoEncoderOutput(ModelOutput):
-    r"""
-    last_hidden_state_vision (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the vision encoder.
-    last_hidden_state_text (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the text encoder.
-    vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the vision embeddings + one for the output of each
-        layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the vision encoder at the
-        output of each layer plus the initial embedding outputs.
-    text_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the text embeddings + one for the output of each layer)
-        of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of
-        each layer plus the initial embedding outputs.
+    This module learns positional embeddings up to a fixed maximum size.
     """
 
-    last_hidden_state_vision: torch.FloatTensor | None = None
-    last_hidden_state_text: torch.FloatTensor | None = None
-    vision_hidden_states: tuple[torch.FloatTensor] | None = None
-    text_hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[tuple[torch.FloatTensor]] | None = None
+    def __init__(self, config):
+        super().__init__()
+
+        embedding_dim = config.d_model // 2
+        self.row_embeddings = nn.Embedding(50, embedding_dim)
+        self.column_embeddings = nn.Embedding(50, embedding_dim)
+
+    def forward(self, pixel_values, pixel_mask=None):
+        height, width = pixel_values.shape[-2:]
+        width_values = torch.arange(width, device=pixel_values.device)
+        height_values = torch.arange(height, device=pixel_values.device)
+        x_emb = self.column_embeddings(width_values)
+        y_emb = self.row_embeddings(height_values)
+        pos = torch.cat([x_emb.unsqueeze(0).repeat(height, 1, 1), y_emb.unsqueeze(1).repeat(1, width, 1)], dim=-1)
+        pos = pos.permute(2, 0, 1)
+        pos = pos.unsqueeze(0)
+        pos = pos.repeat(pixel_values.shape[0], 1, 1, 1)
+        return pos
 
 
 class MMGroundingDinoMultiscaleDeformableAttention(nn.Module):
@@ -392,160 +245,6 @@ class MMGroundingDinoMultiscaleDeformableAttention(nn.Module):
         output = self.output_proj(output)
 
         return output, attention_weights
-
-
-class MMGroundingDinoMultiheadAttention(nn.Module):
-    """Equivalent implementation of nn.MultiheadAttention with `batch_first=True`."""
-
-    def __init__(self, config, num_attention_heads=None):
-        super().__init__()
-        if config.hidden_size % num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError(
-                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
-                f"heads ({num_attention_heads})"
-            )
-
-        self.num_attention_heads = num_attention_heads
-        self.attention_head_size = int(config.hidden_size / num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size)
-
-        self.out_proj = nn.Linear(config.hidden_size, config.hidden_size)
-
-        self.dropout = nn.Dropout(config.attention_dropout)
-
-    def forward(
-        self,
-        queries: torch.Tensor,
-        keys: torch.Tensor,
-        values: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
-        output_attentions: bool | None = False,
-    ) -> tuple[torch.Tensor]:
-        batch_size, seq_length, _ = queries.shape
-        query_layer = (
-            self.query(queries)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        key_layer = (
-            self.key(keys).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
-        )
-        value_layer = (
-            self.value(values).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
-        )
-
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-        if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in MMGroundingDinoModel forward() function)
-            attention_scores = attention_scores + attention_mask
-
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        context_layer = torch.matmul(attention_probs, value_layer)
-
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(new_context_layer_shape)
-
-        context_layer = self.out_proj(context_layer)
-
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-
-        return outputs
-
-
-class MMGroundingDinoTextEnhancerLayer(nn.Module):
-    """Vanilla Transformer with text embeddings as input"""
-
-    def __init__(self, config):
-        super().__init__()
-        self.self_attn = MMGroundingDinoMultiheadAttention(
-            config, num_attention_heads=config.encoder_attention_heads // 2
-        )
-
-        # Implementation of Feedforward model
-        self.fc1 = nn.Linear(config.d_model, config.encoder_ffn_dim // 2)
-        self.fc2 = nn.Linear(config.encoder_ffn_dim // 2, config.d_model)
-
-        self.layer_norm_before = nn.LayerNorm(config.d_model, config.layer_norm_eps)
-        self.layer_norm_after = nn.LayerNorm(config.d_model, config.layer_norm_eps)
-
-        self.activation = ACT2FN[config.activation_function]
-        self.num_heads = config.encoder_attention_heads // 2
-        self.dropout = config.text_enhancer_dropout
-
-    def with_pos_embed(self, hidden_state: Tensor, position_embeddings: Tensor | None):
-        return hidden_state if position_embeddings is None else hidden_state + position_embeddings
-
-    def forward(
-        self,
-        hidden_states: torch.FloatTensor,
-        attention_masks: torch.BoolTensor | None = None,
-        position_embeddings: torch.FloatTensor | None = None,
-    ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
-        """Text self-attention to enhance projection of text features generated by
-        the text encoder (AutoModel based on text_config) within MMGroundingDinoEncoderLayer
-
-        Args:
-            hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_dim)`):
-                Text features generated by the text encoder.
-            attention_masks (`torch.BoolTensor`, *optional*):
-                Attention mask for text self-attention. False for real tokens and True for padding tokens.
-            position_embeddings (`torch.FloatTensor`, *optional*):
-                Position embeddings to be added to the hidden states.
-
-        Returns:
-            `tuple(torch.FloatTensor)` comprising two elements:
-            - **hidden_states** (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`) --
-                Output of the text self-attention layer.
-            - **attention_weights** (`torch.FloatTensor` of shape `(batch_size, num_heads, sequence_length,
-              sequence_length)`) --
-                Attention weights of the text self-attention layer.
-        """
-
-        # repeat attn mask
-        if attention_masks.dim() == 3 and attention_masks.shape[0] == hidden_states.shape[0]:
-            # batch_size, num_queries, num_keys
-            attention_masks = attention_masks[:, None, :, :]
-            attention_masks = attention_masks.repeat(1, self.num_heads, 1, 1)
-
-            dtype = hidden_states.dtype
-            attention_masks = attention_masks.to(dtype=dtype)  # fp16 compatibility
-            attention_masks = (1.0 - attention_masks) * torch.finfo(dtype).min
-
-        queries = keys = self.with_pos_embed(hidden_states, position_embeddings)
-        attention_output, attention_weights = self.self_attn(
-            queries=queries,
-            keys=keys,
-            values=hidden_states,
-            attention_mask=attention_masks,
-            output_attentions=True,
-        )
-        attention_output = nn.functional.dropout(attention_output, p=self.dropout, training=self.training)
-        hidden_states = hidden_states + attention_output
-        hidden_states = self.layer_norm_before(hidden_states)
-
-        residual = hidden_states
-        hidden_states = self.activation(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = hidden_states + residual
-        hidden_states = self.layer_norm_after(hidden_states)
-
-        return hidden_states, attention_weights
 
 
 class MMGroundingDinoBiMultiHeadAttention(nn.Module):
@@ -784,6 +483,396 @@ class MMGroundingDinoFusionLayer(nn.Module):
         text_features = text_features + self.drop_path(self.text_param * delta_t)
 
         return (vision_features, vision_attn), (text_features, text_attn)
+
+
+@auto_docstring
+class MMGroundingDinoPreTrainedModel(PreTrainedModel):
+    config: MMGroundingDinoConfig
+    base_model_prefix = "model"
+    main_input_name = "pixel_values"
+    input_modalities = ("image", "text")
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        std = self.config.init_std
+
+        if isinstance(module, MMGroundingDinoLearnedPositionEmbedding):
+            init.uniform_(module.row_embeddings.weight)
+            init.uniform_(module.column_embeddings.weight)
+        elif isinstance(module, MMGroundingDinoMultiscaleDeformableAttention):
+            init.constant_(module.sampling_offsets.weight, 0.0)
+            default_dtype = torch.get_default_dtype()
+            thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
+                2.0 * math.pi / module.n_heads
+            )
+            grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
+            grid_init = (
+                (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
+                .view(module.n_heads, 1, 1, 2)
+                .repeat(1, module.n_levels, module.n_points, 1)
+            )
+            for i in range(module.n_points):
+                grid_init[:, :, i, :] *= i + 1
+
+            init.copy_(module.sampling_offsets.bias, grid_init.view(-1))
+            init.constant_(module.attention_weights.weight, 0.0)
+            init.constant_(module.attention_weights.bias, 0.0)
+            init.xavier_uniform_(module.value_proj.weight)
+            init.constant_(module.value_proj.bias, 0.0)
+            init.xavier_uniform_(module.output_proj.weight)
+            init.constant_(module.output_proj.bias, 0.0)
+        elif isinstance(module, MMGroundingDinoBiMultiHeadAttention):
+            init.xavier_uniform_(module.vision_proj.weight)
+            init.zeros_(module.vision_proj.bias)
+            init.xavier_uniform_(module.text_proj.weight)
+            init.zeros_(module.text_proj.bias)
+            init.xavier_uniform_(module.values_vision_proj.weight)
+            init.zeros_(module.values_vision_proj.bias)
+            init.xavier_uniform_(module.values_text_proj.weight)
+            init.zeros_(module.values_text_proj.bias)
+            init.xavier_uniform_(module.out_vision_proj.weight)
+            init.zeros_(module.out_vision_proj.bias)
+            init.xavier_uniform_(module.out_text_proj.weight)
+            init.zeros_(module.out_text_proj.bias)
+        elif isinstance(module, MMGroundingDinoFusionLayer):
+            init.constant_(module.vision_param, 1e-4)
+            init.constant_(module.text_param, 1e-4)
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+            init.normal_(module.weight, mean=0.0, std=std)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
+        elif isinstance(module, MMGroundingDinoMLPPredictionHead):
+            init.constant_(module.layers[-1].weight, 0)
+            init.constant_(module.layers[-1].bias, 0)
+
+        if hasattr(module, "reference_points") and not self.config.two_stage:
+            init.xavier_uniform_(module.reference_points.weight, gain=1.0)
+            init.constant_(module.reference_points.bias, 0.0)
+        if hasattr(module, "level_embed"):
+            init.normal_(module.level_embed)
+        if isinstance(module, MMGroundingDinoContrastiveEmbedding):
+            init.constant_(module.bias, -math.log((1 - 0.01) / 0.01))
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, MMGroundingDinoDecoder):
+            module.gradient_checkpointing = value
+
+
+class MMGroundingDinoFrozenBatchNorm2d(nn.Module):
+    """
+    BatchNorm2d where the batch statistics and the affine parameters are fixed.
+
+    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
+    torchvision.models.resnet[18,34,50,101] produce nans.
+    """
+
+    def __init__(self, n):
+        super().__init__()
+        self.register_buffer("weight", torch.ones(n))
+        self.register_buffer("bias", torch.zeros(n))
+        self.register_buffer("running_mean", torch.zeros(n))
+        self.register_buffer("running_var", torch.ones(n))
+
+    def _load_from_state_dict(
+        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+    ):
+        num_batches_tracked_key = prefix + "num_batches_tracked"
+        if num_batches_tracked_key in state_dict:
+            del state_dict[num_batches_tracked_key]
+
+        super()._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+        )
+
+    def forward(self, x):
+        # move reshapes to the beginning
+        # to make it user-friendly
+        weight = self.weight.reshape(1, -1, 1, 1)
+        bias = self.bias.reshape(1, -1, 1, 1)
+        running_var = self.running_var.reshape(1, -1, 1, 1)
+        running_mean = self.running_mean.reshape(1, -1, 1, 1)
+        epsilon = 1e-5
+        scale = weight * (running_var + epsilon).rsqrt()
+        bias = bias - running_mean * scale
+        return x * scale + bias
+
+
+def replace_batch_norm(model):
+    r"""
+    Recursively replace all `torch.nn.BatchNorm2d` with `MMGroundingDinoFrozenBatchNorm2d`.
+
+    Args:
+        model (torch.nn.Module):
+            input model
+    """
+    for name, module in model.named_children():
+        if isinstance(module, nn.BatchNorm2d):
+            new_module = MMGroundingDinoFrozenBatchNorm2d(module.num_features)
+
+            if module.weight.device != torch.device("meta"):
+                new_module.weight.copy_(module.weight)
+                new_module.bias.copy_(module.bias)
+                new_module.running_mean.copy_(module.running_mean)
+                new_module.running_var.copy_(module.running_var)
+
+            model._modules[name] = new_module
+
+        if len(list(module.children())) > 0:
+            replace_batch_norm(module)
+
+
+class MMGroundingDinoConvEncoder(nn.Module):
+    """
+    Convolutional backbone, using either the AutoBackbone API or one from the timm library.
+
+    nn.BatchNorm2d layers are replaced by MMGroundingDinoFrozenBatchNorm2d as defined above.
+
+    """
+
+    def __init__(self, config):
+        super().__init__()
+
+        self.config = config
+        backbone = load_backbone(config)
+
+        # replace batch norm by frozen batch norm
+        with torch.no_grad():
+            replace_batch_norm(backbone)
+        self.model = backbone
+        self.intermediate_channel_sizes = self.model.channels
+
+        backbone_model_type = config.backbone_config.model_type
+        if "resnet" in backbone_model_type:
+            for name, parameter in self.model.named_parameters():
+                if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
+                    parameter.requires_grad_(False)
+
+    def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
+        # send pixel_values through the model to get list of feature maps
+        features = self.model(pixel_values, return_dict=True).feature_maps
+
+        out = []
+        for feature_map in features:
+            # downsample pixel_mask to match shape of corresponding feature_map
+            mask = nn.functional.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
+            out.append((feature_map, mask))
+        return out
+
+
+# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrConvModel with Detr->MMGroundingDino
+class MMGroundingDinoConvModel(nn.Module):
+    """
+    This module adds 2D position embeddings to all intermediate feature maps of the convolutional encoder.
+    """
+
+    def __init__(self, conv_encoder, position_embedding):
+        super().__init__()
+        self.conv_encoder = conv_encoder
+        self.position_embedding = position_embedding
+
+    def forward(self, pixel_values, pixel_mask):
+        # send pixel_values and pixel_mask through backbone to get list of (feature_map, pixel_mask) tuples
+        out = self.conv_encoder(pixel_values, pixel_mask)
+        pos = []
+        for feature_map, mask in out:
+            # position encoding
+            pos.append(self.position_embedding(feature_map, mask).to(feature_map.dtype))
+
+        return out, pos
+
+
+@auto_docstring(
+    custom_intro="""
+    Base class for outputs of the MMGroundingDinoEncoder. This class extends BaseModelOutput, due to:
+    - vision and text last hidden states
+    - vision and text intermediate hidden states
+    """
+)
+@dataclass
+class MMGroundingDinoEncoderOutput(ModelOutput):
+    r"""
+    last_hidden_state_vision (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the vision encoder.
+    last_hidden_state_text (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the text encoder.
+    vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the vision embeddings + one for the output of each
+        layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the vision encoder at the
+        output of each layer plus the initial embedding outputs.
+    text_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the text embeddings + one for the output of each layer)
+        of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of
+        each layer plus the initial embedding outputs.
+    """
+
+    last_hidden_state_vision: torch.FloatTensor | None = None
+    last_hidden_state_text: torch.FloatTensor | None = None
+    vision_hidden_states: tuple[torch.FloatTensor] | None = None
+    text_hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[tuple[torch.FloatTensor]] | None = None
+
+
+class MMGroundingDinoMultiheadAttention(nn.Module):
+    """Equivalent implementation of nn.MultiheadAttention with `batch_first=True`."""
+
+    def __init__(self, config, num_attention_heads=None):
+        super().__init__()
+        if config.hidden_size % num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+            raise ValueError(
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({num_attention_heads})"
+            )
+
+        self.num_attention_heads = num_attention_heads
+        self.attention_head_size = int(config.hidden_size / num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+
+        self.query = nn.Linear(config.hidden_size, self.all_head_size)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size)
+
+        self.out_proj = nn.Linear(config.hidden_size, config.hidden_size)
+
+        self.dropout = nn.Dropout(config.attention_dropout)
+
+    def forward(
+        self,
+        queries: torch.Tensor,
+        keys: torch.Tensor,
+        values: torch.Tensor,
+        attention_mask: torch.FloatTensor | None = None,
+        output_attentions: bool | None = False,
+    ) -> tuple[torch.Tensor]:
+        batch_size, seq_length, _ = queries.shape
+        query_layer = (
+            self.query(queries)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        key_layer = (
+            self.key(keys).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        )
+        value_layer = (
+            self.value(values).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        )
+
+        # Take the dot product between "query" and "key" to get the raw attention scores.
+        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+
+        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        if attention_mask is not None:
+            # Apply the attention mask is (precomputed for all layers in MMGroundingDinoModel forward() function)
+            attention_scores = attention_scores + attention_mask
+
+        # Normalize the attention scores to probabilities.
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
+
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        attention_probs = self.dropout(attention_probs)
+
+        context_layer = torch.matmul(attention_probs, value_layer)
+
+        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.view(new_context_layer_shape)
+
+        context_layer = self.out_proj(context_layer)
+
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+
+        return outputs
+
+
+class MMGroundingDinoTextEnhancerLayer(nn.Module):
+    """Vanilla Transformer with text embeddings as input"""
+
+    def __init__(self, config):
+        super().__init__()
+        self.self_attn = MMGroundingDinoMultiheadAttention(
+            config, num_attention_heads=config.encoder_attention_heads // 2
+        )
+
+        # Implementation of Feedforward model
+        self.fc1 = nn.Linear(config.d_model, config.encoder_ffn_dim // 2)
+        self.fc2 = nn.Linear(config.encoder_ffn_dim // 2, config.d_model)
+
+        self.layer_norm_before = nn.LayerNorm(config.d_model, config.layer_norm_eps)
+        self.layer_norm_after = nn.LayerNorm(config.d_model, config.layer_norm_eps)
+
+        self.activation = ACT2FN[config.activation_function]
+        self.num_heads = config.encoder_attention_heads // 2
+        self.dropout = config.text_enhancer_dropout
+
+    def with_pos_embed(self, hidden_state: Tensor, position_embeddings: Tensor | None):
+        return hidden_state if position_embeddings is None else hidden_state + position_embeddings
+
+    def forward(
+        self,
+        hidden_states: torch.FloatTensor,
+        attention_masks: torch.BoolTensor | None = None,
+        position_embeddings: torch.FloatTensor | None = None,
+    ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
+        """Text self-attention to enhance projection of text features generated by
+        the text encoder (AutoModel based on text_config) within MMGroundingDinoEncoderLayer
+
+        Args:
+            hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_dim)`):
+                Text features generated by the text encoder.
+            attention_masks (`torch.BoolTensor`, *optional*):
+                Attention mask for text self-attention. False for real tokens and True for padding tokens.
+            position_embeddings (`torch.FloatTensor`, *optional*):
+                Position embeddings to be added to the hidden states.
+
+        Returns:
+            `tuple(torch.FloatTensor)` comprising two elements:
+            - **hidden_states** (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`) --
+                Output of the text self-attention layer.
+            - **attention_weights** (`torch.FloatTensor` of shape `(batch_size, num_heads, sequence_length,
+              sequence_length)`) --
+                Attention weights of the text self-attention layer.
+        """
+
+        # repeat attn mask
+        if attention_masks.dim() == 3 and attention_masks.shape[0] == hidden_states.shape[0]:
+            # batch_size, num_queries, num_keys
+            attention_masks = attention_masks[:, None, :, :]
+            attention_masks = attention_masks.repeat(1, self.num_heads, 1, 1)
+
+            dtype = hidden_states.dtype
+            attention_masks = attention_masks.to(dtype=dtype)  # fp16 compatibility
+            attention_masks = (1.0 - attention_masks) * torch.finfo(dtype).min
+
+        queries = keys = self.with_pos_embed(hidden_states, position_embeddings)
+        attention_output, attention_weights = self.self_attn(
+            queries=queries,
+            keys=keys,
+            values=hidden_states,
+            attention_mask=attention_masks,
+            output_attentions=True,
+        )
+        attention_output = nn.functional.dropout(attention_output, p=self.dropout, training=self.training)
+        hidden_states = hidden_states + attention_output
+        hidden_states = self.layer_norm_before(hidden_states)
+
+        residual = hidden_states
+        hidden_states = self.activation(self.fc1(hidden_states))
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = hidden_states + residual
+        hidden_states = self.layer_norm_after(hidden_states)
+
+        return hidden_states, attention_weights
 
 
 class MMGroundingDinoDeformableLayer(nn.Module):
@@ -1633,31 +1722,6 @@ class MMGroundingDinoSinePositionEmbedding(nn.Module):
         pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
-        return pos
-
-
-class MMGroundingDinoLearnedPositionEmbedding(nn.Module):
-    """
-    This module learns positional embeddings up to a fixed maximum size.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-
-        embedding_dim = config.d_model // 2
-        self.row_embeddings = nn.Embedding(50, embedding_dim)
-        self.column_embeddings = nn.Embedding(50, embedding_dim)
-
-    def forward(self, pixel_values, pixel_mask=None):
-        height, width = pixel_values.shape[-2:]
-        width_values = torch.arange(width, device=pixel_values.device)
-        height_values = torch.arange(height, device=pixel_values.device)
-        x_emb = self.column_embeddings(width_values)
-        y_emb = self.row_embeddings(height_values)
-        pos = torch.cat([x_emb.unsqueeze(0).repeat(height, 1, 1), y_emb.unsqueeze(1).repeat(1, width, 1)], dim=-1)
-        pos = pos.permute(2, 0, 1)
-        pos = pos.unsqueeze(0)
-        pos = pos.repeat(pixel_values.shape[0], 1, 1, 1)
         return pos
 
 

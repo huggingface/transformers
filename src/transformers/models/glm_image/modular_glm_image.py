@@ -339,7 +339,6 @@ class GlmImagePreTrainedModel(Glm4vPreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
         PreTrainedModel._init_weights(module)
 
 

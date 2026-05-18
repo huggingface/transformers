@@ -413,7 +413,6 @@ class Siglip2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        super()._init_weights(module)
         if isinstance(module, Siglip2VisionEmbeddings):
             width = (
                 self.config.vision_config.hidden_size

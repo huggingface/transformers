@@ -1169,7 +1169,6 @@ class SpeechT5PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
-        super()._init_weights(module)
         std = self.config.initializer_range
         if isinstance(module, SpeechT5PositionalConvEmbedding):
             init.normal_(

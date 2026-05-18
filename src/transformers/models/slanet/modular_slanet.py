@@ -94,7 +94,6 @@ class SLANetPreTrainedModel(SLANeXtPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        super()._init_weights(module)
         PreTrainedModel._init_weights(module)
 
         # Initialize GRUCell (replicates PyTorch default reset_parameters)

@@ -235,7 +235,6 @@ class PPLCNetV3DepthwiseSeparableConvLayer(PPLCNetDepthwiseSeparableConvLayer):
 class PPLCNetV3PreTrainedModel(PPLCNetPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
         PreTrainedModel._init_weights(module)
         if isinstance(module, (PPLCNetV3LearnableAffineBlock)):
             nn.init.ones_(module.scale)

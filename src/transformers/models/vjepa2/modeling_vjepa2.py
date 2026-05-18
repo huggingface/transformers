@@ -863,7 +863,6 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
 
-        super()._init_weights(module)
         init_std = self.config.initializer_range
         if isinstance(module, VJEPA2AttentivePooler):
             init.trunc_normal_(module.query_tokens, std=init_std)

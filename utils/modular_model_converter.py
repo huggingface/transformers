@@ -368,11 +368,6 @@ class ReplaceSuperCallTransformer(cst.CSTTransformer):
         super_call_node = m.Call(func=m.Attribute(value=m.Call(func=m.Name("super")), attr=m.Name(func_name)))
         return m.matches(node, m.SimpleStatementLine(body=[m.Return(super_call_node) | m.Expr(super_call_node)]))
 
-    # Methods whose `super().method(...)` calls should be preserved verbatim instead of
-    # being treated as "inline parent's body here" directives. TRF018 requires a literal
-    # chain to the base class for `_init_weights`.
-    LITERAL_SUPER_METHODS: frozenset[str] = frozenset({"_init_weights"})
-
     def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
         func_name = updated_node.name.value
         self.should_check_statements = False
@@ -380,11 +375,7 @@ class ReplaceSuperCallTransformer(cst.CSTTransformer):
             actual_body = updated_node.body.body  # first body is an `IndentedBlock` wrapper
             new_body = []
             for i, base_statement_node in enumerate(actual_body):
-                if (
-                    self.is_call_to_super(base_statement_node, func_name)
-                    and func_name not in self.LITERAL_SUPER_METHODS
-                    and func_name in self.original_modeling_methods
-                ):
+                if self.is_call_to_super(base_statement_node, func_name):
                     original_modeling_method_body = self.original_modeling_methods[func_name].body.body
                     new_body.extend(self.update_body(original_modeling_method_body, actual_body[i + 1 :]))
                     new_body = self._fix_init_location(new_body, original_modeling_method_body)

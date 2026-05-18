@@ -1083,7 +1083,6 @@ class EomtDinov3PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
         super()._init_weights(module)
-        super()._init_weights(module)
         std = self.config.initializer_range
         if isinstance(module, EomtDinov3LayerScale):
             if hasattr(module, "lambda1"):

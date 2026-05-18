@@ -135,7 +135,6 @@ class Sam3TrackerPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        super()._init_weights(module)
         if isinstance(module, Sam3TrackerModel):
             if module.no_memory_embedding is not None:
                 init.zeros_(module.no_memory_embedding)

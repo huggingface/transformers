@@ -273,7 +273,6 @@ class PPFormulaNetPreTrainedModel(SLANeXtPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        super()._init_weights(module)
         PreTrainedModel._init_weights(module)
 
         # Initialize positional embeddings to zero (PPFormulaNetVisionModel holds pos_embed)

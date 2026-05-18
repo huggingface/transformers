@@ -651,7 +651,6 @@ class Mamba2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
-        super()._init_weights(module)
         std = self.config.initializer_range
         if isinstance(module, Mamba2Mixer):
             # S4D real initialization. These are not discretized!

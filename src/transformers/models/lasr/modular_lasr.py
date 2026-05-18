@@ -446,7 +446,6 @@ class LasrPreTrainedModel(ParakeetPreTrainedModel):
     _supports_flex_attn = False
 
     def _init_weights(self, module):
-        super()._init_weights(module)
         PreTrainedModel._init_weights(module)
 
     def _get_subsampling_output_length(self, input_lengths: torch.Tensor):
