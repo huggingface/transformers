@@ -25,6 +25,7 @@ The [`ExpertsInterface`] provides optimized experts backends. It decouples the e
 | `"batched_mm"`  | Duplicates selected expert parameters for each token and projects all tokens in a single batched GEMM using [`torch.bmm`](https://docs.pytorch.org/docs/stable/generated/torch.bmm.html).                                                 | Fastest for small inputs, especially with compilation. Uses more memory due to parameter duplication.               | Not recommended (significantly slower than other backends). |
 | `"grouped_mm"`  | Orders tokens by selected experts and uses [`torch.nn.functional.grouped_mm`](https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.grouped_mm.html) to project all tokens in a single grouped GEMM (requires PyTorch 2.9+). | Best for larger inputs and more memory efficient as it avoids duplicating expert parameters. Fast with compilation. | Most efficient backend for all input sizes.                 |
 | `"deepgemm"`    | Sorts tokens by selected expert and projects all tokens in a single TMA-aligned grouped GEMM using the [DeepGEMM](https://github.com/deepseek-ai/DeepGEMM) kernels from [kernels-community/deep-gemm](https://huggingface.co/kernels-community/deep-gemm). | Highest throughput on Hopper (SM90+) and Blackwell (SM100+) for both `bfloat16` experts and FP8/FP4-quantized experts. | Not supported (CUDA-only).                                  |
+| `"sonicmoe"`    | Fused `bfloat16` MoE forward (router dispatch, gated up projection, activation, and down projection) using the [CuteDSL](https://github.com/NVIDIA/cutlass) kernels from [kernels-community/sonic-moe](https://huggingface.co/kernels-community/sonic-moe). | High throughput on Hopper (SM90+) for `bfloat16` experts with a gated activation (SwiGLU/GeGLU/ReGLU). | Not supported (CUDA-only).                                  |
 
 > [!NOTE]
 > When using `experts_implementation="grouped_mm"` on GPU, the model automatically switches to `"batched_mm"` during the decode stage of generation (after prefill). This is because `batched_mm` is significantly faster on lower token count during autoregressive decoding on GPU. On CPU, `grouped_mm` remains active throughout generation as it is more efficient for all input sizes.
@@ -104,7 +105,7 @@ The kernel is loaded lazily on the first forward.
 
 When the model is loaded with [`FineGrainedFP8Config`], the `"deepgemm"` backend automatically picks the FP8 (or FP4 on Blackwell) grouped-GEMM kernel. Set `activation_scheme="dynamic"` on the quantization config. DeepGEMM requires per-row activation scales and rejects static (per-tensor) activation quantization.
 
-For FP4-packed expert weights (DeepSeek V4-style), the GPU must be SM100+ (Blackwell).
+For FP4-packed expert weights (DeepSeek V4-style), the GPU must be SM100+ (Blackwell), and the checkpoint config typically sets `expert_dtype="fp4"` with `scale_fmt="ue8m0"` on the quantization config.
 
 ```py
 from transformers import AutoModelForCausalLM, FineGrainedFP8Config
@@ -137,9 +138,31 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
+## SonicMoE
+
+The `"sonicmoe"` backend fuses the routed MoE forward (dispatch, gated up projection, activation, down projection) into one CuteDSL kernel from [kernels-community/sonic-moe](https://huggingface.co/kernels-community/sonic-moe).
+
+The `"sonicmoe"` backend requires:
+
+- CUDA GPU with compute capability ≥ 9.0 (Hopper or newer).
+- The [`kernels`](https://github.com/huggingface/kernels) package and the `nvidia-cutlass-dsl` package.
+- Experts with a gated activation (`silu`, `gelu`, or `relu`, mapped to SwiGLU/GeGLU/ReGLU).
+
+```py
+from transformers import AutoModelForCausalLM
+
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen1.5-MoE-A2.7B",
+    dtype="bfloat16",
+    experts_implementation="sonicmoe",
+)
+```
+
+If the requirements aren't met, the forward raises `ImportError` — pick a different `experts_implementation`.
+
 ## torch.compile
 
-All three backends (`"eager"`, `"batched_mm"`, `"grouped_mm"`) are compatible with `torch.compile` to certain extents. The following table summarizes compatibility:
+The `"eager"`, `"batched_mm"`, and `"grouped_mm"` backends are compatible with `torch.compile` to varying degrees. The following table summarizes their compatibility. The `"deepgemm"` and `"sonicmoe"` backends route through external CUDA kernels and aren't covered by this table.
 
 | Implementation          | compilation modes                    | dtypes                           | `fullgraph=True` |
 | ----------------------- | ------------------------------------ | -------------------------------- | ---------------- |

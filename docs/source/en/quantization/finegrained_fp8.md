@@ -63,19 +63,19 @@ model = AutoModelForCausalLM.from_pretrained(quant_path, device_map="auto")
 
 ## DeepGEMM fast path
 
-On Hopper (SM90+) and Blackwell (SM100+) GPUs with CUDA runtime 12.3 or later, the FP8 linear and FP8 MoE paths automatically dispatch to the [DeepGEMM](https://github.com/deepseek-ai/DeepGEMM) kernels from [kernels-community/deep-gemm](https://huggingface.co/kernels-community/deep-gemm) when `weight_block_size=(128, 128)` and `activation_scheme="dynamic"`. DeepGEMM is 3-6x faster than the Triton fallback. Install or upgrade the [kernels](https://github.com/huggingface/kernels) package to enable it.
+On Hopper (SM90+) and Blackwell (SM100+) GPUs with CUDA runtime 12.3 or later, every FP8 linear automatically dispatches to the [DeepGEMM](https://github.com/deepseek-ai/DeepGEMM) kernels from [kernels-community/deep-gemm](https://huggingface.co/kernels-community/deep-gemm) when `weight_block_size=(128, 128)` and `activation_scheme="dynamic"`. DeepGEMM is 3-6x faster than the Triton fallback. Install or upgrade the [kernels](https://github.com/huggingface/kernels) package to enable it.
 
 ```bash
 pip install -U kernels
 ```
 
-If the kernel cannot load (missing `kernels`, unsupported GPU, or older CUDA), Transformers logs a warning once and falls back to the Triton finegrained-fp8 kernel.
+If the kernel cannot load (missing `kernels`, unsupported GPU, or older CUDA), Transformers logs a warning once and falls back to the Triton finegrained-fp8 kernel. Static activation quantization always stays on the Triton path.
 
-For MoE models, opt in explicitly with `experts_implementation="deepgemm"` (or `"deepgemm_megamoe"` on Blackwell) to route the expert matmuls through DeepGEMM. See the [Experts backends](../experts_interface) guide for the full set of options.
+For MoE experts, the DeepGEMM path is opt-in. Pass `experts_implementation="deepgemm"` (or `"deepgemm_megamoe"` on Blackwell) at load time to route the expert matmuls through DeepGEMM. See the [Experts backends](../experts_interface) guide for the full set of options.
 
 ## UE8M0 scale format
 
-DeepSeek V4-style checkpoints store FP8 weight scales in the packed `float8_e8m0fnu` format instead of `float32`. Pass `scale_fmt="ue8m0"` to load these checkpoints. UE8M0 scales must take the DeepGEMM path, so the same hardware and `kernels` requirements apply.
+DeepSeek V4-style checkpoints store FP8 weight scales in the packed `float8_e8m0fnu` format instead of `float32`. Pass `scale_fmt="ue8m0"` to load these checkpoints. UE8M0 scales must take the DeepGEMM path (the Triton fallback only reads `float32` scales) so the same hardware and `kernels` requirements apply.
 
 ```py
 from transformers import FineGrainedFP8Config
