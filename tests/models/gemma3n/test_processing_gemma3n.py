@@ -22,8 +22,7 @@ from transformers.testing_utils import (
     require_vision,
 )
 
-from ...test_processing_common import ProcessorTesterMixin
-from .test_feature_extraction_gemma3n import floats_list
+from ...test_processing_common import ProcessorTesterMixin, floats_list
 
 
 # TODO: omni-modal processor can't run tests from `ProcessorTesterMixin`

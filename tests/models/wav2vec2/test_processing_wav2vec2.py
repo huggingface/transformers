@@ -20,7 +20,7 @@ from transformers.models.wav2vec2 import Wav2Vec2Processor
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
 
 from ...test_processing_common import ProcessorTesterMixin
-from ..wav2vec2.test_feature_extraction_wav2vec2 import floats_list
+from ...test_processing_common import floats_list
 
 
 class Wav2Vec2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
