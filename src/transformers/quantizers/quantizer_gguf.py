@@ -242,13 +242,15 @@ class GGUFQuantizer(HfQuantizer):
         ``gguf.quants.quantize`` applied to the live fp16/bf16 weight.
         """
         import fnmatch
+        from typing import cast
 
         import gguf
         import torch.nn as nn
 
         from ..integrations.gguf_linear import replace_with_gguf_linear
+        from ..utils.quantization_config import GgufQuantizeConfig
 
-        cfg = self.quantization_config
+        cfg = cast(GgufQuantizeConfig, self.quantization_config)
         quant_type = cfg.quant_type  # validated to Q4_0 / Q8_0 in GgufQuantizeConfig.post_init
         ggml_type = getattr(gguf.GGMLQuantizationType, quant_type)
         include = cfg.modules_to_convert

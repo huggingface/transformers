@@ -1110,10 +1110,14 @@ class GgufQuantizeConfig(QuantizationConfigMixin):
     ```
 
     Args:
-        quant_type: GGUF quant name (``"Q4_0"`` / ``"Q8_0"``). Default ``"Q4_0"``.
-        modules_to_convert: Optional glob-style module name list. ``None`` =
-            every ``nn.Linear`` that's quantizable.
-        modules_to_not_convert: explicit skip list (matched as substring).
+        quant_type (`str`, *optional*, defaults to `"Q4_0"`):
+            GGUF quantization name. Only `"Q4_0"` and `"Q8_0"` are supported today
+            (gguf-py limitation — K-quants are read-only upstream).
+        modules_to_convert (`list[str]`, *optional*):
+            Glob-style names of `nn.Linear` modules to quantize. `None` means every
+            quantizable `nn.Linear` is converted.
+        modules_to_not_convert (`list[str]`, *optional*):
+            Explicit skip list (substring match against module names).
     """
 
     def __init__(
