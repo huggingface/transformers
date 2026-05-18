@@ -52,3 +52,39 @@ model.save_pretrained("directory")
 
 !python ${path_to_llama_cpp}/convert-hf-to-gguf.py ${directory}
 ```
+
+## Metal fast paths
+
+Transformers ships two optional Metal fast paths for GGUF on Apple Silicon. Both require the [kernels](https://github.com/huggingface/kernels) package. Unsupported quant types and non-MPS devices fall back to the pure PyTorch path.
+
+Use native quantized inference for serving on MPS and the dequant fast path for training, finetuning, or any non-MPS device.
+
+```sh
+pip install kernels
+```
+
+### Native quantized inference
+
+Loading a GGUF checkpoint without an explicit `dtype` keeps weights at their native quant and runs each `nn.Linear` through `GgufLinear`. On Apple Silicon, `GgufLinear` dispatches to the Metal kernels and decode is 1.37x faster under `torch.compile` on Llama-3.2-3B Q4_K_M, M3 Max. Packed weights cut resident memory ~3x — Qwen1.5-MoE-A2.7B Q4_K_M loads at 8.8 GB versus 28.6 GB when dequantized to `bfloat16`.
+
+Pass `gguf_linear=True` in [`~AutoModelForCausalLM.from_pretrained`] to enable but passing an explicit `dtype` switches back to dequantize-on-load even if `gguf_linear=True`.
+
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model_id = "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF"
+filename = "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+
+tokenizer = AutoTokenizer.from_pretrained(model_id, gguf_file=filename)
+model = AutoModelForCausalLM.from_pretrained(model_id, gguf_file=filename, gguf_linear=True)
+```
+
+Supported quant types are `Q4_0`, `Q5_0`, `Q5_1`, `Q8_0`, `Q4_K`, `Q5_K`, `Q6_K`, `IQ4_NL`, and `IQ4_XS`.
+
+### Metal dequant fast path
+
+The dequant path (used for training, finetuning, and non-MPS devices) routes each tensor through a single Metal compute kernel. The kernel ships in [kernels-community/gguf-dequant](https://huggingface.co/kernels-community/gguf-dequant) and runs 2-7x faster than the chained PyTorch path on M3 Max.
+
+Supported quant types are `Q4_0`, `Q8_0`, `Q4_K`, `Q5_K`, `Q6_K`, `IQ4_NL`, and `IQ4_XS`.
+
+The fast path is enabled by default when the [kernels](https://github.com/huggingface/kernels) package is installed. Set the `TRANSFORMERS_GGUF_USE_METAL_KERNELS=0` environment variable to disable it.

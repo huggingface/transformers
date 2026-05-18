@@ -70,6 +70,21 @@ transformers serve \
   --attn-implementation "flash_attention_2"
 ```
 
+### Apple Silicon (Metal flash attention)
+
+Install [kernels](https://github.com/huggingface/kernels) to make `transformers serve` default to [kernels-community/metal-flash-sdpa](https://huggingface.co/kernels-community/metal-flash-sdpa) on MPS. The Metal flash kernel runs 1.66x faster than SDPA with `generate_batch` on 100 samples of gsm8k, Qwen2.5-0.5B-Instruct and MPS fp16. It matches SDPA token-for-token under greedy decoding.
+
+```sh
+pip install kernels
+transformers serve
+```
+
+A warning prints at startup confirming the auto-selection. Pass `--attn-implementation sdpa` to opt out.
+
+```sh
+transformers serve --attn-implementation sdpa
+```
+
 ## Compile
 
 [torch.compile](../perf_torch_compile) traces and compiles the decode loop for faster inference.
