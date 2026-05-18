@@ -12,13 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
+import torch
 
-from ...audio_processing_backends import NumpyAudioBackend
+from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_base import make_legacy_audio_processor_alias
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
-class SeamlessM4tAudioProcessor(NumpyAudioBackend):
+class SeamlessM4tAudioProcessor(TorchAudioBackend):
     sample_rate = 16000
     force_mono = True
     do_batch_spectrogram = False
@@ -54,18 +55,30 @@ class SeamlessM4tAudioProcessor(NumpyAudioBackend):
         # Per-waveform fbank extraction returning (time, n_mels)
         features = []
         for waveform in audio:
-            waveform = np.squeeze(waveform) * self.waveform_scale
+            waveform = waveform.squeeze() * self.waveform_scale
             f = super().extract_spectrogram([waveform], spectrogram_config=self.spectrogram_config)
-            features.append(f[0].T)
+            features.append(f[0].transpose(-2, -1))
         return features
 
+    def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
+        # `computation_dtype="float64"` upcasts the magnitudes but the kaldi-exact mel filter
+        # bank is built in float32; cast the filters to match the features dtype, mirroring the
+        # numpy sibling's `mel_filters.astype(features.dtype)` pattern.
+        mel_filters = self.mel_filters.to(device=features.device, dtype=features.dtype)
+        if spectrogram_config.mel_scale_config.matmul_order == "features_first":
+            mel_spec = torch.matmul(features.transpose(-2, -1), mel_filters)
+        else:
+            mel_spec = torch.nn.functional.linear(features.transpose(-2, -1), mel_filters.T).transpose(-2, -1)
+        return torch.clamp(mel_spec, min=spectrogram_config.mel_floor)
+
     def _postprocess_features(self, features, feature_lengths):
-        # Per-utterance mean/variance normalization (before padding)
+        # Per-utterance mean/variance normalization (before padding). `torch.var(unbiased=True)`
+        # matches numpy `var(ddof=1)`.
         normalized = []
         for f in features:
-            mean = np.expand_dims(f.mean(axis=0), 0)
-            var = np.expand_dims(f.var(axis=0, ddof=1), 0)
-            normalized.append((f - mean) / np.sqrt(var + 1e-7))
+            mean = f.mean(dim=0).unsqueeze(0)
+            var = f.var(dim=0, unbiased=True).unsqueeze(0)
+            normalized.append((f - mean) / torch.sqrt(var + 1e-7))
         return normalized
 
     def _postprocess_output(self, output, feature_ranges=None, **kwargs):
@@ -85,10 +98,15 @@ class SeamlessM4tAudioProcessor(NumpyAudioBackend):
             mask = output["audio_features_mask"]
             if remainder != 0:
                 mask = mask[:, :num_frames]
-            indices = np.arange(0, num_frames)
+            indices = torch.arange(0, num_frames)
             output["audio_features_mask"] = mask[:, indices % self.stride == 1]
 
         return output
 
 
-__all__ = ["SeamlessM4tAudioProcessor"]
+SeamlessM4TFeatureExtractor = make_legacy_audio_processor_alias(
+    SeamlessM4tAudioProcessor, "SeamlessM4TFeatureExtractor"
+)
+
+
+__all__ = ["SeamlessM4tAudioProcessor", "SeamlessM4TFeatureExtractor"]

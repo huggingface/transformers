@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_base import make_legacy_audio_processor_alias
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
@@ -117,33 +118,38 @@ class ParakeetAudioProcessor(TorchAudioBackend):
 
         return torch.matmul(self.mel_filters.T, features)
 
-    def _normalize_magnitude(self, features, *, spectrogram_config, audio_ranges=None, **kwargs):
+    def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
         import torch
 
-        # Match FE: log(mel_spec + guard_value) instead of log(clamp(mel_spec, guard_value))
+        # Per-utterance mean/var normalization is applied later in `_postprocess_output` —
+        # this hook is pointwise per ADR 0005. Match the legacy FE's `log(x + guard)` form
+        # rather than `log(clamp(x, guard))`, then transpose to (batch, frames, mels).
         features = torch.log(features + spectrogram_config.mel_floor)
+        return features.permute(0, 2, 1)
 
-        # (batch, mels, frames) -> (batch, frames, mels)
-        features = features.permute(0, 2, 1)
+    def _postprocess_output(self, output, audio_ranges=None, **kwargs):
+        import torch
 
-        # Per-utterance normalization
-        if audio_ranges is not None:
-            stft_cfg = spectrogram_config.stft_config
-            audio_lengths = torch.tensor([end - start for start, end in audio_ranges])
-            features_lengths = torch.floor_divide(
-                audio_lengths + stft_cfg.n_fft // 2 * 2 - stft_cfg.n_fft, stft_cfg.hop_length
-            )
-            attention_mask = torch.arange(features.shape[1])[None, :] < features_lengths[:, None]
-            mask = attention_mask.unsqueeze(-1)
-            mel_masked = features * mask
-            mean = mel_masked.sum(dim=1) / features_lengths.unsqueeze(-1)
-            mean = mean.unsqueeze(1)
-            variance = ((mel_masked - mean) ** 2 * mask).sum(dim=1) / (features_lengths - 1).unsqueeze(-1)
-            std = torch.sqrt(variance).unsqueeze(1)
-            features = (features - mean) / (std + 1e-5)
-            features *= mask
+        if audio_ranges is None or "audio_features" not in output:
+            return output
 
-        return features
+        features = output["audio_features"]
+        stft_cfg = self.spectrogram_config.stft_config
+        audio_lengths = torch.tensor([end - start for start, end in audio_ranges])
+        features_lengths = torch.floor_divide(
+            audio_lengths + stft_cfg.n_fft // 2 * 2 - stft_cfg.n_fft, stft_cfg.hop_length
+        )
+        attention_mask = torch.arange(features.shape[1])[None, :] < features_lengths[:, None]
+        mask = attention_mask.unsqueeze(-1)
+        mel_masked = features * mask
+        mean = (mel_masked.sum(dim=1) / features_lengths.unsqueeze(-1)).unsqueeze(1)
+        variance = ((mel_masked - mean) ** 2 * mask).sum(dim=1) / (features_lengths - 1).unsqueeze(-1)
+        std = torch.sqrt(variance).unsqueeze(1)
+        output["audio_features"] = (features - mean) / (std + 1e-5) * mask
+        return output
 
 
-__all__ = ["ParakeetAudioProcessor"]
+ParakeetFeatureExtractor = make_legacy_audio_processor_alias(ParakeetAudioProcessor, "ParakeetFeatureExtractor")
+
+
+__all__ = ["ParakeetAudioProcessor", "ParakeetFeatureExtractor"]

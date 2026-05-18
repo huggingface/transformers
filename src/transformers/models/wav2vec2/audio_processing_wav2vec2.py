@@ -15,6 +15,7 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_base import make_legacy_audio_processor_alias
 
 
 class Wav2Vec2AudioProcessor(TorchAudioBackend):
@@ -31,4 +32,7 @@ class Wav2Vec2AudioProcessor(TorchAudioBackend):
         return audio_el
 
 
-__all__ = ["Wav2Vec2AudioProcessor"]
+Wav2Vec2FeatureExtractor = make_legacy_audio_processor_alias(Wav2Vec2AudioProcessor, "Wav2Vec2FeatureExtractor")
+
+
+__all__ = ["Wav2Vec2AudioProcessor", "Wav2Vec2FeatureExtractor"]

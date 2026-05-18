@@ -13,13 +13,19 @@
 # limitations under the License.
 
 import numpy as np
+import torch
 
-from ...audio_processing_backends import NumpyAudioBackend
+from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_base import make_legacy_audio_processor_alias
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 from ...utils import PaddingStrategy
 
 
-class ClapAudioProcessor(NumpyAudioBackend):
+class ClapAudioProcessor(TorchAudioBackend):
+    """Torch sibling of [`ClapAudioProcessorNumpy`]. Supports both `rand_trunc` (single view)
+    and `fusion` (4-view chunking with bilinear-downsampled global view) truncation modes.
+    Random offsets are drawn from `np.random` to match the numpy sibling when seeded."""
+
     sample_rate = 48000
     force_mono = True
     max_length = 480000
@@ -54,6 +60,13 @@ class ClapAudioProcessor(NumpyAudioBackend):
         self._is_longer_flags = []
         return super().pad(audio, *args, **kwargs)
 
+    def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
+        # Cast mel_filters to the features' dtype so the float64 spectrogram path matches the
+        # numpy sibling, which casts via `mel_filters.astype(features.dtype, copy=False)`.
+        mel_filters = self.mel_filters.to(device=features.device, dtype=features.dtype)
+        mel_spec = torch.nn.functional.linear(features.transpose(-2, -1), mel_filters.T).transpose(-2, -1)
+        return torch.clamp(mel_spec, min=spectrogram_config.mel_floor)
+
     def _truncate_single(self, audio_el, max_length):
         """Random-offset truncation for rand_trunc mode, also tracks which samples were longer."""
         self._is_longer_flags.append(audio_el.shape[-1] > max_length)
@@ -67,27 +80,32 @@ class ClapAudioProcessor(NumpyAudioBackend):
         is_fusion = self.truncation_mode == "fusion"
         chunk_frames = self.max_length // self.spectrogram_config.stft_config.hop_length + 1
 
-        if isinstance(audio, np.ndarray) and audio.ndim == 2:
+        if isinstance(audio, torch.Tensor) and audio.ndim == 2:
             waveforms = list(audio)
-        elif isinstance(audio, np.ndarray) and audio.ndim == 1:
+        elif isinstance(audio, torch.Tensor) and audio.ndim == 1:
             waveforms = [audio]
+        elif isinstance(audio, np.ndarray) and audio.ndim == 2:
+            waveforms = [torch.as_tensor(w) for w in audio]
+        elif isinstance(audio, np.ndarray) and audio.ndim == 1:
+            waveforms = [torch.as_tensor(audio)]
         else:
-            waveforms = audio
+            waveforms = [w if isinstance(w, torch.Tensor) else torch.as_tensor(w) for w in audio]
 
         mels = []
         is_longer = []
         for waveform in waveforms:
-            mel = super().extract_spectrogram(waveform, spectrogram_config=self.spectrogram_config).T  # (time, n_mels)
+            # `super().extract_spectrogram` returns `(n_mels, time)`; transpose to `(time, n_mels)`.
+            mel = super().extract_spectrogram(waveform, spectrogram_config=self.spectrogram_config).transpose(-2, -1)
             total_frames = mel.shape[0]
 
             if is_fusion and total_frames > chunk_frames:
                 mels.append(self._random_mel_fusion(mel, total_frames, chunk_frames))
                 is_longer.append(True)
             elif is_fusion:
-                mels.append(np.stack([mel, mel, mel, mel], axis=0))
+                mels.append(torch.stack([mel, mel, mel, mel], dim=0))
                 is_longer.append(False)
             else:
-                mels.append(mel[np.newaxis])
+                mels.append(mel.unsqueeze(0))
                 is_longer.append(False)
 
         if is_fusion:
@@ -95,8 +113,6 @@ class ClapAudioProcessor(NumpyAudioBackend):
         return mels
 
     def _random_mel_fusion(self, mel, total_frames, chunk_frames):
-        import torch
-
         ranges = np.array_split(list(range(0, total_frames - chunk_frames + 1)), 3)
         if len(ranges[1]) == 0:
             ranges[1] = [0]
@@ -110,12 +126,13 @@ class ClapAudioProcessor(NumpyAudioBackend):
         mel_chunk_middle = mel[idx_middle : idx_middle + chunk_frames, :]
         mel_chunk_back = mel[idx_back : idx_back + chunk_frames, :]
 
-        mel_tensor = torch.tensor(mel[None, None, :])
+        # Bilinear downsample the full mel to (chunk_frames, 64) as a "global" view.
+        mel_tensor = mel.unsqueeze(0).unsqueeze(0).to(torch.float32)
         mel_shrink = torch.nn.functional.interpolate(
             mel_tensor, size=[chunk_frames, 64], mode="bilinear", align_corners=False
         )
-        mel_shrink = mel_shrink[0][0].numpy()
-        return np.stack([mel_shrink, mel_chunk_front, mel_chunk_middle, mel_chunk_back], axis=0)
+        mel_shrink = mel_shrink[0][0].to(mel.dtype)
+        return torch.stack([mel_shrink, mel_chunk_front, mel_chunk_middle, mel_chunk_back], dim=0)
 
     def _build_mask(self, audio_ranges, padded_length, *, do_extract_spectrogram, spectrogram_config):
         """Return CLAP's is_longer flag instead of a standard attention mask."""
@@ -126,4 +143,7 @@ class ClapAudioProcessor(NumpyAudioBackend):
         return {"is_longer": [[longer] for longer in is_longer]}
 
 
-__all__ = ["ClapAudioProcessor"]
+ClapFeatureExtractor = make_legacy_audio_processor_alias(ClapAudioProcessor, "ClapFeatureExtractor")
+
+
+__all__ = ["ClapAudioProcessor", "ClapFeatureExtractor"]

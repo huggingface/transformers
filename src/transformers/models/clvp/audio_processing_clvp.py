@@ -12,13 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
+import torch
 
-from ...audio_processing_backends import NumpyAudioBackend
+from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_base import make_legacy_audio_processor_alias
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
-class ClvpAudioProcessor(NumpyAudioBackend):
+class ClvpAudioProcessor(TorchAudioBackend):
+    """Torch sibling of [`ClvpAudioProcessorNumpy`]. Applies log compression and an optional
+    per-mel-bin normalization (``mel_norms`` ~ per-bin stddev with implicit zero mean)."""
+
     sample_rate = 22050
     force_mono = True
     max_length = 132300  # 6 seconds at 22050 Hz
@@ -49,13 +53,25 @@ class ClvpAudioProcessor(NumpyAudioBackend):
         super().__init__(**kwargs)
         self.mel_norms = mel_norms
 
+    def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
+        # Cast mel_filters to the features' dtype so the float64 spectrogram path matches the
+        # numpy sibling, which casts via `mel_filters.astype(features.dtype, copy=False)`.
+        mel_filters = self.mel_filters.to(device=features.device, dtype=features.dtype)
+        mel_spec = torch.nn.functional.linear(features.transpose(-2, -1), mel_filters.T).transpose(-2, -1)
+        return torch.clamp(mel_spec, min=spectrogram_config.mel_floor)
+
     def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
         # Compute log and mel_norms division in float64 before casting to float32
-        # to match the legacy feature extractor's precision
+        # to match the legacy feature extractor's precision (same recipe as the numpy sibling).
         mel_floor = spectrogram_config.mel_floor
-        features = np.log(np.maximum(mel_floor, features))
+        features = torch.log(torch.maximum(torch.tensor(mel_floor, dtype=features.dtype, device=features.device), features))
         if self.mel_norms is not None:
-            features = features / np.array(self.mel_norms)[:, None]
-        return features.astype(np.float32)
+            mel_norms = torch.as_tensor(self.mel_norms, dtype=features.dtype, device=features.device)[:, None]
+            features = features / mel_norms
+        return features.to(torch.float32)
 
-__all__ = ["ClvpAudioProcessor"]
+
+ClvpFeatureExtractor = make_legacy_audio_processor_alias(ClvpAudioProcessor, "ClvpFeatureExtractor")
+
+
+__all__ = ["ClvpAudioProcessor", "ClvpFeatureExtractor"]

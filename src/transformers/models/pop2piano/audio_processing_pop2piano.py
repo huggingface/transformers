@@ -17,11 +17,12 @@
 # This audio processor provides the basic mel spectrogram configuration but
 # does not implement the complete beat-aligned segmentation pipeline.
 
-from ...audio_processing_backends import NumpyAudioBackend
+from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_base import make_legacy_audio_processor_alias
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
-class Pop2PianoAudioProcessor(NumpyAudioBackend):
+class Pop2PianoAudioProcessor(TorchAudioBackend):
     sample_rate = 22050
     force_mono = True
     spectrogram_config = SpectrogramConfig(
@@ -31,4 +32,9 @@ class Pop2PianoAudioProcessor(NumpyAudioBackend):
     )
 
 
-__all__ = ["Pop2PianoAudioProcessor"]
+Pop2PianoFeatureExtractor = make_legacy_audio_processor_alias(
+    Pop2PianoAudioProcessor, "Pop2PianoFeatureExtractor"
+)
+
+
+__all__ = ["Pop2PianoAudioProcessor", "Pop2PianoFeatureExtractor"]

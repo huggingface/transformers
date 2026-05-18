@@ -12,12 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
+import torch
 
-from ...audio_processing_backends import NumpyAudioBackend
+from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_base import make_legacy_audio_processor_alias
 
 
-class KyutaiSpeechToTextAudioProcessor(NumpyAudioBackend):
+class KyutaiSpeechToTextAudioProcessor(TorchAudioBackend):
     sample_rate = 24000
     force_mono = True
     add_channel_dim = True
@@ -30,14 +31,19 @@ class KyutaiSpeechToTextAudioProcessor(NumpyAudioBackend):
         pad_right = int((self.audio_delay_seconds + 1.0) * self.sample_rate)
 
         if pad_left > 0 or pad_right > 0:
-            output["audio_values"] = np.pad(
-                output["audio_values"], [(0, 0), (0, 0), (pad_left, pad_right)], mode="constant", constant_values=0.0,
+            output["audio_values"] = torch.nn.functional.pad(
+                output["audio_values"], (pad_left, pad_right), mode="constant", value=0.0,
             )
-            output["audio_values_mask"] = np.pad(
-                output["audio_values_mask"], [(0, 0), (pad_left, pad_right)], mode="constant", constant_values=0,
+            output["audio_values_mask"] = torch.nn.functional.pad(
+                output["audio_values_mask"], (pad_left, pad_right), mode="constant", value=0,
             )
 
         return output
 
 
-__all__ = ["KyutaiSpeechToTextAudioProcessor"]
+KyutaiSpeechToTextFeatureExtractor = make_legacy_audio_processor_alias(
+    KyutaiSpeechToTextAudioProcessor, "KyutaiSpeechToTextFeatureExtractor"
+)
+
+
+__all__ = ["KyutaiSpeechToTextAudioProcessor", "KyutaiSpeechToTextFeatureExtractor"]

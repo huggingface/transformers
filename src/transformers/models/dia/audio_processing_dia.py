@@ -12,14 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...audio_processing_backends import NumpyAudioBackend
+from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_base import make_legacy_audio_processor_alias
 
 
-class DiaAudioProcessor(NumpyAudioBackend):
+class DiaAudioProcessor(TorchAudioBackend):
     sample_rate = 44100
     force_mono = True
     add_channel_dim = True
     pad_to_multiple_of = 512
 
 
-__all__ = ["DiaAudioProcessor"]
+DiaFeatureExtractor = make_legacy_audio_processor_alias(DiaAudioProcessor, "DiaFeatureExtractor")
+
+
+__all__ = ["DiaAudioProcessor", "DiaFeatureExtractor"]

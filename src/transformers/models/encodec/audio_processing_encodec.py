@@ -12,13 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...audio_processing_backends import NumpyAudioBackend
+from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_base import make_legacy_audio_processor_alias
 
 
-class EncodecAudioProcessor(NumpyAudioBackend):
+class EncodecAudioProcessor(TorchAudioBackend):
     sample_rate = 24000
     force_mono = True
     add_channel_dim = True
 
 
-__all__ = ["EncodecAudioProcessor"]
+EncodecFeatureExtractor = make_legacy_audio_processor_alias(EncodecAudioProcessor, "EncodecFeatureExtractor")
+
+
+__all__ = ["EncodecAudioProcessor", "EncodecFeatureExtractor"]

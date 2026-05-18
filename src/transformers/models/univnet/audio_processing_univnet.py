@@ -12,13 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
+import torch
 
-from ...audio_processing_backends import NumpyAudioBackend
+from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_base import make_legacy_audio_processor_alias
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
-class UnivNetAudioProcessor(NumpyAudioBackend):
+class UnivNetAudioProcessor(TorchAudioBackend):
+    """Torch sibling of [`UnivNetAudioProcessorNumpy`]. Reflect-padded STFT with mel_floor
+    added inside the magnitude sqrt, no mel-floor clamp, and a `(frames, n_mels)` output layout."""
+
     sample_rate = 24000
     force_mono = True
     mask_level = "audio"
@@ -58,19 +62,19 @@ class UnivNetAudioProcessor(NumpyAudioBackend):
         # UnivNet uses reflect padding with (n_fft - hop_length) / 2 instead of center padding
         stft_cfg = spectrogram_config.stft_config
         pad_amount = int((stft_cfg.n_fft - stft_cfg.hop_length) / 2)
-        if audio.ndim > 1:
-            audio = np.pad(audio, ((0, 0), (pad_amount, pad_amount)), mode="reflect")
-        else:
-            audio = np.pad(audio, (pad_amount, pad_amount), mode="reflect")
+        # `torch.nn.functional.pad` reflects on the last dim by default; works for 1D or 2D.
+        audio = torch.nn.functional.pad(audio, (pad_amount, pad_amount), mode="reflect")
         return super()._stft(audio, spectrogram_config=spectrogram_config, **kwargs)
 
     def _compute_magnitudes(self, stft_out, power, spectrogram_config=None):
         # UnivNet adds mel_floor inside the sqrt: sqrt(real² + imag² + mel_floor)
-        return np.sqrt(np.real(stft_out) ** 2 + np.imag(stft_out) ** 2 + self.mel_floor)
+        return torch.sqrt(stft_out.real ** 2 + stft_out.imag ** 2 + self.mel_floor)
 
     def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
-        # UnivNet applies mel filterbank without a floor
-        return np.matmul(self.mel_filters.T, features)
+        # UnivNet applies mel filterbank without a floor.
+        # `mel_filters` is shape `(n_freq, n_mels)`; transposing gives `(n_mels, n_freq)`.
+        mel_filters = self.mel_filters.to(device=features.device, dtype=features.dtype)
+        return torch.matmul(mel_filters.T, features)
 
     def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
         features = super()._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)
@@ -82,8 +86,11 @@ class UnivNetAudioProcessor(NumpyAudioBackend):
         features = super().extract_spectrogram(audio, spectrogram_config=spectrogram_config, **kwargs)
         # Transpose from (..., n_mels, frames) to (..., frames, n_mels)
         if isinstance(features, list):
-            return [np.swapaxes(f, -2, -1) for f in features]
-        return np.swapaxes(features, -2, -1)
+            return [f.transpose(-2, -1) for f in features]
+        return features.transpose(-2, -1)
 
 
-__all__ = ["UnivNetAudioProcessor"]
+UnivNetFeatureExtractor = make_legacy_audio_processor_alias(UnivNetAudioProcessor, "UnivNetFeatureExtractor")
+
+
+__all__ = ["UnivNetAudioProcessor", "UnivNetFeatureExtractor"]

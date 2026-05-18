@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_base import make_legacy_audio_processor_alias
 from ...utils.import_utils import requires
 
 
@@ -78,4 +79,7 @@ class MusicgenMelodyAudioProcessor(TorchAudioBackend):
         return norm_chroma
 
 
-__all__ = ["MusicgenMelodyAudioProcessor"]
+MusicgenMelodyFeatureExtractor = make_legacy_audio_processor_alias(MusicgenMelodyAudioProcessor, "MusicgenMelodyFeatureExtractor")
+
+
+__all__ = ["MusicgenMelodyAudioProcessor", "MusicgenMelodyFeatureExtractor"]

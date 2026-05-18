@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from ...audio_processing_backends import NumpyAudioBackend
+from ...audio_processing_base import make_legacy_audio_processor_alias
 
 
 class DacAudioProcessor(NumpyAudioBackend):
@@ -21,4 +22,7 @@ class DacAudioProcessor(NumpyAudioBackend):
     add_channel_dim = True
 
 
-__all__ = ["DacAudioProcessor"]
+DacFeatureExtractor = make_legacy_audio_processor_alias(DacAudioProcessor, "DacFeatureExtractor")
+
+
+__all__ = ["DacAudioProcessor", "DacFeatureExtractor"]

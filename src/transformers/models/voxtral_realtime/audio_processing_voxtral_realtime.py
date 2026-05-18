@@ -15,6 +15,7 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_base import make_legacy_audio_processor_alias
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
@@ -43,8 +44,10 @@ class VoxtralRealtimeAudioProcessor(TorchAudioBackend):
         return torch.clamp(torch.matmul(mel_filters.T, features), min=spectrogram_config.mel_floor)
 
     def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
+        # Voxtral uses a *fixed* `global_log_mel_max` as the upper bound (rather than the
+        # per-utterance amax that the base `clip_max_offset` field expects), so we don't set
+        # the post-log fields on `spectrogram_config` and handle the whole rescale here.
         features = super()._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)
-
         if self.global_log_mel_max is not None:
             spec_max = torch.tensor(self.global_log_mel_max, device=features.device, dtype=features.dtype)
         else:
@@ -59,4 +62,7 @@ class VoxtralRealtimeAudioProcessor(TorchAudioBackend):
         return (audio_lengths - win_length) // stft_cfg.hop_length + 1
 
 
-__all__ = ["VoxtralRealtimeAudioProcessor"]
+VoxtralRealtimeFeatureExtractor = make_legacy_audio_processor_alias(VoxtralRealtimeAudioProcessor, "VoxtralRealtimeFeatureExtractor")
+
+
+__all__ = ["VoxtralRealtimeAudioProcessor", "VoxtralRealtimeFeatureExtractor"]
