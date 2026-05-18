@@ -111,13 +111,13 @@ assistant prefill started a response before handing off to the model), the parse
 that were opened *and* closed inside the prefix produce a full `region_open` / `region_chunk` / `region_close`
 sequence and their parsed value lands in the output dict, exactly as if the model itself had written them.
 
-A typical event stream for the SmolLM example above looks like:
+A typical event stream might look like this:
 
 ```python
 {"type": "region_open",  "field": "thinking"}
-{"type": "region_chunk", "field": "thinking", "text": "Some chain ", "dirty": False}
-{"type": "region_chunk", "field": "thinking", "text": "of thought...", "dirty": False}
-{"type": "region_close", "field": "thinking", "value": "Some chain of thought..."}
+{"type": "region_chunk", "field": "thinking", "text": "I should ", "dirty": False}
+{"type": "region_chunk", "field": "thinking", "text": "greet the user", "dirty": False}
+{"type": "region_close", "field": "thinking", "value": "I should greet the user"}
 {"type": "region_open",  "field": "tool_calls"}
 {"type": "region_chunk", "field": "tool_calls", "text": '{"name": "greet_user", ', "dirty": True}
 {"type": "region_chunk", "field": "tool_calls", "text": '"arguments": {"greeting": "Hi!"}}', "dirty": True}
@@ -133,7 +133,7 @@ up to you what you want to do with the `dirty` chunks until then - you can displ
 "raw" output, or you can simply wait until you have something clean to display.
 
 This concludes most of what you need to know to use response templates. The rest of this document is focused on
-the internals of the parsing system, and how to write response templates. This is mostly relevant for developers
+the internals of the parsing system and how to write response templates. This is mostly relevant for developers
 and model authors. Most people can safely stop here!
 
 ## Advanced: Writing a response template
@@ -143,7 +143,7 @@ reply from `SmolLM` might look like:
 
 ```txt
 <think>
-Some chain of thought...
+I should greet the user
 </think>
 
 <tool_call>{"name": "greet_user", "arguments": {"greeting": "Hi!"}}</tool_call>
@@ -154,7 +154,7 @@ When we parse this output in the standard message dict format, it should look li
 ```json
 {
     "role": "assistant",
-    "thinking": "Some chain of thought...",
+    "thinking": "I should greet the user",
     "tool_calls": [
         {"type": "function", "function": {"name": "greet_user", "arguments": {"greeting": "Hi!"}}}
     ]
