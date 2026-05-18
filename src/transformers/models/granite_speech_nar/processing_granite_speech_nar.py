@@ -13,10 +13,13 @@
 # limitations under the License.
 """Processor for Granite Speech NAR."""
 
-import torch
-
 from ...processing_utils import ProcessorMixin
+from ...utils import is_torch_available
 from .feature_extraction_granite_speech_nar import GraniteSpeechNarFeatureExtractor
+
+
+if is_torch_available():
+    import torch
 
 
 class GraniteSpeechNarProcessor(ProcessorMixin):

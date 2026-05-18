@@ -13,10 +13,16 @@
 # limitations under the License.
 """Feature extraction for Granite Speech NAR."""
 
-import torch
-import torchaudio
-
 from ...feature_extraction_utils import FeatureExtractionMixin
+from ...utils import is_torch_available, is_torchaudio_available
+from ...utils.import_utils import requires_backends
+
+
+if is_torch_available():
+    import torch
+
+if is_torchaudio_available():
+    import torchaudio
 
 
 class GraniteSpeechNarFeatureExtractor(FeatureExtractionMixin):
@@ -37,6 +43,7 @@ class GraniteSpeechNarFeatureExtractor(FeatureExtractionMixin):
         n_mels: int = 80,
         **kwargs,
     ):
+        requires_backends(self, ["torch", "torchaudio"])
         super().__init__(**kwargs)
         self.sampling_rate = sampling_rate
         self.n_fft = n_fft
