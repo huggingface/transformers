@@ -203,6 +203,33 @@ class Molmo2Processor(ProcessorMixin):
 
         return video_string
 
+    def apply_chat_template(
+        self,
+        conversation,
+        chat_template: str | None = None,
+        **kwargs,
+    ):
+        uses_default_template = chat_template is None
+        if chat_template is None:
+            if isinstance(self.chat_template, dict):
+                chat_template = self.chat_template.get("default")
+            else:
+                chat_template = self.chat_template
+        elif isinstance(self.chat_template, dict) and chat_template in self.chat_template:
+            uses_default_template = True
+            chat_template = self.chat_template[chat_template]
+
+        if (
+            uses_default_template
+            and isinstance(chat_template, str)
+            and self.tokenizer.bos_token is not None
+            and "{{ bos_token" not in chat_template
+            and not chat_template.lstrip().startswith(self.tokenizer.bos_token)
+        ):
+            chat_template = "{{ bos_token }}" + chat_template
+
+        return super().apply_chat_template(conversation, chat_template=chat_template, **kwargs)
+
     @auto_docstring
     def __call__(
         self,
