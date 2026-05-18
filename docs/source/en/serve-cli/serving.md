@@ -1919,6 +1919,212 @@ print(final_response.output_text)
 </hfoption>
 </hfoptions>
 
+## Reasoning
+
+Reasoning models emit a hidden chain-of-thought before the final answer. The server detects these thinking spans, strips the delimiters from the visible answer, and surfaces the reasoning text in a dedicated field so clients can render it separately.
+
+- Chat Completions returns reasoning as `reasoning_content` on the assistant message (an OpenAI-compatible extension used by DeepSeek, vLLM, and SGLang).
+- The Responses API returns reasoning as a `reasoning` output item that precedes the `message` item, mirroring OpenAI's reasoning model schema.
+
+> [!NOTE]
+> Reasoning detection relies on the model's chat template and tokenizer. Models with custom thinking delimiters (Gemma 4) declare them with the tokenizer's `response_schema`. Models with inline `<think>...</think>` tags (Qwen3, DeepSeek-R1) work with the default schema.
+
+### Enable reasoning at the server
+
+Use `--reasoning` to control whether the chat template emits thinking tokens.
+
+| Value | Behavior |
+|---|---|
+| `auto` (default) | Defer to the chat template's default. |
+| `on` | Force thinking on by setting `enable_thinking=True` in the chat template kwargs. |
+| `off` | Force thinking off by setting `enable_thinking=False`. |
+
+```sh
+transformers serve Qwen/Qwen3-1.7B --reasoning on
+```
+
+`--reasoning on` and `--reasoning off` work by setting the chat template variable `enable_thinking`. Some chat templates use a different variable name to toggle thinking, or accept extra variables that change how the prompt is rendered. Pass any chat template variable directly with `--chat-template-kwargs` as a JSON object.
+
+```sh
+transformers serve Qwen/Qwen3-1.7B \
+  --chat-template-kwargs '{"enable_thinking": true}'
+```
+
+Clients can also send `chat_template_kwargs` in the request body to override the server defaults for a single request, without restarting the server.
+
+### Chat Completions
+
+Non-streaming responses include `reasoning_content` alongside `content` on the assistant message.
+
+<hfoptions id="reasoning-chat">
+<hfoption id="openai">
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<KEY>")
+
+completion = client.chat.completions.create(
+    model="Qwen/Qwen3-1.7B",
+    messages=[{"role": "user", "content": "What is 17 * 23?"}],
+)
+message = completion.choices[0].message
+print("reasoning:", message.reasoning_content)
+print("answer:", message.content)
+```
+
+</hfoption>
+<hfoption id="openai (stream)">
+
+Streaming emits `reasoning_content` deltas before `content` deltas. Concatenate each field separately.
+
+```python
+chunks = list(
+    client.chat.completions.create(
+        model="Qwen/Qwen3-1.7B",
+        messages=[{"role": "user", "content": "What is 17 * 23?"}],
+        stream=True,
+    )
+)
+reasoning = "".join(getattr(c.choices[0].delta, "reasoning_content", None) or "" for c in chunks)
+content = "".join(c.choices[0].delta.content or "" for c in chunks)
+```
+
+</hfoption>
+<hfoption id="curl">
+
+```shell
+curl -X POST http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen/Qwen3-1.7B",
+    "messages": [{"role": "user", "content": "What is 17 * 23?"}],
+    "chat_template_kwargs": {"enable_thinking": true}
+  }'
+```
+
+The response includes `reasoning_content` on the assistant message.
+
+```json
+{
+  "choices": [
+    {
+      "message": {
+        "role": "assistant",
+        "content": "17 * 23 = 391.",
+        "reasoning_content": "Let me compute 17 * 23. 17 * 20 = 340, 17 * 3 = 51, so 340 + 51 = 391."
+      },
+      "finish_reason": "stop",
+      "index": 0
+    }
+  ]
+}
+```
+
+</hfoption>
+</hfoptions>
+
+### Responses API
+
+The Responses API returns reasoning as a separate `reasoning` output item that precedes the `message` item.
+
+<hfoptions id="reasoning-responses">
+<hfoption id="openai">
+
+```python
+response = client.responses.create(
+    model="Qwen/Qwen3-1.7B",
+    input="What is 17 * 23?",
+    stream=False,
+)
+reasoning_item = next(i for i in response.output if i.type == "reasoning")
+message_item = next(i for i in response.output if i.type == "message")
+print("reasoning:", reasoning_item.content[0].text)
+print("answer:", message_item.content[0].text)
+```
+
+</hfoption>
+<hfoption id="openai (stream)">
+
+Streaming opens the reasoning item first and emits `response.reasoning_text.delta` events, then closes it and opens the message item to emit `response.output_text.delta` events.
+
+```python
+stream = client.responses.create(
+    model="Qwen/Qwen3-1.7B",
+    input="What is 17 * 23?",
+    stream=True,
+)
+
+for event in stream:
+    if event.type == "response.reasoning_text.delta":
+        print(event.delta, end="")
+    elif event.type == "response.output_text.delta":
+        print(event.delta, end="")
+```
+
+</hfoption>
+</hfoptions>
+
+### Multi-turn round trip
+
+For multi-turn conversations, include the reasoning text from the previous response in the next request. The server passes it to the chat template, which can render it as part of the prior assistant turn so the model sees its own earlier thought process.
+
+<hfoptions id="reasoning-multiturn">
+<hfoption id="v1/chat/completions">
+
+Attach `reasoning_content` to the prior assistant message.
+
+```python
+first = client.chat.completions.create(
+    model="Qwen/Qwen3-1.7B",
+    messages=[{"role": "user", "content": "What is 17 * 23?"}],
+).choices[0].message
+
+second = client.chat.completions.create(
+    model="Qwen/Qwen3-1.7B",
+    messages=[
+        {"role": "user", "content": "What is 17 * 23?"},
+        {
+            "role": "assistant",
+            "content": first.content,
+            "reasoning_content": first.reasoning_content,
+        },
+        {"role": "user", "content": "Now multiply that result by 2."},
+    ],
+)
+print(second.choices[0].message.content)
+```
+
+</hfoption>
+<hfoption id="v1/responses">
+
+Pass the prior `reasoning` item back as an input item before the assistant message.
+
+```python
+first = client.responses.create(
+    model="Qwen/Qwen3-1.7B",
+    input="What is 17 * 23?",
+    stream=False,
+)
+reasoning_item = next(i for i in first.output if i.type == "reasoning")
+message_item = next(i for i in first.output if i.type == "message")
+
+second = client.responses.create(
+    model="Qwen/Qwen3-1.7B",
+    input=[
+        {"role": "user", "content": "What is 17 * 23?"},
+        reasoning_item.model_dump(exclude_none=True),
+        {"role": "assistant", "content": message_item.content[0].text},
+        {"role": "user", "content": "Now multiply that result by 2."},
+    ],
+    stream=False,
+)
+print(second.output_text)
+```
+
+</hfoption>
+</hfoptions>
+
 ## Port forwarding
 
 Port forwarding lets you serve models from a remote server. Make sure you have SSH access to the server, then run this command on your local machine.
