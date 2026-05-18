@@ -434,7 +434,7 @@ class HrmTextModel(HrmTextPreTrainedModel):
         self.z_L_init = nn.Parameter(torch.zeros(config.hidden_size), requires_grad=False)
 
         raw_bp = list(config.L_bp_cycles)
-        self.L_bp_cycles_padded = [1] * max(0, config.L_cycles - len(raw_bp)) + raw_bp
+        self.L_bp_cycles_padded = [1] * max(0, config.H_cycles - len(raw_bp)) + raw_bp
 
         # Initialize weights and apply final processing
         self.post_init()
