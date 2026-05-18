@@ -13,13 +13,16 @@
 # limitations under the License.
 
 import numpy as np
-import torch
 
+from ... import is_torch_available
 from ...audio_utils import mel_filter_bank
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
 
+
+if is_torch_available():
+    import torch
 
 logger = logging.get_logger(__name__)
 
@@ -170,6 +173,9 @@ class Qwen3ASRFeatureExtractor(SequenceFeatureExtractor):
                 f"It is strongly recommended to pass the `sampling_rate` argument to `{self.__class__.__name__}()`. "
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
+
+        if not is_torch_available():
+            raise ValueError(f"{self.__class__.__name__} requires PyTorch to compute log-mel features.")
 
         is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
         if is_batched_numpy and len(raw_speech.shape) > 2:
