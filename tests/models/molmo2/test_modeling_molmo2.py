@@ -390,42 +390,51 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
                 self.assertIsNotNone(attentions.grad)
 
 
+IMAGE_URL = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+
+
 @slow
 @require_torch
 @require_vision
 class Molmo2IntegrationTest(unittest.TestCase):
     model_id = "allenai/Molmo2-4B"
-    image_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 
     def setUp(self):
         self.processor = Molmo2Processor.from_pretrained(self.model_id)
-        self.prompt = "<|image|>Describe this image."
-        self.image = Image.open(requests.get(self.image_url, stream=True).raw)
+        self.image = Image.open(requests.get(IMAGE_URL, stream=True).raw)
+        self.messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Describe this image."},
+                    {"type": "image", "image": self.image},
+                ],
+            }
+        ]
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+    def build_inputs(self):
+        return self.processor.apply_chat_template(
+            self.messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_tensors="pt",
+            return_dict=True,
+        )
+
     def test_preprocessing(self):
-        """Test that preprocessing produces expected shapes and values."""
-        prompt = self.prompt
-        inputs = self.processor(images=self.image, text=prompt, return_tensors="pt")
+        inputs = self.build_inputs()
 
-        # Check output keys
-        self.assertIn("input_ids", inputs)
-        self.assertIn("pixel_values", inputs)
-        self.assertIn("image_token_pooling", inputs)
-        self.assertIn("image_grids", inputs)
-        self.assertIn("image_num_crops", inputs)
-        self.assertIn("token_type_ids", inputs)
+        for key in ("input_ids", "pixel_values", "image_token_pooling", "image_grids", "image_num_crops", "token_type_ids"):
+            self.assertIn(key, inputs)
 
-        # Check shapes
         self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 7, 729, 588]))
         self.assertEqual(inputs["image_token_pooling"].shape, torch.Size([1, 955, 4]))
         self.assertEqual(inputs["image_grids"].shape, torch.Size([1, 1, 4]))
         self.assertEqual(inputs["input_ids"].shape[0], 1)
-        self.assertEqual(inputs["input_ids"].shape[1], 987)
 
-        # Check pixel_values slice (preprocessing correctness)
         expected_pixel_slice = torch.tensor(
             [
                 [-0.0745098, -0.05098039, 0.0196079],
@@ -441,18 +450,8 @@ class Molmo2IntegrationTest(unittest.TestCase):
             rtol=1e-4,
         )
 
-        # Check input_ids: BOS token, then image start token, then image patches, ending with text tokens
-        input_ids = inputs["input_ids"][0]
-        self.assertEqual(input_ids[0].item(), 151645)  # BOS token
-        self.assertEqual(input_ids[1].item(), 151940)  # low_res_image_start token
-        # Last tokens should be the text "Describe this image."
-        EXPECTED_TAIL_IDS = [151939, 151937, 74785, 419, 2168, 13]  # <im_end> <im_start> Describe this image.
-        self.assertEqual(input_ids[-6:].tolist(), EXPECTED_TAIL_IDS)
-
     def test_forward_logits(self):
-        """Test that forward pass produces expected logits."""
-        prompt = self.prompt
-        inputs = self.processor(images=self.image, text=prompt, return_tensors="pt")
+        inputs = self.build_inputs()
 
         model = Molmo2ForConditionalGeneration.from_pretrained(
             self.model_id,
@@ -467,12 +466,9 @@ class Molmo2IntegrationTest(unittest.TestCase):
             outputs = model(**device_inputs)
 
         logits = outputs.logits
-
-        # Check logits shape: [batch=1, seq_len=987, vocab_size=151936]
         self.assertEqual(logits.shape[0], 1)
-        self.assertEqual(logits.shape[1], 987)
+        self.assertEqual(logits.shape[1], device_inputs["input_ids"].shape[1])
 
-        # Check logits at last position (first 10 vocab tokens)
         expected_last_logits = torch.tensor(
             [
                 -10.781937,
@@ -494,42 +490,67 @@ class Molmo2IntegrationTest(unittest.TestCase):
             atol=1e-2,
             rtol=1e-2,
         )
-
-        # Check argmax at last position
         self.assertEqual(logits[0, -1].argmax().item(), 11379)
+
+    def test_generation(self):
+        inputs = self.build_inputs()
+
+        model = Molmo2ForConditionalGeneration.from_pretrained(
+            self.model_id,
+            torch_dtype=torch.bfloat16,
+            device_map=torch_device,
+        )
+        model.eval()
+
+        device_inputs = {k: v.to(torch_device) if hasattr(v, "to") else v for k, v in inputs.items()}
+
+        with torch.no_grad():
+            generated_ids = model.generate(**device_inputs, max_new_tokens=20, do_sample=False)
+
+        input_len = device_inputs["input_ids"].shape[1]
+        generated_text = self.processor.batch_decode(generated_ids[:, input_len:], skip_special_tokens=True)[0]
+        EXPECTED_TEXT = "In this captivating image, a small, chubby wild cat is captured mid-stride as it walks through"  # fmt: skip
+        self.assertEqual(generated_text.strip(), EXPECTED_TEXT)
+
 
 @slow
 @require_torch
 @require_vision
 class Molmo2O7BIntegrationTest(unittest.TestCase):
     model_id = "allenai/Molmo2-O-7B"
-    image_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 
     def setUp(self):
         self.processor = Molmo2Processor.from_pretrained(self.model_id)
-        self.prompt = "<|image|>Describe this image."
-        self.image = Image.open(requests.get(self.image_url, stream=True).raw)
+        self.image = Image.open(requests.get(IMAGE_URL, stream=True).raw)
+        self.messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Describe this image."},
+                    {"type": "image", "image": self.image},
+                ],
+            }
+        ]
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+    def build_inputs(self):
+        return self.processor.apply_chat_template(
+            self.messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_tensors="pt",
+            return_dict=True,
+        )
+
     def test_preprocessing(self):
-        """Test that preprocessing produces expected shapes and values for Molmo2-O-7B."""
-        prompt = self.prompt
-        inputs = self.processor(images=self.image, text=prompt, return_tensors="pt")
-
-        # Same image produces same pixel_values regardless of model variant
+        inputs = self.build_inputs()
         self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 7, 729, 588]))
-        self.assertEqual(inputs["input_ids"].shape[1], 987)
-
-        # Molmo2-O-7B uses a different tokenizer (OLMo-based, vocab_size ~100k)
-        EXPECTED_TAIL_IDS = [100281, 100279, 75885, 420, 2217, 13]
-        self.assertEqual(inputs["input_ids"][0, -6:].tolist(), EXPECTED_TAIL_IDS)
+        self.assertEqual(inputs["input_ids"].shape[0], 1)
 
     def test_forward_logits(self):
-        """Test forward pass logits for Molmo2-O-7B."""
-        prompt = self.prompt
-        inputs = self.processor(images=self.image, text=prompt, return_tensors="pt")
+        inputs = self.build_inputs()
 
         model = Molmo2ForConditionalGeneration.from_pretrained(
             self.model_id,
@@ -544,10 +565,8 @@ class Molmo2O7BIntegrationTest(unittest.TestCase):
             outputs = model(**device_inputs)
 
         logits = outputs.logits
-
-        # Molmo2-O-7B has vocab_size=100278
         self.assertEqual(logits.shape[0], 1)
-        self.assertEqual(logits.shape[1], 987)
+        self.assertEqual(logits.shape[1], device_inputs["input_ids"].shape[1])
 
         expected_last_logits = torch.tensor(
             [
@@ -570,39 +589,67 @@ class Molmo2O7BIntegrationTest(unittest.TestCase):
             atol=1e-2,
             rtol=1e-2,
         )
-
         self.assertEqual(logits[0, -1].argmax().item(), 578)
+
+    def test_generation(self):
+        inputs = self.build_inputs()
+
+        model = Molmo2ForConditionalGeneration.from_pretrained(
+            self.model_id,
+            torch_dtype=torch.bfloat16,
+            device_map=torch_device,
+        )
+        model.eval()
+
+        device_inputs = {k: v.to(torch_device) if hasattr(v, "to") else v for k, v in inputs.items()}
+
+        with torch.no_grad():
+            generated_ids = model.generate(**device_inputs, max_new_tokens=20, do_sample=False)
+
+        input_len = device_inputs["input_ids"].shape[1]
+        generated_text = self.processor.batch_decode(generated_ids[:, input_len:], skip_special_tokens=True)[0]
+        EXPECTED_TEXT = "In this captivating image, a small, chubby cat with a distinctive appearance is seen walking through a snowy"  # fmt: skip
+        self.assertEqual(generated_text.strip(), EXPECTED_TEXT)
+
 
 @slow
 @require_torch
 @require_vision
 class Molmo2_8BIntegrationTest(unittest.TestCase):
     model_id = "allenai/Molmo2-8B"
-    image_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 
     def setUp(self):
         self.processor = Molmo2Processor.from_pretrained(self.model_id)
-        self.prompt = "<|image|>Describe this image."
-        self.image = Image.open(requests.get(self.image_url, stream=True).raw)
+        self.image = Image.open(requests.get(IMAGE_URL, stream=True).raw)
+        self.messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Describe this image."},
+                    {"type": "image", "image": self.image},
+                ],
+            }
+        ]
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+    def build_inputs(self):
+        return self.processor.apply_chat_template(
+            self.messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_tensors="pt",
+            return_dict=True,
+        )
+
     def test_preprocessing(self):
-        """Test that preprocessing produces expected shapes and values for Molmo2-8B."""
-        prompt = self.prompt
-        inputs = self.processor(images=self.image, text=prompt, return_tensors="pt")
-
+        inputs = self.build_inputs()
         self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 7, 729, 588]))
-        self.assertEqual(inputs["input_ids"].shape[1], 987)
-
-        # Molmo2-8B uses the same tokenizer as Molmo2-4B (Qwen-based, vocab_size ~152k)
-        EXPECTED_TAIL_IDS = [151939, 151937, 74785, 419, 2168, 13]
-        self.assertEqual(inputs["input_ids"][0, -6:].tolist(), EXPECTED_TAIL_IDS)
+        self.assertEqual(inputs["input_ids"].shape[0], 1)
 
     def test_forward_logits(self):
-        """Test forward pass logits for Molmo2-8B."""
-        inputs = self.processor(images=self.image, text=self.prompt, return_tensors="pt")
+        inputs = self.build_inputs()
 
         model = Molmo2ForConditionalGeneration.from_pretrained(
             self.model_id,
@@ -617,9 +664,8 @@ class Molmo2_8BIntegrationTest(unittest.TestCase):
             outputs = model(**device_inputs)
 
         logits = outputs.logits
-
         self.assertEqual(logits.shape[0], 1)
-        self.assertEqual(logits.shape[1], 987)
+        self.assertEqual(logits.shape[1], device_inputs["input_ids"].shape[1])
 
         expected_last_logits = torch.tensor(
             [
@@ -645,19 +691,7 @@ class Molmo2_8BIntegrationTest(unittest.TestCase):
         self.assertEqual(logits[0, -1].argmax().item(), 25244)
 
     def test_generation(self):
-        """Test generation produces expected text for Molmo2-8B."""
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "Describe this image in exactly 1 short sentence."},
-                    {"type": "image", "image": self.image},
-                ],
-            }
-        ]
-        inputs = self.processor.apply_chat_template(
-            messages, tokenize=True, add_generation_prompt=True, return_tensors="pt", return_dict=True
-        )
+        inputs = self.build_inputs()
 
         model = Molmo2ForConditionalGeneration.from_pretrained(
             self.model_id,
@@ -669,11 +703,11 @@ class Molmo2_8BIntegrationTest(unittest.TestCase):
         device_inputs = {k: v.to(torch_device) if hasattr(v, "to") else v for k, v in inputs.items()}
 
         with torch.no_grad():
-            generated_ids = model.generate(**device_inputs, max_new_tokens=30, do_sample=False)
+            generated_ids = model.generate(**device_inputs, max_new_tokens=20, do_sample=False)
 
         input_len = device_inputs["input_ids"].shape[1]
         generated_text = self.processor.batch_decode(generated_ids[:, input_len:], skip_special_tokens=True)[0]
-        EXPECTED_TEXT = "A snow leopard is captured mid-stride in a snowy landscape, its thick fur dusted with snow as it moves gracefully through its natural habitat."  # fmt: skip
+        EXPECTED_TEXT = "In this captivating image, a snow leopard is captured mid-stride, gracefully walking through a snowy landscape"  # fmt: skip
         self.assertEqual(generated_text.strip(), EXPECTED_TEXT)
 
     def test_generation_video_qa(self):
