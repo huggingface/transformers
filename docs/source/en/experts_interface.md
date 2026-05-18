@@ -24,6 +24,7 @@ The [`ExpertsInterface`] provides optimized experts backends. It decouples the e
 | `"eager"`       | Reference implementation that loops over selected experts and applies projections on their tokens.                                                                                                                                        | Reasonable baseline performance without requiring compilation.                                                      | Slower than `grouped_mm` but faster than `batched_mm`.      |
 | `"batched_mm"`  | Duplicates selected expert parameters for each token and projects all tokens in a single batched GEMM using [`torch.bmm`](https://docs.pytorch.org/docs/stable/generated/torch.bmm.html).                                                 | Fastest for small inputs, especially with compilation. Uses more memory due to parameter duplication.               | Not recommended (significantly slower than other backends). |
 | `"grouped_mm"`  | Orders tokens by selected experts and uses [`torch.nn.functional.grouped_mm`](https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.grouped_mm.html) to project all tokens in a single grouped GEMM (requires PyTorch 2.9+). | Best for larger inputs and more memory efficient as it avoids duplicating expert parameters. Fast with compilation. | Most efficient backend for all input sizes.                 |
+| `"deepgemm"`    | Sorts tokens by selected expert and projects all tokens in a single TMA-aligned grouped GEMM using the [DeepGEMM](https://github.com/deepseek-ai/DeepGEMM) kernels from [kernels-community/deep-gemm](https://huggingface.co/kernels-community/deep-gemm). | Highest throughput on Hopper (SM90+) and Blackwell (SM100+) for both `bfloat16` experts and FP8/FP4-quantized experts. | Not supported (CUDA-only).                                  |
 
 > [!NOTE]
 > When using `experts_implementation="grouped_mm"` on GPU, the model automatically switches to `"batched_mm"` during the decode stage of generation (after prefill). This is because `batched_mm` is significantly faster on lower token count during autoregressive decoding on GPU. On CPU, `grouped_mm` remains active throughout generation as it is more efficient for all input sizes.
@@ -74,6 +75,65 @@ Set the experts backend globally with an empty key.
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen1.5-MoE-A2.7B",
     experts_implementation={"": "batched_mm"},
+)
+```
+
+## DeepGEMM
+
+The `"deepgemm"` backend routes expert matmuls through the [DeepGEMM](https://github.com/deepseek-ai/DeepGEMM) kernels distributed by [kernels-community/deep-gemm](https://huggingface.co/kernels-community/deep-gemm). It works with unquantized `bfloat16` experts and with FP8/FP4-quantized experts loaded through [Fine-grained FP8](./quantization/finegrained_fp8).
+
+The `"deepgemm"` backend requires:
+
+- CUDA GPU with compute capability ≥ 9.0 (Hopper or newer).
+- CUDA runtime 12.3 or later.
+- The [kernels](https://github.com/huggingface/kernels) package.
+
+```py
+from transformers import AutoModelForCausalLM
+
+model = AutoModelForCausalLM.from_pretrained(
+    "deepseek-ai/DeepSeek-V3",
+    dtype="bfloat16",
+    experts_implementation="deepgemm",
+)
+```
+
+The kernel is loaded lazily on the first forward.
+
+### FP8 and FP4 quantized experts
+
+When the model is loaded with [`FineGrainedFP8Config`], the `"deepgemm"` backend automatically picks the FP8 (or FP4 on Blackwell) grouped-GEMM kernel. Set `activation_scheme="dynamic"` on the quantization config. DeepGEMM requires per-row activation scales and rejects static (per-tensor) activation quantization.
+
+For FP4-packed expert weights (DeepSeek V4-style), the GPU must be SM100+ (Blackwell).
+
+```py
+from transformers import AutoModelForCausalLM, FineGrainedFP8Config
+
+quantization_config = FineGrainedFP8Config(activation_scheme="dynamic")
+model = AutoModelForCausalLM.from_pretrained(
+    "deepseek-ai/DeepSeek-V3",
+    quantization_config=quantization_config,
+    experts_implementation="deepgemm",
+)
+```
+
+### Fused Mega MoE on Blackwell
+
+On Blackwell (SM100+), set `experts_implementation="deepgemm_megamoe"` to run a single fused kernel that combines expert-parallel dispatch, the up projection, SwiGLU, the down projection, and the EP combine, overlapping NVLink transfers with tensor-core compute. This backend requires:
+
+- A Blackwell GPU (compute capability ≥ 10.0).
+- FP4-packed expert weights paired with UE8M0 weight scales (typically `expert_dtype="fp4"` and `scale_fmt="ue8m0"` on the loaded checkpoint).
+- A `torch.distributed` process group for the expert-parallel group, which the tensor-parallel wrapping supplies automatically.
+
+```py
+from transformers import AutoModelForCausalLM, FineGrainedFP8Config
+
+quantization_config = FineGrainedFP8Config(scale_fmt="ue8m0")
+model = AutoModelForCausalLM.from_pretrained(
+    "deepseek-ai/DeepSeek-V4",
+    quantization_config=quantization_config,
+    experts_implementation="deepgemm_megamoe",
+    tp_plan="auto",
 )
 ```
 
