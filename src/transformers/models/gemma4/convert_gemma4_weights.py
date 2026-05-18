@@ -87,10 +87,8 @@ _RESPONSE_TEMPLATE = {
                 "unquoted_keys": True,
                 "string_delims": [['<|"|>', '<|"|>']],
             },
-            "assemble": {
-                "type": "function",
-                "function": {"name": "{name}", "arguments": "{content}"},
-            },
+            "transform": "{type: 'function', function: {name: name, arguments: content}}",
+},
         },
         "content": {
             "close": ["<turn|>", "<|tool_response>", "<eos>"],
