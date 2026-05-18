@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING
 
 
-@auto_docstring
+@auto_docstring(checkpoint="ibm-granite/granite-speech-4.1-2b-nar")
 @strict
 class GraniteSpeechNarEncoderConfig(PreTrainedConfig):
     r"""
@@ -90,7 +90,7 @@ class GraniteSpeechNarEncoderConfig(PreTrainedConfig):
             self.self_conditioning_layer = self.num_layers // 2
 
 
-@auto_docstring
+@auto_docstring(checkpoint="ibm-granite/granite-speech-4.1-2b-nar")
 @strict
 class GraniteSpeechNarProjectorConfig(PreTrainedConfig):
     r"""
@@ -138,7 +138,7 @@ class GraniteSpeechNarProjectorConfig(PreTrainedConfig):
     mlp_bias: bool = True
 
 
-@auto_docstring
+@auto_docstring(checkpoint="ibm-granite/granite-speech-4.1-2b-nar")
 @strict
 class GraniteSpeechNarConfig(PreTrainedConfig):
     r"""
