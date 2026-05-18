@@ -24,31 +24,56 @@ floating-point tensor — same pattern as :class:`Fp8Dequantize` for FP8.
 
 from __future__ import annotations
 
+import torch
+
 from .base import HfQuantizer
 
 
 class GGUFQuantizer(HfQuantizer):
-    """Quantizer for GGUF checkpoints — carries the rename table and injects ``GGUFDequantize``."""
+    """GGUF quantizer with two construction modes:
+
+    * ``from_pretrained(..., gguf_file=...)`` (or auto-detected ``.gguf`` in the
+      repo): ``modeling_utils`` builds the quantizer directly from a parsed
+      ``gguf`` file and passes ``weight_mapping``/``gguf_tensors`` here. Default
+      keeps weights at native quant (``linear_mode=True``) and runs Metal
+      kernels via :class:`GgufLinear`. If the caller passed ``dtype=...``
+      explicitly, dequantize-on-load instead.
+    * ``from_pretrained(..., quantization_config=GgufQuantizeConfig(...))``:
+      load an fp16/bf16 model normally, then quantize the matching
+      :class:`nn.Linear` modules on the fly via ``gguf-py`` and swap them for
+      :class:`GgufLinear`.
+    """
 
     requires_calibration = False
 
-    def __init__(self, weight_mapping=None, linear_mode=False, gguf_tensors=None, gguf_kv=None, **kwargs):
-        # ``pre_quantized=True`` so the loader keeps `_dtype=None` (no uint8→float
-        # cast in ``spawn_materialize`` — the GGUFDequantize op handles dtype).
-        kwargs.setdefault("pre_quantized", True)
-        super().__init__(quantization_config=None, **kwargs)
+    def __init__(
+        self,
+        quantization_config=None,
+        weight_mapping=None,
+        linear_mode=False,
+        gguf_tensors=None,
+        gguf_kv=None,
+        **kwargs,
+    ):
+        # ``pre_quantized`` controls whether the loader expects raw bytes from
+        # disk. The ``gguf_file=`` path is pre-quantized; the on-the-fly path
+        # (driven by ``GgufQuantizeConfig``) loads a normal fp16/bf16 checkpoint
+        # and quantizes after weight loading.
+        on_the_fly = quantization_config is not None and getattr(
+            quantization_config, "quant_method", None
+        ) == "gguf"
+        kwargs.setdefault("pre_quantized", not on_the_fly)
+        super().__init__(quantization_config=quantization_config, **kwargs)
         self.weight_mapping = list(weight_mapping or [])
-        # When ``linear_mode=True``, ``_process_model_after_weight_loading`` walks
-        # the model and swaps each ``nn.Linear`` whose source GGUF tensor has a
-        # supported quant type for a :class:`GgufLinear` that runs matmul/matvec
-        # directly on the quantized bytes via the kernels-community Metal kernels
-        # (same kernels as llama.cpp; ~llama.cpp parity at decode on Apple Silicon).
-        #
-        # ``gguf_tensors`` is the ``{gguf_name: GGUFQuantizedTensor}`` map from
-        # :func:`load_gguf_checkpoint`. We hold it here so we can recover each
-        # original tensor's quant type after the model has been loaded with
-        # dequantized weights, then re-quantize per-Linear in Phase 2.
-        self.linear_mode = linear_mode
+        # ``linear_mode``: when True, the post-load step swaps each
+        # ``nn.Linear`` that has a supported quant type for a :class:`GgufLinear`
+        # running matmul/matvec on the raw bytes (kernels-community Metal kernels,
+        # ~llama.cpp parity on Apple Silicon decode). On-the-fly mode is always
+        # linear_mode.
+        self.linear_mode = bool(linear_mode) or on_the_fly
+        self.on_the_fly = on_the_fly
+        # ``gguf_tensors``: ``{gguf_name: GGUFQuantizedTensor}`` map from
+        # :func:`load_gguf_checkpoint`. Empty for on-the-fly mode.
         self.gguf_tensors: dict = dict(gguf_tensors or {})
         # Populated during ``_process_model_after_weight_loading`` so
         # ``integrations.gguf_save.save_pretrained_gguf`` can run the rename in
@@ -101,21 +126,34 @@ class GGUFQuantizer(HfQuantizer):
         return False
 
     def preprocess_model(self, model, **kwargs):
-        # No module swapping needed; skip the base class logic that tries to
-        # set is_quantized / quantization_method on the model.
-        pass
+        # On-the-fly mode runs the base hook so ``is_quantized`` /
+        # ``quantization_method`` get set. The ``gguf_file=`` path has no
+        # ``quantization_config`` and skips the base hook (the swap happens
+        # later in ``_process_model_after_weight_loading``).
+        if self.on_the_fly:
+            return super().preprocess_model(model, **kwargs)
+        return None
 
     def _process_model_before_weight_loading(self, model, **kwargs):
         pass
 
     def postprocess_model(self, model, **kwargs):
-        # GGUF loading does not set any quantization config on the model — but
-        # we still need to fire ``_process_model_after_weight_loading`` so the
-        # opt-in ``linear_mode`` swap (nn.Linear → GgufLinear) happens.
+        # On-the-fly mode goes through the base postprocess (which sets the
+        # quantization config on ``model.config``). The ``gguf_file=`` path
+        # has no config to record, so we just fire the after-load hook to
+        # perform the ``nn.Linear`` → ``GgufLinear`` swap.
+        if self.on_the_fly:
+            return super().postprocess_model(model, **kwargs)
         return self._process_model_after_weight_loading(model, **kwargs)
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         from ..core_model_loading import WeightConverter, WeightRenaming, rename_source_key
+
+        # On-the-fly mode: model loaded in fp16/bf16; quantize matching Linear
+        # weights to GGUF bytes and swap for GgufLinear.
+        if self.on_the_fly:
+            self._quantize_on_the_fly(model)
+            return
 
         if not self.gguf_tensors:
             return
@@ -194,6 +232,48 @@ class GGUFQuantizer(HfQuantizer):
 
         replace_with_gguf_linear(model, weight_info_by_name)
         self._swap_moe_experts(model, renamings, converters, meta_state_dict, prefix)
+
+    def _quantize_on_the_fly(self, model):
+        """On-the-fly quantize path driven by :class:`GgufQuantizeConfig`.
+
+        Walk the model, quantize each :class:`nn.Linear` whose name matches
+        ``modules_to_convert`` (glob), and swap for :class:`GgufLinear`. No
+        rename table / no GGUF file involved — bytes come straight out of
+        ``gguf.quants.quantize`` applied to the live fp16/bf16 weight.
+        """
+        import fnmatch
+
+        import gguf
+        import torch.nn as nn
+
+        from ..integrations.gguf_linear import replace_with_gguf_linear
+
+        cfg = self.quantization_config
+        quant_type = cfg.quant_type  # validated to Q4_0 / Q8_0 in GgufQuantizeConfig.post_init
+        ggml_type = getattr(gguf.GGMLQuantizationType, quant_type)
+        include = cfg.modules_to_convert
+        exclude = set(cfg.modules_to_not_convert or [])
+
+        def _matches(name: str) -> bool:
+            if include is None:
+                return True
+            return any(fnmatch.fnmatchcase(name, pat) for pat in include)
+
+        weight_info_by_name: dict[str, dict] = {}
+        for name, mod in model.named_modules():
+            if not isinstance(mod, nn.Linear):
+                continue
+            if not _matches(name) or any(skip in name for skip in exclude):
+                continue
+            fp = mod.weight.detach().to("cpu", dtype=torch.float32).contiguous().numpy()
+            packed = gguf.quants.quantize(fp, ggml_type)
+            weight_info_by_name[f"{name}.weight"] = {
+                "quant_type": quant_type,
+                "bytes": torch.from_numpy(packed.view("uint8").reshape(-1)),
+                "permute": None,
+            }
+
+        replace_with_gguf_linear(model, weight_info_by_name)
 
     def save_gguf(self, model, path: str, *, quant_config: dict | None = None) -> str:
         """Write the model back to a .gguf file.

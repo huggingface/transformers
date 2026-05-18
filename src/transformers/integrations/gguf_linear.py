@@ -785,11 +785,6 @@ def replace_with_gguf_linear(
     return swapped
 
 
-def is_gguf_linear_enabled() -> bool:
-    """``TRANSFORMERS_GGUF_LINEAR=1`` opts into the GgufLinear path. Off by default."""
-    return os.environ.get("TRANSFORMERS_GGUF_LINEAR", "0") not in ("0", "", "false", "False")
-
-
 def fast_greedy_decode(model, input_ids: torch.Tensor, max_new_tokens: int) -> torch.Tensor:
     """Tight greedy decode loop bypassing ``generate()``'s per-step overhead.
     Requires ``setup_for_compile(model)`` first. No EOS check (would sync

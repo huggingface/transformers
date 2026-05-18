@@ -63,6 +63,7 @@ class QuantizationMethod(str, Enum):
     METAL = "metal"
     FOUR_OVER_SIX = "fouroversix"
     SINQ = "sinq"
+    GGUF = "gguf"
 
 
 class AwqFormat(str, Enum):
@@ -1089,6 +1090,50 @@ class EetqConfig(QuantizationConfigMixin):
         accepted_weights = ["int8"]
         if self.weights not in accepted_weights:
             raise ValueError(f"Only support weights in {accepted_weights} but found {self.weights}")
+
+
+class GgufQuantizeConfig(QuantizationConfigMixin):
+    """Quantize specific modules of a model into GGUF block bytes
+    (Q4_0 / Q8_0 today via gguf-py; K-quants only readable, no Python re-quantizer
+    upstream). Used either implicitly when ``from_pretrained`` is called with a
+    ``gguf_file=`` argument, or explicitly to convert a fp16/bf16 model on the
+    fly:
+
+    ```python
+    AutoModelForCausalLM.from_pretrained(
+        "Qwen/Qwen1.5-MoE-A2.7B",
+        quantization_config=GgufQuantizeConfig(
+            quant_type="Q4_0",
+            modules_to_convert=["model.layers.*.self_attn.q_proj", ...],
+        ),
+    )
+    ```
+
+    Args:
+        quant_type: GGUF quant name (``"Q4_0"`` / ``"Q8_0"``). Default ``"Q4_0"``.
+        modules_to_convert: Optional glob-style module name list. ``None`` =
+            every ``nn.Linear`` that's quantizable.
+        modules_to_not_convert: explicit skip list (matched as substring).
+    """
+
+    def __init__(
+        self,
+        quant_type: str = "Q4_0",
+        modules_to_convert: list[str] | None = None,
+        modules_to_not_convert: list[str] | None = None,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.GGUF
+        self.quant_type = quant_type
+        self.modules_to_convert = modules_to_convert
+        self.modules_to_not_convert = modules_to_not_convert
+        self.post_init()
+
+    def post_init(self):
+        if self.quant_type not in ("Q4_0", "Q8_0"):
+            raise ValueError(
+                f"GgufQuantizeConfig.quant_type must be one of Q4_0 / Q8_0 today (gguf-py limitation), got {self.quant_type!r}"
+            )
 
 
 class CompressedTensorsConfig(QuantizationConfigMixin):

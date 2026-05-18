@@ -259,6 +259,7 @@ _import_structure = {
         "FineGrainedFP8Config",
         "FourOverSixConfig",
         "FPQuantConfig",
+        "GgufQuantizeConfig",
         "GPTQConfig",
         "HiggsConfig",
         "HqqConfig",
@@ -775,6 +776,7 @@ if TYPE_CHECKING:
     from .utils.quantization_config import FineGrainedFP8Config as FineGrainedFP8Config
     from .utils.quantization_config import FourOverSixConfig as FourOverSixConfig
     from .utils.quantization_config import FPQuantConfig as FPQuantConfig
+    from .utils.quantization_config import GgufQuantizeConfig as GgufQuantizeConfig
     from .utils.quantization_config import GPTQConfig as GPTQConfig
     from .utils.quantization_config import HiggsConfig as HiggsConfig
     from .utils.quantization_config import HqqConfig as HqqConfig
