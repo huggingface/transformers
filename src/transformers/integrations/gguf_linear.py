@@ -5,86 +5,46 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
-"""GgufLinear — inference-time replacement for ``nn.Linear`` that runs Q4_0 /
-Q8_0 / Q4_K / Q5_K / Q6_K / IQ4_NL / IQ4_XS matmul directly via Metal kernels,
-keeping the weight at its native quantization (3.5–4× less RAM than bf16).
-
-The forward path uses ``kernels-community`` Metal kernels (a port of
-``llama.cpp`` / ``candle``'s mul_mm and mul_mv templates). On Apple Silicon
-this gives **llama.cpp parity** on a single batched command buffer per token
-(266 tok/s vs 261 tok/s for Qwen2.5-0.5B Q4_0 on M3 Max).
-
-Activation flow on MPS:
-  - Batch-size 1 (decode):     ``mul_mat_vec_<fmt>_f32`` — memory-bound, ~1.27×
-                               faster than bf16 mat-vec on MPS.
-  - Batch-size > 1 (prefill):  ``mul_mat_<fmt>_f32`` — compute-bound, ~10%
-                               slower than bf16 GEMM on MPS but keeps weights
-                               at 4–5 bpw so very large models actually fit.
-
-CPU/CUDA: no fast path today; falls back to ``dequantize_gguf_tensor`` +
-``torch.nn.functional.linear``. The CUDA matmul kernels are a follow-up
-(candle ships them; same shape as the MPS port).
-"""
+"""GgufLinear: nn.Linear replacement that runs GGUF-quantized matmul through
+the kernels-community Metal kernels on MPS, with a dequant+linear fallback on
+CPU/CUDA."""
 
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING
 
 import torch
 import torch.nn as nn
 
-
-if TYPE_CHECKING:
-    pass
-
-
-# ---------------------------------------------------------------------------
-# Lazy load of the kernels-community Metal kernel package. The kernel repo-id
-# is overridable via env var so we can point at staging/personal namespaces
-# without code changes. Off when `kernels` isn't installed → CPU/CUDA fallback.
-# ---------------------------------------------------------------------------
 
 _GGUF_METAL_KERNELS = None
 _GGUF_METAL_LOADED = False
 
 
 class _DirectKernelHandle:
-    """Tiny stand-in for the kernels package's module object — exposes only
-    ``_ops`` (a ``torch._C._OpNamespace``) which is the single attribute our
-    forward path reads. Used when the ``kernels`` package can't load the repo
-    cleanly (its older snapshot_download flow uses a non-recursive ``*`` glob
-    that drops the nested ``gguf_dequant/__init__.py`` file, see
-    huggingface/kernels#TBD)."""
+    """Stand-in for the kernels-package module — exposes only ``_ops``."""
 
     def __init__(self, ops):
         self._ops = ops
 
 
 def _load_kernels_direct(repo: str):
-    """Pull the .so for the current torch variant directly from the Hub and
-    register its ops via ``torch.ops.load_library``. Returns a stub with a
-    ``_ops`` attribute, matching the shape of the ``kernels`` module object.
-    """
+    """snapshot_download the .so for the current torch variant and load it."""
     import torch
     from huggingface_hub import snapshot_download
 
     try:
         from kernels.utils import build_variant
     except Exception:
-        # Compute the variant string ourselves if kernels isn't installed.
         major, minor = torch.__version__.split(".")[:2]
         build_variant = lambda: f"torch{int(major)}{int(minor)}-metal-aarch64-darwin"  # noqa: E731
 
     variant = build_variant() if callable(build_variant) else build_variant
-    # `**` to grab the nested package files the kernels package itself misses.
     repo_dir = snapshot_download(repo, allow_patterns=[f"build/{variant}/**"])
     import os
     import re
 
     var_dir = os.path.join(repo_dir, "build", variant)
-    # The canonical .so name lives in ``_ops.py``: ``from . import _<ns>``.
-    # Read it to pin the right .so when several builds are shipped side-by-side.
     ops_py = os.path.join(var_dir, "_ops.py")
     with open(ops_py) as f:
         m = re.search(r"from \. import (\w+)", f.read())
@@ -95,45 +55,29 @@ def _load_kernels_direct(repo: str):
     if not os.path.exists(so):
         raise FileNotFoundError(f"Canonical .so missing: {so}")
     torch.ops.load_library(so)
-    # ``ns_name`` includes a leading underscore from the .so file convention.
     ns = getattr(torch.ops, ns_name)
     _register_fake_impls(ns_name)
     return _DirectKernelHandle(ns)
 
 
 def _register_fake_impls(ns_name: str) -> None:
-    """Currently a no-op: every Metal kernel we still wire in (``mul_mat_vec``
-    / ``mul_mat`` / ``mul_mat_id`` / ``dequantize_*``) is invoked from a
-    Python forward that dynamo treats as a single opaque call, so no
-    AOTAutograd FakeTensor analysis runs. The function is kept as a hook
-    for follow-up fusion ops that *do* need a registered Meta impl.
-    """
+    """Hook for future fusion ops that need a registered Meta impl. No-op today."""
     return
 
 
 def _load_kernels_local_so(so_path: str):
-    """Load a locally-built kernel .so directly. ``TRANSFORMERS_GGUF_METAL_KERNELS_SO``
-    points at a path like ``.../result-bundle/torchXY-metal-aarch64-darwin/_gguf_dequant_*.abi3.so``.
-    Used for local development without round-tripping through the Hub."""
+    """Load a locally-built kernel .so from ``TRANSFORMERS_GGUF_METAL_KERNELS_SO``."""
     import torch
 
     torch.ops.load_library(so_path)
-    fname = os.path.basename(so_path).split(".")[0]  # `_gguf_dequant_<rev>`
-    # `torch.ops.load_library` registers ops under the TORCH_EXTENSION_NAME the
-    # .so was built with — same string as the .so basename's namespace stub.
+    fname = os.path.basename(so_path).split(".")[0]
     ns = getattr(torch.ops, fname)
     _register_fake_impls(fname)
     return _DirectKernelHandle(ns)
 
 
 def _ensure_metal_kernels():
-    """Idempotent loader for the kernels-community Metal kernel package.
-
-    Tries the ``kernels`` package first; on failure (e.g. when the package's
-    snapshot pattern strips the nested module init), falls back to a direct
-    ``snapshot_download + torch.ops.load_library`` path that's resilient to
-    the kernels lib's layout assumptions.
-    """
+    """Lazy loader for the kernels-community Metal kernel package."""
     global _GGUF_METAL_KERNELS, _GGUF_METAL_LOADED
     if _GGUF_METAL_LOADED:
         return _GGUF_METAL_KERNELS
@@ -197,19 +141,8 @@ def _kernel_fmt(quant_type) -> str:
 
 
 class GgufLinear(nn.Module):
-    """Linear layer backed by GGUF-quantized weights.
-
-    Stores raw block bytes in ``qweight`` (uint8). Forward picks the matvec
-    kernel for batch-size 1 and the matmul kernel otherwise. Inference-only:
-    backward raises.
-
-    Args:
-        in_features: K dimension (must be a multiple of the format's block size).
-        out_features: M dimension (must be a multiple of the format's matvec
-            row alignment, and of 64 for matmul to land cleanly on the tile).
-        quant_type: GGUF quantization name (string), e.g. ``"Q4_K"``.
-        bias: whether to register a learnable fp32 bias.
-    """
+    """Linear layer with GGUF-quantized weights stored as raw block bytes
+    (uint8). Forward picks matvec for batch 1, matmul otherwise. Inference-only."""
 
     def __init__(
         self,
@@ -280,17 +213,7 @@ class GgufLinear(nn.Module):
                 )
 
     def _bind_kernels(self) -> None:
-        """Cache the matvec/matmul op references at construct time so the hot
-        forward path avoids per-call ``_ensure_metal_kernels`` + ``hasattr`` +
-        ``getattr`` round-trips. Re-callable; the bench helper invokes this
-        again after ``.to(device)`` if needed (the op refs themselves don't
-        change on device move).
-
-        Resolves to the concrete ``OpOverload`` (``op.default``) rather than
-        the ``OpOverloadPacket``. Calling the overload skips one level of
-        dispatcher (the packet's overload resolution) — a few µs per call,
-        which is meaningful at ~170 GgufLinear calls per decode token.
-        """
+        """Cache the matvec/matmul OpOverload refs so forward avoids per-call lookup."""
         mod = _ensure_metal_kernels()
         if mod is None:
             self._mv_op = None
@@ -394,13 +317,9 @@ class GgufLinear(nn.Module):
 
 
 class GgufQwen2MoeExperts(nn.Module):
-    """Drop-in for ``Qwen2MoeExperts`` with quantized expert weights.
-
-    Q4_K_M GGUF files (and several other mixed-precision .gguf builds) ship
-    ``ffn_gate_exps`` / ``ffn_up_exps`` and ``ffn_down_exps`` in **different**
-    quant types per layer (e.g. gate/up = Q4_K, down = Q8_0). Each projection
-    therefore carries its own quant type + format.
-    """
+    """Drop-in for ``Qwen2MoeExperts`` holding gate/up/down expert weights as
+    raw GGUF block bytes. Each projection carries its own quant type
+    (Q4_K_M ships gate/up = Q4_K, down = Q8_0 etc.)."""
 
     def __init__(
         self,
@@ -761,13 +680,9 @@ def _row_permute_attn_q_bytes(
     qbytes_flat: torch.Tensor, num_heads: int, out_features: int, bytes_per_row: int
 ) -> torch.Tensor:
     """Reverse llama.cpp's Q-projection row interleave on a flat byte buffer.
-
-    Mirrors :class:`ReversePermuteAttnQ` operating on fp32 rows: it reshapes
-    the leading axis (output features) as ``(num_heads, dim, 2)``, swaps the
-    last two of those, and flattens. The bytes within each row are untouched,
-    so this works for any GGUF quant — including K-quants where ``gguf.quantize``
-    has no Python impl.
-    """
+    Reshapes the leading axis (M) as (num_heads, dim, 2), swaps the last two,
+    flattens. Bytes within each row are untouched, so this works for any
+    GGUF quant (including K-quants where gguf-py has no Python requantizer)."""
     assert qbytes_flat.numel() == out_features * bytes_per_row, (
         f"byte count mismatch: {qbytes_flat.numel()} vs {out_features}×{bytes_per_row}"
     )
@@ -790,31 +705,11 @@ def replace_with_gguf_linear(
     weight_info_by_name: dict[str, dict],
     modules_to_not_convert: set[str] | None = None,
 ) -> int:
-    """Walk `model` and swap each ``nn.Linear`` whose weight name appears in
-    ``weight_info_by_name`` for a :class:`GgufLinear`.
-
-    ``weight_info_by_name`` maps a HF parameter name (e.g.
-    ``model.layers.0.self_attn.v_proj.weight``) to a dict::
-
-        {
-            "quant_type": "Q4_0",         # GGUF type name
-            "bytes": <uint8 Tensor>,      # original GGUF block bytes (flat)
-            "permute": None | "q" | "k",  # llama.cpp Q/K head permute marker
-        }
-
-    For non-permuted Linears the **original GGUF bytes are copied verbatim**
-    into ``qweight`` — byte-identical to llama.cpp, works for *all* quant
-    types (including K-quants where ``gguf.quantize`` isn't implemented in
-    Python), and avoids any round-trip precision loss.
-
-    For ``attn_q`` / ``attn_k`` (``permute`` set), the GGUF bytes are stored
-    in llama.cpp's permuted layout, so we dequantize → reverse-permute →
-    re-quantize through ``gguf-py``. This only works for quant types with a
-    Python re-quantizer (today Q4_0 / Q8_0); unsupported permuted layers
-    stay as the dequantized ``nn.Linear``.
-
-    Returns the number of layers swapped.
-    """
+    """Walk ``model`` and swap each ``nn.Linear`` named in ``weight_info_by_name``
+    for a :class:`GgufLinear`. ``weight_info_by_name[hf_name] = {"quant_type":
+    "Q4_K", "bytes": <uint8>, "permute": None | "q" | "k"}``. Bytes are copied
+    verbatim; permuted Q/K rows are byte-permuted on the way in. Returns the
+    number of layers swapped."""
 
     modules_to_not_convert = modules_to_not_convert or set()
     swapped = 0
@@ -896,29 +791,9 @@ def is_gguf_linear_enabled() -> bool:
 
 
 def fast_greedy_decode(model, input_ids: torch.Tensor, max_new_tokens: int) -> torch.Tensor:
-    """Tight greedy-decoding loop that matches llama.cpp throughput on Apple Silicon.
-
-    ``generate()``'s per-step overhead is significant: it allocates a fresh
-    ``cache_position`` tensor every iteration, runs sampling logic (even
-    for greedy), updates the attention mask, and goes through
-    ``prepare_inputs_for_generation``. That overhead — small per call —
-    multiplies across decode steps and is the dominant remaining gap to
-    llama.cpp on a GGUF-quantized MoE under ``torch.compile``.
-
-    This helper:
-      1. Allocates ONE ``cache_position`` int64 tensor and mutates it in
-         place each step (no per-step ``torch.tensor`` MPS round-trip).
-      2. Pre-allocates the ``next_tok`` buffer ahead of decode and uses
-         ``torch.argmax(..., out=)`` to avoid the per-step argmax tensor.
-      3. Skips everything ``generate()`` adds (sampling, mask update,
-         prepare-inputs). No EOS check — call ``.item()`` would force a
-         CPU↔MPS sync per token and tank throughput; callers who need
-         early-stop should run a smaller batch in a loop.
-
-    Requires ``model.forward`` to already be ``torch.compile``-d (call
-    :func:`setup_for_compile` first). Returns the full token sequence
-    (prompt + generated), shape (B, prefill_len + max_new_tokens).
-    """
+    """Tight greedy decode loop bypassing ``generate()``'s per-step overhead.
+    Requires ``setup_for_compile(model)`` first. No EOS check (would sync
+    per token); slice externally if you need early-stop."""
     import torch
 
     from ..cache_utils import StaticCache
@@ -957,32 +832,10 @@ def fast_greedy_decode(model, input_ids: torch.Tensor, max_new_tokens: int) -> t
 
 
 def setup_for_compile(model, *, mode: str = "reduce-overhead") -> None:
-    """Configure a GGUF-loaded model for ``torch.compile``.
-
-    The recipe is the result of profiling ``generate()`` under dynamo on
-    Apple Silicon and removing every avoidable recompile:
-
-    1. ``cache_implementation = "static"`` on the model's generation_config.
-       The default dynamic KV cache grows on every step, which would force a
-       new compiled graph per decode token.
-    2. ``torch._dynamo.config.cache_size_limit = 512`` — a 24-layer model
-       can have ~170 distinct ``GgufLinear.forward`` specialisations (one
-       per layer × per projection); dynamo's default cap of 8 silently
-       falls back to eager for the rest.
-    3. ``torch._dynamo.config.allow_unspec_int_on_nn_module = True`` so
-       the per-layer ``self.layer_idx`` integer attribute on Cache.update
-       isn't burned in as a guard (otherwise that recompiles once per layer
-       per generate call — 24 useless recompiles).
-    4. ``torch.compile(model.forward, mode=mode, dynamic=False)``. The
-       default ``reduce-overhead`` mode tries cudagraph replay; that's a
-       no-op on MPS but stays consistent with the CUDA recipe.
-
-    With this setup, a 24-layer MoE warms up in ~0.16 s (one trace, static
-    shapes) and steady-state decode is consistently 60–65 tok/s on M3 Max
-    for ``Qwen1.5-MoE-A2.7B Q4_K_M`` — 2× uncompiled, ~66% of llama.cpp's
-    ``llama-bench``. The only remaining recompile is the prefill → decode
-    shape change, which fires once per ``generate()`` call.
-    """
+    """Configure a GGUF-loaded model for ``torch.compile`` on MPS:
+    static KV cache, raise dynamo caches/recompile limits, allow unspec
+    ints on nn.Module attrs, then ``torch.compile(model.forward,
+    mode=mode, dynamic=False)``."""
     import torch as _torch
     import torch._dynamo as _dynamo
 
