@@ -2,6 +2,32 @@ name: Benchmark v2 Framework
 
 on:
   workflow_dispatch:
+    inputs:
+      runner:
+        description: 'Runner to use for the benchmark job'
+        required: true
+        type: string
+      container_image:
+        description: 'Container image to use'
+        required: true
+        type: string
+      container_options:
+        description: 'Container options'
+        required: false
+        type: string
+        default: ''
+      commit_sha:
+        description: 'Commit SHA to benchmark'
+        required: false
+        type: string
+      run_id:
+        description: 'Run ID for tracking'
+        required: false
+        type: string
+      benchmark_repo_id:
+        description: 'Repository ID to push benchmark results'
+        required: true
+        type: string
 
 env:
   HF_HOME: /mnt/cache
@@ -9,6 +35,9 @@ env:
   # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access.
   # This token is created under the bot `hf-transformers-bot`.
   HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+
+permissions:
+  contents: read
 
 jobs:
   benchmark-v2:
@@ -22,9 +51,10 @@ jobs:
       options: ${{ inputs.container_options }}
     steps:
       - name: Get repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ inputs.commit_sha || github.sha }}
+          persist-credentials: false
 
       - name: Install benchmark dependencies
         run: |
@@ -45,13 +75,17 @@ jobs:
 
       - name: Run benchmark v2
         working-directory: benchmark_v2
+        env:
+          HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+          COMMIT_ID: ${{ inputs.commit_sha || github.sha }}
+          RUN_ID: ${{ inputs.run_id }}
+          BENCHMARK_REPO_ID: ${{ inputs.benchmark_repo_id }}
+          UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
         run: |
           echo "Running benchmarks"
           python3 run_benchmarks.py \
-          --commit-id '${{ inputs.commit_sha || github.sha }}' \
-          --run-id '${{ inputs.run_id }}' \
-          --push-to-hub '${{ inputs.benchmark_repo_id}}' \
-          --token '${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}' \
+          --commit-id "$COMMIT_ID" \
+          --run-id "$RUN_ID" \
+          --push-to-hub "$BENCHMARK_REPO_ID" \
+          --token "$UPLOAD_TOKEN" \
           --log-level INFO
-        env:
-          HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
