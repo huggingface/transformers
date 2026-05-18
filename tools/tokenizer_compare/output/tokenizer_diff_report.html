@@ -1,0 +1,231 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Tokenizer diff report</title>
+<style>
+body { font-family: -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif; padding:24px; background:#f8f9fa }
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:24px}
+.card{background:#fff;border-radius:8px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);display:flex;flex-direction:column;min-width:0;max-height:520px}
+pre.diff{background:#0f1720;color:#d8eefe;padding:12px;border-radius:6px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;font-size:0.8rem;flex:1;min-height:120px;max-height:280px}
+.del{color:#ffb4a2}
+.add{color:#a7f3d0}
+.muted{color:#6b7280}
+.models{font-size:0.85rem;margin-top:12px;max-height:180px;overflow:auto}
+.models ul{margin:8px 0 0 20px;padding:0}
+.models li{margin:4px 0}
+.models a{overflow-wrap:anywhere;word-break:break-word}
+.badge{display:inline-block;padding:3px 8px;border-radius:999px;background:#0d6efd;color:#fff;margin-left:8px;font-size:0.8rem}
+h2{margin:0 0 12px 0;font-size:1rem}
+@media(max-width:1200px){.grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:768px){.grid{grid-template-columns:1fr}}
+</style></head><body>
+<h1>Tokenizer backend equivalence report</h1>
+<p class="muted">Models checked: 473 — mismatches with diffs: 45 — unique diff patterns: 22</p>
+<div class="grid">
+<div class="card" id="pattern-1"><h2>Pattern #1 <span class="badge">8 models</span></h2>
+<pre class="diff"><span class="del">-normalizer:	Precompiled(precompiled_charsmap=&quot;ALQCAACEAAAAAACAAQAAgMz8AgC4BQAAhyIAgMzkAgC4PQAAeyIAgMzsAgC4BQAAiyIAgMw8AADNvAAAmwkAgJ4JAIChCQCAgx0AAIAZAACBGQAAPR0AgDUdAIBNHQCARR0AgIAxAACBMQAApAkAgIkxAAA9WAMA...[316520 chars omitted]...qoOOAPCqhIUA8KqIjgDwqoqRAPCqjpIA8KqYgAA=&quot;)
+</span><span class="add">+normalizer:	Sequence(normalizers=[Precompiled(precompiled_charsmap=&quot;ALQCAACEAAAAAACAAQAAgMz8AgC4BQAAhyIAgMzkAgC4PQAAeyIAgMzsAgC4BQAAiyIAgMw8AADNvAAAmwkAgJ4JAIChCQCAgx0AAIAZAACBGQAAPR0AgDUdAIBNHQCARR0AgIAxAACBMQAApAkAgIkxAAA9WAMA...[316520 chars omitted]...qoOOAPCqhIUA8KqIjgDwqoqRAPCqjpIA8KqYgAA=&quot;), Replace(pattern=Regex(&quot; {2,}&quot;), content=&quot; &quot;)])
+</span><span class="del">-pre_tokenizer:	Sequence(pretokenizers=[WhitespaceSplit(), Metaspace(replacement=&quot;▁&quot;, prepend_scheme=always, split=True)])
+</span><span class="add">+pre_tokenizer:	Metaspace(replacement=&quot;▁&quot;, prepend_scheme=always, split=True)</span></pre>
+<div class="models"><strong>Affected models:</strong>
+<ul>
+<li><a href="https://huggingface.co/Salesforce/blip2-flan-t5-xl" target="_blank">Salesforce/blip2-flan-t5-xl</a> <span class="muted">tests/models/blip_2/test_modeling_blip_2.py</span></li>
+<li><a href="https://huggingface.co/Salesforce/instructblip-flan-t5-xl" target="_blank">Salesforce/instructblip-flan-t5-xl</a> <span class="muted">tests/models/instructblip/test_modeling_instructblip.py</span></li>
+<li><a href="https://huggingface.co/facebook/xlm-roberta-xl" target="_blank">facebook/xlm-roberta-xl</a> <span class="muted">tests/models/xlm_roberta_xl/test_modeling_xlm_roberta_xl.py</span></li>
+<li><a href="https://huggingface.co/facebook/xlm-roberta-xxl" target="_blank">facebook/xlm-roberta-xxl</a> <span class="muted">tests/models/xlm_roberta_xl/test_modeling_xlm_roberta_xl.py</span></li>
+<li><a href="https://huggingface.co/microsoft/kosmos-2-patch14-224" target="_blank">microsoft/kosmos-2-patch14-224</a> <span class="muted">tests/models/kosmos2/test_modeling_kosmos2.py</span></li>
+<li><a href="https://huggingface.co/naver-clova-ix/donut-base-finetuned-cord-v2" target="_blank">naver-clova-ix/donut-base-finetuned-cord-v2</a> <span class="muted">tests/models/vision_encoder_decoder/test_modeling_vision_encoder_decoder.py</span></li>
+<li><a href="https://huggingface.co/naver-clova-ix/donut-base-finetuned-docvqa" target="_blank">naver-clova-ix/donut-base-finetuned-docvqa</a> <span class="muted">tests/models/vision_encoder_decoder/test_modeling_vision_encoder_decoder.py</span></li>
+<li><a href="https://huggingface.co/naver-clova-ix/donut-base-finetuned-rvlcdip" target="_blank">naver-clova-ix/donut-base-finetuned-rvlcdip</a> <span class="muted">tests/models/vision_encoder_decoder/test_modeling_vision_encoder_decoder.py</span></li>
+</ul></div></div>
+<div class="card" id="pattern-2"><h2>Pattern #2 <span class="badge">5 models</span></h2>
+<pre class="diff"><span class="del">-pre_tokenizer:	ByteLevel(add_prefix_space=False, trim_offsets=True, use_regex=True)
+</span><span class="add">+pre_tokenizer:	Sequence(pretokenizers=[Digits(individual_digits=True), ByteLevel(add_prefix_space=False, trim_offsets=True, use_regex=True)])</span></pre>
+<div class="models"><strong>Affected models:</strong>
+<ul>
+<li><a href="https://huggingface.co/HuggingFaceTB/SmolVLM2-256M-Video-Instruct" target="_blank">HuggingFaceTB/SmolVLM2-256M-Video-Instruct</a> <span class="muted">tests/models/smolvlm/test_modeling_smolvlm.py</span></li>
+<li><a href="https://huggingface.co/bigcode/gpt_bigcode-santacoder" target="_blank">bigcode/gpt_bigcode-santacoder</a> <span class="muted">tests/models/gpt_bigcode/test_modeling_gpt_bigcode.py</span></li>
+<li><a href="https://huggingface.co/bigcode/tiny_starcoder_py" target="_blank">bigcode/tiny_starcoder_py</a> <span class="muted">tests/models/gpt_bigcode/test_modeling_gpt_bigcode.py</span></li>
+<li><a href="https://huggingface.co/ibm/PowerLM-3b" target="_blank">ibm/PowerLM-3b</a> <span class="muted">tests/models/granite/test_modeling_granite.py</span></li>
+<li><a href="https://huggingface.co/ibm/PowerMoE-3b" target="_blank">ibm/PowerMoE-3b</a> <span class="muted">tests/models/granitemoe/test_modeling_granitemoe.py, tests/models/granitemoeshared/test_modeling_granitemoeshared.py</span></li>
+</ul></div></div>
+<div class="card" id="pattern-3"><h2>Pattern #3 <span class="badge">5 models</span></h2>
+<pre class="diff"><span class="del">-pre_tokenizer:	ByteLevel(add_prefix_space=False, trim_offsets=True, use_regex=True)
+</span><span class="add">+pre_tokenizer:	Sequence(pretokenizers=[Split(pattern=Regex(&quot;(?i:&#x27;s|&#x27;t|&#x27;re|&#x27;ve|&#x27;m|&#x27;ll|&#x27;d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+&quot;), behavior=Removed, invert=True), ByteLevel(add_prefix_space=False, trim_offsets=True, use_regex=False)])</span></pre>
+<div class="models"><strong>Affected models:</strong>
+<ul>
+<li><a href="https://huggingface.co/allenai/OLMo-2-0425-1B" target="_blank">allenai/OLMo-2-0425-1B</a> <span class="muted">tests/models/olmo2/test_modeling_olmo2.py</span></li>
+<li><a href="https://huggingface.co/allenai/dolma2-tokenizer" target="_blank">allenai/dolma2-tokenizer</a> <span class="muted">tests/models/flex_olmo/test_modeling_flex_olmo.py, tests/models/olmo3/test_modeling_olmo3.py</span></li>
+<li><a href="https://huggingface.co/ibm-granite/granite-4.0-h-tiny" target="_blank">ibm-granite/granite-4.0-h-tiny</a> <span class="muted">tests/models/granitemoehybrid/test_modeling_granitemoehybrid.py</span></li>
+<li><a href="https://huggingface.co/shanearora/Flex-reddit-2x7B-1T" target="_blank">shanearora/Flex-reddit-2x7B-1T</a> <span class="muted">tests/models/flex_olmo/test_modeling_flex_olmo.py</span></li>
+<li><a href="https://huggingface.co/shanearora/OLMo2-7B-1124-hf" target="_blank">shanearora/OLMo2-7B-1124-hf</a> <span class="muted">tests/models/olmo2/test_modeling_olmo2.py</span></li>
+</ul></div></div>
+<div class="card" id="pattern-4"><h2>Pattern #4 <span class="badge">3 models</span></h2>
+<pre class="diff"><span class="del">-normalizer:	None
+</span><span class="add">+normalizer:	Sequence(normalizers=[Prepend(prepend=&quot;▁&quot;), Replace(pattern=String(&quot; &quot;), content=&quot;▁&quot;)])
+</span><span class="del">-pre_tokenizer:	Metaspace(replacement=&quot;▁&quot;, prepend_scheme=always, split=False)
+</span><span class="add">+pre_tokenizer:	None</span></pre>
+<div class="models"><strong>Affected models:</strong>
+<ul>
+<li><a href="https://huggingface.co/HuggingFaceM4/idefics-9b" target="_blank">HuggingFaceM4/idefics-9b</a> <span class="muted">tests/models/idefics/test_modeling_idefics.py</span></li>
+<li><a href="https://huggingface.co/Salesforce/instructblip-vicuna-7b" target="_blank">Salesforce/instructblip-vicuna-7b</a> <span class="muted">tests/models/instructblip/test_modeling_instructblip.py, tests/models/instructblipvideo/test_modeling_instructblipvideo.py</span></li>
+<li><a href="https://huggingface.co/jetmoe/jetmoe-8b" target="_blank">jetmoe/jetmoe-8b</a> <span class="muted">tests/models/jetmoe/test_modeling_jetmoe.py</span></li>
+</ul></div></div>
+<div class="card" id="pattern-5"><h2>Pattern #5 <span class="badge">3 models</span></h2>
+<pre class="diff"><span class="del">-normalizer:	None
+</span><span class="add">+normalizer:	Sequence(normalizers=[Replace(pattern=String(&quot; &quot;), content=&quot;▁&quot;)])
+</span><span class="del">-pre_tokenizer:	Metaspace(replacement=&quot;▁&quot;, prepend_scheme=never, split=False)
+</span><span class="add">+pre_tokenizer:	None</span></pre>
+<div class="models"><strong>Affected models:</strong>
+<ul>
+<li><a href="https://huggingface.co/PaddlePaddle/PaddleOCR-VL" target="_blank">PaddlePaddle/PaddleOCR-VL</a> <span class="muted">tests/models/paddleocr_vl/test_modeling_paddleocr_vl.py</span></li>
+<li><a href="https://huggingface.co/baidu/ERNIE-4.5-0.3B-PT" target="_blank">baidu/ERNIE-4.5-0.3B-PT</a> <span class="muted">tests/models/ernie4_5/test_modeling_ernie4_5.py</span></li>
+<li><a href="https://huggingface.co/baidu/ERNIE-4.5-21B-A3B-PT" target="_blank">baidu/ERNIE-4.5-21B-A3B-PT</a> <span class="muted">tests/models/ernie4_5_moe/test_modeling_ernie4_5_moe.py</span></li>
+</ul></div></div>
+<div class="card" id="pattern-6"><h2>Pattern #6 <span class="badge">2 models</span></h2>
+<pre class="diff"><span class="del">-normalizer:	None
+</span><span class="add">+normalizer:	Sequence(normalizers=[Prepend(prepend=&quot;▁&quot;), Replace(pattern=String(&quot; &quot;), content=&quot;▁&quot;)])
+</span><span class="del">-pre_tokenizer:	Metaspace(replacement=&quot;▁&quot;, prepend_scheme=first, split=False)
+</span><span class="add">+pre_tokenizer:	None</span></pre>
+<div class="models"><strong>Affected models:</strong>
+<ul>
+<li><a href="https://huggingface.co/HuggingFaceM4/idefics2-8b-base" target="_blank">HuggingFaceM4/idefics2-8b-base</a> <span class="muted">tests/models/idefics2/test_modeling_idefics2.py</span></li>
+<li><a href="https://huggingface.co/meta-llama/Llama-2-7b-hf" target="_blank">meta-llama/Llama-2-7b-hf</a> <span class="muted">tests/models/llama/test_modeling_llama.py</span></li>
+</ul></div></div>
+<div class="card" id="pattern-7"><h2>Pattern #7 <span class="badge">2 models</span></h2>
+<pre class="diff"><span class="del">-decoder:	Sequence(decoders=[Replace(pattern=String(&quot;▁&quot;), content=&quot; &quot;), ByteFallback(), Fuse(), Strip(content=&quot; &quot;, start=1, stop=0)])
+</span><span class="add">+decoder:	ByteLevel(add_prefix_space=True, trim_offsets=True, use_regex=True)
+</span><span class="del">-pre_tokenizer:	Metaspace(replacement=&quot;▁&quot;, prepend_scheme=first, split=False)
+</span><span class="add">+pre_tokenizer:	Sequence(pretokenizers=[Split(pattern=Regex(&quot;[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n/]*|\s*[\r\n]+|\s+(?!\S)|\s+&quot;), behavior=Isolated, invert=False), ByteLevel(add_prefix_space=False, trim_offsets=True, use_regex=False)])</span></pre>
+<div class="models"><strong>Affected models:</strong>
+<ul>
+<li><a href="https://huggingface.co/Mistralai/Ministral-8B-Instruct-2410" target="_blank">Mistralai/Ministral-8B-Instruct-2410</a> <span class="muted">tests/models/ministral/test_modeling_ministral.py</span></li>
+<li><a href="https://huggingface.co/mistralai/Ministral-8B-Instruct-2410" target="_blank">mistralai/Ministral-8B-Instruct-2410</a> <span class="muted">tests/models/ministral/test_modeling_ministral.py</span></li>
+</ul></div></div>
+<div class="card" id="pattern-8"><h2>Pattern #8 <span class="badge">2 models</span></h2>
+<pre class="diff"><span class="del">-pre_tokenizer:	Metaspace(replacement=&quot;▁&quot;, prepend_scheme=always, split=True)
+</span><span class="add">+pre_tokenizer:	Sequence(pretokenizers=[WhitespaceSplit(), Metaspace(replacement=&quot;▁&quot;, prepend_scheme=always, split=True)])</span></pre>
+<div class="models"><strong>Affected models:</strong>
+<ul>
+<li><a href="https://huggingface.co/google/bigbird-pegasus-large-pubmed" target="_blank">google/bigbird-pegasus-large-pubmed</a> <span class="muted">tests/models/bigbird_pegasus/test_modeling_bigbird_pegasus.py</span></li>
+<li><a href="https://huggingface.co/google/pegasus-x-base" target="_blank">google/pegasus-x-base</a> <span class="muted">tests/models/pegasus_x/test_modeling_pegasus_x.py</span></li>
+</ul></div></div>
+<div class="card" id="pattern-9"><h2>Pattern #9 <span class="badge">2 models</span></h2>
+<pre class="diff"><span class="del">-normalizer:	None
+</span><span class="add">+normalizer:	Sequence(normalizers=[Replace(pattern=Regex(&quot; {2,}&quot;), content=&quot; &quot;)])
+</span><span class="del">-pre_tokenizer:	Sequence(pretokenizers=[WhitespaceSplit(), Metaspace(replacement=&quot;▁&quot;, prepend_scheme=always, split=True)])
+</span><span class="add">+pre_tokenizer:	Metaspace(replacement=&quot;▁&quot;, prepend_scheme=always, split=True)</span></pre>
+<div class="models"><strong>Affected models:</strong>
+<ul>
+<li><a href="https://huggingface.co/google/pix2struct-textcaps-base" target="_blank">google/pix2struct-textcaps-base</a> <span class="muted">tests/models/pix2struct/test_modeling_pix2struct.py</span></li>
+<li><a href="https://huggingface.co/google/umt5-small" target="_blank">google/umt5-small</a> <span class="muted">tests/models/umt5/test_modeling_umt5.py</span></li>
+</ul></div></div>
+<div class="card" id="pattern-10"><h2>Pattern #10 <span class="badge">1 models</span></h2>
+<pre class="diff"><span class="del">-normalizer:	Sequence(normalizers=[Replace(pattern=String(&quot;``&quot;), content=&quot;&quot;&quot;), Replace(pattern=String(&quot;&#x27;&#x27;&quot;), content=&quot;&quot;&quot;), NFKD(), StripAccents(), Lowercase(), Replace(pattern=Regex(&quot; {2,}&quot;), content=&quot; &quot;), NFKD(), StripAccents(), Lowercase(), Replace(pattern=Regex(&quot; {2,}&quot;), content=&quot; &quot;)])
+</span><span class="add">+normalizer:	Sequence(normalizers=[Replace(pattern=String(&quot;``&quot;), content=&quot;&quot;&quot;), Replace(pattern=String(&quot;&#x27;&#x27;&quot;), content=&quot;&quot;&quot;), NFKD(), StripAccents(), Lowercase(), Precompiled(precompiled_charsmap=&quot;ALQCAACEAAAAAACAAQAAgMz8AgC4BQAAhyIAgMzkAgC4PQAAeyIAgMzsAgC4BQAAiyIAgMw8AADNvAAAmwkAgJ4JAIChCQCAgx0AAIAZAACBGQAAPR0AgDUdAIBNHQCARR0AgIAxAACBMQAApAkAgIkxAAA9WAMA...[316520 chars omitted]...qoOOAPCqhIUA8KqIjgDwqoqRAPCqjpIA8KqYgAA=&quot;)])</span></pre>
+<div class="models"><strong>Affected models:</strong>
+<ul>
+<li><a href="https://huggingface.co/albert/albert-base-v2" target="_blank">albert/albert-base-v2</a> <span class="muted">tests/models/albert/test_modeling_albert.py</span></li>
+</ul></div></div>
+<div class="card" id="pattern-11"><h2>Pattern #11 <span class="badge">1 models</span></h2>
+<pre class="diff"><span class="del">-normalizer:	Sequence(normalizers=[Replace(pattern=Regex(&quot;\s{2,}|[\n\r\t]&quot;), content=&quot; &quot;), Strip(strip_left=False, strip_right=True)])
+</span><span class="add">+normalizer:	Precompiled(precompiled_charsmap=&quot;ALQCAACEAAAAAACAAQAAgMz8AgC4BQAAhyIAgMzkAgC4PQAAeyIAgMzsAgC4BQAAiyIAgMw8AADNvAAAmwkAgJ4JAIChCQCAgx0AAIAZAACBGQAAPR0AgDUdAIBNHQCARR0AgIAxAACBMQAApAkAgIkxAAA9WAMA...[316520 chars omitted]...qoOOAPCqhIUA8KqIjgDwqoqRAPCqjpIA8KqYgAA=&quot;)
+</span><span class="del">-pre_tokenizer:	Metaspace(replacement=&quot;▁&quot;, prepend_scheme=always, split=True)
+</span><span class="add">+pre_tokenizer:	Sequence(pretokenizers=[WhitespaceSplit(), Metaspace(replacement=&quot;▁&quot;, prepend_scheme=always, split=True)])
+</span><span class="del">-vocab_size:	32005
+</span><span class="add">+vocab_size:	32004</span></pre>
+<div class="models"><strong>Affected models:</strong>
+<ul>
+<li><a href="https://huggingface.co/almanach/camembert-base" target="_blank">almanach/camembert-base</a> <span class="muted">tests/models/camembert/test_modeling_camembert.py</span></li>
+</ul></div></div>
+<div class="card" id="pattern-12"><h2>Pattern #12 <span class="badge">1 models</span></h2>
+<pre class="diff"><span class="del">-post_processor:	TemplateProcessing(single=[SpecialToken(id=&quot;eng_Latn&quot;, type_id=0), Sequence(id=A, type_id=0), SpecialToken(id=&quot;&lt;/s&gt;&quot;, type_id=0)], pair=[SpecialToken(id=&quot;eng_Latn&quot;, type_id=0), Sequence(id=A, type_id=0), Sequence(id=B, type_id=0), SpecialToken(id=&quot;&lt;/s&gt;&quot;, type_id=0)], special_tokens={&quot;&lt;/s&gt;&quot;:SpecialToken(id=&quot;&lt;/s&gt;&quot;, ids=[2], tokens=[&quot;&lt;/s&gt;&quot;]), &quot;eng_Latn&quot;:SpecialToken(id=&quot;eng_Latn&quot;, ids=[256047], tokens=[&quot;eng_Latn&quot;])})
+</span><span class="add">+post_processor:	TemplateProcessing(single=[Sequence(id=A, type_id=0), SpecialToken(id=&quot;&lt;/s&gt;&quot;, type_id=0), SpecialToken(id=&quot;eng_Latn&quot;, type_id=0)], pair=[Sequence(id=A, type_id=0), Sequence(id=B, type_id=0), SpecialToken(id=&quot;&lt;/s&gt;&quot;, type_id=0), SpecialToken(id=&quot;eng_Latn&quot;, type_id=0)], special_tokens={&quot;&lt;/s&gt;&quot;:SpecialToken(id=&quot;&lt;/s&gt;&quot;, ids=[2], tokens=[&quot;&lt;/s&gt;&quot;]), &quot;eng_Latn&quot;:SpecialToken(id=&quot;eng_Latn&quot;, ids=[256047], tokens=[&quot;eng_Latn&quot;])})</span></pre>
+<div class="models"><strong>Affected models:</strong>
+<ul>
+<li><a href="https://huggingface.co/facebook/nllb-moe-54b" target="_blank">facebook/nllb-moe-54b</a> <span class="muted">tests/models/nllb_moe/test_modeling_nllb_moe.py</span></li>
+</ul></div></div>
+<div class="card" id="pattern-13"><h2>Pattern #13 <span class="badge">1 models</span></h2>
+<pre class="diff"><span class="del">-pre_tokenizer:	Sequence(pretokenizers=[Split(pattern=String(&quot;SPL1T-TH1S-Pl3A5E&quot;), behavior=Removed, invert=False), Digits(individual_digits=True), Split(pattern=String(&quot;[\(\)\[\]\{\}]|([!\&quot;#\$%\&amp;&#x27;\*\</span><span class="add">+,\-\./:;&lt;=&gt;\?\\\^_`\|\~])\1*&quot;), behavior=Isolated, invert=False), Split(pattern=String(&quot;
+&quot;), behavior=Isolated, invert=False), ByteLevel(add_prefix_space=False, trim_offsets=True, use_regex=True)])
+</span><span class="add">+pre_tokenizer:	Sequence(pretokenizers=[Split(pattern=String(&quot;SPL1T-TH1S-Pl3A5E&quot;), behavior=Removed, invert=False), Digits(individual_digits=True), Split(pattern=Regex(&quot;[\(\)\[\]\{\}]|([!&quot;\#\$%\&amp;&#x27;\*\+,\-\./:;&lt;=&gt;\?\\\^_`\|\~])\1*&quot;), behavior=Isolated, invert=False), Split(pattern=String(&quot;
+&quot;), behavior=Isolated, invert=False), ByteLevel(add_prefix_space=False, trim_offsets=True, use_regex=True)])</span></pre>
+<div class="models"><strong>Affected models:</strong>
+<ul>
+<li><a href="https://huggingface.co/facebook/nougat-base" target="_blank">facebook/nougat-base</a> <span class="muted">tests/models/vision_encoder_decoder/test_modeling_vision_encoder_decoder.py</span></li>
+</ul></div></div>
+<div class="card" id="pattern-14"><h2>Pattern #14 <span class="badge">1 models</span></h2>
+<pre class="diff"><span class="del">-normalizer:	Sequence(normalizers=[Replace(pattern=Regex(&quot;[\n\r\t]&quot;), content=&quot; &quot;), NFKC(), Replace(pattern=Regex(&quot; {2,}&quot;), content=&quot; &quot;)])
+</span><span class="add">+normalizer:	Sequence(normalizers=[Precompiled(precompiled_charsmap=&quot;ALQCAACEAAAAAACAAQAAgMz8AgC4BQAAhyIAgMzkAgC4PQAAeyIAgMzsAgC4BQAAiyIAgMw8AADNvAAAmwkAgJ4JAIChCQCAgx0AAIAZAACBGQAAPR0AgDUdAIBNHQCARR0AgIAxAACBMQAApAkAgIkxAAA9WAMA...[316520 chars omitted]...qoOOAPCqhIUA8KqIjgDwqoqRAPCqjpIA8KqYgAA=&quot;), Replace(pattern=Regex(&quot; {2,}&quot;), content=&quot; &quot;)])
+</span><span class="del">-post_processor:	TemplateProcessing(single=[SpecialToken(id=&quot;&lt;/s&gt;&quot;, type_id=0), Sequence(id=A, type_id=0), SpecialToken(id=&quot;&lt;/s&gt;&quot;, type_id=0)], pair=[SpecialToken(id=&quot;&lt;/s&gt;&quot;, type_id=0), Sequence(id=A, type_id=0), SpecialToken(id=&quot;&lt;/s&gt;&quot;, type_id=0), SpecialToken(id=&quot;&lt;/s&gt;&quot;, type_id=0), Sequence(id=B, type_id=0), SpecialToken(id=&quot;&lt;/s&gt;&quot;, type_id=0)], special_tokens={&quot;&lt;/s&gt;&quot;:SpecialToken(id=&quot;&lt;/s&gt;&quot;, ids=[2], tokens=[&quot;&lt;/s&gt;&quot;]), &quot;&lt;s&gt;&quot;:SpecialToken(id=&quot;&lt;s&gt;&quot;, ids=[0], tokens=[&quot;&lt;s&gt;&quot;])})
+</span><span class="add">+post_processor:	TemplateProcessing(single=[SpecialToken(id=&quot;&lt;/s&gt;&quot;, type_id=0), Sequence(id=A, type_id=0)], pair=[SpecialToken(id=&quot;&lt;/s&gt;&quot;, type_id=0), Sequence(id=A, type_id=0), SpecialToken(id=&quot;&lt;/s&gt;&quot;, type_id=0), SpecialToken(id=&quot;&lt;/s&gt;&quot;, type_id=0), Sequence(id=B, type_id=0)], special_tokens={&quot;&lt;/s&gt;&quot;:SpecialToken(id=&quot;&lt;/s&gt;&quot;, ids=[2], tokens=[&quot;&lt;/s&gt;&quot;]), &quot;&lt;s&gt;&quot;:SpecialToken(id=&quot;&lt;s&gt;&quot;, ids=[0], tokens=[&quot;&lt;s&gt;&quot;])})</span></pre>
+<div class="models"><strong>Affected models:</strong>
+<ul>
+<li><a href="https://huggingface.co/facebook/xglm-564M" target="_blank">facebook/xglm-564M</a> <span class="muted">tests/models/xglm/test_modeling_xglm.py</span></li>
+</ul></div></div>
+<div class="card" id="pattern-15"><h2>Pattern #15 <span class="badge">1 models</span></h2>
+<pre class="diff"><span class="del">-pre_tokenizer:	Split(pattern=String(&quot; &quot;), behavior=MergedWithPrevious, invert=False)
+</span><span class="add">+pre_tokenizer:	None</span></pre>
+<div class="models"><strong>Affected models:</strong>
+<ul>
+<li><a href="https://huggingface.co/google/gemma-2b" target="_blank">google/gemma-2b</a> <span class="muted">tests/models/gemma/test_modeling_gemma.py</span></li>
+</ul></div></div>
+<div class="card" id="pattern-16"><h2>Pattern #16 <span class="badge">1 models</span></h2>
+<pre class="diff"><span class="del">-normalizer:	Sequence(normalizers=[Replace(pattern=String(&quot;``&quot;), content=&quot;&quot;&quot;), Replace(pattern=String(&quot;&#x27;&#x27;&quot;), content=&quot;&quot;&quot;), Replace(pattern=Regex(&quot; {2,}&quot;), content=&quot; &quot;), Replace(pattern=Regex(&quot;[\n\r\t]&quot;), content=&quot; &quot;), NFKC()])
+</span><span class="add">+normalizer:	Sequence(normalizers=[Replace(pattern=String(&quot;``&quot;), content=&quot;&quot;&quot;), Replace(pattern=String(&quot;&#x27;&#x27;&quot;), content=&quot;&quot;&quot;), Replace(pattern=Regex(&quot; {2,}&quot;), content=&quot; &quot;), Precompiled(precompiled_charsmap=&quot;ALQCAACEAAAAAACAAQAAgMz8AgC4BQAAhyIAgMzkAgC4PQAAeyIAgMzsAgC4BQAAiyIAgMw8AADNvAAAmwkAgJ4JAIChCQCAgx0AAIAZAACBGQAAPR0AgDUdAIBNHQCARR0AgIAxAACBMQAApAkAgIkxAAA9WAMA...[316520 chars omitted]...qoOOAPCqhIUA8KqIjgDwqoqRAPCqjpIA8KqYgAA=&quot;)])</span></pre>
+<div class="models"><strong>Affected models:</strong>
+<ul>
+<li><a href="https://huggingface.co/google/rembert" target="_blank">google/rembert</a> <span class="muted">tests/models/rembert/test_modeling_rembert.py</span></li>
+</ul></div></div>
+<div class="card" id="pattern-17"><h2>Pattern #17 <span class="badge">1 models</span></h2>
+<pre class="diff"><span class="del">-post_processor:	TemplateProcessing(single=[SpecialToken(id=&quot;&lt;s&gt;&quot;, type_id=0), Sequence(id=A, type_id=0), SpecialToken(id=&quot;&lt;/s&gt;&quot;, type_id=0)], pair=[SpecialToken(id=&quot;&lt;s&gt;&quot;, type_id=0), Sequence(id=A, type_id=0), SpecialToken(id=&quot;&lt;/s&gt;&quot;, type_id=0), SpecialToken(id=&quot;&lt;/s&gt;&quot;, type_id=0), Sequence(id=B, type_id=1), SpecialToken(id=&quot;&lt;/s&gt;&quot;, type_id=1)], special_tokens={&quot;&lt;/s&gt;&quot;:SpecialToken(id=&quot;&lt;/s&gt;&quot;, ids=[2], tokens=[&quot;&lt;/s&gt;&quot;]), &quot;&lt;s&gt;&quot;:SpecialToken(id=&quot;&lt;s&gt;&quot;, ids=[0], tokens=[&quot;&lt;s&gt;&quot;])})
+</span><span class="add">+post_processor:	RobertaProcessing(sep=(&quot;&lt;/s&gt;&quot;, 2), cls=(&quot;&lt;s&gt;&quot;, 0), trim_offsets=True, add_prefix_space=False)</span></pre>
+<div class="models"><strong>Affected models:</strong>
+<ul>
+<li><a href="https://huggingface.co/microsoft/mpnet-base" target="_blank">microsoft/mpnet-base</a> <span class="muted">tests/models/mpnet/test_modeling_mpnet.py</span></li>
+</ul></div></div>
+<div class="card" id="pattern-18"><h2>Pattern #18 <span class="badge">1 models</span></h2>
+<pre class="diff"><span class="del">-normalizer:	None
+</span><span class="add">+normalizer:	Sequence(normalizers=[Prepend(prepend=&quot;▁&quot;), Replace(pattern=String(&quot; &quot;), content=&quot;▁&quot;)])
+</span><span class="del">-pre_tokenizer:	Metaspace(replacement=&quot;▁&quot;, prepend_scheme=always, split=False)
+</span><span class="add">+pre_tokenizer:	None
+</span><span class="del">-vocab_size:	100352
+</span><span class="add">+vocab_size:	100353</span></pre>
+<div class="models"><strong>Affected models:</strong>
+<ul>
+<li><a href="https://huggingface.co/rhymes-ai/Aria" target="_blank">rhymes-ai/Aria</a> <span class="muted">tests/models/aria/test_modeling_aria.py</span></li>
+</ul></div></div>
+<div class="card" id="pattern-19"><h2>Pattern #19 <span class="badge">1 models</span></h2>
+<pre class="diff"><span class="del">-pre_tokenizer:	ByteLevel(add_prefix_space=False, trim_offsets=True, use_regex=True)
+</span><span class="add">+pre_tokenizer:	Sequence(pretokenizers=[Split(pattern=Regex(&quot;(?i:&#x27;s|&#x27;t|&#x27;re|&#x27;ve|&#x27;m|&#x27;ll|&#x27;d)|[^
+\p{L}\p{N}]?\p{L}+|\p{N}| ?[^\s\p{L}\p{N}]+[
+]*|\s*[
+]+|\s+(?!\S)|\s+&quot;), behavior=Removed, invert=True), ByteLevel(add_prefix_space=False, trim_offsets=True, use_regex=False)])</span></pre>
+<div class="models"><strong>Affected models:</strong>
+<ul>
+<li><a href="https://huggingface.co/stabilityai/tiny-random-stablelm-2" target="_blank">stabilityai/tiny-random-stablelm-2</a> <span class="muted">tests/models/stablelm/test_modeling_stablelm.py</span></li>
+</ul></div></div>
+<div class="card" id="pattern-20"><h2>Pattern #20 <span class="badge">1 models</span></h2>
+<pre class="diff"><span class="del">-normalizer:	Sequence(normalizers=[Replace(pattern=String(&quot;``&quot;), content=&quot;&quot;&quot;), Replace(pattern=String(&quot;&#x27;&#x27;&quot;), content=&quot;&quot;&quot;), NFKD(), StripAccents(), Lowercase(), Replace(pattern=Regex(&quot; {2,}&quot;), content=&quot; &quot;), NFKD(), StripAccents(), Lowercase(), Replace(pattern=Regex(&quot; {2,}&quot;), content=&quot; &quot;)])
+</span><span class="add">+normalizer:	Sequence(normalizers=[Replace(pattern=String(&quot;``&quot;), content=&quot;&quot;&quot;), Replace(pattern=String(&quot;&#x27;&#x27;&quot;), content=&quot;&quot;&quot;), NFKD(), StripAccents(), Lowercase(), Precompiled(precompiled_charsmap=&quot;ALQCAACEAAAAAACAAQAAgMz8AgC4BQAAhyIAgMzkAgC4PQAAeyIAgMzsAgC4BQAAiyIAgMw8AADNvAAAmwkAgJ4JAIChCQCAgx0AAIAZAACBGQAAPR0AgDUdAIBNHQCARR0AgIAxAACBMQAApAkAgIkxAAA9WAMA...[316520 chars omitted]...qoOOAPCqhIUA8KqIjgDwqoqRAPCqjpIA8KqYgAA=&quot;), Replace(pattern=Regex(&quot; {2,}&quot;), content=&quot; &quot;)])
+</span><span class="del">-pre_tokenizer:	Sequence(pretokenizers=[WhitespaceSplit(), Metaspace(replacement=&quot;▁&quot;, prepend_scheme=always, split=True)])
+</span><span class="add">+pre_tokenizer:	Metaspace(replacement=&quot;▁&quot;, prepend_scheme=always, split=True)</span></pre>
+<div class="models"><strong>Affected models:</strong>
+<ul>
+<li><a href="https://huggingface.co/uw-madison/nystromformer-512" target="_blank">uw-madison/nystromformer-512</a> <span class="muted">tests/models/nystromformer/test_modeling_nystromformer.py</span></li>
+</ul></div></div>
+<div class="card" id="pattern-21"><h2>Pattern #21 <span class="badge">1 models</span></h2>
+<pre class="diff"><span class="del">-decoder:	Sequence(decoders=[Replace(pattern=String(&quot;▁&quot;), content=&quot; &quot;), ByteFallback(), Fuse(), Strip(content=&quot; &quot;, start=1, stop=0)])
+</span><span class="add">+decoder:	ByteLevel(add_prefix_space=True, trim_offsets=True, use_regex=True)
+</span><span class="del">-pre_tokenizer:	Metaspace(replacement=&quot;▁&quot;, prepend_scheme=always, split=False)
+</span><span class="add">+pre_tokenizer:	Sequence(pretokenizers=[Split(pattern=Regex(&quot;(?i:&#x27;s|&#x27;t|&#x27;re|&#x27;ve|&#x27;m|&#x27;ll|&#x27;d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+&quot;), behavior=Isolated, invert=False), ByteLevel(add_prefix_space=False, trim_offsets=True, use_regex=False)])</span></pre>
+<div class="models"><strong>Affected models:</strong>
+<ul>
+<li><a href="https://huggingface.co/westlake-repl/Evolla-10B-hf" target="_blank">westlake-repl/Evolla-10B-hf</a> <span class="muted">tests/models/evolla/test_modeling_evolla.py</span></li>
+</ul></div></div>
+<div class="card" id="pattern-22"><h2>Pattern #22 <span class="badge">1 models</span></h2>
+<pre class="diff"><span class="del">-normalizer:	Sequence(normalizers=[Replace(pattern=String(&quot;``&quot;), content=&quot;&quot;&quot;), Replace(pattern=String(&quot;&#x27;&#x27;&quot;), content=&quot;&quot;&quot;), NFKD(), StripAccents(), Replace(pattern=Regex(&quot; {2,}&quot;), content=&quot; &quot;)])
+</span><span class="add">+normalizer:	Sequence(normalizers=[Replace(pattern=String(&quot;``&quot;), content=&quot;&quot;&quot;), Replace(pattern=String(&quot;&#x27;&#x27;&quot;), content=&quot;&quot;&quot;), NFKD(), StripAccents(), Precompiled(precompiled_charsmap=&quot;ALQCAACEAAAAAACAAQAAgMz8AgC4BQAAhyIAgMzkAgC4PQAAeyIAgMzsAgC4BQAAiyIAgMw8AADNvAAAmwkAgJ4JAIChCQCAgx0AAIAZAACBGQAAPR0AgDUdAIBNHQCARR0AgIAxAACBMQAApAkAgIkxAAA9WAMA...[316520 chars omitted]...qoOOAPCqhIUA8KqIjgDwqoqRAPCqjpIA8KqYgAA=&quot;)])</span></pre>
+<div class="models"><strong>Affected models:</strong>
+<ul>
+<li><a href="https://huggingface.co/xlnet/xlnet-base-cased" target="_blank">xlnet/xlnet-base-cased</a> <span class="muted">tests/models/xlnet/test_modeling_xlnet.py</span></li>
+</ul></div></div>
+</div>
+</body></html>
