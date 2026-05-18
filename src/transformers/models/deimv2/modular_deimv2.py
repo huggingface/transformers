@@ -440,6 +440,7 @@ class Deimv2PreTrainedModel(DFinePreTrainedModel):
             init.constant_(module.down_proj.bias, 0)
 
 
+# This follows DFineConvEncoder, with optional projections added after the backbone features.
 class Deimv2ConvEncoder(Deimv2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -864,7 +865,7 @@ class Deimv2Model(DFineModel):
 
 
 class Deimv2ForObjectDetection(DFineForObjectDetection):
-
+    _no_split_modules = None  # Restrictions are collected from self.model during post_init.
     @property
     def _tied_weights_keys(self):
         keys = {

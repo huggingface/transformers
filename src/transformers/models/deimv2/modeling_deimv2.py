@@ -1122,6 +1122,7 @@ def replace_batch_norm(model):
             replace_batch_norm(module)
 
 
+# This follows DFineConvEncoder, with optional projections added after the backbone features.
 class Deimv2ConvEncoder(Deimv2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2050,7 +2051,7 @@ class Deimv2ObjectDetectionOutput(ModelOutput):
     """
 )
 class Deimv2ForObjectDetection(Deimv2PreTrainedModel):
-    _no_split_modules = None  # Don't have the same restriction as DFine
+    _no_split_modules = None  # Restrictions are collected from self.model during post_init.
     _tied_weights_keys = {
         r"bbox_embed.(?![0])\d+": r"bbox_embed.0",
         r"class_embed.(?![0])\d+": r"^class_embed.0",
