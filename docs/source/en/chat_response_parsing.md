@@ -44,7 +44,7 @@ tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 model = AutoModelForCausalLM.from_pretrained(checkpoint, dtype="auto", device_map="auto")
 
 messages = [{"role": "user", "content": "Summarize the end of the Cold War, very briefly."}]
-input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt").to(model.device)
+input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")["input_ids"].to(model.device)
 outputs = model.generate(input_ids, max_new_tokens=1024)[0, input_ids.shape[1]:]
 out_text = tokenizer.decode(outputs)
 print(tokenizer.parse_response(out_text, prefix=input_ids[0]))
