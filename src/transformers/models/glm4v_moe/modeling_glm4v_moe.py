@@ -50,11 +50,11 @@ from ...utils.deprecation import deprecate_attribute, deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     can_return_tuple,
-    capture_outputs,
     is_flash_attention_requested,
     maybe_autocast,
     merge_with_config_defaults,
 )
+from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
 from .configuration_glm4v_moe import Glm4vMoeConfig, Glm4vMoeTextConfig, Glm4vMoeVisionConfig
 

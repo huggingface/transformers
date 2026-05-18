@@ -2052,7 +2052,6 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
         position_ids=None,
         past_key_values=None,
         inputs_embeds=None,
-        rope_deltas=None,
         labels=None,
         use_cache=None,
         output_router_logits: bool | None = None,
