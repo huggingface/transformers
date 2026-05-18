@@ -103,15 +103,14 @@ from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
 logger = logging.get_logger(__name__)
 
 
-def _get_feat_extract_output_lengths(input_lengths):
-    """Compute output lengths after the 3-layer CNN feature extractor with deepstack.
-
-    Three stride-2 convolutions within each 100-frame block, plus 13 output frames
-    per full block from the deepstack path.
+def _get_feat_extract_output_lengths(input_lengths, n_window=50):
     """
-    input_lengths_leave = input_lengths % 100
+    Computes the output length of the convolutional layers and the output length of the audio encoder
+    """
+    chunk_len = n_window * 2
+    input_lengths_leave = input_lengths % chunk_len
     feat_lengths = (input_lengths_leave - 1) // 2 + 1
-    return ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // 100) * 13
+    return ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // chunk_len) * 13
 
 
 def chunk_and_pad_features(
@@ -149,11 +148,12 @@ def chunk_and_pad_features(
     return padded_feature, chunk_lengths
 
 
-def get_valid_indices(chunk_lengths: torch.Tensor, kwargs: dict | None = None) -> torch.Tensor:
+def get_valid_indices(chunk_lengths: torch.Tensor, n_window: int, kwargs: dict | None = None) -> torch.Tensor:
     """Compute flat indices of valid (non-padding) positions after CNN extraction, or pop `"valid_indices"` from `kwargs` if precomputed.
 
     Args:
         chunk_lengths: `(num_chunks,)` pre-CNN chunk lengths.
+        n_window: half the chunk size (in raw frames).
         kwargs: optional caller kwargs — if it contains `"valid_indices"` it is popped and returned.
 
     Returns:
@@ -161,7 +161,7 @@ def get_valid_indices(chunk_lengths: torch.Tensor, kwargs: dict | None = None) -
     """
     if kwargs is not None and (valid_indices := kwargs.pop("valid_indices", None)) is not None:
         return valid_indices
-    feature_lens_after_cnn = _get_feat_extract_output_lengths(chunk_lengths)
+    feature_lens_after_cnn = _get_feat_extract_output_lengths(chunk_lengths, n_window)
     max_len_after_cnn = feature_lens_after_cnn.max().item()
     mask = torch.arange(max_len_after_cnn, device=chunk_lengths.device) < feature_lens_after_cnn.unsqueeze(1)
     return mask.flatten().nonzero().squeeze(-1)
@@ -192,8 +192,8 @@ def get_audio_cu_seqlens(
     if kwargs is not None and (cu_seqlens := kwargs.pop("cu_seqlens", None)) is not None:
         return cu_seqlens
 
-    aftercnn_lens = _get_feat_extract_output_lengths(feature_lens)
-    feature_lens_after_cnn = _get_feat_extract_output_lengths(chunk_lengths)
+    aftercnn_lens = _get_feat_extract_output_lengths(feature_lens, n_window)
+    feature_lens_after_cnn = _get_feat_extract_output_lengths(chunk_lengths, n_window)
     max_len_after_cnn = feature_lens_after_cnn.max().item()
 
     n_window_ratio = n_window_infer // (n_window * 2)
@@ -218,18 +218,6 @@ class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
     """
 
     deepstack_features: list[torch.FloatTensor] | None = None
-
-
-def _get_feat_extract_output_lengths(input_lengths, n_window=50):
-    """
-    Computes the output length of the convolutional layers and the output length of the audio encoder
-    """
-
-    chunk_len = n_window * 2
-    input_lengths_leave = input_lengths % chunk_len
-    feat_lengths = (input_lengths_leave - 1) // 2 + 1
-    output_lengths = ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // chunk_len) * 13
-    return output_lengths
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")
@@ -1016,9 +1004,6 @@ class Qwen3OmniMoeAudioEncoder(Qwen2_5OmniAudioEncoder):
     def padded_and_mask_function(self, tensor_list, tensor_len, padding_value=0, padding_side="right"):
         raise NotImplementedError("Not needed")
 
-    def _prepare_attention_mask(self, inputs_tensor: torch.Tensor, cu_seqlens: torch.Tensor) -> torch.Tensor:
-        raise NotImplementedError("Not needed")
-
     def get_input_embeddings(self):
         return self.conv2d1
 
@@ -1033,7 +1018,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen2_5OmniAudioEncoder):
         padded_feature, chunk_lengths = chunk_and_pad_features(
             input_features, feature_lens, self.n_window, kwargs=kwargs
         )
-        valid_indices = get_valid_indices(chunk_lengths, kwargs=kwargs)
+        valid_indices = get_valid_indices(chunk_lengths, self.n_window, kwargs=kwargs)
         cu_seqlens = get_audio_cu_seqlens(
             chunk_lengths, feature_lens, self.n_window_infer, self.n_window, kwargs=kwargs
         )
