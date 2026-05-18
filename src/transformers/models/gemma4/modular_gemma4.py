@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import math
+from collections import UserDict
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cached_property
@@ -1399,12 +1400,12 @@ class Gemma4TextModel(Gemma3TextModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4TextModelOutputWithPast:
         r"""
-        per_layer_inputs (`torch.Tensor` of shape `(batch_size, sequence_length, num_hidden_layers, hidden_size_per_layer_input)`, *optional*):
-            Pre-computed per-layer input embeddings. When provided, these are used directly instead of being
-            computed from `input_ids` via `get_per_layer_inputs()`. This is primarily used by the multimodal
-            model (`Gemma4Model`) which pre-computes per-layer inputs from the original `input_ids` *before*
-            merging multimodal soft tokens into `inputs_embeds` — at which point the original token ids are
-            no longer recoverable.
+        per_layer_inputs (`torch.Tensor`, *optional*):
+            Pre-computed per-layer input text embeddings of shape of shape `(batch_size, sequence_length, num_hidden_layers,
+            hidden_size_per_layer_input)`. When provided, these are used directly instead of being computed from `input_ids`
+            via `get_per_layer_inputs()` in the text model. If calling the `forward` with `inputs_embeds` instead of `input_ids`,
+            you should probably precompute them and forward them along `inputs_embeds`, otherwise recomputing them needs
+            to reverse the main embedding, which is expensibe.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1447,8 +1448,10 @@ class Gemma4TextModel(Gemma3TextModel):
         for layer_type in self.unique_layer_types:
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
-        # Initialize as empty dict - it will be filled in the right layers, or use passed ones
-        shared_kv_states = kwargs.pop("shared_kv_states", {})
+        # Initialize as empty dict, or reuse past shared states. We use a UserDict instead of built-in dict (it behaves
+        # the same) for fsdp2 support (otherwise, `_apply_to_tensors` rebuilds every dict it recurses into, and `shared_kv_states`
+        # is not correctly shared, see https://github.com/pytorch/pytorch/blob/v2.10.0/torch/distributed/utils.py#L223-L255)
+        shared_kv_states = kwargs.pop("shared_kv_states", UserDict())
 
         # decoder layers
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
@@ -1478,13 +1481,6 @@ class Gemma4TextModel(Gemma3TextModel):
 class Gemma4ForCausalLM(Gemma3ForCausalLM):
     base_model_prefix = "model"
 
-    def __init__(self, config: Gemma4TextConfig):
-        super().__init__(config)
-        # Grab the ones from the child
-        self._keys_to_ignore_on_load_unexpected = [
-            f"model.{name}" for name in self.model._keys_to_ignore_on_load_unexpected
-        ]
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1497,9 +1493,17 @@ class Gemma4ForCausalLM(Gemma3ForCausalLM):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        per_layer_inputs: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4CausalLMOutputWithPast:
         r"""
+        per_layer_inputs (`torch.Tensor`, *optional*):
+            Pre-computed per-layer input text embeddings of shape of shape `(batch_size, sequence_length, num_hidden_layers,
+            hidden_size_per_layer_input)`. When provided, these are used directly instead of being computed from `input_ids`
+            via `get_per_layer_inputs()` in the text model. If calling the `forward` with `inputs_embeds` instead of `input_ids`,
+            you should probably precompute them and forward them along `inputs_embeds`, otherwise recomputing them needs
+            to reverse the main embedding, which is expensibe.
+
         Example:
 
         ```python
@@ -1523,6 +1527,7 @@ class Gemma4ForCausalLM(Gemma3ForCausalLM):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            per_layer_inputs=per_layer_inputs,
             use_cache=use_cache,
             **kwargs,
         )
@@ -1761,52 +1766,16 @@ def token_type_ids_mask_function(
     return inner_mask
 
 
-# Similar to Gemma3 but `sliding_mask_kwargs` and `mask_kwargs` are different and `token_type_ids->mm_token_type_ids`
-def create_causal_mask_mapping(
-    config: PreTrainedConfig,
-    inputs_embeds: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    past_key_values: Cache | None,
-    position_ids: torch.Tensor | None,
-    mm_token_type_ids: torch.Tensor | None = None,
-    is_first_iteration: bool | None = None,
-    **kwargs,
-) -> dict:
-    """
-    Overwrites the base `create_masks_for_generate` with `token_type_ids` masking to create the causal mask mapping
-    for all kinds of forward passes. Gemma4 uses a bidirectional mask for images.
-
-    Uses `pixel_values` as an optional input to disambiguate edge cases.
-    """
-    mask_kwargs = {
-        "config": config.get_text_config(),
-        "inputs_embeds": inputs_embeds,
-        "attention_mask": attention_mask,
-        "past_key_values": past_key_values,
-        "position_ids": position_ids,
-    }
-    sliding_mask_kwargs = mask_kwargs.copy()
-
-    if mm_token_type_ids is not None:
-        # We need to pass an additional mask function to account for token type ids, and it needs to be an `or` (to
-        # undo the causal masking)
-
-        # First find where a new vision block starts. Vision tokens cannot attend to
-        # future vision tokens, but can attend to all prev tokens and to itself bidirectionally
-        is_vision = (mm_token_type_ids == 1) | (mm_token_type_ids == 2)
-        is_prev_vision = torch.roll(is_vision, shifts=1, dims=-1)
-        is_prev_vision[..., 0] = False
-        new_vision_starts = is_vision & ~is_prev_vision
-        vision_group_ids = torch.cumsum(new_vision_starts.int(), dim=1) - 1
-        vision_group_ids = torch.where(is_vision, vision_group_ids, -1)
-        sliding_mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
-            mm_token_type_ids.to(inputs_embeds.device), vision_group_ids
-        )
-
-    return {
-        "full_attention": create_causal_mask(**mask_kwargs),
-        "sliding_attention": create_sliding_window_causal_mask(**sliding_mask_kwargs),
-    }
+def get_block_sequence_ids_for_mask(
+    mm_token_type_ids: torch.Tensor, device: torch.device | None = None
+) -> torch.Tensor:
+    is_vision = (mm_token_type_ids == 1) | (mm_token_type_ids == 2)
+    is_prev_vision = torch.roll(is_vision, shifts=1, dims=-1)
+    is_prev_vision[..., 0] = False
+    new_vision_starts = is_vision & ~is_prev_vision
+    vision_group_ids = torch.cumsum(new_vision_starts.int(), dim=1) - 1
+    block_sequence_ids = torch.where(is_vision, vision_group_ids, -1)
+    return block_sequence_ids
 
 
 @auto_docstring(
@@ -1945,6 +1914,7 @@ class Gemma4Model(Gemma3nModel):
         use_cache: bool | None = None,
         image_position_ids: torch.LongTensor | None = None,
         video_position_ids: torch.LongTensor | None = None,
+        per_layer_inputs: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4ModelOutputWithPast:
         r"""
@@ -1956,6 +1926,12 @@ class Gemma4Model(Gemma3nModel):
         video_position_ids (`torch.LongTensor` of shape `(num_videos, num_frames, max_patches, 2)`, *optional*):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
+        per_layer_inputs (`torch.Tensor`, *optional*):
+            Pre-computed per-layer input text embeddings of shape of shape `(batch_size, sequence_length, num_hidden_layers,
+            hidden_size_per_layer_input)`. When provided, these are used directly instead of being computed from `input_ids`
+            via `get_per_layer_inputs()` in the text model. If calling the `forward` with `inputs_embeds` instead of `input_ids`,
+            you should probably precompute them and forward them along `inputs_embeds`, otherwise recomputing them needs
+            to reverse the main embedding, which is expensibe.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1970,12 +1946,11 @@ class Gemma4Model(Gemma3nModel):
             llm_input_ids[multimodal_mask] = self.config.text_config.pad_token_id
             inputs_embeds = self.get_input_embeddings()(llm_input_ids)
 
-        if self.config.get_text_config().hidden_size_per_layer_input:
+        if per_layer_inputs is None and self.config.get_text_config().hidden_size_per_layer_input:
             pad_embedding = self.language_model.embed_tokens.weight[self.config.text_config.pad_token_id, :]
+            multimodal_mask = multimodal_mask.to(inputs_embeds.device)
             llm_inputs_embeds = torch.where(multimodal_mask[..., None], pad_embedding.view(1, 1, -1), inputs_embeds)
             per_layer_inputs = self.language_model.get_per_layer_inputs(llm_input_ids, llm_inputs_embeds)
-        else:
-            per_layer_inputs = None
 
         # Merge text and images
         if pixel_values is not None:
@@ -2044,25 +2019,25 @@ class Gemma4Model(Gemma3nModel):
             position_ids = position_ids.unsqueeze(0)
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
+            mask_kwargs = {
+                "config": self.config.get_text_config(),
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+
+            # Larger Gemma 4 models use Gemma 3's bidirectional attention mask for vision inputs
+            # Smaller Gemma models use a conventional casual attention mask
             if self.config.get_text_config().use_bidirectional_attention == "vision":
-                # Larger Gemma 4 models use Gemma 3's bidirectional attention mask for vision inputs
-                causal_mask_mapping = create_causal_mask_mapping(
-                    self.config,
-                    inputs_embeds=inputs_embeds,
-                    attention_mask=attention_mask,
-                    past_key_values=past_key_values,
-                    position_ids=position_ids,
-                    mm_token_type_ids=mm_token_type_ids,
-                )
-            else:
-                # Smaller Gemma models use a conventional casual attention mask
-                causal_mask_mapping = create_masks_for_generate(
-                    self.config,
-                    inputs_embeds,
-                    attention_mask,
-                    past_key_values,
-                    position_ids,
-                )
+                block_sequence_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
+                if mm_token_type_ids is not None:
+                    block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids)
+
+                mask_kwargs["block_sequence_ids"] = block_sequence_ids
+
+            # Create the masks
+            causal_mask_mapping = create_masks_for_generate(**mask_kwargs)
 
         outputs = self.language_model(
             per_layer_inputs=per_layer_inputs,
@@ -2143,6 +2118,7 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        per_layer_inputs: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4CausalLMOutputWithPast:
         r"""
@@ -2154,6 +2130,12 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
         video_position_ids (`torch.LongTensor` of shape `(num_videos, num_frames, max_patches, 2)`, *optional*):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
+        per_layer_inputs (`torch.Tensor`, *optional*):
+            Pre-computed per-layer input text embeddings of shape of shape `(batch_size, sequence_length, num_hidden_layers,
+            hidden_size_per_layer_input)`. When provided, these are used directly instead of being computed from `input_ids`
+            via `get_per_layer_inputs()` in the text model. If calling the `forward` with `inputs_embeds` instead of `input_ids`,
+            you should probably precompute them and forward them along `inputs_embeds`, otherwise recomputing them needs
+            to reverse the main embedding, which is expensibe.
         """
         outputs = self.model(
             input_ids=input_ids,
@@ -2166,6 +2148,7 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
             past_key_values=past_key_values,
             mm_token_type_ids=mm_token_type_ids,
             inputs_embeds=inputs_embeds,
+            per_layer_inputs=per_layer_inputs,
             labels=labels,
             use_cache=use_cache,
             image_position_ids=image_position_ids,
@@ -2223,23 +2206,24 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
         is_first_iteration: bool | None = False,
         **kwargs,
     ) -> dict:
+        mask_kwargs = {
+            "config": config.get_text_config(),
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+        }
+
+        # Larger Gemma 4 models use Gemma 3's bidirectional attention mask for vision inputs
+        # Smaller Gemma models use a conventional casual attention mask
         if getattr(config.get_text_config(), "use_bidirectional_attention", None) == "vision":
-            # Larger Gemma 4 models use Gemma 3's bidirectional attention mask for vision inputs
-            return create_causal_mask_mapping(
-                config,
-                inputs_embeds,
-                attention_mask,
-                past_key_values,
-                position_ids,
-                mm_token_type_ids,
-                is_first_iteration=is_first_iteration,
-                **{k: v for k, v in kwargs.items() if k != "pixel_values"},
-            )
-        else:
-            # Smaller Gemma models use a conventional casual attention mask
-            return create_masks_for_generate(
-                config, inputs_embeds, attention_mask, past_key_values, position_ids, **kwargs
-            )
+            block_sequence_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
+            if mm_token_type_ids is not None:
+                block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids)
+
+            mask_kwargs["block_sequence_ids"] = block_sequence_ids
+
+        return create_masks_for_generate(**mask_kwargs)
 
     def prepare_inputs_for_generation(
         self,

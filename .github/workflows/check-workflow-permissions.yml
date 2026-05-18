@@ -12,6 +12,9 @@ on:
         type: string
         default: "10"
 
+permissions:
+  contents: read
+
 jobs:
   advisor:
     uses: huggingface/security-workflows/.github/workflows/permissions-advisor-reusable.yml@1b6a139c28db347498b30338da6a602e0a06f56c  # main
