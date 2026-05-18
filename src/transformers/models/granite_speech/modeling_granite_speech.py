@@ -33,7 +33,6 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.deprecation import forward_base_model_attrs
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
@@ -499,7 +498,6 @@ class GraniteSpeechModel(GraniteSpeechPreTrainedModel):
     The Granite Speech model, which consists of an audio encoder, projector, and language model.
     """
 )
-@forward_base_model_attrs(version="5.15")
 class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
@@ -517,18 +515,6 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
             )
 
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
-    def get_output_embeddings(self) -> nn.Module:
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def get_audio_features(self, *args, **kwargs):
         return self.model.get_audio_features(*args, **kwargs)

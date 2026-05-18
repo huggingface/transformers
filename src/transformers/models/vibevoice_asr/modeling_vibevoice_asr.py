@@ -31,7 +31,6 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
-from ...utils.deprecation import forward_base_model_attrs
 from ..auto import AutoModel
 from .configuration_vibevoice_asr import VibeVoiceAsrConfig
 
@@ -244,6 +243,7 @@ class VibeVoiceAsrPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -302,8 +302,6 @@ class VibeVoiceAsrCausalLMOutputWithPast(ModelOutput):
     """
 )
 class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
-    _supports_attention_backend = True
-
     def __init__(self, config: VibeVoiceAsrConfig):
         super().__init__(config)
         self.acoustic_tokenizer_encoder = AutoModel.from_config(config.acoustic_tokenizer_encoder_config)
@@ -451,7 +449,6 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
     The VibeVoice ASR model with pre-trained acoustic tokenizers and a language model.
     """
 )
-@forward_base_model_attrs(version="5.15")
 class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
@@ -460,18 +457,6 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
         self.model = VibeVoiceAsrModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
-    def get_output_embeddings(self) -> nn.Module:
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def get_audio_features(self, *args, **kwargs):
         return self.model.get_audio_features(*args, **kwargs)

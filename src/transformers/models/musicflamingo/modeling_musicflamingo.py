@@ -35,7 +35,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, torch_compilable_check
-from ...utils.deprecation import forward_base_model_attrs
 from ..auto import AutoModel
 from .configuration_musicflamingo import MusicFlamingoConfig
 
@@ -143,6 +142,7 @@ class MusicFlamingoPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
+    _supports_attention_backend = True
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -212,7 +212,6 @@ def apply_rotary_time_emb(hidden_states, cos, sin):
     """
 )
 class MusicFlamingoModel(MusicFlamingoPreTrainedModel):
-    _supports_attention_backend = True
     _tp_plan = None
     _pp_plan = None
     _keep_in_fp32_modules_strict = None
@@ -414,7 +413,6 @@ class MusicFlamingoCausalLMOutputWithPast(ModelOutput):
     The MusicFlamingo model which consists of a fine-tuned Whisper encoder, rotary time embedding, a multi-modal projector, and a Qwen2 language model.
     """
 )
-@forward_base_model_attrs(version="5.15")
 class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, GenerationMixin):
     _keep_in_fp32_modules_strict = None
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
@@ -426,18 +424,6 @@ class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, Genera
         self.model = MusicFlamingoModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
-    def get_output_embeddings(self) -> nn.Module:
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def get_audio_features(self, input_features, input_features_mask, input_ids, **kwargs):
         return self.model.get_audio_features(input_features, input_features_mask, input_ids, **kwargs)

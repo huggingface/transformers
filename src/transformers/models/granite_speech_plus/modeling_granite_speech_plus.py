@@ -39,7 +39,6 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.deprecation import forward_base_model_attrs
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
@@ -47,6 +46,21 @@ from .configuration_granite_speech_plus import GraniteSpeechPlusConfig, GraniteS
 
 
 logger = logging.get_logger(__name__)
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for Granite Speech outputs, with hidden states and attentions.
+    """
+)
+class GraniteSpeechPlusModelOutputWithPast(BaseModelOutputWithPast):
+    r"""
+    audio_hidden_states (`torch.FloatTensor`, *optional*):
+        Projected audio hidden states.
+    """
+
+    audio_hidden_states: torch.FloatTensor | None = None
 
 
 ### Projector
@@ -92,6 +106,7 @@ class GraniteSpeechPlusPreTrainedModel(PreTrainedModel):
 
     _supports_flash_attn = False  # `blip_2_qformer` dependency does not allow for this
     _supports_sdpa = True
+    _supports_attention_backend = True
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
@@ -107,21 +122,6 @@ class GraniteSpeechPlusPreTrainedModel(PreTrainedModel):
             init.copy_(module.attention_dists, attention_dists)
 
 
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for Granite Speech outputs, with hidden states and attentions.
-    """
-)
-class GraniteSpeechPlusModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    audio_hidden_states (`torch.FloatTensor`, *optional*):
-        Projected audio hidden states.
-    """
-
-    audio_hidden_states: torch.FloatTensor | None = None
-
-
 @auto_docstring(
     custom_intro="""
     The Granite Speech model, which consists of an audio encoder, projector, and language model,
@@ -129,8 +129,6 @@ class GraniteSpeechPlusModelOutputWithPast(BaseModelOutputWithPast):
     """
 )
 class GraniteSpeechPlusModel(GraniteSpeechPlusPreTrainedModel):
-    _supports_attention_backend = True
-
     def __init__(self, config: GraniteSpeechPlusConfig):
         super().__init__(config)
         self.encoder = GraniteSpeechPlusCTCEncoder(config.encoder_config)
@@ -521,9 +519,7 @@ class GraniteSpeechPlusCausalLMOutputWithPast(ModelOutput):
     encoder's final hidden states with an arbitrary subset of its intermediate hidden states.
     """
 )
-@forward_base_model_attrs(version="5.15")
 class GraniteSpeechPlusForConditionalGeneration(GraniteSpeechPlusPreTrainedModel, GenerationMixin):
-    _supports_attention_backend = True
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: GraniteSpeechPlusConfig):
@@ -540,18 +536,6 @@ class GraniteSpeechPlusForConditionalGeneration(GraniteSpeechPlusPreTrainedModel
             )
 
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
-    def get_output_embeddings(self) -> nn.Module:
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def get_audio_features(self, *args, **kwargs):
         return self.model.get_audio_features(*args, **kwargs)

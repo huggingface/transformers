@@ -37,7 +37,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torch_available, torch_compilable_check
-from ...utils.deprecation import forward_base_model_attrs
 from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
@@ -291,6 +290,7 @@ class GlmAsrPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
+    _supports_attention_backend = True
 
 
 # TODO: @eustlb, this is what WhisperEncoder should look like
@@ -372,7 +372,6 @@ class GlmAsrModelOutputWithPast(BaseModelOutputWithPast):
     """
 )
 class GlmAsrModel(GlmAsrPreTrainedModel):
-    _supports_attention_backend = True
     _tp_plan = None
     _pp_plan = None
     _keep_in_fp32_modules_strict = None
@@ -528,7 +527,6 @@ class GlmAsrCausalLMOutputWithPast(ModelOutput):
     The GlmAsr model which consists of a fine-tuned Whisper encoder, a multi-modal projector and a Llama language model.
     """
 )
-@forward_base_model_attrs(version="5.15")
 class GlmAsrForConditionalGeneration(GlmAsrPreTrainedModel, GenerationMixin):
     _keep_in_fp32_modules_strict = None
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
@@ -540,18 +538,6 @@ class GlmAsrForConditionalGeneration(GlmAsrPreTrainedModel, GenerationMixin):
         self.model = GlmAsrModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
-    def get_output_embeddings(self) -> nn.Module:
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def get_audio_features(self, input_features, input_features_mask, **kwargs):
         return self.model.get_audio_features(input_features, input_features_mask, **kwargs)
