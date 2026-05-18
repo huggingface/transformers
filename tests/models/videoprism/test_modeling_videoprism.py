@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch VideoPrism model."""
 
-import copy
 import tempfile
 import unittest
 
@@ -263,9 +262,7 @@ class VideoPrismVisionModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(outputs.attentions)
         self.assertIsNotNone(outputs.hidden_states)
         self.assertEqual(len(outputs.attentions), num_spatial_layers + num_temporal_layers)
-        self.assertEqual(
-            len(outputs.hidden_states), 1 + num_spatial_layers + num_temporal_layers
-        )
+        self.assertEqual(len(outputs.hidden_states), 1 + num_spatial_layers + num_temporal_layers)
 
     def test_hidden_states_output(self):
         """ViViT-style hidden states test; spatial tokens then temporal tokens per encoder stage."""
