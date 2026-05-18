@@ -4244,8 +4244,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     "loaded from GGUF files."
                 )
 
-        # Finalize ``use_kernels`` default for non-GGUF callers (the GGUF
-        # branch above already set it to True implicitly when None).
+        # ``use_kernels`` controls the model-wide kernel resolver (attention /
+        # RMSNorm / ...); it's independent from the GGUF kernels, which load
+        # via ``integrations.gguf_kernels.ensure_metal_kernels`` regardless.
+        # Default to False unless the caller asked for it explicitly.
         if use_kernels is None:
             use_kernels = False
 
@@ -4273,18 +4275,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             gguf_parsed = load_gguf_checkpoint(checkpoint_files[0], return_tensors=True)
             state_dict = gguf_parsed["tensors"]
-            # For the GGUF path the metal kernels are the only fast inference
-            # route, so default ``use_kernels=True`` when the caller didn't say
-            # otherwise — explicit ``use_kernels=False`` (or a non-MPS device)
-            # falls back to dequant-on-load through the rename pipeline.
-            if use_kernels is None:
-                use_kernels = True
             target_device = _resolve_gguf_target_device(device_map)
             # TODO: lift the MPS-only gate once CUDA / CPU GGUF kernels exist
             # (we have a Metal kernels package today; matching CUDA kernels are
             # planned). For now MPS is the only fast path.
-            on_mps = target_device == "mps"
-            linear_mode = on_mps and bool(use_kernels) and not dtype_was_explicit
+            #
+            # Explicit ``dtype=`` always forces the dequant path, regardless of
+            # device. Otherwise: swap to GgufLinear on MPS, dequant elsewhere.
+            linear_mode = (target_device == "mps") and not dtype_was_explicit
             hf_quantizer = GGUFQuantizer(
                 weight_mapping=gguf_parsed.get("weight_mapping", []),
                 linear_mode=linear_mode,

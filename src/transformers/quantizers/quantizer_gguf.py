@@ -145,16 +145,19 @@ class GGUFQuantizer(HfQuantizer):
         replace_with_gguf_linear(model, quant_info_by_target)
 
     def postprocess_model(self, model, **kwargs):
-        """Run the base post-process (sets ``is_quantized`` / ``quantization_config``
-        on the model), then for the pre-quantized linear_mode path copy raw GGUF
-        bytes into the swapped buffers, and finally apply good generation defaults
-        when the GgufLinear swap is in effect."""
+        """Run the base post-process, then (for pre-quantized MoE only) copy
+        ``ffn_*_exps`` bytes into the swapped ``GgufExperts`` buffers, and apply
+        good generation defaults when the GgufLinear swap is in effect.
+
+        Dense ``GgufLinear`` targets need no fix-up here: :class:`GGUFDequantize`
+        is target-aware (see :mod:`gguf_conversion_ops`) and lands raw bytes
+        directly into ``GgufLinear.weight`` through the rename pipeline. The
+        MoE case still goes through this fix-up because the GGUF rename rules
+        ship a merge ``WeightConverter`` (``ffn_gate_exps + ffn_up_exps →
+        gate_up_proj``) whose target doesn't exist on the swapped module."""
         super().postprocess_model(model, **kwargs)
         if self.linear_mode and self.gguf_tensors:
-            # TODO(arthur): replace this with a target-aware ConversionOp so the
-            # rename pipeline lands bytes directly into the GgufLinear/GgufExperts
-            # buffers and we can drop this final post-load fix-up entirely.
-            self._copy_bytes_to_swapped_modules(model)
+            self._copy_experts_bytes(model)
         if self.linear_mode:
             self._apply_generation_defaults(model)
         return model
@@ -256,19 +259,19 @@ class GGUFQuantizer(HfQuantizer):
         }
         return info
 
-    def _copy_bytes_to_swapped_modules(self, model) -> None:
-        """Final fix-up step for the linear_mode path: copy raw GGUF bytes from
-        :attr:`gguf_tensors` into the swapped ``.weight`` / ``gate_proj_q`` /
-        ... buffers. Runs after the standard rename pipeline (which produced
-        dequantized values that go nowhere on swapped targets).
-
-        TODO: replace by a target-aware ``ConversionOp`` that the rename
-        pipeline injects automatically — so the byte path becomes one machinery
-        rather than two.
+    def _copy_experts_bytes(self, model) -> None:
+        """Copy ``ffn_{gate,up,down}_exps`` bytes from the source .gguf into the
+        swapped :class:`GgufExperts` buffers. Necessary because the GGUF rename
+        pipeline ships a merge :class:`WeightConverter`
+        (``gate+up → gate_up_proj``) whose target doesn't exist on the swapped
+        expert module — so the rename path can't land these bytes on its own.
+        Dense :class:`GgufLinear` targets don't need this fix-up;
+        :class:`GGUFDequantize` is target-aware and passes uint8 bytes straight
+        to ``GgufLinear.weight``.
         """
         from ..core_model_loading import WeightConverter, WeightRenaming, rename_source_key
         from ..integrations.gguf_kernels import bind_id_kernel_refs
-        from ..integrations.gguf_linear import GgufExperts, GgufLinear
+        from ..integrations.gguf_linear import GgufExperts
 
         renamings = [e for e in self.weight_mapping if isinstance(e, WeightRenaming)]
         converters = [e for e in self.weight_mapping if isinstance(e, WeightConverter)]
@@ -276,61 +279,34 @@ class GGUFQuantizer(HfQuantizer):
         prefix = getattr(model, "base_model_prefix", "") or ""
 
         for gguf_name, tensor in self.gguf_tensors.items():
+            if ".ffn_gate_exps." in gguf_name:
+                kind = "gate_proj_q"
+            elif ".ffn_up_exps." in gguf_name:
+                kind = "up_proj_q"
+            elif ".ffn_down_exps." in gguf_name:
+                kind = "down_proj_q"
+            else:
+                continue
             try:
                 hf_name, _ = rename_source_key(
                     gguf_name, renamings, converters, prefix=prefix, meta_state_dict=meta_state_dict
                 )
             except Exception:
                 continue
-
-            # Decide which (module, buffer attribute) the bytes land in.
-            module = None
-            buf_attr = None
-            row_index: int | None = None
-            if ".ffn_gate_exps." in gguf_name or ".ffn_up_exps." in gguf_name or ".ffn_down_exps." in gguf_name:
-                parent = hf_name.rsplit(".", 1)[0]
-                try:
-                    module = model.get_submodule(parent)
-                except AttributeError:
-                    continue
-                if not isinstance(module, GgufExperts):
-                    continue
-                buf_attr = (
-                    "gate_proj_q"
-                    if ".ffn_gate_exps." in gguf_name
-                    else "up_proj_q"
-                    if ".ffn_up_exps." in gguf_name
-                    else "down_proj_q"
-                )
-            else:
-                if not hf_name.endswith(".weight"):
-                    continue
-                parent = hf_name[: -len(".weight")]
-                try:
-                    module = model.get_submodule(parent)
-                except AttributeError:
-                    continue
-                if not isinstance(module, GgufLinear):
-                    continue
-                buf_attr = "weight"
-
-            src = tensor.detach().contiguous().view(torch.uint8).reshape(-1)
-            dst = getattr(module, buf_attr)
-            if dst.numel() != src.numel():
-                # Mismatched shape — leave the buffer empty; user will see an
-                # obvious failure at first forward instead of silent corruption.
+            parent = hf_name.rsplit(".", 1)[0]
+            try:
+                module = model.get_submodule(parent)
+            except AttributeError:
                 continue
-            if row_index is not None:
-                dst[row_index].copy_(src.to(dst.device))
-            else:
-                dst.view(-1).copy_(src.to(dst.device))
-
-            # For experts modules, bind kernels + scratch buffers once all three
-            # projections are filled (the last copy triggers the bind).
-            if isinstance(module, GgufExperts) and buf_attr == "down_proj_q":
+            if not isinstance(module, GgufExperts):
+                continue
+            dst = getattr(module, kind)
+            src = tensor.detach().contiguous().view(torch.uint8).reshape(-1)
+            if dst.numel() != src.numel():
+                continue
+            dst.view(-1).copy_(src.to(dst.device))
+            if kind == "down_proj_q":
                 bind_id_kernel_refs(module)
-            elif isinstance(module, GgufLinear):
-                module._bind_kernels()
 
     def _apply_generation_defaults(self, model) -> None:
         """Set ``cache_implementation`` + ``compile_config`` defaults on

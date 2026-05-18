@@ -76,16 +76,46 @@ class GGUFDequantize(ConversionOps):
         target_patterns,
         **kwargs,
     ):
+        """Same target-aware pattern other ops use (``ReversePermuteAttn`` reads
+        ``config.num_attention_heads`` etc.): when the live target module is a
+        swapped :class:`GgufLinear` (uint8 buffer) we hand back the raw bytes
+        instead of dequantizing — the bytes flow straight into the kernel-ready
+        ``weight`` buffer without a wasted dequant + re-quant round-trip.
+        Otherwise produce a regular floating-point tensor for a standard
+        :class:`nn.Linear` / embedding / layer-norm target.
+        """
+        import torch
+
         from .integrations.gguf_dequant import GGUFQuantizedTensor, dequantize_gguf_tensor
+        from .integrations.gguf_linear import GgufLinear
+
+        # Resolve the live target module via ``model`` + ``full_layer_name`` (both
+        # threaded into every op's convert kwargs by ``WeightConverter.convert`` /
+        # ``WeightRenaming.convert`` in :mod:`core_model_loading`).
+        model = kwargs.get("model")
+        full_layer_name = kwargs.get("full_layer_name", "") or ""
+        target_module = None
+        if model is not None and full_layer_name:
+            parent_path = full_layer_name.rsplit(".", 1)[0]
+            try:
+                target_module = model.get_submodule(parent_path)
+            except (AttributeError, KeyError):
+                target_module = None
+        pass_through = isinstance(target_module, GgufLinear)
 
         out = {}
         for key, tensors in input_dict.items():
             tensors_list = tensors if isinstance(tensors, list) else [tensors]
-            dequantized = [
-                dequantize_gguf_tensor(t, t.quant_type, device=t.device) if isinstance(t, GGUFQuantizedTensor) else t
-                for t in tensors_list
-            ]
-            out[key] = dequantized if isinstance(tensors, list) else dequantized[0]
+            processed = []
+            for t in tensors_list:
+                if not isinstance(t, GGUFQuantizedTensor):
+                    processed.append(t)
+                elif pass_through:
+                    # Flatten the raw uint8 byte buffer to match GgufLinear.weight's shape.
+                    processed.append(t.data.detach().contiguous().view(torch.uint8).reshape(-1))
+                else:
+                    processed.append(dequantize_gguf_tensor(t, t.quant_type, device=t.device))
+            out[key] = processed if isinstance(tensors, list) else processed[0]
         return out
 
     @property
