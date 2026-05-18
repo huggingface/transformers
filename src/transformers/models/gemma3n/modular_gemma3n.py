@@ -125,6 +125,13 @@ class Gemma3nTextConfig(Gemma3TextConfig):
         "layers.*.mlp.down_proj": "rowwise_allreduce",
     }
     base_model_sp_plan = None
+
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
+
     default_theta = {"global": 1_000_000.0, "local": 10_000.0}
 
     vocab_size: int = 262_400

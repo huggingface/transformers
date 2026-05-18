@@ -1945,6 +1945,7 @@ class Qwen3_5MoeForConditionalGeneration(Qwen3_5MoePreTrainedModel, GenerationMi
     accepts_loss_kwargs = False
     config: Qwen3_5MoeConfig
     _tp_plan = {"lm_head": "colwise_allgather"}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
     _sp_plan = {"lm_head": "colwise_loss_parallel"}
 
     def __init__(self, config):

@@ -875,9 +875,9 @@ class KyutaiSpeechToTextModel(KyutaiSpeechToTextPreTrainedModel):
 class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_allgather"}
-    _fsdp_plan = {"lm_head": "keep_full_weight"}
     _sp_plan = {"lm_head": "colwise_loss_parallel"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
     _keep_in_fp32_modules_strict = ["codec_model"]
     output_modalities = ("audio", "text")
 

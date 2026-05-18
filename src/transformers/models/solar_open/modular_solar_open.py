@@ -64,6 +64,12 @@ class SolarOpenConfig(Glm4MoeConfig):
         "norm": "activation",
     }
 
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
+
     vocab_size: int = 196608
     moe_intermediate_size: int = 1280
     num_hidden_layers: int = 48

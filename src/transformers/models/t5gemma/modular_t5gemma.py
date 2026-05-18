@@ -84,6 +84,12 @@ class T5GemmaModuleConfig(Gemma2Config):
     >>> configuration = model.config
     ```"""
 
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
+
     is_decoder: bool = False
     use_bidirectional_attention = AttributeError()
 

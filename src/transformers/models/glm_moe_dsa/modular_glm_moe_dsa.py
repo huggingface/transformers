@@ -119,6 +119,12 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
         "layers.*.mlp.down_proj": "rowwise_allreduce",
     }
 
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
+
     hidden_size: int = 6144
     intermediate_size: int = 12288
     moe_intermediate_size: int = 2048

@@ -76,8 +76,6 @@ class T5Gemma2TextConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    # FSDP2 plan. Bundled with other parallel plans for consistency; the applier walks
-    # this dict to decide what fully_shard each module gets.
     base_model_fsdp_plan = {
         "embed_tokens": "free_full_weight",
         "layers.*": "free_full_weight",
@@ -108,6 +106,7 @@ class T5Gemma2TextConfig(PreTrainedConfig):
     layer_types: list[str] | None = None
     final_logit_softcapping: float | None = None
     attn_logit_softcapping: float | None = None
+
     default_theta = {"global": 1_000_000.0, "local": 10_000.0}
 
     def __post_init__(self, **kwargs):
@@ -274,6 +273,12 @@ class T5Gemma2DecoderConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
+
     vocab_size: int = 262_208
     hidden_size: int = 2304
     intermediate_size: int = 9216
@@ -298,6 +303,7 @@ class T5Gemma2DecoderConfig(PreTrainedConfig):
     layer_types: list[str] | None = None
     final_logit_softcapping: float | None = None
     attn_logit_softcapping: float | None = None
+
     default_theta = {"global": 1_000_000.0, "local": 10_000.0}
 
     def __post_init__(self, **kwargs):

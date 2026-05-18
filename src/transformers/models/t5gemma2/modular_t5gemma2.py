@@ -86,6 +86,13 @@ class T5Gemma2TextConfig(Gemma3TextConfig, PreTrainedConfig):
     """
 
     model_type = "t5gemma2_text"
+
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
+
     use_bidirectional_attention = AttributeError()
 
     def __post_init__(self, **kwargs):

@@ -67,13 +67,12 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    # FSDP2 plan. Bundled with other parallel plans for consistency; the applier walks
-    # this dict to decide what fully_shard each module gets.
     base_model_fsdp_plan = {
         "embed_tokens": "free_full_weight",
         "layers.*": "free_full_weight",
         "norm": "keep_full_weight",
     }
+
     attribute_map = {
         "num_local_experts": "n_routed_experts",
     }
@@ -106,6 +105,7 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
     eos_token_id: int | list[int] | None = None
     pad_token_id: int | None = None
     base_config_key = "text_config"
+
     ignore_keys_at_rope_validation = {"mrope_section"}
     router_aux_loss_coef: float = 0.0001
 

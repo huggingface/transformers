@@ -93,8 +93,6 @@ class Gemma3nTextConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    # FSDP2 plan. Bundled with other parallel plans for consistency; the applier walks
-    # this dict to decide what fully_shard each module gets.
     base_model_fsdp_plan = {
         "embed_tokens": "free_full_weight",
         "layers.*": "free_full_weight",
@@ -123,6 +121,7 @@ class Gemma3nTextConfig(PreTrainedConfig):
     sliding_window: int = 512
     layer_types: list[str] | None = None
     final_logit_softcapping: float = 30.0
+
     default_theta = {"global": 1_000_000.0, "local": 10_000.0}
     vocab_size_per_layer_input: int = 262_144
     hidden_size_per_layer_input: int = 256

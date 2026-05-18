@@ -168,13 +168,12 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    # FSDP2 plan. Bundled with other parallel plans for consistency; the applier walks
-    # this dict to decide what fully_shard each module gets.
     base_model_fsdp_plan = {
         "embed_tokens": "free_full_weight",
         "layers.*": "free_full_weight",
         "norm": "keep_full_weight",
     }
+
     ignore_keys_at_rope_validation = {"mrope_section"}
 
     vocab_size: int = 152064
