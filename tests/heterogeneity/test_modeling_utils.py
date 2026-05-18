@@ -243,21 +243,21 @@ HETERO_CASES = [
         model_key="llama",
         config_factory=_tiny_llama_config,
         model_cls=LlamaForCausalLM,
-        per_layer_config={1: {"skip_attention": True}},
+        per_layer_config={1: {"skip": ["attention"]}},
     ),
     HeteroCase(
         name="llama_skip_mlp",
         model_key="llama",
         config_factory=_tiny_llama_config,
         model_cls=LlamaForCausalLM,
-        per_layer_config={2: {"skip_mlp": True}},
+        per_layer_config={2: {"skip": ["mlp"]}},
     ),
     HeteroCase(
         name="llama_skip_both",
         model_key="llama",
         config_factory=_tiny_llama_config,
         model_cls=LlamaForCausalLM,
-        per_layer_config={1: {"skip_attention": True, "skip_mlp": True}},
+        per_layer_config={1: {"skip": ["attention", "mlp"]}},
     ),
     # ── GPT-OSS ──
     HeteroCase(
@@ -278,21 +278,21 @@ HETERO_CASES = [
         model_key="gpt_oss",
         config_factory=_tiny_gpt_oss_config,
         model_cls=GptOssForCausalLM,
-        per_layer_config={1: {"skip_attention": True}},
+        per_layer_config={1: {"skip": ["attention"]}},
     ),
     HeteroCase(
         name="gpt_oss_skip_mlp",
         model_key="gpt_oss",
         config_factory=_tiny_gpt_oss_config,
         model_cls=GptOssForCausalLM,
-        per_layer_config={2: {"skip_mlp": True}},
+        per_layer_config={2: {"skip": ["mlp"]}},
     ),
     HeteroCase(
         name="gpt_oss_skip_both",
         model_key="gpt_oss",
         config_factory=_tiny_gpt_oss_config,
         model_cls=GptOssForCausalLM,
-        per_layer_config={1: {"skip_attention": True, "skip_mlp": True}},
+        per_layer_config={1: {"skip": ["attention", "mlp"]}},
     ),
     # ── Llama4 ──
     HeteroCase(
@@ -311,21 +311,21 @@ HETERO_CASES = [
         model_key="llama4",
         config_factory=_tiny_llama4_config,
         model_cls=Llama4ForCausalLM,
-        per_layer_config={0: {"skip_attention": True}},
+        per_layer_config={0: {"skip": ["attention"]}},
     ),
     HeteroCase(
         name="llama4_skip_mlp",
         model_key="llama4",
         config_factory=_tiny_llama4_config,
         model_cls=Llama4ForCausalLM,
-        per_layer_config={0: {"skip_mlp": True}},
+        per_layer_config={0: {"skip": ["mlp"]}},
     ),
     HeteroCase(
         name="llama4_skip_both",
         model_key="llama4",
         config_factory=_tiny_llama4_config,
         model_cls=Llama4ForCausalLM,
-        per_layer_config={0: {"skip_attention": True, "skip_mlp": True}},
+        per_layer_config={0: {"skip": ["attention", "mlp"]}},
     ),
     # ── NemotronH (layers: attention, mamba, moe, attention) ──
     HeteroCase(
@@ -344,21 +344,21 @@ HETERO_CASES = [
         model_key="nemotron_h",
         config_factory=_tiny_nemotron_h_config,
         model_cls=NemotronHForCausalLM,
-        per_layer_config={0: {"skip_mixer": True}},
+        per_layer_config={0: {"skip": ["mixer"]}},
     ),
     HeteroCase(
         name="nemotron_h_skip_mamba",
         model_key="nemotron_h",
         config_factory=_tiny_nemotron_h_config,
         model_cls=NemotronHForCausalLM,
-        per_layer_config={1: {"skip_mixer": True}},
+        per_layer_config={1: {"skip": ["mixer"]}},
     ),
     HeteroCase(
         name="nemotron_h_skip_moe",
         model_key="nemotron_h",
         config_factory=_tiny_nemotron_h_config,
         model_cls=NemotronHForCausalLM,
-        per_layer_config={2: {"skip_mixer": True}},
+        per_layer_config={2: {"skip": ["mixer"]}},
     ),
 ]
 
@@ -443,7 +443,7 @@ class TestHeterogeneousModeling(unittest.TestCase):
     def test_no_leaked_state_after_heterogeneous_init(self):
         """After heterogeneous model init, no context token should remain and non-heterogeneous models should work."""
         with _hetero_context("llama"):
-            config = _tiny_llama_config(per_layer_config={1: {"skip_attention": True}})
+            config = _tiny_llama_config(per_layer_config={1: {"skip": ["attention"]}})
             model = _build_model(config, LlamaForCausalLM)
 
         self.assertFalse(hasattr(model, "_layer_init_context_token"))
@@ -514,7 +514,7 @@ class TestHeterogeneousModeling(unittest.TestCase):
 
     def test_error_missing_skip_descriptor(self):
         """Requesting a skip type without a matching descriptor should raise ValueError."""
-        config = _tiny_llama_config(per_layer_config={1: {"skip_attention": True}})
+        config = _tiny_llama_config(per_layer_config={1: {"skip": ["attention"]}})
         fixture = MODEL_FIXTURES["llama"]
         with (
             patch.object(fixture.pretrained_cls, "_layer_cls", fixture.layer_cls, create=True),

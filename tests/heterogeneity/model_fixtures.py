@@ -61,10 +61,10 @@ class SkipAwareLlamaDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config, layer_idx):
         layer_config = config.get_full_layer_config(layer_idx)
         super().__init__(layer_config, layer_idx)
-        if getattr(layer_config, "skip_attention", False):
+        if "attention" in layer_config.skip:
             self.input_layernorm = None
             self.self_attn = None
-        if getattr(layer_config, "skip_mlp", False):
+        if "mlp" in layer_config.skip:
             self.post_attention_layernorm = None
             self.mlp = None
 
@@ -113,10 +113,10 @@ class SkipAwareGptOssDecoderLayer(GptOssDecoderLayer):
     def __init__(self, config, layer_idx):
         layer_config = config.get_full_layer_config(layer_idx)
         super().__init__(layer_config, layer_idx)
-        if getattr(layer_config, "skip_attention", False):
+        if "attention" in layer_config.skip:
             self.input_layernorm = None
             self.self_attn = None
-        if getattr(layer_config, "skip_mlp", False):
+        if "mlp" in layer_config.skip:
             self.post_attention_layernorm = None
             self.mlp = None
 
@@ -165,10 +165,10 @@ class SkipAwareLlama4TextDecoderLayer(Llama4TextDecoderLayer):
     def __init__(self, config, layer_idx):
         layer_config = config.get_full_layer_config(layer_idx)
         super().__init__(layer_config, layer_idx)
-        if getattr(layer_config, "skip_attention", False):
+        if "attention" in layer_config.skip:
             self.input_layernorm = None
             self.self_attn = None
-        if getattr(layer_config, "skip_mlp", False):
+        if "mlp" in layer_config.skip:
             self.post_attention_layernorm = None
             self.feed_forward = None
 
@@ -218,7 +218,7 @@ class SkipAwareNemotronHBlock(NemotronHBlock):
     def __init__(self, config, layer_idx):
         layer_config = config.get_full_layer_config(layer_idx)
         super().__init__(layer_config, layer_idx)
-        if getattr(layer_config, "skip_mixer", False):
+        if "mixer" in layer_config.skip:
             self.norm = None
             self.mixer = None
 

@@ -20,8 +20,8 @@ _LAYER_IDX_POSSIBLE_NAMES = ("layer_idx", "idx", "layer_id", "layer_number", "i"
 
 @dataclass
 class _LayerInitContext:
-    skip_types_per_layer: dict[int, list[str]]
-    skip_descriptors: dict
+    skip_types_per_layer: dict[int, set[str]]
+    skip_descriptors: dict[str | tuple[str, type], type[nn.Module]]
     per_layer_attributes: set[str]
     layer_idx_variable_name: str | None
 
@@ -49,7 +49,7 @@ def apply_heterogeneous_modeling(model: PreTrainedModel) -> None:
        global config with the per-layer overrides set up by
        ``apply_heterogeneous_config``.
     3. It passes the resolved config to the original ``__init__``.
-    4. For layers with ``skip_<type>`` attributes, the corresponding
+    4. For layers with ``skip`` attribute, the corresponding
        sub-modules are replaced with no-op modules according to the model's
        ``_skip_descriptors``.
 
@@ -76,8 +76,7 @@ def apply_heterogeneous_modeling(model: PreTrainedModel) -> None:
         return
 
     skip_types_per_layer = {
-        layer_idx: [attr.removeprefix("skip_") for attr in layer_config.attributes if attr.startswith("skip_")]
-        for layer_idx, layer_config in model.config.per_layer_config.items()
+        layer_idx: getattr(layer_config, "skip", set()) for layer_idx, layer_config in model.config.per_layer_config.items()
     }
     skip_descriptors = getattr(model, "_skip_descriptors", None) or {}
     _validate_skip_descriptors(skip_types_per_layer, skip_descriptors)
@@ -175,8 +174,10 @@ def _patch_layer_forward_for_heterogeneous_masks(
     layer.forward = MethodType(_patched_forward, layer)
 
 
-def _validate_skip_descriptors(skip_types_per_layer: dict[int, list[str]], skip_descriptors: dict) -> None:
-    skip_types = {skip_type for skip_types in skip_types_per_layer.values() for skip_type in skip_types}
+def _validate_skip_descriptors(
+    skip_types_per_layer: dict[int, set[str]], skip_descriptors: dict[str | tuple[str, type], type[nn.Module]]
+) -> None:
+    skip_types = set.union(*skip_types_per_layer.values())
     missing_descriptors = skip_types - skip_descriptors.keys()
     if missing_descriptors:
         raise ValueError(f"No-op descriptors are missing for the following types: {missing_descriptors}")

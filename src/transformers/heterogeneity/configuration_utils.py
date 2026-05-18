@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from collections.abc import Iterable
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
@@ -9,14 +10,34 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from transformers import PreTrainedConfig
 
-
 class LayerConfig(SimpleNamespace):
+    def __init__(self, **kwargs: Any) -> None:
+        if "skip" in kwargs:
+            skip = self._normalize_skip(kwargs.pop("skip"))
+            if skip:
+                kwargs["skip"] = skip
+        super().__init__(**kwargs)
+
+    @staticmethod
+    def _normalize_skip(skip: Any) -> set[str]:
+        if isinstance(skip, str) or not isinstance(skip, Iterable):
+            raise TypeError("`skip` must be an iterable of strings.")
+
+        skip = set(skip)
+        if not all(isinstance(item, str) for item in skip):
+            raise TypeError("`skip` must contain only strings.")
+
+        return skip
+
     @property
     def attributes(self) -> set[str]:
         return set(vars(self).keys())
 
     def to_dict(self) -> dict[str, Any]:
-        return dict(vars(self))
+        output = dict(vars(self))
+        if "skip" in output:
+            output["skip"] = sorted(output["skip"])
+        return output
 
 
 @dataclass
@@ -33,7 +54,7 @@ def apply_heterogeneous_config(
 
     In a heterogeneous model, individual layers can differ from the global config
     (e.g., different ``intermediate_size``, ``num_key_value_heads``, or entire
-    sub-layers skipped via ``skip_*`` attributes).
+    sub-layers skipped via the ``skip`` attribute).
 
     This function validates the overrides, computes fallback values from the global
     config, and stores a ``HeterogeneitySpec`` on ``config._heterogeneity_spec``.
@@ -82,10 +103,7 @@ def get_full_layer_config(config: PreTrainedConfig, layer_idx: int) -> PreTraine
 
     layer_config = config.per_layer_config.get(layer_idx, None)
 
-    if layer_config is not None:
-        for attr in layer_config.attributes:
-            if attr.startswith("skip_"):
-                setattr(output_config, attr, getattr(layer_config, attr))
+    output_config.skip = getattr(layer_config, "skip", set()) if layer_config is not None else set()
 
     for attr in config.per_layer_attributes:
         value = config._heterogeneity_spec.fallback_values[attr]
@@ -204,9 +222,4 @@ def _modify_config_and_create_heterogeneity_spec(
 
 
 def _get_per_layer_attributes(per_layer_config: dict[int, LayerConfig]) -> set[str]:
-    return {
-        attr
-        for layer_config in per_layer_config.values()
-        for attr in layer_config.attributes
-        if not attr.startswith("skip_")
-    }
+    return {attr for layer_config in per_layer_config.values() for attr in layer_config.attributes if attr != "skip"}

@@ -7,7 +7,7 @@ from unittest.mock import patch
 from parameterized import parameterized
 
 from transformers import LlamaConfig
-from transformers.heterogeneity import apply_heterogeneous_config
+from transformers.heterogeneity import LayerConfig, apply_heterogeneous_config
 
 
 apply_heterogeneous_config_explicit = partial(apply_heterogeneous_config, explicit=True)
@@ -39,6 +39,33 @@ def _tiny_llama_config(per_layer_config=None, **overrides):
 
 
 class TestHeterogeneousConfig(unittest.TestCase):
+    def test_layer_config_skip_normalization_and_empty_skip_cleanup(self):
+        list_config = LayerConfig(skip=["mlp", "attention"])
+        self.assertEqual(list_config.skip, {"attention", "mlp"})
+        self.assertEqual(list_config.to_dict()["skip"], ["attention", "mlp"])
+
+        set_config = LayerConfig(skip={"attention"})
+        self.assertEqual(set_config.skip, {"attention"})
+
+        empty_skip_config = LayerConfig(skip=[])
+        self.assertFalse(hasattr(empty_skip_config, "skip"))
+        self.assertEqual(empty_skip_config.to_dict(), {})
+
+        no_skip_config = LayerConfig(intermediate_size=128)
+        self.assertFalse(hasattr(no_skip_config, "skip"))
+
+        for invalid_skip in ("attention", ["attention", 1], 1):
+            with self.subTest(invalid_skip=invalid_skip), self.assertRaises(TypeError):
+                LayerConfig(skip=invalid_skip)
+
+        config = _tiny_llama_config(per_layer_config={1: {"skip": ["attention"]}, 2: {"skip": []}})
+
+        self.assertIn(1, config.per_layer_config)
+        self.assertEqual(config.per_layer_config[1].skip, {"attention"})
+        self.assertNotIn(2, config.per_layer_config)
+        self.assertEqual(config.get_full_layer_config(0).skip, set())
+        self.assertEqual(config.get_full_layer_config(1).skip, {"attention"})
+
     def test_per_layer_overrides_and_fallback(self):
         """Per-layer values should override, and non-overridden layers should fall back to global."""
         config = _tiny_llama_config(per_layer_config={1: {"num_key_value_heads": 2}, 3: {"num_key_value_heads": 1}})
