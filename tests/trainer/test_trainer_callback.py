@@ -42,7 +42,7 @@ from transformers import (
     TrainingArguments,
     is_torch_available,
 )
-from transformers.integrations.integration_utils import KubeflowCallback, SwanLabCallback
+from transformers.integrations.integration_utils import KubeflowCallback, MLflowCallback, SwanLabCallback
 from transformers.testing_utils import require_ipython, require_torch
 from transformers.trainer_callback import CallbackHandler, ExportableState, TrainerControl
 
@@ -1037,6 +1037,74 @@ class KubeflowCallbackTest(unittest.TestCase):
             import os as os_module
 
             os_module.unlink(token_path)
+
+
+class MLflowCallbackTest(unittest.TestCase):
+    def _create_callback(self, fake_mlflow):
+        with patch("transformers.integrations.integration_utils.is_mlflow_available", return_value=True):
+            with patch.dict("sys.modules", {"mlflow": fake_mlflow}):
+                callback = MLflowCallback()
+        return callback
+
+    @staticmethod
+    def _create_state():
+        return SimpleNamespace(is_world_process_zero=True)
+
+    def test_on_exception_ends_run_with_failed_status(self):
+        fake_mlflow = Mock()
+        fake_mlflow.active_run.return_value = Mock()
+        callback = self._create_callback(fake_mlflow)
+        callback._initialized = True
+        callback._auto_end_run = True
+
+        callback.on_exception(None, self._create_state(), None)
+
+        fake_mlflow.end_run.assert_called_once_with(status="FAILED")
+
+    def test_on_exception_skips_when_not_initialized(self):
+        fake_mlflow = Mock()
+        fake_mlflow.active_run.return_value = Mock()
+        callback = self._create_callback(fake_mlflow)
+        callback._initialized = False
+        callback._auto_end_run = True
+
+        callback.on_exception(None, self._create_state(), None)
+
+        fake_mlflow.end_run.assert_not_called()
+
+    def test_on_exception_skips_when_not_world_process_zero(self):
+        fake_mlflow = Mock()
+        fake_mlflow.active_run.return_value = Mock()
+        callback = self._create_callback(fake_mlflow)
+        callback._initialized = True
+        callback._auto_end_run = True
+        state = SimpleNamespace(is_world_process_zero=False)
+
+        callback.on_exception(None, state, None)
+
+        fake_mlflow.end_run.assert_not_called()
+
+    def test_on_exception_skips_when_no_active_run(self):
+        fake_mlflow = Mock()
+        fake_mlflow.active_run.return_value = None
+        callback = self._create_callback(fake_mlflow)
+        callback._initialized = True
+        callback._auto_end_run = True
+
+        callback.on_exception(None, self._create_state(), None)
+
+        fake_mlflow.end_run.assert_not_called()
+
+    def test_on_exception_skips_when_auto_end_run_is_false(self):
+        fake_mlflow = Mock()
+        fake_mlflow.active_run.return_value = Mock()
+        callback = self._create_callback(fake_mlflow)
+        callback._initialized = True
+        callback._auto_end_run = False
+
+        callback.on_exception(None, self._create_state(), None)
+
+        fake_mlflow.end_run.assert_not_called()
 
 
 class TrainerControlTest(unittest.TestCase):
