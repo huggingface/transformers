@@ -756,7 +756,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
 
         input_features = model_kwargs.get("input_features")
         if input_features is not None and not isinstance(input_features, GeneratorType):
-            model_kwargs["encoder_inputs_embeds"] = self.audio_tower.embedder(model_kwargs.pop("input_features"))
+            model_kwargs["encoder_inputs_embeds"] = self.model.audio_tower.embedder(model_kwargs.pop("input_features"))
 
         elif isinstance(input_features, GeneratorType):
             input_features_generator = model_kwargs.pop("input_features")
