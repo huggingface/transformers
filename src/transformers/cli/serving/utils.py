@@ -210,7 +210,7 @@ def get_reasoning_config(processor, model: "PreTrainedModel", input_ids=None) ->
     tokenizer = getattr(processor, "tokenizer", processor)
     model_type = model.config.model_type.lower()
     thinking_tokens = next(
-        (v for k, v in _THINKING_TOKENS.items() if k in model_type),
+        (v for k, v in _THINKING_TOKENS.items() if k == model_type),
         _DEFAULT_THINKING_TOKENS,
     )
     start_ids = [tokenizer.convert_tokens_to_ids(t) for t in thinking_tokens["start"]]
