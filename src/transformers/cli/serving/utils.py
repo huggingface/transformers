@@ -72,13 +72,15 @@ class _StreamError:
 class _GenerationCancelled(Exception):
     """Raised inside ``DirectStreamer.put()`` to abort ``model.generate()``."""
 
+
 class ReasoningText(str):
     """Tagged str subclass: text chunk belonging to a thinking/reasoning block.
 
     Streamers wrap reasoning text with this so handlers can route it to
     ``reasoning_content`` deltas instead of ``content``.
     """
-    
+
+
 class CBWorkerDeadError(RuntimeError):
     """Raised when a request is submitted to a CB worker that has died.
 
@@ -208,7 +210,7 @@ def get_reasoning_config(processor, model: "PreTrainedModel", input_ids=None) ->
     tokenizer = getattr(processor, "tokenizer", processor)
     model_type = model.config.model_type.lower()
     thinking_tokens = next(
-        (v for k, v in _THINKING_TOKENS.items() if k in model_type),
+        (v for k, v in _THINKING_TOKENS.items() if k == model_type),
         _DEFAULT_THINKING_TOKENS,
     )
     start_ids = [tokenizer.convert_tokens_to_ids(t) for t in thinking_tokens["start"]]
