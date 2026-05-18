@@ -277,12 +277,7 @@ def get_state_dict_dtype(state_dict):
     """
     for t in state_dict.values():
         # We cannot instantiate a whole model under float4/8_xxx dtypes (torch does not allow setting them as default dtype)
-        if (
-            hasattr(t, "is_floating_point")
-            and t.is_floating_point()
-            and "float8_" not in str(t.dtype)
-            and "float4_" not in str(t.dtype)
-        ):
+        if t.is_floating_point() and "float8_" not in str(t.dtype) and "float4_" not in str(t.dtype):
             return t.dtype
 
     # if no floating dtype was found return whatever the first dtype is
@@ -4196,38 +4191,24 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             tqdm_class=tqdm_class,
         )
 
-        if gguf_file:
-            from .integrations.gguf_linear import is_gguf_linear_enabled
-            from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
-            from .quantizers.quantizer_gguf import GGUFQuantizer
-
-            gguf_parsed = load_gguf_checkpoint(checkpoint_files[0], return_tensors=True)
-            state_dict = gguf_parsed["tensors"]  # {gguf_name: GGUFQuantizedTensor} (raw bytes + quant_type)
-            # GGUFQuantizer takes precedence for materialization & weight-conversion injection.
-            #
-            # Opt-in linear_mode (via kwarg or `TRANSFORMERS_GGUF_LINEAR=1`) keeps weights at native
-            # quant after load and routes matmuls through Metal kernels (kernels-community).
-            # Same kernels as llama.cpp — ~1.0× parity on Apple Silicon decode.
-            gguf_linear = kwargs.pop("gguf_linear", None)
-            if gguf_linear is None:
-                gguf_linear = is_gguf_linear_enabled()
-            # Always keep the GGUF tensor map (raw bytes + quant_type) on the
-            # quantizer so ``save_pretrained_gguf`` / ``hf_quantizer.save_gguf``
-            # can round-trip without re-reading the .gguf. ``linear_mode``
-            # controls only whether the loader swaps Linears for ``GgufLinear``.
-            hf_quantizer = GGUFQuantizer(
-                weight_mapping=gguf_parsed.get("weight_mapping", []),
-                linear_mode=bool(gguf_linear),
-                gguf_tensors=gguf_parsed["tensors"],
-                gguf_kv=gguf_parsed.get("raw_kv", {}),
-            )
-
         is_quantized = hf_quantizer is not None
 
         # Find the correct dtype based on current state
         config, dtype = _get_dtype(
             dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only, hf_quantizer
         )
+
+        if gguf_file:
+            from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
+
+            # we need a dummy model to get the state_dict - for this reason, we keep the state_dict as if it was
+            # passed directly as a kwarg from now on
+            with torch.device("meta"):
+                dummy_model = cls(config)
+
+            state_dict = load_gguf_checkpoint(
+                checkpoint_files[0], return_tensors=True, model_to_load=dummy_model, torch_dtype=dtype
+            )["tensors"]
 
         config.name_or_path = pretrained_model_name_or_path
 
@@ -4262,8 +4243,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # instantiated model, as the flags can be modified by instances sometimes)
         dtype_plan = model._get_dtype_plan(dtype)
 
-        # Obtain the weight conversion mapping for this model if any are registered.
-        # The quantizer (incl. GGUFQuantizer) gets the final say on how to update them.
+        # Obtain the weight conversion mapping for this model if any are registered and apply to all submodels recursively
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
         if _torch_distributed_available and device_mesh is not None:  # add hooks to nn.Modules: no weights
@@ -4342,14 +4322,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         expected_keys: list[str] | None = None,
     ) -> tuple[LoadStateDictInfo, dict]:
         """Perform the actual loading of some checkpoints into a `model`, by reading them from disk and dispatching them accordingly."""
-        is_quantized = load_config.is_quantized
         hf_quantizer = load_config.hf_quantizer
-        is_hqq_or_quark = (
-            is_quantized
-            and hf_quantizer is not None
-            and hf_quantizer.quantization_config is not None
-            and hf_quantizer.quantization_config.quant_method in {QuantizationMethod.HQQ, QuantizationMethod.QUARK}
-        )
+        is_quantized = load_config.is_quantized
+        is_hqq_or_quark = hf_quantizer is not None and hf_quantizer.quantization_config.quant_method in {
+            QuantizationMethod.HQQ,
+            QuantizationMethod.QUARK,
+        }
 
         # Model's definition arriving here is final (TP hooks added, quantized layers replaces)
         expected_keys = list(model.state_dict().keys()) if expected_keys is None else expected_keys
@@ -4669,6 +4647,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 )
             self._use_kernels = False
 
+    def _default_compile_config(self) -> CompileConfig:
+        """Build the default `CompileConfig` for `get_compiled_call`.
+
+        Inductor + `reduce-overhead` (the `CompileConfig` defaults) target CUDA.
+        torch_tpu registers its own TorchDynamo backend named `"tpu"`; route
+        `device.type == "tpu"` through it with static shapes to match the
+        common StaticCache + fixed-prefill usage."""
+        if self.device.type == "tpu":
+            return CompileConfig(backend="tpu", dynamic=False, mode="default")
+        return CompileConfig()
+
     def get_compiled_call(self, compile_config: CompileConfig | None) -> Callable:
         """Return a `torch.compile`'d version of `self.__call__`. This is useful to dynamically choose between
         non-compiled/compiled `forward` during inference, especially to switch between prefill (where we don't
@@ -4677,8 +4666,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Only reset it if not present or different from previous config
         if "llama4" in self.config.model_type:  # TODO try to enable for FULL COMPILE HYBRID CACHE SUPPORT
             return self.__call__
-        compile_config = compile_config or CompileConfig()
-        default_config = getattr(self.generation_config, "compile_config", None) or CompileConfig()
+        compile_config = compile_config or self._default_compile_config()
+        default_config = getattr(self.generation_config, "compile_config", None) or self._default_compile_config()
         if (
             not hasattr(self, "_compiled_call")
             or getattr(self, "_last_compile_config", default_config) != compile_config
