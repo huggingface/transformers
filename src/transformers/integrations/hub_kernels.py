@@ -100,14 +100,14 @@ try:
         "RMSNorm": {
             "cuda": {
                 Mode.INFERENCE: LayerRepository(
-                    repo_id="kernels-community/liger_kernels",
+                    repo_id="kernels-community/liger-kernels",
                     layer_name="LigerRMSNorm",
                     # revision="pure-layer-test",
                 ),
             },
             "rocm": {
                 Mode.INFERENCE: LayerRepository(
-                    repo_id="kernels-community/liger_kernels",
+                    repo_id="kernels-community/liger-kernels",
                     layer_name="LigerRMSNorm",
                 )
             },
@@ -125,7 +125,7 @@ try:
             },
             "npu": {
                 Mode.INFERENCE: LayerRepository(
-                    repo_id="kernels-community/liger_kernels",
+                    repo_id="kernels-community/liger-kernels",
                     layer_name="LigerRMSNorm",
                 )
             },
@@ -218,21 +218,31 @@ try:
 
     # Add function kernel mappings if FuncRepository is available
     if FuncRepository is not None:
-        _KERNEL_MAPPING["rotary_pos_emb"] = {
-            "xpu": {
+        _FUNCTION_KERNEL_MAPPING = {
+            "rotary_pos_emb": {
+                "xpu": {
                 Mode.INFERENCE: FuncRepository(
                     repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
                 )
+                },
+                "cuda": {
+                    Mode.TRAINING: FuncRepository(
+                        repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
+                    ),
+                    Mode.INFERENCE: FuncRepository(
+                        repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
+                    ),
+                },
             },
-            "cuda": {
-                Mode.TRAINING: FuncRepository(
-                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
-                ),
-                Mode.INFERENCE: FuncRepository(
-                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
-                ),
+            "ForCausalLMLoss": {
+                "cuda": {
+                    Mode.TRAINING: FuncRepository(
+                        repo_id="kernels-community/liger-kernels", func_name="LigerForCausalLMLoss"
+                    ),
+                },
             },
         }
+        _KERNEL_MAPPING = _KERNEL_MAPPING | _FUNCTION_KERNEL_MAPPING
 
     def has_key(d, key):
         return key in d or any(isinstance(v, dict) and has_key(v, key) for v in d.values())

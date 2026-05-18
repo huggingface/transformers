@@ -26,6 +26,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
+from ...loss.loss_utils import ForCausalLMLoss
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import (
     GenericForQuestionAnswering,
@@ -425,6 +426,7 @@ class LlamaModel(LlamaPreTrainedModel):
         )
 
 
+@use_kernelized_func(ForCausalLMLoss)
 @auto_docstring
 class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
@@ -484,11 +486,20 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
         hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = hidden_states[:, slice_indices, :]
 
         loss = None
+        logits = self.lm_head(hidden_states) if not self.use_kernels else None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+            loss = self.loss_function(
+                hidden_states=hidden_states,
+                lm_head_weight=self.lm_head.weight,
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.vocab_size,
+                hidden_size=hidden_states.shape[-1],
+                **kwargs
+            )
 
         return CausalLMOutputWithPast(
             loss=loss,
