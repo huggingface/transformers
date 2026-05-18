@@ -22,6 +22,7 @@ import torch
 from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import CompileConfig, ContinuousBatchingConfig
 from ...modeling_flash_attention_utils import lazy_import_paged_flash_attention
+from ...utils import is_torch_xpu_available
 from ...utils.generic import is_flash_attention_requested
 from .requests import logger
 from .utils import WorkloadHints
@@ -103,7 +104,7 @@ def ensure_decode_fast_path_is_available(
     available, and no user-provided max blocks per request, set it to the fallback default."""
     # Then, if the decode fast path is not turned off, check if it is available
     if cb_config.max_blocks_per_request != 0:
-        # NOTE: block table should be available with FA2 and FA3, but there seems to be an issue with FA2 atm
+        # NOTE: For CUDA, block table should be available with FA2 and FA3, but there seems to be an issue with FA2 atm
         if is_flash_attention_requested(config, version=3):
             flash_attn_with_kvcache = lazy_import_paged_flash_attention(config._attn_implementation)[1]
             conditions = [
@@ -111,6 +112,19 @@ def ensure_decode_fast_path_is_available(
                 flash_attn_with_kvcache is not None,  # The `flash_attn_with_kvcache` fn is needed
             ]
             # Throw a warning only if the decode fast path was requested by the user
+            if not all(conditions):
+                if user_requested:
+                    logger.warning(
+                        f"Although {cb_config.max_blocks_per_request = }, the decode fast path is not available "
+                        f"because at least one condition is not met: {conditions}."
+                    )
+                cb_config.max_blocks_per_request = 0
+        elif torch.xpu.is_available() and is_flash_attention_requested(config, version=2):
+            flash_attn_with_kvcache = lazy_import_paged_flash_attention(config._attn_implementation)[1]
+            conditions = [
+                is_torch_xpu_available(),  # Block table is supported on XPU through kernels-community/flash-attn2
+                flash_attn_with_kvcache is not None,
+            ]
             if not all(conditions):
                 if user_requested:
                     logger.warning(
