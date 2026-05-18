@@ -1666,7 +1666,6 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
         )
 
 
-# Adapted from ...models.gemma3.modeling_gemma3
 def token_type_ids_mask_function(group_ids: torch.Tensor) -> Callable:
     """
     This function adds the correct offsets to the `q_idx` and `kv_idx` as the torch API can only accept lengths,
@@ -1694,7 +1693,6 @@ def token_type_ids_mask_function(group_ids: torch.Tensor) -> Callable:
     return inner_mask
 
 
-# Adapted from ...models.gemma3.modeling_gemma3
 def create_causal_mask_mapping(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
@@ -2050,7 +2048,6 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
 
         return model_inputs
 
-    # Adapted from ...models.gemma3.modeling_gemma3
     @staticmethod
     def create_masks_for_generate(
         config: PreTrainedConfig,
