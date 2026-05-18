@@ -132,20 +132,29 @@ class Gemma4Processor(ProcessorMixin):
 
         image_inputs = {}
         if images is not None:
-            images = self.image_processor.fetch_images(images)
-            batched_images = make_nested_list_of_images(images)
-            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
+            # For a batch with some samples with images and some without images (only with text), None can be used for samples without images.
+            valid_images, valid_images_idx = zip(*[(img, img_idx) for img_idx, img in enumerate(images) if img is not None])
+            valid_images = self.image_processor.fetch_images(valid_images)
+
+            batched_images = make_nested_list_of_images(valid_images)
+            image_inputs = self.image_processor(valid_images, **output_kwargs["images_kwargs"])
 
             num_soft_tokens = image_inputs.pop("num_soft_tokens_per_image")
 
-            # Create empty text to be replaced with placeholders
-            if not text:
-                text = [" ".join([self.image_token] * len(images)) for images in batched_images]
+            if text:
+                if len(images) > 1 and len(batched_images) + (len(images)-len(valid_images)) != len(text):
+                    raise ValueError(
+                        f"Received inconsistently sized batches of images ({len(batched_images)}) and text ({len(text)})."
+                    )
 
-            if len(batched_images) != len(text):
-                raise ValueError(
-                    f"Received inconsistently sized batches of images ({len(batched_images)}) and text ({len(text)})."
-                )
+                if len(text) == 1:
+                    # To support the case with a single sample with text and many images
+                    valid_images_text = text
+                else:
+                    valid_images_text = [text[image_idx] for image_idx in valid_images_idx]
+            else:
+                # Create empty text to be replaced with placeholders
+                valid_images_text = [" ".join([self.image_token] * len(images_sample)) for images_sample in batched_images]
 
             replacements = [f"{self.boi_token}{self.image_token * n}{self.eoi_token}" for n in num_soft_tokens]
             replacements_iter = iter(replacements)
@@ -153,7 +162,14 @@ class Gemma4Processor(ProcessorMixin):
             # Expand image_token placeholders to per-image soft token sequences.
             # re.sub never re-scans replaced text, so it is safe
             pattern = re.escape(self.image_token)
-            text = [re.sub(pattern, lambda _: next(replacements_iter), prompt) for prompt in text]
+            valid_images_text = [re.sub(pattern, lambda _: next(replacements_iter), prompt) for prompt in valid_images_text]
+
+            if text:
+                for img_idx, image_text in zip(valid_images_idx, valid_images_text):
+                    # Updating text from valid images with the replaced image tokens
+                    text[img_idx] = image_text
+            else:
+                text = valid_images_text
 
         # Process video inputs in same way
         video_inputs = {}
