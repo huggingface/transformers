@@ -320,4 +320,4 @@ is a list and we want to transform every element, which often occurs with Cohere
 ```
 
 Using `transform` requires the optional `jmespath` package (`pip install jmespath`); it's only imported when a template
-actually uses the key.
+actually uses the key. It is installed with the `transformers["chat_template"]` extra.
