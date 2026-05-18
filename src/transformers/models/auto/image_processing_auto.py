@@ -118,6 +118,8 @@ else:
             ("pixio", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
             ("pp_ocrv5_mobile_det", {"torchvision": "PPOCRV5ServerDetImageProcessor"}),
             ("pp_ocrv5_mobile_rec", {"torchvision": "PPOCRV5ServerRecImageProcessor"}),
+            ("pp_ocrv6_medium_det", {"torchvision": "PPOCRV5ServerDetImageProcessor"}),
+            ("pp_ocrv6_small_det", {"torchvision": "PPOCRV5ServerDetImageProcessor"}),
             ("pp_ocrv6_small_rec", {"torchvision": "PPOCRV5ServerRecImageProcessor"}),
             ("pp_ocrv6_tiny_rec", {"torchvision": "PPOCRV5ServerRecImageProcessor"}),
             ("pvt_v2", {"torchvision": "PvtImageProcessor", "pil": "PvtImageProcessorPil"}),

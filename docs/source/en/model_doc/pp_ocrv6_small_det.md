@@ -13,9 +13,9 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-05-12 and added to Hugging Face Transformers on 2026-05-12.*
+*This model was released on 2026-05-14 and added to Hugging Face Transformers on 2026-05-14.*
 
-# PP-OCRv6_small_rec
+# PP-OCRv6_small_det
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -33,7 +33,7 @@ TODO.
 
 ### Single input inference
 
-The example below demonstrates how to detect text with PP-OCRv6_small_rec using the [`AutoModel`].
+The example below demonstrates how to detect text with PP-OCRv6_small_det using the [`AutoModel`].
 
 <hfoptions id="usage">
 <hfoption id="AutoModel">
@@ -43,19 +43,20 @@ from io import BytesIO
 
 import httpx
 from PIL import Image
-from transformers import AutoImageProcessor, AutoModelForTextRecognition
+from transformers import AutoImageProcessor, AutoModelForObjectDetection
 from transformers.image_utils import load_image
 
-model_path = "PaddlePaddle/PP-OCRv6_small_rec_safetensors"
-model = AutoModelForTextRecognition.from_pretrained(model_path, device_map="auto")
+model_path = "PaddlePaddle/PP-OCRv6_small_det_safetensors" # or "PaddlePaddle/PP-OCRv6_tiny_det_safetensors"
+model = AutoModelForObjectDetection.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-image_url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_rec_001.png"
+image_url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png"
 image = load_image(image_url)
 inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 
-results = image_processor.post_process_text_recognition(outputs)
+results = image_processor.post_process_object_detection(outputs, target_sizes=inputs["target_sizes"])
+
 for result in results:
     print(result)
 ```
@@ -65,7 +66,7 @@ for result in results:
 
 ### Batched inference
 
-Here is how you can do it with PP-OCRv6_small_rec using the [`AutoModel`]:
+Here is how you can do it with PP-OCRv6_small_det using the [`AutoModel`]:
 
 <hfoptions id="usage">
 <hfoption id="AutoModel">
@@ -75,19 +76,20 @@ from io import BytesIO
 
 import httpx
 from PIL import Image
-from transformers import AutoImageProcessor, AutoModelForTextRecognition
+from transformers import AutoImageProcessor, AutoModelForObjectDetection
 from transformers.image_utils import load_image
 
-model_path = "PaddlePaddle/PP-OCRv6_small_rec_safetensors"
-model = AutoModelForTextRecognition.from_pretrained(model_path, device_map="auto")
+model_path = "PaddlePaddle/PP-OCRv6_small_det_safetensors" # or "PaddlePaddle/PP-OCRv6_tiny_det_safetensors"
+model = AutoModelForObjectDetection.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-image_url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_rec_001.png"
+image_url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png"
 image = load_image(image_url)
 inputs = image_processor(images=[image, image], return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 
-results = image_processor.post_process_text_recognition(outputs)
+results = image_processor.post_process_object_detection(outputs, target_sizes=inputs["target_sizes"])
+
 for result in results:
     print(result)
 ```
@@ -95,22 +97,15 @@ for result in results:
 </hfoption>
 </hfoptions>
 
-## PPOCRV6SmallRecForTextRecognition
+## PPOCRV6SmallDetForObjectDetection
 
-[[autodoc]] PPOCRV6SmallRecForTextRecognition
+[[autodoc]] PPOCRV6SmallDetForObjectDetection
 
-## PPOCRV6SmallRecConfig
+## PPOCRV6SmallDetConfig
 
-[[autodoc]] PPOCRV6SmallRecConfig
+[[autodoc]] PPOCRV6SmallDetConfig
 
-## PPOCRV6SmallRecModel
+## PPOCRV6SmallDetModel
 
-[[autodoc]] PPOCRV6SmallRecModel
+[[autodoc]] PPOCRV6SmallDetModel
 
-## PPOCRV6SmallRecEncoderWithSVTR
-
-[[autodoc]] PPOCRV6SmallRecEncoderWithSVTR
-
-## PPOCRV6SmallRecImageProcessor
-
-[[autodoc]] PPOCRV6SmallRecImageProcessor

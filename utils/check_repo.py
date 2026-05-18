@@ -211,6 +211,8 @@ IGNORE_NON_TESTED = (
         "PPOCRV5MobileRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileRecForTextRecognition.
         "PPOCRV5ServerRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerRecForTextRecognition.
         "PPOCRV5ServerRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerRecForTextRecognition.
+        "PPOCRV6MediumDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6MediumDetForObjectDetection.
+        "PPOCRV6SmallDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6SmallDetForObjectDetection.
         "PPOCRV6SmallRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6SmallRecForTextRecognition.
         "PPOCRV6SmallRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6SmallRecForTextRecognition.
         "PPOCRV6TinyRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6TinyRecForTextRecognition.
