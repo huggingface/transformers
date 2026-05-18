@@ -800,8 +800,34 @@ def _flash_attention_forward(
 
     # No padding
     else:
-        out = flash_fn(query_states, key_states, value_states, **flash_kwargs())
-        if isinstance(out, tuple):
-            out = out[0]
+        if flash_fn is None:
+            # Some Hub kernels (``kernels-community/metal-flash-sdpa``) only expose
+            # ``flash_attn_varlen_func`` — no dense ``flash_attn_func``. Fall back
+            # to varlen by synthesising the trivial cu_seqlens for the dense shape,
+            # so ``model.generate()`` doesn't crash with NoneType.
+            if flash_varlen_fn is None:
+                raise RuntimeError(
+                    f"No flash attention function available for the loaded kernel "
+                    f"(neither ``flash_attn_func`` nor ``flash_attn_varlen_func``)."
+                )
+            B, S_q, H_q, D = query_states.shape
+            S_k = key_states.shape[1]
+            q = query_states.reshape(-1, H_q, D)
+            k = key_states.reshape(-1, key_states.size(-2), D)
+            v = value_states.reshape(-1, value_states.size(-2), D)
+            cu_q = torch.arange(0, (B + 1) * S_q, S_q, dtype=torch.int32, device=q.device)
+            cu_k = torch.arange(0, (B + 1) * S_k, S_k, dtype=torch.int32, device=q.device)
+            out = flash_varlen_fn(
+                q, k, v,
+                cu_seqlens_q=cu_q, cu_seqlens_k=cu_k,
+                **flash_kwargs(max_seqlen_q=S_q, max_seqlen_k=S_k),
+            )
+            if isinstance(out, tuple):
+                out = out[0]
+            out = out.view(B, S_q, H_q, D)
+        else:
+            out = flash_fn(query_states, key_states, value_states, **flash_kwargs())
+            if isinstance(out, tuple):
+                out = out[0]
 
     return out
