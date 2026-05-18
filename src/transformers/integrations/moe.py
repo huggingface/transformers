@@ -479,105 +479,14 @@ def grouped_mm_experts_forward(
     return final_hidden_states.to(hidden_states.dtype)
 
 
-def gguf_bmm_experts_forward(
-    self: torch.nn.Module,
-    hidden_states: torch.Tensor,
-    top_k_index: torch.Tensor,
-    top_k_weights: torch.Tensor,
-) -> torch.Tensor:
-    """Quantized fused-expert forward for GGUF MoE modules.
-
-    Per token-expert pair (``S = num_tokens * top_k``), the gate / up / down
-    projections run as indexed matvecs over the raw GGUF byte buffers via
-    the ``mul_mat_id_<fmt>_f32`` Metal kernels — same pattern as llama.cpp's
-    ``mul_mat_id``. Each projection is **one** kernel launch; the kernel
-    reads the quantized bytes for ``ids[s]`` inline and never materialises
-    the expert weights as fp32.
-
-    When the loaded kernels package lacks the ``mul_mat_id`` op for a given
-    quant type, falls back to ``gather + dequant + torch.bmm`` (~10× faster
-    than the eager per-expert loop but still bandwidth-bound — it
-    materialises the (S, M, K) fp32 weight stack every forward).
-
-    The module is expected to expose ``gate_proj_q`` / ``up_proj_q`` /
-    ``down_proj_q`` as ``(num_experts, bytes_per_expert)`` uint8 buffers
-    along with per-projection ``{gate,up,down}_quant`` strings, the
-    matching ``_<proj>_fmt`` lowercase format keys, and a
-    ``_gather_dequant`` helper (see
-    ``integrations.gguf_linear.GgufQwen2MoeExperts``).
-    """
-    num_top_k = top_k_index.size(-1)
-    num_tokens = hidden_states.size(0)
-    H = self.hidden_dim
-    I = self.intermediate_dim
-    device = hidden_states.device
-    S = num_tokens * num_top_k
-
-    op_gate = getattr(self, "_id_op_gate", None)
-    op_up = getattr(self, "_id_op_up", None)
-    op_down = getattr(self, "_id_op_down", None)
-    use_id_kernel = op_gate is not None and op_up is not None and op_down is not None
-
-    selected = hidden_states.repeat_interleave(num_top_k, dim=0).to(torch.float32).contiguous()
-    ids32 = top_k_index.reshape(-1).to(torch.int32)
-    sample_weights = top_k_weights.reshape(-1).to(torch.float32)
-
-    # Pre-allocated scratch buffers for the decode shape are set at swap time
-    # (see ``_prepare_id_kernel_refs``). Larger shapes (prefill, batched) fall
-    # back to per-call ``torch.empty`` — does NOT mutate any module attribute,
-    # so dynamo doesn't re-trace on the second call.
-    if getattr(self, "_scratch_S", None) == S and getattr(self, "_scratch_T", None) == num_tokens:
-        gate_buf, up_buf, out = self._gate_buf, self._up_buf, self._pair_out
-    else:
-        gate_buf = torch.empty(S, I, dtype=torch.float32, device=device)
-        up_buf = torch.empty(S, I, dtype=torch.float32, device=device)
-        out = torch.empty(S, H, dtype=torch.float32, device=device)
-
-    if use_id_kernel:
-        gate_qw = self.gate_proj_q.view(-1)
-        up_qw = self.up_proj_q.view(-1)
-        down_qw = self.down_proj_q.view(-1)
-        op_gate(gate_qw, selected, ids32, gate_buf)
-        op_up(up_qw, selected, ids32, up_buf)
-        inter = (self.act_fn(gate_buf) * up_buf).contiguous()
-        op_down(down_qw, inter, ids32, out)
-    else:
-        # Fallback: per-projection batched dequant + bmm. ``_gather_dequant``
-        # uses ``.index_select(0, ids)`` which requires int64.
-        ids_long = ids32.to(torch.long)
-        gate_w = self._gather_dequant(self.gate_proj_q, ids_long, self.gate_quant, self._gate_fmt, I, H)
-        up_w = self._gather_dequant(self.up_proj_q, ids_long, self.up_quant, self._up_fmt, I, H)
-        gate = torch.bmm(selected.unsqueeze(1), gate_w.transpose(-1, -2)).squeeze(1)
-        up = torch.bmm(selected.unsqueeze(1), up_w.transpose(-1, -2)).squeeze(1)
-        inter = (self.act_fn(gate) * up).contiguous()
-        down_w = self._gather_dequant(self.down_proj_q, ids_long, self.down_quant, self._down_fmt, H, I)
-        out = torch.bmm(inter.unsqueeze(1), down_w.transpose(-1, -2)).squeeze(1)
-
-    weighted = out * sample_weights.unsqueeze(-1)
-    return weighted.view(num_tokens, num_top_k, H).sum(dim=1).to(hidden_states.dtype)
+# GGUF fused-expert forward kernels live in ``integrations.gguf_linear`` so the
+# GGUF integration owns them end-to-end. ``ExpertsInterface`` below picks them
+# up by import; alias the prefill variant to the same fn (today both routes go
+# through the ``mul_mat_id`` kernel — separate names kept for future divergence).
+from .gguf_linear import gguf_bmm_experts_forward as gguf_bmm_experts_forward  # noqa: E402  re-export
 
 
-def gguf_grouped_mm_experts_forward(
-    self: torch.nn.Module,
-    hidden_states: torch.Tensor,
-    top_k_index: torch.Tensor,
-    top_k_weights: torch.Tensor,
-) -> torch.Tensor:
-    """GGUF MoE forward intended for prefill (many tokens per expert).
-
-    Currently a thin wrapper that delegates to
-    :func:`gguf_bmm_experts_forward`. Reason: ``torch.grouped_mm`` requires
-    a ``(num_experts, K, M)`` weight tensor, while our quantized layout
-    only gives us the *bytes* per expert — dequantising every expert to fp32
-    every forward (60 × ~46 MB for a Qwen1.5-MoE-style layer × 3 projections)
-    is far more expensive than the bmm overhead it would save.
-
-    The right path here is a GGUF-aware grouped matmul kernel (llama.cpp's
-    ``mul_mat_id``: indexes into the byte buffer per group, never materialises
-    the dense fp tensor). Once that lands as a Metal kernel we wire it here
-    and the prefill regime stops degenerating to per-token bmm.
-    """
-    return gguf_bmm_experts_forward(self, hidden_states, top_k_index, top_k_weights)
+gguf_grouped_mm_experts_forward = gguf_bmm_experts_forward
 
 
 class ExpertsInterface(GeneralInterface):

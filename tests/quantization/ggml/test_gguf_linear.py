@@ -5,23 +5,25 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
-"""Standalone tests for the GgufLinear module.
+"""Tests for the slim GGUF integration.
 
-These don't exercise the full ``from_pretrained(..., gguf_linear=True)`` path
-(which depends on the GGUF rename + dequant pipeline being healthy on this
-branch). They just check that ``GgufLinear`` produces forward outputs that
-agree with the dequant-then-``nn.functional.linear`` reference, using
-synthesized Q4_0 / Q4_K bytes.
+Covers:
+* :class:`GgufLinear` construction + ``state_dict`` / ``load_state_dict`` round-trip
+* :func:`replace_with_gguf_linear` meta-time swap mechanics
+* ``MODEL_TYPE_TO_GGUF_EXPERTS`` registry lookup
+* the public load APIs:
+    - ``from_pretrained(..., gguf_file=..., dtype=torch.bfloat16)`` → dequant path
+    - ``from_pretrained(..., quantization_config=GgufQuantizeConfig(...))`` → on-the-fly swap
+* generation-config defaults set by ``GGUFQuantizer.postprocess_model``
 
-The Metal-kernel fast path on MPS is exercised via the ``kernels-community``
-package (``ArthurZ/gguf-kernels``). If that package isn't installed locally,
-GgufLinear falls back to the pure-torch dequant path and these tests still
-pass.
+Forward-pass correctness lives behind MPS + kernels-available — the strict
+no-fallback policy means we can't validate forward on CI hosts. The structural
+tests below run anywhere.
 """
 
 from __future__ import annotations
 
-import os
+import tempfile
 import unittest
 
 import numpy as np
@@ -32,15 +34,18 @@ from transformers.utils import is_torch_available
 
 if is_torch_available():
     import torch
+    import torch.nn as nn
 
     from transformers.integrations.gguf_linear import (
+        MODEL_TYPE_TO_GGUF_EXPERTS,
+        GgufExperts,
         GgufLinear,
         gguf_linear_supports,
+        replace_with_gguf_linear,
     )
 
 
 def _random_q4_0_bytes(M: int, K: int, seed: int = 0) -> bytes:
-    """Synthesize a valid Q4_0 byte blob with finite half scales."""
     nblocks = M * (K // 32)
     rng = np.random.default_rng(seed)
     d = rng.uniform(0.01, 0.5, size=nblocks).astype(np.float16)
@@ -52,7 +57,6 @@ def _random_q4_0_bytes(M: int, K: int, seed: int = 0) -> bytes:
 
 
 def _random_q4_K_bytes(M: int, K: int, seed: int = 0) -> bytes:
-    """Synthesize a valid Q4_K byte blob with finite half scales."""
     nblocks = M * (K // 256)
     rng = np.random.default_rng(seed)
     d = rng.uniform(0.01, 0.5, size=nblocks).astype(np.float16)
@@ -67,411 +71,160 @@ def _random_q4_K_bytes(M: int, K: int, seed: int = 0) -> bytes:
 
 @require_torch
 @require_gguf
-class GgufLinearForwardTest(unittest.TestCase):
-    """Forward pass: GgufLinear vs (dequant → nn.functional.linear) baseline."""
-
-    def _check_forward(self, quant_type: str, qbytes_fn, M: int, K: int, batch_sizes):
+class GgufLinearConstructionTest(unittest.TestCase):
+    def test_supports_lookup(self):
         import gguf
 
-        from transformers.integrations.gguf_dequant import dequantize_gguf_tensor
-
-        qb = qbytes_fn(M, K)
-        layer = GgufLinear(in_features=K, out_features=M, quant_type=quant_type, bias=False)
-        layer.qweight.copy_(torch.frombuffer(bytearray(qb), dtype=torch.uint8))
-
-        # Reference: dequant the same bytes, then run torch's nn.linear
-        W_ref = (
-            dequantize_gguf_tensor(layer.qweight, getattr(gguf.GGMLQuantizationType, quant_type), device="cpu")
-            .reshape(M, K)
-            .to(torch.float32)
-        )
-
-        torch.manual_seed(0)
-        for B in batch_sizes:
-            shape = (K,) if B == 0 else (B, K)
-            x = torch.randn(shape, dtype=torch.float32) * 0.1
-            ref = torch.nn.functional.linear(x, W_ref)
-            got = layer(x)
-            self.assertEqual(ref.shape, got.shape)
-            scale = max(1.0, float(ref.abs().max()))
-            rel = float((ref - got).abs().max() / scale)
-            tol = 1e-3 if B > 1 else 1e-5
-            self.assertLessEqual(rel, tol, msg=f"B={B}: rel={rel:.4e}")
-
-    def test_q4_0_forward(self):
-        self._check_forward("Q4_0", _random_q4_0_bytes, M=64, K=512, batch_sizes=(0, 1, 8))
-
-    def test_q4_K_forward(self):
-        self._check_forward("Q4_K", _random_q4_K_bytes, M=64, K=256, batch_sizes=(0, 1, 8))
-
-
-@require_torch
-@require_gguf
-class GgufLinearSwapTest(unittest.TestCase):
-    """``replace_with_gguf_linear`` swaps Linears and preserves forward output."""
-
-    def test_swap_two_layer_mlp(self):
-        import gguf
-        import torch.nn as nn
-
-        from transformers.integrations.gguf_dequant import dequantize_gguf_tensor
-
-        K, H, M = 256, 512, 128
-        qb1 = _random_q4_K_bytes(H, K, seed=1)
-        qb2 = _random_q4_K_bytes(M, H, seed=2)
-
-        W1_ref = (
-            dequantize_gguf_tensor(
-                torch.frombuffer(bytearray(qb1), dtype=torch.uint8),
-                gguf.GGMLQuantizationType.Q4_K,
-                device="cpu",
-            )
-            .reshape(H, K)
-            .to(torch.float32)
-        )
-        W2_ref = (
-            dequantize_gguf_tensor(
-                torch.frombuffer(bytearray(qb2), dtype=torch.uint8),
-                gguf.GGMLQuantizationType.Q4_K,
-                device="cpu",
-            )
-            .reshape(M, H)
-            .to(torch.float32)
-        )
-
-        baseline = nn.Sequential(nn.Linear(K, H, bias=False), nn.ReLU(), nn.Linear(H, M, bias=False))
-        baseline[0].weight.data.copy_(W1_ref)
-        baseline[2].weight.data.copy_(W2_ref)
-
-        target = nn.Sequential(nn.Linear(K, H, bias=False), nn.ReLU(), nn.Linear(H, M, bias=False))
-        target[0].weight.data.copy_(W1_ref)
-        target[2].weight.data.copy_(W2_ref)
-
-        # Swap directly (bypass the gguf.quantize round-trip — Q4_K Python quantizer
-        # isn't implemented, and this test only validates the swap mechanics).
-        target[0] = GgufLinear(K, H, "Q4_K", bias=False)
-        target[0].qweight.copy_(torch.frombuffer(bytearray(qb1), dtype=torch.uint8))
-        target[2] = GgufLinear(H, M, "Q4_K", bias=False)
-        target[2].qweight.copy_(torch.frombuffer(bytearray(qb2), dtype=torch.uint8))
-
-        torch.manual_seed(7)
-        x = torch.randn(4, K) * 0.1
-        ref = baseline(x)
-        got = target(x)
-        self.assertEqual(ref.shape, got.shape)
-        rel = float((ref - got).abs().max() / max(1.0, float(ref.abs().max())))
-        self.assertLessEqual(rel, 1e-3, msg=f"swap forward rel={rel:.4e}")
-
-
-@require_torch
-@require_gguf
-class GgufLinearAcceptsSupportedTypes(unittest.TestCase):
-    def test_supported(self):
-        import gguf
-
-        self.assertTrue(gguf_linear_supports(gguf.GGMLQuantizationType.Q4_0))
-        self.assertTrue(gguf_linear_supports(gguf.GGMLQuantizationType.Q4_K))
-        self.assertTrue(gguf_linear_supports(gguf.GGMLQuantizationType.Q5_0))
-        self.assertTrue(gguf_linear_supports(gguf.GGMLQuantizationType.Q5_1))
+        for name in ("Q4_0", "Q4_K", "Q5_0", "Q5_1", "Q8_0", "IQ4_NL", "IQ4_XS"):
+            self.assertTrue(gguf_linear_supports(getattr(gguf.GGMLQuantizationType, name)), name)
         self.assertFalse(gguf_linear_supports(gguf.GGMLQuantizationType.F32))
 
+    def test_weight_buffer_size(self):
+        # Q4_K: 144 bytes / 256 elems → out_features * (in/256) * 144.
+        layer = GgufLinear(in_features=256, out_features=32, quant_type="Q4_K", bias=False)
+        self.assertEqual(layer.weight.numel(), 32 * (256 // 256) * 144)
+        self.assertEqual(layer.weight.dtype, torch.uint8)
+
+    def test_rejects_unsupported_dim(self):
+        with self.assertRaises(ValueError):
+            GgufLinear(in_features=130, out_features=32, quant_type="Q4_0")  # 130 not multiple of 32
+
 
 @require_torch
 @require_gguf
-class GgufLinearSerializationTest(unittest.TestCase):
-    """``state_dict`` / ``load_state_dict`` roundtrip preserves bytes + quant type,
-    and forward output of a freshly reloaded module matches the original."""
+class GgufLinearStateDictRoundtripTest(unittest.TestCase):
+    """``state_dict`` → ``load_state_dict`` preserves bytes + extra-state metadata."""
 
-    def _roundtrip_state_dict(self, layer):
-        sd = layer.state_dict()
-        clone = GgufLinear(
-            in_features=layer.in_features,
-            out_features=layer.out_features,
-            quant_type=layer.quant_type,
-            bias=layer.bias is not None,
+    def test_q4_0_roundtrip(self):
+        K, M = 64, 32
+        qb = _random_q4_0_bytes(M, K)
+        layer = GgufLinear(in_features=K, out_features=M, quant_type="Q4_0", bias=False)
+        layer.weight.copy_(torch.frombuffer(bytearray(qb), dtype=torch.uint8))
+        clone = GgufLinear(in_features=K, out_features=M, quant_type="Q4_0", bias=False)
+        clone.load_state_dict(layer.state_dict())
+        self.assertTrue(torch.equal(layer.weight, clone.weight))
+
+
+@require_torch
+@require_gguf
+class ReplaceWithGgufLinearTest(unittest.TestCase):
+    """``replace_with_gguf_linear`` does the FP8-style meta-time swap."""
+
+    def test_swap_select_linears(self):
+        class M(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.config = type("C", (), {"model_type": "llama"})()
+                self.a = nn.Linear(64, 32, bias=False)
+                self.b = nn.Linear(64, 32, bias=False)
+
+        m = M()
+        info = {"a": {"quant_type": "Q4_0"}}  # only swap `.a`
+        n = replace_with_gguf_linear(m, info)
+        self.assertEqual(n, 1)
+        self.assertIsInstance(m.a, GgufLinear)
+        self.assertIsInstance(m.b, nn.Linear)
+        # Buffer shape is dimension-correct for Q4_0.
+        self.assertEqual(m.a.weight.numel(), 32 * (64 // 32) * 18)
+
+    def test_moe_registry_lookup(self):
+        self.assertIn("qwen2_moe", MODEL_TYPE_TO_GGUF_EXPERTS)
+        self.assertIs(MODEL_TYPE_TO_GGUF_EXPERTS["qwen2_moe"], GgufExperts)
+
+
+@require_torch
+@require_gguf
+class GgufLinearForwardOnMpsTest(unittest.TestCase):
+    """Forward path only runs on MPS with kernels available — no slow fallback."""
+
+    def test_forward_errors_off_mps(self):
+        layer = GgufLinear(in_features=32, out_features=32, quant_type="Q4_0", bias=False)
+        x = torch.zeros(1, 32, dtype=torch.float32, device="cpu")
+        with self.assertRaisesRegex(RuntimeError, "GgufLinear runs only on MPS"):
+            layer(x)
+
+
+@require_torch
+@require_gguf
+class FromPretrainedDequantPathTest(unittest.TestCase):
+    """`gguf_file=` + explicit `dtype=` → dequant path; no GgufLinear in the model."""
+
+    def test_dequant_on_load(self):
+        # Pull a tiny GGUF off the Hub. The dequant path runs on CPU.
+        from transformers import AutoModelForCausalLM
+
+        model = AutoModelForCausalLM.from_pretrained(
+            "unsloth/Llama-3.2-1B-Instruct-GGUF",
+            gguf_file="Llama-3.2-1B-Instruct-Q4_K_M.gguf",
+            dtype=torch.bfloat16,
+            device_map="cpu",
         )
-        # zero the clone so the reload is observable
-        clone.qweight.zero_()
-        if clone.bias is not None:
-            clone.bias.data.zero_()
-        clone.load_state_dict(sd)
-        return clone, sd
-
-    def test_q4_0_state_dict_roundtrip(self):
-        M, K = 64, 256
-        qb = _random_q4_0_bytes(M, K, seed=11)
-        layer = GgufLinear(K, M, "Q4_0", bias=False)
-        layer.qweight.copy_(torch.frombuffer(bytearray(qb), dtype=torch.uint8))
-
-        clone, sd = self._roundtrip_state_dict(layer)
-
-        # state_dict carries the raw bytes verbatim.
-        self.assertTrue(torch.equal(sd["qweight"], layer.qweight))
-        # And the extra state carries the quant_type.
-        self.assertIn("_extra_state", sd)
-        self.assertEqual(sd["_extra_state"]["quant_type"], "Q4_0")
-        # Reloaded module has identical bytes.
-        self.assertTrue(torch.equal(clone.qweight, layer.qweight))
-
-        # Forward output of the clone matches the original bit-for-bit.
-        torch.manual_seed(3)
-        x = torch.randn(4, K) * 0.1
-        self.assertTrue(torch.equal(layer(x), clone(x)))
-
-    def test_q4_K_state_dict_with_bias(self):
-        M, K = 64, 256
-        qb = _random_q4_K_bytes(M, K, seed=13)
-        layer = GgufLinear(K, M, "Q4_K", bias=True)
-        layer.qweight.copy_(torch.frombuffer(bytearray(qb), dtype=torch.uint8))
-        layer.bias.data.copy_(torch.linspace(-0.5, 0.5, M))
-
-        clone, sd = self._roundtrip_state_dict(layer)
-
-        self.assertIn("bias", sd)
-        self.assertTrue(torch.equal(clone.bias, layer.bias))
-        torch.manual_seed(5)
-        x = torch.randn(2, K) * 0.1
-        self.assertTrue(torch.equal(layer(x), clone(x)))
-
-    def test_quant_type_mismatch_raises(self):
-        M, K = 64, 256
-        qb = _random_q4_0_bytes(M, K, seed=17)
-        layer = GgufLinear(K, M, "Q4_0", bias=False)
-        layer.qweight.copy_(torch.frombuffer(bytearray(qb), dtype=torch.uint8))
-        sd = layer.state_dict()
-
-        # Loading Q4_0 state into a Q4_K-configured module must fail loudly
-        # rather than silently dequant garbage.
-        wrong = GgufLinear(K, M, "Q4_K", bias=False)
-        with self.assertRaises((ValueError, RuntimeError)):
-            wrong.load_state_dict(sd)
-
-    def test_disk_roundtrip_via_torch_save(self):
-        """torch.save / torch.load on the state_dict — same path save_pretrained
-        uses internally for non-safetensor backends."""
-        import io
-
-        M, K = 64, 256
-        qb = _random_q4_K_bytes(M, K, seed=23)
-        layer = GgufLinear(K, M, "Q4_K", bias=False)
-        layer.qweight.copy_(torch.frombuffer(bytearray(qb), dtype=torch.uint8))
-
-        buf = io.BytesIO()
-        torch.save(layer.state_dict(), buf)
-        buf.seek(0)
-        sd = torch.load(buf, weights_only=False)
-
-        clone = GgufLinear(K, M, "Q4_K", bias=False)
-        clone.qweight.zero_()
-        clone.load_state_dict(sd)
-
-        torch.manual_seed(11)
-        x = torch.randn(3, K) * 0.1
-        self.assertTrue(torch.equal(layer(x), clone(x)))
+        n_gguf = sum(1 for _, mod in model.named_modules() if isinstance(mod, GgufLinear))
+        self.assertEqual(n_gguf, 0)
+        # First projection weight came through dequant.
+        q = next(p for name, p in model.named_parameters() if name.endswith("q_proj.weight"))
+        self.assertEqual(q.dtype, torch.bfloat16)
 
 
 @require_torch
 @require_gguf
-class GgufQwen2MoeExpertsSerializationTest(unittest.TestCase):
-    """Round-trip ``GgufQwen2MoeExperts`` — including per-projection quant types
-    that mixed-precision (e.g. Q4_K_M) files exercise."""
+class FromPretrainedOnTheFlyTest(unittest.TestCase):
+    """`quantization_config=GgufQuantizeConfig(...)` → meta-time swap, GGUFQuantize op packs bytes."""
 
-    @staticmethod
-    def _build_module(gate="Q4_K", up="Q4_K", down="Q8_0", num_experts=4):
-        from transformers.integrations.gguf_linear import GgufQwen2MoeExperts
+    def test_on_the_fly_swap(self):
+        from transformers import AutoModelForCausalLM, GgufQuantizeConfig
 
-        class _Cfg:
-            pass
-
-        cfg = _Cfg()
-        cfg.num_experts = num_experts
-        cfg.hidden_size = 256
-        cfg.moe_intermediate_size = 256
-        cfg.hidden_act = "silu"
-        return GgufQwen2MoeExperts(cfg, gate_quant=gate, up_quant=up, down_quant=down)
-
-    @staticmethod
-    def _fill_random(m, seed=0):
-        rng = np.random.default_rng(seed)
-        for name in ("gate_proj_q", "up_proj_q", "down_proj_q"):
-            buf = getattr(m, name)
-            rnd = torch.from_numpy(rng.integers(0, 256, size=buf.shape, dtype=np.uint8))
-            buf.copy_(rnd)
-
-    def test_state_dict_roundtrip_mixed_quants(self):
-        # Q4_K_M-style: gate/up are Q4_K, down is Q8_0.
-        m = self._build_module(gate="Q4_K", up="Q4_K", down="Q8_0", num_experts=3)
-        self._fill_random(m, seed=31)
-
-        sd = m.state_dict()
-        # Per-projection bytes and per-projection quant types both ride along.
-        self.assertIn("gate_proj_q", sd)
-        self.assertIn("up_proj_q", sd)
-        self.assertIn("down_proj_q", sd)
-        self.assertIn("_extra_state", sd)
-        self.assertEqual(sd["_extra_state"]["gate_quant"], "Q4_K")
-        self.assertEqual(sd["_extra_state"]["up_quant"], "Q4_K")
-        self.assertEqual(sd["_extra_state"]["down_quant"], "Q8_0")
-
-        clone = self._build_module(gate="Q4_K", up="Q4_K", down="Q8_0", num_experts=3)
-        for name in ("gate_proj_q", "up_proj_q", "down_proj_q"):
-            getattr(clone, name).zero_()
-        clone.load_state_dict(sd)
-        for name in ("gate_proj_q", "up_proj_q", "down_proj_q"):
-            self.assertTrue(torch.equal(getattr(clone, name), getattr(m, name)))
-
-    def test_state_dict_roundtrip_uniform_q4_K(self):
-        m = self._build_module(gate="Q4_K", up="Q4_K", down="Q4_K", num_experts=2)
-        self._fill_random(m, seed=37)
-        sd = m.state_dict()
-
-        clone = self._build_module(gate="Q4_K", up="Q4_K", down="Q4_K", num_experts=2)
-        clone.load_state_dict(sd)
-        for name in ("gate_proj_q", "up_proj_q", "down_proj_q"):
-            self.assertTrue(torch.equal(getattr(clone, name), getattr(m, name)))
-
-    def test_quant_type_mismatch_raises(self):
-        m = self._build_module(gate="Q4_K", up="Q4_K", down="Q8_0", num_experts=2)
-        self._fill_random(m, seed=41)
-        sd = m.state_dict()
-        # Constructed with the wrong ``down_quant`` — must reject.
-        wrong = self._build_module(gate="Q4_K", up="Q4_K", down="Q4_K", num_experts=2)
-        with self.assertRaises((ValueError, RuntimeError)):
-            wrong.load_state_dict(sd)
-
-
-def _build_synthetic_llama_gguf(path, *, H=64, I=128, L=2, V=256, num_heads=2, seed=0):
-    """Write a tiny well-formed Q4_0 llama GGUF file for round-trip tests."""
-    import gguf
-    from gguf import GGMLQuantizationType as Q
-    from gguf import GGUFWriter
-
-    rng = np.random.default_rng(seed)
-    w = GGUFWriter(path, arch="llama")
-    w.add_block_count(L)
-    w.add_embedding_length(H)
-    w.add_feed_forward_length(I)
-    w.add_head_count(num_heads)
-    w.add_head_count_kv(num_heads)
-    w.add_context_length(64)
-    w.add_rope_dimension_count(H // num_heads)
-    w.add_layer_norm_rms_eps(1e-6)
-    w.add_vocab_size(V)
-    w.add_tokenizer_model("gpt2")
-    w.add_token_list(["<unk>"] * V)
-    w.add_token_types([1] * V)
-    w.add_token_merges([])
-
-    def add_q40(name, shape):
-        a = rng.standard_normal(shape).astype(np.float32) * 0.1
-        w.add_tensor(name, gguf.quants.quantize(a, Q.Q4_0), raw_dtype=Q.Q4_0)
-
-    def add_f32(name, shape):
-        a = rng.standard_normal(shape).astype(np.float32) * 0.1
-        w.add_tensor(name, a, raw_dtype=Q.F32)
-
-    add_q40("token_embd.weight", (V, H))
-    add_f32("output_norm.weight", (H,))
-    add_q40("output.weight", (V, H))
-    for i in range(L):
-        for kind in ("attn_q", "attn_k", "attn_v", "attn_output"):
-            add_q40(f"blk.{i}.{kind}.weight", (H, H))
-        for kind in ("ffn_gate", "ffn_up"):
-            add_q40(f"blk.{i}.{kind}.weight", (I, H))
-        add_q40(f"blk.{i}.ffn_down.weight", (H, I))
-        add_f32(f"blk.{i}.attn_norm.weight", (H,))
-        add_f32(f"blk.{i}.ffn_norm.weight", (H,))
-
-    w.write_header_to_file()
-    w.write_kv_data_to_file()
-    w.write_tensors_to_file()
-    w.close()
-    return path
+        model = AutoModelForCausalLM.from_pretrained(
+            "HuggingFaceTB/SmolLM2-135M",
+            dtype=torch.float32,
+            quantization_config=GgufQuantizeConfig(quant_type="Q4_0", modules_to_convert=["model.layers.*.mlp.*"]),
+        )
+        gguf_linears = [name for name, mod in model.named_modules() if isinstance(mod, GgufLinear)]
+        # 30 layers × 3 mlp linears = 90.
+        self.assertEqual(len(gguf_linears), 90)
+        # The buffer is uint8 and non-empty after the load.
+        sample = model.get_submodule(gguf_linears[0]).weight
+        self.assertEqual(sample.dtype, torch.uint8)
+        self.assertGreater(sample.numel(), 0)
+        self.assertTrue(bool((sample != 0).any()), "weight should have been populated by GGUFQuantize")
 
 
 @require_torch
 @require_gguf
-class GgufSaveRoundtripTest(unittest.TestCase):
-    """``hf_quantizer.save_gguf`` writes a .gguf file that, on reload, produces
-    the same forward output as the original. The byte-preserved path is the
-    happy path: same file size, bit-identical for the per-tensor blob ordering."""
+class GenerationDefaultsTest(unittest.TestCase):
+    """`postprocess_model` should default `cache_implementation` + `compile_config`
+    when the GgufLinear swap is in effect."""
 
-    def _build_and_load(self, tmpdir, name="src.gguf"):
+    def test_defaults_applied(self):
+        if not torch.backends.mps.is_available():
+            self.skipTest("GgufLinear swap only triggers on MPS")
         from transformers import AutoModelForCausalLM
+        from transformers.generation.configuration_utils import CompileConfig
 
-        path = os.path.join(tmpdir, name)
-        _build_synthetic_llama_gguf(path)
-        model = AutoModelForCausalLM.from_pretrained(tmpdir, gguf_file=name, gguf_linear=True)
-        return path, model
+        model = AutoModelForCausalLM.from_pretrained(
+            "unsloth/Llama-3.2-1B-Instruct-GGUF",
+            gguf_file="Llama-3.2-1B-Instruct-Q4_K_M.gguf",
+        )
+        self.assertEqual(model.generation_config.cache_implementation, "static")
+        self.assertIsInstance(model.generation_config.compile_config, CompileConfig)
+        self.assertEqual(model.generation_config.compile_config.mode, "reduce-overhead")
 
-    def test_byte_preserved_roundtrip(self):
-        import tempfile
 
-        from transformers import AutoModelForCausalLM
+@require_torch
+@require_gguf
+class SaveRoundtripTest(unittest.TestCase):
+    """`state_dict` → safetensors round-trip via ``save_pretrained`` / ``from_pretrained``."""
 
-        with tempfile.TemporaryDirectory() as tmp:
-            _, m1 = self._build_and_load(tmp)
-            rt = os.path.join(tmp, "rt.gguf")
-            m1.hf_quantizer.save_gguf(m1, rt)
-
-            m2 = AutoModelForCausalLM.from_pretrained(tmp, gguf_file="rt.gguf", gguf_linear=True)
-            torch.manual_seed(7)
-            ids = torch.randint(0, m1.config.vocab_size, (1, 8))
-            y1 = m1(ids).logits
-            y2 = m2(ids).logits
-            err = float((y1 - y2).abs().max())
-            self.assertEqual(err, 0.0, msg=f"byte-preserved roundtrip diverged: {err}")
-
-    def test_quantize_on_save_norms_to_f16(self):
-        """Override the F32 norms to F16 on save — verifies the policy DSL routes
-        the right tensors and the file size shrinks accordingly."""
-        import tempfile
-
-        import gguf
-
-        from transformers import AutoModelForCausalLM
-
-        with tempfile.TemporaryDirectory() as tmp:
-            src, m1 = self._build_and_load(tmp)
-            rt = os.path.join(tmp, "rt-f16.gguf")
-            m1.hf_quantizer.save_gguf(m1, rt, quant_config={r"_norm\.weight$": "F16"})
-
-            # The norm tensors must now read as F16 in the saved file.
-            r = gguf.GGUFReader(rt)
-            for t in r.tensors:
-                if "_norm" in t.name:
-                    self.assertEqual(
-                        t.tensor_type,
-                        gguf.GGMLQuantizationType.F16,
-                        msg=f"{t.name}: expected F16, got {t.tensor_type}",
-                    )
-
-            # Forward equivalence within F32→F16 noise.
-            m2 = AutoModelForCausalLM.from_pretrained(tmp, gguf_file="rt-f16.gguf", gguf_linear=True)
-            torch.manual_seed(7)
-            ids = torch.randint(0, m1.config.vocab_size, (1, 8))
-            err = float((m1(ids).logits - m2(ids).logits).abs().max())
-            self.assertLess(err, 5e-3, msg=f"F32→F16 norm save diverged too much: {err}")
-
-    def test_save_gguf_handles_missing_quantizer(self):
-        """``save_pretrained_gguf`` errors clearly when given a model that
-        wasn't loaded from a .gguf (no hf_to_gguf map, no source rename rules)."""
-        import tempfile
-
-        from transformers.integrations.gguf_save import save_pretrained_gguf
-
-        class _Stub:
-            config = type("C", (), {"model_type": "definitely_not_a_real_arch"})()
-
-            def state_dict(self):
-                return {}
-
-            def named_modules(self):
-                return []
-
-        with tempfile.NamedTemporaryFile(suffix=".gguf") as tf:
-            with self.assertRaises(ValueError):
-                save_pretrained_gguf(_Stub(), tf.name)
+    def test_uint8_buffers_survive_safetensors(self):
+        # Quick check that uint8 buffer values survive a CPU round-trip via state_dict.
+        K, M = 32, 32
+        layer = GgufLinear(in_features=K, out_features=M, quant_type="Q4_0", bias=False)
+        layer.weight.copy_(torch.frombuffer(bytearray(_random_q4_0_bytes(M, K, seed=11)), dtype=torch.uint8))
+        with tempfile.TemporaryDirectory():
+            sd = layer.state_dict()
+            clone = GgufLinear(in_features=K, out_features=M, quant_type="Q4_0", bias=False)
+            clone.load_state_dict(sd)
+            self.assertTrue(torch.equal(layer.weight, clone.weight))
 
 
 if __name__ == "__main__":

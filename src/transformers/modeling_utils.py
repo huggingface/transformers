@@ -573,6 +573,35 @@ def _maybe_auto_detect_gguf(pretrained_model_name_or_path: str, **download_kwarg
     return ggufs[0] if len(ggufs) == 1 else None
 
 
+def _resolve_gguf_target_device(device_map) -> str:
+    """Infer the dominant device.type for the upcoming load — used by the GGUF
+    branch to decide whether to keep weights native (MPS) or dequantize on load
+    (CUDA / CPU until matching GGUF kernels exist for those backends)."""
+    if device_map is None:
+        if torch.backends.mps.is_available():
+            return "mps"
+        if torch.cuda.is_available():
+            return "cuda"
+        return "cpu"
+    if isinstance(device_map, str):
+        if device_map in ("auto", "balanced", "balanced_low_0", "sequential"):
+            if torch.backends.mps.is_available():
+                return "mps"
+            if torch.cuda.is_available():
+                return "cuda"
+            return "cpu"
+        return torch.device(device_map).type
+    if isinstance(device_map, dict):
+        for dev in device_map.values():
+            if dev in (None, "disk"):
+                continue
+            try:
+                return torch.device(dev).type
+            except (TypeError, RuntimeError):
+                continue
+    return "cpu"
+
+
 def _get_resolved_checkpoint_files(
     pretrained_model_name_or_path: str | os.PathLike | None,
     variant: str | None,
@@ -4083,7 +4112,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         allow_all_kernels = kwargs.pop("allow_all_kernels", False)
-        use_kernels = kwargs.pop("use_kernels", False)
+        # ``use_kernels`` defaults to True implicitly for the GGUF path (see
+        # below) — the metal kernels are the only fast inference path, so the
+        # default should match the typical user intent.
+        use_kernels = kwargs.pop("use_kernels", None)
         kernel_config = kwargs.pop("kernel_config", None)
         key_mapping = kwargs.pop("key_mapping", None)
 
@@ -4212,6 +4244,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     "loaded from GGUF files."
                 )
 
+        # Finalize ``use_kernels`` default for non-GGUF callers (the GGUF
+        # branch above already set it to True implicitly when None).
+        if use_kernels is None:
+            use_kernels = False
+
         if kernel_config is not None and not use_kernels:
             logger.warning_once(
                 "A kernel_config was provided but use_kernels is False; setting use_kernels=True automatically. To suppress this warning, explicitly set use_kernels to True."
@@ -4233,26 +4270,27 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if gguf_file:
             from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
             from .quantizers.quantizer_gguf import GGUFQuantizer
-            from .utils.quantization_config import GgufQuantizeConfig
 
             gguf_parsed = load_gguf_checkpoint(checkpoint_files[0], return_tensors=True)
             state_dict = gguf_parsed["tensors"]
-            # Default: keep weights at native GGUF quant and route matmuls
-            # through Metal kernels (~llama.cpp parity at decode on Apple
-            # Silicon). If the caller passed an explicit ``dtype=`` argument,
-            # dequantize during load to that dtype instead.
-            #
-            # A ``GgufQuantizeConfig`` is attached purely so the rest of the
-            # loader (which dereferences ``hf_quantizer.quantization_config``)
-            # has a method tag — the per-tensor quant info lives on
-            # ``gguf_parsed['tensors']``, not on this config.
+            # For the GGUF path the metal kernels are the only fast inference
+            # route, so default ``use_kernels=True`` when the caller didn't say
+            # otherwise — explicit ``use_kernels=False`` (or a non-MPS device)
+            # falls back to dequant-on-load through the rename pipeline.
+            if use_kernels is None:
+                use_kernels = True
+            target_device = _resolve_gguf_target_device(device_map)
+            # TODO: lift the MPS-only gate once CUDA / CPU GGUF kernels exist
+            # (we have a Metal kernels package today; matching CUDA kernels are
+            # planned). For now MPS is the only fast path.
+            on_mps = target_device == "mps"
+            linear_mode = on_mps and bool(use_kernels) and not dtype_was_explicit
             hf_quantizer = GGUFQuantizer(
                 weight_mapping=gguf_parsed.get("weight_mapping", []),
-                linear_mode=not dtype_was_explicit,
+                linear_mode=linear_mode,
                 gguf_tensors=gguf_parsed["tensors"],
                 gguf_kv=gguf_parsed.get("raw_kv", {}),
             )
-            hf_quantizer.quantization_config = GgufQuantizeConfig()
 
         is_quantized = hf_quantizer is not None
 

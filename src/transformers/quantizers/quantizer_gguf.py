@@ -1,48 +1,42 @@
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-"""GGUF quantizer.
+"""GGUF quantizer — mirrors the FP8 quantizer pattern.
 
-The state-dict produced by ``load_gguf_checkpoint`` contains
-:class:`GGUFQuantizedTensor` instances — ``torch.Tensor`` subclasses that
-carry raw uint8 bytes plus the per-tensor ``quant_type`` metadata. They flow
-through the standard loader unchanged (``.to(device)`` preserves the
-subclass via ``__torch_function__``), and the :class:`GGUFDequantize` op
-injected at the head of every ``WeightConverter`` produces the final
-floating-point tensor — same pattern as :class:`Fp8Dequantize` for FP8.
+Three load paths:
+
+* ``from_pretrained(repo, gguf_file=...)`` on MPS with ``use_kernels=True``:
+  modules swap to :class:`GgufLinear` / :class:`GgufExperts` at meta time.
+  Bytes flow through the existing rename pipeline, then a final byte-copy
+  step lands the raw GGUF blocks in the swapped buffers (TODO: integrate via
+  a target-aware ConversionOp so the post-load copy goes away entirely).
+* ``from_pretrained(repo, gguf_file=..., dtype=...)`` or non-MPS / no kernels:
+  ``GGUFDequantize`` is injected and the model loads as a standard
+  ``nn.Linear`` chain in the chosen dtype.
+* ``from_pretrained(repo, quantization_config=GgufQuantizeConfig(...))``:
+  load fp16/bf16 normally, then ``GGUFQuantize`` (the ``GGUFDequantize``
+  reverse op) quantizes matching Linears on the fly and the meta-time swap
+  drops in :class:`GgufLinear` modules.
 """
 
 from __future__ import annotations
+
+import logging
 
 import torch
 
 from .base import HfQuantizer
 
 
-class GGUFQuantizer(HfQuantizer):
-    """GGUF quantizer with two construction modes:
+logger = logging.getLogger(__name__)
 
-    * ``from_pretrained(..., gguf_file=...)`` (or auto-detected ``.gguf`` in the
-      repo): ``modeling_utils`` builds the quantizer directly from a parsed
-      ``gguf`` file and passes ``weight_mapping``/``gguf_tensors`` here. Default
-      keeps weights at native quant (``linear_mode=True``) and runs Metal
-      kernels via :class:`GgufLinear`. If the caller passed ``dtype=...``
-      explicitly, dequantize-on-load instead.
-    * ``from_pretrained(..., quantization_config=GgufQuantizeConfig(...))``:
-      load an fp16/bf16 model normally, then quantize the matching
-      :class:`nn.Linear` modules on the fly via ``gguf-py`` and swap them for
-      :class:`GgufLinear`.
-    """
+
+class GGUFQuantizer(HfQuantizer):
+    """GGUF quantizer."""
 
     requires_calibration = False
 
@@ -55,54 +49,47 @@ class GGUFQuantizer(HfQuantizer):
         gguf_kv=None,
         **kwargs,
     ):
-        # ``pre_quantized`` controls whether the loader expects raw bytes from
-        # disk. The ``gguf_file=`` path is pre-quantized; the on-the-fly path
-        # (driven by ``GgufQuantizeConfig``) loads a normal fp16/bf16 checkpoint
-        # and quantizes after weight loading.
         on_the_fly = quantization_config is not None and getattr(quantization_config, "quant_method", None) == "gguf"
+        if quantization_config is None:
+            # ``gguf_file=`` path: the base class needs a config to record on the
+            # model so ``model.quantization_method`` etc. can be set. Attach the
+            # default so callers don't have to pass one explicitly.
+            from ..utils.quantization_config import GgufQuantizeConfig
+
+            quantization_config = GgufQuantizeConfig()
         kwargs.setdefault("pre_quantized", not on_the_fly)
         super().__init__(quantization_config=quantization_config, **kwargs)
         self.weight_mapping = list(weight_mapping or [])
-        # ``linear_mode``: when True, the post-load step swaps each
-        # ``nn.Linear`` that has a supported quant type for a :class:`GgufLinear`
-        # running matmul/matvec on the raw bytes (kernels-community Metal kernels,
-        # ~llama.cpp parity on Apple Silicon decode). On-the-fly mode is always
-        # linear_mode.
+        # ``linear_mode``: when True, modules are swapped to GgufLinear / GgufExperts
+        # at meta time and run the metal kernels on raw bytes. Always True for the
+        # on-the-fly path (the quant config implies we want the kernels).
         self.linear_mode = bool(linear_mode) or on_the_fly
         self.on_the_fly = on_the_fly
-        # ``gguf_tensors``: ``{gguf_name: GGUFQuantizedTensor}`` map from
-        # :func:`load_gguf_checkpoint`. Empty for on-the-fly mode.
+        # ``{gguf_name: GGUFQuantizedTensor}`` map populated by modeling_utils for
+        # the ``gguf_file=`` path. Empty for on-the-fly.
         self.gguf_tensors: dict = dict(gguf_tensors or {})
-        # Populated during ``_process_model_after_weight_loading`` so
-        # ``integrations.gguf_save.save_pretrained_gguf`` can run the rename in
-        # reverse without re-deriving the forward map.
+        # Reverse rename map (hf_target -> gguf_source), filled lazily during the
+        # post-load byte-copy step. Consumed by ``save_gguf``.
         self.hf_to_gguf: dict[str, str] = {}
-        # Raw GGUF key-value snapshot from the source file ({key: (value, gguf_value_type)}).
-        # Replayed verbatim by ``save_pretrained_gguf`` so the round-trip preserves
-        # block_count / head_count / tokenizer / quantization_version etc.
+        # Raw GGUF key-value snapshot from the source file (replayed verbatim by
+        # ``save_gguf`` so the round-trip preserves tokenizer / block_count / ...).
         self.gguf_kv: dict = dict(gguf_kv or {})
+
+    # ---- HfQuantizer hooks ----------------------------------------------------
 
     @property
     def renaming_dequantize_op(self):
-        """Op the loader attaches to freshly-constructed ``WeightRenaming``s so the
-        rename path produces dequantized fp32 (not raw GGUF bytes cast to fp32)."""
+        """Op the rename pipeline attaches to ``WeightRenaming`` entries so the
+        renamed key lands as a regular floating-point tensor rather than a raw
+        uint8 ``GGUFQuantizedTensor``."""
         from ..gguf_conversion_ops import GGUFDequantize
 
-        return GGUFDequantize()
+        return GGUFDequantize(self)
 
     def update_weight_conversions(self, weight_conversions):
-        """Prepend the GGUF→HF rename table and inject ``GGUFDequantize`` at the head of every
-        ``WeightConverter`` — same pattern as ``Fp8Quantizer.update_weight_conversions``.
-
-        ``WeightRenaming`` entries also need dequant on the rename path: ``WeightRenaming.convert``
-        returns the source ``GGUFQuantizedTensor`` directly under the renamed key, and
-        ``set_param_for_module`` skips the shape check when a quantizer is active, so otherwise
-        ``v_proj`` / ``o_proj`` / FFN projs / RMSNorms / embeddings would land in the model as
-        uint8-bytes-cast-to-float32 with the wrong (byte-) shape. Attaching ``GGUFDequantize``
-        as the ``quantization_operation`` on each renaming routes them through the dequant op
-        (``WeightRenaming.convert`` runs ``self.quantization_operation`` when ``hf_quantizer`` is
-        active), producing the correctly-expanded fp32 tensor.
-        """
+        """Inject :class:`GGUFDequantize` at the head of every weight converter +
+        attach it as the ``quantization_operation`` on every rename — mirrors
+        ``Fp8Quantizer.update_weight_conversions``."""
         from ..core_model_loading import WeightConverter, WeightRenaming
         from ..gguf_conversion_ops import GGUFDequantize
 
@@ -112,232 +99,72 @@ class GGUFQuantizer(HfQuantizer):
                 conv = WeightConverter(
                     source_patterns=conv._original_source_patterns,
                     target_patterns=conv._original_target_patterns,
-                    operations=[GGUFDequantize(), *conv.operations],
+                    operations=[GGUFDequantize(self), *conv.operations],
                 )
             elif isinstance(conv, WeightRenaming):
-                conv.quantization_operation = GGUFDequantize()
+                conv.quantization_operation = GGUFDequantize(self)
             injected.append(conv)
         return injected + list(weight_conversions)
 
-    def param_needs_quantization(self, model, param_name, **kwargs):
-        # TODO: for on the fly quantization :)
-        return False
+    def get_quantize_ops(self):
+        """On-the-fly path: the loader calls this when ``param_needs_quantization``
+        returns True. Returns the :class:`GGUFQuantize` op that packs a live
+        fp16/bf16 weight into GGUF block bytes."""
+        from ..gguf_conversion_ops import GGUFQuantize
 
-    def preprocess_model(self, model, **kwargs):
-        # On-the-fly mode runs the base hook so ``is_quantized`` /
-        # ``quantization_method`` get set. The ``gguf_file=`` path has no
-        # ``quantization_config`` and skips the base hook (the swap happens
-        # later in ``_process_model_after_weight_loading``).
-        if self.on_the_fly:
-            return super().preprocess_model(model, **kwargs)
-        return None
+        return GGUFQuantize(self)
 
-    def _process_model_before_weight_loading(self, model, **kwargs):
-        pass
-
-    def postprocess_model(self, model, **kwargs):
-        # On-the-fly mode goes through the base postprocess (which sets the
-        # quantization config on ``model.config``). The ``gguf_file=`` path
-        # has no config to record, so we just fire the after-load hook to
-        # perform the ``nn.Linear`` → ``GgufLinear`` swap.
-        if self.on_the_fly:
-            return super().postprocess_model(model, **kwargs)
-        return self._process_model_after_weight_loading(model, **kwargs)
-
-    def _process_model_after_weight_loading(self, model, **kwargs):
-        from ..core_model_loading import WeightConverter, WeightRenaming, rename_source_key
-
-        # On-the-fly mode: model loaded in fp16/bf16; quantize matching Linear
-        # weights to GGUF bytes and swap for GgufLinear.
-        if self.on_the_fly:
-            self._quantize_on_the_fly(model)
-            return
-
-        if not self.gguf_tensors:
-            return
-        renamings = [e for e in self.weight_mapping if isinstance(e, WeightRenaming)]
-        converters = [e for e in self.weight_mapping if isinstance(e, WeightConverter)]
-        meta_state_dict = model.state_dict()
-        prefix = getattr(model, "base_model_prefix", "") or ""
-
-        # Always compute the hf→gguf map (needed by save_pretrained_gguf even
-        # when ``linear_mode=False``).
-        for gguf_name in self.gguf_tensors:
-            try:
-                hf_name, _ = rename_source_key(
-                    gguf_name,
-                    renamings,
-                    converters,
-                    prefix=prefix,
-                    meta_state_dict=meta_state_dict,
-                )
-            except Exception:
-                continue
-            self.hf_to_gguf[hf_name] = gguf_name
-
-        if not self.linear_mode:
-            return
-
-        from ..integrations.gguf_linear import replace_with_gguf_linear
-
-        weight_info_by_name: dict[str, dict] = {}
-        for gguf_name, tensor in self.gguf_tensors.items():
-            qt = getattr(tensor, "quant_type", None)
-            if qt is None:
-                continue
-            try:
-                hf_name, _ = rename_source_key(
-                    gguf_name,
-                    renamings,
-                    converters,
-                    prefix=prefix,
-                    meta_state_dict=meta_state_dict,
-                )
-            except Exception:
-                continue
-            # Older GGUFs (llama-1 / llama-2 era) store attn_q / attn_k in
-            # llama.cpp's head-permuted layout — applying the permute reversal
-            # here is correct.  Modern exporters for Qwen2/3-MoE (and a few
-            # others) instead ship Q/K already in HF layout; reverse-permuting
-            # those corrupts the matmul ~140% relative.  Skip whenever the
-            # rename pipeline didn't go through ``_ROPE_ATTN_CONVERTERS`` (the
-            # only path that signals "this arch was permuted on export").
-            #
-            # NB: ``target_patterns`` may be a str or a list (multi-input fused
-            # converters carry a list of targets) — normalize before scanning.
-            arch_uses_rope_permute = False
-            for c in converters:
-                if not hasattr(c, "operations"):
-                    continue
-                if not any(type(op).__name__.startswith("ReversePermuteAttn") for op in c.operations):
-                    continue
-                tp = c.target_patterns
-                targets = tp if isinstance(tp, (list, tuple)) else [tp]
-                if any(t == ".self_attn.q_proj.weight" or t == ".self_attn.k_proj.weight" for t in targets):
-                    arch_uses_rope_permute = True
-                    break
-            permute = None
-            if arch_uses_rope_permute:
-                if ".attn_q." in gguf_name:
-                    permute = "q"
-                elif ".attn_k." in gguf_name:
-                    permute = "k"
-            weight_info_by_name[hf_name] = {
-                "quant_type": qt.name if hasattr(qt, "name") else str(qt),
-                "bytes": tensor,
-                "permute": permute,
-            }
-
-        replace_with_gguf_linear(model, weight_info_by_name)
-        self._swap_moe_experts(model, renamings, converters, meta_state_dict, prefix)
-
-    def _quantize_on_the_fly(self, model):
-        """On-the-fly quantize path driven by :class:`GgufQuantizeConfig`.
-
-        Walk the model, quantize each :class:`nn.Linear` whose name matches
-        ``modules_to_convert`` (glob), and swap for :class:`GgufLinear`. No
-        rename table / no GGUF file involved — bytes come straight out of
-        ``gguf.quants.quantize`` applied to the live fp16/bf16 weight.
-        """
-        import fnmatch
-        from typing import cast
-
-        import gguf
+    def param_needs_quantization(self, model, param_name, **kwargs) -> bool:
+        """Only the on-the-fly path needs per-param quantization (re-packing the
+        incoming fp16/bf16 weight into GGUF bytes). The pre-quantized path leans
+        on the rename pipeline + the post-load byte-copy."""
+        if not self.on_the_fly:
+            return False
         import torch.nn as nn
 
+        from ..integrations.gguf_linear import GgufLinear
+
+        target_path = param_name.rsplit(".", 1)[0]
+        try:
+            module = model.get_submodule(target_path)
+        except AttributeError:
+            return False
+        # After ``_process_model_before_weight_loading`` swapped the matching
+        # Linears, those modules are GgufLinear and need quantization. Anything
+        # else (norms, lm_head, embeddings) is left alone.
+        return isinstance(module, GgufLinear) and not param_name.endswith(".bias") and isinstance(module, nn.Module)
+
+    def _process_model_before_weight_loading(self, model, **kwargs):
+        """Swap ``nn.Linear`` / fused-expert modules in place at meta time.
+        Mirrors :func:`replace_with_fp8_linear` in the FP8 quantizer."""
+        if not self.linear_mode:
+            return
         from ..integrations.gguf_linear import replace_with_gguf_linear
-        from ..utils.quantization_config import GgufQuantizeConfig
 
-        cfg = cast(GgufQuantizeConfig, self.quantization_config)
-        quant_type = cfg.quant_type  # validated to Q4_0 / Q8_0 in GgufQuantizeConfig.post_init
-        ggml_type = getattr(gguf.GGMLQuantizationType, quant_type)
-        include = cfg.modules_to_convert
-        exclude = set(cfg.modules_to_not_convert or [])
+        quant_info_by_target = self._build_quant_info(model)
+        replace_with_gguf_linear(model, quant_info_by_target)
 
-        def _matches(name: str) -> bool:
-            if include is None:
-                return True
-            return any(fnmatch.fnmatchcase(name, pat) for pat in include)
-
-        weight_info_by_name: dict[str, dict] = {}
-        for name, mod in model.named_modules():
-            if not isinstance(mod, nn.Linear):
-                continue
-            if not _matches(name) or any(skip in name for skip in exclude):
-                continue
-            fp = mod.weight.detach().to("cpu", dtype=torch.float32).contiguous().numpy()
-            packed = gguf.quants.quantize(fp, ggml_type)
-            weight_info_by_name[f"{name}.weight"] = {
-                "quant_type": quant_type,
-                "bytes": torch.from_numpy(packed.view("uint8").reshape(-1)),
-                "permute": None,
-            }
-
-        replace_with_gguf_linear(model, weight_info_by_name)
+    def postprocess_model(self, model, **kwargs):
+        """Run the base post-process (sets ``is_quantized`` / ``quantization_config``
+        on the model), then for the pre-quantized linear_mode path copy raw GGUF
+        bytes into the swapped buffers, and finally apply good generation defaults
+        when the GgufLinear swap is in effect."""
+        super().postprocess_model(model, **kwargs)
+        if self.linear_mode and self.gguf_tensors:
+            # TODO(arthur): replace this with a target-aware ConversionOp so the
+            # rename pipeline lands bytes directly into the GgufLinear/GgufExperts
+            # buffers and we can drop this final post-load fix-up entirely.
+            self._copy_bytes_to_swapped_modules(model)
+        if self.linear_mode:
+            self._apply_generation_defaults(model)
+        return model
 
     def save_gguf(self, model, path: str, *, quant_config: dict | None = None) -> str:
-        """Write the model back to a .gguf file.
-
-        Delegate to :func:`transformers.integrations.gguf_save.save_pretrained_gguf`,
-        which uses ``self.hf_to_gguf`` (populated at load time) for the reverse
-        rename. Pass ``quant_config`` to override per-tensor quant types — see
-        the function docstring for the policy DSL.
-        """
-        from ..integrations.gguf_save import save_pretrained_gguf
+        """Write the model back to a .gguf file via the thin reverse-rename
+        driver in :mod:`integrations.gguf_writer`."""
+        from ..integrations.gguf_writer import save_pretrained_gguf
 
         return save_pretrained_gguf(model, path, quant_config=quant_config, quantizer=self)
-
-    def _swap_moe_experts(self, model, renamings, converters, meta_state_dict, prefix):
-        """Detect ``Qwen2MoeExperts``-style fused-expert modules and swap them
-        for the quantized :class:`GgufQwen2MoeExperts` so the expert weights
-        (typically >90% of an MoE model's params) stay native-quantized.
-
-        Matches gate / up / down expert tensors by their GGUF source names
-        (``blk.{N}.ffn_{gate,up,down}_exps.weight``) and groups them by the HF
-        parent path the dequant rename pipeline would have produced for *any*
-        of them (the three share a single ``...mlp.experts`` parent).
-        """
-        from ..core_model_loading import rename_source_key
-        from ..integrations.gguf_linear import replace_qwen2_moe_experts
-
-        # Group the three expert source tensors per layer. Each projection gets
-        # its own quant_type because Q4_K_M (and friends) mix quant types per
-        # tensor — e.g. gate/up = Q4_K but down = Q8_0.
-        kind_to_keys = {
-            "ffn_gate_exps": ("gate_bytes", "gate_quant"),
-            "ffn_up_exps": ("up_bytes", "up_quant"),
-            "ffn_down_exps": ("down_bytes", "down_quant"),
-        }
-        groups: dict[str, dict] = {}
-        for gguf_name, tensor in self.gguf_tensors.items():
-            for kind, (bytes_key, quant_key) in kind_to_keys.items():
-                if f".{kind}." not in gguf_name:
-                    continue
-                try:
-                    hf_name, _ = rename_source_key(
-                        gguf_name,
-                        renamings,
-                        converters,
-                        prefix=prefix,
-                        meta_state_dict=meta_state_dict,
-                    )
-                except Exception:
-                    break
-                parent_path = hf_name.rsplit(".", 1)[0]  # drop ``.weight`` suffix
-                groups.setdefault(parent_path, {})
-                groups[parent_path][bytes_key] = tensor
-                groups[parent_path][quant_key] = (
-                    tensor.quant_type.name if hasattr(tensor.quant_type, "name") else str(tensor.quant_type)
-                )
-                break
-
-        complete = {
-            p: info
-            for p, info in groups.items()
-            if all(k in info for k in ("gate_bytes", "up_bytes", "down_bytes", "gate_quant", "up_quant", "down_quant"))
-        }
-        if complete:
-            replace_qwen2_moe_experts(model, complete)
 
     @property
     def is_trainable(self):
@@ -345,3 +172,185 @@ class GGUFQuantizer(HfQuantizer):
 
     def is_serializable(self):
         return False
+
+    # ---- Internals ------------------------------------------------------------
+
+    def _build_quant_info(self, model) -> dict[str, dict]:
+        """Map each module-name target to its quant info, ready for
+        :func:`replace_with_gguf_linear`. The on-the-fly path uses the config's
+        ``modules_to_convert`` glob + the single ``quant_type``; the
+        ``gguf_file=`` path reads per-tensor quant types out of
+        :attr:`gguf_tensors` and renames source names to module-name targets."""
+        if self.on_the_fly:
+            return self._build_quant_info_on_the_fly(model)
+        return self._build_quant_info_from_gguf_file(model)
+
+    def _build_quant_info_on_the_fly(self, model) -> dict[str, dict]:
+        import fnmatch
+
+        import torch.nn as nn
+
+        cfg = self.quantization_config
+        include = getattr(cfg, "modules_to_convert", None)
+        exclude = set(getattr(cfg, "modules_to_not_convert", None) or [])
+        quant_type = getattr(cfg, "quant_type", "Q4_0")
+        info: dict[str, dict] = {}
+        for name, mod in model.named_modules():
+            if not isinstance(mod, nn.Linear):
+                continue
+            if include is not None and not any(fnmatch.fnmatchcase(name, pat) for pat in include):
+                continue
+            if any(skip in name for skip in exclude):
+                continue
+            info[name] = {"quant_type": quant_type}
+        return info
+
+    def _build_quant_info_from_gguf_file(self, model) -> dict[str, dict]:
+        """For each gguf tensor name, find the corresponding hf module path
+        (Linear or fused-experts) and record its quant type."""
+        from ..core_model_loading import WeightConverter, WeightRenaming, rename_source_key
+        from ..integrations.gguf_linear import gguf_linear_supports
+
+        renamings = [e for e in self.weight_mapping if isinstance(e, WeightRenaming)]
+        converters = [e for e in self.weight_mapping if isinstance(e, WeightConverter)]
+        meta_state_dict = model.state_dict()
+        prefix = getattr(model, "base_model_prefix", "") or ""
+
+        # Map each gguf name to its hf-target param name + quant_type.
+        gguf_to_hf: dict[str, tuple[str, str]] = {}
+        for gguf_name, tensor in self.gguf_tensors.items():
+            qt = getattr(tensor, "quant_type", None)
+            if qt is None or not gguf_linear_supports(qt):
+                continue
+            try:
+                hf_name, _ = rename_source_key(
+                    gguf_name, renamings, converters, prefix=prefix, meta_state_dict=meta_state_dict
+                )
+            except Exception:
+                continue
+            self.hf_to_gguf[hf_name] = gguf_name
+            gguf_to_hf[gguf_name] = (hf_name, qt.name if hasattr(qt, "name") else str(qt))
+
+        # Linear targets: ``<module>.weight`` -> {"quant_type": "Q4_K"}
+        # Experts targets: group ffn_gate_exps / ffn_up_exps / ffn_down_exps by
+        # the shared parent path (``...mlp.experts``).
+        info: dict[str, dict] = {}
+        for gguf_name, (hf_name, quant_type) in gguf_to_hf.items():
+            if ".ffn_gate_exps." in gguf_name:
+                key, slot = hf_name.rsplit(".", 1)[0], "gate_quant"
+            elif ".ffn_up_exps." in gguf_name:
+                key, slot = hf_name.rsplit(".", 1)[0], "up_quant"
+            elif ".ffn_down_exps." in gguf_name:
+                key, slot = hf_name.rsplit(".", 1)[0], "down_quant"
+            else:
+                # Plain Linear weight -> module path (strip ``.weight`` suffix)
+                if hf_name.endswith(".weight"):
+                    info[hf_name[: -len(".weight")]] = {"quant_type": quant_type}
+                continue
+            info.setdefault(key, {})[slot] = quant_type
+        # Drop incomplete experts triples (missing gate/up/down).
+        info = {
+            k: v
+            for k, v in info.items()
+            if "quant_type" in v or all(s in v for s in ("gate_quant", "up_quant", "down_quant"))
+        }
+        return info
+
+    def _copy_bytes_to_swapped_modules(self, model) -> None:
+        """Final fix-up step for the linear_mode path: copy raw GGUF bytes from
+        :attr:`gguf_tensors` into the swapped ``.weight`` / ``gate_proj_q`` /
+        ... buffers. Runs after the standard rename pipeline (which produced
+        dequantized values that go nowhere on swapped targets).
+
+        TODO: replace by a target-aware ``ConversionOp`` that the rename
+        pipeline injects automatically — so the byte path becomes one machinery
+        rather than two.
+        """
+        from ..core_model_loading import WeightConverter, WeightRenaming, rename_source_key
+        from ..integrations.gguf_kernels import bind_id_kernel_refs
+        from ..integrations.gguf_linear import GgufExperts, GgufLinear
+
+        renamings = [e for e in self.weight_mapping if isinstance(e, WeightRenaming)]
+        converters = [e for e in self.weight_mapping if isinstance(e, WeightConverter)]
+        meta_state_dict = model.state_dict()
+        prefix = getattr(model, "base_model_prefix", "") or ""
+
+        for gguf_name, tensor in self.gguf_tensors.items():
+            try:
+                hf_name, _ = rename_source_key(
+                    gguf_name, renamings, converters, prefix=prefix, meta_state_dict=meta_state_dict
+                )
+            except Exception:
+                continue
+
+            # Decide which (module, buffer attribute) the bytes land in.
+            module = None
+            buf_attr = None
+            row_index: int | None = None
+            if ".ffn_gate_exps." in gguf_name or ".ffn_up_exps." in gguf_name or ".ffn_down_exps." in gguf_name:
+                parent = hf_name.rsplit(".", 1)[0]
+                try:
+                    module = model.get_submodule(parent)
+                except AttributeError:
+                    continue
+                if not isinstance(module, GgufExperts):
+                    continue
+                buf_attr = (
+                    "gate_proj_q"
+                    if ".ffn_gate_exps." in gguf_name
+                    else "up_proj_q"
+                    if ".ffn_up_exps." in gguf_name
+                    else "down_proj_q"
+                )
+            else:
+                if not hf_name.endswith(".weight"):
+                    continue
+                parent = hf_name[: -len(".weight")]
+                try:
+                    module = model.get_submodule(parent)
+                except AttributeError:
+                    continue
+                if not isinstance(module, GgufLinear):
+                    continue
+                buf_attr = "weight"
+
+            src = tensor.detach().contiguous().view(torch.uint8).reshape(-1)
+            dst = getattr(module, buf_attr)
+            if dst.numel() != src.numel():
+                # Mismatched shape — leave the buffer empty; user will see an
+                # obvious failure at first forward instead of silent corruption.
+                continue
+            if row_index is not None:
+                dst[row_index].copy_(src.to(dst.device))
+            else:
+                dst.view(-1).copy_(src.to(dst.device))
+
+            # For experts modules, bind kernels + scratch buffers once all three
+            # projections are filled (the last copy triggers the bind).
+            if isinstance(module, GgufExperts) and buf_attr == "down_proj_q":
+                bind_id_kernel_refs(module)
+            elif isinstance(module, GgufLinear):
+                module._bind_kernels()
+
+    def _apply_generation_defaults(self, model) -> None:
+        """Set ``cache_implementation`` + ``compile_config`` defaults on
+        ``model.generation_config`` so the user gets good performance out of the
+        box. Doesn't overwrite values the user already set."""
+        from ..generation.configuration_utils import CompileConfig
+
+        gc = getattr(model, "generation_config", None)
+        if gc is None:
+            return
+        changed = []
+        if getattr(gc, "cache_implementation", None) is None:
+            gc.cache_implementation = "static"
+            changed.append('cache_implementation="static"')
+        if getattr(gc, "compile_config", None) is None:
+            gc.compile_config = CompileConfig(mode="reduce-overhead", dynamic=False)
+            changed.append('compile_config=CompileConfig(mode="reduce-overhead", dynamic=False)')
+        if changed:
+            logger.info(
+                "GGUFQuantizer: defaulting generation_config to %s for the GgufLinear kernel path. "
+                "Pass values explicitly on `model.generation_config` to override.",
+                ", ".join(changed),
+            )

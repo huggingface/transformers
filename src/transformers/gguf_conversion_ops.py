@@ -58,6 +58,17 @@ class GGUFDequantize(ConversionOps):
     MPS / CUDA dequant happens on-device.
     """
 
+    def __init__(self, hf_quantizer=None):
+        # Quantizer reference is only needed for the reverse op (re-quantize on save).
+        self.hf_quantizer = hf_quantizer
+
+    def __deepcopy__(self, memo):
+        # ``WeightConverter`` deep-copies its op list during loading. The default
+        # deepcopy would walk ``self.hf_quantizer`` → ``gguf_tensors`` (which
+        # contains :class:`GGUFQuantizedTensor` subclasses that lack ``__deepcopy__``).
+        # We don't need a deep copy of the quantizer anyway — share the reference.
+        return GGUFDequantize(self.hf_quantizer)
+
     def convert(
         self,
         input_dict,
@@ -79,7 +90,54 @@ class GGUFDequantize(ConversionOps):
 
     @property
     def reverse_op(self):
-        raise NotImplementedError("GGUFDequantize is one-way")
+        return GGUFQuantize(self.hf_quantizer)
+
+
+class GGUFQuantize(ConversionOps):
+    """Reverse op of :class:`GGUFDequantize`. Re-packs a floating-point tensor
+    into GGUF block bytes via ``gguf.quants.quantize``. Used on the save path
+    to round-trip a dequantized / on-the-fly-quantized model back to a ``.gguf``
+    file. Mirrors :class:`~transformers.integrations.finegrained_fp8.Fp8Quantize`.
+
+    Today gguf-py only ships a Python quantizer for ``Q4_0`` and ``Q8_0``; other
+    quant types (K-quants, IQ4) are read-only upstream, so attempting to use
+    them here raises with a clear message.
+    """
+
+    def __init__(self, hf_quantizer=None):
+        self.hf_quantizer = hf_quantizer
+
+    def __deepcopy__(self, memo):
+        return GGUFQuantize(self.hf_quantizer)
+
+    def _resolve_quant_type(self) -> str:
+        quant_type = None
+        cfg = getattr(self.hf_quantizer, "quantization_config", None)
+        if cfg is not None:
+            quant_type = getattr(cfg, "quant_type", None)
+        return quant_type or "Q4_0"
+
+    def _quantize_one(self, key: str, value):
+        import gguf
+        import torch
+
+        quant_type = self._resolve_quant_type()
+        ggml_type = getattr(gguf.GGMLQuantizationType, quant_type)
+        # gguf-py expects a numpy array in fp32.
+        fp = value.detach().to("cpu", dtype=torch.float32).contiguous().numpy()
+        packed = gguf.quants.quantize(fp, ggml_type)
+        return {key: torch.from_numpy(packed.view("uint8").reshape(-1))}
+
+    def convert(self, input_dict, **kwargs):
+        result: dict = {}
+        for key, value in input_dict.items():
+            tensor = value[0] if isinstance(value, list) else value
+            result.update(self._quantize_one(key, tensor))
+        return result
+
+    @property
+    def reverse_op(self):
+        return GGUFDequantize(self.hf_quantizer)
 
 
 class Unsqueeze(ConversionOps):
