@@ -188,22 +188,25 @@ def deprecate_attribute(name: str, version: str, additional_message: str = ""):
     def wrapper(cls):
         warn_msg = f"`{cls.__name__}.{name}` is deprecated {version_message}.\n{additional_message}".strip()
 
-        class DeprecatedCls(cls):
-            def __getitem__(self, key):
-                value = super().__getitem__(key)
-                if key == name and value is not None:
-                    warnings.warn(warn_msg, FutureWarning, stacklevel=2)
-                return value
+        original_getitem = cls.__getitem__
+        original_getattribute = cls.__getattribute__
 
-            def __getattribute__(self, key):
-                value = super().__getattribute__(key)
-                if key == name and value is not None:
-                    warnings.warn(warn_msg, FutureWarning, stacklevel=2)
-                return value
+        def __getitem__(cls, key):
+            value = original_getitem(cls, key)
+            if key == name and value is not None:
+                warnings.warn(warn_msg, FutureWarning, stacklevel=2)
+            return value
 
-        DeprecatedCls.__name__ = cls.__name__
-        DeprecatedCls.__qualname__ = cls.__qualname__
-        DeprecatedCls.__doc__ = cls.__doc__
-        return DeprecatedCls
+        def __getattribute__(cls, key):
+            value = original_getattribute(cls, key)
+            if key == name and value is not None:
+                warnings.warn(warn_msg, FutureWarning, stacklevel=2)
+            return value
+
+        # changing the getter causes dynamo failure (not because of raising a warning)
+        if not is_torchdynamo_compiling():
+            cls.__getitem__ = __getitem__
+            cls.__getattribute__ = __getattribute__
+        return cls
 
     return wrapper
