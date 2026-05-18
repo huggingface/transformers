@@ -1171,4 +1171,10 @@ class GraniteSpeechNarForASR(GraniteSpeechNarPreTrainedModel):
         )
 
 
-__all__ = ["GraniteSpeechNarCTCEncoder", "GraniteSpeechNarForASR", "GraniteSpeechNarPreTrainedModel"]
+__all__ = [
+    "GraniteSpeechNarBidirectionalGraniteModel",
+    "GraniteSpeechNarCTCEncoder",
+    "GraniteSpeechNarForASR",
+    "GraniteSpeechNarLanguageModel",
+    "GraniteSpeechNarPreTrainedModel",
+]

@@ -255,7 +255,10 @@ class GraniteSpeechNarBidirectionalGraniteModel(GraniteModel):
     def __init__(self, config):
         super().__init__(config)
         self.layers = nn.ModuleList(
-            [GraniteSpeechNarBidirectionalDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [
+                GraniteSpeechNarBidirectionalDecoderLayer(config, layer_idx)
+                for layer_idx in range(config.num_hidden_layers)
+            ]
         )
 
     def forward(
@@ -638,7 +641,9 @@ class GraniteSpeechNarForASR(GraniteSpeechNarPreTrainedModel):
 
 
 __all__ = [
+    "GraniteSpeechNarBidirectionalGraniteModel",
     "GraniteSpeechNarCTCEncoder",
     "GraniteSpeechNarForASR",
+    "GraniteSpeechNarLanguageModel",
     "GraniteSpeechNarPreTrainedModel",
 ]
