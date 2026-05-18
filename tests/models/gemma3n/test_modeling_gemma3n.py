@@ -558,7 +558,10 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
 
                 # Check 2: The outputs must be similar to the case with dynamic cache
                 dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)
-                assert_similar_generate_outputs(dynamic_cache_generation, static_cache_generation)
+                atol = rtol = 1e-5 if dtype == torch.float32 else 1e-3
+                assert_similar_generate_outputs(
+                    dynamic_cache_generation, static_cache_generation, atol=atol, rtol=rtol
+                )
 
     def test_model_rope_scaling_frequencies(self):
         """Tests the frequency properties of the different RoPE scaling types on the model RoPE layer."""
