@@ -1093,11 +1093,9 @@ class EetqConfig(QuantizationConfigMixin):
 
 
 class GgufQuantizeConfig(QuantizationConfigMixin):
-    """Quantize specific modules of a model into GGUF block bytes
-    (Q4_0 / Q8_0 today via gguf-py; K-quants only readable, no Python re-quantizer
-    upstream). Used either implicitly when ``from_pretrained`` is called with a
-    ``gguf_file=`` argument, or explicitly to convert a fp16/bf16 model on the
-    fly:
+    """Quantize specific modules of a model into GGUF block bytes. Used either
+    implicitly when `from_pretrained` is called with a `gguf_file=`
+    argument, or explicitly to convert a fp16/bf16 model on the fly:
 
     ```python
     AutoModelForCausalLM.from_pretrained(
@@ -1163,7 +1161,7 @@ class GgufQuantizeConfig(QuantizationConfigMixin):
         self.post_init()
 
     # All quant types the GGUF metal kernels handle. The on-the-fly path is
-    # narrower (gguf-py limit) and validated lazily inside ``GGUFQuantize.convert``.
+    # narrower (gguf-py limit) and validated lazily inside `GGUFQuantize.convert`.
     _SUPPORTED_QUANT_TYPES = (
         "Q4_0",
         "Q5_0",
@@ -1183,7 +1181,7 @@ class GgufQuantizeConfig(QuantizationConfigMixin):
             )
 
     def to_dict(self):
-        """Serialise for ``config.json``. ``gguf_file`` is a load-time pointer
+        """Serialise for `config.json`. `gguf_file` is a load-time pointer
         to an external file and shouldn't survive into the saved config — once
         the model is saved as safetensors the bytes live there. Reload picks
         up the swap layout via :attr:`module_quant_types`."""

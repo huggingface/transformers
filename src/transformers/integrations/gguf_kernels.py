@@ -13,7 +13,7 @@ _GGUF_METAL_LOADED = False
 
 
 # Quant-type → kernel-name suffix table. Kernel names like
-# ``mul_mat_<fmt>_f32`` / ``mul_mat_vec_<fmt>_f32`` / ``mul_mat_id_<fmt>_f32``
+# `mul_mat_<fmt>_f32` / `mul_mat_vec_<fmt>_f32` / `mul_mat_id_<fmt>_f32`
 # are deterministic from this, so consumers can build the full name once at
 # construction.
 _KERNEL_FMT: dict[str, str] = {
@@ -31,7 +31,7 @@ _KERNEL_FMT: dict[str, str] = {
 # TODO Change the repo name to kernel community once merged.
 def ensure_metal_kernels(repo: str = "ArthurZ/gguf-kernels"):
     """Return the loaded kernels handle, caching across calls. Raises
-    ``RuntimeError`` on failure — no fallback."""
+    `RuntimeError` on failure — no fallback."""
     global _GGUF_METAL_KERNELS, _GGUF_METAL_LOADED
     if _GGUF_METAL_LOADED:
         if _GGUF_METAL_KERNELS is None:

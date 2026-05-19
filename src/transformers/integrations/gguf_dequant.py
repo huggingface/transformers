@@ -16,17 +16,17 @@ SOURCES:
 https://github.com/city96/ComfyUI-GGUF/blob/main/dequant.py
 https://github.com/huggingface/diffusers/blob/main/src/diffusers/quantizers/gguf/utils.py
 
-The reference dequant in ``gguf-py`` is pure NumPy and operates on grouped
+The reference dequant in `gguf-py` is pure NumPy and operates on grouped
 row slices, which is ~5–20x slower than the same logic expressed as
-``torch`` ops on a ``uint8`` view of the raw bytes (and also avoids the
-``__array_finalize__`` overhead from memmap slicing). The ops here run on
+`torch` ops on a `uint8` view of the raw bytes (and also avoids the
+`__array_finalize__` overhead from memmap slicing). The ops here run on
 CPU or GPU unchanged — pass an already-on-device tensor as input.
 
-``GGUFQuantizedTensor`` is a ``torch.Tensor`` subclass that carries the
-``quant_type`` metadata alongside the raw uint8 bytes, so the standard
-loader can move it to the target device with ``.to(device)`` and the
-``GGUFDequantize`` op in the weight-conversion chain can dequant on-device
-without any GGUF-specific hook in ``core_model_loading``.
+`GGUFQuantizedTensor` is a `torch.Tensor` subclass that carries the
+`quant_type` metadata alongside the raw uint8 bytes, so the standard
+loader can move it to the target device with `.to(device)` and the
+`GGUFDequantize` op in the weight-conversion chain can dequant on-device
+without any GGUF-specific hook in `core_model_loading`.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ from __future__ import annotations
 import torch
 
 
-# Re-exported lazily so ``import transformers`` does not require gguf installed.
+# Re-exported lazily so `import transformers` does not require gguf installed.
 QK_K = 256
 K_SCALE_SIZE = 12
 
@@ -309,7 +309,7 @@ def _dq_IQ4_XS(blocks, block_size, type_size, dtype=None):
 
 def _build_dispatch():
     """Build the {GGMLQuantizationType: kernel} dispatch table lazily so that
-    importing this module does not require ``gguf`` to be installed."""
+    importing this module does not require `gguf` to be installed."""
     import gguf
 
     return {
@@ -340,28 +340,28 @@ def supported_quant_types():
 
 
 class GGUFQuantizedTensor(torch.Tensor):
-    """``torch.Tensor`` subclass that carries the GGUF ``quant_type`` alongside
+    """`torch.Tensor` subclass that carries the GGUF `quant_type` alongside
     raw uint8 bytes.
 
-    Three small affordances make the hot path through ``spawn_materialize`` fast
-    *without* touching ``core_model_loading``:
+    Three small affordances make the hot path through `spawn_materialize` fast
+    *without* touching `core_model_loading`:
 
-    * ``__getitem__(Ellipsis)`` short-circuits — ``tensor[...]`` is a no-op for
-      already-loaded torch bytes; the default goes through ``__torch_function__``
+    * `__getitem__(Ellipsis)` short-circuits — `tensor[...]` is a no-op for
+      already-loaded torch bytes; the default goes through `__torch_function__`
       dispatch for no reason.
-    * ``.to(...)`` defaults ``non_blocking=True``, letting the loader queue the
+    * `.to(...)` defaults `non_blocking=True`, letting the loader queue the
       next transfer / dequant on the same MPS/CUDA stream while the previous
       copy is still in flight.
-    * ``__torch_function__`` only re-wraps on ``Tensor.to`` — the one place we
-      need ``quant_type`` to survive (so the :class:`GGUFDequantize` op in the
+    * `__torch_function__` only re-wraps on `Tensor.to` — the one place we
+      need `quant_type` to survive (so the :class:`GGUFDequantize` op in the
       conversion chain can read it on the device side). All other ops return
       plain tensors, which avoids the per-op wrap overhead.
 
-    Inspired by ``GGUFParameter`` in diffusers.
+    Inspired by `GGUFParameter` in diffusers.
     """
 
     # Class-level default so subclass instances spawned by torch's default
-    # ``__torch_function__`` path (which doesn't invoke our ``__new__``) still
+    # `__torch_function__` path (which doesn't invoke our `__new__`) still
     # have the attribute defined.
     quant_type = None
 
@@ -373,21 +373,21 @@ class GGUFQuantizedTensor(torch.Tensor):
         return instance
 
     def __getitem__(self, key):
-        # ``_materialize_copy`` does ``tensor = tensor[...]`` to pull a memmap
+        # `_materialize_copy` does `tensor = tensor[...]` to pull a memmap
         # safetensors slice into RAM. Our bytes are already a torch.Tensor view,
         # so this is a no-op; short-circuit before torch dispatches via
-        # ``__torch_function__`` (which would re-wrap into a fresh subclass).
+        # `__torch_function__` (which would re-wrap into a fresh subclass).
         if key is Ellipsis:
             return self
         return super().__getitem__(key)
 
     def to(self, *args, **kwargs):
         # The loader queues a dequant op on the destination device right after
-        # this transfer (same MPS/CUDA stream), so ``non_blocking=True`` overlaps
-        # the bytes copy with the next ``.to(device)`` call from another worker.
-        # Skip the inject if ``non_blocking`` was already supplied positionally
-        # (3rd positional after device + dtype) — torch's ``nn.Module._apply``
-        # calls ``Tensor.to`` with positional args on some torch versions and
+        # this transfer (same MPS/CUDA stream), so `non_blocking=True` overlaps
+        # the bytes copy with the next `.to(device)` call from another worker.
+        # Skip the inject if `non_blocking` was already supplied positionally
+        # (3rd positional after device + dtype) — torch's `nn.Module._apply`
+        # calls `Tensor.to` with positional args on some torch versions and
         # would otherwise raise a duplicate-kwarg TypeError.
         if "non_blocking" not in kwargs and len(args) < 3:
             kwargs["non_blocking"] = True
@@ -408,8 +408,8 @@ class GGUFQuantizedTensor(torch.Tensor):
         if kwargs is None:
             kwargs = {}
         result = super().__torch_function__(func, types, args, kwargs)
-        # Only re-wrap on ``Tensor.to`` — the GGUFDequantize op in the conversion
-        # chain reads ``quant_type`` off the post-transfer tensor. Other ops in
+        # Only re-wrap on `Tensor.to` — the GGUFDequantize op in the conversion
+        # chain reads `quant_type` off the post-transfer tensor. Other ops in
         # the path don't care, so skipping the wrap saves Python overhead per call.
         if func is not torch.Tensor.to:
             return result
@@ -425,28 +425,28 @@ class GGUFQuantizedTensor(torch.Tensor):
 
 
 def dequantize_gguf_tensor(data, quant_type, dtype=None, device=None) -> torch.Tensor:
-    """Dequantize a GGUF tensor to a ``torch.Tensor`` using torch ops.
+    """Dequantize a GGUF tensor to a `torch.Tensor` using torch ops.
 
     Args:
-        data: the ``ReaderTensor.data`` numpy array from ``gguf.GGUFReader``.
+        data: the `ReaderTensor.data` numpy array from `gguf.GGUFReader`.
             For quantized types this is shaped as the **byte** shape
             (rows × byte-cols, uint8); for F16/F32 it is already the
             logical shape with the matching dtype.
-        quant_type: ``gguf.GGMLQuantizationType`` enum value.
+        quant_type: `gguf.GGMLQuantizationType` enum value.
         dtype: target floating-point dtype for the dequantized output
-            (defaults to ``torch.float32``).
+            (defaults to `torch.float32`).
         device: device to run the dequant kernel on. The raw uint8 input is
-            transferred to ``device`` *before* the kernel runs so the big
+            transferred to `device` *before* the kernel runs so the big
             float output is produced on-device — this is dramatically faster
             on MPS / CUDA than dequantizing on CPU and copying the
             fully-expanded tensor afterwards.
 
     Returns:
         Tensor with the **logical** shape recovered from the byte shape
-        (matching what ``gguf.dequantize`` returns).
+        (matching what `gguf.dequantize` returns).
 
     Raises:
-        NotImplementedError: when ``quant_type`` has no torch kernel.
+        NotImplementedError: when `quant_type` has no torch kernel.
     """
     import gguf
     import torch
@@ -460,7 +460,7 @@ def dequantize_gguf_tensor(data, quant_type, dtype=None, device=None) -> torch.T
     target_device = torch.device(device) if device is not None else None
 
     # Accept either a numpy array (gguf reader) or a torch.Tensor (e.g. a
-    # ``GGUFQuantizedTensor`` already moved to the target device). For numpy
+    # `GGUFQuantizedTensor` already moved to the target device). For numpy
     # we materialise the mmap view into RAM and wrap zero-copy; for torch we
     # just take a uint8 view of the raw bytes.
     if isinstance(data, torch.Tensor):
@@ -494,7 +494,7 @@ def dequantize_gguf_tensor(data, quant_type, dtype=None, device=None) -> torch.T
 
     block_size, type_size = gguf.GGML_QUANT_SIZES[quant_type]
     # logical_shape recovers the per-element shape from the byte shape (last
-    # dim shrinks from ``n_blocks * type_size`` bytes → ``n_blocks * block_size`` elements).
+    # dim shrinks from `n_blocks * type_size` bytes → `n_blocks * block_size` elements).
     logical_shape = (*byte_shape[:-1], byte_shape[-1] // type_size * block_size)
 
     blocks = flat.reshape((-1, type_size))

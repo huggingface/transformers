@@ -5,28 +5,12 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
-"""Thin .gguf writer driven by the quantizer's reverse-rename map.
-
-Replaces the previous 370-line ``gguf_save.py`` with a small driver that
-leans on the existing pieces:
-
-* :attr:`GGUFQuantizer.hf_to_gguf` — built at load time, used here in reverse
-  to map HF state-dict keys back to gguf names.
-* :class:`~transformers.gguf_conversion_ops.GGUFQuantize` — the reverse op of
-  :class:`GGUFDequantize`; packs an fp16/bf16/fp32 tensor into GGUF block
-  bytes via ``gguf.quants.quantize``.
-* :attr:`GGUFQuantizer.gguf_tensors` — the original-source byte map, so the
-  round-trip path is just "write the bytes we already have".
-* :attr:`GGUFQuantizer.gguf_kv` — replayed verbatim so tokenizer / block_count
-  / quantization_version / ... survive a load → save cycle.
-"""
-
 from __future__ import annotations
 
 import torch
 
 
-# GGUF's arch tag mostly matches HF ``model_type``; only the underscore-stripped
+# GGUF's arch tag mostly matches HF `model_type`; only the underscore-stripped
 # / aliased exceptions need entries here.
 _ARCH_OVERRIDES: dict[str, str] = {
     "llama4": "llama",
@@ -61,7 +45,7 @@ def _replay_kv(writer, kv: dict | None) -> None:
 
 
 def _write_original_bytes(writer, gguf_name: str, tensor) -> None:
-    """Round-trip path: write the original ``GGUFQuantizedTensor`` bytes back
+    """Round-trip path: write the original `GGUFQuantizedTensor` bytes back
     out under the same gguf name, preserving the source quant type."""
     import gguf
     import numpy as np
@@ -98,7 +82,7 @@ def _write_float_state_tensor(writer, gguf_name: str, tensor: torch.Tensor) -> N
 
 
 def save_pretrained_gguf(model, path: str, *, quant_config=None, quantizer=None) -> str:
-    """Write ``model`` back to a ``.gguf`` file at ``path``.
+    """Write `model` back to a `.gguf` file at `path`.
 
     Round-trip semantics: tensors that the quantizer holds the source bytes for
     are written verbatim (so attn_q / attn_k preserve llama.cpp's permuted
@@ -106,12 +90,12 @@ def save_pretrained_gguf(model, path: str, *, quant_config=None, quantizer=None)
     entries are written as F32.
 
     On-the-fly quantization for save is handled by the loader path
-    (``GgufQuantizeConfig`` → :class:`~transformers.gguf_conversion_ops.GGUFQuantize`),
+    (`GgufQuantizeConfig` → :class:`~transformers.gguf_conversion_ops.GGUFQuantize`),
     which packs weights into GGUF bytes at load time so the live model carries
     them. By the time we reach this writer, every quantized weight is already
     a uint8 buffer — we just need to spell it out under the right name.
 
-    ``quant_config`` is reserved for future per-tensor quant policy and is
+    `quant_config` is reserved for future per-tensor quant policy and is
     ignored today.
     """
     del quant_config  # not honoured yet; kept for API stability with the old saver.

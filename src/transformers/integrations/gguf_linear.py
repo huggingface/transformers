@@ -116,6 +116,24 @@ class GgufLinear(nn.Module):
 
 
 class GgufExperts(nn.Module):
+    """Drop-in for fused-expert MoE modules with the Mixtral / Qwen2MoE /
+    DeepSeek-V3 layout (`gate_up_proj` shape `(num_experts, 2*intermediate,
+    hidden)`, `down_proj` shape `(num_experts, hidden, intermediate)`,
+    no per-expert biases), but storing raw uint8 GGUF bytes instead of fp
+    weights. Mixed quant types per layer are fine — Q4_K_M ships gate/up =
+    Q4_K, down = Q8_0.
+
+    Archs with a different layout (transposed params, biases — gpt_oss) are
+    not swapped to this class; `GGUFDequantize` lands bf16 into their
+    original fused-expert module and `moe.py`'s `batched_mm_experts_forward`
+    handles them via its existing `is_transposed` / `has_bias` flags."""
+
+    # ExpertsInterface contract flags.
+    has_gate = True
+    has_bias = False
+    is_transposed = False
+    is_concatenated = True
+
     def __init__(self, config, gate_up_quant: str, down_quant: str):
         super().__init__()
         for label, qt in (("gate_up", gate_up_quant), ("down", down_quant)):
@@ -127,30 +145,34 @@ class GgufExperts(nn.Module):
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_quant, self.down_quant = gate_up_quant, down_quant
 
-        gate_up_rows = 2 * self.intermediate_dim
-        gate_up_bytes_per_row = (self.hidden_dim // _QUANT_INFO[gate_up_quant][1]) * _QUANT_INFO[gate_up_quant][0]
-        down_bytes_per_row = (self.intermediate_dim // _QUANT_INFO[down_quant][1]) * _QUANT_INFO[down_quant][0]
+        gate_up_block_bytes, gate_up_block_elems = _QUANT_INFO[gate_up_quant]
+        down_block_bytes, down_block_elems = _QUANT_INFO[down_quant]
         self.register_buffer(
             "gate_up_proj",
-            torch.empty(self.num_experts, gate_up_rows, gate_up_bytes_per_row, dtype=torch.uint8),
+            torch.empty(
+                self.num_experts,
+                2 * self.intermediate_dim,
+                (self.hidden_dim // gate_up_block_elems) * gate_up_block_bytes,
+                dtype=torch.uint8,
+            ),
             persistent=True,
         )
         self.register_buffer(
             "down_proj",
-            torch.empty(self.num_experts, self.hidden_dim, down_bytes_per_row, dtype=torch.uint8),
+            torch.empty(
+                self.num_experts,
+                self.hidden_dim,
+                (self.intermediate_dim // down_block_elems) * down_block_bytes,
+                dtype=torch.uint8,
+            ),
             persistent=True,
         )
 
         from ..activations import ACT2FN
 
         self.act_fn = ACT2FN[config.hidden_act]
-        # ExpertsInterface contract flags.
-        self.has_gate = True
-        self.has_bias = False
-        self.is_transposed = False
-        self.is_concatenated = True
 
-        # Same as linear layers, we need to record the specifc quant type / operation names.
+        # Same as linear layers, we record the specific quant-type op names.
         try:
             ops = ensure_metal_kernels()._ops
             self._id_op_gate_up = getattr(ops, f"mul_mat_id_{_KERNEL_FMT[gate_up_quant]}_f32").default
@@ -159,7 +181,7 @@ class GgufExperts(nn.Module):
             self._id_op_gate_up = self._id_op_down = None
 
         decode_size = getattr(config, "num_experts_per_tok", None) or 4
-        # For fast inference, we register buffers that are used during the forward pass for compile friendly!
+        # Decode-shape scratch — keeps the forward compile-friendly.
         self.register_buffer(
             "_gate_buf", torch.empty(decode_size, self.intermediate_dim, dtype=torch.float32), persistent=False
         )
@@ -193,98 +215,24 @@ class GgufExperts(nn.Module):
         )
 
 
-class GgufExpertsTransposed(GgufExperts):
-    """Variant for archs that store gate_up_proj transposed —
-    (num_experts, hidden_dim, 2*intermediate_dim) instead of
-    (num_experts, 2*intermediate_dim, hidden_dim) — and carry biases on both
-    projections. Today: gpt_oss (GptOssExperts does
-    current_state @ self.gate_up_proj[expert_idx] rather than
-    F.linear(..., self.gate_up_proj[expert_idx]), so the parameter is stored
-    (in_dim, out_dim) instead of (out_dim, in_dim)).
-
-    TODO: forward kernel. gguf_bmm_experts_forward assumes the
-    Mixtral/Qwen2MoE layout (rows = output axis). Loading a gpt_oss GGUF
-    populates the buffers correctly via the standard rename pipeline, but
-    forward needs a transposed-aware kernel path before it produces correct
-    logits.
-    """
-
-    def __init__(self, config, gate_up_quant: str, down_quant: str):
-        nn.Module.__init__(self)  # skip GgufExperts.__init__: different buffer shapes.
-        for label, qt in (("gate_up", gate_up_quant), ("down", down_quant)):
-            if qt not in _QUANT_INFO:
-                raise NotImplementedError(f"GgufExpertsTransposed {label}_quant {qt} not in {sorted(_QUANT_INFO)}")
-        self.config = config
-        self.num_experts = config.num_experts
-        self.hidden_dim = config.hidden_size
-        # gpt_oss uses ``intermediate_size`` for the per-expert MLP width — no
-        # moe_intermediate_size distinction since there's no shared dense MLP
-        # alongside the experts.
-        self.intermediate_dim = config.intermediate_size
-        self.gate_up_quant, self.down_quant = gate_up_quant, down_quant
-
-        # Transposed layout: rows = in axis, cols-in-bytes = out / block_elems * block_bytes.
-        gate_up_bytes_per_row = ((2 * self.intermediate_dim) // _QUANT_INFO[gate_up_quant][1]) * _QUANT_INFO[
-            gate_up_quant
-        ][0]
-        down_bytes_per_row = (self.hidden_dim // _QUANT_INFO[down_quant][1]) * _QUANT_INFO[down_quant][0]
-        self.register_buffer(
-            "gate_up_proj",
-            torch.empty(self.num_experts, self.hidden_dim, gate_up_bytes_per_row, dtype=torch.uint8),
-            persistent=True,
-        )
-        self.register_buffer(
-            "down_proj",
-            torch.empty(self.num_experts, self.intermediate_dim, down_bytes_per_row, dtype=torch.uint8),
-            persistent=True,
-        )
-        # gpt_oss has biases on both projections; mirror that here.
-        self.gate_up_proj_bias = nn.Parameter(
-            torch.zeros(self.num_experts, 2 * self.intermediate_dim, dtype=torch.float32), requires_grad=False
-        )
-        self.down_proj_bias = nn.Parameter(
-            torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32), requires_grad=False
-        )
-
-        from ..activations import ACT2FN
-
-        self.act_fn = ACT2FN[config.hidden_act]
-        self.has_gate = True
-        self.has_bias = True
-        self.is_transposed = True
-        self.is_concatenated = True
-
-        # Eager kernel refs + decode scratch; same pattern as GgufExperts.
-        try:
-            ops = ensure_metal_kernels()._ops
-            self._id_op_gate_up = getattr(ops, f"mul_mat_id_{_KERNEL_FMT[gate_up_quant]}_f32").default
-            self._id_op_down = getattr(ops, f"mul_mat_id_{_KERNEL_FMT[down_quant]}_f32").default
-        except Exception:
-            self._id_op_gate_up = self._id_op_down = None
-        decode_size = getattr(config, "num_experts_per_tok", None) or 4
-        self.register_buffer(
-            "_gate_buf", torch.empty(decode_size, self.intermediate_dim, dtype=torch.float32), persistent=False
-        )
-        self.register_buffer(
-            "_up_buf", torch.empty(decode_size, self.intermediate_dim, dtype=torch.float32), persistent=False
-        )
-        self.register_buffer(
-            "_pair_out", torch.empty(decode_size, self.hidden_dim, dtype=torch.float32), persistent=False
-        )
-        self._decode_size = decode_size
-
-
 MODEL_TYPE_TO_GGUF_EXPERTS: dict[str, type[nn.Module]] = {
-    # Same layout as MixtralExperts: ``gate_up_proj`` shape
-    # ``(num_experts, 2*intermediate, hidden)``.
+    # Same layout as MixtralExperts: `gate_up_proj` shape
+    # `(num_experts, 2*intermediate, hidden)`.
     "qwen2_moe": GgufExperts,
     "qwen3_moe": GgufExperts,
     "minimax_m2": GgufExperts,
     "mixtral": GgufExperts,
     "deepseek_v3": GgufExperts,
-    # Transposed + biased layout: ``gate_up_proj`` shape
-    # ``(num_experts, hidden, 2*intermediate)`` plus per-expert biases.
-    "gpt_oss": GgufExpertsTransposed,
+    # gpt_oss is intentionally NOT here. Its experts store `gate_up_proj`
+    # transposed — `(num_experts, hidden, 2*intermediate)` — and carry
+    # per-expert biases. The Metal `mul_mat_id` kernels we ship assume rows =
+    # output axis, so a byte-passthrough GgufExperts subclass would have a
+    # broken forward. The FP8 pattern handles archs without specialised kernels
+    # the same way: skip the swap, let the dequant op land bf16 into the
+    # original `GptOssExperts`, and reuse `moe.py`'s
+    # `batched_mm_experts_forward` (which already handles
+    # `is_transposed=True` + `has_bias=True`). Re-add gpt_oss here once a
+    # transposed-aware `mul_mat_id` kernel exists.
 }
 
 @torch.no_grad()
@@ -310,7 +258,7 @@ def gguf_bmm_experts_forward(
     ids32 = top_k_index.reshape(-1).to(torch.int32)
     sample_weights = top_k_weights.reshape(-1).to(torch.float32)
 
-    # Avoids ``torch.empty`` inside the compiled graph — without this,
+    # Avoids `torch.empty` inside the compiled graph — without this,
     # dynamo would re-trace on the second call
     if num_tokens == 1 and self._decode_size == S:
         # this was alloceted at init time
@@ -403,7 +351,6 @@ __all__: list[str] = [
     "ALL_GGUF_EXPERTS_FUNCTIONS",
     "GgufLinear",
     "GgufExperts",
-    "GgufExpertsTransposed",
     "MODEL_TYPE_TO_GGUF_EXPERTS",
     "gguf_bmm_experts_forward",
     "gguf_linear_supports",

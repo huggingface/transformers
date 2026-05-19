@@ -11,18 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""GGUF-specific :class:`ConversionOps` for use with :class:`WeightConverter`.
-
-The ``GGUFDequantize`` op runs first in every GGUF ``WeightConverter`` chain
-and turns each :class:`GGUFQuantizedTensor` input (raw uint8 bytes carrying
-``quant_type`` metadata) into a regular ``torch.Tensor`` — same role as
-``Fp8Dequantize`` in the FP8 quantizer's chain.
-
-The remaining ops here (``Unsqueeze``/``SubtractOne``/``LogNegate``/permute/
-reshape) operate on already-dequantized ``torch.Tensor`` objects.
-"""
-
 from __future__ import annotations
+from transformers import PreTrainedConfig
 
 from typing import TYPE_CHECKING
 
@@ -48,14 +38,10 @@ def _single_input_target(input_dict, source_patterns, target_patterns):
 
 
 class GGUFDequantize(ConversionOps):
-    """First op in every GGUF ``WeightConverter`` chain.
-
-    Reads ``quant_type`` from each input :class:`GGUFQuantizedTensor` and
-    dequantizes the raw uint8 bytes to a floating-point ``torch.Tensor`` using
-    the pure-torch kernels in ``integrations/gguf_dequant.py`` (city96-style,
-    same kernels diffusers uses). The dequant runs on whatever device the
-    input tensor is already on, so the loader's ``.to(device)`` upstream means
-    MPS / CUDA dequant happens on-device.
+    """
+    Reads `quant_type` from each input :class:`GGUFQuantizedTensor` and
+    dequantizes the raw uint8 bytes to a floating-point `torch.Tensor` using
+    the pure-torch kernels in `integrations/gguf_dequant.py`
     """
 
     def __init__(self, hf_quantizer=None):
@@ -63,67 +49,22 @@ class GGUFDequantize(ConversionOps):
         self.hf_quantizer = hf_quantizer
 
     def __deepcopy__(self, memo):
-        # ``WeightConverter`` deep-copies its op list during loading. The default
-        # deepcopy would walk ``self.hf_quantizer`` → ``gguf_tensors`` (which
-        # contains :class:`GGUFQuantizedTensor` subclasses that lack ``__deepcopy__``).
+        # `WeightConverter` deep-copies its op list during loading. The default
+        # deepcopy would walk `self.hf_quantizer` → `gguf_tensors` (which
+        # contains :class:`GGUFQuantizedTensor` subclasses that lack `__deepcopy__`).
         # We don't need a deep copy of the quantizer anyway — share the reference.
         return GGUFDequantize(self.hf_quantizer)
 
-    def convert(
-        self,
-        input_dict,
-        source_patterns,
-        target_patterns,
-        **kwargs,
-    ):
-        """Same target-aware pattern other ops use (``ReversePermuteAttn`` reads
-        ``config.num_attention_heads`` etc.): when the live target module is a
-        swapped :class:`GgufLinear` (uint8 buffer) we hand back the raw bytes
-        instead of dequantizing — the bytes flow straight into the kernel-ready
-        ``weight`` buffer without a wasted dequant + re-quant round-trip.
-        Otherwise produce a regular floating-point tensor for a standard
-        :class:`nn.Linear` / embedding / layer-norm target.
-        """
-        import torch
-
+    def convert(self, input_dict, source_patterns, target_patterns, **kwargs):
         from .integrations.gguf_dequant import GGUFQuantizedTensor, dequantize_gguf_tensor
-        from .integrations.gguf_linear import GgufExperts, GgufLinear
-
-        # Resolve the live target module via ``model`` + ``full_layer_name`` (both
-        # threaded into every op's convert kwargs by ``WeightConverter.convert`` /
-        # ``WeightRenaming.convert`` in :mod:`core_model_loading`).
-        model = kwargs.get("model")
-        full_layer_name = kwargs.get("full_layer_name", "") or ""
-        target_module = None
-        if model is not None and full_layer_name:
-            parent_path = full_layer_name.rsplit(".", 1)[0]
-            try:
-                target_module = model.get_submodule(parent_path)
-            except (AttributeError, KeyError):
-                target_module = None
-        pass_through = isinstance(target_module, (GgufLinear, GgufExperts))
 
         out = {}
         for key, tensors in input_dict.items():
             tensors_list = tensors if isinstance(tensors, list) else [tensors]
-            processed = []
-            for t in tensors_list:
-                if not isinstance(t, GGUFQuantizedTensor):
-                    processed.append(t)
-                elif pass_through:
-                    # Preserve the source's native 2D ``(out, bytes_per_row)`` shape
-                    # (or 3D for fused experts ``(num_experts, M, bytes_per_row)``)
-                    # so downstream ops in the converter chain can do row-axis
-                    # work on the bytes — most importantly :class:`ReversePermuteAttnQ`
-                    # / ``K`` for rope-permuted attention projections in Llama-style
-                    # GGUFs (their reshape splits ``shape[0]`` and leaves the
-                    # column axis untouched, so it works on uint8 byte rows
-                    # exactly the way it works on fp32 element rows). The loader
-                    # handles the final assignment shape — it skips shape checks
-                    # when an hf_quantizer is active.
-                    processed.append(t.data.detach().contiguous().view(torch.uint8))
-                else:
-                    processed.append(dequantize_gguf_tensor(t, t.quant_type, device=t.device))
+            processed = [
+                dequantize_gguf_tensor(t, t.quant_type, device=t.device) if isinstance(t, GGUFQuantizedTensor) else t
+                for t in tensors_list
+            ]
             out[key] = processed if isinstance(tensors, list) else processed[0]
         return out
 
@@ -134,11 +75,11 @@ class GGUFDequantize(ConversionOps):
 
 class GGUFQuantize(ConversionOps):
     """Reverse op of :class:`GGUFDequantize`. Re-packs a floating-point tensor
-    into GGUF block bytes via ``gguf.quants.quantize``. Used on the save path
-    to round-trip a dequantized / on-the-fly-quantized model back to a ``.gguf``
+    into GGUF block bytes via `gguf.quants.quantize`. Used on the save path
+    to round-trip a dequantized / on-the-fly-quantized model back to a `.gguf`
     file. Mirrors :class:`~transformers.integrations.finegrained_fp8.Fp8Quantize`.
 
-    Today gguf-py only ships a Python quantizer for ``Q4_0`` and ``Q8_0``; other
+    Today gguf-py only ships a Python quantizer for `Q4_0` and `Q8_0`; other
     quant types (K-quants, IQ4) are read-only upstream, so attempting to use
     them here raises with a clear message.
     """
@@ -149,8 +90,7 @@ class GGUFQuantize(ConversionOps):
     def __deepcopy__(self, memo):
         return GGUFQuantize(self.hf_quantizer)
 
-    # Subset of quant types gguf-py ships a Python quantizer for. The loader
-    # path handles the rest read-only.
+    # TODO support all quantization types.
     _GGUF_PY_QUANTIZE_SUPPORTED = ("Q4_0", "Q8_0")
 
     def _quantize_one(self, key: str, value):
@@ -182,7 +122,7 @@ class GGUFQuantize(ConversionOps):
 
 
 class Unsqueeze(ConversionOps):
-    """Unsqueeze a tensor along ``dim``."""
+    """Unsqueeze a tensor along `dim`."""
 
     def __init__(self, dim: int = 0):
         self.dim = dim
@@ -205,7 +145,7 @@ class Unsqueeze(ConversionOps):
 
 
 class Squeeze(ConversionOps):
-    """Squeeze a tensor along ``dim``. Inverse of :class:`Unsqueeze`."""
+    """Squeeze a tensor along `dim`. Inverse of :class:`Unsqueeze`."""
 
     def __init__(self, dim: int = 0):
         self.dim = dim
@@ -268,7 +208,7 @@ class AddOne(ConversionOps):
 
 
 class LogNegate(ConversionOps):
-    """Apply ``log(-tensor)`` (used for GGUF Mamba SSM-A de-transform)."""
+    """Apply `log(-tensor)` (used for GGUF Mamba SSM-A de-transform)."""
 
     def convert(
         self,
@@ -290,16 +230,18 @@ class LogNegate(ConversionOps):
 
 
 class ReversePermuteAttnQ(ConversionOps):
-    """Reverse Q-projection GGUF permutation. Reads ``config.num_attention_heads`` at convert time."""
+    """Reverse Q-projection GGUF permutation. Reads `config.num_attention_heads` at convert time."""
 
     def convert(
         self,
         input_dict: dict[str, torch.Tensor],
         source_patterns: list[str],
         target_patterns: list[str],
-        config=None,
+        config=PreTrainedConfig,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
+        if not hasattr(config, "num_attention_heads"):
+            raise ValueError("Config does not have `num_attention_heads`, you can't use `ReversePermuteAttnQ`.")
         num_heads = config.num_attention_heads
         target_pattern = _single_input_target(input_dict, source_patterns, target_patterns)
         tensors = next(iter(input_dict.values()))
@@ -317,16 +259,18 @@ class ReversePermuteAttnQ(ConversionOps):
 class PermuteAttnQ(ConversionOps):
     """Forward Q-projection GGUF permutation — inverse of :class:`ReversePermuteAttnQ`.
     Used by :func:`save_pretrained_gguf` when re-emitting Q weights into llama.cpp's
-    expected layout. Reads ``config.num_attention_heads`` at convert time."""
+    expected layout. Reads `config.num_attention_heads` at convert time."""
 
     def convert(
         self,
         input_dict: dict[str, torch.Tensor],
         source_patterns: list[str],
         target_patterns: list[str],
-        config=None,
+        config=PreTrainedConfig,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
+        if not hasattr(config, "num_attention_heads"):
+            raise ValueError("Config does not have `num_attention_heads`, you can't use `ReversePermuteAttnQ`.")
         num_heads = config.num_attention_heads
         target_pattern = _single_input_target(input_dict, source_patterns, target_patterns)
         tensors = next(iter(input_dict.values()))
@@ -342,17 +286,19 @@ class PermuteAttnQ(ConversionOps):
 
 
 class ReversePermuteAttnK(ConversionOps):
-    """Reverse K-projection GGUF permutation. Reads ``config.num_attention_heads`` and
-    ``config.num_key_value_heads`` at convert time."""
+    """Reverse K-projection GGUF permutation. Reads `config.num_attention_heads` and
+    `config.num_key_value_heads` at convert time."""
 
     def convert(
         self,
         input_dict: dict[str, torch.Tensor],
         source_patterns: list[str],
         target_patterns: list[str],
-        config=None,
+        config=PreTrainedConfig,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
+        if not hasattr(config, "num_attention_heads"):
+            raise ValueError("Config does not have `num_attention_heads`, you can't use `ReversePermuteAttnQ`.")
         num_kv_heads = config.num_key_value_heads
         target_pattern = _single_input_target(input_dict, source_patterns, target_patterns)
         tensors = next(iter(input_dict.values()))
@@ -377,9 +323,11 @@ class PermuteAttnK(ConversionOps):
         input_dict: dict[str, torch.Tensor],
         source_patterns: list[str],
         target_patterns: list[str],
-        config=None,
+        config=PreTrainedConfig,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
+        if not hasattr(config, "num_attention_heads"):
+            raise ValueError("Config does not have `num_attention_heads`, you can't use `ReversePermuteAttnQ`.")
         num_kv_heads = config.num_key_value_heads
         target_pattern = _single_input_target(input_dict, source_patterns, target_patterns)
         tensors = next(iter(input_dict.values()))
@@ -397,18 +345,19 @@ class PermuteAttnK(ConversionOps):
 
 
 class BloomReshapeQKVWeight(ConversionOps):
-    """Reverse Bloom QKV weight reshape. Reads ``config.n_head`` and ``config.hidden_size`` at convert time."""
+    """Reverse Bloom QKV weight reshape. Reads `config.n_head` and `config.hidden_size` at convert time."""
 
     def convert(
         self,
         input_dict: dict[str, torch.Tensor],
         source_patterns: list[str],
         target_patterns: list[str],
-        config=None,
+        config=PreTrainedConfig,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         import torch
-
+        if not hasattr(config, "n_head") or not hasattr(config, "hidden_size"):
+            raise ValueError("Config does not have `num_attention_heads`, you can't use `ReversePermuteAttnQ`.")
         n_head = config.n_head
         n_embed = config.hidden_size
         target_pattern = _single_input_target(input_dict, source_patterns, target_patterns)
@@ -427,18 +376,19 @@ class BloomReshapeQKVWeight(ConversionOps):
 
 
 class BloomReshapeQKVBias(ConversionOps):
-    """Reverse Bloom QKV bias reshape. Reads ``config.n_head`` and ``config.hidden_size`` at convert time."""
+    """Reverse Bloom QKV bias reshape. Reads `config.n_head` and `config.hidden_size` at convert time."""
 
     def convert(
         self,
         input_dict: dict[str, torch.Tensor],
         source_patterns: list[str],
         target_patterns: list[str],
-        config=None,
+        config=PreTrainedConfig,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         import torch
-
+        if not hasattr(config, "n_head") or not hasattr(config, "hidden_size"):
+            raise ValueError("Config does not have `num_attention_heads`, you can't use `ReversePermuteAttnQ`.")
         n_head = config.n_head
         n_embed = config.hidden_size
         target_pattern = _single_input_target(input_dict, source_patterns, target_patterns)

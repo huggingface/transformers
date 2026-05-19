@@ -46,8 +46,8 @@ GGUF_SUPPORTED_ARCHITECTURES = list(GGUF_TO_TRANSFORMERS_MAPPING["config"].keys(
 
 # --- Llama-family (rope-permuted Q/K, plain Llama norms) --------------------
 # Constructing the rename rules pulls in torch via WeightRenaming/WeightConverter,
-# so we keep that behind ``is_torch_available()`` — ``load_gguf_checkpoint`` is
-# imported by ``tokenization_utils_tokenizers`` even in tokenizer-only installs.
+# so we keep that behind `is_torch_available()` — `load_gguf_checkpoint` is
+# imported by `tokenization_utils_tokenizers` even in tokenizer-only installs.
 _GGUF_ARCH_CONVERTERS: dict[str, list] = {}
 
 if is_torch_available():
@@ -258,7 +258,7 @@ if is_torch_available():
 
     # --- Qwen2-MoE / Qwen3-MoE (shared experts + merged gate_up_proj) ----------
     # NB: modern Qwen2/3-MoE GGUFs ship Q/K projection weights already in HF
-    # layout (no llama.cpp-style head permute) — applying ``ReversePermuteAttn*``
+    # layout (no llama.cpp-style head permute) — applying `ReversePermuteAttn*`
     # here would corrupt the matmul output ~140% relative.  Tested against
     # gdax/Qwen1.5-MoE-A2.7B_gguf: max abs diff to the HF reference is
     # 3.8e-2 (Q4_K quantization noise) without the permute, 1.27 with it.
@@ -314,7 +314,7 @@ if is_torch_available():
     ]
 
     # --- GPT-2 (Transpose on every Linear weight, bias kept as-is) -------------
-    # GGUF stores GPT-2 ``c_attn``/``c_proj``/``c_fc`` weights transposed relative to HF.
+    # GGUF stores GPT-2 `c_attn`/`c_proj`/`c_fc` weights transposed relative to HF.
     # The TARGET names differ per source (attn_qkv→c_attn, attn_output/ffn_down→c_proj,
     # ffn_up→c_fc), so the four Transpose converters can't be merged into one rule.
     _GPT2_CONVERTERS = [
@@ -410,7 +410,7 @@ if is_torch_available():
 
 
 def get_gguf_converters(model_type: str) -> list:
-    """Return the GGUF→HF rename rules (``WeightRenaming`` / ``WeightConverter``) for a given HF model type."""
+    """Return the GGUF→HF rename rules (`WeightRenaming` / `WeightConverter`) for a given HF model type."""
     return list(_GGUF_ARCH_CONVERTERS.get(model_type, []))
 
 
@@ -448,7 +448,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
 
     parsed_parameters: dict = {k: {} for k in GGUF_TO_TRANSFORMERS_MAPPING}
     # Snapshot every raw GGUF kv field as (typed_value, gguf_value_type) so
-    # ``save_pretrained_gguf`` can replay the metadata bit-for-bit on round-trip.
+    # `save_pretrained_gguf` can replay the metadata bit-for-bit on round-trip.
     raw_kv: dict[str, tuple[object, int]] = {}
     for k, field in fields.items():
         try:
@@ -610,8 +610,8 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
         config = parsed_parameters.get("config", {})
         model_type = config.get("model_type", architecture)
 
-        # Wrap raw uint8 bytes in a ``torch.Tensor`` subclass that carries ``quant_type``.
-        # ``GGUFDequantize`` does the actual dequant inside the WeightConverter chain,
+        # Wrap raw uint8 bytes in a `torch.Tensor` subclass that carries `quant_type`.
+        # `GGUFDequantize` does the actual dequant inside the WeightConverter chain,
         # on whatever device the loader has moved the bytes to.
         import torch  # local: keep top-of-file import-light when torch isn't required
 

@@ -9,16 +9,16 @@
 
 Three load paths:
 
-* ``from_pretrained(repo, gguf_file=...)`` on MPS: modules swap to
+* `from_pretrained(repo, gguf_file=...)` on MPS: modules swap to
   :class:`GgufLinear` / :class:`GgufExperts` at meta time. Bytes flow through
   the standard rename pipeline via the target-aware :class:`GGUFDequantize`
   (which passes uint8 bytes straight to the swapped buffers) and the experts
   merge converter is rewritten in-place to per-projection renames so the
   whole load is one machinery — no post-load fix-up.
-* ``from_pretrained(repo, gguf_file=..., dtype=...)`` or non-MPS:
+* `from_pretrained(repo, gguf_file=..., dtype=...)` or non-MPS:
   :class:`GGUFDequantize` dequantizes and the model loads as a standard
-  ``nn.Linear`` chain in the requested dtype.
-* ``from_pretrained(repo, quantization_config=GgufQuantizeConfig(...))``:
+  `nn.Linear` chain in the requested dtype.
+* `from_pretrained(repo, quantization_config=GgufQuantizeConfig(...))`:
   load fp16/bf16 normally; :class:`GGUFQuantize` (the
   :class:`GGUFDequantize` reverse op) packs matching Linears on the fly and
   the meta-time swap drops in :class:`GgufLinear` modules.
@@ -47,11 +47,11 @@ class GGUFQuantizer(HfQuantizer):
         if quantization_config is None:
             quantization_config = GgufQuantizeConfig()
         # Three load paths:
-        #   - safetensors reload: ``module_quant_types`` carries the swap plan
-        #     from a prior ``save_pretrained`` — bytes live in the model's own
+        #   - safetensors reload: `module_quant_types` carries the swap plan
+        #     from a prior `save_pretrained` — bytes live in the model's own
         #     safetensors, no .gguf file needed. pre_quantized=True.
         #   - gguf_file=: source bytes come from an external .gguf — quantizer
-        #     loads them via ``load_checkpoint_state``. pre_quantized=True.
+        #     loads them via `load_checkpoint_state`. pre_quantized=True.
         #   - on-the-fly: live fp16/bf16 checkpoint, GGUFQuantize op packs at
         #     load time. pre_quantized=False.
         has_module_map = bool(getattr(quantization_config, "module_quant_types", None))
@@ -62,9 +62,9 @@ class GGUFQuantizer(HfQuantizer):
         # Re-annotate with the concrete type so attribute accesses type-check.
         self.quantization_config: GgufQuantizeConfig = quantization_config
         self.on_the_fly = on_the_fly
-        # ``linear_mode`` is the on-the-fly default and the gguf_file default on
-        # MPS without explicit dequant; ``_process_model_before_weight_loading``
-        # finalizes it once it can see the live ``device_map``.
+        # `linear_mode` is the on-the-fly default and the gguf_file default on
+        # MPS without explicit dequant; `_process_model_before_weight_loading`
+        # finalizes it once it can see the live `device_map`.
         self.linear_mode = on_the_fly
         # GGUF file state — populated by :meth:`load_checkpoint_state` when the
         # gguf_file path is active. Empty for the on-the-fly path.
@@ -72,20 +72,26 @@ class GGUFQuantizer(HfQuantizer):
         self.gguf_tensors: dict = {}
         self.gguf_kv: dict = {}
         # Reverse rename map (hf_target -> gguf_source), filled during
-        # ``_build_quant_info_from_gguf_file``. Consumed by ``save_gguf``.
+        # `_build_quant_info_from_gguf_file`. Consumed by `save_gguf`.
         self.hf_to_gguf: dict[str, str] = {}
 
     # ---- HfQuantizer hooks ----------------------------------------------------
 
     def update_weight_conversions(self, weight_conversions):
-        """Inject :class:`GGUFDequantize` at the head of every weight converter
-        + attach it as the ``quantization_operation`` on every rename — same
-        shape as ``Fp8Quantizer.update_weight_conversions``. No experts-specific
-        rewrite needed: :class:`GgufExperts` exposes the same ``gate_up_proj`` /
-        ``down_proj`` buffer names as ``MixtralExperts`` / ``Qwen2MoeExperts``,
-        so the GGUF merge converter (``ffn_gate_exps + ffn_up_exps →
-        gate_up_proj``) lands its uint8 ``Concatenate(dim=1)`` output directly
-        into the swapped buffer through the target-aware op."""
+        """Prepend the GGUF rename / merge / reverse-permute converters
+        produced from the source `.gguf` (`load_checkpoint_state` populates
+        `self.weight_mapping`) onto the model's existing conversion list.
+
+        Same shape as `Fp8Quantizer.update_weight_conversions`: only inject
+        `GGUFDequantize` when we're actually dequantizing (`not self.linear_mode`).
+        On the GgufLinear / GgufExperts swap path the raw uint8 source bytes
+        flow straight into the swapped buffers — every other op in the chain
+        (`ReversePermuteAttn*`, `Concatenate(dim=1)`) operates on the row /
+        expert axis, which is identical between byte and element tensors.
+        """
+        if self.linear_mode:
+            return list(self.weight_mapping) + list(weight_conversions)
+
         from ..core_model_loading import WeightConverter, WeightRenaming
         from ..gguf_conversion_ops import GGUFDequantize
 
@@ -103,7 +109,7 @@ class GGUFQuantizer(HfQuantizer):
         return injected + list(weight_conversions)
 
     def get_quantize_ops(self):
-        """On-the-fly path: the loader calls this when ``param_needs_quantization``
+        """On-the-fly path: the loader calls this when `param_needs_quantization`
         returns True. Returns the :class:`GGUFQuantize` op that packs a live
         fp16/bf16 weight into GGUF block bytes."""
         from ..gguf_conversion_ops import GGUFQuantize
@@ -125,17 +131,17 @@ class GGUFQuantizer(HfQuantizer):
             module = model.get_submodule(target_path)
         except AttributeError:
             return False
-        # After ``_process_model_before_weight_loading`` swapped the matching
+        # After `_process_model_before_weight_loading` swapped the matching
         # Linears, those modules are GgufLinear and need quantization. Anything
         # else (norms, lm_head, embeddings) is left alone.
         return isinstance(module, GgufLinear) and not param_name.endswith(".bias") and isinstance(module, nn.Module)
 
     def load_checkpoint_state(self, gguf_path: str):
-        """Pre-load the ``.gguf`` file's tensors + rename map + KV metadata.
+        """Pre-load the `.gguf` file's tensors + rename map + KV metadata.
 
         Called by :func:`PreTrainedModel.from_pretrained` for the gguf_file path
         after :func:`_get_resolved_checkpoint_files` resolves the file. Returns
-        the state-dict (``{gguf_name: GGUFQuantizedTensor}``) that the standard
+        the state-dict (`{gguf_name: GGUFQuantizedTensor}`) that the standard
         loader needs — GGUF isn't a safetensors format, so this hook gives the
         quantizer ownership of the on-disk → in-memory state load.
         """
@@ -151,17 +157,17 @@ class GGUFQuantizer(HfQuantizer):
         """Swap nn.Linear / fused-expert modules in place at meta time.
 
         Three paths converge here:
-          * safetensors reload (``module_quant_types`` non-empty): swap from
+          * safetensors reload (`module_quant_types` non-empty): swap from
             the saved plan unconditionally — the bytes are already uint8 in
             safetensors and only GgufLinear/GgufExperts have buffers shaped
             to receive them.
-          * gguf_file= load: finalize ``linear_mode`` from MPS availability
-            and the caller's ``dtype=`` choice. The plan comes from
-            ``_build_quant_info_from_gguf_file`` walking ``gguf_tensors``.
+          * gguf_file= load: finalize `linear_mode` from MPS availability
+            and the caller's `dtype=` choice. The plan comes from
+            `_build_quant_info_from_gguf_file` walking `gguf_tensors`.
           * on-the-fly: swap unconditionally (the config asked for it).
 
-        Records the swap plan on ``quantization_config.module_quant_types``
-        so it survives ``save_pretrained`` → ``from_pretrained``.
+        Records the swap plan on `quantization_config.module_quant_types`
+        so it survives `save_pretrained` → `from_pretrained`.
         """
         has_module_map = bool(getattr(self.quantization_config, "module_quant_types", None))
         if has_module_map:
@@ -202,8 +208,8 @@ class GGUFQuantizer(HfQuantizer):
         # save_pretrained → safetensors works: GgufLinear / GgufExperts buffers
         # are uint8, biases / norms are fp32, all native safetensors dtypes.
         # The swap layout is replayed on reload via
-        # ``GgufQuantizeConfig.module_quant_types`` (filled in
-        # ``_process_model_before_weight_loading``).
+        # `GgufQuantizeConfig.module_quant_types` (filled in
+        # `_process_model_before_weight_loading`).
         return True
 
     # ---- Internals ------------------------------------------------------------
@@ -211,17 +217,17 @@ class GGUFQuantizer(HfQuantizer):
     def _build_quant_info(self, model) -> dict[str, dict]:
         """Walk the live model and emit one entry per module that should swap.
 
-        Safetensors reload path: ``module_quant_types`` already carries the
+        Safetensors reload path: `module_quant_types` already carries the
         full plan; return it verbatim.
 
-        On-the-fly path (``GgufQuantizeConfig`` without a source file): every
-        :class:`nn.Linear` matching ``modules_to_convert`` gets the config's
-        single ``quant_type``.
+        On-the-fly path (`GgufQuantizeConfig` without a source file): every
+        :class:`nn.Linear` matching `modules_to_convert` gets the config's
+        single `quant_type`.
 
         gguf_file path: per-tensor quant types come from :attr:`gguf_tensors`
-        after renaming the GGUF source names through ``self.weight_mapping``.
+        after renaming the GGUF source names through `self.weight_mapping`.
         :attr:`hf_to_gguf` is filled here as a side effect (consumed by
-        ``save_gguf``).
+        `save_gguf`).
         """
         import torch.nn as nn
 
@@ -282,9 +288,8 @@ class GGUFQuantizer(HfQuantizer):
         return info
 
     def _apply_generation_defaults(self, model) -> None:
-        """Set ``cache_implementation`` + ``compile_config`` defaults on
-        ``model.generation_config`` so the user gets good performance out of the
-        box. Doesn't overwrite values the user already set."""
+        """Set `cache_implementation` + `compile_config` defaults on
+        `model.generation_config` to leverage the best perf when running GGUF Models"""
         from ..generation.configuration_utils import CompileConfig
 
         gc = getattr(model, "generation_config", None)

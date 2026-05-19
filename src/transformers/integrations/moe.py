@@ -480,12 +480,7 @@ def grouped_mm_experts_forward(
 
 
 class ExpertsInterface(GeneralInterface):
-    """Interface for registering custom experts forward functions.
-
-    Quantization integrations subclass this with their own ``_global_mapping``
-    (see :class:`~transformers.integrations.finegrained_fp8.FP8ExpertsInterface`
-    and :class:`~transformers.integrations.gguf_linear.GgufExpertsInterface`).
-    """
+    """Interface for registering custom experts forward functions."""
 
     _global_mapping = {
         "batched_mm": batched_mm_experts_forward,
