@@ -1339,6 +1339,11 @@ class Molmo2Attention(Olmo2Attention):
         self.att_proj = nn.Linear(config.hidden_size, sum(self.fused_dims), bias=config.qkv_bias)
         self.attn_out = nn.Linear(config.num_attention_heads * config.head_dim, config.hidden_size, bias=False)
 
+        if not config.use_qk_norm:
+            raise ValueError(
+                "Molmo2 requires `use_qk_norm=True`; all shipped checkpoints apply Q/K norm and "
+                "no q_norm/k_norm-less path is provided."
+            )
         self.qk_norm_type = config.qk_norm_type
         if self.qk_norm_type == "qwen3":
             q_norm_dim = config.head_dim
