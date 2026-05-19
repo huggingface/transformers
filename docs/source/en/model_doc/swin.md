@@ -15,11 +15,6 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2021-03-25 and added to Hugging Face Transformers on 2022-01-21.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
 
 # Swin Transformer
 
@@ -35,14 +30,13 @@ The example below demonstrates how to classify an image with [`Pipeline`] or the
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="image-classification",
     model="microsoft/swin-tiny-patch4-window7-224",
-    dtype=torch.float16,
     device=0
 )
 pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
@@ -52,11 +46,13 @@ pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resol
 
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 import requests
+import torch
 from PIL import Image
-from transformers import AutoModelForImageClassification, AutoImageProcessor
+
+from transformers import AutoImageProcessor, AutoModelForImageClassification
+
 
 image_processor = AutoImageProcessor.from_pretrained(
     "microsoft/swin-tiny-patch4-window7-224",
@@ -67,7 +63,6 @@ model = AutoModelForImageClassification.from_pretrained(
     device_map="auto"
 )
 
-device = Accelerator().device
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 inputs = image_processor(image, return_tensors="pt").to(model.device)

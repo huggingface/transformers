@@ -17,7 +17,6 @@ rendered properly in your Markdown viewer.
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">    </div>
 </div>
@@ -36,14 +35,14 @@ The example below demonstrates how to generate text based on an image with [`Pip
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
+
 pipe = pipeline(
     task="image-text-to-text",
     model="Qwen/Qwen2.5-VL-7B-Instruct",
     device=0,
-    dtype=torch.bfloat16
 )
 messages = [
     {
@@ -58,20 +57,18 @@ messages = [
     }
 ]
 pipe(text=messages,max_new_tokens=20, return_full_text=False)
-
 ```
 
 </hfoption>
 
 <hfoption id="AutoModel">
 
-```py
-import torch
-from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
+```python
+from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
+
 
 model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
     "Qwen/Qwen2.5-VL-7B-Instruct",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -119,17 +116,15 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
 
 ```python
-import torch
-from transformers import TorchAoConfig, Qwen2_5_VLForConditionalGeneration, AutoProcessor
+from transformers import Qwen2_5_VLForConditionalGeneration, TorchAoConfig
+
 
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
     "Qwen/Qwen2.5-VL-7B-Instruct",
-    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )
-
 ```
 
 ## Notes
@@ -172,7 +167,6 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
     
     model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
         "Qwen/Qwen2.5-VL-7B-Instruct",
-        dtype=torch.float16,
         device_map="auto",
         attn_implementation="sdpa"
     )

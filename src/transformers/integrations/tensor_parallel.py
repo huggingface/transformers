@@ -63,7 +63,14 @@ def initialize_tensor_parallelism(
                 local_rank = int(os.environ["LOCAL_RANK"])
                 world_size = int(os.environ["WORLD_SIZE"])
 
-                backend_map = {"cuda": "nccl", "cpu": "gloo", "xpu": "xccl", "hpu": "hccl", "neuron": "neuron"}
+                backend_map = {
+                    "cuda": "nccl",
+                    "cpu": "gloo",
+                    "xpu": "xccl",
+                    "hpu": "hccl",
+                    "neuron": "neuron",
+                    "tpu": "tpu_dist",
+                }
                 backend = backend_map.get(device_type)
 
                 torch.distributed.init_process_group(backend=backend, rank=rank, world_size=world_size)
@@ -1467,6 +1474,7 @@ def shard_and_distribute_module(
         else:
             logger.info(f"Tensor sharding plan for {param_name}: {current_shard_plan}")
 
+    tp_layer = None
     if current_shard_plan is not None:
         try:
             tp_layer = ALL_PARALLEL_STYLES[current_shard_plan]
@@ -1488,7 +1496,8 @@ def shard_and_distribute_module(
     if not isinstance(param, torch.nn.Parameter):
         param = torch.nn.Parameter(param, requires_grad=empty_param.is_floating_point())
     setattr(module_to_tp, param_type, param)
-    tp_layer.update_module_attributes(module_to_tp)
+    if tp_layer is not None:
+        tp_layer.update_module_attributes(module_to_tp)
     return param
 
 

@@ -2823,6 +2823,20 @@ class TestAttentionImplementation(unittest.TestCase):
 
         self.assertTrue('The only possible arguments are `attn_implementation="eager"' in str(cm.exception))
 
+    def test_registered_experts_implementation_is_valid(self):
+        from transformers.integrations.moe import ALL_EXPERTS_FUNCTIONS
+
+        def custom_experts_forward(*args, **kwargs):
+            pass
+
+        experts_implementation = "custom_experts"
+        model = BaseModel(PreTrainedConfig())
+
+        with patch.dict(ALL_EXPERTS_FUNCTIONS._global_mapping, {}, clear=False):
+            ALL_EXPERTS_FUNCTIONS.register(experts_implementation, custom_experts_forward)
+
+            self.assertEqual(model.get_correct_experts_implementation(experts_implementation), experts_implementation)
+
     def test_not_available_flash(self):
         if is_flash_attn_2_available():
             self.skipTest(reason="Please uninstall flash-attn package to run test_not_available_flash")

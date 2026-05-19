@@ -328,7 +328,7 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                 C * T * (P**2),
             ]
         )
-        video_grid_thw = torch.tensor([[patch_T, patch_H, patch_W]] * B)
+        video_grid_thw = torch.tensor([[patch_T, patch_H, patch_W]] * B, device=torch_device)
 
         # sanity check
         assert pixel_values_videos.shape[0] == video_grid_thw.prod(dim=1).sum().item()
@@ -440,9 +440,6 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                 # acceptable numerical instability
                 tol = torch.finfo(torch.bfloat16).eps
                 torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
-
-    def test_reverse_loading_mapping(self):
-        super().test_reverse_loading_mapping(skip_base_model=True)
 
     @unittest.skip(reason="Feedforward chunking is not yet supported")
     def test_feed_forward_chunking(self):
