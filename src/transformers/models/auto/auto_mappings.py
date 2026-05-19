@@ -953,6 +953,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ),
         ("pvt", {"pil": "PvtImageProcessorPil", "torchvision": "PvtImageProcessor"}),
         ("qwen2_vl", {"pil": "Qwen2VLImageProcessorPil", "torchvision": "Qwen2VLImageProcessor"}),
+        ("rf_detr", {"torchvision": "RfDetrImageProcessor"}),
         ("rt_detr", {"pil": "RTDetrImageProcessorPil", "torchvision": "RTDetrImageProcessor"}),
         ("sam", {"pil": "SamImageProcessorPil", "torchvision": "SamImageProcessor"}),
         ("sam2", {"torchvision": "Sam2ImageProcessor"}),
