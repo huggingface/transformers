@@ -1037,6 +1037,10 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
             Labels for computing the language modeling loss. Indices should either be in `[0, ..., config.vocab_size]`
             or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored (masked), the loss is
             only computed for the tokens with labels in `[0, ..., config.vocab_size]`. `sequence_length` should be smaller than or equal to `config.max_target_positions`.
+        num_items_in_batch (`torch.Tensor`, *optional*):
+            Number of non-masked tokens in the batch, used to normalise the loss under gradient accumulation.
+            When provided, the loss uses `reduction="sum"` divided by `num_items_in_batch`; otherwise it uses
+            the default `reduction="mean"`.
 
         Example:
 
@@ -1180,6 +1184,10 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        num_items_in_batch (`torch.Tensor`, *optional*):
+            Number of non-masked tokens in the batch, used to normalise the loss under gradient accumulation.
+            When provided, the loss uses `reduction="sum"` divided by `num_items_in_batch`; otherwise it uses
+            the default `reduction="mean"`.
 
         Example:
 
