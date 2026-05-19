@@ -147,6 +147,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
       naming of attributes.
     - **base_model_tp_plan** (`dict[str, Any]`) -- A dict that maps sub-modules FQNs of a base model to a tensor
       parallel plan applied to the sub-module when `model.tensor_parallel` is called.
+    - **base_model_sp_plan** (`dict[str, Any]`) -- A dict that maps sub-modules FQNs of a base model to a sequence
+      parallel plan, used in place of `base_model_tp_plan` when `distributed_config.enable_sequence_parallel` is set.
+      Same key/value shape as the TP plan; values are style names registered in `ALL_PARALLEL_STYLES`
+      (e.g. `"vocab_reduce_scatter"`, `"rowwise_reduce_scatter"`, `"activation"`, `"module_allgather"`).
     - **base_model_fsdp_plan** (`dict[Any, str]`) -- A dict that maps sub-modules of a base model to an FSDP2
       sharding strategy (e.g. `"free_full_weight"` / `"keep_full_weight"`). Keys can be wildcard module paths
       (e.g. `"layers.*"`) or tuples of paths (grouped into a single `fully_shard` call).
