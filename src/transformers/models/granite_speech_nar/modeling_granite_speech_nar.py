@@ -324,33 +324,35 @@ class GraniteSpeechNarProjector(nn.Module):
         self.out_norm = nn.LayerNorm(config.hidden_size, eps=config.layernorm_eps)
         self.out_linear = nn.Linear(config.hidden_size, config.llm_dim)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        batch_size, seq_len, dim = x.size()
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        batch_size, seq_len, dim = hidden_states.size()
 
-        x = x.view(batch_size, seq_len, self.config.num_encoder_layers, self.config.encoder_dim)
+        hidden_states = hidden_states.view(
+            batch_size, seq_len, self.config.num_encoder_layers, self.config.encoder_dim
+        )
         normalized_layers = []
         for i, layer_norm in enumerate(self.layer_norms):
-            normalized_layers.append(layer_norm(x[:, :, i]))
-        x = torch.cat(normalized_layers, dim=-1)
+            normalized_layers.append(layer_norm(hidden_states[:, :, i]))
+        hidden_states = torch.cat(normalized_layers, dim=-1)
 
-        x = self.projector_act(self.layer_projector(x))
+        hidden_states = self.projector_act(self.layer_projector(hidden_states))
 
         block_size = self.config.block_size
         nblocks = seq_len // block_size
         rest = seq_len % block_size
         if rest > 0:
-            x = F.pad(x, (0, 0, 0, block_size - rest), "constant", 0)
+            hidden_states = F.pad(hidden_states, (0, 0, 0, block_size - rest), "constant", 0)
             nblocks += 1
 
-        x = x.view(batch_size * nblocks, block_size, self.config.hidden_size)
+        hidden_states = hidden_states.view(batch_size * nblocks, block_size, self.config.hidden_size)
         query_length = self.query.shape[1]
-        mean_pool = x.view(
+        mean_pool = hidden_states.view(
             batch_size * nblocks, query_length, self.config.downsample_rate, self.config.hidden_size
         ).mean(dim=-2)
 
         hidden_states = self.qformer(
             query_embeds=self.dropout(self.query + mean_pool),
-            encoder_hidden_states=self.dropout(x + self.window_positions),
+            encoder_hidden_states=self.dropout(hidden_states + self.window_positions),
         )
 
         hidden_states = hidden_states.view(batch_size, nblocks * query_length, -1)
@@ -738,6 +740,7 @@ class GraniteSpeechNarModel(GraniteSpeechNarPreTrainedModel):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
+        # KV cache is not needed in a non-autoregressive model
         kwargs["use_cache"] = False
         for decoder_layer in self.layers:
             hidden_states = decoder_layer(
@@ -754,14 +757,14 @@ class GraniteSpeechNarModel(GraniteSpeechNarPreTrainedModel):
 
 
 def _posterior_weighted_pool(hidden: torch.Tensor, importance: torch.Tensor, window_size: int = 4) -> torch.Tensor:
-    B, T, D = hidden.shape
-    pad_len = (window_size - T % window_size) % window_size
+    batch_size, seq_len, hidden_dim = hidden.shape
+    pad_len = (window_size - seq_len % window_size) % window_size
     if pad_len > 0:
         hidden = F.pad(hidden, (0, 0, 0, pad_len))
         importance = F.pad(importance, (0, pad_len))
     num_windows = hidden.shape[1] // window_size
-    hidden = hidden.view(B, num_windows, window_size, D)
-    importance = importance.view(B, num_windows, window_size)
+    hidden = hidden.view(batch_size, num_windows, window_size, hidden_dim)
+    importance = importance.view(batch_size, num_windows, window_size)
     weights = importance / (importance.sum(dim=-1, keepdim=True) + 1e-8)
     pooled = (hidden * weights.unsqueeze(-1)).sum(dim=2)
     return pooled
@@ -805,10 +808,10 @@ class GraniteSpeechNarCTCEncoder(GraniteSpeechNarPreTrainedModel):
         relpos_dist = seq.view(-1, 1) - seq.view(1, -1)
         attention_dists = torch.clamp(relpos_dist, -context_size, context_size) + self.config.max_pos_emb
 
-        for idx, layer in enumerate(self.layers, start=1):
+        for layer_idx, layer in enumerate(self.layers, start=1):
             hidden_states = layer(hidden_states, attention_dists=attention_dists)
 
-            if idx == self.config.self_conditioning_layer:
+            if layer_idx == self.config.self_conditioning_layer:
                 mid_logits = self.out(self.dropout(hidden_states))
                 mid_probs = torch.softmax(mid_logits.float(), dim=-1)
                 blank_probs = mid_probs[:, :, 0]
@@ -820,43 +823,38 @@ class GraniteSpeechNarCTCEncoder(GraniteSpeechNarPreTrainedModel):
         hidden_states = self.dropout(hidden_states)
 
         logits = None
-        pool_window = self.config.bpe_pooling_window
+        loss = None
         if self.out_bpe is not None and blank_probs is not None:
+            pool_window = self.config.bpe_pooling_window
             importance = 1.0 - blank_probs
             pooled = _posterior_weighted_pool(hidden_states.float(), importance, window_size=pool_window).to(
                 hidden_states.dtype
             )
-            T = attention_mask.shape[1]
-            pad_len = (pool_window - T % pool_window) % pool_window
-            pooled_mask = F.pad(attention_mask, (0, pad_len), value=False)[:, ::pool_window]
-            logits = self.out_bpe(pooled[pooled_mask])
-
-        loss = None
-        if labels is not None and logits is not None:
             encoder_lengths = attention_mask.sum(dim=1)
-            bpe_lengths = (-(encoder_lengths // -pool_window)).tolist()
-            T_max = max(bpe_lengths)
-            B = len(bpe_lengths)
-            logits_padded = logits.new_zeros(B, T_max, logits.shape[-1])
-            offset = 0
-            for i, length in enumerate(bpe_lengths):
-                logits_padded[i, :length] = logits[offset : offset + length]
-                offset += length
+            lengths = -(encoder_lengths // -pool_window)
+            lengths_list = lengths.tolist()
+            logits = self.out_bpe(torch.cat([pooled[i, :length] for i, length in enumerate(lengths_list)]))
 
-            log_probs = torch.log_softmax(logits_padded.float(), dim=-1)
-            bpe_x_sizes = torch.tensor(bpe_lengths, device=logits.device)
-            loss = (
-                F.ctc_loss(
-                    log_probs.transpose(0, 1),
-                    labels + 1,
-                    bpe_x_sizes,
-                    label_lengths,
-                    blank=0,
-                    reduction="sum",
-                    zero_infinity=True,
+            if labels is not None:
+                logits_padded = logits.new_zeros(len(lengths_list), max(lengths_list), logits.shape[-1])
+                offset = 0
+                for i, length in enumerate(lengths_list):
+                    logits_padded[i, :length] = logits[offset : offset + length]
+                    offset += length
+
+                log_probs = torch.log_softmax(logits_padded.float(), dim=-1)
+                loss = (
+                    F.ctc_loss(
+                        log_probs.transpose(0, 1),
+                        labels + 1,
+                        lengths,
+                        label_lengths,
+                        blank=0,
+                        reduction="sum",
+                        zero_infinity=True,
+                    )
+                    / lengths.sum()
                 )
-                / bpe_x_sizes.sum()
-            )
 
         return GraniteSpeechNarEncoderOutput(
             loss=loss,
@@ -1042,7 +1040,7 @@ class GraniteSpeechNarForASR(GraniteSpeechNarPreTrainedModel):
         Returns:
             [`GraniteSpeechNarOutput`]
         """
-        encoder_labels = labels if (labels is not None and self.config.encoder_ctc_loss_lambda > 0.0) else None
+        encoder_labels = labels if self.config.encoder_ctc_loss_lambda else None
         enc_out = self.encoder(
             input_features=input_features,
             attention_mask=attention_mask,
@@ -1081,33 +1079,27 @@ class GraniteSpeechNarForASR(GraniteSpeechNarPreTrainedModel):
             ctc_token_ids, audio_embeds, audio_lengths
         )
 
-        llm_out = self.language_model.model(
+        llm_out = self.language_model(
             inputs_embeds=flat_embeds,
             position_ids=flat_position_ids,
         )
-        llm_hidden = llm_out.last_hidden_state.squeeze(0)
+        all_logits = llm_out.logits.squeeze(0)
 
         segment_lengths = [l for a, t in zip(audio_lengths, text_lengths) for l in (a, t)]
-        text_hidden = torch.cat(list(llm_hidden.split(segment_lengths)[1::2]))
-
-        logits = self.language_model.lm_head(text_hidden)
-        logits = logits / self.language_model.config.logits_scaling
-        logits_per_sample = list(logits.split(text_lengths))
+        text_logits = torch.cat(list(all_logits.split(segment_lengths)[1::2]))
+        logits_per_sample = list(text_logits.split(text_lengths))
 
         loss = None
         if labels is not None:
-            log_probs = torch.log_softmax(logits.float(), dim=-1)
+            log_probs = torch.log_softmax(text_logits.float(), dim=-1)
 
-            T_max = max(text_lengths)
-            B = len(text_lengths)
-            V = log_probs.shape[-1]
-            log_probs_padded = log_probs.new_zeros(B, T_max, V)
+            log_probs_padded = log_probs.new_zeros(len(text_lengths), max(text_lengths), log_probs.shape[-1])
             offset = 0
             for i, tl in enumerate(text_lengths):
                 log_probs_padded[i, :tl] = log_probs[offset : offset + tl]
                 offset += tl
 
-            input_lengths = torch.tensor(text_lengths, device=logits.device)
+            input_lengths = torch.tensor(text_lengths, device=text_logits.device)
 
             loss = (
                 F.ctc_loss(
@@ -1125,7 +1117,7 @@ class GraniteSpeechNarForASR(GraniteSpeechNarPreTrainedModel):
             if self.config.ce_loss_lambda > 0.0:
                 ce_targets = torch.cat([self._add_insertion_slots(ids) for ids in ctc_token_ids])
                 ce_loss = F.cross_entropy(
-                    logits,
+                    text_logits,
                     ce_targets.long(),
                     reduction="mean",
                     ignore_index=-100,
