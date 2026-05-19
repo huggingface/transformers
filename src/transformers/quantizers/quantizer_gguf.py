@@ -162,10 +162,10 @@ class GGUFQuantizer(HfQuantizer):
         """Run the base post-process, then apply good generation defaults when
         the GgufLinear swap is in effect. Byte routing for both GgufLinear and
         GgufExperts happens through the rename pipeline (target-aware
-        GGUFDequantize) — no post-load byte copy."""
+        GGUFDequantize) — no post-load byte copy. Kernel ops are resolved
+        eagerly in each module's __init__ (no post-load bind step)."""
         super().postprocess_model(model, **kwargs)
         if self.linear_mode:
-            self._bind_experts_kernels(model)
             self._apply_generation_defaults(model)
         return model
 
@@ -251,18 +251,6 @@ class GGUFQuantizer(HfQuantizer):
                 if gate_up is not None and down is not None:
                     info[name] = {"gate_up_quant": gate_up, "down_quant": down}
         return info
-
-    def _bind_experts_kernels(self, model) -> None:
-        """Resolve ``mul_mat_id_<fmt>_f32`` kernel refs + pre-allocate decode
-        scratch buffers on every swapped :class:`GgufExperts` module. Called
-        after weight loading (the rename pipeline already populated the byte
-        buffers via the target-aware :class:`GGUFDequantize`)."""
-        from ..integrations.gguf_kernels import bind_id_kernel_refs
-        from ..integrations.gguf_linear import GgufExperts
-
-        for _, module in model.named_modules():
-            if isinstance(module, GgufExperts):
-                bind_id_kernel_refs(module)
 
     def _apply_generation_defaults(self, model) -> None:
         """Set ``cache_implementation`` + ``compile_config`` defaults on

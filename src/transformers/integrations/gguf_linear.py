@@ -28,7 +28,7 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 
-from .gguf_kernels import _KERNEL_FMT, bind_id_kernel_refs, ensure_metal_kernels
+from .gguf_kernels import _KERNEL_FMT, ensure_metal_kernels
 from .moe import ExpertsInterface
 
 
@@ -51,26 +51,6 @@ def gguf_linear_supports(quant_type) -> bool:
     """Return True if quant_type has a matching mul_mat_<fmt>_f32 kernel."""
     name = quant_type.name if hasattr(quant_type, "name") else str(quant_type)
     return name in _QUANT_INFO
-
-
-# Module-level cache of (matvec, matmul) OpOverload refs per quant type. The
-# kernel names are deterministic from the quant type (mul_mat_vec_q4_K_f32,
-# mul_mat_q4_K_f32, ...), so we resolve once and share across every GgufLinear
-# of the same quant type.
-_LINEAR_OPS: dict[str, tuple] = {}
-
-
-def _linear_ops(quant_type: str):
-    cached = _LINEAR_OPS.get(quant_type)
-    if cached is not None:
-        return cached
-    ops = ensure_metal_kernels()._ops
-    fmt = _KERNEL_FMT[quant_type]
-    mv = getattr(ops, f"mul_mat_vec_{fmt}_f32")
-    mat = getattr(ops, f"mul_mat_{fmt}_f32")
-    pair = (getattr(mv, "default", mv), getattr(mat, "default", mat))
-    _LINEAR_OPS[quant_type] = pair
-    return pair
 
 
 class GgufLinear(nn.Module):
@@ -99,6 +79,16 @@ class GgufLinear(nn.Module):
             self.bias = nn.Parameter(torch.zeros(out_features, dtype=torch.float32), requires_grad=False)
         else:
             self.register_parameter("bias", None)
+        # Explicit kernel refs. Both names are deterministic from quant_type so
+        # we resolve them once at construction. When kernels aren't loadable
+        # (non-MPS / CI) leave the attrs None — forward errors out clearly.
+        try:
+            ops = ensure_metal_kernels()._ops
+            fmt = _KERNEL_FMT[quant_type]
+            self._mv_op = getattr(ops, f"mul_mat_vec_{fmt}_f32").default
+            self._mat_op = getattr(ops, f"mul_mat_{fmt}_f32").default
+        except Exception:
+            self._mv_op = self._mat_op = None
 
     def extra_repr(self) -> str:
         return (
@@ -110,12 +100,11 @@ class GgufLinear(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if x.shape[-1] != self.in_features:
             raise ValueError(f"Last dim of x must be {self.in_features}, got {x.shape[-1]}")
-        if x.device.type != "mps":
+        if x.device.type != "mps" or self._mv_op is None:
             raise RuntimeError(
-                "GgufLinear runs only on MPS. Re-load with `dtype=torch.bfloat16` (or any explicit dtype) "
-                "to dequantize to a normal nn.Linear for non-MPS devices."
+                "GgufLinear runs only on MPS with the metal kernels loaded. Re-load with "
+                "`dtype=torch.bfloat16` (or any explicit dtype) to dequantize to a normal nn.Linear."
             )
-        mv_op, mat_op = _linear_ops(self.quant_type)
 
         batch_shape = x.shape[:-1]
         x_flat = x.reshape(-1, self.in_features).contiguous().to(torch.float32)
@@ -126,14 +115,14 @@ class GgufLinear(nn.Module):
         # over matvec (rare in practice — most call sites land aligned).
         if N == 1:
             y = torch.empty(self.out_features, dtype=torch.float32, device=x.device)
-            mv_op(qw, x_flat.view(-1), y)
+            self._mv_op(qw, x_flat.view(-1), y)
         elif N % 32 == 0:
             y = torch.empty(N * self.out_features, dtype=torch.float32, device=x.device)
-            mat_op(qw, x_flat, y)
+            self._mat_op(qw, x_flat, y)
         else:
             y = torch.empty(N * self.out_features, dtype=torch.float32, device=x.device)
             for i in range(N):
-                mv_op(qw, x_flat[i].reshape(-1), y[i * self.out_features : (i + 1) * self.out_features])
+                self._mv_op(qw, x_flat[i].reshape(-1), y[i * self.out_features : (i + 1) * self.out_features])
         y = y.view(N, self.out_features).reshape(*batch_shape, self.out_features)
         if self.bias is not None:
             y = y + self.bias.to(y.device).to(y.dtype)
@@ -207,6 +196,31 @@ class GgufExperts(nn.Module):
         self.has_bias = False
         self.is_transposed = False
         self.is_concatenated = True
+
+        # Explicit kernel refs + decode-shape scratch. Same rationale as the
+        # GgufLinear case (eager resolution from quant_type, None when kernels
+        # are unloadable so non-MPS construction still succeeds). The scratch
+        # buffers are registered as non-persistent meta tensors here; ``.to``
+        # materialises them when the model lands on its real device. They feed
+        # the decode hot path so torch.compile doesn't see fresh ``torch.empty``
+        # mutations on the second call (that would force a re-trace).
+        try:
+            ops = ensure_metal_kernels()._ops
+            self._id_op_gate_up = getattr(ops, f"mul_mat_id_{_KERNEL_FMT[gate_up_quant]}_f32").default
+            self._id_op_down = getattr(ops, f"mul_mat_id_{_KERNEL_FMT[down_quant]}_f32").default
+        except Exception:
+            self._id_op_gate_up = self._id_op_down = None
+        decode_size = getattr(config, "num_experts_per_tok", None) or 4
+        self.register_buffer(
+            "_gate_buf", torch.empty(decode_size, self.intermediate_dim, dtype=torch.float32), persistent=False
+        )
+        self.register_buffer(
+            "_up_buf", torch.empty(decode_size, self.intermediate_dim, dtype=torch.float32), persistent=False
+        )
+        self.register_buffer(
+            "_pair_out", torch.empty(decode_size, self.hidden_dim, dtype=torch.float32), persistent=False
+        )
+        self._decode_size = decode_size
 
     def extra_repr(self) -> str:
         return (
@@ -291,6 +305,25 @@ class GgufExpertsTransposed(GgufExperts):
         self.is_transposed = True
         self.is_concatenated = True
 
+        # Eager kernel refs + decode scratch; same pattern as GgufExperts.
+        try:
+            ops = ensure_metal_kernels()._ops
+            self._id_op_gate_up = getattr(ops, f"mul_mat_id_{_KERNEL_FMT[gate_up_quant]}_f32").default
+            self._id_op_down = getattr(ops, f"mul_mat_id_{_KERNEL_FMT[down_quant]}_f32").default
+        except Exception:
+            self._id_op_gate_up = self._id_op_down = None
+        decode_size = getattr(config, "num_experts_per_tok", None) or 4
+        self.register_buffer(
+            "_gate_buf", torch.empty(decode_size, self.intermediate_dim, dtype=torch.float32), persistent=False
+        )
+        self.register_buffer(
+            "_up_buf", torch.empty(decode_size, self.intermediate_dim, dtype=torch.float32), persistent=False
+        )
+        self.register_buffer(
+            "_pair_out", torch.empty(decode_size, self.hidden_dim, dtype=torch.float32), persistent=False
+        )
+        self._decode_size = decode_size
+
 
 # Registry of fused-expert classes keyed by ``model.config.model_type``.
 # Covers every MoE arch with GGUF rename rules (``_GGUF_ARCH_CONVERTERS`` in
@@ -334,29 +367,22 @@ def gguf_bmm_experts_forward(
     intermediate_dim = self.intermediate_dim
     device = hidden_states.device
     # S = total token-expert pairs across the batch (each routed token contributes
-    # ``num_top_k`` work items). The mul_mat_id kernel writes one output row per pair.
+    # num_top_k work items). The mul_mat_id kernel writes one output row per pair.
     S = num_tokens * num_top_k
 
-    op_gate_up = getattr(self, "_id_op_gate_up", None)
-    op_down = getattr(self, "_id_op_down", None)
-    if op_gate_up is None or op_down is None:
-        # State-dict load path bypasses the meta-time swap, so bind kernels lazily.
-        bind_id_kernel_refs(self)
-        op_gate_up, op_down = self._id_op_gate_up, self._id_op_down
+    if self._id_op_gate_up is None or self._id_op_down is None:
+        raise RuntimeError("GgufExperts requires the GGUF metal kernels (install `kernels`, run on MPS).")
 
     selected = hidden_states.repeat_interleave(num_top_k, dim=0).to(torch.float32).contiguous()
     ids32 = top_k_index.reshape(-1).to(torch.int32)
     sample_weights = top_k_weights.reshape(-1).to(torch.float32)
 
-    # Decode (num_tokens == 1) is the hot path under torch.compile: we re-allocate
-    # scratch ONCE per quant module at swap time (bind_id_kernel_refs registers
-    # _gate_buf / _up_buf / _pair_out as non-persistent buffers sized for
-    # S = num_experts_per_tok). Reusing those buffers avoids torch.empty inside
-    # the compiled graph — fresh allocations would trigger dynamo recompiles on
-    # the second forward when shapes match but addresses differ. For prefill
-    # (num_tokens > 1) we fall back to per-call empties; the recompile happens
-    # once for that shape and is then cached.
-    if getattr(self, "_scratch_S", None) == S and getattr(self, "_scratch_T", None) == num_tokens:
+    # Decode hot path: reuse the per-module scratch buffers (registered at
+    # __init__, materialised by .to(device)). Avoids ``torch.empty`` inside the
+    # compiled graph — without this, dynamo would re-trace on the second call
+    # when the buffer storage changes. Prefill (num_tokens > 1) allocates per
+    # call; that re-trace happens once per shape and dynamo caches it.
+    if num_tokens == 1 and self._decode_size == S:
         gate_buf, up_buf, out = self._gate_buf, self._up_buf, self._pair_out
     else:
         gate_buf = torch.empty(S, intermediate_dim, dtype=torch.float32, device=device)
@@ -372,10 +398,10 @@ def gguf_bmm_experts_forward(
     gate_qw = gate_up_bytes[:, :half].contiguous().view(-1)
     up_qw = gate_up_bytes[:, half:].contiguous().view(-1)
     down_qw = self.down_proj.view(-1)
-    op_gate_up(gate_qw, selected, ids32, gate_buf)
-    op_gate_up(up_qw, selected, ids32, up_buf)
+    self._id_op_gate_up(gate_qw, selected, ids32, gate_buf)
+    self._id_op_gate_up(up_qw, selected, ids32, up_buf)
     inter = (self.act_fn(gate_buf) * up_buf).contiguous()
-    op_down(down_qw, inter, ids32, out)
+    self._id_op_down(down_qw, inter, ids32, out)
 
     weighted = out * sample_weights.unsqueeze(-1)
     return weighted.view(num_tokens, num_top_k, hidden_dim).sum(dim=1).to(hidden_states.dtype)
