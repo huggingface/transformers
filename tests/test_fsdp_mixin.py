@@ -83,7 +83,6 @@ FSDP_TOP_MODEL_NAMES = {
     "qwen3_5_moe",
     "deepseek_v2",
     "gpt_oss",
-    "glm_moe_dsa",
     "glm4_moe_lite",
 }
 
