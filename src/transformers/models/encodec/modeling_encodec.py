@@ -35,8 +35,8 @@ logger = logging.get_logger(__name__)
 # General docstring
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class EncodecOutput(ModelOutput):
     r"""
     audio_codes (`torch.LongTensor`  of shape `(nb_frames, batch_size, nb_quantizers, frame_len)`, *optional*):
@@ -49,8 +49,8 @@ class EncodecOutput(ModelOutput):
     audio_values: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class EncodecEncoderOutput(ModelOutput):
     r"""
     audio_codes (`torch.LongTensor`  of shape `(nb_frames, batch_size, nb_quantizers, frame_len)`, *optional*):
@@ -68,8 +68,8 @@ class EncodecEncoderOutput(ModelOutput):
     last_frame_pad_length: int | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class EncodecDecoderOutput(ModelOutput):
     r"""
     audio_values (`torch.FloatTensor`  of shape `(batch_size, segment_length)`, *optional*):

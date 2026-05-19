@@ -19,7 +19,7 @@
 # limitations under the License.
 
 import math
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -47,7 +47,6 @@ from .configuration_sam3_lite_text import (
     Sam3LiteTextGeometryEncoderConfig,
     Sam3LiteTextMaskDecoderConfig,
     Sam3LiteTextTextConfig,
-    Sam3LiteTextViTConfig,
 )
 
 
@@ -341,140 +340,6 @@ class Sam3LiteTextTextEmbeddings(nn.Module):
         return hidden_states
 
 
-class Sam3LiteTextViTRotaryEmbedding(nn.Module):
-    """
-    Vision Rotary Position Embedding for SAM3_LITE_TEXT, following transformers library standards.
-    Supports 2D (axial) rotary embeddings for spatial dimensions.
-    """
-
-    def __init__(self, config: Sam3LiteTextViTConfig, end_x: int, end_y: int, scale: float = 1.0):
-        super().__init__()
-        dim = config.hidden_size // config.num_attention_heads
-        # Ensure even dimension for proper axial splitting
-        if dim % 4 != 0:
-            raise ValueError("Dimension must be divisible by 4 for axial RoPE")
-        self.end_x, self.end_y = end_x, end_y
-        self.dim = dim
-        self.rope_theta = config.rope_theta
-        self.scale = scale
-        freqs = 1.0 / (config.rope_theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
-
-        flattened_indices = torch.arange(end_x * end_y, dtype=torch.long)
-        x_positions = (flattened_indices % end_x) * scale
-        y_positions = torch.div(flattened_indices, end_x, rounding_mode="floor") * scale
-        freqs_x = torch.outer(x_positions, freqs).float()
-        freqs_y = torch.outer(y_positions, freqs).float()
-        inv_freq = torch.cat([freqs_x, freqs_y], dim=-1)
-        inv_freq = inv_freq.repeat_interleave(2, dim=-1)
-        # directly register the cos and sin embeddings as we have a fixed feature shape
-        self.register_buffer("rope_embeddings_cos", inv_freq.cos(), persistent=False)
-        self.register_buffer("rope_embeddings_sin", inv_freq.sin(), persistent=False)
-
-    @torch.no_grad()
-    def forward(self) -> tuple[torch.Tensor, torch.Tensor]:
-        # As the feature map size is fixed for each stage, we can just return the pre-computed embeddings.
-        return self.rope_embeddings_cos, self.rope_embeddings_sin
-
-
-class Sam3LiteTextViTPatchEmbeddings(nn.Module):
-    """
-    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
-    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
-    Transformer.
-    """
-
-    def __init__(self, config: Sam3LiteTextViTConfig):
-        super().__init__()
-        image_size, patch_size = config.pretrain_image_size, config.patch_size
-        num_channels, hidden_size = config.num_channels, config.hidden_size
-
-        image_size = image_size if isinstance(image_size, Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, Iterable) else (patch_size, patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.num_patches = num_patches
-
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size, bias=False)
-
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        embeddings = self.projection(pixel_values.to(self.projection.weight.dtype)).flatten(2).transpose(1, 2)
-        return embeddings
-
-
-class Sam3LiteTextViTEmbeddings(nn.Module):
-    """
-    Construct the patch embeddings and position embeddings for SAM3_LITE_TEXT ViT.
-
-    Position embeddings are tiled (not interpolated) when resizing to match different input sizes.
-    """
-
-    def __init__(self, config: Sam3LiteTextViTConfig):
-        super().__init__()
-
-        self.patch_embeddings = Sam3LiteTextViTPatchEmbeddings(config)
-        num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Parameter(
-            torch.randn(1, num_patches, config.hidden_size)
-        )  # !Remove cls token in convert weights!
-
-        self.dropout = nn.Dropout(config.hidden_dropout)
-        self.patch_size = config.patch_size
-
-    def _tile_position_embeddings(
-        self,
-        position_embeddings: torch.Tensor,
-        height: int,
-        width: int,
-    ) -> torch.Tensor:
-        """
-        Tile position embeddings to match target spatial dimensions.
-        Args:
-            position_embeddings: Shape [1, num_pretrain_patches, hidden_size]
-            height: Target height in patches
-            width: Target width in patches
-
-        Returns:
-            Shape [1, height * width, hidden_size]
-        """
-        pretrain_size = int(position_embeddings.shape[1] ** 0.5)
-
-        # Skip tiling if sizes match (but always tile during tracing for consistent graph)
-        if not torch.jit.is_tracing() and pretrain_size == height and pretrain_size == width:
-            return position_embeddings.reshape(1, height * width, -1)
-
-        # Tile position embeddings to match target spatial dimensions
-        hidden_size = position_embeddings.shape[-1]
-        pos_embed = position_embeddings.reshape(1, pretrain_size, pretrain_size, hidden_size).permute(0, 3, 1, 2)
-        repeat_h = height // pretrain_size + 1
-        repeat_w = width // pretrain_size + 1
-        pos_embed = pos_embed.tile([1, 1, repeat_h, repeat_w])[:, :, :height, :width]
-        return pos_embed.permute(0, 2, 3, 1).reshape(1, height * width, hidden_size)
-
-    def forward(
-        self,
-        pixel_values: torch.Tensor,
-        interpolate_pos_encoding: bool = False,
-    ) -> torch.Tensor:
-        height, width = pixel_values.shape[-2:]
-        embeddings = self.patch_embeddings(pixel_values)
-
-        # Calculate spatial dimensions in patches
-        height_patches = height // self.patch_size
-        width_patches = width // self.patch_size
-
-        position_embeddings = self._tile_position_embeddings(
-            self.position_embeddings,
-            height_patches,
-            width_patches,
-        )
-        embeddings = embeddings + position_embeddings
-        embeddings = self.dropout(embeddings)
-
-        return embeddings
-
-
 @auto_docstring
 class Sam3LiteTextPreTrainedModel(PreTrainedModel):
     config_class = Sam3LiteTextConfig
@@ -490,21 +355,6 @@ class Sam3LiteTextPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, Sam3LiteTextViTEmbeddings):
-            init.normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, Sam3LiteTextViTRotaryEmbedding):
-            end_x, end_y = module.end_x, module.end_y
-            dim = module.dim
-            freqs = 1.0 / (module.rope_theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
-            flattened_indices = torch.arange(end_x * end_y, dtype=torch.long)
-            x_positions = (flattened_indices % end_x) * module.scale
-            y_positions = torch.div(flattened_indices, end_x, rounding_mode="floor") * module.scale
-            freqs_x = torch.outer(x_positions, freqs).float()
-            freqs_y = torch.outer(y_positions, freqs).float()
-            inv_freq = torch.cat([freqs_x, freqs_y], dim=-1)
-            inv_freq = inv_freq.repeat_interleave(2, dim=-1)
-            init.copy_(module.rope_embeddings_cos, inv_freq.cos())
-            init.copy_(module.rope_embeddings_sin, inv_freq.sin())
         if isinstance(module, Sam3LiteTextTextPositionEmbedding):
             init.normal_(module.position_embedding, std=module.position_embedding.shape[-1] ** -0.5)
         elif isinstance(module, Sam3LiteTextTextModel):
@@ -568,8 +418,8 @@ class Sam3LiteTextTextModel(Sam3LiteTextPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3LiteTextVisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
     fpn_hidden_states (`tuple[torch.FloatTensor]`):
@@ -582,8 +432,8 @@ class Sam3LiteTextVisionEncoderOutput(BaseModelOutputWithPooling):
     fpn_position_encoding: tuple[torch.FloatTensor, ...] = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3LiteTextGeometryEncoderOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_prompts, hidden_size)`):
@@ -596,8 +446,8 @@ class Sam3LiteTextGeometryEncoderOutput(ModelOutput):
     attention_mask: torch.BoolTensor | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3LiteTextDETREncoderOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -622,8 +472,8 @@ class Sam3LiteTextDETREncoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3LiteTextDETRDecoderOutput(ModelOutput):
     r"""
     intermediate_hidden_states (`torch.FloatTensor` of shape `(num_layers, batch_size, num_queries, hidden_size)`):
@@ -645,8 +495,8 @@ class Sam3LiteTextDETRDecoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3LiteTextMaskDecoderOutput(ModelOutput):
     r"""
     pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height, width)`):
@@ -662,8 +512,8 @@ class Sam3LiteTextMaskDecoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3LiteTextImageSegmentationOutput(ModelOutput):
     r"""
     pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height, width)`):
@@ -819,12 +669,16 @@ class Sam3LiteTextSinePositionEmbedding(nn.Module):
     """
 
     def __init__(
-        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: float | None = None
+        self,
+        num_position_features: int = 64,
+        temperature: int = 10000,
+        normalize: bool = False,
+        scale: float | None = None,
     ):
         super().__init__()
         if scale is not None and normalize is False:
             raise ValueError("normalize should be True if scale is passed")
-        self.num_pos_feats = num_pos_feats
+        self.num_position_features = num_position_features
         self.temperature = temperature
         self.normalize = normalize
         self.scale = 2 * math.pi if scale is None else scale
@@ -843,8 +697,8 @@ class Sam3LiteTextSinePositionEmbedding(nn.Module):
         x_embed = x * self.scale
         y_embed = y * self.scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=x.device).to(x.dtype)
-        dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_pos_feats)
+        dim_t = torch.arange(self.num_position_features, dtype=torch.int64, device=x.device).to(x.dtype)
+        dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_position_features)
 
         pos_x = x_embed[:, None] / dim_t
         pos_y = y_embed[:, None] / dim_t
@@ -860,11 +714,11 @@ class Sam3LiteTextSinePositionEmbedding(nn.Module):
             boxes: Box coordinates [batch_size, num_queries, 4] in (x, y, w, h) format
 
         Returns:
-            Position embeddings [batch_size, num_queries, num_pos_feats*4]
+            Position embeddings [batch_size, num_queries, num_position_features*4]
         """
         assert boxes.size(-1) == 4, f"Expected 4D box coordinates (x, y, w, h), got shape {boxes.shape}"
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=boxes.device).to(boxes.dtype)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
+        dim_t = torch.arange(self.num_position_features, dtype=torch.int64, device=boxes.device).to(boxes.dtype)
+        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_position_features)
 
         x_embed = boxes[:, :, 0] * self.scale
         y_embed = boxes[:, :, 1] * self.scale
@@ -885,26 +739,29 @@ class Sam3LiteTextSinePositionEmbedding(nn.Module):
 
         return pos
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=4)
-    def forward(
-        self,
+    def build_sine_position_embedding(
         shape: torch.Size,
         device: torch.device | str,
         dtype: torch.dtype,
-        mask: Tensor | None = None,
-    ) -> Tensor:
+        num_position_features: int,
+        normalize: bool = False,
+        scale: float | None = None,
+        temperature: int = 10000,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         if mask is None:
-            mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
-        not_mask = (~mask).to(dtype)
-        y_embed = not_mask.cumsum(1)
-        x_embed = not_mask.cumsum(2)
-        if self.normalize:
+            mask = torch.ones((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
+        y_embed = mask.cumsum(1, dtype=dtype)
+        x_embed = mask.cumsum(2, dtype=dtype)
+        if normalize:
             eps = 1e-6
-            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
+            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * scale
+            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=device).to(dtype)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
+        dim_t = torch.arange(num_position_features, dtype=torch.int64, device=device).to(dtype)
+        dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_position_features)
 
         pos_x = x_embed[:, :, :, None] / dim_t
         pos_y = y_embed[:, :, :, None] / dim_t
@@ -912,6 +769,17 @@ class Sam3LiteTextSinePositionEmbedding(nn.Module):
         pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
         return pos
+
+    def forward(
+        self,
+        shape: torch.Size,
+        device: torch.device | str,
+        dtype: torch.dtype,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        return self.build_sine_position_embedding(
+            shape, device, dtype, self.num_position_features, self.normalize, self.scale, self.temperature, mask
+        )
 
 
 class Sam3LiteTextGeometryEncoderLayer(nn.Module):
@@ -1034,7 +902,7 @@ class Sam3LiteTextGeometryEncoder(nn.Module):
         self.roi_size = config.roi_size
 
         self.position_encoding = Sam3LiteTextSinePositionEmbedding(
-            num_pos_feats=config.hidden_size // 2, normalize=True
+            num_position_features=config.hidden_size // 2, normalize=True
         )
         self.label_embed = nn.Embedding(2, self.hidden_size)
         self.cls_embed = nn.Embedding(1, self.hidden_size)
@@ -1560,7 +1428,7 @@ class Sam3LiteTextDetrDecoder(Sam3LiteTextPreTrainedModel):
         self.box_rpb_embed_y = Sam3LiteTextDecoderMLP(2, config.hidden_size, config.num_attention_heads, 2)
 
         self.position_encoding = Sam3LiteTextSinePositionEmbedding(
-            num_pos_feats=config.hidden_size // 2, normalize=False
+            num_position_features=config.hidden_size // 2, normalize=False
         )
 
         self.post_init()
@@ -2222,12 +2090,9 @@ class Sam3LiteTextModel(Sam3LiteTextPreTrainedModel):
         fpn_position_encoding = vision_outputs.fpn_position_encoding[:-1]
 
         if text_embeds is None:
-            text_features = self.get_text_features(
-                input_ids=input_ids, attention_mask=attention_mask, return_dict=True
-            ).pooler_output
-        else:
-            text_features = text_embeds
+            text_embeds = self.get_text_features(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)
 
+        text_features = text_embeds.pooler_output
         text_mask = attention_mask.bool() if attention_mask is not None else None
         has_geometry_prompts = input_boxes is not None and input_boxes.numel() > 0
 

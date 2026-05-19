@@ -19,7 +19,6 @@ rendered properly in your Markdown viewer.
 # Audio Flamingo 3
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
@@ -56,6 +55,7 @@ The model supports audio-text instructions, including multi-turn interactions, a
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
 
+
 model_id = "nvidia/audio-flamingo-3-hf"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AudioFlamingo3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
@@ -87,6 +87,7 @@ print(decoded_outputs)
 
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
+
 
 model_id = "nvidia/audio-flamingo-3-hf"
 processor = AutoProcessor.from_pretrained(model_id)
@@ -133,6 +134,7 @@ print(decoded_outputs)
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
 
+
 model_id = "nvidia/audio-flamingo-3-hf"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AudioFlamingo3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
@@ -164,6 +166,7 @@ print(decoded_outputs)
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
 
+
 model_id = "nvidia/audio-flamingo-3-hf"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AudioFlamingo3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
@@ -194,6 +197,7 @@ print(decoded_outputs)
 
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
+
 
 model_id = "nvidia/audio-flamingo-3-hf"
 processor = AutoProcessor.from_pretrained(model_id)
@@ -243,6 +247,7 @@ print(decoded_outputs)
 
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
+
 
 model_id = "nvidia/audio-flamingo-3-hf"
 processor = AutoProcessor.from_pretrained(model_id)
@@ -298,6 +303,7 @@ loss.backward()
 
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
+
 
 model_id = "nvidia/audio-flamingo-3-hf"
 processor = AutoProcessor.from_pretrained(model_id)

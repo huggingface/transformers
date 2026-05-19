@@ -40,9 +40,9 @@ from .utils import (
     BaseGenerateManager,
     BaseHandler,
     Modality,
-    ToolCallParser,
     _StreamError,
-    detect_tool_format,
+    get_tool_call_config,
+    parse_tool_calls,
 )
 
 
@@ -140,11 +140,7 @@ class ChatCompletionHandler(BaseHandler):
         if use_cb:
             gen_manager.init_cb(model, gen_config)
 
-        # Detect tool support for the loaded model
-        # TODO: after tool_call start token, use constrained generation to:
-        # 1. force generation to pick from the available tool names
-        # 2. force generation to produce valid JSON matching the tool's parameter schema
-        tool_format = detect_tool_format(model) if body.get("tools") else None
+        tool_config = get_tool_call_config(processor, model) if body.get("tools") else None
 
         streaming = body.get("stream")
         if streaming:
@@ -156,7 +152,7 @@ class ChatCompletionHandler(BaseHandler):
                 inputs,
                 gen_config,
                 gen_manager=gen_manager,
-                tool_format=tool_format,
+                tool_config=tool_config,
             )
         else:
             return await self._non_streaming(
@@ -167,7 +163,7 @@ class ChatCompletionHandler(BaseHandler):
                 inputs,
                 gen_config,
                 gen_manager=gen_manager,
-                tool_format=tool_format,
+                tool_config=tool_config,
             )
 
     # ----- streaming -----
@@ -181,17 +177,22 @@ class ChatCompletionHandler(BaseHandler):
         inputs: dict,
         gen_config: "GenerationConfig",
         gen_manager: BaseGenerateManager,
-        tool_format: dict | None = None,
+        tool_config: dict | None = None,
     ) -> StreamingResponse:
         """Stream tokens as SSE via DirectStreamer."""
-        queue, streamer = gen_manager.generate_streaming(model, processor, inputs, gen_config, request_id=request_id)
+        queue, streamer = gen_manager.generate_streaming(
+            model,
+            processor,
+            inputs,
+            gen_config,
+            request_id=request_id,
+            tool_config=tool_config,
+        )
         input_ids = inputs["input_ids"]
         # CB returns plain lists, regular path returns tensors
         input_len = len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
-        parser = ToolCallParser(tool_format) if tool_format else None
 
         async def sse_gen() -> AsyncGenerator[str, None]:
-            has_tool_calls = False
             try:
                 yield self._build_chunk_sse(request_id, role="assistant", model=model_id)
 
@@ -215,27 +216,31 @@ class ChatCompletionHandler(BaseHandler):
                             yield "".join(sse_parts)
                             return
 
-                        # Tool call parsing: None = normal text, CONSUMED = buffering, else = tool call dict
-                        chunk_kwargs = {"content": text}
-                        if parser is not None and (result := parser.feed(text)) is not None:
-                            if result is ToolCallParser.CONSUMED:
-                                continue
-                            has_tool_calls = True
-                            chunk_kwargs = {
-                                "tool_calls": [
-                                    ChoiceDeltaToolCall(
-                                        index=0,
-                                        type="function",
-                                        id=f"{request_id}_tool_call",
-                                        function={"name": result["name"], "arguments": result["arguments"]},
-                                    )
-                                ]
-                            }
-
-                        sse_parts.append(self._build_chunk_sse(request_id, model=model_id, **chunk_kwargs))
+                        sse_parts.append(self._build_chunk_sse(request_id, model=model_id, content=text))
 
                     if sse_parts:
                         yield "".join(sse_parts)
+
+                # Tool calls are parsed after generation completes (not during streaming),
+                # because the full token sequence is needed for reliable parsing.
+                has_tool_calls = False
+                if tool_config:
+                    parsed = parse_tool_calls(processor, streamer.generated_token_ids, tool_config["schema"])
+                    if parsed:
+                        has_tool_calls = True
+                        for i, tc in enumerate(parsed):
+                            yield self._build_chunk_sse(
+                                request_id,
+                                model=model_id,
+                                tool_calls=[
+                                    ChoiceDeltaToolCall(
+                                        index=i,
+                                        type="function",
+                                        id=f"{request_id}_tool_call_{i}",
+                                        function={"name": tc["name"], "arguments": tc["arguments"]},
+                                    )
+                                ],
+                            )
 
                 hit_max = gen_config.max_new_tokens is not None and streamer.total_tokens >= gen_config.max_new_tokens
                 if has_tool_calls:
@@ -274,7 +279,7 @@ class ChatCompletionHandler(BaseHandler):
         inputs: dict,
         gen_config: "GenerationConfig",
         gen_manager: BaseGenerateManager,
-        tool_format: dict | None = None,
+        tool_config: dict | None = None,
     ) -> JSONResponse:
         """Run generation and return a JSONResponse."""
         content, input_len, generated_ids = await gen_manager.generate_non_streaming(
@@ -289,18 +294,17 @@ class ChatCompletionHandler(BaseHandler):
             total_tokens=input_len + completion_tokens,
         )
 
-        # Parse tool calls from the generated text
         tool_calls = None
-        if tool_format is not None:
-            parsed = ToolCallParser.parse(content, tool_format)
-            if parsed is not None:
+        if tool_config is not None:
+            parsed = parse_tool_calls(processor, generated_ids, tool_config["schema"])
+            if parsed:
                 tool_calls = [
                     ChatCompletionMessageToolCall(
-                        id=f"{request_id}_tool_call",
+                        id=f"{request_id}_tool_call_{i}",
                         type="function",
                         function={"name": tc["name"], "arguments": tc["arguments"]},
                     )
-                    for tc in parsed
+                    for i, tc in enumerate(parsed)
                 ]
 
         if tool_calls is not None:

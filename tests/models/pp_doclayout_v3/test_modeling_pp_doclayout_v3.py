@@ -18,7 +18,6 @@ import inspect
 import math
 import unittest
 
-import requests
 from parameterized import parameterized
 
 from transformers import (
@@ -28,6 +27,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
+from transformers.image_utils import load_image
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
@@ -39,13 +39,11 @@ from transformers.testing_utils import (
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
     import torch
-
-if is_vision_available():
-    from PIL import Image
 
 
 class PPDocLayoutV3ModelTester:
@@ -457,8 +455,10 @@ class PPDocLayoutV3ModelIntegrationTest(unittest.TestCase):
         self.image_processor = (
             PPDocLayoutV3ImageProcessor.from_pretrained(model_path) if is_vision_available() else None
         )
-        url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg"
-        self.image = Image.open(requests.get(url, stream=True).raw)
+        img_url = url_to_local_path(
+            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg"
+        )
+        self.image = load_image(img_url)
 
     def test_inference_object_detection_head(self):
         inputs = self.image_processor(images=self.image, return_tensors="pt").to(torch_device)

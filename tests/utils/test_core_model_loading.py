@@ -11,14 +11,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import unittest
 from types import SimpleNamespace
 
 import torch
 import torch.nn as nn
 
-from transformers import PretrainedConfig
-from transformers.conversion_mapping import get_checkpoint_conversion_mapping, register_checkpoint_conversion_mapping
+from transformers import PretrainedConfig, PreTrainedModel
+from transformers.conversion_mapping import (
+    get_checkpoint_conversion_mapping,
+    get_model_conversion_mapping,
+    register_checkpoint_conversion_mapping,
+)
 from transformers.core_model_loading import (
     Chunk,
     Concatenate,
@@ -27,6 +32,7 @@ from transformers.core_model_loading import (
     LinearToConv3d,
     MergeModulelist,
     PermuteForRope,
+    PrefixChange,
     WeightConverter,
     WeightRenaming,
     build_glob_alternation,
@@ -206,20 +212,21 @@ class DummyMLP(nn.Module):
         self.down_proj = DummyParamModule((2, 2))
 
 
-class DummyRoot(nn.Module):
+class DummyRoot(PreTrainedModel):
     base_model_prefix = "model"
     config: PretrainedConfig
 
-    def __init__(self, add_extra_moe=False):
-        super().__init__()
+    def __init__(self, config, add_extra_moe=False, with_mlp=True):
+        super().__init__(config)
         self.model = DummyTopModel(add_extra_moe)
-        self.mlp = DummyMLP()
+        if with_mlp:
+            self.mlp = DummyMLP()
+        self.post_init()
 
 
 class TestConvertAndLoadStateDict(unittest.TestCase):
     def test_moe_and_qkv_conversion(self):
-        model = DummyRoot()
-        model.config = PretrainedConfig()
+        model = DummyRoot(PretrainedConfig())
 
         raw_tensors = {
             "model.layers.0.experts.0.w1.weight": torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
@@ -335,8 +342,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         torch.testing.assert_close(model_state["mlp.down_proj.weight"], raw_tensors["mlp.w2.weight"])
 
     def test_moe_and_qkv_conversion_reversed(self):
-        model = DummyRoot()
-        model.config = PretrainedConfig()
+        model = DummyRoot(PretrainedConfig())
 
         raw_tensors = {
             "model.layers.0.experts.0.w1.weight": torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
@@ -403,7 +409,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
     def test_qkv_chunk_rope_permute_with_fp8_quantization(self):
         if is_triton_available():
-            from transformers.integrations.finegrained_fp8 import Fp8Dequantize
+            from transformers.integrations.finegrained_fp8 import Fp8Dequantize, Fp8Quantize
         else:
             self.skipTest("Fine-grained FP8 integration tests require Triton to be installed.")
         n_heads = 2
@@ -432,16 +438,17 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
                 super().__init__()
                 self.self_attn = RopeSelfAttn()
 
-        class RopeModel(nn.Module):
+        class RopeModel(PreTrainedModel):
             base_model_prefix = "model"
 
-            def __init__(self):
-                super().__init__()
+            def __init__(self, config):
+                super().__init__(config)
                 self.layers = nn.ModuleList([RopeLayer()])
+                self.post_init()
 
-        model = RopeModel()
-        model.config = PretrainedConfig()
-        model.config.num_attention_heads = n_heads
+        config = PretrainedConfig()
+        config.num_attention_heads = n_heads
+        model = RopeModel(config)
 
         raw_q = torch.tensor(
             [
@@ -469,6 +476,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
                     self, "quantization_config", SimpleNamespace(weight_block_size=bs)
                 ),
                 "param_needs_quantization": lambda self, _model, param_name: param_name.endswith("q_proj.weight"),
+                "get_quantize_ops": lambda self: Fp8Quantize(self),
                 "pre_quantized": False,
             },
         )
@@ -476,11 +484,11 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
         weight_mapping = [
             WeightConverter(
-                "model.layers.*.self_attn.qkv_proj.weight",
+                "self_attn.qkv_proj.weight",
                 [
-                    "model.layers.*.self_attn.q_proj.weight",
-                    "model.layers.*.self_attn.k_proj.weight",
-                    "model.layers.*.self_attn.v_proj.weight",
+                    "self_attn.q_proj.weight",
+                    "self_attn.k_proj.weight",
+                    "self_attn.v_proj.weight",
                 ],
                 operations=[Chunk(dim=0), PermuteForRope()],
             )
@@ -523,9 +531,143 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         )
         torch.testing.assert_close(dequantized_q, expected_q, rtol=1e-2, atol=1e-2)
 
+    def test_scoped_renaming_does_not_leak_to_sibling_or_parent(self):
+        """scope_prefix gates a WeightRenaming to keys under one submodel only —
+        neither the sibling submodel nor the parent's own keys must be affected.
+
+        This mirrors the real use-case: a composite model (e.g. vision-language) has
+        two top-level submodels and a root-level weight, each with an ``old_q`` key.
+        The rename is registered only for ``vision_model``; the sibling
+        ``language_model.old_q`` and the root-level ``old_q`` must remain unmatched.
+        """
+
+        class _Submodel(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.q = DummyParamModule((1, 2))
+
+        class _CompositeModel(PreTrainedModel):
+            base_model_prefix = ""
+
+            def __init__(self, config):
+                super().__init__(config)
+                self.vision_model = _Submodel()
+                self.language_model = _Submodel()
+                self.q = DummyParamModule((1, 2))  # root-level weight with the same name
+                self.post_init()
+
+        model = _CompositeModel(PretrainedConfig())
+
+        vision_val = torch.tensor([[1.0, 2.0]])
+        checkpoint = {
+            "vision_model.old_q.weight": vision_val.clone(),
+            "language_model.old_q.weight": torch.tensor([[9.0, 9.0]]),
+            "old_q.weight": torch.tensor([[7.0, 7.0]]),  # root-level, must not be renamed
+        }
+
+        scoped_rename = WeightRenaming("^old_q", "q")
+        scoped_rename.scope_prefix = "vision_model"
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            checkpoint,
+            LoadStateDictConfig(weight_mapping=[scoped_rename]),
+            tp_plan=None,
+        )
+
+        # Sibling and parent keys must be unmatched.
+        self.assertEqual(loading_info.unexpected_keys, {"language_model.old_q.weight", "old_q.weight"})
+        self.assertEqual(loading_info.missing_keys, {"language_model.q.weight", "q.weight"})
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        torch.testing.assert_close(model.vision_model.q.weight, vision_val)
+        torch.testing.assert_close(model.language_model.q.weight, torch.zeros(1, 2))
+        torch.testing.assert_close(model.q.weight, torch.zeros(1, 2))
+
+    def test_interleaved_renaming_and_converter_round_trip(self):
+        """A WeightRenaming preceding a WeightConverter must also fire on the save path
+        even after the converter has already set source_pattern.
+
+        Loading (checkpoint key → model key):
+          1. WeightRenaming  (source "^decoder", target "encoder"):
+             "decoder.attn.qkv_proj.weight"          → "encoder.attn.qkv_proj.weight"
+          2. WeightConverter (source "^attn.qkv_proj.weight", targets "attn.{q,k,v}_proj.weight", scope "encoder"):
+             strips "encoder.", matches source, unpacks QKV, re-attaches "encoder."
+             "encoder.attn.qkv_proj.weight"          → "encoder.attn.{q,k,v}_proj.weight"
+
+        Saving (model key → checkpoint key, transforms applied in reverse):
+          1. rev(WeightConverter) (source "attn.{q,k,v}_proj.weight", target "^attn.qkv_proj.weight", scope "encoder"):
+             strips "encoder.", matches source, repacks QKV, re-attaches "encoder."
+             "encoder.attn.{q,k,v}_proj.weight"      → "encoder.attn.qkv_proj.weight"
+          2. rev(WeightRenaming) (source "^encoder", target "decoder"):
+             "encoder.attn.qkv_proj.weight"          → "decoder.attn.qkv_proj.weight"
+        """
+
+        class _Attn(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.q_proj = DummyParamModule((2, 4))
+                self.k_proj = DummyParamModule((2, 4))
+                self.v_proj = DummyParamModule((2, 4))
+
+        class _Encoder(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.attn = _Attn()
+
+        class _InterleavedModel(PreTrainedModel):
+            base_model_prefix = ""
+
+            def __init__(self, config):
+                super().__init__(config)
+                self.encoder = _Encoder()
+                self.post_init()
+
+        qkv = torch.arange(24, dtype=torch.float32).reshape(6, 4)
+        model = _InterleavedModel(PretrainedConfig())
+
+        # Checkpoint uses a "decoder" prefix and stores QKV packed together.
+        checkpoint = {"decoder.attn.qkv_proj.weight": qkv.clone()}
+
+        qkv_converter = WeightConverter(
+            "^attn.qkv_proj.weight",
+            ["attn.q_proj.weight", "attn.k_proj.weight", "attn.v_proj.weight"],
+            operations=[Chunk(dim=0)],
+        )
+        # scope_prefix mirrors what get_model_conversion_mapping sets for a submodel
+        qkv_converter.scope_prefix = "encoder"
+
+        weight_mapping = [
+            WeightRenaming("^decoder", "encoder"),  # step 1: fix prefix
+            qkv_converter,  # step 2: unpack QKV (fires after rename, scoped to encoder)
+        ]
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            checkpoint,
+            LoadStateDictConfig(weight_mapping=weight_mapping),
+            tp_plan=None,
+        )
+
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        q, k, v = torch.chunk(qkv, 3, dim=0)
+        torch.testing.assert_close(model.encoder.attn.q_proj.weight, q)
+        torch.testing.assert_close(model.encoder.attn.k_proj.weight, k)
+        torch.testing.assert_close(model.encoder.attn.v_proj.weight, v)
+
+        # Round-trip: saving must reconstruct the original "decoder.*" checkpoint.
+        # This relies on rev(WeightRenaming) firing after rev(WeightConverter) has set
+        # source_pattern — if it were skipped the prefix would remain "encoder".
+        saved = revert_weight_conversion(model, model.state_dict())
+        self.assertTrue(compare_state_dicts(saved, checkpoint))
+
     def test_ernie4_5_vl_moe_conversion(self):
-        model = DummyRoot(add_extra_moe=True)
-        model.config = PretrainedConfig()
+        model = DummyRoot(PretrainedConfig(), add_extra_moe=True)
 
         raw_tensors = {
             "model.layers.0.experts.0.w1.weight": torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
@@ -646,8 +788,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         torch.testing.assert_close(model_state["model.layers.1.extra_experts.down_proj.weight"], moe_2)
 
     def test_ernie4_5_vl_moe_conversion_reversed(self):
-        model = DummyRoot(add_extra_moe=True)
-        model.config = PretrainedConfig()
+        model = DummyRoot(PretrainedConfig(), add_extra_moe=True)
 
         raw_tensors = {
             "model.layers.0.experts.0.w1.weight": torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
@@ -777,6 +918,338 @@ class TestConversionMapping(unittest.TestCase):
         )
 
         self.assertEqual(len(get_checkpoint_conversion_mapping("foobarbaz")), 2)
+
+    def test_can_remove_prefix(self):
+        model = DummyRoot(PretrainedConfig())
+
+        bad_serialized_checkpoints = {f"bad_name.{k}": v.clone() for k, v in model.state_dict().items()}
+        weight_mapping = [PrefixChange(prefix_to_remove="bad_name")]
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            bad_serialized_checkpoints,
+            LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
+            tp_plan=None,
+        )
+
+        # Assert we can load without issues
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        # Assert that re-saving will lead to the exact same state_dict, re-adding the bad prefix
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        self.assertEqual(set(bad_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == bad_serialized_checkpoints[k]).all())
+
+        # Now, check that using the same conversion with already good keys works when loading and resaving
+        good_serialized_checkpoints = {k: v.clone() for k, v in model.state_dict().items()}
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            good_serialized_checkpoints,
+            LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
+            tp_plan=None,
+        )
+
+        # Assert we can load without issues
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        # Assert that re-saving will lead to the exact same state_dict, i.e. it will not re-add the bad prefix since it was
+        # not present at loading time
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        self.assertEqual(set(good_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == good_serialized_checkpoints[k]).all())
+
+        # Now, use a fresh model, without going trough loading first, so the model won't have `_weight_conversions` attached
+        # and the prefix should not be added when saving directly (i.e. the conversion should be dropped)
+        model = DummyRoot(PretrainedConfig())
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        model_state_dict = model.state_dict()
+        self.assertEqual(set(model_state_dict.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == model_state_dict[k]).all())
+
+    def test_can_add_prefix(self):
+        # we cannot have another param next to the model, otherwise the prefix adding will already be added even with correct
+        # checkpoints starting with the prefix
+        model = DummyRoot(PretrainedConfig(), with_mlp=False)
+
+        bad_serialized_checkpoints = {k.removeprefix("model."): v.clone() for k, v in model.state_dict().items()}
+        weight_mapping = [PrefixChange(prefix_to_add="model")]
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            bad_serialized_checkpoints,
+            LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
+            tp_plan=None,
+        )
+
+        # Assert we can load without issues
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        # Assert that re-saving will lead to the exact same state_dict, re-adding the bad prefix
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        self.assertEqual(set(bad_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == bad_serialized_checkpoints[k]).all())
+
+        # Now, check that using the same conversion with already good keys works when loading and resaving
+        good_serialized_checkpoints = {k: v.clone() for k, v in model.state_dict().items()}
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            good_serialized_checkpoints,
+            LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
+            tp_plan=None,
+        )
+
+        # Assert we can load without issues
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        # Assert that re-saving will lead to the exact same state_dict, i.e. it will not remove the prefix since it was
+        # already present at loading time
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        self.assertEqual(set(good_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == good_serialized_checkpoints[k]).all())
+
+        # Now, use a fresh model, without going trough loading first, so the model won't have `_weight_conversions` attached
+        # and the prefix should not be removed when saving directly (i.e. the conversion should be dropped)
+        model = DummyRoot(PretrainedConfig())
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        model_state_dict = model.state_dict()
+        self.assertEqual(set(model_state_dict.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == model_state_dict[k]).all())
+
+    def test_can_remove_prefix_submodule(self):
+        model = DummyRoot(PretrainedConfig())
+
+        bad_serialized_checkpoints = {
+            f"model.layers.bad_name.{k.replace('model.layers.', '')}" if "model.layers." in k else k: v.clone()
+            for k, v in model.state_dict().items()
+        }
+        weight_mapping = [PrefixChange(prefix_to_remove="bad_name", model_prefix="model.layers")]
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            bad_serialized_checkpoints,
+            LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
+            tp_plan=None,
+        )
+
+        # Assert we can load without issues
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        # Assert that re-saving will lead to the exact same state_dict, re-adding the bad prefix
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        self.assertEqual(set(bad_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == bad_serialized_checkpoints[k]).all())
+
+        # Now, check that using the same conversion with already good keys works when loading and resaving
+        good_serialized_checkpoints = {k: v.clone() for k, v in model.state_dict().items()}
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            good_serialized_checkpoints,
+            LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
+            tp_plan=None,
+        )
+
+        # Assert we can load without issues
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        # Assert that re-saving will lead to the exact same state_dict, i.e. it will not re-add the bad prefix since it was
+        # not present at loading time
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        self.assertEqual(set(good_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == good_serialized_checkpoints[k]).all())
+
+        # Now, use a fresh model, without going trough loading first, so the model won't have `_weight_conversions` attached
+        # and the prefix should not be added when saving directly (i.e. the conversion should be dropped)
+        model = DummyRoot(PretrainedConfig())
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        model_state_dict = model.state_dict()
+        self.assertEqual(set(model_state_dict.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == model_state_dict[k]).all())
+
+    def test_can_add_prefix_submodule(self):
+        # we cannot have another param next to the model, otherwise the prefix adding will already be added even with correct
+        # checkpoints starting with the prefix
+        model = DummyRoot(PretrainedConfig(), with_mlp=False)
+
+        bad_serialized_checkpoints = {k.replace(".layers.", "."): v.clone() for k, v in model.state_dict().items()}
+        weight_mapping = [PrefixChange(prefix_to_add="layers", model_prefix="model")]
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            bad_serialized_checkpoints,
+            LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
+            tp_plan=None,
+        )
+
+        # Assert we can load without issues
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        # Assert that re-saving will lead to the exact same state_dict, re-adding the bad prefix
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        self.assertEqual(set(bad_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == bad_serialized_checkpoints[k]).all())
+
+        # Now, check that using the same conversion with already good keys works when loading and resaving
+        good_serialized_checkpoints = {k: v.clone() for k, v in model.state_dict().items()}
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            good_serialized_checkpoints,
+            LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
+            tp_plan=None,
+        )
+
+        # Assert we can load without issues
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        # Assert that re-saving will lead to the exact same state_dict, i.e. it will not remove the prefix since it was
+        # already present at loading time
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        self.assertEqual(set(good_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == good_serialized_checkpoints[k]).all())
+
+        # Now, use a fresh model, without going trough loading first, so the model won't have `_weight_conversions` attached
+        # and the prefix should not be removed when saving directly (i.e. the conversion should be dropped)
+        model = DummyRoot(PretrainedConfig())
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        model_state_dict = model.state_dict()
+        self.assertEqual(set(model_state_dict.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == model_state_dict[k]).all())
+
+    def test_class_name_wins_over_model_type(self):
+        """Class-name registry entry takes priority over model_type for the same model."""
+        register_checkpoint_conversion_mapping("_TstCls", [WeightRenaming(r"^cls_key", "cls_renamed")], overwrite=True)
+        register_checkpoint_conversion_mapping(
+            "_tst_mtype", [WeightRenaming(r"^type_key", "type_renamed")], overwrite=True
+        )
+
+        class _TstCls(PreTrainedModel): ...
+
+        class _TstOther(PreTrainedModel): ...
+
+        # A module whose class name has a registry entry → class entry wins.
+        transforms = get_model_conversion_mapping(_TstCls(PretrainedConfig(model_type="_tst_mtype")), add_legacy=False)
+        patterns = [t.source_patterns for t in transforms]
+        self.assertIn(["^cls_key"], patterns)
+        self.assertNotIn(["^type_key"], patterns)
+
+        # A module with no class entry falls through to the model_type entry.
+        transforms = get_model_conversion_mapping(
+            _TstOther(PretrainedConfig(model_type="_tst_mtype")), add_legacy=False
+        )
+        patterns = [t.source_patterns for t in transforms]
+        self.assertIn(["^type_key"], patterns)
+        self.assertNotIn(["^cls_key"], patterns)
+
+    def test_sibling_submodels_same_model_type_both_get_transforms(self):
+        """Two sibling sub-models sharing a model_type must each get their own scoped transforms.
+
+        Old flat-set deduplication would mark the model_type seen after the first
+        sibling and silently skip the second one.  The ancestor-based check must
+        allow both because neither sibling is an ancestor of the other.
+        """
+        register_checkpoint_conversion_mapping(
+            "_tst_shared_type", [WeightRenaming(r"^w", "renamed_w")], overwrite=True
+        )
+
+        class _TstEncCls(PreTrainedModel): ...
+
+        class _TstDecCls(PreTrainedModel): ...
+
+        class _TstRoot(PreTrainedModel): ...
+
+        child_a = _TstEncCls(PretrainedConfig(model_type="_tst_shared_type"))
+        child_b = _TstDecCls(PretrainedConfig(model_type="_tst_shared_type"))
+        root = _TstRoot(PretrainedConfig(model_type="_tst_root_only"))
+        root.encoder = child_a
+        root.decoder = child_b
+
+        transforms = get_model_conversion_mapping(root, add_legacy=False)
+        scope_prefixes = [t.scope_prefix for t in transforms]
+
+        # Both siblings must be represented with their own scoped transforms.
+        self.assertIn("encoder", scope_prefixes)
+        self.assertIn("decoder", scope_prefixes)
+
+    def test_sibling_submodels_same_class_both_get_transforms(self):
+        """Two sibling sub-models of the *same* class must each get their own scoped transforms."""
+        register_checkpoint_conversion_mapping("_TstSharedCls", [WeightRenaming(r"^w", "renamed_w")], overwrite=True)
+
+        class _TstSharedCls(PreTrainedModel): ...
+
+        class _TstRootSharedCls(PreTrainedModel): ...
+
+        child_a = _TstSharedCls(PretrainedConfig(model_type="_tst_shared_cls_mtype"))
+        child_b = _TstSharedCls(PretrainedConfig(model_type="_tst_shared_cls_mtype"))
+        root = _TstRootSharedCls(PretrainedConfig(model_type="_tst_root_only2"))
+        root.encoder = child_a
+        root.decoder = child_b
+
+        transforms = get_model_conversion_mapping(root, add_legacy=False)
+        scope_prefixes = [t.scope_prefix for t in transforms]
+
+        self.assertIn("encoder", scope_prefixes)
+        self.assertIn("decoder", scope_prefixes)
+
+    def test_child_with_same_model_type_as_root_is_skipped(self):
+        """When the root model claims a model_type unscoped, a nested child with the
+        same model_type must NOT produce a second (incorrectly scoped) copy of those
+        transforms — the root's unscoped transforms already cover all keys."""
+
+        class _TstChildSame(PreTrainedModel): ...
+
+        class _TstRootSame(PreTrainedModel): ...
+
+        register_checkpoint_conversion_mapping(
+            "_tst_root_child_shared", [WeightRenaming(r"^w", "renamed_w")], overwrite=True
+        )
+
+        child = _TstChildSame(PretrainedConfig(model_type="_tst_root_child_shared"))
+        root = _TstRootSame(PretrainedConfig(model_type="_tst_root_child_shared"))
+        root.submodel = child
+
+        transforms = get_model_conversion_mapping(root, add_legacy=False)
+        # Only one unscoped transform (from the root); child must be suppressed.
+        self.assertEqual(len(transforms), 1)
+        self.assertIsNone(transforms[0].scope_prefix)
 
 
 if __name__ == "__main__":

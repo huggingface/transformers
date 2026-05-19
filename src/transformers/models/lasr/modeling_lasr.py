@@ -473,6 +473,26 @@ class LasrEncoderModelOutput(BaseModelOutputWithPooling):
 
 @auto_docstring(
     custom_intro="""
+    Extends [~modeling_outputs.BaseModelOutputWithPooling] to include the output attention mask since sequence length
+    is not preserved in the model's forward.
+    """
+)
+@dataclass
+class LasrEncoderModelOutput(BaseModelOutputWithPooling):
+    r"""
+    attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        Mask to avoid performing attention on padding token indices after sequence compression. Returned because the
+        sequence length may differ from the input sequence length. Mask values selected in `[0, 1]`:
+
+        - 1 for tokens that are **not masked**,
+        - 0 for tokens that are **masked**.
+    """
+
+    attention_mask: torch.Tensor | None = None
+
+
+@auto_docstring(
+    custom_intro="""
     The LasrEncoder model, based on the Conformer architecture](https://arxiv.org/abs/2005.08100).
     """
 )

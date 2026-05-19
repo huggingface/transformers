@@ -44,14 +44,23 @@ from .generation_parakeet import ParakeetTDTDecoderCache, ParakeetTDTGenerationM
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Extends [~modeling_outputs.BaseModelOutputWithPooling] to include the output attention mask since sequence length
     is not preserved in the model's forward.
     """
 )
+@dataclass
 class ParakeetEncoderModelOutput(BaseModelOutputWithPooling):
+    r"""
+    attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        Mask to avoid performing attention on padding token indices after sequence compression. Returned because the
+        sequence length may differ from the input sequence length. Mask values selected in `[0, 1]`:
+
+        - 1 for tokens that are **not masked**,
+        - 0 for tokens that are **masked**.
+    """
+
     attention_mask: torch.Tensor | None = None
 
 
@@ -677,7 +686,7 @@ class ParakeetGenerateOutput(ParakeetCTCGenerateOutput):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         logger.warning_once(
-            "`ParakeetGenerateOutput` is deprecated and removed starting from version 5.5.0; please use `ParakeetCTCGenerateOutput` instead.",
+            "`ParakeetGenerateOutput` is deprecated and removed starting from version 5.11.0; please use `ParakeetCTCGenerateOutput` instead.",
         )
 
 

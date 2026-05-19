@@ -686,12 +686,12 @@ class Mamba2PreTrainedModel(PreTrainedModel):
             init.normal_(module.weight, std=std)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for the MAMBA2 model outputs.
     """
 )
+@dataclass
 # Copied from transformers.models.mamba.modeling_mamba.MambaOutput with MAMBA->MAMBA2,Mamba->Mamba2
 class Mamba2Output(ModelOutput):
     r"""
@@ -707,12 +707,12 @@ class Mamba2Output(ModelOutput):
     hidden_states: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 # Copied from transformers.models.mamba.modeling_mamba.MambaCausalLMOutput with Mamba->Mamba2
 class Mamba2CausalLMOutput(ModelOutput):
     r"""

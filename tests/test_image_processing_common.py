@@ -591,7 +591,7 @@ class ImageProcessingTestMixin:
             try:
                 # Convert model_type to directory name and construct file path
                 model_dir = model_type.replace("-", "_")
-                slow_processor_file = f"src/transformers/models/{model_dir}/image_processing_{model_dir}.py"
+                slow_processor_file = f"src/transformers/models/{model_dir}"
                 # Check if the file exists otherwise skip the test
                 if not os.path.exists(slow_processor_file):
                     return None

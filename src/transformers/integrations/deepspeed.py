@@ -367,7 +367,9 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
     if len(converters) == 0:
         new_state_dict = {}
         for original_key, tensor in state_dict.items():
-            renamed_key, _ = rename_source_key(original_key, renamings, [], prefix, model_state_dict)
+            renamed_key, _ = rename_source_key(
+                original_key, renamings, [], prefix=prefix, meta_state_dict=model_state_dict
+            )
             if renamed_key in model_state_dict:
                 new_state_dict[renamed_key] = tensor
         # Attach metadata to the new state dict
@@ -386,7 +388,9 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
     sorted_keys = sorted(state_dict.keys(), key=lambda k: dot_natural_key(k))
     for original_key in sorted_keys:
         tensor = state_dict.pop(original_key)
-        renamed_key, source_pattern = rename_source_key(original_key, renamings, converters, prefix, model_state_dict)
+        renamed_key, source_pattern = rename_source_key(
+            original_key, renamings, converters, prefix=prefix, meta_state_dict=model_state_dict
+        )
 
         # Only process if the renamed key is in the model's state dict
         if renamed_key in model_state_dict:
