@@ -89,7 +89,4 @@ deps = {
     "libcst": "libcst",
     "rich": "rich",
     "ray[tune]": "ray[tune]>=2.7.0",
-    "opentelemetry-api": "opentelemetry-api",
-    "opentelemetry-exporter-otlp": "opentelemetry-exporter-otlp",
-    "opentelemetry-sdk": "opentelemetry-sdk",
 }

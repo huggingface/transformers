@@ -51,38 +51,6 @@ def generate_without_cb(
     return decoded_outputs
 
 
-def maybe_setup_metrics(use_metrics: bool) -> None:
-    if not use_metrics:
-        return
-    try:
-        from opentelemetry import metrics, trace
-        from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-        from opentelemetry.sdk.metrics import MeterProvider
-        from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
-        from opentelemetry.sdk.resources import Resource
-        from opentelemetry.sdk.trace import TracerProvider
-        from opentelemetry.sdk.trace.export import BatchSpanProcessor
-
-        resource = Resource.create({"service.name": "transformers"})
-        metrics_exporter = PeriodicExportingMetricReader(
-            OTLPMetricExporter(
-                endpoint="http://localhost:9090/api/v1/otlp/v1/metrics"
-            ),  # Uses OTEL_EXPORTER_OTLP_METRICS_ENDPOINT env var
-            export_interval_millis=1000,
-        )
-        meter_provider = MeterProvider(resource=resource, metric_readers=[metrics_exporter])
-        metrics.set_meter_provider(meter_provider)
-        trace_exporter = OTLPSpanExporter(
-            endpoint="http://localhost:4318/v1/traces"
-        )  # Uses OTEL_EXPORTER_OTLP_TRACES_ENDPOINT env var
-        tracer_provider = TracerProvider(resource=resource)
-        tracer_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
-        trace.set_tracer_provider(tracer_provider)
-    except Exception as e:
-        print(f"Error setting up metrics: {e}")
-
-
 def batch_generate(
     model: AutoModelForCausalLM,
     simple_batch_inputs: list,
@@ -202,7 +170,6 @@ if __name__ == "__main__":
     parser.add_argument("--add-prefix", action="store_true", help="Add a prefix to the samples")
     parser.add_argument("--compare", action="store_true", help="Compare CB generation with classic generate")
     parser.add_argument("--profile", type=str, default=None)
-    parser.add_argument("--metrics", action="store_true")
     parser.add_argument("--seed", type=int, default=None, help="Random seed")
 
     # Display parameters
@@ -233,7 +200,6 @@ if __name__ == "__main__":
 
     # Set up diagnostics
     logger.setLevel(args.log_level.upper())
-    maybe_setup_metrics(args.metrics)
 
     # Set up performance
     if args.matmul_precision != "none":

@@ -31,7 +31,6 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import ContinuousBatchingConfig, GenerationConfig
 from ...utils.logging import logging
-from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from ..logits_process import LogitsProcessorList
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
@@ -130,7 +129,6 @@ class OutputRouter:
 
 
 # Continuous Batch Processor (Internal Logic)
-@attach_tracer()
 class ContinuousBatchProcessor:
     inputs_and_outputs: ContinuousBatchingIOs | ContinuousBatchingAsyncIOs
     scheduler: Scheduler
@@ -192,9 +190,7 @@ class ContinuousBatchProcessor:
         # Retrieve the size of the sliding window if there is one
         self.sliding_window = 1 if getattr(config, "sliding_window", None) is None else config.sliding_window
 
-        # Set up metrics collector
         self.max_batch_tokens = cache.max_batch_tokens
-        self.metrics = ContinuousBatchProcessorMetrics(cache.max_batch_tokens)
 
         # Setup inputs and outputs
         use_cuda_graph_varlen, _ = self.cb_config.cuda_graph_booleans
@@ -255,10 +251,8 @@ class ContinuousBatchProcessor:
         self.scheduler.reset()
         self.inputs_and_outputs.reset()
         self.cache.free_all_requests()
-        self.metrics = ContinuousBatchProcessorMetrics(self.cache.max_batch_tokens)
         self.driver_stopped = False
 
-    @traced
     def _get_new_requests(self) -> bool:
         """Pull new requests and cancellations from the queues and apply them to the scheduler. In the context of TP,
         only the TP driver of the TP group does this, and broadcasts the new_states / cancellations to other TP ranks.
@@ -296,7 +290,6 @@ class ContinuousBatchProcessor:
             self.scheduler.set_request_cancellation(request_id)
         return False
 
-    @traced
     def _handle_request_error(self, error: Exception, state: RequestState) -> None:
         """Handle general request processing error."""
         state.status = RequestStatus.FAILED
@@ -308,10 +301,8 @@ class ContinuousBatchProcessor:
         else:
             state.generated_tokens = []
 
-        self.metrics.record_request_completion(state.created_time, state.request_id)
         self.output_router.deliver(state.to_generation_output())
 
-    @traced
     def prepare_next_batch(self) -> bool:
         """Prepare tensors and metadata for the next model forward pass. Returns True if there are requests to process,
         False otherwise."""
@@ -326,7 +317,6 @@ class ContinuousBatchProcessor:
             self.offloading_manager.free_request_cpu_cache(state)
         if not self.scheduler.has_pending_requests():
             return False
-        self.metrics.record_queue_metrics(len(self.scheduler.active_requests), len(self.scheduler.waiting_requests))
 
         # Schedule the next batch of requests
         requests_in_batch, use_decode_fast_path, num_q_tokens, max_kv_read = self.scheduler.schedule_batch(
@@ -347,7 +337,6 @@ class ContinuousBatchProcessor:
         self.offloading_manager.restore_scheduled_requests(requests_in_batch)
 
         # Otherwise, we can continue with the non-empty batch and log in the dimensions before padding
-        self.metrics.record_batch_metrics(requests_in_batch)
         logger.debug(
             f"Scheduled: {len(requests_in_batch)}, Waiting: {len(self.scheduler.waiting_requests)}, "
             f"Active: {len(self.scheduler.active_requests)}. cum Q: {num_q_tokens}. "
@@ -360,10 +349,8 @@ class ContinuousBatchProcessor:
         self.inputs_and_outputs.prepare_batch_tensors(
             requests_in_batch, self.logit_processor, use_decode_fast_path, num_q_tokens, max_kv_read
         )
-        self.metrics.record_kv_cache_memory_metrics(self.cache)
         return True
 
-    @traced
     def update_batch(self) -> None:
         """Update request states based on generated tokens."""
         requests_in_batch, new_tokens, logprobs = self.inputs_and_outputs.prepare_batch_update()
@@ -383,7 +370,6 @@ class ContinuousBatchProcessor:
             if future_state.has_new_token:
                 # If there is just one temporary token, it means prefill just ended
                 if state.generated_len() == 0:
-                    self.metrics.record_ttft_metric(state.created_time, state.request_id)
                     state.status = RequestStatus.DECODING
 
                 token = new_tokens[current_logits_index]
@@ -395,7 +381,6 @@ class ContinuousBatchProcessor:
                 # We mark the completed blocks as such
                 self.cache.mark_shareable_blocks_as_complete(state, future_state.complete_blocks)
                 if is_finished:
-                    self.metrics.record_request_completion(state.created_time, state.request_id)
                     self.scheduler.finish_request(state.request_id)
                     self.scheduler.block_new_requests = False
                 if state.streaming or state.status == RequestStatus.FINISHED:
@@ -433,12 +418,10 @@ class ContinuousBatchProcessor:
             with maybe_stream:
                 self.cache.copy_cache(copy_source, copy_destination)
 
-    @traced
     def has_pending_requests(self) -> bool:
         """Check if there are any active or waiting requests."""
         return self.scheduler.has_pending_requests()
 
-    @traced
     def handle_batch_error(self, error):
         """Handle errors during batch processing."""
         failed_future_states = self.inputs_and_outputs.prepare_batch_update()[0]
@@ -446,7 +429,6 @@ class ContinuousBatchProcessor:
             self._handle_request_error(error, future_state.state)
             self.scheduler.finish_request(future_state.state.request_id)
 
-    @traced
     def fail_all_requests(self, error: Exception) -> None:
         """Fail all active requests with the given error."""
 
@@ -464,7 +446,6 @@ class ContinuousBatchProcessor:
         # Clear the ordering queue
         self.scheduler.waiting_requests_order.clear()
 
-    @traced
     @torch.no_grad()
     def _generation_step(self, model: nn.Module) -> None:
         """Perform a single generation step."""
@@ -489,7 +470,6 @@ class ContinuousBatchProcessor:
 
 
 # Manager Class (User Interface)
-@attach_tracer()
 class ContinuousBatchingManager:
     """Manager for handling continuous batching of generation requests. It provides a user interface for submitting
     generation requests, retrieving results, and managing the background generation thread. This class should not be
@@ -567,7 +547,6 @@ class ContinuousBatchingManager:
             self._original_attn_impl = model.config._attn_implementation
             model.set_attn_implementation(f"paged|{model.config._attn_implementation}")
 
-    @traced
     def start(self) -> None:
         """Start the background generation thread."""
         if self.is_running():
@@ -810,7 +789,6 @@ class ContinuousBatchingManager:
         with self.output_router._lock:
             self.output_router.result_handlers[request_id] = (_auto_cleanup, loop)
 
-    @traced
     def _generation_step(self) -> None:
         """Perform a single generation step. This is mostly cuda graphed"""
         if self.batch_processor is None:
@@ -899,7 +877,6 @@ class ContinuousBatchingManager:
         finally:
             logger.info("Generation loop finished.")
 
-    @traced(span_name="generation_loop")
     def _inner_generation_loop(self, batch_processor: ContinuousBatchProcessor) -> None:
         # Loop body ends if there is no requests in the batch
         if not batch_processor.prepare_next_batch():
@@ -910,7 +887,6 @@ class ContinuousBatchingManager:
         self._generation_step()
         batch_processor.update_batch()
 
-    @traced
     def _handle_critical_error(self, error: Exception, batch_processor: ContinuousBatchProcessor | None) -> None:
         """Handle critical errors that terminate the generation loop."""
         # Record so callers (e.g. the serving layer) can fail fast on subsequent requests
@@ -1045,7 +1021,6 @@ class ContinuousMixin:
             manager.stop(block=block, timeout=timeout, keep_for_next_session=persistent_manager)
 
     # TODO: support streaming
-    @traced
     @torch.no_grad()
     def generate_batch(
         self,

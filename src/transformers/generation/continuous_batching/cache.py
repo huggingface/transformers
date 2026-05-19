@@ -20,7 +20,6 @@ import torch
 from ...configuration_utils import PreTrainedConfig
 from ...generation.configuration_utils import ContinuousBatchingConfig
 from ...utils.generic import is_flash_attention_requested
-from ...utils.metrics import attach_tracer, traced
 from .cache_manager import BlockManager, CacheAllocator, FullAttentionCacheAllocator, SlidingAttentionCacheAllocator
 from .distributed import DistributedHelper
 from .initialization import resolve_max_memory_percent
@@ -60,7 +59,6 @@ def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]]
     return layer_groups, group_types
 
 
-@attach_tracer()
 class PagedAttentionCache:
     """
     Manages the cache for a paged attention mechanism, inspired by VLLM's hybrid allocator. The cache relies on making
@@ -312,7 +310,6 @@ class PagedAttentionCache:
             needed_blocks += min(blocks_left, num_requested_blocks) * self.num_sliding_attention_groups
         return needed_blocks <= self.get_num_free_blocks()
 
-    @traced
     def allocate_blocks(self, n_blocks: int, request_id: str, allocated_blocks: int) -> int | None:
         """Allocate cache blocks across all layer groups for a given request. Actual allocation is done by the cache
         managers, and this method only returns the maximum number of blocks actually allocated across all managers."""
@@ -328,7 +325,6 @@ class PagedAttentionCache:
             max_allocated = max(max_allocated, num_allocated_blocks)
         return max_allocated
 
-    @traced
     def free_blocks(self, request_id: str) -> None:
         """Free all allocated cache blocks for a given request across all layer groups. Actual deallocation is done
         by the cache managers."""
@@ -339,7 +335,6 @@ class PagedAttentionCache:
         """Get the current number of unallocated blocks available for new requests."""
         return self._block_manager.num_free_blocks
 
-    @traced
     def extend_read_and_write_indices(
         self,
         request_id: str,
@@ -366,7 +361,6 @@ class PagedAttentionCache:
         for i, cm in enumerate(self.group_cache_managers):
             cm.fill_block_table(request_id, past_length, query_length, block_table[i])
 
-    @traced
     def get_seqlens_k(self, past_length: int, query_length: int) -> dict[str, int]:
         """Retrieve the key sequence length for the given request_id across all layer types. Returns a dictionary of
         layer types to their corresponding key sequence lengths."""
@@ -378,7 +372,6 @@ class PagedAttentionCache:
         # NOTE: when we add more attention types / different sliding windows, we can go back to looping over CMs
         return seqlens_k
 
-    @traced
     def update(
         self,
         key_states: torch.Tensor,  # shape [1, num_kv_heads, seqlen_kv, head_dim]

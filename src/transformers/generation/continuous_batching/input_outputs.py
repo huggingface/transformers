@@ -21,7 +21,6 @@ import torch
 from transformers.configuration_utils import PretrainedConfig
 
 from ...utils import get_available_devices
-from ...utils.metrics import traced
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .requests import TMP_TOKEN_ID, FutureRequestState, logger
@@ -140,7 +139,6 @@ class ContinuousBatchingIOs:
         self._reset_static_tensors(full_reset=True)
         self.compute_stream = torch.cuda.Stream(device=self.device) if device.type == "cuda" else None
 
-    @traced(standalone=True)
     def _setup_static_tensors(self, logit_processor: ContinuousBatchingLogitsProcessorList) -> None:
         """Allocates static tensors for generation inputs and outputs. This is called only once at init time, to avoid
         repeated allocations and enable CUDA graphs. All tensors are allocated with maximum possible sizes.
@@ -261,7 +259,6 @@ class ContinuousBatchingIOs:
                 for layer_type in self.attention_mask.keys():
                     other.attention_mask[layer_type].copy_(self.attention_mask[layer_type], non_blocking=non_blocking)
 
-    @traced
     @torch.no_grad()
     def _reset_static_tensors(self, full_reset: bool = False) -> None:
         """Reset static tensors for the next batch. For efficiency, this only resets the portions of tensors that were
@@ -337,7 +334,6 @@ class ContinuousBatchingIOs:
             logprobs = None
         return requests_in_batch, new_tokens, logprobs
 
-    @traced
     def prepare_batch_tensors(
         self,
         requests_in_batch: list[FutureRequestState],

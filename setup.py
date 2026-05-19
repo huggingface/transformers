@@ -162,9 +162,6 @@ _deps = [
     "libcst",
     "rich",
     "ray[tune]>=2.7.0",
-    "opentelemetry-api",
-    "opentelemetry-exporter-otlp",
-    "opentelemetry-sdk",
 ]
 
 # This is a lookup table with items like: {"tokenizers": "tokenizers==0.9.4", "packaging": "packaging"}, i.e.
@@ -211,8 +208,6 @@ extras["benchmark"] = deps_list("optimum-benchmark")
 extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "rhoknp")
 if PYTHON_MINOR_VERSION < 14:
     extras["ja"] += deps_list("sudachipy", "sudachidict_core")
-# OpenTelemetry dependencies for metrics collection in continuous batching
-extras["open-telemetry"] = deps_list("opentelemetry-api", "opentelemetry-exporter-otlp", "opentelemetry-sdk")
 
 extras["testing"] = (
     deps_list(
