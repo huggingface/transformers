@@ -119,6 +119,22 @@ for result in results:
 
 [[autodoc]] RfDetrDinov2Config
 
+## RfDetrImageProcessor
+
+[[autodoc]] RfDetrImageProcessor
+    - preprocess
+    - post_process_object_detection
+    - post_process_instance_segmentation
+
+
+## RF-DETR specific outputs
+
+[[autodoc]] models.rf_detr.modeling_rf_detr.RfDetrModelOutput
+
+[[autodoc]] models.rf_detr.modeling_rf_detr.RfDetrObjectDetectionOutput
+
+[[autodoc]] models.rf_detr.modeling_rf_detr.RfDetrInstanceSegmentationOutput
+
 ## RfDetrModel
 
 [[autodoc]] RfDetrModel
