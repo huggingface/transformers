@@ -272,16 +272,89 @@ class GgufExperts(nn.Module):
         return fwd(self, hidden_states, top_k_index, top_k_weights)
 
 
-# Registry of fused-expert classes keyed by ``model.config.model_type``. Mirrors
-# the MoE entries in ``_GGUF_ARCH_CONVERTERS`` (modeling_gguf_pytorch_utils):
-# every arch whose GGUF rename rules emit a ``gate_up_proj`` merge converter
-# needs an entry here so :func:`replace_with_gguf_linear` swaps the fused-expert
-# module in place.
+class GgufExpertsTransposed(GgufExperts):
+    """Variant for arch's that store ``gate_up_proj`` transposed —
+    ``(num_experts, hidden_dim, 2*intermediate_dim)`` instead of
+    ``(num_experts, 2*intermediate_dim, hidden_dim)`` — and carry biases on
+    both projections. Today: ``gpt_oss`` (:class:`GptOssExperts` does
+    ``current_state @ self.gate_up_proj[expert_idx]`` rather than
+    ``F.linear(..., self.gate_up_proj[expert_idx])``, so the parameter is
+    stored ``(in_dim, out_dim)`` instead of ``(out_dim, in_dim)``).
+
+    TODO: forward kernel. The ``gguf_bmm_experts_forward`` path assumes the
+    Mixtral/Qwen2MoE layout (rows = output axis). Loading a gpt_oss GGUF
+    populates the buffers correctly via the standard rename pipeline, but
+    ``forward`` needs a transposed-aware kernel path before it produces
+    correct logits.
+    """
+
+    def __init__(self, config, gate_up_quant: str, down_quant: str, device=None):
+        nn.Module.__init__(self)  # skip GgufExperts.__init__: different buffer shapes.
+        for label, qt in (("gate_up", gate_up_quant), ("down", down_quant)):
+            if qt not in _QUANT_INFO:
+                raise NotImplementedError(f"GgufExpertsTransposed {label}_quant {qt} not in {sorted(_QUANT_INFO)}")
+        self.config = config
+        self.num_experts = _read_first(config, "num_experts", "num_local_experts", "n_routed_experts")
+        self.hidden_dim = config.hidden_size
+        self.intermediate_dim = _read_first(config, "moe_intermediate_size", "intermediate_size")
+        self.gate_up_quant, self.down_quant = gate_up_quant, down_quant
+        self._gate_up_fmt = _KERNEL_FMT[gate_up_quant]
+        self._down_fmt = _KERNEL_FMT[down_quant]
+
+        # Transposed layout: rows = in axis, cols (in bytes) = out axis / blocks * bytes.
+        gate_up_bytes_per_row = ((2 * self.intermediate_dim) // _QUANT_INFO[gate_up_quant][1]) * _QUANT_INFO[
+            gate_up_quant
+        ][0]
+        down_bytes_per_row = (self.hidden_dim // _QUANT_INFO[down_quant][1]) * _QUANT_INFO[down_quant][0]
+        self.register_buffer(
+            "gate_up_proj",
+            torch.empty(
+                self.num_experts, self.hidden_dim, gate_up_bytes_per_row, dtype=torch.uint8, device=device or "cpu"
+            ),
+            persistent=True,
+        )
+        self.register_buffer(
+            "down_proj",
+            torch.empty(
+                self.num_experts, self.intermediate_dim, down_bytes_per_row, dtype=torch.uint8, device=device or "cpu"
+            ),
+            persistent=True,
+        )
+        # gpt_oss has biases on both projections; mirror that here.
+        self.gate_up_proj_bias = nn.Parameter(
+            torch.zeros(self.num_experts, 2 * self.intermediate_dim, dtype=torch.float32, device=device or "cpu"),
+            requires_grad=False,
+        )
+        self.down_proj_bias = nn.Parameter(
+            torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32, device=device or "cpu"),
+            requires_grad=False,
+        )
+
+        from ..activations import ACT2FN
+
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.has_gate = True
+        self.has_bias = True
+        self.is_transposed = True
+        self.is_concatenated = True
+
+
+# Registry of fused-expert classes keyed by ``model.config.model_type``.
+# Covers every MoE arch with GGUF rename rules (``_GGUF_ARCH_CONVERTERS`` in
+# ``modeling_gguf_pytorch_utils``) plus the popular MoE archs that share the
+# fused-expert layout but don't have GGUF rules yet (Mixtral, DeepSeek-V3 —
+# their day-zero rename rules can land bytes here when added).
 MODEL_TYPE_TO_GGUF_EXPERTS: dict[str, type[nn.Module]] = {
+    # Same layout as MixtralExperts: ``gate_up_proj`` shape
+    # ``(num_experts, 2*intermediate, hidden)``.
     "qwen2_moe": GgufExperts,
     "qwen3_moe": GgufExperts,
     "minimax_m2": GgufExperts,
-    "gpt_oss": GgufExperts,
+    "mixtral": GgufExperts,
+    "deepseek_v3": GgufExperts,
+    # Transposed + biased layout: ``gate_up_proj`` shape
+    # ``(num_experts, hidden, 2*intermediate)`` plus per-expert biases.
+    "gpt_oss": GgufExpertsTransposed,
 }
 
 
@@ -439,6 +512,7 @@ def _first_device(mod: nn.Module) -> torch.device | str:
 __all__: list[str] = [
     "GgufLinear",
     "GgufExperts",
+    "GgufExpertsTransposed",
     "MODEL_TYPE_TO_GGUF_EXPERTS",
     "gguf_bmm_experts_forward",
     "gguf_linear_supports",
