@@ -68,7 +68,7 @@ conversations = [
         "role": "user",
         "content": [
             {"type": "video", "video": "/path/to/video.mp4"},
-            {"type": "text", "text": "What cant you hear and see in this video?"},
+            {"type": "text", "text": "What can you hear and see in this video?"},
         ],
     },
 ]
@@ -124,7 +124,7 @@ conversations = [
         "role": "user",
         "content": [
             {"type": "video", "video": "/path/to/video.mp4"},
-            {"type": "text", "text": "What cant you hear and see in this video?"},
+            {"type": "text", "text": "What can you hear and see in this video?"},
         ],
     },
 ]
