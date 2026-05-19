@@ -114,7 +114,7 @@ tokenizer.batch_decode(generated_ids)[0]
 
 ## Pipeline
 
-The [`Pipeline`] class is the most convenient way to inference with a pretrained model. It supports many tasks such as text generation, image segmentation, automatic speech recognition, document question answering, and more.
+The Pipeline class is the most convenient way to run inference with a pretrained model. It supports many tasks such as text generation, image segmentation, automatic speech recognition, document question answering, and more.
 
 > [!TIP]
 > Refer to the [Pipeline](./main_classes/pipelines) API reference for a complete list of available tasks.
