@@ -51,7 +51,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torchdynamo_compiling,
     logging,
     torch_compilable_check,
 )
@@ -139,7 +138,7 @@ def build_resized_image(
     image_std: list[float],
     image_patch_size: int,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    if image_chw.dtype == torch.uint8 and is_torchdynamo_compiling():
+    if image_chw.dtype == torch.uint8:
         image_chw = image_chw.to(torch.float32)
     chw_resized = backend.resize(
         image_chw,
@@ -237,7 +236,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
 
         src_h = tiling_h * crop_window_size + total_margin_pixels
         src_w = tiling_w * crop_window_size + total_margin_pixels
-        if image_chw.dtype == torch.uint8 and is_torchdynamo_compiling():
+        if image_chw.dtype == torch.uint8:
             image_chw = image_chw.to(torch.float32)
         chw_resized = self.resize(
             image_chw,
