@@ -264,12 +264,12 @@ class GgufExperts(nn.Module):
         top_k_index: torch.Tensor,
         top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
-        """Dispatch through the ``ExpertsInterface`` — defaults to ``"gguf_bmm"``."""
-        from .moe import ALL_EXPERTS_FUNCTIONS
-
-        impl = getattr(self, "_experts_implementation", None) or "gguf_bmm"
-        fwd = ALL_EXPERTS_FUNCTIONS.get_interface(impl, gguf_bmm_experts_forward)
-        return fwd(self, hidden_states, top_k_index, top_k_weights)
+        """Dispatch through :data:`ALL_GGUF_EXPERTS_FUNCTIONS` (GGUF-specific
+        sibling of :data:`ALL_EXPERTS_FUNCTIONS`). Default is the bmm path."""
+        impl = getattr(self, "_experts_implementation", None) or "bmm"
+        return ALL_GGUF_EXPERTS_FUNCTIONS.get_interface(impl, gguf_bmm_experts_forward)(
+            self, hidden_states, top_k_index, top_k_weights
+        )
 
 
 class GgufExpertsTransposed(GgufExperts):
@@ -425,6 +425,36 @@ def gguf_bmm_experts_forward(
     return weighted.view(num_tokens, num_top_k, H).sum(dim=1).to(hidden_states.dtype)
 
 
+# GGUF-specific ExpertsInterface — the GGUF integration registers its
+# implementations here instead of polluting the base ``ExpertsInterface``.
+# Same shape as :class:`FP8ExpertsInterface` in :mod:`integrations.finegrained_fp8`.
+def _gguf_grouped_mm_experts_forward(self, hidden_states, top_k_index, top_k_weights):
+    """Prefill alias — currently delegates to the bmm path (single ``mul_mat_id``
+    kernel per projection is the right shape for both decode and prefill on MPS;
+    a real ``grouped_mm`` impl would land here when CUDA kernels arrive)."""
+    return gguf_bmm_experts_forward(self, hidden_states, top_k_index, top_k_weights)
+
+
+def _make_gguf_experts_interface():
+    """Build the singleton; deferred so this module's import order doesn't fight
+    the ``moe.py`` import order (moe.py defines ``ExpertsInterface``)."""
+    from .moe import ExpertsInterface
+
+    class GgufExpertsInterface(ExpertsInterface):
+        """GGUF-specific experts dispatch — registers the ``mul_mat_id``-backed
+        bmm + grouped_mm impls. Mirrors :class:`FP8ExpertsInterface`."""
+
+        _global_mapping = {
+            "bmm": gguf_bmm_experts_forward,
+            "grouped_mm": _gguf_grouped_mm_experts_forward,
+        }
+
+    return GgufExpertsInterface()
+
+
+ALL_GGUF_EXPERTS_FUNCTIONS = _make_gguf_experts_interface()
+
+
 # ----------------------------------------------------------------------------
 # Meta-time swap helper — FP8-style. Walks ``model`` on the meta device and
 # replaces ``nn.Linear`` / fused-expert modules in one pass.
@@ -510,6 +540,7 @@ def _first_device(mod: nn.Module) -> torch.device | str:
 
 # Public re-exports for callers (quantizer, weight conversion ops, tests).
 __all__: list[str] = [
+    "ALL_GGUF_EXPERTS_FUNCTIONS",
     "GgufLinear",
     "GgufExperts",
     "GgufExpertsTransposed",

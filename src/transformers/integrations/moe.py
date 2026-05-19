@@ -479,24 +479,17 @@ def grouped_mm_experts_forward(
     return final_hidden_states.to(hidden_states.dtype)
 
 
-# GGUF fused-expert forward kernels live in ``integrations.gguf_linear`` so the
-# GGUF integration owns them end-to-end. ``ExpertsInterface`` below picks them
-# up by import; alias the prefill variant to the same fn (today both routes go
-# through the ``mul_mat_id`` kernel — separate names kept for future divergence).
-from .gguf_linear import gguf_bmm_experts_forward as gguf_bmm_experts_forward  # noqa: E402  re-export
-
-
-gguf_grouped_mm_experts_forward = gguf_bmm_experts_forward
-
-
 class ExpertsInterface(GeneralInterface):
-    """Interface for registering custom experts forward functions."""
+    """Interface for registering custom experts forward functions.
+
+    Quantization integrations subclass this with their own ``_global_mapping``
+    (see :class:`~transformers.integrations.finegrained_fp8.FP8ExpertsInterface`
+    and :class:`~transformers.integrations.gguf_linear.GgufExpertsInterface`).
+    """
 
     _global_mapping = {
         "batched_mm": batched_mm_experts_forward,
         "grouped_mm": grouped_mm_experts_forward,
-        "gguf_bmm": gguf_bmm_experts_forward,
-        "gguf_grouped_mm": gguf_grouped_mm_experts_forward,
         "sonicmoe": sonicmoe_experts_forward,
     }
 
