@@ -874,16 +874,22 @@ class Bnb4bitCompile(unittest.TestCase):
         from transformers.quantizers.base import get_keys_to_not_convert
         import torch.nn as nn
 
-        class DummyMultimodalModel(nn.Module):
+        class DummyInnerModel(nn.Module):
             def __init__(self):
                 super().__init__()
                 self.audio_tower = nn.Sequential(nn.Linear(10, 10), nn.Linear(10, 10))
                 self.embed_audio = nn.Linear(10, 10)
                 self.language_model = nn.Linear(10, 10)
 
+        class DummyMultimodalModel(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.model = DummyInnerModel()
+
         model = DummyMultimodalModel()
         keys = get_keys_to_not_convert(model)
 
-        self.assertIn("audio_tower", keys)
-        self.assertIn("embed_audio", keys)
-        self.assertNotIn("audio_tower.0", keys)
+        self.assertIn("model.audio_tower", keys)
+        self.assertIn("model.embed_audio", keys)
+        self.assertNotIn("model.audio_tower.0", keys)
+
