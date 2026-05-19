@@ -1142,6 +1142,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("encodec", "EncodecFeatureExtractor"),
         ("gemma3n", "Gemma3nAudioFeatureExtractor"),
         ("gemma4", "Gemma4AudioFeatureExtractor"),
+        ("granite_speech", "GraniteSpeechFeatureExtractor"),
         ("kyutai_speech_to_text", "KyutaiSpeechToTextFeatureExtractor"),
         ("musicgen_melody", "MusicgenMelodyFeatureExtractor"),
         ("pe_audio", "PeAudioFeatureExtractor"),
