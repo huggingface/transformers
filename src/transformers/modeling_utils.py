@@ -48,7 +48,6 @@ from .conversion_mapping import get_model_conversion_mapping
 from .core_model_loading import (
     WeightConverter,
     WeightRenaming,
-    apply_transforms_to_meta_model,
     convert_and_load_state_dict_in_model,
     revert_weight_conversion,
 )
@@ -4253,8 +4252,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Obtain the weight conversion mapping for this model if any are registered and apply to all submodels recursively
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
-        # Apply any structural model transforms while parameters are still on the meta device (free operation).
-        apply_transforms_to_meta_model(model, weight_conversions)
+        # Apply kernel-specific structural transforms before loading (module graph changes, cost-free on meta device).
+        if use_kernels:
+            from .integrations.hub_kernels import apply_kernel_structural_transforms
+
+            apply_kernel_structural_transforms(model, weight_conversions)
 
         if _torch_distributed_available and device_mesh is not None:  # add hooks to nn.Modules: no weights
             model = distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size)

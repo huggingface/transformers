@@ -35,12 +35,12 @@ from transformers.core_model_loading import (
     PrefixChange,
     WeightConverter,
     WeightRenaming,
-    apply_transforms_to_meta_model,
     build_glob_alternation,
     convert_and_load_state_dict_in_model,
     rename_source_key,
     revert_weight_conversion,
 )
+from transformers.integrations.hub_kernels import apply_kernel_structural_transforms as apply_transforms_to_meta_model
 from transformers.modeling_utils import LoadStateDictConfig
 from transformers.utils.import_utils import is_triton_available
 
