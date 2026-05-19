@@ -1062,7 +1062,7 @@ def log_conversion_errors(
         # Raise a specific Exception that we can catch easily
         raise SkipParameters()
 
-
+@torch.no_grad()
 def set_param_for_module(
     model: PreTrainedModel,
     target_name: str,
@@ -1089,7 +1089,7 @@ def set_param_for_module(
         # Remove from missing keys (it's either mismatched, or all good)
         loading_info.missing_keys.discard(target_name)
 
-        expected_shape = ref.to_local().shape if isinstance(ref, DTensor) else ref.shape
+        expected_shape = ref._local_tensor.shape if isinstance(ref, DTensor) else ref.shape
 
         if ref is not None and param_value.shape != expected_shape and hf_quantizer is None:
             loading_info.mismatched_keys.add((target_name, param_value.shape, expected_shape))
@@ -1097,18 +1097,10 @@ def set_param_for_module(
             if isinstance(ref, DTensor):
                 local_param = param_value.detach() if isinstance(param_value, torch.nn.Parameter) else param_value
                 dtensor_param = _dtensor_from_local_like(local_param, ref)
-                with torch.no_grad():
-                    if ref.is_meta:
-                        torch.utils.swap_tensors(
-                            ref, torch.nn.Parameter(dtensor_param, requires_grad=ref.requires_grad)
-                        )
-                    else:
-                        ref.copy_(dtensor_param)
-                ref._is_hf_initialized = True
-            else:
-                # super important otherwise _init_weight will re-init the param
-                param_value._is_hf_initialized = True
-                setattr(module_obj, param_name, param_value)
+                param_value = torch.nn.Parameter(dtensor_param, requires_grad=ref.requires_grad)
+            # super important otherwise _init_weight will re-init the param
+            param_value._is_hf_initialized = True
+            setattr(module_obj, param_name, param_value)
 
 
 def offload_and_maybe_resave_param(
