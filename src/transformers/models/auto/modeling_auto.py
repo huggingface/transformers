@@ -371,6 +371,10 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("pp_doclayout_v3", "PPDocLayoutV3Model"),
         ("pp_ocrv5_mobile_rec", "PPOCRV5MobileRecModel"),
         ("pp_ocrv5_server_rec", "PPOCRV5ServerRecModel"),
+        ("pp_ocrv6_medium_det", "PPOCRV6MediumDetModel"),
+        ("pp_ocrv6_small_det", "PPOCRV6SmallDetModel"),
+        ("pp_ocrv6_small_rec", "PPOCRV6SmallRecModel"),
+        ("pp_ocrv6_tiny_rec", "PPOCRV6TinyRecModel"),
         ("prophetnet", "ProphetNetModel"),
         ("pvt", "PvtModel"),
         ("pvt_v2", "PvtV2Model"),
@@ -1142,6 +1146,8 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
         ("pp_doclayout_v3", "PPDocLayoutV3ForObjectDetection"),
         ("pp_ocrv5_mobile_det", "PPOCRV5MobileDetForObjectDetection"),
         ("pp_ocrv5_server_det", "PPOCRV5ServerDetForObjectDetection"),
+        ("pp_ocrv6_medium_det", "PPOCRV6MediumDetForObjectDetection"),
+        ("pp_ocrv6_small_det", "PPOCRV6SmallDetForObjectDetection"),
         ("rf_detr", "RfDetrForObjectDetection"),
         ("rt_detr", "RTDetrForObjectDetection"),
         ("rt_detr_v2", "RTDetrV2ForObjectDetection"),
@@ -1179,6 +1185,8 @@ MODEL_FOR_TEXT_RECOGNITION_MAPPING_NAMES = OrderedDict(
     [
         ("pp_ocrv5_mobile_rec", "PPOCRV5MobileRecForTextRecognition"),
         ("pp_ocrv5_server_rec", "PPOCRV5ServerRecForTextRecognition"),
+        ("pp_ocrv6_small_rec", "PPOCRV6SmallRecForTextRecognition"),
+        ("pp_ocrv6_tiny_rec", "PPOCRV6TinyRecForTextRecognition"),
     ]
 )
 
@@ -1765,6 +1773,7 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("pixio", "PixioBackbone"),
         ("pp_lcnet", "PPLCNetBackbone"),
         ("pp_lcnet_v3", "PPLCNetV3Backbone"),
+        ("pp_lcnet_v4", "PPLCNetV4Backbone"),
         ("pvt_v2", "PvtV2Backbone"),
         ("resnet", "ResNetBackbone"),
         ("rf_detr_dinov2", "RfDetrDinov2Backbone"),
