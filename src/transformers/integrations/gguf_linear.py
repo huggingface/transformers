@@ -274,11 +274,6 @@ class GgufExpertsTransposed(GgufExperts):
         self._decode_size = decode_size
 
 
-# Registry of fused-expert classes keyed by ``model.config.model_type``.
-# Covers every MoE arch with GGUF rename rules (``_GGUF_ARCH_CONVERTERS`` in
-# ``modeling_gguf_pytorch_utils``) plus the popular MoE archs that share the
-# fused-expert layout but don't have GGUF rules yet (Mixtral, DeepSeek-V3 —
-# their day-zero rename rules can land bytes here when added).
 MODEL_TYPE_TO_GGUF_EXPERTS: dict[str, type[nn.Module]] = {
     # Same layout as MixtralExperts: ``gate_up_proj`` shape
     # ``(num_experts, 2*intermediate, hidden)``.
@@ -292,12 +287,6 @@ MODEL_TYPE_TO_GGUF_EXPERTS: dict[str, type[nn.Module]] = {
     "gpt_oss": GgufExpertsTransposed,
 }
 
-
-# Fused-expert forward + GgufExpertsInterface — relocated here from moe.py so
-# the GGUF integration owns the dispatch end-to-end. Mirrors FP8ExpertsInterface
-# in integrations/finegrained_fp8.py.
-
-
 @torch.no_grad()
 def gguf_bmm_experts_forward(
     self: nn.Module,
@@ -305,11 +294,6 @@ def gguf_bmm_experts_forward(
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
-    """Quantized fused-expert forward for GgufExperts. Each of gate / up / down
-    runs as a single mul_mat_id_<fmt>_f32 Metal kernel launch indexed by the
-    per-token expert ids — same pattern as llama.cpp's mul_mat_id, never
-    materialises the expert weights as fp32.
-    """
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
     hidden_dim = self.hidden_dim
@@ -326,22 +310,18 @@ def gguf_bmm_experts_forward(
     ids32 = top_k_index.reshape(-1).to(torch.int32)
     sample_weights = top_k_weights.reshape(-1).to(torch.float32)
 
-    # Decode hot path: reuse the per-module scratch buffers (registered at
-    # __init__, materialised by .to(device)). Avoids ``torch.empty`` inside the
-    # compiled graph — without this, dynamo would re-trace on the second call
-    # when the buffer storage changes. Prefill (num_tokens > 1) allocates per
-    # call; that re-trace happens once per shape and dynamo caches it.
+    # Avoids ``torch.empty`` inside the compiled graph — without this,
+    # dynamo would re-trace on the second call
     if num_tokens == 1 and self._decode_size == S:
+        # this was alloceted at init time
         gate_buf, up_buf, out = self._gate_buf, self._up_buf, self._pair_out
     else:
+        # this one is for prefill
         gate_buf = torch.empty(S, intermediate_dim, dtype=torch.float32, device=device)
         up_buf = torch.empty(S, intermediate_dim, dtype=torch.float32, device=device)
         out = torch.empty(S, hidden_dim, dtype=torch.float32, device=device)
 
-    # gate_up_proj packs [gate; up] along the row axis (the standard MixtralExperts
-    # layout, produced naturally by the GGUF merge converter's Concatenate(dim=1)
-    # on uint8 byte tensors). Split into per-projection byte halves at kernel
-    # call time — both halves share a quant type so the same op fires twice.
+    # TODO: gate_up should be a single call passing gate_up (no slice, contiguous, view here)
     gate_up_bytes = self.gate_up_proj.view(self.num_experts, -1)
     half = gate_up_bytes.shape[1] // 2
     gate_qw = gate_up_bytes[:, :half].contiguous().view(-1)
@@ -364,10 +344,6 @@ def _gguf_grouped_mm_experts_forward(self, hidden_states, top_k_index, top_k_wei
 
 
 class GgufExpertsInterface(ExpertsInterface):
-    """GGUF-specific experts dispatch — registers the mul_mat_id-backed bmm /
-    grouped_mm impls. Mirrors FP8ExpertsInterface in integrations.finegrained_fp8.
-    """
-
     _global_mapping = {
         "bmm": gguf_bmm_experts_forward,
         "grouped_mm": _gguf_grouped_mm_experts_forward,
@@ -375,12 +351,6 @@ class GgufExpertsInterface(ExpertsInterface):
 
 
 ALL_GGUF_EXPERTS_FUNCTIONS = GgufExpertsInterface()
-
-
-# ----------------------------------------------------------------------------
-# Meta-time swap helper — FP8-style. Walks ``model`` on the meta device and
-# replaces ``nn.Linear`` / fused-expert modules in one pass.
-# ----------------------------------------------------------------------------
 
 
 def _should_convert(name: str, modules_to_not_convert: set[str]) -> bool:
@@ -392,26 +362,6 @@ def replace_with_gguf_linear(
     quant_info_by_target: dict[str, dict],
     modules_to_not_convert: set[str] | None = None,
 ) -> int:
-    """Walk ``model`` on its current device (typically meta) and swap matching
-    ``nn.Linear`` / fused-expert modules in place.
-
-    ``quant_info_by_target[name]`` carries the per-module quant info:
-
-    * For an ``nn.Linear`` (key = full module name)::
-
-          {"quant_type": "Q4_K"}
-
-    * For a fused-expert module (key = parent path, e.g. ``model.layers.0.mlp.experts``)::
-
-          {"gate_up_quant": "Q4_K", "down_quant": "Q8_0"}
-
-    The actual bytes flow through the GGUF rename pipeline at weight-load time
-    (the merge ``WeightConverter`` for ``gate_up_proj`` + the
-    ``ffn_down_exps → down_proj`` rename, both routed through the target-aware
-    :class:`~transformers.gguf_conversion_ops.GGUFDequantize`).
-
-    Returns the number of modules swapped.
-    """
     modules_to_not_convert = modules_to_not_convert or set()
     swapped = 0
     experts_cls = MODEL_TYPE_TO_GGUF_EXPERTS.get(getattr(model.config, "model_type", None))
@@ -422,9 +372,6 @@ def replace_with_gguf_linear(
         if info is None:
             continue
 
-        # Construct on meta — same as ``replace_with_fp8_linear``. The buffers
-        # come up as meta tensors; the real bytes are filled by the rename
-        # pipeline at weight-load time.
         new_module: nn.Module | None = None
         with torch.device("meta"):
             if isinstance(mod, nn.Linear):
@@ -452,8 +399,6 @@ def replace_with_gguf_linear(
         swapped += 1
     return swapped
 
-
-# Public re-exports for callers (quantizer, weight conversion ops, tests).
 __all__: list[str] = [
     "ALL_GGUF_EXPERTS_FUNCTIONS",
     "GgufLinear",
