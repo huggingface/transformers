@@ -1410,8 +1410,8 @@ class Gemma4TextModel(Gemma3TextModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if (input_ids is None) ^ (per_layer_inputs is not None):
-            raise ValueError("You must specify exactly one of input_ids or per_layer_inputs")
+        if input_ids is not None and per_layer_inputs is not None:
+            raise ValueError("You cannot specify per_layer_inputs if input_ids is provided")
 
         if input_ids is not None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -1939,8 +1939,8 @@ class Gemma4Model(Gemma3nModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if (input_ids is None) ^ (per_layer_inputs is not None):
-            raise ValueError("You must specify exactly one of input_ids or per_layer_inputs")
+        if input_ids is not None and per_layer_inputs is not None:
+            raise ValueError("You cannot specify per_layer_inputs if input_ids is provided")
 
         image_mask, video_mask, audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds)
         multimodal_mask = image_mask | video_mask | audio_mask
