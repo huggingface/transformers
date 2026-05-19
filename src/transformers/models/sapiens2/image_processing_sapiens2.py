@@ -16,6 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from typing import Union
 
 import numpy as np
@@ -54,6 +55,156 @@ class Sapiens2ImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     do_reduce_labels: bool
+
+
+def get_warp_matrix(theta: float, size_input: np.ndarray, size_dst: np.ndarray, size_target: np.ndarray):
+    """
+    Calculate the transformation matrix under the constraint of unbiased. Paper ref: Huang et al. The Devil is in the
+    Details: Delving into Unbiased Data Processing for Human Pose Estimation (CVPR 2020).
+
+    Source: https://github.com/open-mmlab/mmpose/blob/master/mmpose/core/post_processing/post_transforms.py
+
+    Args:
+        theta (`float`):
+            Rotation angle in degrees.
+        size_input (`np.ndarray`):
+            Size of input image [width, height].
+        size_dst (`np.ndarray`):
+            Size of output image [width, height].
+        size_target (`np.ndarray`):
+            Size of ROI in input plane [w, h].
+
+    Returns:
+        `np.ndarray`: A matrix for transformation.
+    """
+    theta = np.deg2rad(theta)
+    matrix = np.zeros((2, 3), dtype=np.float32)
+    scale_x = size_dst[0] / size_target[0]
+    scale_y = size_dst[1] / size_target[1]
+    matrix[0, 0] = math.cos(theta) * scale_x
+    matrix[0, 1] = -math.sin(theta) * scale_x
+    matrix[0, 2] = scale_x * (
+        -0.5 * size_input[0] * math.cos(theta) + 0.5 * size_input[1] * math.sin(theta) + 0.5 * size_target[0]
+    )
+    matrix[1, 0] = math.sin(theta) * scale_y
+    matrix[1, 1] = math.cos(theta) * scale_y
+    matrix[1, 2] = scale_y * (
+        -0.5 * size_input[0] * math.sin(theta) - 0.5 * size_input[1] * math.cos(theta) + 0.5 * size_target[1]
+    )
+    return matrix
+
+
+def get_keypoint_predictions(heatmaps: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Get keypoint predictions from score maps.
+
+    Args:
+        heatmaps (`np.ndarray` of shape `(batch_size, num_keypoints, height, width)`):
+            Model predicted heatmaps.
+
+    Returns:
+        tuple: A tuple containing aggregated results.
+
+        - coords (`np.ndarray` of shape `(batch_size, num_keypoints, 2)`):
+            Predicted keypoint location.
+        - scores (`np.ndarray` of shape `(batch_size, num_keypoints, 1)`):
+            Scores (confidence) of the keypoints.
+    """
+    if not isinstance(heatmaps, np.ndarray):
+        raise TypeError("Heatmaps should be np.ndarray")
+    if heatmaps.ndim != 4:
+        raise ValueError("Heatmaps should be 4-dimensional")
+
+    batch_size, num_keypoints, _, width = heatmaps.shape
+    heatmaps_reshaped = heatmaps.reshape((batch_size, num_keypoints, -1))
+    idx = np.argmax(heatmaps_reshaped, 2).reshape((batch_size, num_keypoints, 1))
+    scores = np.amax(heatmaps_reshaped, 2).reshape((batch_size, num_keypoints, 1))
+
+    preds = np.tile(idx, (1, 1, 2)).astype(np.float32)
+    preds[:, :, 0] = preds[:, :, 0] % width
+    preds[:, :, 1] = preds[:, :, 1] // width
+
+    preds = np.where(np.tile(scores, (1, 1, 2)) > 0.0, preds, -1)
+    return preds, scores
+
+
+def box_to_center_and_scale(bbox: np.ndarray, padding: float = 1.25) -> tuple[np.ndarray, np.ndarray]:
+    """Convert COCO bbox (x, y, w, h) to center and scale for affine warp."""
+    x, y, w, h = bbox[:4].astype(np.float32)
+    center = np.array([x + w * 0.5, y + h * 0.5], dtype=np.float32)
+    scale = np.array([w * padding, h * padding], dtype=np.float32)
+    return center, scale
+
+
+def cv2_warp_affine(image_np: np.ndarray, warp_mat: np.ndarray, output_size: tuple[int, int]) -> np.ndarray:
+    """Warp-affine crop a HWC uint8 numpy array. output_size = (width, height)."""
+    scale_factor = min(np.linalg.norm(warp_mat[0, :2]), np.linalg.norm(warp_mat[1, :2]))
+    flags = cv2.INTER_AREA if scale_factor < 1.0 else cv2.INTER_CUBIC
+    return cv2.warpAffine(image_np, warp_mat, output_size, flags=flags)
+
+
+def cv2_gaussian_blur(heatmaps: np.ndarray, kernel: int = 11) -> np.ndarray:
+    """Gaussian blur per-keypoint heatmap, preserving the original max value."""
+    assert kernel % 2 == 1
+    border = (kernel - 1) // 2
+    K, H, W = heatmaps.shape
+    for k in range(K):
+        origin_max = np.max(heatmaps[k])
+        dr = np.zeros((H + 2 * border, W + 2 * border), dtype=np.float32)
+        dr[border:-border, border:-border] = heatmaps[k].copy()
+        dr = cv2.GaussianBlur(dr, (kernel, kernel), 0)
+        heatmaps[k] = dr[border:-border, border:-border].copy()
+        if np.max(heatmaps[k]) > 0:
+            heatmaps[k] *= origin_max / np.max(heatmaps[k])
+    return heatmaps
+
+
+def fix_aspect_ratio(scale: np.ndarray, width: int, height: int) -> np.ndarray:
+    """Adjust scale so the crop aspect ratio matches the given width/height."""
+    aspect_ratio = width / height
+    sw, sh = scale
+    if sw > sh * aspect_ratio:
+        return np.array([sw, sw / aspect_ratio], dtype=scale.dtype)
+    else:
+        return np.array([sh * aspect_ratio, sh], dtype=scale.dtype)
+
+
+def post_dark_unbiased_data_processing(
+    keypoints: np.ndarray, heatmaps: np.ndarray, blur_kernel_size: int = 11
+) -> np.ndarray:
+    """Sub-pixel refinement via Hessian on log-heatmaps (UDP Dark Pose). In-place, returns keypoints."""
+    N, K = keypoints.shape[:2]
+    H, W = heatmaps.shape[1:]
+
+    heatmaps = cv2_gaussian_blur(heatmaps, blur_kernel_size)
+    np.clip(heatmaps, 1e-3, 50.0, heatmaps)
+    np.log(heatmaps, heatmaps)
+
+    heatmaps_pad = np.pad(heatmaps, ((0, 0), (1, 1), (1, 1)), mode="edge").flatten()
+
+    for n in range(N):
+        index = keypoints[n, :, 0] + 1 + (keypoints[n, :, 1] + 1) * (W + 2)
+        index += (W + 2) * (H + 2) * np.arange(0, K)
+        index = index.astype(int).reshape(-1, 1)
+        i_ = heatmaps_pad[index]
+        ix1 = heatmaps_pad[index + 1]
+        iy1 = heatmaps_pad[index + W + 2]
+        ix1y1 = heatmaps_pad[index + W + 3]
+        ix1_y1_ = heatmaps_pad[index - W - 3]
+        ix1_ = heatmaps_pad[index - 1]
+        iy1_ = heatmaps_pad[index - 2 - W]
+
+        dx = 0.5 * (ix1 - ix1_)
+        dy = 0.5 * (iy1 - iy1_)
+        derivative = np.concatenate([dx, dy], axis=1).reshape(K, 2, 1)
+
+        dxx = ix1 - 2 * i_ + ix1_
+        dyy = iy1 - 2 * i_ + iy1_
+        dxy = 0.5 * (ix1y1 - ix1 - iy1 + i_ + i_ - ix1_ - iy1_ + ix1_y1_)
+        hessian = np.concatenate([dxx, dxy, dxy, dyy], axis=1).reshape(K, 2, 2)
+        hessian = np.linalg.inv(hessian + np.finfo(np.float32).eps * np.eye(2))
+        keypoints[n] -= np.einsum("imn,ink->imk", hessian, derivative).squeeze()
+
+    return keypoints
 
 
 class Sapiens2ImageProcessor(TorchvisionBackend):
@@ -145,107 +296,6 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             labels[idx] = label
         return labels
 
-    # TODO(guarin): Check all the pose pre- and post-processing steps and try to unify with ViTPoseProcessor where possible.
-    def _bbox_coco_to_center_scale(self, bbox: np.ndarray, padding: float = 1.25):
-        """Convert COCO bbox (x, y, w, h) to center and scale for affine warp."""
-        x, y, w, h = bbox[:4].astype(np.float32)
-        center = np.array([x + w * 0.5, y + h * 0.5], dtype=np.float32)
-        scale = np.array([w * padding, h * padding], dtype=np.float32)
-        return center, scale
-
-    def _fix_aspect_ratio(self, scale: np.ndarray) -> np.ndarray:
-        """Adjust scale so the crop aspect ratio matches the model input size."""
-        aspect_ratio = self.size["width"] / self.size["height"]
-        sw, sh = scale
-        if sw > sh * aspect_ratio:
-            return np.array([sw, sw / aspect_ratio], dtype=scale.dtype)
-        else:
-            return np.array([sh * aspect_ratio, sh], dtype=scale.dtype)
-
-    def _get_udp_warp_matrix(self, center: np.ndarray, scale: np.ndarray, output_size: tuple[int, int]) -> np.ndarray:
-        """Compute affine warp matrix (rot=0). Port of get_udp_warp_matrix from sapiens2 pose."""
-        # output_size = (width, height)
-        input_size = center * 2
-        warp_mat = np.zeros((2, 3), dtype=np.float32)
-        scale_x = (output_size[0] - 1) / scale[0]
-        scale_y = (output_size[1] - 1) / scale[1]
-        warp_mat[0, 0] = scale_x
-        warp_mat[0, 2] = scale_x * (-0.5 * input_size[0] + 0.5 * scale[0])
-        warp_mat[1, 1] = scale_y
-        warp_mat[1, 2] = scale_y * (-0.5 * input_size[1] + 0.5 * scale[1])
-        return warp_mat
-
-    def _apply_affine_crop(
-        self, image_np: np.ndarray, warp_mat: np.ndarray, output_size: tuple[int, int]
-    ) -> np.ndarray:
-        """Warp-affine crop a HWC uint8 numpy array. output_size = (width, height)."""
-        scale_factor = min(np.linalg.norm(warp_mat[0, :2]), np.linalg.norm(warp_mat[1, :2]))
-        flags = cv2.INTER_AREA if scale_factor < 1.0 else cv2.INTER_CUBIC
-        return cv2.warpAffine(image_np, warp_mat, output_size, flags=flags)
-
-    def _gaussian_blur(self, heatmaps: np.ndarray, kernel: int = 11) -> np.ndarray:
-        """Gaussian blur per-keypoint heatmap, preserving the original max value."""
-        assert kernel % 2 == 1
-        border = (kernel - 1) // 2
-        K, H, W = heatmaps.shape
-        for k in range(K):
-            origin_max = np.max(heatmaps[k])
-            dr = np.zeros((H + 2 * border, W + 2 * border), dtype=np.float32)
-            dr[border:-border, border:-border] = heatmaps[k].copy()
-            dr = cv2.GaussianBlur(dr, (kernel, kernel), 0)
-            heatmaps[k] = dr[border:-border, border:-border].copy()
-            if np.max(heatmaps[k]) > 0:
-                heatmaps[k] *= origin_max / np.max(heatmaps[k])
-        return heatmaps
-
-    def _get_heatmap_maximum(self, heatmaps: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        """Return per-keypoint argmax locations (K, 2) in x/y pixel coords and max values (K,)."""
-        K, H, W = heatmaps.shape
-        flat = heatmaps.reshape(K, -1)
-        y_locs, x_locs = np.unravel_index(np.argmax(flat, axis=1), shape=(H, W))
-        locs = np.stack((x_locs, y_locs), axis=-1).astype(np.float32)
-        vals = np.amax(flat, axis=1)
-        locs[vals <= 0.0] = -1
-        return locs, vals
-
-    def _refine_keypoints_dark_udp(
-        self, keypoints: np.ndarray, heatmaps: np.ndarray, blur_kernel_size: int = 11
-    ) -> np.ndarray:
-        """Sub-pixel refinement via Hessian on log-heatmaps (UDP Dark Pose). In-place, returns keypoints."""
-        N, K = keypoints.shape[:2]
-        H, W = heatmaps.shape[1:]
-
-        heatmaps = self._gaussian_blur(heatmaps, blur_kernel_size)
-        np.clip(heatmaps, 1e-3, 50.0, heatmaps)
-        np.log(heatmaps, heatmaps)
-
-        heatmaps_pad = np.pad(heatmaps, ((0, 0), (1, 1), (1, 1)), mode="edge").flatten()
-
-        for n in range(N):
-            index = keypoints[n, :, 0] + 1 + (keypoints[n, :, 1] + 1) * (W + 2)
-            index += (W + 2) * (H + 2) * np.arange(0, K)
-            index = index.astype(int).reshape(-1, 1)
-            i_ = heatmaps_pad[index]
-            ix1 = heatmaps_pad[index + 1]
-            iy1 = heatmaps_pad[index + W + 2]
-            ix1y1 = heatmaps_pad[index + W + 3]
-            ix1_y1_ = heatmaps_pad[index - W - 3]
-            ix1_ = heatmaps_pad[index - 1]
-            iy1_ = heatmaps_pad[index - 2 - W]
-
-            dx = 0.5 * (ix1 - ix1_)
-            dy = 0.5 * (iy1 - iy1_)
-            derivative = np.concatenate([dx, dy], axis=1).reshape(K, 2, 1)
-
-            dxx = ix1 - 2 * i_ + ix1_
-            dyy = iy1 - 2 * i_ + iy1_
-            dxy = 0.5 * (ix1y1 - ix1 - iy1 + i_ + i_ - ix1_ - iy1_ + ix1_y1_)
-            hessian = np.concatenate([dxx, dxy, dxy, dyy], axis=1).reshape(K, 2, 2)
-            hessian = np.linalg.inv(hessian + np.finfo(np.float32).eps * np.eye(2))
-            keypoints[n] -= np.einsum("imn,ink->imk", hessian, derivative).squeeze()
-
-        return keypoints
-
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -271,10 +321,10 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
                 image_np = image.permute(1, 2, 0).cpu().numpy()  # (H, W, 3) uint8
                 for bbox in image_boxes:
                     bbox_np = np.array(bbox, dtype=np.float32)
-                    center, scale = self._bbox_coco_to_center_scale(bbox_np)
-                    scale = self._fix_aspect_ratio(scale)
-                    warp_mat = self._get_udp_warp_matrix(center, scale, output_size)
-                    crop_np = self._apply_affine_crop(image_np, warp_mat, output_size)
+                    center, scale = box_to_center_and_scale(bbox_np)
+                    scale = fix_aspect_ratio(scale, size["width"], size["height"])
+                    warp_mat = get_warp_matrix(0, center * 2, np.array(output_size, dtype=np.float32) - 1, scale)
+                    crop_np = cv2_warp_affine(image_np, warp_mat, output_size)
                     crops.append(torch.from_numpy(crop_np).permute(2, 0, 1).to(image.device))
             images = crops
             do_resize = False  # affine crop already produces the target size
@@ -346,13 +396,13 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
 
         person_results = []
         for i, bbox in enumerate(flattened_boxes):
-            center, scale = self._bbox_coco_to_center_scale(np.array(bbox, dtype=np.float32))
-            scale = self._fix_aspect_ratio(scale)
+            center, scale = box_to_center_and_scale(np.array(bbox, dtype=np.float32))
+            scale = fix_aspect_ratio(scale, self.size["width"], self.size["height"])
             heatmap_i = heatmaps_np[i].copy()  # copy to avoid mutating caller's tensor
 
-            locs, scores_i = self._get_heatmap_maximum(heatmap_i)  # (K, 2), (K,)
-            locs = locs[None]  # (1, K, 2) for refine signature
-            locs = self._refine_keypoints_dark_udp(locs, heatmap_i, blur_kernel_size)
+            locs, scores_i = get_keypoint_predictions(heatmap_i[None])  # (1, K, 2), (1, K, 1)
+            scores_i = scores_i[0, :, 0]  # (K,)
+            locs = post_dark_unbiased_data_processing(locs, heatmap_i, blur_kernel_size)
             locs = locs[0]  # (K, 2)
 
             locs = locs / heatmap_size * scale + center - 0.5 * scale
