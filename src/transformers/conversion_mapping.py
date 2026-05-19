@@ -932,7 +932,6 @@ def _build_checkpoint_conversion_mapping():
                 operations=[Chunk(dim=0)],
             ),
         ],
-        # TODO(guarin): Check what happens if a checkpoint/config has more or fewer layers
         "Sapiens2ForSemanticSegmentation": [
             WeightRenaming(r"^backbone\.", r"sapiens2."),
             WeightRenaming(r"decode_head\.deconv_layers\.0\.weight", r"decode_head.deconv_layers.0.conv.weight"),
