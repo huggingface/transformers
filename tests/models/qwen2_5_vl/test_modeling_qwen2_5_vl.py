@@ -328,7 +328,7 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                 C * T * (P**2),
             ]
         )
-        video_grid_thw = torch.tensor([[patch_T, patch_H, patch_W]] * B)
+        video_grid_thw = torch.tensor([[patch_T, patch_H, patch_W]] * B, device=torch_device)
 
         # sanity check
         assert pixel_values_videos.shape[0] == video_grid_thw.prod(dim=1).sum().item()

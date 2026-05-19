@@ -117,6 +117,24 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "hrm_text": [
+            WeightConverter(
+                source_patterns="mlp.gate_up_proj.weight",
+                target_patterns=["mlp.gate_proj.weight", "mlp.up_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns="attn.gqkv_proj.weight",
+                target_patterns=[
+                    "self_attn.gate_proj.weight",
+                    "self_attn.q_proj.weight",
+                    "self_attn.k_proj.weight",
+                    "self_attn.v_proj.weight",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightRenaming(source_patterns=r"\.attn\.o_proj\.", target_patterns=".self_attn.o_proj."),
+        ],
         "ViTModel": [
             WeightRenaming(r"encoder\.layer\.", "layers."),
             WeightRenaming("attention.query", "q_proj"),
@@ -383,12 +401,12 @@ def _build_checkpoint_conversion_mapping():
                     "mlp.experts.*.w1.weight",
                     "mlp.experts.*.w3.weight",
                 ],
-                target_patterns="mlp.experts.gate_up_proj",
+                target_patterns="mlp.experts.gate_up_proj$",
                 operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
             ),
             WeightConverter(
                 source_patterns="mlp.experts.*.w2.weight",
-                target_patterns="mlp.experts.down_proj",
+                target_patterns="mlp.experts.down_proj$",
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
@@ -1060,6 +1078,8 @@ def get_model_conversion_mapping(
     seen to prevent `XForY` / `XModel` pairs from applying the same mapping
     twice via different lookup paths.
     """
+    from .modeling_utils import PreTrainedModel
+
     # note: this function is used in PEFT, so changing the API requires coordination
     weight_conversions = []
 
@@ -1075,8 +1095,11 @@ def get_model_conversion_mapping(
     # prevents a parent's transforms from being duplicated with a scoped copy for the child.
     seen_identifiers: defaultdict[str, list[str]] = defaultdict(list)
 
-    named_pretrained = model._named_pretrained_submodules
-    for module_name, submodule in named_pretrained:
+    for module_name, submodule in model.named_modules():
+        # Skip if it's not a submodel
+        if not isinstance(submodule, PreTrainedModel):
+            continue
+
         class_name = type(submodule).__name__
         model_type = submodule.config.model_type
 

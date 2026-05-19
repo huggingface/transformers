@@ -25,7 +25,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, torch_compilable_check
 from ..audioflamingo3.configuration_audioflamingo3 import AudioFlamingo3Config
 from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3ForConditionalGeneration,
@@ -78,6 +78,12 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
     rope_parameters: dict | None = None
 
     def __post_init__(self, **kwargs):
+        if self.rope_parameters is None:
+            self.rope_parameters = {
+                "rope_type": "default",
+                "rope_theta": 1200.0,
+                "partial_rotary_factor": 0.2,
+            }
         if isinstance(self.audio_config, dict):
             if self.audio_config["model_type"] in [None, "musicflamingo_encoder"]:
                 self.audio_config["model_type"] = "audioflamingo3_encoder"
@@ -92,11 +98,9 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["qwen2"]()
 
-        if self.rope_parameters is None:
-            self.rope_parameters = {"rope_type": "default", "rope_theta": 1200, "partial_rotary_factor": 0.2}
         self.max_position_embeddings = self.rope_parameters["rope_theta"]
         self.head_dim = self.audio_config.hidden_size
-        PreTrainedConfig.__post_init__(**kwargs)
+        PreTrainedConfig.__post_init__(self, **kwargs)
 
 
 class MusicFlamingoProcessor(AudioFlamingo3Processor):
@@ -274,6 +278,13 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
         _, ends = torch.where(diff == -1)
         sample_lengths = (ends - starts).to(torch.long)
 
+        n_audio_tokens = audio_token_mask.sum()
+        n_audio_features = post_lengths.sum()
+        torch_compilable_check(
+            n_audio_tokens == n_audio_features,
+            f"Audio features and audio tokens do not match, tokens: {n_audio_tokens}, features: {n_audio_features}",
+        )
+
         # Account for 4x downsampling in audio encoder (conv2 and avg pooling)
         audio_embed_frame_step = self.config.audio_frame_step * 4
         frame_offsets = (
@@ -408,10 +419,10 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
             ).pooler_output
 
             # replace text-audio token placeholders with audio embeddings
-            audio_token_mask = (input_ids == self.config.audio_token_id).unsqueeze(-1)
-            inputs_embeds = inputs_embeds.masked_scatter(
-                audio_token_mask.to(inputs_embeds.device), audio_embeds.to(inputs_embeds.device)
+            special_audio_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, audio_features=audio_embeds
             )
+            inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_embeds.to(inputs_embeds.device))
 
         outputs: CausalLMOutputWithPast = self.language_model(
             inputs_embeds=inputs_embeds,
