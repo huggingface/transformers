@@ -14,6 +14,8 @@ import html
 import json
 import re
 import shutil
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -79,10 +81,15 @@ def collect_from_tests(tests_root: Path) -> dict[str, set[str]]:
 
 
 def should_ignore_diff(diff: dict) -> bool:
-    """Return True if all differences are trivial ByteLevel flags or post_processor ordering."""
+    """Return True if all differences are trivial ByteLevel flags, post_processor ordering, or vocab_size."""
     if not diff:
         return False
-    if any(f not in ("decoder", "pre_tokenizer", "post_processor") for f in diff):
+    
+    # Skip if only difference is vocab_size
+    if diff.keys() == {"vocab_size"}:
+        return True
+    
+    if any(f not in ("decoder", "pre_tokenizer", "post_processor", "vocab_size") for f in diff):
         return False
 
     trivial = r"[,\s]*(add_prefix_space|trim_offsets|use_regex)=[^,\)]*"
@@ -290,6 +297,7 @@ def main() -> int:
     p.add_argument("--no-cleanup", action="store_true", help="Keep downloaded model files in HF cache.")
     p.add_argument("--list", action="store_true", help="Print discovered model IDs and exit.")
     p.add_argument("--show-all", action="store_true", help="Include trivial flag-only diffs in the HTML report.")
+    p.add_argument("--workers", type=int, default=1, help="Number of parallel download/compare workers (default: 1).")
     args = p.parse_args()
 
     models_map: dict[str, set[str]] = {}
@@ -330,20 +338,35 @@ def main() -> int:
             print(f"Warning: could not load existing results: {e}")
 
     models_to_process = sorted(set(models_map) - processed)
-    pbar = tqdm(models_to_process, desc="Comparing tokenizers", unit="model")
-    for m in pbar:
-        pbar.set_postfix_str(m, refresh=True)
-        results.append(compare_tokenizers(m, found_in=sorted(models_map[m])))
-        try:
-            tmp_path.write_text(json.dumps(results, indent=2), encoding="utf-8")
-            tmp_path.replace(out_path)
-        except Exception as e:
-            tqdm.write(f"Warning: failed to write results: {e}")
+    write_lock = threading.Lock()
+
+    def process_one(m: str) -> None:
+        result = compare_tokenizers(m, found_in=sorted(models_map[m]))
+        with write_lock:
+            results.append(result)
+            try:
+                tmp_path.write_text(json.dumps(results, indent=2), encoding="utf-8")
+                tmp_path.replace(out_path)
+            except Exception as e:
+                tqdm.write(f"Warning: failed to write results: {e}")
         if not args.no_cleanup:
             try:
                 cleanup_cache(m)
             except Exception as e:
                 tqdm.write(f"cleanup failed for {m}: {e}")
+
+    pbar = tqdm(total=len(models_to_process), desc="Comparing tokenizers", unit="model")
+    with ThreadPoolExecutor(max_workers=args.workers) as executor:
+        futures = {executor.submit(process_one, m): m for m in models_to_process}
+        for future in as_completed(futures):
+            m = futures[future]
+            try:
+                future.result()
+            except Exception as e:
+                tqdm.write(f"Error processing {m}: {e}")
+            pbar.set_postfix_str(m, refresh=True)
+            pbar.update(1)
+    pbar.close()
 
     if models_to_process:
         print(f"Wrote {out_path} ({len(results)} total results)")
