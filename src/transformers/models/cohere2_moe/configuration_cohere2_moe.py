@@ -14,9 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import warnings
+from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 
 
 def make_pattern(num_layers: int, pattern: int) -> list[str]:
@@ -26,20 +26,19 @@ def make_pattern(num_layers: int, pattern: int) -> list[str]:
     return ["sliding_attention" if ((i + 1) % pattern) != 0 else "full_attention" for i in range(num_layers)]
 
 
-class Cohere2MoeConfig(PretrainedConfig):
+@strict
+class Cohere2MoeConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CohereModel`]. It is used to instantiate an Cohere
-    model according to the specified arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a [`Cohere2MoeModel`]. It is used to instantiate a
+    Cohere2Moe model according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the [CohereForAI/c4ai-command-r-v01](https://huggingface.co/CohereForAI/c4ai-command-r-v01) model.
-
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 256000):
-            Vocabulary size of the Cohere model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`CohereModel`]
+            Vocabulary size of the Cohere2Moe model. Defines the number of different tokens that can be represented by
+            the `inputs_ids` passed when calling [`Cohere2MoeModel`].
         hidden_size (`int`, *optional*, defaults to 8192):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 22528):
@@ -51,15 +50,11 @@ class Cohere2MoeConfig(PretrainedConfig):
         num_attention_heads (`int`, *optional*, defaults to 64):
             Number of attention heads for each attention layer in the Transformer decoder.
         num_key_value_heads (`int`, *optional*):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
-            `num_attention_heads`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
+            Number of key/value heads for Grouped Query Attention. Defaults to `num_attention_heads`.
+        head_dim (`int`, *optional*, defaults to 128):
+            Dimension of each attention head.
+        hidden_act (`str`, *optional*, defaults to `"silu"`):
+            The non-linear activation function in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 8192):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -67,8 +62,7 @@ class Cohere2MoeConfig(PretrainedConfig):
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization.
         use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
+            Whether or not the model should return the last key/values attentions.
         pad_token_id (`int`, *optional*, defaults to 0):
             Padding token id.
         bos_token_id (`int`, *optional*, defaults to 5):
@@ -76,47 +70,12 @@ class Cohere2MoeConfig(PretrainedConfig):
         eos_token_id (`int`, *optional*, defaults to 255001):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings
+            Whether to tie weight embeddings.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
-        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
+        rope_scaling (`dict`, *optional*):
+            Dictionary containing the scaling configuration for the RoPE embeddings.
+        attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
@@ -125,32 +84,32 @@ class Cohere2MoeConfig(PretrainedConfig):
         num_experts (`int`, *optional*, defaults to 8):
             Number of routed experts.
         num_experts_per_tok (`int`, *optional*, defaults to 2):
-            Number of selected experts.
+            Number of selected experts per token.
         num_shared_experts (`int`, *optional*, defaults to 0):
             The number of shared experts.
         shared_expert_combination_strategy (`str`, *optional*, defaults to `"average"`):
-            The combination strategy of shared expert, must be one of ['average', 'sum']
+            The combination strategy of shared expert, must be one of ['average', 'sum'].
         expert_selection_fn (`str`, *optional*, defaults to `"softmax"`):
             Expert selection function of router.
         layer_types (`list`, *optional*):
             Attention pattern for each layer.
         first_k_dense_replace (`int`, *optional*, defaults to 0):
-            Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
-                                                            \--k dense layers--/
+            Number of dense layers before MoE layers.
         prefix_dense_sliding_window_pattern (`int`, *optional*, defaults to 1):
             Sliding window pattern for the prefix dense layers.
         norm_topk_prob (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the top-k expert probabilities when sigmoid is used
+            Whether to normalize the top-k expert probabilities when sigmoid is used.
         prefix_dense_intermediate_size (`int`, *optional*):
             Intermediate dimension of the dense prefix layers.
-        rms_norm_eps (`float`, *optional*, defaults to None):
+        rms_norm_eps (`float`, *optional*):
             The epsilon used by the RMS normalization layers.
         sliding_window_pattern (`int`, *optional*, defaults to 4):
             Sliding window pattern for the layers.
+
     ```python
     >>> from transformers import Cohere2MoeModel, Cohere2MoeConfig
 
-    >>> # Initializing a Cohere Next MOE model configuration
+    >>> # Initializing a Cohere2Moe model configuration
     >>> configuration = Cohere2MoeConfig()
 
     >>> # Initializing a model from the Cohere2Moe configuration
@@ -178,96 +137,54 @@ class Cohere2MoeConfig(PretrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    def __init__(
-        self,
-        vocab_size=256000,
-        hidden_size=8192,
-        intermediate_size=22528,
-        logit_scale=0.0625,
-        num_hidden_layers=40,
-        num_attention_heads=64,
-        num_key_value_heads=None,
-        head_dim=128,
-        hidden_act="silu",
-        max_position_embeddings=8192,
-        initializer_range=0.02,
-        layer_norm_eps=1e-5,
-        use_cache=True,
-        pad_token_id=0,
-        bos_token_id=5,
-        eos_token_id=255001,
-        tie_word_embeddings=True,
-        rope_theta=10000.0,
-        rope_scaling=None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        sliding_window=4096,
-        num_experts_per_tok=2,
-        num_experts=8,
-        num_shared_experts=0,
-        shared_expert_combination_strategy="average",
-        expert_selection_fn="softmax",
-        layer_types=None,
-        first_k_dense_replace=0,
-        prefix_dense_sliding_window_pattern=1,
-        norm_topk_prob=True,
-        prefix_dense_intermediate_size=None,
-        rms_norm_eps=None,
-        sliding_window_pattern=4,
-        **kwargs,
-    ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
-        self.num_experts_per_tok = num_experts_per_tok
-        self.num_experts = num_experts
-        self.num_shared_experts = num_shared_experts
-        self.shared_expert_combination_strategy = shared_expert_combination_strategy
-        self.expert_selection_fn = expert_selection_fn
-        self.first_k_dense_replace = first_k_dense_replace
-        self.norm_topk_prob = norm_topk_prob
-        self.prefix_dense_intermediate_size = prefix_dense_intermediate_size
-        self.prefix_dense_sliding_window_pattern = prefix_dense_sliding_window_pattern
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.logit_scale = logit_scale
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.head_dim = head_dim
+    vocab_size: int = 256000
+    hidden_size: int = 8192
+    intermediate_size: int = 22528
+    logit_scale: float = 0.0625
+    num_hidden_layers: int = 40
+    num_attention_heads: int = 64
+    num_key_value_heads: int | None = None
+    head_dim: int = 128
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 8192
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-5
+    use_cache: bool = True
+    pad_token_id: int | None = 0
+    bos_token_id: int | None = 5
+    eos_token_id: int | list[int] | None = 255001
+    tie_word_embeddings: bool = True
+    rope_theta: float | int = 10000.0
+    rope_scaling: dict | None = None
+    attention_bias: bool = False
+    attention_dropout: float = 0.0
+    sliding_window: int | None = 4096
+    num_experts_per_tok: int = 2
+    num_experts: int = 8
+    num_shared_experts: int = 0
+    shared_expert_combination_strategy: str = "average"
+    expert_selection_fn: str = "softmax"
+    layer_types: list[str] | None = None
+    first_k_dense_replace: int = 0
+    prefix_dense_sliding_window_pattern: int = 1
+    norm_topk_prob: bool = True
+    prefix_dense_intermediate_size: int | None = None
+    rms_norm_eps: float | None = None
+    sliding_window_pattern: int = 4
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.sliding_window = sliding_window
-        self.layer_types = layer_types
-        self.rms_norm_eps = rms_norm_eps
-        self.sliding_window_pattern = sliding_window_pattern
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
         # Validate the correctness of rotary position embeddings parameters
         self.standardize_rope_params()
         self.validate_rope()
 
         if self.layer_types is None:
-            first_k_dense_replace = getattr(self, "first_k_dense_replace", 0)
-            prefix_dense_sliding_window_pattern = getattr(self, "prefix_dense_sliding_window_pattern", 1)
-            prefix_layers = make_pattern(first_k_dense_replace, self.prefix_dense_sliding_window_pattern)
-            rest_layers = make_pattern(self.num_hidden_layers - self.first_k_dense_replace, self.sliding_window_pattern)
+            prefix_layers = make_pattern(self.first_k_dense_replace, self.prefix_dense_sliding_window_pattern)
+            rest_layers = make_pattern(
+                self.num_hidden_layers - self.first_k_dense_replace, self.sliding_window_pattern
+            )
             self.layer_types = prefix_layers + rest_layers
 
         self.validate_layer_type()
@@ -277,6 +194,16 @@ class Cohere2MoeConfig(PretrainedConfig):
                 f"The length of layer_types ({len(self.layer_types)}) does not match "
                 f"num_hidden_layers ({self.num_hidden_layers})"
             )
+
+        super().__post_init__(**kwargs)
+
+    @classmethod
+    def from_dict(cls, config_dict, **kwargs):
+        # Normalise the legacy "cohere2moe" model type (no underscore) to the canonical
+        # "cohere2_moe" so that checkpoints saved with either spelling load correctly.
+        if config_dict.get("model_type") == "cohere2moe":
+            config_dict = {**config_dict, "model_type": "cohere2_moe"}
+        return super().from_dict(config_dict, **kwargs)
 
 
 __all__ = ["Cohere2MoeConfig"]
