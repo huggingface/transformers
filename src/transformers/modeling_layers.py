@@ -245,7 +245,10 @@ class GenericForTokenClassification:
         else:
             classifier_dropout = 0.1
         self.dropout = nn.Dropout(classifier_dropout)
-        self.score = nn.Linear(config.get_text_config().hidden_size, config.num_labels, bias=True)
+        if getattr(config, "score_bias", None) is None:
+            self.score = nn.Linear(config.get_text_config().hidden_size, config.num_labels)
+        else:
+            self.score = nn.Linear(config.get_text_config().hidden_size, config.num_labels, bias=config.score_bias)
 
         # Initialize weights and apply final processing
         self.post_init()

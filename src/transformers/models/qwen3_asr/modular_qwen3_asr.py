@@ -80,6 +80,8 @@ class Qwen3ASRConfig(PreTrainedConfig):
     timestamp_token_id (`int`, *optional*, defaults to 151705):
         Token ID of the ``<timestamp>`` marker in the tokenizer vocabulary. These markers
         delimit word boundaries in the forced-alignment input sequence.
+    score_bias (`bool`, *optional*, defaults to False):
+        Whether the token classification head for forced alignment should have a bias term.
 
     Example:
 
@@ -107,6 +109,7 @@ class Qwen3ASRConfig(PreTrainedConfig):
     eos_token_id: list[int] | tuple[int, ...] | int = (151643, 151645)
     initializer_range: float = 0.02
     tie_word_embeddings: bool = True
+    score_bias: bool = False
 
     @property
     def hidden_size(self):
@@ -148,11 +151,6 @@ class Qwen3ASRPreTrainedModel(Qwen2AudioPreTrainedModel):
         if isinstance(module, SinusoidsPositionEmbedding):
             position_embeddings = module.compute_default_singular_positional_embedding()
             init.copy_(module.positional_embedding, position_embeddings)
-
-    def _backward_compatibility_gradient_checkpointing(self):
-        # Override to not delete the attribute from the config (like `MBartEncoder`)
-        if self.supports_gradient_checkpointing and getattr(self.config, "gradient_checkpointing", False):
-            self.gradient_checkpointing_enable()
 
 
 class Qwen3ASRAttention(nn.Module):
@@ -521,12 +519,7 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
     """
 )
 class Qwen3ASRForTokenClassification(GenericForTokenClassification, Qwen3ASRPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = Qwen3ASRModel(config)
-        self.dropout = nn.Dropout(getattr(config, "classifier_dropout", 0.1))
-        self.score = nn.Linear(config.text_config.hidden_size, config.num_labels, bias=False)
-        self.post_init()
+    pass
 
 
 __all__ = [

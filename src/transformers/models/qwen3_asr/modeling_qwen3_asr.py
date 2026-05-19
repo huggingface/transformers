@@ -61,11 +61,6 @@ class Qwen3ASRPreTrainedModel(PreTrainedModel):
             position_embeddings = module.compute_default_singular_positional_embedding()
             init.copy_(module.positional_embedding, position_embeddings)
 
-    def _backward_compatibility_gradient_checkpointing(self):
-        # Override to not delete the attribute from the config (like `MBartEncoder`)
-        if self.supports_gradient_checkpointing and getattr(self.config, "gradient_checkpointing", False):
-            self.gradient_checkpointing_enable()
-
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
@@ -586,12 +581,7 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
     """
 )
 class Qwen3ASRForTokenClassification(GenericForTokenClassification, Qwen3ASRPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = Qwen3ASRModel(config)
-        self.dropout = nn.Dropout(getattr(config, "classifier_dropout", 0.1))
-        self.score = nn.Linear(config.text_config.hidden_size, config.num_labels, bias=False)
-        self.post_init()
+    pass
 
 
 __all__ = [

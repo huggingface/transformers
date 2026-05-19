@@ -206,7 +206,7 @@ class Qwen3ASRFeatureExtractor(SequenceFeatureExtractor):
             return_attention_mask=True,
         )
 
-        input_features = padded_inputs.get("input_features").transpose(2, 0, 1)
+        input_features = padded_inputs["input_features"].transpose(2, 0, 1)
         input_features = self._torch_extract_fbank_features(input_features[0], device)
         padded_inputs["input_features"] = input_features
 
