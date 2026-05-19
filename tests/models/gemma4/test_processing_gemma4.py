@@ -149,6 +149,42 @@ class Gemma4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             out_batch_oneimage[self.images_input_name].tolist(), out_multiimages[self.images_input_name].tolist()
         )
 
+    def test_batch_with_only_images_or_text_mixed(self):
+        feature_extractor = self.get_component("feature_extractor")
+        image_processor = self.get_component("image_processor")
+        video_processor = self.get_component("video_processor")
+        tokenizer = self.get_component("tokenizer")
+
+        processor = self.processor_class(
+            feature_extractor=feature_extractor,
+            tokenizer=tokenizer,
+            image_processor=image_processor,
+            video_processor=video_processor,
+        )
+        text_image = f"{processor.boi_token}Dummy text!"
+        text_no_image = "Dummy text!"
+
+        image = self.prepare_image_inputs()
+
+        out_images_batch = processor(text=[text_image, text_image], images=[[image], [image]], return_tensors="np")
+        self.assertEqual(out_images_batch[self.images_input_name].shape[0], 2)
+        out_text_batch = processor(text=[text_no_image, text_no_image, text_no_image], return_tensors="np")
+        assert self.images_input_name not in out_text_batch
+        out_images_and_text_batch = processor(
+            text=[text_image, text_no_image, text_no_image], images=[[image], [], []], return_tensors="np"
+        )
+        self.assertEqual(out_images_and_text_batch[self.images_input_name].shape[0], 1)
+
+        self.assertListEqual(
+            out_images_batch[self.images_input_name].tolist()[0],
+            out_images_and_text_batch[self.images_input_name].tolist()[0],
+        )
+        self.assertListEqual(
+            out_images_batch["input_ids"].tolist()[0], out_images_and_text_batch["input_ids"].tolist()[0]
+        )
+        text_tokens = out_text_batch["input_ids"].tolist()[0]
+        self.assertListEqual(text_tokens, out_images_and_text_batch["input_ids"].tolist()[1][: len(text_tokens)])
+
     def test_special_mm_token_truncation(self):
         """Tests that special vision tokens do not get truncated when `truncation=True` is set."""
 
