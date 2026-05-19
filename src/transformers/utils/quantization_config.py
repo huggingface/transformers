@@ -1687,11 +1687,8 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         modules_to_not_convert (`list`, *optional*):
             A list of module names that should not be converted during quantization.
         scale_fmt (`str`, *optional*, defaults to `"float"`):
-            Storage dtype of the per-block weight scales:
-                - `"float"`: fp32 scales (DeepSeek V3-style; Hopper SM90 1D2D path).
-                - `"ue8m0"`: 1-byte `torch.float8_e8m0fnu` scales (DeepSeek V4-style). At GEMM time
-                the underlying memory is reinterpreted as `torch.int32` (4 UE8M0 bytes per int),
-                feeding the SM100 1D1D dispatch directly with no float→int transform per call.
+            Storage dtype of the per-block weight scales: `"float"` (fp32, V3-style) or
+            `"ue8m0"` (1-byte `torch.float8_e8m0fnu`, V4-style).
     """
 
     def __init__(

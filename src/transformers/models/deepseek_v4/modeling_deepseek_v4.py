@@ -1202,10 +1202,10 @@ class DeepseekV4PreTrainedModel(PreTrainedModel):
         "post_attention_layernorm",
         "norm",
     ]
-    # DeepSeek-V4-Flash checkpoints mix FP8 and bf16 in the attention compressor /
-    # indexer branch: these projections ship in bf16 with no companion `scale_inv`.
+    # DeepSeek-V4-Flash checkpoints mix FP8 and BF16 in the attention compressor /
+    # indexer branch: these projections ship in BF16 with no companion `scale_inv`.
     # Listed here (non-strict) so the FP8 quantizer's `get_modules_to_not_convert`
-    # auto-skips them; non-strict has no dtype effect at bf16, so they stay bf16.
+    # auto-skips them; non-strict has no dtype effect at BF16, so they stay BF16.
     _keep_in_fp32_modules = [
         "self_attn.compressor.kv_proj",
         "self_attn.compressor.gate_proj",
