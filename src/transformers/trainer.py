@@ -70,6 +70,7 @@ from .integrations.fsdp import get_fsdp_ckpt_kwargs, update_fsdp_plugin_peft
 from .integrations.liger import apply_liger_kernel
 from .integrations.neftune import activate_neftune, deactivate_neftune
 from .integrations.peft import MIN_PEFT_VERSION
+from .integrations.tensor_parallel import get_ep_sharded_param_names
 from .integrations.tpu import save_tpu_checkpoint, tpu_spmd_dataloader, wrap_model_xla_fsdp
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, unwrap_model
@@ -726,7 +727,12 @@ class Trainer:
                 )
             args["parallelism_config"] = self.args.parallelism_config
 
-        if getattr(self.model, "tp_size", None) is not None and self.model.tp_size > 1:
+        # EP-sharded params are already DTensors on the EP mesh, not on a TP mesh.
+        if (
+            getattr(self.model, "tp_size", None) is not None
+            and self.model.tp_size > 1
+            and not getattr(self.model, "has_ep", False)
+        ):
             if self.args.parallelism_config is None:
                 if is_accelerate_available("1.12.0"):
                     if self.args.parallelism_config is None:
@@ -823,6 +829,11 @@ class Trainer:
         # post accelerator creation setup
         if self.is_fsdp_enabled:
             fsdp_plugin = self.accelerator.state.fsdp_plugin
+            # EP-sharded experts must not be re-sharded by FSDP,  their params are DTensors on the EP mesh.
+            ep_param_names = get_ep_sharded_param_names(self.model)
+            if ep_param_names:
+                module_names = list({n.rsplit(".", 1)[0] for n in ep_param_names})
+                fsdp_plugin.ignored_modules = [self.model.get_submodule(n) for n in module_names]
             for param in ["limit_all_gathers", "activation_checkpointing"]:
                 setattr(fsdp_plugin, param, self.args.fsdp_config.get(param, getattr(fsdp_plugin, param)))
             if fsdp_plugin.activation_checkpointing and self.args.gradient_checkpointing:
