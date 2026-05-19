@@ -142,26 +142,29 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         if fps is not None and num_frames is not None:
             raise ValueError("`num_frames` and `fps` are mutually exclusive arguments, please use only one!")
 
-        num_frames = num_frames if num_frames is not None else self.num_frames
-        max_fps = max_fps if max_fps is not None else self.max_fps
+        if max_fps is None:
+            max_fps = self.max_fps
 
         if metadata.fps is None:
-            metadata.fps = fps or max_fps
+            metadata.fps = fps if fps is not None else max_fps
             logger.warning_once(
                 "Molmo2 inserts frame timestamps into video prompts, but the input video's `fps` was not provided "
                 f"or could not be inferred. Defaulting to `fps={metadata.fps}`. Please provide `video_metadata` "
                 "for more accurate timestamps."
             )
-        if metadata.duration is None and metadata.fps is not None:
+        if metadata.duration is None:
             metadata.duration = metadata.total_num_frames / metadata.fps
 
         if fps is not None:
-            return super().sample_frames(metadata=metadata, fps=fps)
-        elif max_fps is not None and metadata.fps > max_fps:
-            num_frames = min(num_frames, int(metadata.duration * max_fps))
+            target_num_frames = int(metadata.duration * fps)
+        else:
+            target_num_frames = num_frames if num_frames is not None else self.num_frames
+            if max_fps is not None and metadata.fps > max_fps:
+                target_num_frames = min(target_num_frames, int(metadata.duration * max_fps))
 
-        num_frames = max(min(num_frames, metadata.total_num_frames), 1)
-        return super().sample_frames(metadata=metadata, num_frames=num_frames)
+        target_num_frames = max(min(target_num_frames, metadata.total_num_frames), 1)
+        total = metadata.total_num_frames
+        return torch.arange(0, total, total / target_num_frames).int()
 
     def _build_frame_patches(
         self,
