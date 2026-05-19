@@ -123,31 +123,43 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         # assume that if `hasattr(self, hf_quantizer)` and `has_moe_conversion(self)` and `is_moe_proj_in_config_scheme`
         # then it needs special dequantization for MoE projections
         # NOTE: MoE conversion should happen AFTER decompression! Already hardcoded in convesion
+
         dequant_conversions = [
             WeightConverter(
                 source_patterns=[
-                    r"mlp.experts.\d+.down_proj.weight_packed",
-                    r"mlp.experts.\d+.down_proj.weight_scale",
-                    r"mlp.experts.\d+.down_proj.weight_shape",
+                    r".weight_packed$",
+                    r".weight_scale$",
+                    r".weight_shape$",
                 ],
-                target_patterns=r"mlp.experts.down_proj",
-                operations=[DecompressExperts(self)],
-            ),
-            WeightConverter(
-                source_patterns=[
-                    r"mlp.experts.\d+.gate_proj.weight_packed",
-                    r"mlp.experts.\d+.gate_proj.weight_scale",
-                    r"mlp.experts.\d+.gate_proj.weight_shape",
-                    r"mlp.experts.\d+.up_proj.weight_packed",
-                    r"mlp.experts.\d+.up_proj.weight_scale",
-                    r"mlp.experts.\d+.up_proj.weight_shape",
-                ],
-                target_patterns=r"mlp.experts.gate_up_proj",
+                target_patterns=r"weight",
                 operations=[DecompressExperts(self)],
             ),
         ]
-
         return dequant_conversions
+
+    def update_weight_conversions(self, weight_conversions):
+        updated: list = []
+        for conv in weight_conversions:
+            # Only WeightConverter for experts have ``.operations`` to extend with the dequant op
+            if not isinstance(conv, WeightConverter) or any("experts" not in p for p in conv.source_patterns):
+                updated.append(conv)
+                continue
+            weight_sources = [p for p in conv.source_patterns if p.endswith(".weight")]
+            if weight_sources:
+                packed_weight = [p + "_packed$" for p in weight_sources]
+                scale_sources = [p[: -len(".weight")] + ".weight_scale$" for p in weight_sources]
+                shape_sources = [p[: -len(".weight")] + ".weight_shape$" for p in weight_sources]
+                other = [p for p in conv.source_patterns if not p.endswith(".weight")]
+                new_sources = packed_weight + scale_sources + shape_sources + other
+                new_ops = [DecompressExperts(self)] + list(conv.operations)
+                conv = WeightConverter(
+                    source_patterns=new_sources,
+                    target_patterns=conv._original_target_patterns,
+                    operations=new_ops,
+                )
+            updated.append(conv)
+        updated.extend(self.get_weight_conversions())
+        return updated
 
 
 class DecompressExperts(ConversionOps):
@@ -190,14 +202,13 @@ class DecompressExperts(ConversionOps):
                 self.weight_shape = nn.Parameter(shape, requires_grad=False)
 
         # Per-expert compressed projections of size (input-dim; output-dim)
-        processed_out = []
-        input_dict = self.group_input_dict(input_dict)
-        for value in input_dict.values():
-            quantized, scales, shapes = (
-                value["weight_packed"],
-                value["weight_scale"],
-                value["weight_shape"],
-            )
+        processed_out = {}
+        for key, value in input_dict.items():
+            if "weight_packed" not in key:
+                continue
+            quantized = value
+            scales = input_dict[key.replace("weight_packed", "weight_scale")]
+            shapes = input_dict[key.replace("weight_packed", "weight_shape")]
 
             # Create a dummy module to not rely on low-lvl API and iter over each expert
             decompessed_tensors = []
@@ -209,10 +220,9 @@ class DecompressExperts(ConversionOps):
                 decompessed_tensors.append(module.weight)
 
             del quantized, scales, shapes, module
-            processed_out.append(torch.stack(decompessed_tensors, dim=0))
+            processed_out[key] = decompessed_tensors
 
-        processed_out = torch.cat(processed_out, dim=1)
-        return {target_patterns[0]: processed_out}
+        return processed_out
 
     def group_input_dict(self, input_dict: dict) -> dict:
         weight_grouped = {}
