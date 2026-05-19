@@ -17,11 +17,7 @@ import unittest
 import numpy as np
 
 from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
-from transformers.testing_utils import (
-    require_torch,
-    require_torchvision,
-    require_vision,
-)
+from transformers.testing_utils import require_torch, require_torchvision, require_vision
 from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_video_processing_common import VideoProcessingTestMixin, prepare_video_inputs
@@ -215,6 +211,8 @@ class Molmo2VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             outputs = video_processing(video_inputs, return_tensors="pt")
             self._assert_patchified_output(outputs, self.video_processor_tester.batch_size)
 
-    # Molmo2 always converts to RGB, so 4-channel inputs are not supported
+    @unittest.skip(
+        reason="Molmo2VideoProcessor always converts to RGB before processing; 4-channel videos are not supported."
+    )
     def test_call_numpy_4_channels(self):
         pass

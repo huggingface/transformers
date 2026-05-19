@@ -17,18 +17,11 @@ import unittest
 import numpy as np
 
 from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
-from transformers.testing_utils import (
-    require_torch,
-    require_torchvision,
-    require_vision,
-)
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.testing_utils import require_torch, require_torchvision, require_vision
+from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
-
-if is_torch_available():
-    pass
 
 if is_vision_available() and is_torchvision_available():
     from PIL import Image
