@@ -132,7 +132,6 @@ class Cohere2MoeConfig(PretrainedConfig):
             The combination strategy of shared expert, must be one of ['average', 'sum']
         expert_selection_fn (`str`, *optional*, defaults to `"softmax"`):
             Expert selection function of router.
-        cache_implementation (`str`, *optional*, defaults to `"hybrid"`): the cache type to be used with `generate`.
         layer_types (`list`, *optional*):
             Attention pattern for each layer.
         first_k_dense_replace (`int`, *optional*, defaults to 0):
@@ -146,6 +145,8 @@ class Cohere2MoeConfig(PretrainedConfig):
             Intermediate dimension of the dense prefix layers.
         rms_norm_eps (`float`, *optional*, defaults to None):
             The epsilon used by the RMS normalization layers.
+        sliding_window_pattern (`int`, *optional*, defaults to 4):
+            Sliding window pattern for the layers.
     ```python
     >>> from transformers import Cohere2MoeModel, Cohere2MoeConfig
 
@@ -206,13 +207,13 @@ class Cohere2MoeConfig(PretrainedConfig):
         num_shared_experts=0,
         shared_expert_combination_strategy="average",
         expert_selection_fn="softmax",
-        cache_implementation="hybrid",
         layer_types=None,
         first_k_dense_replace=0,
         prefix_dense_sliding_window_pattern=1,
         norm_topk_prob=True,
         prefix_dense_intermediate_size=None,
         rms_norm_eps=None,
+        sliding_window_pattern=4,
         **kwargs,
     ):
         super().__init__(
@@ -238,6 +239,7 @@ class Cohere2MoeConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.head_dim = head_dim
 
         # for backward compatibility
         if num_key_value_heads is None:
@@ -255,21 +257,17 @@ class Cohere2MoeConfig(PretrainedConfig):
         self.sliding_window = sliding_window
         self.layer_types = layer_types
         self.rms_norm_eps = rms_norm_eps
-
-        self.head_dim = head_dim
+        self.sliding_window_pattern = sliding_window_pattern
 
         # Validate the correctness of rotary position embeddings parameters
         self.standardize_rope_params()
         self.validate_rope()
 
-        # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
-        self._sliding_window_pattern = kwargs.get("sliding_window_pattern", 4)
-
         if self.layer_types is None:
             first_k_dense_replace = getattr(self, "first_k_dense_replace", 0)
             prefix_dense_sliding_window_pattern = getattr(self, "prefix_dense_sliding_window_pattern", 1)
-            prefix_layers = make_pattern(first_k_dense_replace, prefix_dense_sliding_window_pattern)
-            rest_layers = make_pattern(self.num_hidden_layers - first_k_dense_replace, self._sliding_window_pattern)
+            prefix_layers = make_pattern(first_k_dense_replace, self.prefix_dense_sliding_window_pattern)
+            rest_layers = make_pattern(self.num_hidden_layers - self.first_k_dense_replace, self.sliding_window_pattern)
             self.layer_types = prefix_layers + rest_layers
 
         self.validate_layer_type()
@@ -279,18 +277,6 @@ class Cohere2MoeConfig(PretrainedConfig):
                 f"The length of layer_types ({len(self.layer_types)}) does not match "
                 f"num_hidden_layers ({self.num_hidden_layers})"
             )
-
-    @property
-    def sliding_window_pattern(self):
-        warnings.warn(
-            "The `sliding_window_pattern` attribute is deprecated and will be removed in v4.55.0.",
-            FutureWarning,
-        )
-        return self._sliding_window_pattern
-
-    @sliding_window_pattern.setter
-    def sliding_window_pattern(self, value):
-        self._sliding_window_pattern = value
 
 
 __all__ = ["Cohere2MoeConfig"]

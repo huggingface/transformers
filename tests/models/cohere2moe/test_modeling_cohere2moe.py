@@ -209,7 +209,7 @@ class Cohere2MoeIntegrationTest(unittest.TestCase):
     text-only inputs exercises the text backbone without requiring a separate text-only checkpoint.
     """
 
-    model_id = "/root/repos/moe/engines/command_a+_bf16"
+    model_id = "CohereLabs/command-a-plus-05-2026"
     input_text = ["Hello I am doing", "Hi today"]
 
     def tearDown(self):
@@ -235,7 +235,7 @@ class Cohere2MoeIntegrationTest(unittest.TestCase):
     def test_model_bf16(self):
         EXPECTED_TEXTS = [
             '<BOS_TOKEN>Hello I am doing a project on the history of the internet. I am trying to ARexx script a program that',
-            '<PAD><PAD><BOS_TOKEN>Hi today we are going to discuss about the concept of "The law of karma" and "Reincarnation',
+            '<PAD><PAD><BOS_TOKEN>Hi today we are going to discuss about the concept of "Self-Confidence". Self-confidence is a term that',
         ]
 
         model = self._load_model(torch.bfloat16)

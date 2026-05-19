@@ -45,7 +45,8 @@ from ..cohere2.modeling_cohere2 import (
     eager_attention_forward,
 )
 from ..llama.modeling_llama import LlamaRMSNorm
-from .configuration_cohere2_moe import Cohere2MoeConfig
+from ..mixtral.modeling_mixtral import MixtralExperts
+from .configuration_cohere2moe import Cohere2MoeConfig
 
 
 class Cohere2MoeMLP(Cohere2MLP):
@@ -58,64 +59,24 @@ class Cohere2MoeMLP(Cohere2MLP):
             self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
 
 
-class Cohere2MoeRouter(nn.Module):
+class Cohere2MoeExperts(MixtralExperts):
     def __init__(self, config):
-        super().__init__()
-        self.top_k = config.num_experts_per_tok
+        super().__init__(config)
         self.num_experts = config.num_experts
-        self.expert_selection_fn = config.expert_selection_fn
-        self.norm_topk_prob = config.norm_topk_prob
-        self.weight = nn.Parameter(torch.empty(config.num_experts, config.hidden_size))
-
-    def forward(self, hidden_states: torch.Tensor):
-        hidden_states = hidden_states.reshape(-1, hidden_states.shape[-1])
-        router_logits = F.linear(hidden_states, self.weight).float()
-        routing_weights, selected_experts = torch.topk(router_logits, self.top_k, dim=-1)
-
-        if self.expert_selection_fn == "softmax":
-            routing_weights = F.softmax(routing_weights, dim=-1, dtype=torch.float)
-        elif self.expert_selection_fn == "sigmoid":
-            routing_weights = torch.sigmoid(routing_weights)
-            if self.norm_topk_prob:
-                routing_weights = routing_weights / routing_weights.sum(dim=-1, keepdim=True)
-        else:
-            raise NotImplementedError("Expert selection function can only be either softmax or sigmoid.")
-
-        return router_logits, routing_weights, selected_experts
-
-
-class Cohere2MoeExperts(nn.ModuleList):
-    """Collection of experts stored as a ModuleList to preserve per-expert weight names
-    (experts.{i}.gate_proj / up_proj / down_proj) matching the checkpoint layout."""
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        selected_experts: torch.Tensor,
-        routing_weights: torch.Tensor,
-    ) -> torch.Tensor:
-        final_hidden_states = torch.zeros_like(hidden_states)
-        expert_mask = F.one_hot(selected_experts, num_classes=len(self)).permute(2, 1, 0)
-
-        for expert_idx, expert in enumerate(self):
-            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
-            if token_idx.numel() == 0:
-                continue
-            current_hidden_states = expert(hidden_states[token_idx])
-            current_hidden_states = current_hidden_states * routing_weights[token_idx, top_k_pos, None]
-            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
-
-        return final_hidden_states
+        self.intermediate_dim = config.intermediate_size
 
 
 class Cohere2MoeSparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.top_k = config.num_experts_per_tok
+        self.expert_selection_fn = config.expert_selection_fn
+        self.norm_topk_prob = config.norm_topk_prob
         self.num_shared_experts = config.num_shared_experts
         self.shared_expert_combination_strategy = config.shared_expert_combination_strategy
 
-        self.gate = Cohere2MoeRouter(config)
-        self.experts = Cohere2MoeExperts([Cohere2MoeMLP(config) for _ in range(config.num_experts)])
+        self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
+        self.experts = Cohere2MoeExperts(config)
 
         if self.num_shared_experts > 0:
             self.shared_experts = Cohere2MoeMLP(
@@ -127,7 +88,18 @@ class Cohere2MoeSparseMoeBlock(nn.Module):
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_flat = hidden_states.view(-1, hidden_dim)
 
-        _, routing_weights, selected_experts = self.gate(hidden_states_flat)
+        router_logits = self.gate(hidden_states_flat)
+        routing_weights, selected_experts = torch.topk(router_logits, self.top_k, dim=-1)
+        if self.expert_selection_fn == "softmax":
+            routing_weights = F.softmax(routing_weights, dim=1, dtype=torch.float)
+        elif self.expert_selection_fn == "sigmoid":
+            routing_weights = F.sigmoid(routing_weights)
+            if self.norm_topk_prob:
+                routing_weights = routing_weights / torch.sum(routing_weights, dim=-1, keepdims=True)
+        else:
+            raise NotImplementedError("Expert selection function can only be either Softmax or Sigmoid.")
+        
+        # we cast back to the input dtype
         routing_weights = routing_weights.to(hidden_states.dtype)
 
         final_hidden_states = self.experts(hidden_states_flat, selected_experts, routing_weights)
@@ -231,23 +203,17 @@ class Cohere2MoeAttention(Cohere2Attention):
 
 class Cohere2MoeDecoderLayer(Cohere2DecoderLayer):
     def __init__(self, config: Cohere2MoeConfig, layer_idx: int):
-        GradientCheckpointingLayer.__init__(self)
-
-        self.hidden_size = config.hidden_size
-        self.self_attn = Cohere2MoeAttention(config=config, layer_idx=layer_idx)
-        self.attention_type = config.layer_types[layer_idx]
-
-        rms_norm_eps = getattr(config, "rms_norm_eps", None)
+        super().__init__()
         self.input_layernorm = (
-            Cohere2MoeRMSNorm(hidden_size=config.hidden_size, eps=rms_norm_eps)
-            if rms_norm_eps is not None
+            Cohere2MoeRMSNorm(hidden_size=config.hidden_size, eps=config.rms_norm_eps)
+            if config.rms_norm_eps is not None
             else Cohere2MoeLayerNorm(hidden_size=config.hidden_size, eps=config.layer_norm_eps)
         )
-
-        if layer_idx < config.first_k_dense_replace:
-            self.mlp = Cohere2MoeMLP(config, config.prefix_dense_intermediate_size)
-        else:
-            self.mlp = Cohere2MoeSparseMoeBlock(config)
+        self.mlp = (
+            Cohere2MoeMLP(config, config.prefix_dense_intermediate_size)
+            if layer_idx < config.first_k_dense_replace
+            else Cohere2MoeSparseMoeBlock(config)
+        )
 
 
 @auto_docstring
@@ -273,86 +239,11 @@ class Cohere2MoeModel(Cohere2Model):
     """
 
     def __init__(self, config: Cohere2MoeConfig):
-        Cohere2MoePreTrainedModel.__init__(self, config)
-        self.padding_idx = config.pad_token_id
-        self.vocab_size = config.vocab_size
-
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList(
-            [Cohere2MoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-        rms_norm_eps = getattr(config, "rms_norm_eps", None)
+        super().__init__()
         self.norm = (
-            Cohere2MoeRMSNorm(hidden_size=config.hidden_size, eps=rms_norm_eps)
-            if rms_norm_eps is not None
+            Cohere2MoeRMSNorm(hidden_size=config.hidden_size, eps=config.rms_norm_eps)
+            if config.rms_norm_eps is not None
             else Cohere2MoeLayerNorm(hidden_size=config.hidden_size, eps=config.layer_norm_eps)
-        )
-        self.rotary_emb = Cohere2MoeRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @merge_with_config_defaults
-    @capture_outputs
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
-
-        if use_cache and past_key_values is None and not self.training:
-            past_key_values = DynamicCache(config=self.config)
-
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-        if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
-
-        if not isinstance(causal_mask_mapping := attention_mask, dict):
-            mask_kwargs = {
-                "config": self.config,
-                "inputs_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
-                "position_ids": position_ids,
-            }
-            causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
-                "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
-            }
-
-        hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
-        for decoder_layer in self.layers:
-            hidden_states = decoder_layer(
-                hidden_states,
-                position_embeddings=position_embeddings,
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-                cache_position=cache_position,
-                **kwargs,
-            )
-
-        hidden_states = self.norm(hidden_states)
-        return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
         )
 
 
