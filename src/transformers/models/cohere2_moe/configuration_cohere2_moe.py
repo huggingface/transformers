@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2026 Cohere Inc. HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -17,6 +16,7 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 
 
 def make_pattern(num_layers: int, pattern: int) -> list[str]:
@@ -26,85 +26,40 @@ def make_pattern(num_layers: int, pattern: int) -> list[str]:
     return ["sliding_attention" if ((i + 1) % pattern) != 0 else "full_attention" for i in range(num_layers)]
 
 
+@auto_docstring(checkpoint="CohereLabs/command-a-plus-05-2026")
 @strict
 class Cohere2MoeConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Cohere2MoeModel`]. It is used to instantiate a
-    Cohere2Moe model according to the specified arguments, defining the model architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 256000):
-            Vocabulary size of the Cohere2Moe model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`Cohere2MoeModel`].
-        hidden_size (`int`, *optional*, defaults to 8192):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 22528):
-            Dimension of the MLP representations.
-        logit_scale (`float`, *optional*, defaults to 0.0625):
-            The scaling factor for the output logits.
-        num_hidden_layers (`int`, *optional*, defaults to 40):
-            Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 64):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*):
-            Number of key/value heads for Grouped Query Attention. Defaults to `num_attention_heads`.
-        head_dim (`int`, *optional*, defaults to 128):
-            Dimension of each attention head.
-        hidden_act (`str`, *optional*, defaults to `"silu"`):
-            The non-linear activation function in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 8192):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions.
-        pad_token_id (`int`, *optional*, defaults to 0):
-            Padding token id.
-        bos_token_id (`int`, *optional*, defaults to 5):
-            Beginning of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 255001):
-            End of stream token id.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        sliding_window (`int`, *optional*, defaults to 4096):
-            Size of the sliding window attention context.
-        num_experts (`int`, *optional*, defaults to 8):
-            Number of routed experts.
-        num_experts_per_tok (`int`, *optional*, defaults to 2):
-            Number of selected experts per token.
-        num_shared_experts (`int`, *optional*, defaults to 0):
-            The number of shared experts.
-        shared_expert_combination_strategy (`str`, *optional*, defaults to `"average"`):
-            The combination strategy of shared expert, must be one of ['average', 'sum'].
-        expert_selection_fn (`str`, *optional*, defaults to `"softmax"`):
-            Expert selection function of router.
-        layer_types (`list`, *optional*):
-            Attention pattern for each layer.
-        first_k_dense_replace (`int`, *optional*, defaults to 0):
-            Number of dense layers before MoE layers.
-        prefix_dense_sliding_window_pattern (`int`, *optional*, defaults to 1):
-            Sliding window pattern for the prefix dense layers.
-        norm_topk_prob (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the top-k expert probabilities when sigmoid is used.
-        prefix_dense_intermediate_size (`int`, *optional*):
-            Intermediate dimension of the dense prefix layers.
-        rms_norm_eps (`float`, *optional*):
-            The epsilon used by the RMS normalization layers.
-        sliding_window_pattern (`int`, *optional*, defaults to 4):
-            Sliding window pattern for the layers.
+    logit_scale (`float`, *optional*, defaults to 0.0625):
+        The scaling factor for the output logits.
+    rope_theta (`float`, *optional*, defaults to 10000.0):
+        The base period of the RoPE embeddings.
+    rope_scaling (`dict`, *optional*):
+        Dictionary containing the scaling configuration for the RoPE embeddings.
+    num_experts_per_tok (`int`, *optional*, defaults to 2):
+        Number of selected experts per token.
+    num_experts (`int`, *optional*, defaults to 8):
+        Number of routed experts.
+    num_shared_experts (`int`, *optional*, defaults to 0):
+        The number of shared experts.
+    shared_expert_combination_strategy (`str`, *optional*, defaults to `"average"`):
+        The combination strategy of shared expert, must be one of ['average', 'sum'].
+    expert_selection_fn (`str`, *optional*, defaults to `"softmax"`):
+        Expert selection function of router.
+    layer_types (`list`, *optional*):
+        Attention pattern for each layer.
+    first_k_dense_replace (`int`, *optional*, defaults to 0):
+        Number of dense layers before MoE layers.
+    prefix_dense_sliding_window_pattern (`int`, *optional*, defaults to 1):
+        Sliding window pattern for the prefix dense layers.
+    norm_topk_prob (`bool`, *optional*, defaults to `True`):
+        Whether to normalize the top-k expert probabilities when sigmoid is used.
+    prefix_dense_intermediate_size (`int`, *optional*):
+        Intermediate dimension of the dense prefix layers.
+    rms_norm_eps (`float`, *optional*):
+        The epsilon used by the RMS normalization layers.
+    sliding_window_pattern (`int`, *optional*, defaults to 4):
+        Sliding window pattern for the layers.
 
     ```python
     >>> from transformers import Cohere2MoeModel, Cohere2MoeConfig

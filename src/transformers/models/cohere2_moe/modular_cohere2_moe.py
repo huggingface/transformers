@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2026 Cohere Inc. HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -15,23 +14,16 @@
 # limitations under the License.
 
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils import auto_docstring
 from ..cohere2.modeling_cohere2 import (
     Cohere2Attention,
     Cohere2DecoderLayer,
@@ -98,7 +90,7 @@ class Cohere2MoeSparseMoeBlock(nn.Module):
                 routing_weights = routing_weights / torch.sum(routing_weights, dim=-1, keepdims=True)
         else:
             raise NotImplementedError("Expert selection function can only be either Softmax or Sigmoid.")
-        
+
         # we cast back to the input dtype
         routing_weights = routing_weights.to(hidden_states.dtype)
 
@@ -125,7 +117,7 @@ class Cohere2MoeLayerNorm(Cohere2LayerNorm):
 class Cohere2MoeAttention(Cohere2Attention):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: Cohere2MoeConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: Cohere2MoeConfig, layer_idx: int | None = None):
         nn.Module.__init__(self)
         self.config = config
         self.layer_idx = layer_idx
@@ -161,11 +153,11 @@ class Cohere2MoeAttention(Cohere2Attention):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 

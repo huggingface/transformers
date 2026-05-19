@@ -18,13 +18,19 @@ import unittest
 from parameterized import parameterized
 from pytest import mark
 
-from transformers import AutoConfig, AutoTokenizer, Cohere2MoeConfig, Cohere2VisionForConditionalGeneration, is_torch_available
+from transformers import (
+    AutoConfig,
+    AutoTokenizer,
+    Cohere2MoeConfig,
+    Cohere2VisionForConditionalGeneration,
+    is_torch_available,
+)
 from transformers.testing_utils import (
     Expectations,
     cleanup,
     is_flash_attn_2_available,
-    is_torch_xpu_available,
     is_kernels_available,
+    is_torch_xpu_available,
     require_flash_attn,
     require_torch,
     require_torch_large_accelerator,
@@ -227,7 +233,7 @@ class Cohere2MoeIntegrationTest(unittest.TestCase):
                 setattr(config.text_config, k, v)
         else:
             config = None
-        kwargs = dict(torch_dtype=dtype, attn_implementation=attn_implementation, device_map="auto")
+        kwargs = {"torch_dtype": dtype, "attn_implementation": attn_implementation, "device_map": "auto"}
         if config is not None:
             kwargs["config"] = config
         return Cohere2VisionForConditionalGeneration.from_pretrained(self.model_id, **kwargs).eval()
