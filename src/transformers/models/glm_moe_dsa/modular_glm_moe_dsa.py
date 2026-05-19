@@ -108,18 +108,21 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_b_proj": "colwise",
-        "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.kv_b_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
-        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise_allreduce",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.down_proj": "rowwise_allreduce",
+    }
+
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
     }
 
     hidden_size: int = 6144
@@ -138,6 +141,10 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
     pretraining_tp = AttributeError()
     rope_interleave = AttributeError()
     indexer_types: list[str] | None = None
+    attribute_map = {
+        "num_local_experts": "n_routed_experts",
+        "head_dim": "qk_rope_head_dim",
+    }
 
     def __post_init__(self, **kwargs):
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim

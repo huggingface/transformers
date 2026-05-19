@@ -15,7 +15,6 @@ import threading
 from abc import ABC, abstractmethod
 from collections import deque
 
-from ...utils.metrics import attach_tracer, traced
 from .cache import PagedAttentionCache
 from .requests import FutureRequestState, RequestState, RequestStatus, logger
 
@@ -45,7 +44,6 @@ class Scheduler(ABC):
         self._requests_to_fork: list[RequestState] = []
         self.block_new_requests = False
 
-    @traced
     def add_waiting_request(self, state: RequestState):
         """Adds a request to the waiting list."""
         self.waiting_requests[state.request_id] = state
@@ -62,12 +60,10 @@ class Scheduler(ABC):
         Returns the list of scheduled requests in their "FutureRequestState" form, a boolean indicating if the decode
         fast path can be used, the total number of query tokens and the maximum number of kv tokens read."""
 
-    @traced
     def has_pending_requests(self) -> bool:
         """Checks if there are requests ready to be processed."""
         return bool(len(self.active_requests) or len(self.waiting_requests))
 
-    @traced
     def finish_request(self, request_id: str) -> None:
         """Completes processing of a request and frees its allocated cache blocks. This method is called
         when a request has finished generation or encountered an error.
@@ -83,20 +79,17 @@ class Scheduler(ABC):
         request_id = next(iter(self.active_requests))
         return request_id, self.active_requests.pop(request_id)
 
-    @traced
     def get_active_request_static_outputs(self, request_id: str) -> list[int]:
         """Gets generated tokens for an active request."""
         if request_id in self.active_requests:
             return self.active_requests[request_id].generated_tokens
         return []
 
-    @traced
     def set_request_cancellation(self, request_id: str):
         """Marks a request for cancellation."""
         with self._cancellation_lock:
             self._requests_to_cancel.add(request_id)
 
-    @traced
     def clear_cancelled_requests(self) -> list[RequestState]:
         """Remove all cancelled requests from active and waiting queues."""
         cancelled_states = []
@@ -114,14 +107,12 @@ class Scheduler(ABC):
             self._requests_to_cancel = set()
         return cancelled_states
 
-    @traced
     def request_is_cancelled(self, request_id: str) -> bool:
         """Checks if a request has been cancelled or removed."""
         return request_id in self._requests_to_cancel or (
             request_id not in self.active_requests and request_id not in self.waiting_requests
         )
 
-    @traced
     def _allocate_blocks_if_needed(self, state: RequestState, len_next_tokens: int) -> bool:
         """Allocate additional cache blocks for a request if the currently allocated blocks are insufficient to
         accommodate the next tokens. It calculates how many blocks are needed based on the request's current
@@ -324,7 +315,6 @@ class Scheduler(ABC):
 
 
 # TODO: further common-ize the two classes
-@attach_tracer()
 class FIFOScheduler(Scheduler):
     """This scheduler processes requests in the order they arrive, meaning decoding requests has priority over
     prefilling requests. Additionally, it includes a safety margin mechanism to prevent cache exhaustion. By default,
@@ -338,7 +328,6 @@ class FIFOScheduler(Scheduler):
         super().__init__(cache)
         self.safety_margin = safety_margin
 
-    @traced
     def schedule_batch(
         self, token_budget: int, cache_budget: int
     ) -> tuple[list[FutureRequestState] | None, bool, int, int]:
@@ -379,13 +368,11 @@ class FIFOScheduler(Scheduler):
 
 # FIXME: prioritize adding from waiting reqs before scheduling `RequestStatus.DECODING` when cache space allows it
 # TODO: further consolidate the code by making more of it common. The reference Scheduler is FIFO, not this one.
-@attach_tracer()
 class PrefillFirstScheduler(Scheduler):
     """Scheduler that prioritizes split prefill requests over decoding requests. This scheduler ensures that split
     prefill requests (which are continuations of partially processed prompts) are completed before processing new
     decoding requests."""
 
-    @traced
     def schedule_batch(
         self, token_budget: int, cache_budget: int
     ) -> tuple[list[FutureRequestState] | None, bool, int, int]:

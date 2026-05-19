@@ -79,18 +79,18 @@ class LagunaConfig(Qwen2MoeConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.g_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
-        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.self_attn.q_norm": "activation_seq_dim_2",
+        "layers.*.self_attn.k_norm": "activation_seq_dim_2",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.down_proj": "rowwise_allreduce",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts.down_proj": "rowwise_allreduce",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
-        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise_allreduce",
     }
 
     vocab_size: int = 100352
@@ -180,8 +180,8 @@ class LagunaRMSNorm(Qwen2MoeRMSNorm):
 
 
 class LagunaRotaryEmbedding(Gemma3RotaryEmbedding):
-    def __init__(self, config: LagunaConfig, device=None, layer_type=None):
-        super().__init__(config, device, layer_type)
+    def __init__(self, config: LagunaConfig):
+        super().__init__(config)
 
     @staticmethod
     def compute_default_rope_parameters(

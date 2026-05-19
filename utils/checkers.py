@@ -27,9 +27,9 @@ Each checker module declares a ``CHECKER_CONFIG`` dict (extracted via ``ast.lite
 no import needed — this keeps discovery fast and avoids executing checker code at scan time).
 See any ``check_*.py`` file for the schema.
 
-Cache semantics of ``file_globs``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-``file_globs`` lists the file patterns whose content is hashed to decide whether a checker
+Cache semantics of ``cache_globs``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+``cache_globs`` lists the file patterns whose content is hashed to decide whether a checker
 can be skipped. **Not all globs are exact reflections of the checker's runtime behaviour.**
 
 * Some checkers introspect the live ``transformers`` module (``check_repo``,
@@ -39,10 +39,12 @@ can be skipped. **Not all globs are exact reflections of the checker's runtime b
   inside the broad glob forces a re-run even if the checker wouldn't look at that file.
   This is safe—just less cache-efficient.
 * Some checkers rely on external state (network, git history, installed packages) that
-  cannot be captured by file globs at all (``add_dates``, ``imports``).
+  cannot be captured by cache globs at all (``add_dates``, ``imports``).
 
 Each ``CHECKER_CONFIG`` that is an approximation has an inline comment explaining the
-gap. When in doubt, use ``--no-cache`` to force a full run.
+gap. For contributors: ``check_args`` control what a checker runs on, while
+``cache_globs`` only control when the cache is invalidated. When in doubt, use
+``--no-cache`` to force a full run.
 """
 
 import argparse
@@ -66,20 +68,20 @@ REPO_ROOT = UTILS_DIR.parent
 CACHE_PATH = UTILS_DIR / ".checkers_cache.json"
 
 # Required keys in each module's CHECKER_CONFIG dict.
-_CHECKER_CONFIG_KEYS = {"name", "label", "file_globs", "check_args", "fix_args"}
+_CHECKER_CONFIG_KEYS = {"name", "label", "cache_globs", "check_args", "fix_args"}
 
 
 def _discover_checkers() -> tuple[dict, dict]:
     """Scan utils/*.py for CHECKER_CONFIG dicts using AST (no imports).
 
     Each checker module may define a top-level ``CHECKER_CONFIG`` dict with
-    keys: name, label, file_globs, check_args, fix_args.
+    keys: name, label, cache_globs, check_args, fix_args.
 
-    Returns (checkers_dict, file_globs_dict) matching the shapes of
-    the old CHECKERS and CHECKER_FILE_GLOBS registries.
+    Returns (checkers_dict, cache_globs_dict) matching the shapes of
+    the old CHECKERS and CHECKER_CACHE_GLOBS registries.
     """
     checkers = {}
-    file_globs = {}
+    cache_globs = {}
 
     for py_file in sorted(UTILS_DIR.glob("*.py")):
         if py_file.name == Path(__file__).name:
@@ -128,22 +130,24 @@ def _discover_checkers() -> tuple[dict, dict]:
             config["check_args"],
             config["fix_args"],
         )
-        if config["file_globs"] is not None:
-            file_globs[name] = config["file_globs"]
+        if config["cache_globs"] is not None:
+            cache_globs[name] = config["cache_globs"]
 
-    return checkers, file_globs
+    return checkers, cache_globs
 
 
 # Inline checkers have no separate script file; they use custom runner functions below.
+# fix_args=[] marks a checker as fix-capable (its custom runner handles --fix internally);
+# fix_args=None marks a check-only entry that `make fix-repo` should silently skip.
 _INLINE_CHECKERS = {
-    "deps_table": ("Dependency versions table", None, None, None),
+    "deps_table": ("Dependency versions table", None, None, []),
     "imports": ("Public imports", None, None, None),
     "import_complexity": ("Import complexity", "check_import_complexity.py", [], None),
-    "ruff_check": ("Ruff linting", None, None, None),
-    "ruff_format": ("Ruff formatting", None, None, None),
+    "ruff_check": ("Ruff linting", None, None, []),
+    "ruff_format": ("Ruff formatting", None, None, []),
 }
 
-_INLINE_FILE_GLOBS = {
+_INLINE_CACHE_GLOBS = {
     # Also generates/checks src/transformers/dependency_versions_table.py.
     "deps_table": ["setup.py", "pyproject.toml", "src/transformers/dependency_versions_table.py"],
     # Approximate: runs `from transformers import *` at runtime; depends on the full
@@ -177,15 +181,15 @@ _INLINE_FILE_GLOBS = {
 }
 
 # Build the registries: discovered modules + inline custom runners.
-_discovered_checkers, _discovered_globs = _discover_checkers()
+_discovered_checkers, _discovered_cache_globs = _discover_checkers()
 
 CHECKERS = {**_discovered_checkers, **_INLINE_CHECKERS}
-CHECKER_FILE_GLOBS = {**_discovered_globs, **_INLINE_FILE_GLOBS}
+CHECKER_CACHE_GLOBS = {**_discovered_cache_globs, **_INLINE_CACHE_GLOBS}
 
 
 def get_checker_cache_globs(checker_name: str) -> list[str] | None:
     """Return the cache inputs for a checker, including its implementation files."""
-    globs = CHECKER_FILE_GLOBS.get(checker_name)
+    globs = CHECKER_CACHE_GLOBS.get(checker_name)
     if globs is None:
         return None
 
@@ -199,7 +203,7 @@ def get_checker_cache_globs(checker_name: str) -> list[str] | None:
 class CheckerCache:
     """Disk-backed cache that tracks file content hashes per checker.
 
-    For each checker that declares file globs in CHECKER_FILE_GLOBS, we compute
+    For each checker that declares cache globs in CHECKER_CACHE_GLOBS, we compute
     a single digest over all matching files.  If the digest matches the stored
     value from the last clean (rc == 0) run, the checker can be skipped.
     """
@@ -516,6 +520,18 @@ def main():
         print(f"Unknown checkers: {', '.join(unknown)}")
         print(f"Available: {', '.join(sorted(CHECKERS.keys()))}")
         sys.exit(1)
+
+    # In --fix mode, drop checkers that have no fix capability (fix_args is None) so
+    # they don't print bogus "(0.00s)" lines or inflate the final pass count. Print
+    # one transparency line listing what we're skipping.
+    if args.fix:
+        not_fixable = [n for n in names if CHECKERS[n][3] is None]
+        if not_fixable:
+            names = [n for n in names if CHECKERS[n][3] is not None]
+            print(
+                f"Skipping {len(not_fixable)} check-only checker(s) in fix mode: {', '.join(not_fixable)}\n",
+                flush=True,
+            )
 
     is_ci = os.environ.get("GITHUB_ACTIONS") == "true" or os.environ.get("CIRCLECI") == "true"
     is_tty = sys.stdout.isatty() and not is_ci

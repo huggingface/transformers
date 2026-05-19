@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch Gemma4 model."""
 
 import unittest
+from contextlib import contextmanager
 
 import pytest
 from parameterized import parameterized
@@ -27,6 +28,7 @@ from transformers import (
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    require_deterministic_for_xpu,
     require_torch,
     require_torch_accelerator,
     require_torch_multi_gpu,
@@ -124,6 +126,20 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
     def test_model_training(self):
+        pass
+
+    @unittest.skip(
+        "Under non-bf16 dtypes, MoE grouped_mm falls back to "
+        "_grouped_mm_fallback_backward which is incompatible with torch.compile under 'reduce-overhead' mode"
+    )
+    def test_flash_attn_2_can_compile_with_attention_mask_None_without_graph_break(self):
+        pass
+
+    @unittest.skip(
+        "Under non-bf16 dtypes, MoE grouped_mm falls back to "
+        "_grouped_mm_fallback_backward which is incompatible with torch.compile under 'reduce-overhead' mode"
+    )
+    def test_torch_compile_for_training(self):
         pass
 
 
@@ -417,6 +433,19 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def setUp(self):
         self.model_tester = Gemma4Vision2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Gemma4Config, hidden_size=37)
+        self.skip_flash_attn_inference_equivalence_tests()
+
+    def skip_flash_attn_inference_equivalence_tests(self):
+        skippable_tests = [
+            "test_flash_attn_2_inference_equivalence",
+            "test_flash_attn_3_inference_equivalence",
+            "test_flash_attn_4_inference_equivalence",
+        ]
+        for test in skippable_tests:
+            if self._testMethodName.startswith(test):
+                self.skipTest(
+                    reason="The base test does not pass image_position_ids and mm_token_type_ids required by Gemma4"
+                )
 
     def test_training(self):
         # Overwrite to test training with text-only samples, should not raise errors
@@ -488,6 +517,49 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_disk_offload_safetensors(self):
         pass
 
+    def test_per_layer_inputs_are_correctly_forwarded(self):
+        from transformers.models.gemma4.modeling_gemma4 import Gemma4TextModel
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        model = Gemma4ForConditionalGeneration(config).to(torch_device)
+        model.eval()
+
+        input_ids = torch.randint(20, 50, (1, 10), device=torch_device)
+        inputs_embeds = model.get_input_embeddings()(input_ids)
+        per_layer_inputs = model.model.language_model.get_per_layer_inputs(input_ids, None)
+
+        @contextmanager
+        def count_get_per_layer_inputs_calls():
+            original = Gemma4TextModel.get_per_layer_inputs
+            counter = {"call_count": 0}
+
+            def count_calls(*args, **kwargs):
+                nonlocal counter
+                counter["call_count"] += 1
+                return original(*args, **kwargs)
+
+            Gemma4TextModel.get_per_layer_inputs = count_calls
+            try:
+                yield counter
+            finally:
+                Gemma4TextModel.get_per_layer_inputs = original
+
+        # We should never call `get_per_layer_input_embeddings` if we provide both inputs_embeds and per_layer_inputs
+        with count_get_per_layer_inputs_calls() as counter:
+            _ = model(inputs_embeds=inputs_embeds, per_layer_inputs=per_layer_inputs)
+            self.assertEqual(counter["call_count"], 0)
+
+        # We should call it once if we provide only input_ids
+        with count_get_per_layer_inputs_calls() as counter:
+            _ = model(input_ids)
+            self.assertEqual(counter["call_count"], 1)
+
+        # We should call it once as well if we provide only inputs_embeds
+        with count_get_per_layer_inputs_calls() as counter:
+            _ = model(inputs_embeds=inputs_embeds)
+            self.assertEqual(counter["call_count"], 1)
+
 
 @slow
 @require_torch_accelerator
@@ -516,6 +588,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+    @require_deterministic_for_xpu
     def test_model_with_image(self):
         model = Gemma4ForConditionalGeneration.from_pretrained(self.model_name, device_map=torch_device)
 
@@ -534,11 +607,13 @@ class Gemma4IntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 ("cuda", 8): ['This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background'],
+                ("xpu", 3): ['This image shows a **brown and white cow standing on a sandy beach near the ocean**.\n\nHere are some details about the image:\n\n*   '],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
         self.assertEqual(output_text, EXPECTED_TEXT)
 
+    @require_deterministic_for_xpu
     def test_model_with_image_batch(self):
         model = Gemma4ForConditionalGeneration.from_pretrained(self.model_name, device_map=torch_device)
 
@@ -580,11 +655,16 @@ class Gemma4IntegrationTest(unittest.TestCase):
                     "This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background",
                     "No, these images are not identical.\n\nThe first image is a photograph of a **brown and white cow standing on a beach** under a blue",
                 ],
+                ("xpu", 3): [
+                    "This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background",
+                    "No, these images are not identical.\n\nThe first image is a photograph of a **brown and white cow standing on a beach** under a blue",
+                ],
             }
         )
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
         self.assertEqual(output_text, EXPECTED_TEXT)
 
+    @require_deterministic_for_xpu
     def test_model_multiimage(self):
         model = Gemma4ForConditionalGeneration.from_pretrained(self.model_name, device_map=torch_device)
 
@@ -614,6 +694,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 ("cuda", 8): ['Based on the image, here is a description of what I see:\n\n**Foreground & Street Scene:**\n* **Traffic Sign:** The most prominent'],
+                ("xpu", 3): ['Based on the image, here is a description of what I see:\n\n**Foreground & Street Scene:**\n* **Roadway:** There is an'],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
@@ -647,6 +728,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
         self.assertEqual(output_text, EXPECTED_TEXT)
 
+    @require_deterministic_for_xpu
     def test_model_text_only(self):
         model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map=torch_device)
         tokenizer = AutoTokenizer.from_pretrained(self.model_name, padding_side="left")
@@ -666,6 +748,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
             {
                 ("cuda", (8, 0)): ['## The Algorithmic Mind\n\nA whisper starts, a seed unseen,\nOf data vast, a vibrant sheen.\nA sea of numbers,'],
                 ("cuda", (8, 6)): ['## The Algorithmic Mind\n\nA tapestry of data, vast and deep,\nWhere silent numbers in their slumber sleep.\nA sea of text'],
+                ("xpu", 3): ['## The Algorithmic Mind\n\nA whisper starts in silicon deep,\nWhere data streams in endless sweep.\nNo flesh and blood, no beating'],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
@@ -696,6 +779,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
 
     # Note: we do not test FA2 as the head dim is 512 on some layers, which is not compatible with the kernels
     @parameterized.expand([("sdpa",), ("eager",)])
+    @require_deterministic_for_xpu
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
         """Test that we can correctly generate beyond the sliding window. Outputs for every attention functions
         should be coherent and identical.
@@ -734,7 +818,11 @@ class Gemma4IntegrationTest(unittest.TestCase):
                 ("cuda", 8): [
                     "That sounds lovely! It seems like you're really enjoying the place you'",
                     "Here are a few ways you could use or expand upon that list, depending on",
-                ]
+                ],
+                ("xpu", 3): [
+                    "That sounds lovely! It seems like you're really enjoying the place you'",
+                    "Here are a few ways you could use or expand upon that list, depending on",
+                ],
             }
         )
         self.assertEqual(output_text, EXPECTED_COMPLETIONS.get_expectation())

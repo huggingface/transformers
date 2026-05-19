@@ -56,7 +56,7 @@ CHECKER_CONFIG = {
     "label": "Repository structure",
     # Approximate: the checker also introspects the live transformers module at runtime
     # (e.g. dir(transformers.models), CONFIG_MAPPING_NAMES) and walks tests/ broadly.
-    "file_globs": [
+    "cache_globs": [
         "src/transformers/models/**/*.py",
         "src/transformers/models/auto/*.py",
         "src/transformers/**/__init__.py",
@@ -200,6 +200,8 @@ IGNORE_NON_TESTED = (
         "SLANetBackbone",  # Buildinere is used only for encoding (discretizing) and is tested as part of bigger model
         "SLANeXtSLAHead",  # Buildinere is used only for encoding (discretizing) and is tested as part of bigger model
         "SLANeXtBackbone",  # Building part of bigger (tested) model. Tested implicitly through SLANeXtForTableRecognition.
+        "PPFormulaNetTextModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
+        "PPFormulaNetVisionModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
         "PPOCRV5MobileDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
         "PPOCRV5ServerDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerDetForObjectDetection.
         "PPDocLayoutV2ReadingOrder",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV2ForObjectDetection.
@@ -209,6 +211,11 @@ IGNORE_NON_TESTED = (
         "PPOCRV5MobileRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileRecForTextRecognition.
         "PPOCRV5ServerRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerRecForTextRecognition.
         "PPOCRV5ServerRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerRecForTextRecognition.
+        "PPOCRV6MediumDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6MediumDetForObjectDetection.
+        "PPOCRV6SmallDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6SmallDetForObjectDetection.
+        "PPOCRV6SmallRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6SmallRecForTextRecognition.
+        "PPOCRV6SmallRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6SmallRecForTextRecognition.
+        "PPOCRV6TinyRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6TinyRecForTextRecognition.
         "PPLCNetModel",  # Building part of bigger (tested) model. Tested implicitly through PPLCNetForImageClassification.
         "PaddleOCRVLModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
         "PaddleOCRVisionModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
@@ -283,6 +290,8 @@ IGNORE_NON_TESTED = (
         "Gemma4VisionModel",  # Building part of a bigger model, tested implicitly
         "Gemma4AudioModel",  # Building part of a bigger model, tested implicitly
         "Sam3LiteTextTextModel",  # Building part of a bigger model, tested implicitly through Sam3LiteTextModel
+        "Exaone4_5_VisionModel",  # Building part of a bigger model
+        "Granite4VisionTextModel",  # Building part of bigger (tested) model. Tested implicitly through Granite4VisionModel.
     ]
 )
 
@@ -305,6 +314,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/sam3_tracker_video/test_modeling_sam3_tracker_video.py",
     "models/sam3_video/test_modeling_sam3_video.py",
     "models/edgetam_video/test_modeling_edgetam_video.py",
+    "models/gemma4_assistant/test_modeling_gemma4_assistant.py",
 ]
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
@@ -474,6 +484,9 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SLANetBackbone",  # Building part of bigger (tested) model
     "SLANeXtSLAHead",  # Building part of bigger (tested) model
     "SLANeXtBackbone",  # Building part of bigger (tested) model
+    "PPFormulaNetTextModel",  # Building part of bigger (tested) model
+    "PPFormulaNetVisionModel",  # Building part of bigger (tested) model
+    "PPFormulaNetModel",  # Building part of bigger (tested) model
     "PPOCRV5MobileDetModel",  # Building part of bigger (tested) model
     "PPOCRV5ServerDetModel",  # Building part of bigger (tested) model
     "PPDocLayoutV2Model",  # Building part of bigger (tested) model
@@ -508,6 +521,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Ernie4_5_VL_MoeModel",  # BC Alias
     "Ernie4_5_VL_MoeTextModel",  # BC Alias
     "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
+    "Granite4VisionTextModel",  # Building part of bigger (tested) model.
 ]
 
 
@@ -825,6 +839,24 @@ def find_tested_models(test_file: str) -> set[str]:
             else:
                 continue
             model_tested.add(tested_class)
+
+    # Same as above, but for ALMModelTester. Audio-LMs typically only set `conditional_generation_class`
+    # (no base_model_class). `GraniteSpeechModelTester` is listed because `GraniteSpeechPlusForConditionalGenerationModelTester`
+    # uses `ALMModelTester` indirectly through it; in the future we may want to resolve inheritance properly.
+    audio_class_match = re.search(r"class \w+\((?:ALMModelTester|GraniteSpeechModelTester)\)", content)
+    if audio_class_match is not None:
+        audio_content = content[audio_class_match.start() :]
+        for test_class_type in [
+            "config_class",
+            "conditional_generation_class",
+            "base_model_class",
+            "sequence_classification_class",
+        ]:
+            tested_class = re.findall(rf"{test_class_type}\s+=.*", audio_content)
+            if tested_class:
+                tested_class = tested_class[0].split("=")[1].strip()
+                if tested_class != "None":
+                    model_tested.add(tested_class)
 
     return model_tested
 

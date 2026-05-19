@@ -23,8 +23,8 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...distributed.fsdp import is_fsdp_managed_module
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
-from ...integrations.fsdp import is_fsdp_managed_module
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ModelOutput
@@ -36,12 +36,12 @@ from .configuration_vits import VitsConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Describes the outputs for the VITS model, with potential hidden states and attentions.
     """
 )
+@dataclass
 class VitsModelOutput(ModelOutput):
     r"""
     waveform (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -60,12 +60,12 @@ class VitsModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Describes the outputs for the VITS text encoder model, with potential hidden states and attentions.
     """
 )
+@dataclass
 class VitsTextEncoderOutput(ModelOutput):
     r"""
     prior_means (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
