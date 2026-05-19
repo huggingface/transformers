@@ -256,7 +256,7 @@ class Mamba2Mixer(nn.Module):
         ) // 2
 
         # Single step calculations via cache
-        if cache_params is not None and cache_params.has_previous_state(self.layer_idx):
+        if cache_params is not None and cache_params.has_previous_state(self.layer_idx) and seq_len == 1:
             _, _, gate, hidden_states_B_C, dt = projected_states.squeeze(1).split(
                 [d_mlp, d_mlp, self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
             )
@@ -302,6 +302,60 @@ class Mamba2Mixer(nn.Module):
 
             # 4. Final linear projection
             out = self.out_proj(hidden_states)[:, None, ...]
+
+        elif cache_params is not None and cache_params.has_previous_state(self.layer_idx):
+            A = -torch.exp(self.A_log.float())
+            dt_limit_kwargs = {} if self.time_step_limit == (0.0, float("inf")) else {"dt_limit": self.time_step_limit}
+            _, _, gate, hidden_states_B_C, dt = projected_states.split(
+                [d_mlp, d_mlp, self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
+            )
+            # 2. Convolution: prepend cached left-context so causal conv sees correct history.
+            hidden_states_B_C_t = hidden_states_B_C.transpose(1, 2)
+            hidden_states_B_C_t = torch.cat(
+                [cache_params.layers[self.layer_idx].conv_states[:, :, 1:], hidden_states_B_C_t], dim=-1
+            )
+            new_conv_state = nn.functional.pad(
+                hidden_states_B_C_t, (self.conv_kernel_size - hidden_states_B_C_t.shape[-1], 0)
+            )
+            cache_params.update_conv_state(new_conv_state, layer_idx=self.layer_idx)
+            if causal_conv1d_fn is not None:
+                hidden_states_B_C = causal_conv1d_fn(
+                    x=hidden_states_B_C_t,
+                    weight=self.conv1d.weight.squeeze(1),
+                    bias=self.conv1d.bias,
+                    activation=self.activation,
+                ).transpose(1, 2)[:, -seq_len:, :]
+            else:
+                hidden_states_B_C = self.act(
+                    self.conv1d(hidden_states_B_C_t)[..., :hidden_states_B_C_t.shape[-1]]
+                ).transpose(1, 2)[:, -seq_len:, :]
+            hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C, attention_mask)
+            hidden_states, B, C = torch.split(
+                hidden_states_B_C,
+                [self.intermediate_size, groups_time_state_size, groups_time_state_size],
+                dim=-1,
+            )
+            # 3. SSM: parallel chunk scan seeded with the cached recurrent state.
+            scan_output, ssm_state = mamba_chunk_scan_combined(
+                hidden_states.view(batch_size, seq_len, -1, self.head_dim),
+                dt,
+                A,
+                B.view(batch_size, seq_len, self.n_groups, -1),
+                C.view(batch_size, seq_len, self.n_groups, -1),
+                chunk_size=self.chunk_size,
+                D=self.D,
+                z=None,
+                seq_idx=None,
+                return_final_states=True,
+                dt_bias=self.dt_bias,
+                dt_softplus=True,
+                initial_states=cache_params.layers[self.layer_idx].recurrent_states,
+                **dt_limit_kwargs,
+            )
+            cache_params.update_recurrent_state(ssm_state, layer_idx=self.layer_idx)
+            scan_output = scan_output.view(batch_size, seq_len, -1)
+            scan_output = self.norm(scan_output, gate)
+            out = self.out_proj(scan_output)
 
         # Fused calculations or step by step if no initialized cache is found
         else:
@@ -416,7 +470,7 @@ class Mamba2Mixer(nn.Module):
         is_decoding = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
 
         # 2. Convolution sequence transformation
-        if is_decoding:
+        if is_decoding and seq_len == 1:
             conv_states = cache_params.update_conv_state(hidden_states_B_C, layer_idx=self.layer_idx)
 
             hidden_states_B_C = torch.sum(
@@ -426,6 +480,10 @@ class Mamba2Mixer(nn.Module):
                 hidden_states_B_C = hidden_states_B_C + self.conv1d.bias
             hidden_states_B_C = self.act(hidden_states_B_C)
         else:
+            if is_decoding:
+                hidden_states_B_C = torch.cat(
+                    [cache_params.layers[self.layer_idx].conv_states[:, :, 1:], hidden_states_B_C], dim=-1
+                )
             # Init cache
             if cache_params is not None:
                 conv_states = nn.functional.pad(
@@ -433,7 +491,10 @@ class Mamba2Mixer(nn.Module):
                 )
                 cache_params.update_conv_state(conv_states, layer_idx=self.layer_idx)
 
-            hidden_states_B_C = self.act(self.conv1d(hidden_states_B_C)[..., :seq_len].transpose(1, 2))
+            n = hidden_states_B_C.shape[-1]
+            hidden_states_B_C = self.act(self.conv1d(hidden_states_B_C)[..., :n].transpose(1, 2))
+            if is_decoding:
+                hidden_states_B_C = hidden_states_B_C[:, -seq_len:, :]
 
         hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C, attention_mask)
         hidden_states, B, C = torch.split(
@@ -444,7 +505,7 @@ class Mamba2Mixer(nn.Module):
 
         # 3. SSM transformation
         A = -torch.exp(self.A_log.float())                            # [num_heads]
-        if is_decoding:
+        if is_decoding and seq_len == 1:
             # We need to guarantee that anything regarding the cache is on the same device
             cache_device = cache_params.layers[self.layer_idx].device
 
@@ -547,7 +608,11 @@ class Mamba2Mixer(nn.Module):
 
             # 3. Compute the inter-chunk SSM recurrence; produces correct SSM states at chunk boundaries
             # (middle term of factorization of off-diag blocks; A terms)
-            previous_states = torch.zeros_like(states[:, :1])
+            previous_states = (
+                cache_params.layers[self.layer_idx].recurrent_states[:, None].to(dtype=states.dtype, device=states.device)
+                if is_decoding
+                else torch.zeros_like(states[:, :1])
+            )
             states = torch.cat([previous_states, states], dim=1)
             decay_chunk = torch.exp(segment_sum(nn.functional.pad(A_cumsum[:, :, :, -1], (1, 0))))
             decay_chunk = decay_chunk.transpose(1, 3)

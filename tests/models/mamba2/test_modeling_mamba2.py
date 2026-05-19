@@ -206,6 +206,31 @@ class Mamba2ModelTester:
             torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-3, rtol=1e-3)
         )
 
+    def create_and_check_mamba2_chunked_prefill(self, config, *args):
+        model = Mamba2Model(config=config)
+        model.to("cpu")
+        model.eval()
+
+        L = 8
+        inputs_embeds = torch.randn(1, L, config.hidden_size)
+
+        cache_tbt = DynamicCache(config=config)
+        outputs_tbt = []
+        for t in range(L):
+            out = model(inputs_embeds=inputs_embeds[:, t : t + 1, :], cache_params=cache_tbt, use_cache=True)
+            outputs_tbt.append(out.last_hidden_state)
+        result_tbt = torch.cat(outputs_tbt, dim=1)
+
+        cache_chunk = DynamicCache(config=config)
+        out_first = model(inputs_embeds=inputs_embeds[:, :1, :], cache_params=cache_chunk, use_cache=True)
+        out_rest = model(inputs_embeds=inputs_embeds[:, 1:, :], cache_params=cache_chunk, use_cache=True)
+        result_chunk = torch.cat([out_first.last_hidden_state, out_rest.last_hidden_state], dim=1)
+
+        self.parent.assertTrue(
+            torch.allclose(result_tbt, result_chunk, atol=1e-3, rtol=1e-3),
+            msg=f"Max diff: {(result_tbt - result_chunk).abs().max().item():.6f}",
+        )
+
     def create_and_check_mamba2_slow_vs_fast_forward(self, config, input_ids, *args, gradient_checkpointing=False):
         model = Mamba2Model(config)
         model.eval()
@@ -259,6 +284,38 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_mamba2_caching(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_caching(*config_and_inputs)
+
+    def test_mamba2_chunked_prefill(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_mamba2_chunked_prefill(*config_and_inputs)
+
+    @require_torch_accelerator
+    def test_mamba2_chunked_prefill_cuda_path(self):
+        if not (is_mamba_2_ssm_available() and is_causal_conv1d_available()):
+            self.skipTest("Requires mamba-ssm and causal-conv1d packages.")
+
+        torch.manual_seed(0)
+        config = self.model_tester.get_config()
+        L = 8
+        model = Mamba2Model(config=config).to(torch_device).eval()
+        inputs_embeds = torch.randn(1, L, config.hidden_size, device=torch_device)
+
+        cache_tbt = DynamicCache(config=config)
+        outputs_tbt = []
+        for t in range(L):
+            out = model(inputs_embeds=inputs_embeds[:, t : t + 1, :], cache_params=cache_tbt, use_cache=True)
+            outputs_tbt.append(out.last_hidden_state)
+        result_tbt = torch.cat(outputs_tbt, dim=1)
+
+        cache_chunk = DynamicCache(config=config)
+        out_first = model(inputs_embeds=inputs_embeds[:, :1, :], cache_params=cache_chunk, use_cache=True)
+        out_rest = model(inputs_embeds=inputs_embeds[:, 1:, :], cache_params=cache_chunk, use_cache=True)
+        result_chunk = torch.cat([out_first.last_hidden_state, out_rest.last_hidden_state], dim=1)
+
+        self.assertTrue(
+            torch.allclose(result_tbt, result_chunk, atol=1e-3, rtol=1e-3),
+            msg=f"Max diff: {(result_tbt - result_chunk).abs().max().item():.6f}",
+        )
 
     def test_mamba2_slow_vs_fast_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
