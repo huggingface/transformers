@@ -54,6 +54,7 @@ from ..dinov3_vit.modeling_dinov3_vit import (
     get_patches_center_coordinates,
     rotate_half,
 )
+from ..beit.modeling_beit import BeitConvLayer
 from ..gemma2.modeling_gemma2 import eager_attention_forward
 
 
@@ -371,17 +372,12 @@ class Sapiens2ConvTransposeLayer(nn.Module):
         return self.activation(self.norm(self.conv(hidden_states)))
 
 
-class Sapiens2ConvLayer(nn.Module):
+class Sapiens2ConvLayer(BeitConvLayer):
     def __init__(
         self, in_channels: int, out_channels: int, kernel_size: int = 1, bias: bool = True, activation: str = "silu"
     ):
-        super().__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, bias=bias)
-        self.norm = nn.InstanceNorm2d(out_channels)
-        self.activation = ACT2FN[activation]
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.activation(self.norm(self.conv(hidden_states)))
+        super().__init__(in_channels, out_channels, kernel_size=kernel_size, bias=bias, activation=activation)
+        self.normalization = nn.InstanceNorm2d(out_channels)
 
 
 class Sapiens2SegmentationHead(nn.Module):
