@@ -163,6 +163,19 @@ class ALMModelTest(MultiModalModelTest):
     def test_model_base_model_prefix(self):
         pass
 
+    def test_sdpa_can_dispatch_on_flash(self):
+        # `test_sdpa_can_dispatch_on_flash` already pops the attention mask, but we cannot simply pop the
+        # audio mask here since it will raise an error in `get_audio_features` (cf. `test_mismatching_num_audio_tokens`).
+        # Therefore we substitute a full-ones mask instead.
+        original_create_audio_mask = self.model_tester.create_audio_mask
+        self.model_tester.create_audio_mask = lambda: torch.ones(
+            [self.model_tester.batch_size, self.model_tester.feat_seq_length], dtype=torch.bool, device=torch_device
+        )
+        try:
+            super().test_sdpa_can_dispatch_on_flash()
+        finally:
+            self.model_tester.create_audio_mask = original_create_audio_mask
+
     def test_mismatching_num_audio_tokens(self):
         """
         Tests that ALMs throw an error with explicit message saying what is wrong
