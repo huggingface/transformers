@@ -93,7 +93,7 @@ Open a [New model addition](https://github.com/huggingface/transformers/issues/n
 
 Now is a good time to get familiar with BrandNewLlama. It is helpful to read a models research paper to understand its technical design and implementation. You don't necessarily have to worry too much about the theoretical details. Instead, focus on the practical ones. Use the questions below to guide your reading.
 
-- What type of model is BrandNewLlama? Is it a encoder, decoder, or encoder-decoder model?
+- What type of model is BrandNewLlama? Is it an encoder, decoder, or encoder-decoder model?
 - What tasks can BrandNewLlama be used for?
 - What makes BrandNewLlama different from other models?
 - What models in Transformers are most similar to BrandNewLlama?
@@ -211,7 +211,7 @@ Orient yourself with the original repository by doing the following.
 - Figure out how to run the tokenizer independently of the model.
 - Trace one forward pass to understand which classes and functions are required. These are probably the only classes and functions you'll have to implement.
 - Locate all the important components (model class, model subclasses, self-attention layer, etc.) of the model.
-- Figure out how to debug the model in the original repository. Add print statements, use interactive debuggers like [ipdb](https://github.com/gotcha/ipdb), or a efficient integrated development environment (IDE) like [PyCharm](https://www.jetbrains.com/pycharm/).
+- Figure out how to debug the model in the original repository. Add print statements, use interactive debuggers like [ipdb](https://github.com/gotcha/ipdb), or an efficient integrated development environment (IDE) like [PyCharm](https://www.jetbrains.com/pycharm/).
 
 The last point is especially important because you'll need a thorough understanding of what's happening inside the original model before you can reimplement it in Transformers. Feel free to open issues and pull requests in the original repository if you encounter any issues.
 
@@ -381,7 +381,7 @@ class SimpleModel(nn.Module):
         self.layer_norm = nn.LayerNorm(10)
 ```
 
-PyTorch layer names are defined by the class attribute name of the layer (`dense`, `intermediate`, `layer_norm`). Create a instance of `SimpleModel` to fill all the layers with random weights.
+PyTorch layer names are defined by the class attribute name of the layer (`dense`, `intermediate`, `layer_norm`). Create an instance of `SimpleModel` to fill all the layers with random weights.
 
 ```py
 model = SimpleModel()
