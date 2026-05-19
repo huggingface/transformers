@@ -28,32 +28,12 @@ from __future__ import annotations
 
 import logging
 
+import torch
+
 from .base import HfQuantizer
 
 
 logger = logging.getLogger(__name__)
-
-
-def _resolve_target_device(device_map) -> str:
-    """Infer the dominant ``device.type`` for the upcoming load — used to gate
-    the GgufLinear swap on MPS until CUDA / CPU GGUF kernels exist."""
-    import torch
-
-    if device_map is None:
-        return "mps" if torch.backends.mps.is_available() else ("cuda" if torch.cuda.is_available() else "cpu")
-    if isinstance(device_map, str):
-        if device_map in ("auto", "balanced", "balanced_low_0", "sequential"):
-            return "mps" if torch.backends.mps.is_available() else ("cuda" if torch.cuda.is_available() else "cpu")
-        return torch.device(device_map).type
-    if isinstance(device_map, dict):
-        for dev in device_map.values():
-            if dev in (None, "disk"):
-                continue
-            try:
-                return torch.device(dev).type
-            except (TypeError, RuntimeError):
-                continue
-    return "cpu"
 
 
 class GGUFQuantizer(HfQuantizer):
@@ -90,15 +70,6 @@ class GGUFQuantizer(HfQuantizer):
         self.hf_to_gguf: dict[str, str] = {}
 
     # ---- HfQuantizer hooks ----------------------------------------------------
-
-    @property
-    def renaming_dequantize_op(self):
-        """Op the rename pipeline attaches to ``WeightRenaming`` entries so the
-        renamed key lands as a regular floating-point tensor rather than a raw
-        uint8 ``GGUFQuantizedTensor``."""
-        from ..gguf_conversion_ops import GGUFDequantize
-
-        return GGUFDequantize(self)
 
     def update_weight_conversions(self, weight_conversions):
         """Inject :class:`GGUFDequantize` at the head of every weight converter
@@ -170,15 +141,16 @@ class GGUFQuantizer(HfQuantizer):
         self.gguf_kv = parsed.get("raw_kv", {}) or {}
         return parsed["tensors"]
 
-    def _process_model_before_weight_loading(self, model, device_map=None, **kwargs):
-        """Swap ``nn.Linear`` / fused-expert modules in place at meta time.
+    def _process_model_before_weight_loading(self, model, **kwargs):
+        """Swap nn.Linear / fused-expert modules in place at meta time.
 
-        For the gguf_file path, finalize ``self.linear_mode`` here — we need
-        ``device_map`` to decide MPS vs not. Explicit ``dequantize=True`` (set by
-        ``from_pretrained`` when the caller passed ``dtype=``) forces dequant.
+        For the gguf_file path, finalize ``self.linear_mode`` here: native
+        kernels run on MPS today (matching CUDA kernels are a TODO), so we
+        swap when MPS is available and the caller didn't explicitly request
+        dequantize-on-load (``dtype=`` -> ``GgufQuantizeConfig.dequantize``).
         """
         if not self.on_the_fly:
-            self.linear_mode = _resolve_target_device(device_map) == "mps" and not self.quantization_config.dequantize
+            self.linear_mode = torch.backends.mps.is_available() and not self.quantization_config.dequantize
         if not self.linear_mode:
             return
         from ..integrations.gguf_linear import replace_with_gguf_linear
@@ -188,10 +160,9 @@ class GGUFQuantizer(HfQuantizer):
 
     def postprocess_model(self, model, **kwargs):
         """Run the base post-process, then apply good generation defaults when
-        the GgufLinear swap is in effect. Byte routing for both
-        :class:`GgufLinear` and :class:`GgufExperts` happens through the rename
-        pipeline (target-aware :class:`GGUFDequantize` +
-        :meth:`_rewrite_experts_mapping`) — no post-load byte copy."""
+        the GgufLinear swap is in effect. Byte routing for both GgufLinear and
+        GgufExperts happens through the rename pipeline (target-aware
+        GGUFDequantize) — no post-load byte copy."""
         super().postprocess_model(model, **kwargs)
         if self.linear_mode:
             self._bind_experts_kernels(model)

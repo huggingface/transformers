@@ -28,11 +28,12 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 
-from .gguf_kernels import bind_id_kernel_refs, ensure_metal_kernels
+from .gguf_kernels import _KERNEL_FMT, bind_id_kernel_refs, ensure_metal_kernels
+from .moe import ExpertsInterface
 
 
-# Per quant type: (block bytes, block elems). Format names match the suffix of
-# the ``mul_mat_<fmt>_f32`` and ``mul_mat_vec_<fmt>_f32`` ops in the kernel.
+# Per quant type: (block bytes, block elems). The format string side of the
+# table (kernel names like mul_mat_q4_K_f32) lives in gguf_kernels._KERNEL_FMT.
 _QUANT_INFO: dict[str, tuple[int, int]] = {
     "Q4_0": (18, 32),
     "Q5_0": (22, 32),
@@ -45,59 +46,43 @@ _QUANT_INFO: dict[str, tuple[int, int]] = {
     "IQ4_XS": (136, 256),
 }
 
-_KERNEL_FMT: dict[str, str] = {
-    "Q4_0": "q4_0",
-    "Q5_0": "q5_0",
-    "Q5_1": "q5_1",
-    "Q8_0": "q8_0",
-    "Q4_K": "q4_K",
-    "Q5_K": "q5_K",
-    "Q6_K": "q6_K",
-    "IQ4_NL": "iq4_nl",
-    "IQ4_XS": "iq4_xs",
-}
-
 
 def gguf_linear_supports(quant_type) -> bool:
-    """Return True if ``quant_type`` has a matching ``mul_mat_<fmt>_f32`` kernel."""
+    """Return True if quant_type has a matching mul_mat_<fmt>_f32 kernel."""
     name = quant_type.name if hasattr(quant_type, "name") else str(quant_type)
     return name in _QUANT_INFO
 
 
-def _read_first(config, *attrs: str):
-    """Return ``config.<first_attr_that_exists>`` — MoE configs across archs spell
-    the same idea differently (``num_experts`` / ``num_local_experts`` /
-    ``n_routed_experts``; ``moe_intermediate_size`` / ``intermediate_size``)."""
-    for a in attrs:
-        v = getattr(config, a, None)
-        if v is not None:
-            return v
-    raise AttributeError(f"GgufExperts: config has none of {attrs}; got {type(config).__name__}")
+# Module-level cache of (matvec, matmul) OpOverload refs per quant type. The
+# kernel names are deterministic from the quant type (mul_mat_vec_q4_K_f32,
+# mul_mat_q4_K_f32, ...), so we resolve once and share across every GgufLinear
+# of the same quant type.
+_LINEAR_OPS: dict[str, tuple] = {}
 
 
-def _fmt(quant_type) -> str:
-    name = quant_type.name if hasattr(quant_type, "name") else str(quant_type)
-    return _KERNEL_FMT[name]
+def _linear_ops(quant_type: str):
+    cached = _LINEAR_OPS.get(quant_type)
+    if cached is not None:
+        return cached
+    ops = ensure_metal_kernels()._ops
+    fmt = _KERNEL_FMT[quant_type]
+    mv = getattr(ops, f"mul_mat_vec_{fmt}_f32")
+    mat = getattr(ops, f"mul_mat_{fmt}_f32")
+    pair = (getattr(mv, "default", mv), getattr(mat, "default", mat))
+    _LINEAR_OPS[quant_type] = pair
+    return pair
 
 
 class GgufLinear(nn.Module):
     """Linear layer with GGUF-quantized weights stored as raw block bytes (uint8).
 
-    Forward dispatches to ``mul_mat_vec_<fmt>_f32`` for batch 1 and
-    ``mul_mat_<fmt>_f32`` for batched / non-padded inputs. Inference-only — no
-    dequant fallback. Callers that want a CPU/CUDA dequant path should let the
-    loader's :class:`~transformers.gguf_conversion_ops.GGUFDequantize` op
-    produce fp32 weights into a standard ``nn.Linear`` instead.
+    Forward dispatches to mul_mat_vec_<fmt>_f32 for batch 1 and mul_mat_<fmt>_f32
+    for batched inputs. Inference-only — no dequant fallback. Callers that want
+    a CPU/CUDA dequant path should let the loader's GGUFDequantize op produce
+    fp32 weights into a standard nn.Linear instead.
     """
 
-    def __init__(
-        self,
-        in_features: int,
-        out_features: int,
-        quant_type: str = "Q4_K",
-        bias: bool = False,
-        device: torch.device | str | None = None,
-    ):
+    def __init__(self, in_features: int, out_features: int, quant_type: str = "Q4_K", bias: bool = False):
         super().__init__()
         if quant_type not in _QUANT_INFO:
             raise NotImplementedError(f"GgufLinear only supports {sorted(_QUANT_INFO)} today, got {quant_type}")
@@ -107,38 +92,19 @@ class GgufLinear(nn.Module):
         self.in_features = in_features
         self.out_features = out_features
         self.quant_type = quant_type
-        self._fmt = _KERNEL_FMT[quant_type]
         nblocks_per_row = in_features // block_elems
         nbytes = out_features * nblocks_per_row * block_bytes
-        self.register_buffer("weight", torch.empty(nbytes, dtype=torch.uint8, device=device or "cpu"), persistent=True)
+        self.register_buffer("weight", torch.empty(nbytes, dtype=torch.uint8), persistent=True)
         if bias:
-            self.bias = nn.Parameter(
-                torch.zeros(out_features, dtype=torch.float32, device=device or "cpu"), requires_grad=False
-            )
+            self.bias = nn.Parameter(torch.zeros(out_features, dtype=torch.float32), requires_grad=False)
         else:
             self.register_parameter("bias", None)
-        # Resolved lazily on first forward to keep meta-device construction cheap.
-        self._mv_op = None
-        self._mat_op = None
 
     def extra_repr(self) -> str:
         return (
             f"in_features={self.in_features}, out_features={self.out_features}, "
             f"quant_type={self.quant_type}, bias={self.bias is not None}"
         )
-
-    def _bind_kernels(self) -> None:
-        """Resolve and cache the matvec / matmul ``OpOverload`` refs (idempotent)."""
-        ops = ensure_metal_kernels()._ops
-        mv = getattr(ops, f"mul_mat_vec_{self._fmt}_f32", None)
-        mat = getattr(ops, f"mul_mat_{self._fmt}_f32", None)
-        if mv is None or mat is None:
-            raise RuntimeError(
-                f"GGUF metal kernels missing required ops for {self.quant_type}: "
-                f"mul_mat_vec_{self._fmt}_f32 / mul_mat_{self._fmt}_f32"
-            )
-        self._mv_op = getattr(mv, "default", mv)
-        self._mat_op = getattr(mat, "default", mat)
 
     @torch.no_grad()
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -149,9 +115,7 @@ class GgufLinear(nn.Module):
                 "GgufLinear runs only on MPS. Re-load with `dtype=torch.bfloat16` (or any explicit dtype) "
                 "to dequantize to a normal nn.Linear for non-MPS devices."
             )
-        if self._mv_op is None:
-            self._bind_kernels()
-        mv_op, mat_op = self._mv_op, self._mat_op
+        mv_op, mat_op = _linear_ops(self.quant_type)
 
         batch_shape = x.shape[:-1]
         x_flat = x.reshape(-1, self.in_features).contiguous().to(torch.float32)
@@ -187,57 +151,51 @@ class GgufLinear(nn.Module):
 
 
 class GgufExperts(nn.Module):
-    """Drop-in for fused-expert MoE modules (``MixtralExperts`` /
-    ``Qwen2MoeExperts`` / ``DeepseekV3NaiveMoe`` — same layout). Holds the
-    same buffers names as the unswapped module (``gate_up_proj`` + ``down_proj``),
-    but as raw uint8 GGUF bytes — so the standard GGUF rename pipeline's merge
-    ``WeightConverter`` (``ffn_gate_exps + ffn_up_exps → gate_up_proj``) lands
-    bytes here without any per-quantizer rewrite.
+    """Drop-in for fused-expert MoE modules (MixtralExperts / Qwen2MoeExperts
+    / DeepseekV3NaiveMoe — same layout). Holds the same buffer names as the
+    unswapped module (gate_up_proj + down_proj) but as raw uint8 GGUF bytes,
+    so the standard GGUF rename pipeline's merge WeightConverter
+    (ffn_gate_exps + ffn_up_exps -> gate_up_proj) lands bytes here without
+    any per-quantizer rewrite.
 
-    ``gate_quant`` is assumed equal to ``up_quant`` (the merge can only run
+    gate_up_quant is assumed equal across gate and up (the merge can only run
     when both halves share a quant type — Q4_K_M ships them both as Q4_K).
-    ``down_quant`` may differ (Q4_K_M ships down as Q8_0).
+    down_quant may differ (Q4_K_M ships down as Q8_0).
+
+    Configs across MoE archs spell these dims differently — Qwen2MoE uses
+    num_experts, Mixtral uses num_local_experts, DeepSeek-V3 uses
+    n_routed_experts. PretrainedConfig's attribute_map aliases the names so
+    config.num_experts / config.moe_intermediate_size resolve consistently;
+    archs missing an alias need it added to their config (one-line fix there,
+    not here).
     """
 
-    def __init__(
-        self,
-        config,
-        gate_up_quant: str,
-        down_quant: str,
-        device=None,
-    ):
+    def __init__(self, config, gate_up_quant: str, down_quant: str):
         super().__init__()
         for label, qt in (("gate_up", gate_up_quant), ("down", down_quant)):
             if qt not in _QUANT_INFO:
                 raise NotImplementedError(f"GgufExperts {label}_quant {qt} not in {sorted(_QUANT_INFO)}")
         self.config = config
-        # Different MoE archs spell these differently — read every known name.
-        self.num_experts = _read_first(config, "num_experts", "num_local_experts", "n_routed_experts")
+        self.num_experts = config.num_experts
         self.hidden_dim = config.hidden_size
-        self.intermediate_dim = _read_first(config, "moe_intermediate_size", "intermediate_size")
+        self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_quant, self.down_quant = gate_up_quant, down_quant
-        self._gate_up_fmt = _KERNEL_FMT[gate_up_quant]
-        self._down_fmt = _KERNEL_FMT[down_quant]
 
-        # Same buffer names as MixtralExperts / Qwen2MoeExperts — uint8 bytes.
-        # ``gate_up_proj``: rows = 2 * intermediate (gate first, then up — that's the
-        # output of the merge converter's ``Concatenate(dim=1)`` over gate+up uint8
-        # byte tensors), cols (in bytes) = hidden_dim / block_elems * block_bytes.
+        # Buffer layout matches MixtralExperts.gate_up_proj (3D Parameter):
+        # rows = 2*intermediate (gate first, then up — natural output of the
+        # merge converter's Concatenate(dim=1)), cols-in-bytes = hidden /
+        # block_elems * block_bytes.
         gate_up_rows = 2 * self.intermediate_dim
         gate_up_bytes_per_row = (self.hidden_dim // _QUANT_INFO[gate_up_quant][1]) * _QUANT_INFO[gate_up_quant][0]
         down_bytes_per_row = (self.intermediate_dim // _QUANT_INFO[down_quant][1]) * _QUANT_INFO[down_quant][0]
         self.register_buffer(
             "gate_up_proj",
-            torch.empty(
-                self.num_experts, gate_up_rows, gate_up_bytes_per_row, dtype=torch.uint8, device=device or "cpu"
-            ),
+            torch.empty(self.num_experts, gate_up_rows, gate_up_bytes_per_row, dtype=torch.uint8),
             persistent=True,
         )
         self.register_buffer(
             "down_proj",
-            torch.empty(
-                self.num_experts, self.hidden_dim, down_bytes_per_row, dtype=torch.uint8, device=device or "cpu"
-            ),
+            torch.empty(self.num_experts, self.hidden_dim, down_bytes_per_row, dtype=torch.uint8),
             persistent=True,
         )
 
@@ -264,8 +222,8 @@ class GgufExperts(nn.Module):
         top_k_index: torch.Tensor,
         top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
-        """Dispatch through :data:`ALL_GGUF_EXPERTS_FUNCTIONS` (GGUF-specific
-        sibling of :data:`ALL_EXPERTS_FUNCTIONS`). Default is the bmm path."""
+        """Dispatch through ALL_GGUF_EXPERTS_FUNCTIONS (GGUF-specific sibling
+        of ALL_EXPERTS_FUNCTIONS). Default is the bmm path."""
         impl = getattr(self, "_experts_implementation", None) or "bmm"
         return ALL_GGUF_EXPERTS_FUNCTIONS.get_interface(impl, gguf_bmm_experts_forward)(
             self, hidden_states, top_k_index, top_k_weights
@@ -273,61 +231,56 @@ class GgufExperts(nn.Module):
 
 
 class GgufExpertsTransposed(GgufExperts):
-    """Variant for arch's that store ``gate_up_proj`` transposed —
-    ``(num_experts, hidden_dim, 2*intermediate_dim)`` instead of
-    ``(num_experts, 2*intermediate_dim, hidden_dim)`` — and carry biases on
-    both projections. Today: ``gpt_oss`` (:class:`GptOssExperts` does
-    ``current_state @ self.gate_up_proj[expert_idx]`` rather than
-    ``F.linear(..., self.gate_up_proj[expert_idx])``, so the parameter is
-    stored ``(in_dim, out_dim)`` instead of ``(out_dim, in_dim)``).
+    """Variant for archs that store gate_up_proj transposed —
+    (num_experts, hidden_dim, 2*intermediate_dim) instead of
+    (num_experts, 2*intermediate_dim, hidden_dim) — and carry biases on both
+    projections. Today: gpt_oss (GptOssExperts does
+    current_state @ self.gate_up_proj[expert_idx] rather than
+    F.linear(..., self.gate_up_proj[expert_idx]), so the parameter is stored
+    (in_dim, out_dim) instead of (out_dim, in_dim)).
 
-    TODO: forward kernel. The ``gguf_bmm_experts_forward`` path assumes the
+    TODO: forward kernel. gguf_bmm_experts_forward assumes the
     Mixtral/Qwen2MoE layout (rows = output axis). Loading a gpt_oss GGUF
     populates the buffers correctly via the standard rename pipeline, but
-    ``forward`` needs a transposed-aware kernel path before it produces
-    correct logits.
+    forward needs a transposed-aware kernel path before it produces correct
+    logits.
     """
 
-    def __init__(self, config, gate_up_quant: str, down_quant: str, device=None):
+    def __init__(self, config, gate_up_quant: str, down_quant: str):
         nn.Module.__init__(self)  # skip GgufExperts.__init__: different buffer shapes.
         for label, qt in (("gate_up", gate_up_quant), ("down", down_quant)):
             if qt not in _QUANT_INFO:
                 raise NotImplementedError(f"GgufExpertsTransposed {label}_quant {qt} not in {sorted(_QUANT_INFO)}")
         self.config = config
-        self.num_experts = _read_first(config, "num_experts", "num_local_experts", "n_routed_experts")
+        self.num_experts = config.num_experts
         self.hidden_dim = config.hidden_size
-        self.intermediate_dim = _read_first(config, "moe_intermediate_size", "intermediate_size")
+        # gpt_oss uses ``intermediate_size`` for the per-expert MLP width — no
+        # moe_intermediate_size distinction since there's no shared dense MLP
+        # alongside the experts.
+        self.intermediate_dim = config.intermediate_size
         self.gate_up_quant, self.down_quant = gate_up_quant, down_quant
-        self._gate_up_fmt = _KERNEL_FMT[gate_up_quant]
-        self._down_fmt = _KERNEL_FMT[down_quant]
 
-        # Transposed layout: rows = in axis, cols (in bytes) = out axis / blocks * bytes.
+        # Transposed layout: rows = in axis, cols-in-bytes = out / block_elems * block_bytes.
         gate_up_bytes_per_row = ((2 * self.intermediate_dim) // _QUANT_INFO[gate_up_quant][1]) * _QUANT_INFO[
             gate_up_quant
         ][0]
         down_bytes_per_row = (self.hidden_dim // _QUANT_INFO[down_quant][1]) * _QUANT_INFO[down_quant][0]
         self.register_buffer(
             "gate_up_proj",
-            torch.empty(
-                self.num_experts, self.hidden_dim, gate_up_bytes_per_row, dtype=torch.uint8, device=device or "cpu"
-            ),
+            torch.empty(self.num_experts, self.hidden_dim, gate_up_bytes_per_row, dtype=torch.uint8),
             persistent=True,
         )
         self.register_buffer(
             "down_proj",
-            torch.empty(
-                self.num_experts, self.intermediate_dim, down_bytes_per_row, dtype=torch.uint8, device=device or "cpu"
-            ),
+            torch.empty(self.num_experts, self.intermediate_dim, down_bytes_per_row, dtype=torch.uint8),
             persistent=True,
         )
         # gpt_oss has biases on both projections; mirror that here.
         self.gate_up_proj_bias = nn.Parameter(
-            torch.zeros(self.num_experts, 2 * self.intermediate_dim, dtype=torch.float32, device=device or "cpu"),
-            requires_grad=False,
+            torch.zeros(self.num_experts, 2 * self.intermediate_dim, dtype=torch.float32), requires_grad=False
         )
         self.down_proj_bias = nn.Parameter(
-            torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32, device=device or "cpu"),
-            requires_grad=False,
+            torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32), requires_grad=False
         )
 
         from ..activations import ACT2FN
@@ -358,11 +311,9 @@ MODEL_TYPE_TO_GGUF_EXPERTS: dict[str, type[nn.Module]] = {
 }
 
 
-# ----------------------------------------------------------------------------
-# Forward kernel for fused-expert MoE — relocated here from moe.py so the GGUF
-# integration owns it end-to-end. ``integrations/moe.py`` only imports and
-# registers it.
-# ----------------------------------------------------------------------------
+# Fused-expert forward + GgufExpertsInterface — relocated here from moe.py so
+# the GGUF integration owns the dispatch end-to-end. Mirrors FP8ExpertsInterface
+# in integrations/finegrained_fp8.py.
 
 
 @torch.no_grad()
@@ -372,24 +323,24 @@ def gguf_bmm_experts_forward(
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
-    """Quantized fused-expert forward for ``GgufExperts``.
-
-    Each of gate / up / down runs as a single ``mul_mat_id_<fmt>_f32`` Metal
-    kernel launch indexed by the per-token expert ids (same pattern as
-    llama.cpp's ``mul_mat_id`` — never materialises the expert weights as fp32).
+    """Quantized fused-expert forward for GgufExperts. Each of gate / up / down
+    runs as a single mul_mat_id_<fmt>_f32 Metal kernel launch indexed by the
+    per-token expert ids — same pattern as llama.cpp's mul_mat_id, never
+    materialises the expert weights as fp32.
     """
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
-    H = self.hidden_dim
-    I_dim = self.intermediate_dim
+    hidden_dim = self.hidden_dim
+    intermediate_dim = self.intermediate_dim
     device = hidden_states.device
+    # S = total token-expert pairs across the batch (each routed token contributes
+    # ``num_top_k`` work items). The mul_mat_id kernel writes one output row per pair.
     S = num_tokens * num_top_k
 
     op_gate_up = getattr(self, "_id_op_gate_up", None)
     op_down = getattr(self, "_id_op_down", None)
     if op_gate_up is None or op_down is None:
-        # Bind on first call if the module was constructed without the kernel
-        # cache (state-dict load path bypasses the meta-time swap).
+        # State-dict load path bypasses the meta-time swap, so bind kernels lazily.
         bind_id_kernel_refs(self)
         op_gate_up, op_down = self._id_op_gate_up, self._id_op_down
 
@@ -397,20 +348,25 @@ def gguf_bmm_experts_forward(
     ids32 = top_k_index.reshape(-1).to(torch.int32)
     sample_weights = top_k_weights.reshape(-1).to(torch.float32)
 
-    # Reuse decode-shape scratch buffers if the call matches; otherwise allocate.
+    # Decode (num_tokens == 1) is the hot path under torch.compile: we re-allocate
+    # scratch ONCE per quant module at swap time (bind_id_kernel_refs registers
+    # _gate_buf / _up_buf / _pair_out as non-persistent buffers sized for
+    # S = num_experts_per_tok). Reusing those buffers avoids torch.empty inside
+    # the compiled graph — fresh allocations would trigger dynamo recompiles on
+    # the second forward when shapes match but addresses differ. For prefill
+    # (num_tokens > 1) we fall back to per-call empties; the recompile happens
+    # once for that shape and is then cached.
     if getattr(self, "_scratch_S", None) == S and getattr(self, "_scratch_T", None) == num_tokens:
         gate_buf, up_buf, out = self._gate_buf, self._up_buf, self._pair_out
     else:
-        gate_buf = torch.empty(S, I_dim, dtype=torch.float32, device=device)
-        up_buf = torch.empty(S, I_dim, dtype=torch.float32, device=device)
-        out = torch.empty(S, H, dtype=torch.float32, device=device)
+        gate_buf = torch.empty(S, intermediate_dim, dtype=torch.float32, device=device)
+        up_buf = torch.empty(S, intermediate_dim, dtype=torch.float32, device=device)
+        out = torch.empty(S, hidden_dim, dtype=torch.float32, device=device)
 
-    # ``gate_up_proj`` packs ``[gate; up]`` along the row axis (the standard
-    # MixtralExperts layout, produced naturally by the GGUF merge converter's
-    # ``Concatenate(dim=1)`` on uint8 byte tensors). Split into per-projection
-    # byte halves at kernel-call time. Each half is per-expert-contiguous
-    # (gate0 / gate1 / … gateN, up0 / up1 / … upN — interleaved per expert,
-    # since concat is on dim 1 = row axis within each expert's block).
+    # gate_up_proj packs [gate; up] along the row axis (the standard MixtralExperts
+    # layout, produced naturally by the GGUF merge converter's Concatenate(dim=1)
+    # on uint8 byte tensors). Split into per-projection byte halves at kernel
+    # call time — both halves share a quant type so the same op fires twice.
     gate_up_bytes = self.gate_up_proj.view(self.num_experts, -1)
     half = gate_up_bytes.shape[1] // 2
     gate_qw = gate_up_bytes[:, :half].contiguous().view(-1)
@@ -422,37 +378,28 @@ def gguf_bmm_experts_forward(
     op_down(down_qw, inter, ids32, out)
 
     weighted = out * sample_weights.unsqueeze(-1)
-    return weighted.view(num_tokens, num_top_k, H).sum(dim=1).to(hidden_states.dtype)
+    return weighted.view(num_tokens, num_top_k, hidden_dim).sum(dim=1).to(hidden_states.dtype)
 
 
-# GGUF-specific ExpertsInterface — the GGUF integration registers its
-# implementations here instead of polluting the base ``ExpertsInterface``.
-# Same shape as :class:`FP8ExpertsInterface` in :mod:`integrations.finegrained_fp8`.
 def _gguf_grouped_mm_experts_forward(self, hidden_states, top_k_index, top_k_weights):
-    """Prefill alias — currently delegates to the bmm path (single ``mul_mat_id``
-    kernel per projection is the right shape for both decode and prefill on MPS;
-    a real ``grouped_mm`` impl would land here when CUDA kernels arrive)."""
+    """Prefill alias — currently delegates to the bmm path (one mul_mat_id kernel
+    per projection is the right shape for both decode and prefill on MPS; a
+    proper grouped_mm impl would land here when CUDA kernels arrive)."""
     return gguf_bmm_experts_forward(self, hidden_states, top_k_index, top_k_weights)
 
 
-def _make_gguf_experts_interface():
-    """Build the singleton; deferred so this module's import order doesn't fight
-    the ``moe.py`` import order (moe.py defines ``ExpertsInterface``)."""
-    from .moe import ExpertsInterface
+class GgufExpertsInterface(ExpertsInterface):
+    """GGUF-specific experts dispatch — registers the mul_mat_id-backed bmm /
+    grouped_mm impls. Mirrors FP8ExpertsInterface in integrations.finegrained_fp8.
+    """
 
-    class GgufExpertsInterface(ExpertsInterface):
-        """GGUF-specific experts dispatch — registers the ``mul_mat_id``-backed
-        bmm + grouped_mm impls. Mirrors :class:`FP8ExpertsInterface`."""
-
-        _global_mapping = {
-            "bmm": gguf_bmm_experts_forward,
-            "grouped_mm": _gguf_grouped_mm_experts_forward,
-        }
-
-    return GgufExpertsInterface()
+    _global_mapping = {
+        "bmm": gguf_bmm_experts_forward,
+        "grouped_mm": _gguf_grouped_mm_experts_forward,
+    }
 
 
-ALL_GGUF_EXPERTS_FUNCTIONS = _make_gguf_experts_interface()
+ALL_GGUF_EXPERTS_FUNCTIONS = GgufExpertsInterface()
 
 
 # ----------------------------------------------------------------------------
@@ -500,25 +447,27 @@ def replace_with_gguf_linear(
         if info is None:
             continue
 
+        # Construct on meta — same as ``replace_with_fp8_linear``. The buffers
+        # come up as meta tensors; the real bytes are filled by the rename
+        # pipeline at weight-load time.
         new_module: nn.Module | None = None
-        if isinstance(mod, nn.Linear):
-            quant_type = info.get("quant_type")
-            if quant_type not in _QUANT_INFO:
-                continue
-            new_module = GgufLinear(
-                in_features=mod.in_features,
-                out_features=mod.out_features,
-                quant_type=quant_type,
-                bias=mod.bias is not None,
-                device=mod.weight.device,
-            )
-        elif experts_cls is not None and "gate_up_quant" in info:
-            new_module = experts_cls(
-                config=getattr(mod, "config", model.config),
-                gate_up_quant=info["gate_up_quant"],
-                down_quant=info["down_quant"],
-                device=_first_device(mod),
-            )
+        with torch.device("meta"):
+            if isinstance(mod, nn.Linear):
+                quant_type = info.get("quant_type")
+                if quant_type not in _QUANT_INFO:
+                    continue
+                new_module = GgufLinear(
+                    in_features=mod.in_features,
+                    out_features=mod.out_features,
+                    quant_type=quant_type,
+                    bias=mod.bias is not None,
+                )
+            elif experts_cls is not None and "gate_up_quant" in info:
+                new_module = experts_cls(
+                    config=getattr(mod, "config", model.config),
+                    gate_up_quant=info["gate_up_quant"],
+                    down_quant=info["down_quant"],
+                )
         if new_module is None:
             continue
 
@@ -527,15 +476,6 @@ def replace_with_gguf_linear(
         setattr(parent, leaf, new_module)
         swapped += 1
     return swapped
-
-
-def _first_device(mod: nn.Module) -> torch.device | str:
-    try:
-        return next(mod.parameters()).device
-    except StopIteration:
-        for buf in mod.buffers():
-            return buf.device
-        return "cpu"
 
 
 # Public re-exports for callers (quantizer, weight conversion ops, tests).
