@@ -225,6 +225,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("hiera", "HieraModel"),
         ("higgs_audio_v2", "HiggsAudioV2ForConditionalGeneration"),
         ("higgs_audio_v2_tokenizer", "HiggsAudioV2TokenizerModel"),
+        ("hrm_text", "HrmTextModel"),
         ("hubert", "HubertModel"),
         ("hunyuan_v1_dense", "HunYuanDenseV1Model"),
         ("hunyuan_v1_moe", "HunYuanMoEV1Model"),
@@ -344,6 +345,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("paligemma", "PaliGemmaModel"),
         ("parakeet_ctc", "ParakeetForCTC"),
         ("parakeet_encoder", "ParakeetEncoder"),
+        ("parakeet_tdt", "ParakeetForTDT"),
         ("patchtsmixer", "PatchTSMixerModel"),
         ("patchtst", "PatchTSTModel"),
         ("pe_audio", "PeAudioModel"),
@@ -689,6 +691,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("granitemoehybrid", "GraniteMoeHybridForCausalLM"),
         ("granitemoeshared", "GraniteMoeSharedForCausalLM"),
         ("helium", "HeliumForCausalLM"),
+        ("hrm_text", "HrmTextForCausalLM"),
         ("hunyuan_v1_dense", "HunYuanDenseV1ForCausalLM"),
         ("hunyuan_v1_moe", "HunYuanMoEV1ForCausalLM"),
         ("hy_v3", "HYV3ForCausalLM"),
@@ -1669,6 +1672,14 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+MODEL_FOR_TDT_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Token-and-Duration Transducer (TDT) mapping.
+        ("parakeet_tdt", "ParakeetForTDT"),
+    ]
+)
+
+
 MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Audio Classification mapping
@@ -1940,6 +1951,7 @@ MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES
 )
 MODEL_FOR_CTC_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_CTC_MAPPING_NAMES)
+MODEL_FOR_TDT_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_TDT_MAPPING_NAMES)
 MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES)
 MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES
@@ -2263,6 +2275,13 @@ class AutoModelForCTC(_BaseAutoModelClass):
 AutoModelForCTC = auto_class_update(AutoModelForCTC, head_doc="connectionist temporal classification")
 
 
+class AutoModelForTDT(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_TDT_MAPPING
+
+
+AutoModelForTDT = auto_class_update(AutoModelForTDT, head_doc="token-and-duration transducer")
+
+
 class AutoModelForSpeechSeq2Seq(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING
 
@@ -2325,6 +2344,7 @@ __all__ = [
     "MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING",
     "MODEL_FOR_CAUSAL_LM_MAPPING",
     "MODEL_FOR_CTC_MAPPING",
+    "MODEL_FOR_TDT_MAPPING",
     "MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING",
     "MODEL_FOR_DEPTH_ESTIMATION_MAPPING",
     "MODEL_FOR_TEXT_RECOGNITION_MAPPING",
@@ -2373,6 +2393,7 @@ __all__ = [
     "AutoModelForAudioXVector",
     "AutoModelForCausalLM",
     "AutoModelForCTC",
+    "AutoModelForTDT",
     "AutoModelForDepthEstimation",
     "AutoModelForTextRecognition",
     "AutoModelForTableRecognition",

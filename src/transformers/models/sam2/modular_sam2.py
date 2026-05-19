@@ -46,7 +46,7 @@ from ...utils.generic import (
 )
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
-from ..maskformer.modeling_maskformer import MaskFormerSinePositionEmbedding
+from ..detr.modeling_detr import DetrSinePositionEmbedding
 from ..sam.image_processing_sam import SamImageProcessor
 from ..sam.modeling_sam import (
     SamLayerNorm,
@@ -356,7 +356,7 @@ class Sam2PatchEmbeddings(nn.Module):
         return embeddings
 
 
-class Sam2SinePositionEmbedding(MaskFormerSinePositionEmbedding):
+class Sam2SinePositionEmbedding(DetrSinePositionEmbedding):
     pass
 
 
@@ -365,7 +365,9 @@ class Sam2VisionNeck(nn.Module):
         super().__init__()
         self.config = config
 
-        self.position_encoding = Sam2SinePositionEmbedding(num_pos_feats=config.fpn_hidden_size // 2, normalize=True)
+        self.position_encoding = Sam2SinePositionEmbedding(
+            num_position_features=config.fpn_hidden_size // 2, normalize=True
+        )
         self.convs = nn.ModuleList()
         for in_channels in config.backbone_channel_list:
             self.convs.append(
@@ -1244,8 +1246,8 @@ class Sam2Model(SamModel):
         # flatten NxCxHxW to HWxNxC
         feature_maps = [feature_map.flatten(2).permute(2, 0, 1) for feature_map in feature_maps]
         feature_maps_position_embeddings = [
-            feature_map_position_embedding.flatten(2).permute(2, 0, 1)
-            for feature_map_position_embedding in feature_maps_position_embeddings
+            feature_maps_position_embeddings.flatten(2).permute(2, 0, 1)
+            for feature_maps_position_embeddings in feature_maps_position_embeddings
         ]
         vision_outputs.fpn_hidden_states = feature_maps
         vision_outputs.fpn_position_encoding = feature_maps_position_embeddings

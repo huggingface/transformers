@@ -87,11 +87,7 @@ def get_packed_grad_shard(grad, world_size, rank, dim):
     return grad.index_select(dim, torch.tensor(indices, device=grad.device))
 
 
-def _is_packed_colwise_plan(plan) -> bool:
-    return plan == "packed_colwise" or getattr(plan, "kind", None) == "packed_colwise"
-
-
-def _global_wrapper(rank, func, tp, port, func_args, func_kwargs):
+def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs):
     """Wrapper to set up distributed environment and run the test function."""
 
     def setup_dist_env(rank, world_size, port):
@@ -104,7 +100,7 @@ def _global_wrapper(rank, func, tp, port, func_args, func_kwargs):
     world_size = tp
     setup_dist_env(rank, world_size, port)
 
-    dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+    dist.init_process_group(backend=backend, rank=rank, world_size=world_size)
 
     func(rank, *func_args, **func_kwargs)
 
@@ -112,7 +108,7 @@ def _global_wrapper(rank, func, tp, port, func_args, func_kwargs):
     dist.destroy_process_group()
 
 
-def _init_distributed(tp: int, max_retries: int = 5):
+def _init_distributed(tp: int, max_retries: int = 5, backend: str = "gloo"):
     """Decorator to initialize distributed environment and spawn processes."""
 
     def _init_distributed_inner(func):
@@ -120,7 +116,7 @@ def _init_distributed(tp: int, max_retries: int = 5):
             world_size = tp
             for attempt in range(max_retries):
                 port = _find_free_port()
-                spawn_args = (func, tp, port, args, kwargs)
+                spawn_args = (func, tp, port, backend, args, kwargs)
                 try:
                     mp.spawn(_global_wrapper, args=spawn_args, nprocs=world_size)
                     return
