@@ -63,12 +63,6 @@ class PPOCRV6MediumDetIntraclassBlock(PPOCRV5ServerDetIntraclassBlock):
 
 
 class PPOCRV6MediumDetNeck(PPOCRV5ServerDetNeck):
-    """
-    The only difference from PPOCRV5ServerDetNeck is that
-    feature_projection_convolution and pan_lateral_convolution require bias=True
-    to load weights fused from depthwise reparameterization, pointwise convolution, and BatchNorm.
-    """
-
     def __init__(self, config):
         nn.Module.__init__(self)
         self.interpolate_mode = config.interpolate_mode

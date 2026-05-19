@@ -205,9 +205,9 @@ class PPOCRV6MediumDetIntraclassBlock(nn.Module):
 
 class PPOCRV6MediumDetNeck(nn.Module):
     """
-    The only difference from PPOCRV5ServerDetNeck is that
-    feature_projection_convolution and pan_lateral_convolution require bias=True
-    to load weights fused from depthwise reparameterization, pointwise convolution, and BatchNorm.
+    Large Kernel Path Aggregation Network (Neck) for PPOCRV5 Server Detection.
+    Fuses multi-scale features from backbone stages (stage 2 to stage 5) via top-down and bottom-up paths,
+    enhanced with large kernel convolution for better spatial dependency modeling.
     """
 
     def __init__(self, config):
