@@ -969,8 +969,6 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         self.model = WhisperModel(config)
         self.proj_out = nn.Linear(config.d_model, config.vocab_size, bias=False)
         self.max_target_positions = config.max_target_positions
-        # Encoder-decoder models receive labels already aligned with decoder logits
-        # (no token shift needed), so ForMaskedLMLoss is the correct loss function.
         self.loss_type = "ForMaskedLM"
 
         # Initialize weights and apply final processing
@@ -1090,7 +1088,10 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         loss = None
         if labels is not None:
             loss = self.loss_function(
-                logits=lm_logits, labels=labels, vocab_size=self.config.vocab_size, num_items_in_batch=num_items_in_batch
+                logits=lm_logits,
+                labels=labels,
+                vocab_size=self.config.vocab_size,
+                num_items_in_batch=num_items_in_batch,
             )
 
         return Seq2SeqLMOutput(
@@ -1143,8 +1144,6 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
         self.model = WhisperDecoderWrapper(config)
 
         self.proj_out = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        # WhisperForCausalLM receives labels already aligned with logits (no shift),
-        # matching the original CrossEntropyLoss behavior preserved here.
         self.loss_type = "ForMaskedLM"
 
         # Initialize weights and apply final processing
@@ -1234,7 +1233,10 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
         loss = None
         if labels is not None:
             loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.vocab_size, num_items_in_batch=num_items_in_batch
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.vocab_size,
+                num_items_in_batch=num_items_in_batch,
             )
 
         return CausalLMOutputWithCrossAttentions(
