@@ -2567,7 +2567,7 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
 
         # If `per_layer_inputs` was provided along with `inputs_embeds` for first forward, drop it for subsequent forwards
         if not is_first_iteration:
-            _ = model_inputs.pop("per_layer_inputs")
+            _ = model_inputs.pop("per_layer_inputs", None)
 
         return model_inputs
 
