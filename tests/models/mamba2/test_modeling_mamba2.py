@@ -476,3 +476,67 @@ class Mamba2IntegrationTest(unittest.TestCase):
                 out_eval = mixer(hidden_states)
 
                 torch.testing.assert_close(out_train, out_eval, rtol=1e-3, atol=1e-3)
+
+    @require_torch_accelerator
+    def test_chunked_prefill_with_cache(self):
+        """Verify chunked prefill (seq_len>1, use_cache=True) matches full sequence and token-by-token."""
+        # Use a realistic config (small enough to run fast, large enough to stress the kernel)
+        config = Mamba2Config(
+            hidden_size=128,
+            num_heads=16,
+            head_dim=8,
+            expand=2,
+            n_groups=4,
+            state_size=16,
+            conv_kernel=4,
+            chunk_size=8,
+            num_hidden_layers=2,
+            vocab_size=2,
+        )
+        if not (is_mamba_2_ssm_available() and is_causal_conv1d_available()):
+            self.skipTest(
+                "Fast path kernels not available, skipping GPU test (the CPU fallback is covered separately)"
+            )
+
+        model = Mamba2Model(config).to(torch_device).eval()
+        batch_size, seq_len = 1, 16
+        inputs_embeds = torch.randn(batch_size, seq_len, config.hidden_size, device=torch_device, dtype=torch.float16)
+
+        with torch.no_grad():
+            # Full sequence (no cache)
+            out_full = model(inputs_embeds=inputs_embeds, use_cache=False).last_hidden_state
+
+            # Chunked prefill (with cache)
+            cache = DynamicCache(config=config)
+            chunk_size = config.chunk_size
+            outputs_chunked = []
+            for start in range(0, seq_len, chunk_size):
+                end = min(start + chunk_size, seq_len)
+                chunk = inputs_embeds[:, start:end, :]
+                out = model(inputs_embeds=chunk, cache_params=cache, use_cache=True)
+                outputs_chunked.append(out.last_hidden_state)
+            out_chunked = torch.cat(outputs_chunked, dim=1)
+
+            # Token-by-token (baseline)
+            cache_tbt = DynamicCache(config=config)
+            outputs_tbt = []
+            for t in range(seq_len):
+                token = inputs_embeds[:, t : t + 1, :]
+                out = model(inputs_embeds=token, cache_params=cache_tbt, use_cache=True)
+                outputs_tbt.append(out.last_hidden_state)
+            out_tbt = torch.cat(outputs_tbt, dim=1)
+
+            # Assertions
+            atol = 1e-5  # float16 tolerance
+            self.assertTrue(
+                torch.allclose(out_full, out_chunked, atol=atol),
+                f"Full vs chunked max diff: {(out_full - out_chunked).abs().max()}",
+            )
+            self.assertTrue(
+                torch.allclose(out_full, out_tbt, atol=atol),
+                f"Full vs tbt max diff: {(out_full - out_tbt).abs().max()}",
+            )
+            self.assertTrue(
+                torch.allclose(out_chunked, out_tbt, atol=atol),
+                f"Chunked vs tbt max diff: {(out_chunked - out_tbt).abs().max()}",
+            )
