@@ -2202,7 +2202,7 @@ class _TestToolCallBase:
     def test_chat_streaming_matches_non_streaming(self):
         """Streaming and non-streaming chat completions yield the same tool call at T=0."""
         msgs = [{"role": "user", "content": "What is the weather in Paris?"}]
-        kwargs = dict(model=self.MODEL, max_tokens=50, temperature=0.0, tools=[self._get_tool_def()])
+        kwargs = {"model": self.MODEL, "max_tokens": 50, "temperature": 0.0, "tools": [self._get_tool_def()]}
 
         ns = self.client.chat.completions.create(messages=msgs, stream=False, **kwargs)
         ns_tc = ns.choices[0].message.tool_calls[0]
@@ -2218,12 +2218,12 @@ class _TestToolCallBase:
 
     def test_responses_streaming_matches_non_streaming(self):
         """Streaming and non-streaming Responses API yield the same tool call at T=0."""
-        kwargs = dict(
-            model=self.MODEL,
-            input="What is the weather in Paris?",
-            max_output_tokens=50,
-            tools=[self._get_tool_def()],
-        )
+        kwargs = {
+            "model": self.MODEL,
+            "input": "What is the weather in Paris?",
+            "max_output_tokens": 50,
+            "tools": [self._get_tool_def()],
+        }
 
         ns = self.client.responses.create(stream=False, **kwargs)
         ns_tc = next(i for i in ns.output if i.type == "function_call")
@@ -2427,7 +2427,7 @@ class _TestReasoningBase:
     def test_chat_streaming_matches_non_streaming(self):
         """Streaming and non-streaming chat completions yield the same content + reasoning at T=0."""
         msgs = [{"role": "user", "content": self.USER_PROMPT}]
-        kwargs = dict(model=self.MODEL, max_tokens=self.MAX_TOKENS, temperature=0.0)
+        kwargs = {"model": self.MODEL, "max_tokens": self.MAX_TOKENS, "temperature": 0.0}
 
         ns_msg = self.client.chat.completions.create(messages=msgs, stream=False, **kwargs).choices[0].message
         chunks = list(self.client.chat.completions.create(messages=msgs, stream=True, **kwargs))
@@ -2439,7 +2439,7 @@ class _TestReasoningBase:
 
     def test_response_streaming_matches_non_streaming(self):
         """Streaming and non-streaming Responses API yield the same content + reasoning at T=0."""
-        kwargs = dict(model=self.MODEL, input=self.USER_PROMPT, max_output_tokens=self.MAX_TOKENS, temperature=0.0)
+        kwargs = {"model": self.MODEL, "input": self.USER_PROMPT, "max_output_tokens": self.MAX_TOKENS, "temperature": 0.0}
 
         ns = self.client.responses.create(stream=False, **kwargs)
         ns_message = next(i for i in ns.output if i.type == "message")
