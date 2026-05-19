@@ -660,8 +660,10 @@ class DiffLlamaModel(DiffLlamaPreTrainedModel):
 @auto_docstring
 class DiffLlamaForCausalLM(DiffLlamaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _tp_plan = {"lm_head": "colwise_allgather"}
+    _sp_plan = {"lm_head": "colwise_loss_parallel"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     def __init__(self, config):
         super().__init__(config)

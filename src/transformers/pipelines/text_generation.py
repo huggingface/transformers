@@ -456,26 +456,17 @@ class TextGenerationPipeline(Pipeline):
             if return_type == ReturnType.TENSORS:
                 record = {"generated_token_ids": sequence}
             elif return_type in {ReturnType.NEW_TEXT, ReturnType.FULL_TEXT}:
-                # Decode text
-                text = self.tokenizer.decode(
-                    sequence,
+                if input_ids is None:
+                    prompt_token_length = 0
+                else:
+                    prompt_token_length = input_ids.shape[-1]
+
+                all_text = self.tokenizer.decode(
+                    sequence[prompt_token_length:],
                     skip_special_tokens=skip_special_tokens,
                     clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                 )
 
-                # Remove PADDING prompt of the sequence if XLNet or Transfo-XL model is used
-                if input_ids is None:
-                    prompt_length = 0
-                else:
-                    prompt_length = len(
-                        self.tokenizer.decode(
-                            input_ids[0],
-                            skip_special_tokens=skip_special_tokens,
-                            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-                        )
-                    )
-
-                all_text = text[prompt_length:]
                 if return_type == ReturnType.FULL_TEXT:
                     if isinstance(prompt_text, str):
                         all_text = prompt_text + all_text

@@ -23,7 +23,6 @@ from torch import nn
 
 from transformers.models.arcee.modeling_arcee import ArceeMLP
 from transformers.models.dinov2.modeling_dinov2 import (
-    Dinov2DropPath,
     Dinov2LayerScale,
     Dinov2PreTrainedModel,
     eager_attention_forward,
@@ -41,6 +40,7 @@ from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..swin.modeling_swin import SwinDropPath
 from .configuration_dinov3_vit import DINOv3ViTConfig
 
 
@@ -296,15 +296,15 @@ class DINOv3ViTLayerScale(Dinov2LayerScale):
     pass
 
 
-class DINOv3ViTDropPath(Dinov2DropPath):
-    pass
-
-
 class DINOv3ViTMLP(ArceeMLP):
     pass
 
 
 class DINOv3ViTGatedMLP(LlamaMLP):
+    pass
+
+
+class Dinov3ViTDropPath(SwinDropPath):
     pass
 
 
@@ -317,7 +317,7 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = DINOv3ViTAttention(config)
         self.layer_scale1 = DINOv3ViTLayerScale(config)
-        self.drop_path = DINOv3ViTDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = Dinov3ViTDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 

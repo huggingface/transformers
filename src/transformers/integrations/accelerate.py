@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING
 from safetensors import safe_open
 from safetensors.torch import save_file
 
+from ..distributed.fsdp import is_fsdp_enabled
 from ..utils import (
     is_accelerate_available,
     is_torch_available,
@@ -34,7 +35,6 @@ from ..utils import (
 )
 from ..utils.quantization_config import QuantizationMethod
 from .deepspeed import is_deepspeed_zero3_enabled
-from .fsdp import is_fsdp_enabled
 
 
 if is_torch_available():
@@ -446,14 +446,15 @@ def accelerate_disk_offload(
     renamed) will be mapped to where they already reside on disk. Otherwise, the parameters will be resaved inside
     `disk_offload_folder` during loading.
     """
-    from ..core_model_loading import rename_source_key
+    from ..core_model_loading import WeightRenaming, rename_source_key
 
     if disk_offload_folder is not None:
         os.makedirs(disk_offload_folder, exist_ok=True)
     is_offloaded_safetensors = checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors")
 
-    transforms = weight_mapping if weight_mapping is not None else []
-
+    renamings = []
+    if weight_mapping is not None:
+        renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
     # In this case, the offload index is simply the existing safetensors (except if using custom weight loading
     # Operation, e.g. the MoE models, where we need to resave the weights that were changed at loading time)
     if is_offloaded_safetensors:
@@ -468,7 +469,7 @@ def accelerate_disk_offload(
 
         # Update the weight names according to the `weight_mapping`
         weight_renaming_map = {
-            rename_source_key(k, transforms, prefix=model.base_model_prefix, meta_state_dict=meta_state_dict)[0]: k
+            rename_source_key(k, renamings, [], prefix=model.base_model_prefix, meta_state_dict=meta_state_dict)[0]: k
             for k in weight_map
         }
 

@@ -1341,7 +1341,9 @@ class Sam2VideoMemoryEncoder(nn.Module):
         self.mask_downsampler = Sam2VideoMaskDownSampler(config)
         self.feature_projection = nn.Conv2d(hidden_size, hidden_size, kernel_size=1)
         self.memory_fuser = Sam2VideoMemoryFuser(config)
-        self.position_encoding = Sam2VideoPositionEmbeddingSine(num_pos_feats=output_channels // 2, normalize=True)
+        self.position_encoding = Sam2VideoPositionEmbeddingSine(
+            num_position_features=output_channels // 2, normalize=True
+        )
         self.projection = nn.Conv2d(hidden_size, output_channels, kernel_size=1)
 
     def forward(
@@ -2090,7 +2092,7 @@ class Sam2VideoModel(Sam2Model):
 
         # Reshape from (Batch, H*W, Channels) to (Batch, Channels, Height, Width)
         conditioned_feature_map = (
-            conditioned_feature_map_flat.squeeze(1).permute(0, 2, 1).view(batch_size, num_channels, height, width)
+            conditioned_feature_map_flat.squeeze(1).transpose(1, 2).view(batch_size, num_channels, height, width)
         )
         return conditioned_feature_map
 
@@ -2261,6 +2263,7 @@ class Sam2VideoModel(Sam2Model):
             ].expand(*maskmem_features.shape)
 
         # convert to bfloat16 to save memory, and for consistency with the original implementation
+        # flatten from BxCxHxW to HWxBxC
         maskmem_features = maskmem_features.to(torch.bfloat16).flatten(2).permute(2, 0, 1)
         maskmem_pos_enc = maskmem_pos_enc.to(pred_masks_high_res.dtype).flatten(2).permute(2, 0, 1)
 

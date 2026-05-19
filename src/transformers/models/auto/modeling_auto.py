@@ -225,6 +225,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("hiera", "HieraModel"),
         ("higgs_audio_v2", "HiggsAudioV2ForConditionalGeneration"),
         ("higgs_audio_v2_tokenizer", "HiggsAudioV2TokenizerModel"),
+        ("hrm_text", "HrmTextModel"),
         ("hubert", "HubertModel"),
         ("hunyuan_v1_dense", "HunYuanDenseV1Model"),
         ("hunyuan_v1_moe", "HunYuanMoEV1Model"),
@@ -344,6 +345,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("paligemma", "PaliGemmaModel"),
         ("parakeet_ctc", "ParakeetForCTC"),
         ("parakeet_encoder", "ParakeetEncoder"),
+        ("parakeet_tdt", "ParakeetForTDT"),
         ("patchtsmixer", "PatchTSMixerModel"),
         ("patchtst", "PatchTSTModel"),
         ("pe_audio", "PeAudioModel"),
@@ -693,6 +695,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("granitemoehybrid", "GraniteMoeHybridForCausalLM"),
         ("granitemoeshared", "GraniteMoeSharedForCausalLM"),
         ("helium", "HeliumForCausalLM"),
+        ("hrm_text", "HrmTextForCausalLM"),
         ("hunyuan_v1_dense", "HunYuanDenseV1ForCausalLM"),
         ("hunyuan_v1_moe", "HunYuanMoEV1ForCausalLM"),
         ("hy_v3", "HYV3ForCausalLM"),
@@ -1354,7 +1357,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("qwen2_moe", "Qwen2MoeForSequenceClassification"),
         ("qwen3", "Qwen3ForSequenceClassification"),
         ("qwen3_5", "Qwen3_5ForSequenceClassification"),
-        ("qwen3_5_text", "Qwen3_5ForSequenceClassification"),
+        ("qwen3_5_text", "Qwen3_5TextForSequenceClassification"),
         ("qwen3_moe", "Qwen3MoeForSequenceClassification"),
         ("qwen3_next", "Qwen3NextForSequenceClassification"),
         ("reformer", "ReformerForSequenceClassification"),
@@ -1564,6 +1567,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("qwen2", "Qwen2ForTokenClassification"),
         ("qwen2_moe", "Qwen2MoeForTokenClassification"),
         ("qwen3", "Qwen3ForTokenClassification"),
+        ("qwen3_5", "Qwen3_5ForTokenClassification"),
         ("qwen3_moe", "Qwen3MoeForTokenClassification"),
         ("qwen3_next", "Qwen3NextForTokenClassification"),
         ("rembert", "RemBertForTokenClassification"),
@@ -1675,6 +1679,14 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
         ("wavlm", "WavLMForCTC"),
     ]
 )
+
+MODEL_FOR_TDT_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Token-and-Duration Transducer (TDT) mapping.
+        ("parakeet_tdt", "ParakeetForTDT"),
+    ]
+)
+
 
 MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
@@ -1948,6 +1960,7 @@ MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES
 )
 MODEL_FOR_CTC_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_CTC_MAPPING_NAMES)
+MODEL_FOR_TDT_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_TDT_MAPPING_NAMES)
 MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES)
 MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES
@@ -2271,6 +2284,13 @@ class AutoModelForCTC(_BaseAutoModelClass):
 AutoModelForCTC = auto_class_update(AutoModelForCTC, head_doc="connectionist temporal classification")
 
 
+class AutoModelForTDT(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_TDT_MAPPING
+
+
+AutoModelForTDT = auto_class_update(AutoModelForTDT, head_doc="token-and-duration transducer")
+
+
 class AutoModelForSpeechSeq2Seq(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING
 
@@ -2333,6 +2353,7 @@ __all__ = [
     "MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING",
     "MODEL_FOR_CAUSAL_LM_MAPPING",
     "MODEL_FOR_CTC_MAPPING",
+    "MODEL_FOR_TDT_MAPPING",
     "MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING",
     "MODEL_FOR_DEPTH_ESTIMATION_MAPPING",
     "MODEL_FOR_TEXT_RECOGNITION_MAPPING",
@@ -2381,6 +2402,7 @@ __all__ = [
     "AutoModelForAudioXVector",
     "AutoModelForCausalLM",
     "AutoModelForCTC",
+    "AutoModelForTDT",
     "AutoModelForDepthEstimation",
     "AutoModelForTextRecognition",
     "AutoModelForTableRecognition",

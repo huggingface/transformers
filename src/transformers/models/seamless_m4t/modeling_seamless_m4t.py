@@ -24,9 +24,9 @@ from torch.nn import CrossEntropyLoss
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
+from ...distributed.fsdp import is_fsdp_managed_module
 from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
-from ...integrations.fsdp import is_fsdp_managed_module
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -38,7 +38,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_seamless_m4t import SeamlessM4TConfig
 
 
@@ -2250,7 +2249,6 @@ class SeamlessM4THifiGan(nn.Module):
 
         self.conv_post = nn.Conv1d(channels, 1, kernel_size=7, stride=1, padding=3)
 
-    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     def forward(self, inputs_embeds: torch.FloatTensor) -> torch.FloatTensor:
         r"""
         Converts a log-mel spectrogram into a speech waveform. Passing a batch of log-mel spectrograms returns a batch
