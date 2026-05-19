@@ -32,7 +32,6 @@ if is_torch_available() and is_torch_greater_or_equal("2.5"):
         PrepareModuleInput,
         RowwiseParallel,
         SequenceParallel,
-        parallelize_module,
     )
     from torch.distributed.tensor.parallel.style import ParallelStyle
     from torch.distributed.tensor.placement_types import _StridedShard
@@ -462,11 +461,12 @@ ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 
 
 def apply_tensor_parallel(model, tp_mesh, tp_plan):
-    """Apply tensor parallelism using PyTorch's parallelize_module.
+    """Apply tensor parallelism by calling each style's ``_apply`` on the
+    matching submodules.
 
-    Converts the wildcard tp_plan from model config into a concrete plan
-    for ``parallelize_module``. Plan values are string names looked up in
-    ``ALL_PARALLEL_STYLES``.
+    Walks ``model.named_modules()``, resolves each name against the wildcard
+    ``tp_plan`` from the model config, and applies the corresponding style
+    from ``ALL_PARALLEL_STYLES`` (looked up by string name) directly.
     """
     distributed_config = getattr(model.config, "distributed_config", None)
     sp_requested = getattr(distributed_config, "enable_sequence_parallel", False)
@@ -488,25 +488,11 @@ def apply_tensor_parallel(model, tp_mesh, tp_plan):
         if not tied_source_in_plan:
             tp_plan.pop("lm_head", None)
 
-    parallelize_plan = {}
-
-    for name, _ in model.named_modules():
+    for name, submodule in model.named_modules():
         style_value = _get_parameter_tp_plan(parameter_name=name, tp_plan=tp_plan, is_weight=False)
         if style_value is None:
             continue
-
-        if not isinstance(style_value, str):
-            raise TypeError(
-                f"Unsupported plan value for '{name}': {style_value!r} (type {type(style_value).__name__}). "
-                f"TP plan values must be strings looked up in ALL_PARALLEL_STYLES."
-            )
-        if style_value not in ALL_PARALLEL_STYLES:
-            raise ValueError(
-                f"Unknown TP style {style_value!r} for module {name!r}. Valid styles: {sorted(ALL_PARALLEL_STYLES)}"
-            )
-        parallelize_plan[name] = ALL_PARALLEL_STYLES[style_value]
-
-    parallelize_module(model, tp_mesh, parallelize_plan)
+        ALL_PARALLEL_STYLES[style_value]._apply(submodule, tp_mesh)
 
     # Under SP, inputs_embeds is sequence-sharded after embed_tokens, so
     # auto-generated position_ids would use the wrong (local) seq_len.
