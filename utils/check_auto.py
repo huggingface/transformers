@@ -25,7 +25,9 @@ from typing import Any
 from sort_auto_mappings import sort_auto_mapping
 
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING_NAMES as COMPLETE_CONFIG_MAPPING_NAMES
+from transformers.models.auto.feature_extraction_auto import MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES
 from transformers.models.auto.image_processing_auto import MISSING_IMAGE_PROCESSOR_MAPPING_NAMES
+from transformers.models.auto.processing_auto import MISSING_PROCESSOR_MAPPING_NAMES
 from transformers.models.auto.video_processing_auto import MISSING_VIDEO_PROCESSOR_MAPPING_NAMES
 
 
@@ -180,6 +182,56 @@ def build_video_processor_mapping(
     return processor_mapping
 
 
+def build_feature_extractor_mapping(
+    config_mapping: dict[str, str],
+) -> OrderedDict[str, dict[str, str | None]]:
+    feature_extractor_mapping = OrderedDict()
+    for model_type in config_mapping:
+        module = model_type.replace("-", "_")
+        feature_extractor_name = None
+
+        if os.path.exists(f"src/transformers/models/{module}/feature_extraction_{module}.py"):
+            with open(f"src/transformers/models/{module}/feature_extraction_{module}.py", "r") as f:
+                content = f.read()
+
+            tree = ast.parse(content)
+            for node in tree.body:
+                if isinstance(node, ast.ClassDef) and any(
+                    base.id == "SequenceFeatureExtractor" for base in node.bases if isinstance(base, ast.Name)
+                ):
+                    feature_extractor_name = node.name
+
+        if feature_extractor_name is not None:
+            feature_extractor_mapping[model_type] = feature_extractor_name
+
+    return feature_extractor_mapping
+
+
+def build_processor_mapping(
+    config_mapping: dict[str, str],
+) -> OrderedDict[str, dict[str, str | None]]:
+    processor_mapping = OrderedDict()
+    for model_type in config_mapping:
+        module = model_type.replace("-", "_")
+        processor_name = None
+
+        if os.path.exists(f"src/transformers/models/{module}/processing_{module}.py"):
+            with open(f"src/transformers/models/{module}/processing_{module}.py", "r") as f:
+                content = f.read()
+
+            tree = ast.parse(content)
+            for node in tree.body:
+                if isinstance(node, ast.ClassDef) and any(
+                    base.id == "ProcessorMixin" for base in node.bases if isinstance(base, ast.Name)
+                ):
+                    processor_name = node.name
+
+        if processor_name is not None:
+            processor_mapping[model_type] = processor_name
+
+    return processor_mapping
+
+
 def run_ruff_and_sort(file: str):
     """Run `ruff` linter and formatter on `file`, as in `make style` and sort the mappings order"""
     sort_auto_mapping(file, overwrite=True)
@@ -236,10 +288,14 @@ def main(overwrite: bool):
     config_mapping, special_mapping = build_config_mapping_names()
     image_processor_mapping = build_image_processor_mapping(config_mapping=config_mapping)
     video_processor_mapping = build_video_processor_mapping(config_mapping=config_mapping)
+    processor_mapping = build_processor_mapping(config_mapping=config_mapping)
+    feature_extractor_mapping = build_feature_extractor_mapping(config_mapping=config_mapping)
 
     # Make sure users aren't duplicating the same keys manually
     check_duplicates(MISSING_IMAGE_PROCESSOR_MAPPING_NAMES, image_processor_mapping)
     check_duplicates(MISSING_VIDEO_PROCESSOR_MAPPING_NAMES, video_processor_mapping)
+    check_duplicates(MISSING_PROCESSOR_MAPPING_NAMES, processor_mapping)
+    check_duplicates(MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES, feature_extractor_mapping)
 
     # The config mapping has to be one-to-one for correct `AutoConfig.from_pretrained()` because `LazyMapping`
     # reverts keys/values and creates a dict from it. Duplicate values will be overwritten by whatever comes at last
@@ -266,6 +322,8 @@ def main(overwrite: bool):
         "SPECIAL_MODEL_TYPE_TO_MODULE_NAME": special_mapping,
         "IMAGE_PROCESSOR_MAPPING_NAMES": image_processor_mapping,
         "VIDEO_PROCESSOR_MAPPING_NAMES": video_processor_mapping,
+        "PROCESSOR_MAPPING_NAMES": processor_mapping,
+        "FEATURE_EXTRACTOR_MAPPING_NAMES": feature_extractor_mapping,
     }
     new_content = AUTO_GENERATED_HADER + "\nfrom collections import OrderedDict\n\n"
     for k, v in new_mappings.items():
