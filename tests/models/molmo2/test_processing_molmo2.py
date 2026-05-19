@@ -82,27 +82,68 @@ class Molmo2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             ),
         }
 
-    # Molmo2 concatenates image crops and video patches along dim 0, so
-    # pixel_values shape is [num_total_crops, ...] not [batch_size, ...].
-    # The base chat-template tests assert len(pixel_values) == batch_size.
-    # Video tests also need fps metadata for timestamp computation.
-    def test_apply_chat_template_decoded_video_0(self):
-        pass
-
-    def test_apply_chat_template_image_0(self):
-        pass
-
-    def test_apply_chat_template_image_1(self):
-        pass
-
-    def test_apply_chat_template_video_0(self):
-        pass
-
-    def test_apply_chat_template_video_1(self):
-        pass
-
     def test_apply_chat_template_video_frame_sampling(self):
-        pass
+        processor = self.get_processor()
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        video_url = "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"
+        messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "video", "url": video_url},
+                        {"type": "text", "text": "What is shown in this video?"},
+                    ],
+                },
+            ]
+        ]
+
+        # Default `max_fps=2` caps `num_frames=3` for the ~1s tiny_video to a single frame.
+        out_capped = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            processor_kwargs={"num_frames": 3, "fps": None},
+        )
+        self.assertIn(self.videos_input_name, out_capped)
+        self.assertEqual(len(out_capped[self.videos_input_name]), 1)
+        self.assertEqual(len(out_capped[self.videos_input_name][0]), 1)
+
+        # Raising the cap above the video's native fps restores the requested `num_frames`.
+        out_uncapped = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            processor_kwargs={"num_frames": 3, "fps": None, "max_fps": 1000},
+        )
+        self.assertEqual(len(out_uncapped[self.videos_input_name][0]), 3)
+
+        # `fps` mode bypasses the cap entirely (different code path in sample_frames).
+        out_fps = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            processor_kwargs={"fps": 10, "num_frames": None},
+        )
+        self.assertGreaterEqual(len(out_fps[self.videos_input_name][0]), 1)
+
+        # `fps` and `num_frames` are mutually exclusive.
+        with self.assertRaises(ValueError):
+            processor.apply_chat_template(
+                messages,
+                add_generation_prompt=True,
+                tokenize=True,
+                return_dict=True,
+                processor_kwargs={"fps": 10, "num_frames": 3},
+            )
 
     def test_model_input_names(self):
         processor = self.get_processor()

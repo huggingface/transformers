@@ -116,9 +116,16 @@ class Molmo2VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
     def video_processor_dict(self):
         return self.video_processor_tester.prepare_video_processor_dict()
 
-    # Molmo2 video processor uses height/width size dict, not shortest_edge/crop_size
     def test_video_processor_from_dict_with_kwargs(self):
-        pass
+        video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict)
+        self.assertEqual(video_processor.size, {"height": 378, "width": 378})
+        self.assertEqual(video_processor.patch_size, 14)
+
+        video_processor = self.fast_video_processing_class.from_dict(
+            self.video_processor_dict, size={"height": 252, "width": 252}, patch_size=18
+        )
+        self.assertEqual(video_processor.size, {"height": 252, "width": 252})
+        self.assertEqual(video_processor.patch_size, 18)
 
     def test_video_processor_properties(self):
         video_processor = self.video_processing_class(**self.video_processor_dict)
