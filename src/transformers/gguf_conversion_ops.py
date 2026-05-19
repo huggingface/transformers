@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from __future__ import annotations
-from transformers import PreTrainedConfig
 
 from typing import TYPE_CHECKING
 
@@ -237,7 +236,7 @@ class ReversePermuteAttnQ(ConversionOps):
         input_dict: dict[str, torch.Tensor],
         source_patterns: list[str],
         target_patterns: list[str],
-        config=PreTrainedConfig,
+        config=None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         if not hasattr(config, "num_attention_heads"):
@@ -266,7 +265,7 @@ class PermuteAttnQ(ConversionOps):
         input_dict: dict[str, torch.Tensor],
         source_patterns: list[str],
         target_patterns: list[str],
-        config=PreTrainedConfig,
+        config=None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         if not hasattr(config, "num_attention_heads"):
@@ -294,7 +293,7 @@ class ReversePermuteAttnK(ConversionOps):
         input_dict: dict[str, torch.Tensor],
         source_patterns: list[str],
         target_patterns: list[str],
-        config=PreTrainedConfig,
+        config=None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         if not hasattr(config, "num_attention_heads"):
@@ -323,7 +322,7 @@ class PermuteAttnK(ConversionOps):
         input_dict: dict[str, torch.Tensor],
         source_patterns: list[str],
         target_patterns: list[str],
-        config=PreTrainedConfig,
+        config=None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         if not hasattr(config, "num_attention_heads"):
@@ -352,7 +351,7 @@ class BloomReshapeQKVWeight(ConversionOps):
         input_dict: dict[str, torch.Tensor],
         source_patterns: list[str],
         target_patterns: list[str],
-        config=PreTrainedConfig,
+        config=None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         import torch
@@ -383,7 +382,7 @@ class BloomReshapeQKVBias(ConversionOps):
         input_dict: dict[str, torch.Tensor],
         source_patterns: list[str],
         target_patterns: list[str],
-        config=PreTrainedConfig,
+        config=None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         import torch
