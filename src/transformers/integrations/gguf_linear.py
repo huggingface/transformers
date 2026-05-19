@@ -54,9 +54,11 @@ class GgufLinear(nn.Module):
         self.in_features = in_features
         self.out_features = out_features
         self.quant_type = quant_type
-        nblocks_per_row = in_features // block_elems
-        nbytes = out_features * nblocks_per_row * block_bytes
-        self.register_buffer("weight", torch.empty(nbytes, dtype=torch.uint8), persistent=True)
+        bytes_per_row = (in_features // block_elems) * block_bytes
+        # 2D `(out_features, bytes_per_row)` — matches the source byte shape
+        # coming out of the GGUF reader, so the standard loader assigns it in
+        # without any explicit reshape / quant op in the converter chain.
+        self.register_buffer("weight", torch.empty(out_features, bytes_per_row, dtype=torch.uint8), persistent=True)
         if bias:
             self.bias = nn.Parameter(torch.zeros(out_features, dtype=torch.float32), requires_grad=False)
         else:
@@ -91,7 +93,9 @@ class GgufLinear(nn.Module):
         batch_shape = x.shape[:-1]
         x_flat = x.reshape(-1, self.in_features).contiguous().to(torch.float32)
         N = x_flat.shape[0]
-        qw = self.weight
+        # Buffer is 2D `(out, bytes_per_row)` to match the GGUF source layout;
+        # kernels want a flat byte array, so view here at the call boundary.
+        qw = self.weight.view(-1)
         # Pick the kernel by batch size: matvec when N==1, matmul otherwise. The
         # matmul kernel requires N % 32 == 0; non-aligned batches loop per-row
         # over matvec (rare in practice — most call sites land aligned).

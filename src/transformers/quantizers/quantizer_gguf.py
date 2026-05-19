@@ -184,10 +184,13 @@ class GGUFQuantizer(HfQuantizer):
 
     def postprocess_model(self, model, **kwargs):
         """Run the base post-process, then apply good generation defaults when
-        the GgufLinear swap is in effect. Byte routing for both GgufLinear and
-        GgufExperts happens through the rename pipeline (target-aware
-        GGUFDequantize) — no post-load byte copy. Kernel ops are resolved
-        eagerly in each module's __init__ (no post-load bind step)."""
+        the GgufLinear swap is in effect. On the swap path raw uint8 source
+        bytes flow straight into the GgufLinear / GgufExperts buffers via the
+        standard loader — `update_weight_conversions` returns the rename /
+        merge pipeline unchanged (no dequant op injected). On the dequant path
+        `GGUFDequantize` heads each converter and produces fp tensors before
+        any merge / permute. Kernel ops are resolved in each module's
+        `__init__` (no post-load bind step)."""
         super().postprocess_model(model, **kwargs)
         if self.linear_mode:
             self._apply_generation_defaults(model)
