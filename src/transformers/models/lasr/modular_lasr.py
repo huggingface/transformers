@@ -21,12 +21,13 @@ from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, process
 from tokenizers.models import Unigram
 from torch import nn
 
+from ...audio_utils import AudioInput, make_list_of_audio
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...tokenization_utils_tokenizers import TokenizersBackend
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding, apply_rotary_pos_emb, eager_attention_forward
@@ -34,11 +35,14 @@ from ..parakeet.configuration_parakeet import ParakeetCTCConfig, ParakeetEncoder
 from ..parakeet.modeling_parakeet import (
     ParakeetEncoderBlock,
     ParakeetEncoderConvolutionModule,
+    ParakeetEncoderModelOutput,
     ParakeetForCTC,
     ParakeetPreTrainedModel,
 )
-from ..parakeet.processing_parakeet import ParakeetProcessor
 from ..t5.tokenization_t5 import T5Tokenizer
+
+
+logger = logging.get_logger(__name__)
 
 
 class LasrTokenizer(T5Tokenizer, TokenizersBackend):
@@ -144,8 +148,74 @@ class LasrTokenizer(T5Tokenizer, TokenizersBackend):
         )
 
 
-class LasrProcessor(ParakeetProcessor):
-    pass
+class LasrProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "audio_kwargs": {
+            "sampling_rate": 16000,
+            "padding": "longest",
+            "return_attention_mask": True,
+        },
+        "text_kwargs": {
+            "padding": True,
+            "padding_side": "right",
+            "add_special_tokens": False,
+        },
+        "common_kwargs": {"return_tensors": "pt"},
+    }
+
+
+@auto_docstring
+class LasrProcessor(ProcessorMixin):
+    def __init__(self, feature_extractor, tokenizer):
+        super().__init__(feature_extractor, tokenizer)
+
+    @auto_docstring
+    def __call__(
+        self,
+        audio: AudioInput,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        sampling_rate: int | None = None,
+        **kwargs: Unpack[LasrProcessorKwargs],
+    ):
+        r"""
+        sampling_rate (`int`, *optional*):
+            The sampling rate of the input audio in Hz. This should match the sampling rate expected by the feature
+            extractor (defaults to 16000 Hz). If provided, it will be validated against the processor's expected
+            sampling rate, and an error will be raised if they don't match. If not provided, a warning will be
+            issued and the default sampling rate will be assumed.
+        """
+        audio = make_list_of_audio(audio)
+
+        output_kwargs = self._merge_kwargs(
+            LasrProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+
+        if sampling_rate is None:
+            logger.warning_once(
+                f"You've provided audio without specifying the sampling rate. It will be assumed to be {output_kwargs['audio_kwargs']['sampling_rate']}, which can result in silent errors."
+            )
+        elif sampling_rate != output_kwargs["audio_kwargs"]["sampling_rate"]:
+            raise ValueError(
+                f"The sampling rate of the audio ({sampling_rate}) does not match the sampling rate of the processor ({output_kwargs['audio_kwargs']['sampling_rate']}). Please provide resampled the audio to the expected sampling rate."
+            )
+
+        if audio is not None:
+            inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
+        if text is not None:
+            encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
+
+        if text is None:
+            return inputs
+        else:
+            inputs["labels"] = encodings["input_ids"]
+            return inputs
+
+    @property
+    def model_input_names(self):
+        feature_extractor_input_names = self.feature_extractor.model_input_names
+        return feature_extractor_input_names + ["labels"]
 
 
 @auto_docstring(checkpoint="google/medasr")
@@ -172,18 +242,18 @@ class LasrEncoderConfig(ParakeetEncoderConfig):
         The momentum for the batch normalization layers
 
     Example:
-        ```python
-        >>> from transformers import LasrEncoderModel, LasrEncoderConfig
+    ```python
+    >>> from transformers import LasrEncoderModel, LasrEncoderConfig
 
-        >>> # Initializing a `LasrEncoder` configuration
-        >>> configuration = LasrEncoderConfig()
+    >>> # Initializing a `LasrEncoder` configuration
+    >>> configuration = LasrEncoderConfig()
 
-        >>> # Initializing a model from the configuration
-        >>> model = LasrEncoderModel(configuration)
+    >>> # Initializing a model from the configuration
+    >>> model = LasrEncoderModel(configuration)
 
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
-        ```
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
 
     This configuration class is based on the LasrEncoder architecture from Google Health AI. You can find more details
     and pre-trained models at [google/medasr](https://huggingface.co/google/medasr).
@@ -221,15 +291,15 @@ class LasrCTCConfig(ParakeetCTCConfig):
         of [`LasrForCTC`].
 
     Example:
-        ```python
-        >>> from transformers import LasrForCTC, LasrCTCConfig
-        >>> # Initializing a Lasr configuration
-        >>> configuration = LasrCTCConfig()
-        >>> # Initializing a model from the configuration
-        >>> model = LasrForCTC(configuration)
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
-        ```
+    ```python
+    >>> from transformers import LasrForCTC, LasrCTCConfig
+    >>> # Initializing a Lasr configuration
+    >>> configuration = LasrCTCConfig()
+    >>> # Initializing a model from the configuration
+    >>> model = LasrForCTC(configuration)
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
     This configuration class is based on the Lasr CTC architecture from Google Health AI. You can find more details
     and pre-trained models at [google/medasr](https://huggingface.co/google/medasr).
     """
@@ -390,6 +460,10 @@ class LasrPreTrainedModel(ParakeetPreTrainedModel):
         return input_lengths
 
 
+class LasrEncoderModelOutput(ParakeetEncoderModelOutput):
+    pass
+
+
 @auto_docstring(
     custom_intro="""
     The LasrEncoder model, based on the Conformer architecture](https://arxiv.org/abs/2005.08100).
@@ -424,16 +498,20 @@ class LasrEncoder(LasrPreTrainedModel):
         self,
         input_features: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
+        output_attention_mask: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput:
+    ) -> LasrEncoderModelOutput:
         r"""
+        output_attention_mask (`bool`, *optional*):
+            Whether to return the output attention mask.
+
         Example:
 
         ```python
         >>> from transformers import AutoProcessor, LasrEncoder
         >>> from datasets import load_dataset, Audio
 
-        >>> model_id = TODO
+        >>> model_id = "google/medasr"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> encoder = ParakeetEncoder.from_pretrained(model_id)
 
@@ -456,8 +534,10 @@ class LasrEncoder(LasrPreTrainedModel):
         cos = nn.functional.dropout(cos, p=self.dropout_positions, training=self.training)
         sin = nn.functional.dropout(sin, p=self.dropout_positions, training=self.training)
 
+        output_mask = None
         if attention_mask is not None:
-            attention_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
+            output_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
+            attention_mask = output_mask
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
@@ -483,7 +563,10 @@ class LasrEncoder(LasrPreTrainedModel):
 
         hidden_states = self.out_norm(hidden_states)
 
-        return BaseModelOutput(last_hidden_state=hidden_states)
+        return LasrEncoderModelOutput(
+            last_hidden_state=hidden_states,
+            attention_mask=output_mask.int() if output_attention_mask and output_mask is not None else None,
+        )
 
 
 class LasrForCTC(ParakeetForCTC):
@@ -495,7 +578,7 @@ class LasrForCTC(ParakeetForCTC):
         >>> from transformers import AutoProcessor, LasrForCTC
         >>> from datasets import load_dataset, Audio
 
-        >>> model_id = TODO
+        >>> model_id = "google/medasr"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = LasrForCTC.from_pretrained(model_id)
 
