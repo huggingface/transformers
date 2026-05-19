@@ -23,7 +23,7 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import (
     auto_docstring,
     logging,
@@ -54,34 +54,37 @@ def positional_encoding(position, d_model_size, dtype):
     return pos_encoding
 
 
-def scaled_dot_product_attention(q, k, v, mask, attention_mask=None):
-    # calculate attention
-    matmul_qk = torch.matmul(q, k.permute(0, 1, 3, 2))
+def eager_attention_forward(module, query, key, value, attention_mask=None, causal_mask=None, scaling=None, **kwargs):
+    attn_weights = torch.matmul(query, key.transpose(-1, -2))
 
-    dk = k.shape[-1]
-    scaled_attention_logits = matmul_qk / np.sqrt(dk)
+    if scaling is None:
+        attn_weights = attn_weights / np.sqrt(key.shape[-1])
+    else:
+        attn_weights = attn_weights * scaling
 
-    if mask is not None:
-        nd, ns = scaled_attention_logits.size(-2), scaled_attention_logits.size(-1)
-        scaled_attention_logits += mask[ns - nd : ns, :ns] * -1e4
+    if causal_mask is not None:
+        nd, ns = attn_weights.size(-2), attn_weights.size(-1)
+        causal_mask = causal_mask[ns - nd : ns, :ns].to(dtype=query.dtype)
+        attn_weights += causal_mask * -1e4
 
     if attention_mask is not None:
-        # Apply the attention mask
-        scaled_attention_logits = scaled_attention_logits + attention_mask
+        attn_weights = attn_weights + attention_mask
 
-    attention_weights = torch.softmax(scaled_attention_logits, dim=-1)
+    attention_weights = torch.softmax(attn_weights, dim=-1)
+    attn_output = torch.matmul(attention_weights, value)
+    attn_output = attn_output.transpose(1, 2)
 
-    output = torch.matmul(attention_weights, v)
-
-    return output, attention_weights
+    return attn_output, attention_weights
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, d_model_size, num_heads, layer_idx=None):
+    def __init__(self, d_model_size, num_heads, layer_idx=None, config=None):
         super().__init__()
+        self.config = config
         self.num_heads = num_heads
         self.d_model_size = d_model_size
         self.layer_idx = layer_idx
+        self.is_causal = True
 
         self.depth = int(d_model_size / self.num_heads)
 
@@ -120,9 +123,28 @@ class MultiHeadAttention(nn.Module):
         if layer_past is not None:
             k, v = layer_past.update(k, v, self.layer_idx)
 
-        output = scaled_dot_product_attention(q, k, v, mask, attention_mask)
-        scaled_attention = output[0].permute([0, 2, 1, 3])
-        attn = output[1]
+        attn_implementation = getattr(self.config, "_attn_implementation", "eager")
+        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(attn_implementation, eager_attention_forward)
+        if attn_implementation == "eager":
+            causal_mask = mask
+        elif mask is not None:
+            nd, ns = q.size(-2), k.size(-2)
+            causal_mask = mask[ns - nd : ns, :ns].to(dtype=q.dtype) * -1e4
+            attention_mask = causal_mask[None, None, :, :] if attention_mask is None else attention_mask + causal_mask
+        else:
+            causal_mask = None
+
+        scaled_attention, attn = attention_interface(
+            self,
+            q,
+            k,
+            v,
+            attention_mask,
+            causal_mask=causal_mask,
+            scaling=None if attn_implementation == "eager" else self.depth**-0.5,
+            output_attentions=output_attentions,
+            **kwargs,
+        )
         original_size_attention = scaled_attention.reshape(batch_size, -1, self.d_model_size)
         output = self.dense(original_size_attention)
         return output, attn
@@ -133,10 +155,10 @@ def point_wise_feed_forward_network(d_model_size, dff):
 
 
 class EncoderLayer(nn.Module):
-    def __init__(self, d_model_size, num_heads, dff, rate=0.1, layer_idx=None):
+    def __init__(self, d_model_size, num_heads, dff, rate=0.1, layer_idx=None, config=None):
         super().__init__()
 
-        self.multi_head_attention = MultiHeadAttention(d_model_size, num_heads, layer_idx=layer_idx)
+        self.multi_head_attention = MultiHeadAttention(d_model_size, num_heads, layer_idx=layer_idx, config=config)
         self.ffn = point_wise_feed_forward_network(d_model_size, dff)
 
         self.layernorm1 = nn.LayerNorm(d_model_size, eps=1e-6)
@@ -183,6 +205,7 @@ class EncoderLayer(nn.Module):
 class CTRLPreTrainedModel(PreTrainedModel):
     config: CTRLConfig
     base_model_prefix = "transformer"
+    _supports_sdpa = True
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -205,7 +228,7 @@ class CTRLModel(CTRLPreTrainedModel):
         self.dropout = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList(
             [
-                EncoderLayer(config.n_embd, config.n_head, config.dff, config.resid_pdrop, layer_idx=i)
+                EncoderLayer(config.n_embd, config.n_head, config.dff, config.resid_pdrop, layer_idx=i, config=config)
                 for i in range(config.n_layer)
             ]
         )
@@ -324,8 +347,8 @@ class CTRLModel(CTRLPreTrainedModel):
 
         inputs_embeds *= np.sqrt(self.d_model_size)
 
-        # `self.pos_encoding` won't be sent to the correct device along the model, so we do it manually.
-        self.pos_encoding = self.pos_encoding.to(device)
+        # `self.pos_encoding` won't be sent to the correct device and dtype along the model, so we do it manually.
+        self.pos_encoding = self.pos_encoding.to(device=device, dtype=inputs_embeds.dtype)
         pos_embeds = self.pos_encoding[position_ids, :]
 
         hidden_states = inputs_embeds + pos_embeds + token_type_embeds
