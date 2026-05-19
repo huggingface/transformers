@@ -69,8 +69,6 @@ class VideoPrismVisionConfig(VivitConfig):
 
     model_type = "videoprism_vision_model"
     base_config_key = "vision_config"
-    pooler_act = AttributeError()
-    pooler_output_size = AttributeError()
     image_size: int | list[int] | tuple[int, int] = 288
     num_frames: int = 16
     tubelet_size: list[int] | tuple[int, ...] = (1, 18, 18)
@@ -88,6 +86,9 @@ class VideoPrismVisionConfig(VivitConfig):
     attn_logit_softcapping: float = 50.0
     num_auxiliary_layers: int = 2
     apply_l2norm: bool = True
+    num_hidden_layers = AttributeError()
+    pooler_act = AttributeError()
+    pooler_output_size = AttributeError()
 
     def __post_init__(self, **kwargs):
         raise AttributeError("Not used here")
@@ -121,6 +122,7 @@ class VideoPrismTextConfig(SiglipTextConfig):
     attn_logit_softcapping: float = 50.0
     attention_dropout = AttributeError()
     projection_size = AttributeError()
+    num_hidden_layers = AttributeError()
 
     def __post_init__(self, **kwargs):
         raise AttributeError("Not used here")

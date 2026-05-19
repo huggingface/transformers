@@ -54,7 +54,6 @@ class VideoPrismVisionConfig(PreTrainedConfig):
     tubelet_size: list[int] | tuple[int, ...] = (1, 18, 18)
     num_channels: int = 3
     hidden_size: int = 768
-    num_hidden_layers: int = 12
     num_attention_heads: int = 12
     intermediate_size: int = 3072
     hidden_act: str = "gelu_python"
@@ -89,7 +88,6 @@ class VideoPrismTextConfig(PreTrainedConfig):
     vocab_size: int = 32000
     hidden_size: int = 768
     intermediate_size: int = 3072
-    num_hidden_layers: int = 12
     num_attention_heads: int = 12
     max_position_embeddings: int = 64
     hidden_act: str = "relu"
