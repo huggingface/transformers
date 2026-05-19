@@ -92,6 +92,7 @@ class VideoPrismVisionConfig(VivitConfig):
     def __post_init__(self, **kwargs):
         raise AttributeError("Not used here")
 
+
 @auto_docstring(checkpoint="google/videoprism-lvt-base-f16r288")
 @strict
 class VideoPrismTextConfig(SiglipTextConfig):
@@ -391,7 +392,7 @@ class VideoPrismTemporalEmbeddings(VivitEmbeddings):
         del self.patch_size
         del num_patches
         del self.image_size
-        self.position_embeddings = nn.Parameter(torch.zeros(1, self.config.num_frames, config.hidden_size))
+        self.position_embeddings = nn.Parameter(torch.zeros(1, config.num_frames, config.hidden_size))
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor) -> torch.Tensor:
         target_emb_length = embeddings.shape[1]
@@ -616,10 +617,10 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
     def __init__(self, config: VideoPrismVisionConfig):
         super().__init__()
         self.config = config
-        self.num_attention_heads = self.config.num_attention_heads
-        self.attention_head_size = int(self.config.intermediate_size / self.config.num_attention_heads)
+        self.num_attention_heads = config.num_attention_heads
+        self.attention_head_size = int(config.intermediate_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.dropout_prob = self.config.attention_probs_dropout_prob
+        self.dropout_prob = config.attention_probs_dropout_prob
         self.num_key_value_groups = 1.0
         # PerDimScale
         self.per_dim_scale = nn.Parameter(torch.zeros(self.attention_head_size))
@@ -627,12 +628,12 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
         scale = torch.tensor(r_softplus_0 / (self.attention_head_size**0.5))
         self.register_buffer("scale", scale)
         self.is_causal = False
-        self.pooling_attention_query = nn.Parameter(torch.zeros(1, 1, self.config.hidden_size))
-        self.q_proj = nn.Linear(self.config.hidden_size, self.config.intermediate_size, bias=self.config.qkv_bias)
-        self.k_proj = nn.Linear(self.config.hidden_size, self.config.intermediate_size, bias=self.config.qkv_bias)
-        self.v_proj = nn.Linear(self.config.hidden_size, self.config.intermediate_size, bias=self.config.qkv_bias)
-        self.o_proj = nn.Linear(self.config.intermediate_size, self.config.hidden_size, bias=self.config.qkv_bias)
-        self.layernorm = VideoPrismLayerNorm(self.config.hidden_size, eps=self.config.layer_norm_eps)
+        self.pooling_attention_query = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        self.q_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.qkv_bias)
+        self.k_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.qkv_bias)
+        self.v_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.qkv_bias)
+        self.o_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.qkv_bias)
+        self.layernorm = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -693,9 +694,7 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
         super().__init__(config)
         self.config = config
         self.embeddings = VideoPrismTextEmbeddings(self.config)
-        self.text_encoder = nn.ModuleList(
-            [VideoPrismLayer(config) for _ in range(config.num_text_layers)]
-        )  # VideoPrismTextEncoder(self.config)
+        self.text_encoder = nn.ModuleList([VideoPrismLayer(config) for _ in range(config.num_text_layers)])
         self.layernorm = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.normalize = config.apply_l2norm
         self.is_causal = True
@@ -730,7 +729,6 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
                 past_key_values=None,
             )
 
-        # text_encoder_output = self.text_encoder(hidden_states, attention_mask)
         text_hidden_states = hidden_states
         for layer in self.text_encoder:
             text_hidden_states = layer(text_hidden_states, attention_mask, **kwargs)

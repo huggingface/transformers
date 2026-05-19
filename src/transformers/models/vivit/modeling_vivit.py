@@ -74,7 +74,7 @@ class VivitEmbeddings(nn.Module):
 
     def __init__(self, config: VivitConfig):
         super().__init__()
-        self.config = config
+
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.patch_embeddings = VivitTubeletEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
