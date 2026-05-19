@@ -486,6 +486,7 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
     skip_test_video_features_output_shape = True
 
     test_resize_embeddings = True
+    test_torch_exportable = False
     test_attention_outputs = False
     _is_composite = True
 

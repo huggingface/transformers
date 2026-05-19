@@ -14,7 +14,6 @@ specific language governing permissions and limitations under the License.
 # DBRX
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
@@ -45,14 +44,14 @@ Note: The original `databricks/dbrx-instruct` checkpoint was closed; [`transform
 The `generate()` method can be used to generate text using DBRX. You can generate using the standard attention implementation, flash-attention, and the PyTorch scaled dot product attention. The last two attention implementations give speed ups.
 
 ```python
-from transformers import DbrxForCausalLM, AutoTokenizer
-import torch
+
+from transformers import AutoTokenizer, DbrxForCausalLM
+
 
 tokenizer = AutoTokenizer.from_pretrained("transformers-community/dbrx-instruct", token="YOUR_HF_TOKEN")
 model = DbrxForCausalLM.from_pretrained(
     "transformers-community/dbrx-instruct",
     device_map="auto",
-    dtype=torch.bfloat16,
     token="YOUR_HF_TOKEN",
     )
 
@@ -67,14 +66,14 @@ print(tokenizer.decode(outputs[0]))
 If you have flash-attention installed (`pip install flash-attn`), it is possible to generate faster. (The HuggingFace documentation for flash-attention can be found [here](https://huggingface.co/docs/transformers/perf_infer_gpu_one#flashattention-2).)
 
 ```python
-from transformers import DbrxForCausalLM, AutoTokenizer
-import torch
+
+from transformers import AutoTokenizer, DbrxForCausalLM
+
 
 tokenizer = AutoTokenizer.from_pretrained("transformers-community/dbrx-instruct", token="YOUR_HF_TOKEN")
 model = DbrxForCausalLM.from_pretrained(
     "transformers-community/dbrx-instruct",
     device_map="auto",
-    dtype=torch.bfloat16,
     token="YOUR_HF_TOKEN",
     attn_implementation="flash_attention_2",
     )
@@ -90,14 +89,14 @@ print(tokenizer.decode(outputs[0]))
 You can also generate faster using the PyTorch scaled dot product attention. (The HuggingFace documentation for scaled dot product attention can be found [here](https://huggingface.co/docs/transformers/perf_infer_gpu_one#pytorch-scaled-dot-product-attention).)
 
 ```python
-from transformers import DbrxForCausalLM, AutoTokenizer
-import torch
+
+from transformers import AutoTokenizer, DbrxForCausalLM
+
 
 tokenizer = AutoTokenizer.from_pretrained("transformers-community/dbrx-instruct", token="YOUR_HF_TOKEN")
 model = DbrxForCausalLM.from_pretrained(
     "transformers-community/dbrx-instruct",
     device_map="auto",
-    dtype=torch.bfloat16,
     token="YOUR_HF_TOKEN",
     attn_implementation="sdpa",
     )

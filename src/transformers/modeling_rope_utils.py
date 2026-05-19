@@ -876,7 +876,7 @@ class RotaryEmbeddingConfigMixin:
         # Double-check: `factor` should be the ratio between the pre-yarn and post-yarn context lengths.
         # NOTE: we might get `implicit_factor == 1` if config's `original_max_position_embeddings` was
         # inferred from `max_position_embeddings` during standardization
-        original_max_position_embeddings = self.rope_parameters["original_max_position_embeddings"]
+        original_max_position_embeddings = rope_parameters["original_max_position_embeddings"]
         implicit_factor = self.max_position_embeddings / original_max_position_embeddings
         if implicit_factor != factor and implicit_factor != 1:
             logger.warning_once(

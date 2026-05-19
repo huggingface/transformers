@@ -63,7 +63,6 @@ from .utils import (
 )
 from .utils.chat_parsing_utils import recursive_parse
 from .utils.chat_template_utils import render_jinja_template
-from .utils.import_utils import PROTOBUF_IMPORT_ERROR
 
 
 if TYPE_CHECKING:
@@ -76,8 +75,7 @@ def import_protobuf_decode_error(error_message=""):
         from google.protobuf.message import DecodeError
 
         return DecodeError
-    else:
-        raise ImportError(PROTOBUF_IMPORT_ERROR.format(error_message))
+    return ()
 
 
 def flatten(arr: list):
@@ -1074,8 +1072,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         self.model_input_names = kwargs.pop("model_input_names", self.model_input_names)
 
-        # By default, clean up tokenization spaces for both fast and slow tokenizers
+        # By default, do not clean up tokenization spaces for both fast and slow tokenizers
         self.clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", False)
+        self.clean_up_tokenization_spaces_for_bpe_even_though_it_will_corrupt_output = kwargs.pop(
+            "clean_up_tokenization_spaces_for_bpe_even_though_it_will_corrupt_output", False
+        )
 
         # By default, do not split special tokens for both fast and slow tokenizers
         self.split_special_tokens = kwargs.pop("split_special_tokens", False)
@@ -1681,7 +1682,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         remote_files = []
         if not is_local and not local_files_only:
             try:
-                remote_files = list_repo_files(pretrained_model_name_or_path)
+                remote_files = list_repo_files(pretrained_model_name_or_path, revision=revision)
             except Exception:
                 remote_files = []
         elif pretrained_model_name_or_path and os.path.isdir(pretrained_model_name_or_path):
@@ -2651,6 +2652,14 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             # Call .keys() explicitly for compatibility with TensorDict and other Mapping subclasses
             encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0].keys()}
 
+        # Pop 4D nested-list attention masks and stack
+        # them at the end to avoid slow `to_py_obj`
+        preserved_attention_mask = None
+        if "attention_mask" in encoded_inputs:
+            mask = encoded_inputs["attention_mask"]
+            if isinstance(mask, list) and mask and getattr(mask[0], "ndim", 0) > 1:
+                preserved_attention_mask = encoded_inputs.pop("attention_mask")
+
         # The model's main input name, usually `input_ids`, has been passed for padding
         if self.model_input_names[0] not in encoded_inputs:
             raise ValueError(
@@ -2733,6 +2742,17 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 if key not in batch_outputs:
                     batch_outputs[key] = []
                 batch_outputs[key].append(value)
+
+        if preserved_attention_mask is not None:
+            sample = preserved_attention_mask[0]
+            if is_torch_tensor(sample):
+                import torch
+
+                batch_outputs["attention_mask"] = torch.stack(preserved_attention_mask)
+            elif isinstance(sample, np.ndarray):
+                batch_outputs["attention_mask"] = np.stack(preserved_attention_mask)
+            else:
+                batch_outputs["attention_mask"] = np.array(preserved_attention_mask)
 
         return BatchEncoding(batch_outputs, tensor_type=return_tensors)
 
@@ -2974,7 +2994,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         documents: list[dict[str, str]] | None = None,
         chat_template: str | None = None,
         add_generation_prompt: bool = False,
-        continue_final_message: bool = False,
+        continue_final_message: bool | str = False,
         tokenize: bool = True,
         padding: bool | str | PaddingStrategy = False,
         truncation: bool = False,
@@ -3011,11 +3031,12 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 the start of an assistant message will be appended to the formatted output. This is useful when you want to generate a response from the model.
                 Note that this argument will be passed to the chat template, and so it must be supported in the
                 template for this argument to have any effect.
-            continue_final_message (bool, *optional*):
+            continue_final_message (bool or str, *optional*):
                 If this is set, the chat will be formatted so that the final
                 message in the chat is open-ended, without any EOS tokens. The model will continue this message
                 rather than starting a new one. This allows you to "prefill" part of
-                the model's response for it. Cannot be used at the same time as `add_generation_prompt`.
+                the model's response for it. If a string is passed, it will be used as the key for the field to continue
+                (e.g. "reasoning_content"). Cannot be used at the same time as `add_generation_prompt`.
             tokenize (`bool`, defaults to `True`):
                 Whether to tokenize the output. If `False`, the output will be a string.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):

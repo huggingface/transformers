@@ -46,13 +46,13 @@ from .generation_parakeet import ParakeetTDTDecoderCache, ParakeetTDTGenerationM
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Extends [~modeling_outputs.BaseModelOutputWithPooling] to include the output attention mask since sequence length
     is not preserved in the model's forward.
     """
 )
+@dataclass
 class ParakeetEncoderModelOutput(BaseModelOutputWithPooling):
     attention_mask: torch.Tensor | None = None
 
