@@ -324,7 +324,7 @@ def squad_convert_examples_to_features(
 ):
     """
     Converts a list of examples into a list of features that can be directly given as input to a model. It is
-    model-dependant and takes advantage of many of the tokenizer's features to create the model's inputs.
+    model-dependent and takes advantage of many of the tokenizer's features to create the model's inputs.
 
     Args:
         examples: list of [`~data.processors.squad.SquadExample`]
