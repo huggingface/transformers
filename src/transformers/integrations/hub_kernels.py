@@ -733,11 +733,13 @@ def make_fused_parent_class(
     child_names: list[str],
     source_names: list[str],
     kernel_layer_name: str,
+    conversion_mapping: list | None = None,
 ) -> type:
     original_init = parent_cls.__init__
     _child_names = list(child_names)
     _source_names = list(source_names)
     _kernel_layer_name = kernel_layer_name
+    _conversion_mapping = list(conversion_mapping) if conversion_mapping else []
 
     fused_module_cls = make_fused_module_class(tuple(_source_names), _kernel_layer_name)
 
@@ -745,6 +747,8 @@ def make_fused_parent_class(
         original_init(self, *args, **kwargs)
         modules_to_fuse = [getattr(self, name) for name in _child_names]
         fused = fused_module_cls(modules_to_fuse, fused_module_names=list(_source_names))
+        if _conversion_mapping:
+            apply_kernel_structural_transforms(fused, _conversion_mapping)
         setattr(self, _child_names[0], fused)
         for name in _child_names[1:]:
             setattr(self, name, nn.Identity())
@@ -877,7 +881,15 @@ def register_kernel_fusions(
             repo_str = next(iter(repo_str.values()))
         kernel_layer_name = repo_str.split(":")[1] if ":" in repo_str else repo_str.split("/")[-1]
 
-        # 1. Meta-device scan — find parent classes that contain all target children.
+        # 1. Load the kernel class to get any conversion_mapping it declares.
+        kernel_cls = _try_load_kernel_class(repo_str, use_local=kernel_config.use_local_kernel)
+        kernel_conversion_mapping = (
+            list(kernel_cls.conversion_mapping)
+            if kernel_cls is not None and hasattr(kernel_cls, "conversion_mapping")
+            else []
+        )
+
+        # 2. Meta-device scan — find parent classes that contain all target children.
         with torch.device("meta"):
             meta_model = cls(config)
 
@@ -890,7 +902,13 @@ def register_kernel_fusions(
             if not all(hasattr(module, name) for name in child_names):
                 continue
             seen.add(module_cls)
-            fused_parent_cls = make_fused_parent_class(module_cls, child_names, source_names, kernel_layer_name)
+            fused_parent_cls = make_fused_parent_class(
+                module_cls,
+                child_names,
+                source_names,
+                kernel_layer_name,
+                conversion_mapping=kernel_conversion_mapping,
+            )
             patch_mapping[module_cls.__name__] = fused_parent_cls
 
         if not patch_mapping:
@@ -901,16 +919,13 @@ def register_kernel_fusions(
             new_mapping[layer_name] = hub_repo
             continue
 
-        # 2. Register class-level monkey patches.
+        # 3. Register class-level monkey patches.
         register_patch_mapping(patch_mapping, overwrite=True)
 
-        # 3. Infer weight renaming mapping.
+        # 4. Infer weight renaming mapping for the loader.
         transforms = infer_kernel_fusion_transforms(list(zip(source_names, glob_patterns)))
-
-        # 4. Load weight conversion mapping from the kernel class if available.
-        kernel_cls = _try_load_kernel_class(repo_str, use_local=kernel_config.use_local_kernel)
-        if kernel_cls is not None and hasattr(kernel_cls, "conversion_mapping"):
-            transforms = transforms + list(kernel_cls.conversion_mapping)
+        if kernel_conversion_mapping:
+            transforms = transforms + kernel_conversion_mapping
 
         # 5. Load existing conversion mapping for this model type.
         existing = get_checkpoint_conversion_mapping(model_type)
