@@ -72,7 +72,7 @@ def _rename_common(rest: str) -> str:
         ("self_attn.qkv.val_proj1.", "self_attn.qkv_proj.v_proj_current."),
         ("self_attn.qkv.val_proj2.", "self_attn.qkv_proj.v_proj_delayed."),
         ("self_attn.qkv.", "self_attn.qkv_proj."),
-        ("zaya_block.router.rmsnorm_eda.", "mlp.gate.router_mlp.rmsnorm_eda."),
+        ("zaya_block.router.rmsnorm_eda.", "mlp.gate.router_mlp.norm."),
         ("zaya_block.router.router_mlp.0.", "mlp.gate.router_mlp.fc1."),
         ("zaya_block.router.router_mlp.2.", "mlp.gate.router_mlp.fc2."),
         ("zaya_block.router.router_mlp.4.", "mlp.gate.router_mlp.out_proj."),

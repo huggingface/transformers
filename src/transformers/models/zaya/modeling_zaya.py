@@ -160,12 +160,8 @@ class ZayaCCAProjection(nn.Module):
     """
     Projects hidden states into attention q/k/v states with ZAYA's CCA path.
 
-    `q_proj` and `k_proj` produce the residual q/k states and are concatenated into `qk_states`. The causal
-    `conv_qk_depthwise` + `conv_qk_grouped` stack mixes the current q/k stream with the cached pre-convolution tail;
-    for example, decoding token `t` uses the cached q/k states from previous tokens plus the current `qk_states[:, t]`.
-    Values are built from `v_proj_current(hidden_states[:, t])` and a delayed `v_proj_delayed`: during prefill token
-    `t` uses `v_proj_delayed(hidden_states[:, t - 1])`, while decoding reads the previous delayed value projection
-    from **the recurrent cache**.
+    This follows the usual q/k/v projection flow, with three ZAYA-specific changes: q/k are mixed by a causal 1D
+    convolution, q/k keep residual projection paths, and v uses a delayed recurrent state.
     """
 
     def __init__(self, config: ZayaConfig, layer_idx: int):
@@ -242,8 +238,7 @@ class ZayaCCAProjection(nn.Module):
 
         if past_key_values is not None:
             new_conv_state = qk_states[..., -self.conv_kernel_size :]
-            if new_conv_state.shape[-1] < self.conv_kernel_size:
-                new_conv_state = F.pad(new_conv_state, (self.conv_kernel_size - new_conv_state.shape[-1], 0))
+            new_conv_state = F.pad(new_conv_state, (self.conv_kernel_size - new_conv_state.shape[-1], 0))
             past_key_values.update_conv_state(new_conv_state, self.layer_idx)
 
         qk_states = self.conv_qk_depthwise(qk_states)
@@ -405,8 +400,8 @@ class ZayaAttention(nn.Module):
         causal_mask = mask_mapping.get("causal")
         padding_mask = mask_mapping.get("padding")
 
+        # ZAYA replaces the usual independent q/k/v projections with CCA projection followed by special q/k normalization.
         query_states, key_states, value_states = self.qkv_proj(hidden_states, past_key_values, padding_mask)
-
         query_states, key_states = self.qk_norm(query_states, key_states)
 
         query_states = query_states.transpose(1, 2)
@@ -503,14 +498,14 @@ class ZayaResidualScaling(nn.Module):
 class ZayaRouterMLP(nn.Module):
     def __init__(self, hidden_size: int, num_experts: int, rms_norm_eps: float):
         super().__init__()
-        self.rmsnorm_eda = ZayaRMSNorm(hidden_size, eps=rms_norm_eps)
+        self.norm = ZayaRMSNorm(hidden_size, eps=rms_norm_eps)
         self.fc1 = nn.Linear(hidden_size, hidden_size, bias=True)
         self.fc2 = nn.Linear(hidden_size, hidden_size, bias=True)
         self.out_proj = nn.Linear(hidden_size, num_experts, bias=False)
         self.act_fn = nn.GELU()
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.rmsnorm_eda(hidden_states)
+        hidden_states = self.norm(hidden_states)
         hidden_states = self.act_fn(self.fc1(hidden_states))
         hidden_states = self.act_fn(self.fc2(hidden_states))
         return self.out_proj(hidden_states)
@@ -676,7 +671,7 @@ class ZayaPreTrainedModel(PreTrainedModel):
             if module.use_eda:
                 init.ones_(module.router_states_scale)
             init.zeros_(module.balancing_biases)
-            module.balancing_biases[-1] = -1.0  # ignore: trf012
+            module.balancing_biases[-1] = -1.0  # trf-ignore: TRF012
         elif isinstance(module, ZayaExperts):
             std = self.config.initializer_range
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
@@ -750,16 +745,14 @@ class ZayaModel(ZayaPreTrainedModel):
             "past_key_values": past_key_values,
             "position_ids": position_ids,
         }
-        # Original ZAYA SWA only applies the local causal pattern; padding tokens are zeroed before the CCA projection.
-        sliding_mask_kwargs = {**mask_kwargs, "attention_mask": None}
         mask_creation_functions = {
             "hybrid": lambda: create_causal_mask(**mask_kwargs),
-            "hybrid_sliding": lambda: create_sliding_window_causal_mask(**sliding_mask_kwargs),
+            "hybrid_sliding": lambda: create_sliding_window_causal_mask(**mask_kwargs),
         }
         causal_mask_mapping = {
             layer_type: mask_creation_functions[layer_type]() for layer_type in set(self.config.layer_types)
         }
-        cca_mask = self._update_cca_mask(attention_mask, past_key_values, inputs_embeds)
+        cca_mask = self._update_cca_mask(attention_mask, past_key_values)
 
         hidden_states = inputs_embeds
 
@@ -793,7 +786,7 @@ class ZayaModel(ZayaPreTrainedModel):
             past_key_values=past_key_values if use_cache else None,
         )
 
-    def _update_cca_mask(self, attention_mask, past_key_values, inputs_embeds):
+    def _update_cca_mask(self, attention_mask, past_key_values):
         """
         No need to zero padding states when cached convolution states are already available or all inputs are valid.
         """
@@ -802,8 +795,6 @@ class ZayaModel(ZayaPreTrainedModel):
             attention_mask is not None and torch.all(attention_mask == 1)
         ):
             cca_mask = None
-        elif attention_mask is not None:
-            cca_mask = attention_mask[:, -inputs_embeds.shape[1] :]
         return cca_mask
 
 

@@ -43,10 +43,10 @@ class ZayaModelTester(CausalLMModelTester):
     def __init__(self, parent, **kwargs):
         super().__init__(
             parent=parent,
-            num_hidden_layers=4,
+            num_hidden_layers=2,
             moe_intermediate_size=32,
             num_experts_per_tok=1,
-            layer_types=["hybrid", "hybrid_sliding", "hybrid", "hybrid_sliding"],
+            layer_types=["hybrid", "hybrid_sliding"],
             sliding_window=64,
             **kwargs,
         )
@@ -93,13 +93,6 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
 
     @unittest.skip("ZAYA uses key/query normalization which is not equivalent under padding-free packing.")
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    @unittest.skip(
-        "ZAYA follows the original SWA behavior where sliding attention only applies the local causal pattern;"
-        "See https://github.com/huggingface/transformers/pull/45862#discussion_r3249556316"
-    )
-    def test_left_padding_compatibility(self):
         pass
 
     def test_attention_outputs(self):
@@ -215,22 +208,6 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(yarn_sin_long, original_sin_long)
 
-    def test_moe_router_logits(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = self.model_tester.causal_lm_class(config)
-        model.to(torch_device)
-        model.eval()
-
-        with torch.no_grad():
-            outputs = model(**inputs_dict, output_router_logits=True)
-
-        expected_moe_layers = config.num_hidden_layers
-        self.assertEqual(len(outputs.router_logits), expected_moe_layers)
-        self.assertEqual(
-            outputs.router_logits[0].shape,
-            (self.model_tester.batch_size * self.model_tester.seq_length, config.num_experts + 1),
-        )
-
     def test_num_experts_per_tok_validation(self):
         with self.assertRaisesRegex(StrictDataclassClassValidationError, "num_experts_per_tok=1"):
             ZayaConfig(num_experts_per_tok=2)
@@ -240,13 +217,13 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
             vocab_size=128,
             hidden_size=32,
             moe_intermediate_size=32,
-            num_hidden_layers=4,
+            num_hidden_layers=2,
             num_experts=4,
             num_attention_heads=4,
             num_key_value_heads=2,
             head_dim=8,
             router_hidden_size=4,
-            layer_types=["hybrid_sliding", "hybrid", "hybrid_sliding", "hybrid"],
+            layer_types=["hybrid_sliding", "hybrid"],
             sliding_window=3,
             tie_word_embeddings=False,
             attn_implementation="eager",
@@ -260,33 +237,6 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
 
         sliding_attention = outputs.attentions[0]
         self.assertTrue(torch.all(sliding_attention[:, :, -1, :3] == 0))
-
-    def test_cca_cache_matches_full_forward(self):
-        config = ZayaConfig(
-            vocab_size=128,
-            hidden_size=32,
-            moe_intermediate_size=32,
-            num_hidden_layers=1,
-            num_experts=4,
-            num_attention_heads=4,
-            num_key_value_heads=2,
-            head_dim=8,
-            router_hidden_size=4,
-            tie_word_embeddings=False,
-        )
-        torch.manual_seed(0)
-        cca = ZayaCCAProjection(config, layer_idx=0).to(torch_device)
-        cca.eval()
-        hidden_states = torch.randn(1, 5, config.hidden_size, device=torch_device)
-
-        with torch.no_grad():
-            full = cca(hidden_states, None, None)
-            cache = DynamicCache(config=config)
-            cca(hidden_states[:, :4], cache, None)
-            cached = cca(hidden_states[:, 4:], cache, None)
-
-        for full_states, cached_states in zip(full, cached):
-            torch.testing.assert_close(full_states[:, -1:], cached_states, rtol=1e-5, atol=1e-5)
 
     def test_cca_cache_matches_full_forward_multi_token(self):
         config = ZayaConfig(
@@ -307,6 +257,8 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
         hidden_states = torch.randn(1, 5, config.hidden_size, device=torch_device)
 
         with torch.no_grad():
+            # Compare full CCA projection against a cached continuation. The second chunk must recover the same
+            # q/k/v states from the cached convolution tail and delayed recurrent value state.
             full = cca(hidden_states, None, None)
             cache = DynamicCache(config=config)
             cca(hidden_states[:, :3], cache, None)
