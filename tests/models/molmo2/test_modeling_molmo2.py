@@ -441,17 +441,19 @@ class Molmo2IntegrationTest(unittest.TestCase):
         self.assertEqual(inputs["image_token_pooling"].shape, torch.Size([1, 955, 4]))
         self.assertEqual(inputs["image_grids"].shape, torch.Size([1, 1, 4]))
         self.assertEqual(inputs["input_ids"].shape[0], 1)
+        # 4B uses the Qwen tokenizer; `<|im_end|>` (151645) is the leading BOS.
+        self.assertEqual(inputs["input_ids"][0, 0].item(), 151645)
 
         expected_pixel_slice = torch.tensor(
             [
-                [-0.0745098, -0.05098039, 0.0196079],
-                [-0.7019608, -0.6784314, -0.60784316],
-                [-0.8745098, -0.88235295, -0.84313726],
+                [-0.07450979948043823, -0.05098038911819458, 0.019607901573181152],
+                [-0.7019608020782471, -0.6784313917160034, -0.6078431606292725],
+                [-0.8745098114013672, -0.8823529481887817, -0.843137264251709],
             ],
             dtype=torch.float32,
         )
         torch.testing.assert_close(
-            inputs["pixel_values"][0, 0, :3, :3],
+            inputs["pixel_values"][0, 0, :3, :3].float().cpu(),
             expected_pixel_slice,
             atol=1e-4,
             rtol=1e-4,
@@ -554,7 +556,26 @@ class Molmo2O7BIntegrationTest(unittest.TestCase):
     def test_preprocessing(self):
         inputs = self.build_inputs()
         self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 7, 729, 588]))
+        self.assertEqual(inputs["image_token_pooling"].shape, torch.Size([1, 955, 4]))
+        self.assertEqual(inputs["image_grids"].shape, torch.Size([1, 1, 4]))
         self.assertEqual(inputs["input_ids"].shape[0], 1)
+        # O-7B uses the OLMo tokenizer; `<|endoftext|>` (100257) is the leading BOS.
+        self.assertEqual(inputs["input_ids"][0, 0].item(), 100257)
+
+        expected_pixel_slice = torch.tensor(
+            [
+                [-0.07450979948043823, -0.05098038911819458, 0.019607901573181152],
+                [-0.7019608020782471, -0.6784313917160034, -0.6078431606292725],
+                [-0.8745098114013672, -0.8823529481887817, -0.843137264251709],
+            ],
+            dtype=torch.float32,
+        )
+        torch.testing.assert_close(
+            inputs["pixel_values"][0, 0, :3, :3].float().cpu(),
+            expected_pixel_slice,
+            atol=1e-4,
+            rtol=1e-4,
+        )
 
     def test_forward_logits(self):
         inputs = self.build_inputs()
@@ -642,7 +663,26 @@ class Molmo2_8BIntegrationTest(unittest.TestCase):
     def test_preprocessing(self):
         inputs = self.build_inputs()
         self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 7, 729, 588]))
+        self.assertEqual(inputs["image_token_pooling"].shape, torch.Size([1, 955, 4]))
+        self.assertEqual(inputs["image_grids"].shape, torch.Size([1, 1, 4]))
         self.assertEqual(inputs["input_ids"].shape[0], 1)
+        # 8B uses the Qwen tokenizer; `<|im_end|>` (151645) is the leading BOS.
+        self.assertEqual(inputs["input_ids"][0, 0].item(), 151645)
+
+        expected_pixel_slice = torch.tensor(
+            [
+                [-0.07450979948043823, -0.05098038911819458, 0.019607901573181152],
+                [-0.7019608020782471, -0.6784313917160034, -0.6078431606292725],
+                [-0.8745098114013672, -0.8823529481887817, -0.843137264251709],
+            ],
+            dtype=torch.float32,
+        )
+        torch.testing.assert_close(
+            inputs["pixel_values"][0, 0, :3, :3].float().cpu(),
+            expected_pixel_slice,
+            atol=1e-4,
+            rtol=1e-4,
+        )
 
     def test_forward_logits(self):
         inputs = self.build_inputs()
