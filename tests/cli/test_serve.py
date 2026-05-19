@@ -227,6 +227,8 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         ]
         result = get_processor_inputs_from_messages(messages, Modality.LLM)
         self.assertEqual(len(result), 3)
+        # The preprocessor parses function.arguments from JSON string to dict.
+        tool_calls[0]["function"]["arguments"] = json.loads(tool_calls[0]["function"]["arguments"])
         self.assertEqual(result[1]["tool_calls"], tool_calls)
         self.assertNotIn("tool_calls", result[0])
         self.assertEqual(result[2]["tool_call_id"], "call_1")
@@ -245,6 +247,7 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         ]
         result = get_processor_inputs_from_messages(messages, Modality.VLM)
         self.assertEqual(len(result), 3)
+        tool_calls[0]["function"]["arguments"] = json.loads(tool_calls[0]["function"]["arguments"])
         self.assertEqual(result[1]["tool_calls"], tool_calls)
         self.assertEqual(result[2]["tool_call_id"], "call_1")
 
@@ -1809,7 +1812,8 @@ class TestToolCallUnit(unittest.TestCase):
         text = '<tool_call>\n{"name": "get_weather", "arguments": {"city": "Paris"}}\n</tool_call>'
         processor = MagicMock()
         processor.parse_response = lambda t, s: recursive_parse(t, s)
-        calls = parse_tool_calls(processor, text, _TOOL_CALL_FALLBACKS["qwen"]["schema"])
+        schema = next(v["schema"] for k, v in _TOOL_CALL_FALLBACKS.items() if "qwen2" in k)
+        calls = parse_tool_calls(processor, text, schema)
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0]["name"], "get_weather")
 
@@ -1820,7 +1824,8 @@ class TestToolCallUnit(unittest.TestCase):
         )
         processor = MagicMock()
         processor.parse_response = lambda t, s: recursive_parse(t, s)
-        calls = parse_tool_calls(processor, text, _TOOL_CALL_FALLBACKS["qwen"]["schema"])
+        schema = next(v["schema"] for k, v in _TOOL_CALL_FALLBACKS.items() if "qwen2" in k)
+        calls = parse_tool_calls(processor, text, schema)
         self.assertEqual(len(calls), 2)
 
 
@@ -2439,7 +2444,12 @@ class _TestReasoningBase:
 
     def test_response_streaming_matches_non_streaming(self):
         """Streaming and non-streaming Responses API yield the same content + reasoning at T=0."""
-        kwargs = {"model": self.MODEL, "input": self.USER_PROMPT, "max_output_tokens": self.MAX_TOKENS, "temperature": 0.0}
+        kwargs = {
+            "model": self.MODEL,
+            "input": self.USER_PROMPT,
+            "max_output_tokens": self.MAX_TOKENS,
+            "temperature": 0.0,
+        }
 
         ns = self.client.responses.create(stream=False, **kwargs)
         ns_message = next(i for i in ns.output if i.type == "message")

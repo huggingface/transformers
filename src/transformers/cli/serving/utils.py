@@ -1207,7 +1207,8 @@ class BaseHandler:
                 for tc in message["tool_calls"]:
                     tc = copy.deepcopy(tc)
                     fn = tc.get("function") or tc
-                    fn["arguments"] = json.loads(fn["arguments"])
+                    if isinstance(fn["arguments"], str):
+                        fn["arguments"] = json.loads(fn["arguments"])
                     tool_calls.append(tc)
                 parsed["tool_calls"] = tool_calls
             if "tool_call_id" in message:
