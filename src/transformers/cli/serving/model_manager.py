@@ -295,9 +295,9 @@ class ModelManager:
         """Load a model and stream progress as SSE events.
 
         Handles three cases:
-        1. Model already cached → single ``ready`` event
-        2. Load already in progress → join existing subscriber stream
-        3. First request → start loading, broadcast to all subscribers
+        1. Model already cached -> single ``ready`` event
+        2. Load already in progress -> join existing subscriber stream
+        3. First request -> start loading, broadcast to all subscribers
 
         Args:
             model_id_and_revision (`str`): Model ID in ``'model_id@revision'`` format.
@@ -314,7 +314,7 @@ class ModelManager:
             yield f"data: {json.dumps({'status': 'ready', 'model': mid, 'cached': True})}\n\n"
             return
 
-        # Case 2: load in progress — join existing subscribers
+        # Case 2: load in progress -- join existing subscribers
         if mid in self._loading_tasks:
             self._loading_subscribers[mid].append(queue)
             while True:
@@ -324,7 +324,7 @@ class ModelManager:
                 yield item
             return
 
-        # Case 3: first request — start the load
+        # Case 3: first request -- start the load
         self._loading_subscribers[mid] = [queue]
         loop = asyncio.get_running_loop()
 
@@ -455,7 +455,7 @@ class ModelManager:
                 multimodal = MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES.values()
 
                 if any(arch for arch in architectures if arch in [*llms, *vlms, *multimodal]):
-                    author = repo.repo_id.split("/") if "/" in repo.repo_id else ""
+                    author = repo.repo_id.split("/")[0] if "/" in repo.repo_id else ""
                     repo_handle = repo.repo_id + (f"@{ref}" if ref != "main" else "")
                     generative_models.append(
                         {
