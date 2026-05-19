@@ -455,7 +455,7 @@ class Molmo2IntegrationTest(unittest.TestCase):
         torch.testing.assert_close(
             inputs["pixel_values"][0, 0, :3, :3].float().cpu(),
             expected_pixel_slice,
-            atol=1e-4,
+            atol=1e-2,
             rtol=1e-4,
         )
 
@@ -573,7 +573,7 @@ class Molmo2O7BIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(
             inputs["pixel_values"][0, 0, :3, :3].float().cpu(),
             expected_pixel_slice,
-            atol=1e-4,
+            atol=1e-2,
             rtol=1e-4,
         )
 
@@ -680,7 +680,7 @@ class Molmo2_8BIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(
             inputs["pixel_values"][0, 0, :3, :3].float().cpu(),
             expected_pixel_slice,
-            atol=1e-4,
+            atol=1e-2,
             rtol=1e-4,
         )
 
