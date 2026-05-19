@@ -73,7 +73,7 @@ class GraniteSpeechNarFeatureExtractor(FeatureExtractionMixin):
     def __call__(
         self,
         audios: AudioInput,
-        device: str | "torch.device" | None = None,
+        device: str | None = None,
     ) -> dict:
         if isinstance(audios, torch.Tensor):
             if audios.ndim == 1:

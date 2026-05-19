@@ -35,7 +35,7 @@ class GraniteSpeechNarProcessor(ProcessorMixin):
     def __call__(
         self,
         audios: AudioInput,
-        device: str | "torch.device" | None = None,
+        device: str | None = None,
         **kwargs,
     ) -> dict:
         return self.feature_extractor(audios, device=device)
