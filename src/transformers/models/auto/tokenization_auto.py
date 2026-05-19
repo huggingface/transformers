@@ -815,7 +815,7 @@ class AutoTokenizer:
                         config_model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS
                         or config_model_name in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS
                     )
-                    else tokenizer_config_class
+                    else _hub_class
                 )
                 tokenizer_class = tokenizer_class_from_name(class_name)
                 if tokenizer_class is not None and tokenizer_class.__name__ not in (
