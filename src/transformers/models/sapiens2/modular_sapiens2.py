@@ -42,6 +42,7 @@ from ...utils import TensorType, TransformersKwargs, auto_docstring, is_cv2_avai
 from ...utils.generic import can_return_tuple, maybe_autocast
 from ..dinov3_vit.configuration_dinov3_vit import DINOv3ViTConfig
 from ..dinov3_vit.modeling_dinov3_vit import (
+    DINOv3ViTAttention,
     DINOv3ViTBackbone,
     DINOv3ViTEmbeddings,
     DINOv3ViTEncoder,
@@ -50,10 +51,10 @@ from ..dinov3_vit.modeling_dinov3_vit import (
     DINOv3ViTModel,
     DINOv3ViTPreTrainedModel,
     augment_patches_center_coordinates,
-    eager_attention_forward,
     get_patches_center_coordinates,
     rotate_half,
 )
+from ..gemma2.modeling_gemma2 import eager_attention_forward
 
 
 # TODO(guarin): Check if we can drop cv2 dependency. Ideally re-use as much as possible from ViTPoseProcessor.
@@ -277,31 +278,19 @@ def apply_rotary_pos_emb(
     return q, k
 
 
-class Sapiens2Attention(nn.Module):
+class Sapiens2Attention(DINOv3ViTAttention):
     def __init__(self, config: Sapiens2Config, layer_idx: int):
-        super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
-        self.is_causal = False
-        self.scaling = self.head_dim**-0.5
-        self.dropout = config.attention_dropout
-        self.use_qk_norm = config.use_qk_norm
-
-        self.num_kv_heads = (
+        super().__init__(config)
+        num_key_value_heads = (
             self.num_heads if config.layer_types[layer_idx] == "full_attention" else config.num_key_value_heads
         )
-        kv_dim = self.num_kv_heads * self.head_dim
-
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.query_bias)
+        self.num_key_value_heads = num_key_value_heads
+        self.num_key_value_groups = self.num_heads // num_key_value_heads
+        kv_dim = num_key_value_heads * self.head_dim
         self.k_proj = nn.Linear(self.embed_dim, kv_dim, bias=config.key_bias)
         self.v_proj = nn.Linear(self.embed_dim, kv_dim, bias=config.value_bias)
-        self.o_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.proj_bias)
-
-        if self.use_qk_norm:
-            self.q_norm = nn.RMSNorm(self.head_dim, eps=config.layer_norm_eps)
-            self.k_norm = nn.RMSNorm(self.head_dim, eps=config.layer_norm_eps)
+        self.q_norm = nn.RMSNorm(self.head_dim, eps=config.layer_norm_eps) if config.use_qk_norm else nn.Identity()
+        self.k_norm = nn.RMSNorm(self.head_dim, eps=config.layer_norm_eps) if config.use_qk_norm else nn.Identity()
 
     def forward(
         self,
@@ -317,20 +306,14 @@ class Sapiens2Attention(nn.Module):
         value_states = self.v_proj(hidden_states)
 
         query_states = query_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(batch_size, patches, self.num_kv_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(batch_size, patches, self.num_kv_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(batch_size, patches, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(batch_size, patches, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        if self.use_qk_norm:
-            query_states = self.q_norm(query_states)
-            key_states = self.k_norm(key_states)
+        query_states = self.q_norm(query_states)
+        key_states = self.k_norm(key_states)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        if self.num_kv_heads != self.num_heads:
-            factor = self.num_heads // self.num_kv_heads
-            key_states = key_states.repeat_interleave(factor, dim=1)
-            value_states = value_states.repeat_interleave(factor, dim=1)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
