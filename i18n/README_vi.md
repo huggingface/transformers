@@ -304,7 +304,7 @@ Những phiên bản này đã được kiểm tra trên một số tập dữ l
 
 ## Trích dẫn
 
-Bây giờ chúng ta có một [bài báo](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) mà bạn có thể trích dẫn cho thư viện 🤗 Transformers:
+Bây giờ chúng ta có một [bài báo](https://aclanthology.org/2020.emnlp-demos.6/) mà bạn có thể trích dẫn cho thư viện 🤗 Transformers:
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers,
     title = "Transformers: State-of-the-Art Natural Language Processing",
@@ -314,7 +314,7 @@ Bây giờ chúng ta có một [bài báo](https://www.aclweb.org/anthology/2020
     year = "2020",
     address = "Online",
     publisher = "Association for Computational Linguistics",
-    url = "https://www.aclweb.org/anthology/2020.emnlp-demos.6",
+    url = "https://aclanthology.org/2020.emnlp-demos.6/",
     pages = "38--45"
 }
 ```

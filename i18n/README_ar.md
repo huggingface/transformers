@@ -304,7 +304,7 @@ conda install conda-forge::transformers
 
 ## الاستشهاد
 
-لدينا الآن [ورقة](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) يمكنك الاستشهاد بها لمكتبة 🤗 Transformers:
+لدينا الآن [ورقة](https://aclanthology.org/2020.emnlp-demos.6/) يمكنك الاستشهاد بها لمكتبة 🤗 Transformers:
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers،
     title = "Transformers: State-of-the-Art Natural Language Processing"،
@@ -314,7 +314,7 @@ conda install conda-forge::transformers
     year = "2020"،
     address = "Online"،
     publisher = "Association for Computational Linguistics"،
-    url = "https://www.aclweb.org/anthology/2020.emnlp-demos.6"،
+    url = "https://aclanthology.org/2020.emnlp-demos.6/"،
     pages = "38--45"
 }
 ```

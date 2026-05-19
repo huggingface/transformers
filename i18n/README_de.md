@@ -303,7 +303,7 @@ Diese Implementierungen wurden mit mehreren Datensätzen getestet (siehe Beispie
 
 ## Zitation
 
-Wir haben jetzt ein [Paper](https://www.aclweb.org/anthology/2020.emnlp-demos.6/), das Sie für die 🤗 Transformers-Bibliothek zitieren können:
+Wir haben jetzt ein [Paper](https://aclanthology.org/2020.emnlp-demos.6/), das Sie für die 🤗 Transformers-Bibliothek zitieren können:
 
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers,
@@ -314,7 +314,7 @@ Wir haben jetzt ein [Paper](https://www.aclweb.org/anthology/2020.emnlp-demos.6/
     year = "2020",
     address = "Online",
     publisher = "Association for Computational Linguistics",
-    url = "https://www.aclweb.org/anthology/2020.emnlp-demos.6",
+    url = "https://aclanthology.org/2020.emnlp-demos.6/",
     pages = "38--45"
 }
 ```
