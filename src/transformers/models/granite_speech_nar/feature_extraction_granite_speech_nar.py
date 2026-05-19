@@ -14,6 +14,7 @@
 """Feature extraction for Granite Speech NAR."""
 
 from ...feature_extraction_utils import FeatureExtractionMixin
+from ...tokenization_utils_base import AudioInput
 from ...utils import is_torch_available, is_torchaudio_available
 from ...utils.import_utils import requires_backends
 
@@ -58,20 +59,21 @@ class GraniteSpeechNarFeatureExtractor(FeatureExtractionMixin):
             n_mels=n_mels,
         )
 
-    def _extract_features(self, raw_audio: torch.Tensor) -> torch.Tensor:
-        mel_transform = self.mel_transform.to(raw_audio.device)
-        B, T = raw_audio.shape
-        l = 2 * (T // (2 * self.hop_length))
-        mel = mel_transform(raw_audio.float())[..., :l]
-        logmel = mel.transpose(-1, -2).clamp_min_(1e-10).log10_()
-        mx = logmel.amax(dim=(-2, -1), keepdim=True)
-        logmel = torch.maximum(logmel, mx - 8.0).div_(4).add_(1)
-        return logmel.reshape(B, -1, 2 * self.n_mels)
+    def _extract_features(self, raw_audio: "torch.Tensor") -> "torch.Tensor":
+        with torch.no_grad():
+            mel_transform = self.mel_transform.to(raw_audio.device)
+            B, T = raw_audio.shape
+            l = 2 * (T // (2 * self.hop_length))
+            mel = mel_transform(raw_audio.float())[..., :l]
+            logmel = mel.transpose(-1, -2).clamp_min_(1e-10).log10_()
+            mx = logmel.amax(dim=(-2, -1), keepdim=True)
+            logmel = torch.maximum(logmel, mx - 8.0).div_(4).add_(1)
+            return logmel.reshape(B, -1, 2 * self.n_mels)
 
     def __call__(
         self,
-        audios: torch.Tensor | list[torch.Tensor],
-        device: str | torch.device | None = None,
+        audios: AudioInput,
+        device: str | "torch.device" | None = None,
     ) -> dict:
         if isinstance(audios, torch.Tensor):
             if audios.ndim == 1:

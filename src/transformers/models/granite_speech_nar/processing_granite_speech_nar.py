@@ -14,6 +14,7 @@
 """Processor for Granite Speech NAR."""
 
 from ...processing_utils import ProcessorMixin
+from ...tokenization_utils_base import AudioInput
 from ...utils import is_torch_available
 from .feature_extraction_granite_speech_nar import GraniteSpeechNarFeatureExtractor
 
@@ -33,13 +34,13 @@ class GraniteSpeechNarProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        audios: torch.Tensor | list[torch.Tensor],
-        device: str | torch.device | None = None,
+        audios: AudioInput,
+        device: str | "torch.device" | None = None,
         **kwargs,
     ) -> dict:
         return self.feature_extractor(audios, device=device)
 
-    def batch_decode(self, token_ids_list: list[torch.Tensor], **kwargs) -> list[str]:
+    def batch_decode(self, token_ids_list: list["torch.Tensor"], **kwargs) -> list[str]:
         if self.tokenizer is None:
             raise ValueError("Tokenizer not set. Pass tokenizer to GraniteSpeechNarProcessor.")
         return [self.tokenizer.decode(ids, skip_special_tokens=True) for ids in token_ids_list]
