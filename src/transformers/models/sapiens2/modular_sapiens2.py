@@ -67,6 +67,388 @@ if is_cv2_available():
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(
+    custom_intro="""
+    Class for outputs of pose estimation models.
+    """
+)
+@dataclass
+class Sapiens2PoseEstimatorOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Keypoint loss computed between the predicted heatmaps and the ground-truth heatmaps.
+    heatmaps (`torch.FloatTensor` of shape `(batch_size, num_keypoints, height, width)`):
+        Heatmaps as predicted by the model.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage)
+        of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
+        each layer plus the initial embedding outputs.
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one per layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`. Attentions weights after the attention softmax.
+    """
+
+    loss: torch.FloatTensor | None = None
+    heatmaps: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+
+
+def box_to_center_and_scale(bbox: np.ndarray, padding: float = 1.25) -> tuple[np.ndarray, np.ndarray]:
+    """Convert COCO bbox (x, y, w, h) to center and scale for affine warp."""
+    x, y, w, h = bbox[:4].astype(np.float32)
+    center = np.array([x + w * 0.5, y + h * 0.5], dtype=np.float32)
+    scale = np.array([w * padding, h * padding], dtype=np.float32)
+    return center, scale
+
+
+def cv2_warp_affine(image_np: np.ndarray, warp_mat: np.ndarray, output_size: tuple[int, int]) -> np.ndarray:
+    """Warp-affine crop a HWC uint8 numpy array. output_size = (width, height)."""
+    scale_factor = min(np.linalg.norm(warp_mat[0, :2]), np.linalg.norm(warp_mat[1, :2]))
+    flags = cv2.INTER_AREA if scale_factor < 1.0 else cv2.INTER_CUBIC
+    return cv2.warpAffine(image_np, warp_mat, output_size, flags=flags)
+
+
+def cv2_gaussian_blur(heatmaps: np.ndarray, kernel: int = 11) -> np.ndarray:
+    """Gaussian blur per-keypoint heatmap, preserving the original max value."""
+    assert kernel % 2 == 1
+    border = (kernel - 1) // 2
+    K, H, W = heatmaps.shape
+    for k in range(K):
+        origin_max = np.max(heatmaps[k])
+        dr = np.zeros((H + 2 * border, W + 2 * border), dtype=np.float32)
+        dr[border:-border, border:-border] = heatmaps[k].copy()
+        dr = cv2.GaussianBlur(dr, (kernel, kernel), 0)
+        heatmaps[k] = dr[border:-border, border:-border].copy()
+        if np.max(heatmaps[k]) > 0:
+            heatmaps[k] *= origin_max / np.max(heatmaps[k])
+    return heatmaps
+
+
+def fix_aspect_ratio(scale: np.ndarray, width: int, height: int) -> np.ndarray:
+    """Adjust scale so the crop aspect ratio matches the given width/height."""
+    aspect_ratio = width / height
+    sw, sh = scale
+    if sw > sh * aspect_ratio:
+        return np.array([sw, sw / aspect_ratio], dtype=scale.dtype)
+    else:
+        return np.array([sh * aspect_ratio, sh], dtype=scale.dtype)
+
+
+def post_dark_unbiased_data_processing(
+    keypoints: np.ndarray, heatmaps: np.ndarray, blur_kernel_size: int = 11
+) -> np.ndarray:
+    """Sub-pixel refinement via Hessian on log-heatmaps (UDP Dark Pose). In-place, returns keypoints."""
+    N, K = keypoints.shape[:2]
+    H, W = heatmaps.shape[1:]
+
+    heatmaps = cv2_gaussian_blur(heatmaps, blur_kernel_size)
+    np.clip(heatmaps, 1e-3, 50.0, heatmaps)
+    np.log(heatmaps, heatmaps)
+
+    heatmaps_pad = np.pad(heatmaps, ((0, 0), (1, 1), (1, 1)), mode="edge").flatten()
+
+    for n in range(N):
+        index = keypoints[n, :, 0] + 1 + (keypoints[n, :, 1] + 1) * (W + 2)
+        index += (W + 2) * (H + 2) * np.arange(0, K)
+        index = index.astype(int).reshape(-1, 1)
+        i_ = heatmaps_pad[index]
+        ix1 = heatmaps_pad[index + 1]
+        iy1 = heatmaps_pad[index + W + 2]
+        ix1y1 = heatmaps_pad[index + W + 3]
+        ix1_y1_ = heatmaps_pad[index - W - 3]
+        ix1_ = heatmaps_pad[index - 1]
+        iy1_ = heatmaps_pad[index - 2 - W]
+
+        dx = 0.5 * (ix1 - ix1_)
+        dy = 0.5 * (iy1 - iy1_)
+        derivative = np.concatenate([dx, dy], axis=1).reshape(K, 2, 1)
+
+        dxx = ix1 - 2 * i_ + ix1_
+        dyy = iy1 - 2 * i_ + iy1_
+        dxy = 0.5 * (ix1y1 - ix1 - iy1 + i_ + i_ - ix1_ - iy1_ + ix1_y1_)
+        hessian = np.concatenate([dxx, dxy, dxy, dyy], axis=1).reshape(K, 2, 2)
+        hessian = np.linalg.inv(hessian + np.finfo(np.float32).eps * np.eye(2))
+        keypoints[n] -= np.einsum("imn,ink->imk", hessian, derivative).squeeze()
+
+    return keypoints
+
+
+class Sapiens2ImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
+        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
+        is used for background, and background itself is not included in all classes of a dataset (e.g.
+        ADE20k). The background label will be replaced by 255.
+    """
+
+    do_reduce_labels: bool
+
+
+class Sapiens2ImageProcessor(TorchvisionBackend):
+    # Note: original Sapiens2 uses cv2.INTER_AREA for downsampling and cv2.INTER_CUBIC for upsampling
+    valid_kwargs = Sapiens2ImageProcessorKwargs
+    resample = PILImageResampling.BILINEAR
+    image_mean = IMAGENET_DEFAULT_MEAN
+    image_std = IMAGENET_DEFAULT_STD
+    size = {"height": 1024, "width": 768}
+    do_resize = True
+    do_rescale = True
+    do_normalize = True
+    do_reduce_labels = False
+
+    def __init__(self, **kwargs: Unpack[Sapiens2ImageProcessorKwargs]):
+        super().__init__(**kwargs)
+
+    @auto_docstring
+    def preprocess(
+        self,
+        images: ImageInput,
+        segmentation_maps: ImageInput | None = None,
+        boxes: list[list[list[float]]] | None = None,
+        **kwargs: Unpack[Sapiens2ImageProcessorKwargs],
+    ) -> BatchFeature:
+        r"""
+        segmentation_maps (`ImageInput`, *optional*):
+            The segmentation maps to preprocess.
+        boxes (`list[list[list[float]]]` or `np.ndarray`, *optional*):
+            List or array of bounding boxes for each image. Each box should be a list of 4 floats
+            representing the bounding box coordinates in COCO format
+            (top_left_x, top_left_y, width, height). When provided, each person crop is
+            affine-warped to the model input size instead of resizing the full image.
+            Requires the `cv2` package.
+        """
+        if boxes is not None:
+            requires_backends(self, ["cv2"])
+        return super().preprocess(images, segmentation_maps, boxes, **kwargs)
+
+    def _preprocess_image_like_inputs(
+        self,
+        images: ImageInput,
+        segmentation_maps: ImageInput | None,
+        boxes: list[list[list[float]]] | None,
+        do_convert_rgb: bool,
+        input_data_format: ChannelDimension,
+        return_tensors: str | TensorType | None,
+        device: Union[str, "torch.device"] | None = None,
+        **kwargs,
+    ) -> BatchFeature:
+        """Handle extra inputs beyond images."""
+        images = self._prepare_image_like_inputs(
+            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+        )
+        images_kwargs = kwargs.copy()
+        images_kwargs["do_reduce_labels"] = False
+        data = {}
+        data["pixel_values"] = self._preprocess(images, boxes=boxes, **images_kwargs)
+
+        if segmentation_maps is not None:
+            processed_segmentation_maps = self._prepare_image_like_inputs(
+                images=segmentation_maps,
+                expected_ndims=2,
+                do_convert_rgb=False,
+                input_data_format=ChannelDimension.FIRST,
+            )
+
+            segmentation_maps_kwargs = kwargs.copy()
+            segmentation_maps_kwargs.update({"do_normalize": False, "do_rescale": False})
+            processed_segmentation_maps = self._preprocess(
+                images=processed_segmentation_maps, **segmentation_maps_kwargs
+            )
+
+            processed_segmentation_maps = [
+                processed_segmentation_map.squeeze(0).to(torch.int64)
+                for processed_segmentation_map in processed_segmentation_maps
+            ]
+            data["labels"] = processed_segmentation_maps
+
+        return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def reduce_label(self, labels: list["torch.Tensor"]) -> list["torch.Tensor"]:
+        """Reduce label values by 1, replacing 0 with 255."""
+        for idx in range(len(labels)):
+            label = labels[idx]
+            label = torch.where(label == 0, torch.tensor(255, dtype=label.dtype, device=label.device), label)
+            label = label - 1
+            label = torch.where(label == 254, torch.tensor(255, dtype=label.dtype, device=label.device), label)
+            labels[idx] = label
+        return labels
+
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        do_reduce_labels: bool = False,
+        boxes: list[list[list[float]]] | None = None,
+        **kwargs,
+    ) -> list["torch.Tensor"]:
+        if boxes is not None:
+            output_size = (size["width"], size["height"])  # (W, H) for cv2
+            crops = []
+            for image, image_boxes in zip(images, boxes):
+                image_np = image.permute(1, 2, 0).cpu().numpy()  # (H, W, 3) uint8
+                for bbox in image_boxes:
+                    bbox_np = np.array(bbox, dtype=np.float32)
+                    center, scale = box_to_center_and_scale(bbox_np)
+                    scale = fix_aspect_ratio(scale, size["width"], size["height"])
+                    warp_mat = get_warp_matrix(0, center * 2, np.array(output_size, dtype=np.float32) - 1, scale)
+                    crop_np = cv2_warp_affine(image_np, warp_mat, output_size)
+                    crops.append(torch.from_numpy(crop_np).permute(2, 0, 1).to(image.device))
+            images = crops
+            do_resize = False  # affine crop already produces the target size
+
+        if do_reduce_labels:
+            images = self.reduce_label(images)
+
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                stacked_images = self.resize(stacked_images, size, resample)
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
+
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_center_crop:
+                stacked_images = self.center_crop(stacked_images, crop_size)
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_images_grouped[shape] = stacked_images
+
+        return reorder_images(processed_images_grouped, grouped_images_index)
+
+    def post_process_pose_estimation(
+        self,
+        outputs: Sapiens2PoseEstimatorOutput,
+        boxes: list[list[list[float]]] | np.ndarray,
+        blur_kernel_size: int = 11,
+        threshold: float | None = None,
+    ) -> list[list[dict[str, torch.Tensor]]]:
+        """
+        Converts the output of [`Sapiens2ForPoseEstimation`] into keypoint predictions in image space.
+
+        Args:
+            outputs (`Sapiens2PoseEstimatorOutput`):
+                Raw outputs of the model. `outputs.heatmaps` must have shape
+                `(N_total, num_keypoints, heatmap_height, heatmap_width)` where
+                `N_total = sum(len(b) for b in boxes)`.
+            boxes (`list[list[list[float]]]` or `np.ndarray`):
+                List or array of bounding boxes for each image. Each box should be a list of 4 floats
+                representing the bounding box coordinates in COCO format
+                (top_left_x, top_left_y, width, height). Must match the `boxes` argument passed to
+                `preprocess`.
+            blur_kernel_size (`int`, *optional*, defaults to 11):
+                Kernel size for the Gaussian blur used in UDP Dark Pose refinement.
+            threshold (`float`, *optional*):
+                Score threshold. Keypoints with scores at or below this value are
+                filtered out from the result dictionaries.
+
+        Returns:
+            `list[list[dict]]`: Outer list is over images, inner list is over persons.
+            Each dict contains:
+            - `keypoints` (`torch.FloatTensor` of shape `(num_keypoints, 2)`): x/y in image coords.
+            - `scores` (`torch.FloatTensor` of shape `(num_keypoints,)`): per-keypoint confidence.
+            - `labels` (`torch.LongTensor` of shape `(num_keypoints,)`): keypoint indices.
+            - `bbox` (`torch.FloatTensor` of shape `(4,)`): the COCO input bounding box.
+        """
+        requires_backends(self, ["cv2"])
+
+        heatmaps_np = outputs.heatmaps.cpu().numpy()  # (N_total, K, H_hm, W_hm)
+        flattened_boxes = [bbox for image_boxes in boxes for bbox in image_boxes]
+
+        _, K, H_hm, W_hm = heatmaps_np.shape
+        heatmap_size = np.array([W_hm - 1, H_hm - 1], dtype=np.float32)
+
+        person_results = []
+        for i, bbox in enumerate(flattened_boxes):
+            center, scale = box_to_center_and_scale(np.array(bbox, dtype=np.float32))
+            scale = fix_aspect_ratio(scale, self.size["width"], self.size["height"])
+            heatmap_i = heatmaps_np[i].copy()  # copy to avoid mutating caller's tensor
+
+            locs, scores_i = get_keypoint_predictions(heatmap_i[None])  # (1, K, 2), (1, K, 1)
+            scores_i = scores_i[0, :, 0]  # (K,)
+            locs = post_dark_unbiased_data_processing(locs, heatmap_i, blur_kernel_size)
+            locs = locs[0]  # (K, 2)
+
+            locs = locs / heatmap_size * scale + center - 0.5 * scale
+
+            keypoints = torch.tensor(locs, dtype=torch.float32)
+            scores = torch.tensor(scores_i, dtype=torch.float32)
+            labels = torch.arange(0, K)
+            bbox_tensor = torch.tensor(bbox, dtype=torch.float32)
+
+            if threshold is not None:
+                keep = scores > threshold
+                keypoints = keypoints[keep]
+                scores = scores[keep]
+                labels = labels[keep]
+
+            person_results.append({"keypoints": keypoints, "scores": scores, "labels": labels, "bbox": bbox_tensor})
+
+        # Reassemble into list[list[dict]] grouped by image
+        result = []
+        idx = 0
+        for image_boxes in boxes:
+            n = len(image_boxes)
+            result.append(person_results[idx : idx + n])
+            idx += n
+        return result
+
+    def post_process_semantic_segmentation(
+        self, outputs: SemanticSegmenterOutput, target_sizes: list[tuple] | None = None
+    ) -> list[torch.Tensor]:
+        """
+        Converts the output of [`Sapiens2ForSemanticSegmentation`] into semantic segmentation maps.
+
+        Args:
+            outputs (`SemanticSegmenterOutput`):
+                Raw outputs of the model.
+            target_sizes (`list[tuple]` of length `batch_size`, *optional*):
+                List of tuples corresponding to the requested final size `(height, width)` of each prediction.
+                If unset, predictions will not be resized.
+
+        Returns:
+            `list[torch.Tensor]` of length `batch_size`, where each item is a semantic segmentation map of
+            shape `(height, width)` corresponding to the target size (if `target_sizes` is specified).
+            Each entry corresponds to a semantic class id.
+        """
+        logits = outputs.logits
+
+        if target_sizes is not None:
+            if len(logits) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+
+            semantic_segmentation = []
+            for idx in range(len(logits)):
+                resized_logits = F.interpolate(
+                    logits[idx].unsqueeze(0),
+                    size=target_sizes[idx],
+                    mode="bilinear",
+                    align_corners=False,
+                    antialias=False,
+                )
+                semantic_segmentation.append(resized_logits[0].argmax(dim=0))
+        else:
+            semantic_segmentation = list(logits.argmax(dim=1))
+
+        return semantic_segmentation
+
+
 @auto_docstring(checkpoint="facebook/sapiens2-pretrain-0.4b")
 @strict
 class Sapiens2Config(DINOv3ViTConfig):
@@ -434,33 +816,6 @@ class Sapiens2SegmentationHead(nn.Module):
         return self.predictor(hidden_states)
 
 
-@auto_docstring(
-    custom_intro="""
-    Class for outputs of pose estimation models.
-    """
-)
-@dataclass
-class Sapiens2PoseEstimatorOutput(ModelOutput):
-    r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Keypoint loss computed between the predicted heatmaps and the ground-truth heatmaps.
-    heatmaps (`torch.FloatTensor` of shape `(batch_size, num_keypoints, height, width)`):
-        Heatmaps as predicted by the model.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage)
-        of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
-        each layer plus the initial embedding outputs.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one per layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Attentions weights after the attention softmax.
-    """
-
-    loss: torch.FloatTensor | None = None
-    heatmaps: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
-
-
 class Sapiens2PreTrainedModel(DINOv3ViTPreTrainedModel):
     base_model_prefix = "sapiens2"
 
@@ -611,361 +966,6 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-
-def box_to_center_and_scale(bbox: np.ndarray, padding: float = 1.25) -> tuple[np.ndarray, np.ndarray]:
-    """Convert COCO bbox (x, y, w, h) to center and scale for affine warp."""
-    x, y, w, h = bbox[:4].astype(np.float32)
-    center = np.array([x + w * 0.5, y + h * 0.5], dtype=np.float32)
-    scale = np.array([w * padding, h * padding], dtype=np.float32)
-    return center, scale
-
-
-def cv2_warp_affine(image_np: np.ndarray, warp_mat: np.ndarray, output_size: tuple[int, int]) -> np.ndarray:
-    """Warp-affine crop a HWC uint8 numpy array. output_size = (width, height)."""
-    scale_factor = min(np.linalg.norm(warp_mat[0, :2]), np.linalg.norm(warp_mat[1, :2]))
-    flags = cv2.INTER_AREA if scale_factor < 1.0 else cv2.INTER_CUBIC
-    return cv2.warpAffine(image_np, warp_mat, output_size, flags=flags)
-
-
-def cv2_gaussian_blur(heatmaps: np.ndarray, kernel: int = 11) -> np.ndarray:
-    """Gaussian blur per-keypoint heatmap, preserving the original max value."""
-    assert kernel % 2 == 1
-    border = (kernel - 1) // 2
-    K, H, W = heatmaps.shape
-    for k in range(K):
-        origin_max = np.max(heatmaps[k])
-        dr = np.zeros((H + 2 * border, W + 2 * border), dtype=np.float32)
-        dr[border:-border, border:-border] = heatmaps[k].copy()
-        dr = cv2.GaussianBlur(dr, (kernel, kernel), 0)
-        heatmaps[k] = dr[border:-border, border:-border].copy()
-        if np.max(heatmaps[k]) > 0:
-            heatmaps[k] *= origin_max / np.max(heatmaps[k])
-    return heatmaps
-
-
-def fix_aspect_ratio(scale: np.ndarray, width: int, height: int) -> np.ndarray:
-    """Adjust scale so the crop aspect ratio matches the given width/height."""
-    aspect_ratio = width / height
-    sw, sh = scale
-    if sw > sh * aspect_ratio:
-        return np.array([sw, sw / aspect_ratio], dtype=scale.dtype)
-    else:
-        return np.array([sh * aspect_ratio, sh], dtype=scale.dtype)
-
-
-def post_dark_unbiased_data_processing(
-    keypoints: np.ndarray, heatmaps: np.ndarray, blur_kernel_size: int = 11
-) -> np.ndarray:
-    """Sub-pixel refinement via Hessian on log-heatmaps (UDP Dark Pose). In-place, returns keypoints."""
-    N, K = keypoints.shape[:2]
-    H, W = heatmaps.shape[1:]
-
-    heatmaps = cv2_gaussian_blur(heatmaps, blur_kernel_size)
-    np.clip(heatmaps, 1e-3, 50.0, heatmaps)
-    np.log(heatmaps, heatmaps)
-
-    heatmaps_pad = np.pad(heatmaps, ((0, 0), (1, 1), (1, 1)), mode="edge").flatten()
-
-    for n in range(N):
-        index = keypoints[n, :, 0] + 1 + (keypoints[n, :, 1] + 1) * (W + 2)
-        index += (W + 2) * (H + 2) * np.arange(0, K)
-        index = index.astype(int).reshape(-1, 1)
-        i_ = heatmaps_pad[index]
-        ix1 = heatmaps_pad[index + 1]
-        iy1 = heatmaps_pad[index + W + 2]
-        ix1y1 = heatmaps_pad[index + W + 3]
-        ix1_y1_ = heatmaps_pad[index - W - 3]
-        ix1_ = heatmaps_pad[index - 1]
-        iy1_ = heatmaps_pad[index - 2 - W]
-
-        dx = 0.5 * (ix1 - ix1_)
-        dy = 0.5 * (iy1 - iy1_)
-        derivative = np.concatenate([dx, dy], axis=1).reshape(K, 2, 1)
-
-        dxx = ix1 - 2 * i_ + ix1_
-        dyy = iy1 - 2 * i_ + iy1_
-        dxy = 0.5 * (ix1y1 - ix1 - iy1 + i_ + i_ - ix1_ - iy1_ + ix1_y1_)
-        hessian = np.concatenate([dxx, dxy, dxy, dyy], axis=1).reshape(K, 2, 2)
-        hessian = np.linalg.inv(hessian + np.finfo(np.float32).eps * np.eye(2))
-        keypoints[n] -= np.einsum("imn,ink->imk", hessian, derivative).squeeze()
-
-    return keypoints
-
-
-class Sapiens2ImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
-        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
-        is used for background, and background itself is not included in all classes of a dataset (e.g.
-        ADE20k). The background label will be replaced by 255.
-    """
-
-    do_reduce_labels: bool
-
-
-class Sapiens2ImageProcessor(TorchvisionBackend):
-    # Note: original Sapiens2 uses cv2.INTER_AREA for downsampling and cv2.INTER_CUBIC for upsampling
-    valid_kwargs = Sapiens2ImageProcessorKwargs
-    resample = PILImageResampling.BILINEAR
-    image_mean = IMAGENET_DEFAULT_MEAN
-    image_std = IMAGENET_DEFAULT_STD
-    size = {"height": 1024, "width": 768}
-    do_resize = True
-    do_rescale = True
-    do_normalize = True
-    do_reduce_labels = False
-
-    def __init__(self, **kwargs: Unpack[Sapiens2ImageProcessorKwargs]):
-        super().__init__(**kwargs)
-
-    @auto_docstring
-    def preprocess(
-        self,
-        images: ImageInput,
-        segmentation_maps: ImageInput | None = None,
-        boxes: list[list[list[float]]] | None = None,
-        **kwargs: Unpack[Sapiens2ImageProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        segmentation_maps (`ImageInput`, *optional*):
-            The segmentation maps to preprocess.
-        boxes (`list[list[list[float]]]` or `np.ndarray`, *optional*):
-            List or array of bounding boxes for each image. Each box should be a list of 4 floats
-            representing the bounding box coordinates in COCO format
-            (top_left_x, top_left_y, width, height). When provided, each person crop is
-            affine-warped to the model input size instead of resizing the full image.
-            Requires the `cv2` package.
-        """
-        if boxes is not None:
-            requires_backends(self, ["cv2"])
-        return super().preprocess(images, segmentation_maps, boxes, **kwargs)
-
-    def _preprocess_image_like_inputs(
-        self,
-        images: ImageInput,
-        segmentation_maps: ImageInput | None,
-        boxes: list[list[list[float]]] | None,
-        do_convert_rgb: bool,
-        input_data_format: ChannelDimension,
-        return_tensors: str | TensorType | None,
-        device: Union[str, "torch.device"] | None = None,
-        **kwargs,
-    ) -> BatchFeature:
-        """Handle extra inputs beyond images."""
-        images = self._prepare_image_like_inputs(
-            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
-        )
-        images_kwargs = kwargs.copy()
-        images_kwargs["do_reduce_labels"] = False
-        data = {}
-        data["pixel_values"] = self._preprocess(images, boxes=boxes, **images_kwargs)
-
-        if segmentation_maps is not None:
-            processed_segmentation_maps = self._prepare_image_like_inputs(
-                images=segmentation_maps,
-                expected_ndims=2,
-                do_convert_rgb=False,
-                input_data_format=ChannelDimension.FIRST,
-            )
-
-            segmentation_maps_kwargs = kwargs.copy()
-            segmentation_maps_kwargs.update({"do_normalize": False, "do_rescale": False})
-            processed_segmentation_maps = self._preprocess(
-                images=processed_segmentation_maps, **segmentation_maps_kwargs
-            )
-
-            processed_segmentation_maps = [
-                processed_segmentation_map.squeeze(0).to(torch.int64)
-                for processed_segmentation_map in processed_segmentation_maps
-            ]
-            data["labels"] = processed_segmentation_maps
-
-        return BatchFeature(data=data, tensor_type=return_tensors)
-
-    def reduce_label(self, labels: list["torch.Tensor"]) -> list["torch.Tensor"]:
-        """Reduce label values by 1, replacing 0 with 255."""
-        for idx in range(len(labels)):
-            label = labels[idx]
-            label = torch.where(label == 0, torch.tensor(255, dtype=label.dtype, device=label.device), label)
-            label = label - 1
-            label = torch.where(label == 254, torch.tensor(255, dtype=label.dtype, device=label.device), label)
-            labels[idx] = label
-        return labels
-
-    def _preprocess(
-        self,
-        images: list["torch.Tensor"],
-        do_resize: bool,
-        size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
-        do_center_crop: bool,
-        crop_size: SizeDict,
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: float | list[float] | None,
-        image_std: float | list[float] | None,
-        disable_grouping: bool | None,
-        do_reduce_labels: bool = False,
-        boxes: list[list[list[float]]] | None = None,
-        **kwargs,
-    ) -> list["torch.Tensor"]:
-        if boxes is not None:
-            output_size = (size["width"], size["height"])  # (W, H) for cv2
-            crops = []
-            for image, image_boxes in zip(images, boxes):
-                image_np = image.permute(1, 2, 0).cpu().numpy()  # (H, W, 3) uint8
-                for bbox in image_boxes:
-                    bbox_np = np.array(bbox, dtype=np.float32)
-                    center, scale = box_to_center_and_scale(bbox_np)
-                    scale = fix_aspect_ratio(scale, size["width"], size["height"])
-                    warp_mat = get_warp_matrix(0, center * 2, np.array(output_size, dtype=np.float32) - 1, scale)
-                    crop_np = cv2_warp_affine(image_np, warp_mat, output_size)
-                    crops.append(torch.from_numpy(crop_np).permute(2, 0, 1).to(image.device))
-            images = crops
-            do_resize = False  # affine crop already produces the target size
-
-        if do_reduce_labels:
-            images = self.reduce_label(images)
-
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        resized_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            if do_resize:
-                stacked_images = self.resize(stacked_images, size, resample)
-            resized_images_grouped[shape] = stacked_images
-        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
-
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
-        processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            if do_center_crop:
-                stacked_images = self.center_crop(stacked_images, crop_size)
-            stacked_images = self.rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
-            processed_images_grouped[shape] = stacked_images
-
-        return reorder_images(processed_images_grouped, grouped_images_index)
-
-    def post_process_pose_estimation(
-        self,
-        outputs: Sapiens2PoseEstimatorOutput,
-        boxes: list[list[list[float]]] | np.ndarray,
-        blur_kernel_size: int = 11,
-        threshold: float | None = None,
-    ) -> list[list[dict[str, torch.Tensor]]]:
-        """
-        Converts the output of [`Sapiens2ForPoseEstimation`] into keypoint predictions in image space.
-
-        Args:
-            outputs (`Sapiens2PoseEstimatorOutput`):
-                Raw outputs of the model. `outputs.heatmaps` must have shape
-                `(N_total, num_keypoints, heatmap_height, heatmap_width)` where
-                `N_total = sum(len(b) for b in boxes)`.
-            boxes (`list[list[list[float]]]` or `np.ndarray`):
-                List or array of bounding boxes for each image. Each box should be a list of 4 floats
-                representing the bounding box coordinates in COCO format
-                (top_left_x, top_left_y, width, height). Must match the `boxes` argument passed to
-                `preprocess`.
-            blur_kernel_size (`int`, *optional*, defaults to 11):
-                Kernel size for the Gaussian blur used in UDP Dark Pose refinement.
-            threshold (`float`, *optional*):
-                Score threshold. Keypoints with scores at or below this value are
-                filtered out from the result dictionaries.
-
-        Returns:
-            `list[list[dict]]`: Outer list is over images, inner list is over persons.
-            Each dict contains:
-            - `keypoints` (`torch.FloatTensor` of shape `(num_keypoints, 2)`): x/y in image coords.
-            - `scores` (`torch.FloatTensor` of shape `(num_keypoints,)`): per-keypoint confidence.
-            - `labels` (`torch.LongTensor` of shape `(num_keypoints,)`): keypoint indices.
-            - `bbox` (`torch.FloatTensor` of shape `(4,)`): the COCO input bounding box.
-        """
-        requires_backends(self, ["cv2"])
-
-        heatmaps_np = outputs.heatmaps.cpu().numpy()  # (N_total, K, H_hm, W_hm)
-        flattened_boxes = [bbox for image_boxes in boxes for bbox in image_boxes]
-
-        _, K, H_hm, W_hm = heatmaps_np.shape
-        heatmap_size = np.array([W_hm - 1, H_hm - 1], dtype=np.float32)
-
-        person_results = []
-        for i, bbox in enumerate(flattened_boxes):
-            center, scale = box_to_center_and_scale(np.array(bbox, dtype=np.float32))
-            scale = fix_aspect_ratio(scale, self.size["width"], self.size["height"])
-            heatmap_i = heatmaps_np[i].copy()  # copy to avoid mutating caller's tensor
-
-            locs, scores_i = get_keypoint_predictions(heatmap_i[None])  # (1, K, 2), (1, K, 1)
-            scores_i = scores_i[0, :, 0]  # (K,)
-            locs = post_dark_unbiased_data_processing(locs, heatmap_i, blur_kernel_size)
-            locs = locs[0]  # (K, 2)
-
-            locs = locs / heatmap_size * scale + center - 0.5 * scale
-
-            keypoints = torch.tensor(locs, dtype=torch.float32)
-            scores = torch.tensor(scores_i, dtype=torch.float32)
-            labels = torch.arange(0, K)
-            bbox_tensor = torch.tensor(bbox, dtype=torch.float32)
-
-            if threshold is not None:
-                keep = scores > threshold
-                keypoints = keypoints[keep]
-                scores = scores[keep]
-                labels = labels[keep]
-
-            person_results.append({"keypoints": keypoints, "scores": scores, "labels": labels, "bbox": bbox_tensor})
-
-        # Reassemble into list[list[dict]] grouped by image
-        result = []
-        idx = 0
-        for image_boxes in boxes:
-            n = len(image_boxes)
-            result.append(person_results[idx : idx + n])
-            idx += n
-        return result
-
-    def post_process_semantic_segmentation(
-        self, outputs: SemanticSegmenterOutput, target_sizes: list[tuple] | None = None
-    ) -> list[torch.Tensor]:
-        """
-        Converts the output of [`Sapiens2ForSemanticSegmentation`] into semantic segmentation maps.
-
-        Args:
-            outputs (`SemanticSegmenterOutput`):
-                Raw outputs of the model.
-            target_sizes (`list[tuple]` of length `batch_size`, *optional*):
-                List of tuples corresponding to the requested final size `(height, width)` of each prediction.
-                If unset, predictions will not be resized.
-
-        Returns:
-            `list[torch.Tensor]` of length `batch_size`, where each item is a semantic segmentation map of
-            shape `(height, width)` corresponding to the target size (if `target_sizes` is specified).
-            Each entry corresponds to a semantic class id.
-        """
-        logits = outputs.logits
-
-        if target_sizes is not None:
-            if len(logits) != len(target_sizes):
-                raise ValueError(
-                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
-                )
-
-            semantic_segmentation = []
-            for idx in range(len(logits)):
-                resized_logits = F.interpolate(
-                    logits[idx].unsqueeze(0),
-                    size=target_sizes[idx],
-                    mode="bilinear",
-                    align_corners=False,
-                    antialias=False,
-                )
-                semantic_segmentation.append(resized_logits[0].argmax(dim=0))
-        else:
-            semantic_segmentation = list(logits.argmax(dim=1))
-
-        return semantic_segmentation
 
 
 __all__ = [

@@ -44,6 +44,33 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_sapiens2 import Sapiens2Config
 
 
+@auto_docstring(
+    custom_intro="""
+    Class for outputs of pose estimation models.
+    """
+)
+@dataclass
+class Sapiens2PoseEstimatorOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Keypoint loss computed between the predicted heatmaps and the ground-truth heatmaps.
+    heatmaps (`torch.FloatTensor` of shape `(batch_size, num_keypoints, height, width)`):
+        Heatmaps as predicted by the model.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage)
+        of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
+        each layer plus the initial embedding outputs.
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one per layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`. Attentions weights after the attention softmax.
+    """
+
+    loss: torch.FloatTensor | None = None
+    heatmaps: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+
+
 class Sapiens2Embeddings(nn.Module):
     """
     Construct the CLS token, mask token, position and patch embeddings.
@@ -549,33 +576,6 @@ class Sapiens2SegmentationHead(nn.Module):
         for layer in self.conv_layers:
             hidden_states = layer(hidden_states)
         return self.predictor(hidden_states)
-
-
-@auto_docstring(
-    custom_intro="""
-    Class for outputs of pose estimation models.
-    """
-)
-@dataclass
-class Sapiens2PoseEstimatorOutput(ModelOutput):
-    r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Keypoint loss computed between the predicted heatmaps and the ground-truth heatmaps.
-    heatmaps (`torch.FloatTensor` of shape `(batch_size, num_keypoints, height, width)`):
-        Heatmaps as predicted by the model.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage)
-        of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
-        each layer plus the initial embedding outputs.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one per layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Attentions weights after the attention softmax.
-    """
-
-    loss: torch.FloatTensor | None = None
-    heatmaps: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @auto_docstring
