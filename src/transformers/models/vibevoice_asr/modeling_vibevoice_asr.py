@@ -264,6 +264,7 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
     _keep_in_fp32_modules_strict = None
     _supports_attention_backend = True
     _tp_plan = None
+    _sp_plan = None
     _pp_plan = None
 
     def __init__(self, config: VibeVoiceAsrConfig):

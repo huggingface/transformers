@@ -47,6 +47,11 @@ class PhimoeConfig(PreTrainedConfig):
     model_type = "phimoe"
     keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 1000000.0
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
 
     vocab_size: int = 32064
     hidden_size: int = 4096
