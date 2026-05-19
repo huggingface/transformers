@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import (
@@ -28,6 +29,8 @@ from ..pp_ocrv5_mobile_det.modeling_pp_ocrv5_mobile_det import (
 from ..pp_ocrv5_server_det.configuration_pp_ocrv5_server_det import PPOCRV5ServerDetConfig
 from ..pp_ocrv5_server_det.modeling_pp_ocrv5_server_det import (
     PPOCRV5ServerDetForObjectDetection,
+    PPOCRV5ServerDetIntraclassBlock,
+    PPOCRV5ServerDetNeck,
 )
 
 
@@ -53,6 +56,79 @@ class PPOCRV6MediumDetConfig(PPOCRV5ServerDetConfig):
 
 class PPOCRV6MediumDetHead(PPOCRV5MobileDetHead):
     pass
+
+
+class PPOCRV6MediumDetIntraclassBlock(PPOCRV5ServerDetIntraclassBlock):
+    pass
+
+
+class PPOCRV6MediumDetNeck(PPOCRV5ServerDetNeck):
+    """
+    The only difference from PPOCRV5ServerDetNeck is that
+    feature_projection_convolution and pan_lateral_convolution require bias=True
+    to load weights fused from depthwise reparameterization, pointwise convolution, and BatchNorm.
+    """
+
+    def __init__(self, config):
+        nn.Module.__init__(self)
+        self.interpolate_mode = config.interpolate_mode
+        self.scale_factor_list = config.scale_factor_list
+        self.num_backbone_stages = len(config.backbone_config.stage_out_channels)
+
+        self.input_channel_adjustment_convolution = nn.ModuleList()
+        self.input_feature_projection_convolution = nn.ModuleList()
+        self.path_aggregation_head_convolution = nn.ModuleList()
+        self.path_aggregation_lateral_convolution = nn.ModuleList()
+
+        backbone_stage_output_channels = config.backbone_config.stage_out_channels
+
+        for backbone_stage_index in range(len(backbone_stage_output_channels)):
+            channel_adjustment_convolution = nn.Conv2d(
+                in_channels=backbone_stage_output_channels[backbone_stage_index],
+                out_channels=config.neck_out_channels,
+                kernel_size=1,
+                bias=False,
+            )
+            self.input_channel_adjustment_convolution.append(channel_adjustment_convolution)
+
+            # [Key Change] bias=True
+            feature_projection_convolution = nn.Conv2d(
+                in_channels=config.neck_out_channels,
+                out_channels=config.neck_out_channels // 4,
+                kernel_size=9,
+                padding=4,
+                bias=True,
+            )
+            self.input_feature_projection_convolution.append(feature_projection_convolution)
+
+            if backbone_stage_index > 0:
+                pan_head_convolution = nn.Conv2d(
+                    in_channels=config.neck_out_channels // 4,
+                    out_channels=config.neck_out_channels // 4,
+                    kernel_size=3,
+                    padding=1,
+                    stride=2,
+                    bias=False,
+                )
+                self.path_aggregation_head_convolution.append(pan_head_convolution)
+
+            # [Key Change] bias=True
+            pan_lateral_convolution = nn.Conv2d(
+                in_channels=config.neck_out_channels // 4,
+                out_channels=config.neck_out_channels // 4,
+                kernel_size=9,
+                padding=4,
+                bias=True,
+            )
+            self.path_aggregation_lateral_convolution.append(pan_lateral_convolution)
+
+        self.intraclass_blocks = nn.ModuleList()
+        for _ in range(config.intraclass_block_number):
+            self.intraclass_blocks.append(
+                PPOCRV6MediumDetIntraclassBlock(
+                    config.intraclass_block_config, config.neck_out_channels // 4, reduce_factor=config.reduce_factor
+                )
+            )
 
 
 @auto_docstring(custom_intro="PPOCRV6MediumDet model for text detection tasks.")

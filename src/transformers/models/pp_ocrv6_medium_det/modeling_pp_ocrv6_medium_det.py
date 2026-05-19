@@ -205,9 +205,9 @@ class PPOCRV6MediumDetIntraclassBlock(nn.Module):
 
 class PPOCRV6MediumDetNeck(nn.Module):
     """
-    Large Kernel Path Aggregation Network (Neck) for PPOCRV5 Server Detection.
-    Fuses multi-scale features from backbone stages (stage 2 to stage 5) via top-down and bottom-up paths,
-    enhanced with large kernel convolution for better spatial dependency modeling.
+    The only difference from PPOCRV5ServerDetNeck is that
+    feature_projection_convolution and pan_lateral_convolution require bias=True
+    to load weights fused from depthwise reparameterization, pointwise convolution, and BatchNorm.
     """
 
     def __init__(self, config):
@@ -232,12 +232,13 @@ class PPOCRV6MediumDetNeck(nn.Module):
             )
             self.input_channel_adjustment_convolution.append(channel_adjustment_convolution)
 
+            # [Key Change] bias=True
             feature_projection_convolution = nn.Conv2d(
                 in_channels=config.neck_out_channels,
                 out_channels=config.neck_out_channels // 4,
                 kernel_size=9,
                 padding=4,
-                bias=False,
+                bias=True,
             )
             self.input_feature_projection_convolution.append(feature_projection_convolution)
 
@@ -252,12 +253,13 @@ class PPOCRV6MediumDetNeck(nn.Module):
                 )
                 self.path_aggregation_head_convolution.append(pan_head_convolution)
 
+            # [Key Change] bias=True
             pan_lateral_convolution = nn.Conv2d(
                 in_channels=config.neck_out_channels // 4,
                 out_channels=config.neck_out_channels // 4,
                 kernel_size=9,
                 padding=4,
-                bias=False,
+                bias=True,
             )
             self.path_aggregation_lateral_convolution.append(pan_lateral_convolution)
 
