@@ -75,12 +75,12 @@ class DeepseekOcr2ModelOutputWithPooling(BaseModelOutputWithPooling):
     local_attentions: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Llava outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class DeepseekOcr2ModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -96,12 +96,12 @@ class DeepseekOcr2ModelOutputWithPast(BaseModelOutputWithPast):
     image_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for DeepseekOcr2 causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class DeepseekOcr2CausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -137,7 +137,7 @@ class DeepseekOcr2PreTrainedModel(PreTrainedModel):
         "DeepseekOcr2VisionEncoderLayer",
         "DeepseekOcr2TextDecoderLayer",
     ]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     # SAM uses rel-pos bias, incompatible with flash attention.
     _supports_flash_attn = False
     _supports_sdpa = True
@@ -208,7 +208,7 @@ class DeepseekOcr2SamVisionAttention(nn.Module):
         max_rel_dist = int(2 * max(q_size, k_size) - 1)
         # Interpolate rel pos.
         rel_pos_resized = F.interpolate(
-            rel_pos.reshape(1, rel_pos.shape[0], -1).permute(0, 2, 1),
+            rel_pos.reshape(1, rel_pos.shape[0], -1).transpose(1, 2),
             size=max_rel_dist,
             mode="linear",
         )
@@ -899,25 +899,6 @@ class DeepseekOcr2VisionEncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-def token_type_ids_mask_function(token_type_ids: torch.Tensor):
-    """
-    Creates an or_mask_function for `create_causal_mask` that allows
-    bidirectional attention between image tokens (type_id=0).
-
-    Args:
-        token_type_ids: `(batch_size, seq_len)` tensor where 0=image, 1=query.
-
-    Returns:
-        A mask function compatible with `create_causal_mask(or_mask_function=...)`.
-    """
-    is_image = token_type_ids == 0
-
-    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        return is_image[batch_idx, q_idx] & is_image[batch_idx, kv_idx]
-
-    return inner_mask
-
-
 @auto_docstring(custom_intro="Vision encoder for DeepSeek-OCR-2.")
 class DeepseekOcr2VisionEncoder(DeepseekOcr2PreTrainedModel):
     _can_record_outputs = {
@@ -959,19 +940,14 @@ class DeepseekOcr2VisionEncoder(DeepseekOcr2PreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
 
         bsz, seq_len, _ = inputs_embeds.shape
-        token_type_ids = torch.cat(
-            [
-                torch.zeros(bsz, num_patches, dtype=torch.long, device=inputs_embeds.device),
-                torch.ones(bsz, seq_len - num_patches, dtype=torch.long, device=inputs_embeds.device),
-            ],
-            dim=1,
-        )
+        block_sequence_ids = torch.full((bsz, seq_len), -1, dtype=torch.long, device=inputs_embeds.device)
+        block_sequence_ids[:, :num_patches] = 0
         attention_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=None,
             past_key_values=None,
-            or_mask_function=token_type_ids_mask_function(token_type_ids),
+            block_sequence_ids=block_sequence_ids,
         )
 
         hidden_states = inputs_embeds
@@ -1458,12 +1434,6 @@ class DeepseekOcr2Model(DeepseekOcr2PreTrainedModel):
         self.view_separator = nn.Parameter(torch.empty(config.text_config.hidden_size))
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -1606,12 +1576,6 @@ class DeepseekOcr2ForConditionalGeneration(DeepseekOcr2PreTrainedModel, Generati
         self.model = DeepseekOcr2Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head

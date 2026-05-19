@@ -836,19 +836,14 @@ class DeepseekOcr2VisionEncoder(Qwen2Model, DeepseekOcr2PreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
 
         bsz, seq_len, _ = inputs_embeds.shape
-        token_type_ids = torch.cat(
-            [
-                torch.zeros(bsz, num_patches, dtype=torch.long, device=inputs_embeds.device),
-                torch.ones(bsz, seq_len - num_patches, dtype=torch.long, device=inputs_embeds.device),
-            ],
-            dim=1,
-        )
+        block_sequence_ids = torch.full((bsz, seq_len), -1, dtype=torch.long, device=inputs_embeds.device)
+        block_sequence_ids[:, :num_patches] = 0
         attention_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=None,
             past_key_values=None,
-            or_mask_function=token_type_ids_mask_function(token_type_ids),
+            block_sequence_ids=block_sequence_ids,
         )
 
         hidden_states = inputs_embeds
@@ -865,25 +860,6 @@ class DeepseekOcr2VisionEncoder(Qwen2Model, DeepseekOcr2PreTrainedModel):
 
         hidden_states = self.norm(hidden_states)
         return BaseModelOutputWithPast(last_hidden_state=hidden_states)
-
-
-def token_type_ids_mask_function(token_type_ids: torch.Tensor):
-    """
-    Creates an or_mask_function for `create_causal_mask` that allows
-    bidirectional attention between image tokens (type_id=0).
-
-    Args:
-        token_type_ids: `(batch_size, seq_len)` tensor where 0=image, 1=query.
-
-    Returns:
-        A mask function compatible with `create_causal_mask(or_mask_function=...)`.
-    """
-    is_image = token_type_ids == 0
-
-    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        return is_image[batch_idx, q_idx] & is_image[batch_idx, kv_idx]
-
-    return inner_mask
 
 
 class DeepseekOcr2VisionModel(DeepseekOcr2PreTrainedModel):
