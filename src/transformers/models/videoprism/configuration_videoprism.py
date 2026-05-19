@@ -70,10 +70,6 @@ class VideoPrismVisionConfig(PreTrainedConfig):
     num_auxiliary_layers: int = 2
     apply_l2norm: bool = True
 
-    def __post_init__(self, **kwargs):
-        self.pooler_output_size = self.pooler_output_size if self.pooler_output_size else self.hidden_size
-        super().__post_init__(**kwargs)
-
 
 @auto_docstring(checkpoint="google/videoprism-lvt-base-f16r288")
 @strict

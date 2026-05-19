@@ -89,6 +89,8 @@ class VideoPrismVisionConfig(VivitConfig):
     num_auxiliary_layers: int = 2
     apply_l2norm: bool = True
 
+    def __post_init__(self, **kwargs):
+        raise AttributeError("Not used here")
 
 @auto_docstring(checkpoint="google/videoprism-lvt-base-f16r288")
 @strict
