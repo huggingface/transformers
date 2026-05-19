@@ -99,12 +99,14 @@ class ALMModelTester(MultiModalModelTester):
         """Create audio-level attention mask with contiguous valid regions per batch element.
 
         Each element gets a random offset and length, producing masks like [0, 0, 1, 1, 1, 0, 0].
+        At least one batch index is pinned to a full-length mask.
         """
         # Use a locally-seeded RNG so repeated calls within a test produce the same mask
         rng = random.Random(0)
         # Sample lengths in [1, feat_seq_length] and offsets in [0, feat_seq_length - length]
         lengths = ids_tensor([self.batch_size], vocab_size=self.feat_seq_length, rng=rng).abs() + 1
         lengths = lengths.clamp(max=self.feat_seq_length)
+        lengths[rng.randint(0, self.batch_size - 1)] = self.feat_seq_length
         offsets = ids_tensor([self.batch_size], vocab_size=self.feat_seq_length, rng=rng).abs()
         offsets = offsets % (self.feat_seq_length - lengths + 1)
 
@@ -171,6 +173,12 @@ class ALMModelTest(MultiModalModelTest):
         audio_feature_key = self.model_tester.get_audio_feature_key()
         audio_mask_key = self.model_tester.audio_mask_key
 
+        # Pick the batch index `create_audio_mask` pinned to full length — guaranteed to
+        # contribute > 0 audio tokens even for encoders that aggressively downsample
+        # (e.g. GlmAsr), so duplicating it in Test 2 reliably moves the audio-token total.
+        audio_token_id = self.model_tester.audio_token_id
+        dup_idx = int((input_dict["input_ids"] == audio_token_id).sum(-1).argmax().item())
+
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
             model.eval()
@@ -187,11 +195,13 @@ class ALMModelTest(MultiModalModelTest):
             # Test 2: add one audio but leave the audio tokens in the text
             curr_input_dict = copy.deepcopy(input_dict)
             curr_input_dict[audio_feature_key] = torch.cat(
-                [curr_input_dict[audio_feature_key], curr_input_dict[audio_feature_key][:1, ...]], dim=0
+                [curr_input_dict[audio_feature_key], curr_input_dict[audio_feature_key][dup_idx : dup_idx + 1, ...]],
+                dim=0,
             )
             if audio_mask_key is not None:
                 curr_input_dict[audio_mask_key] = torch.cat(
-                    [curr_input_dict[audio_mask_key], curr_input_dict[audio_mask_key][:1, ...]], dim=0
+                    [curr_input_dict[audio_mask_key], curr_input_dict[audio_mask_key][dup_idx : dup_idx + 1, ...]],
+                    dim=0,
                 )
             with self.assertRaises(ValueError):
                 _ = model(**curr_input_dict)
