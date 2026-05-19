@@ -2197,6 +2197,46 @@ class _TestToolCallBase:
             f"Expected model to reference tool result, got: {content}",
         )
 
+    # ----- parser equivalence -----
+
+    def test_chat_streaming_matches_non_streaming(self):
+        """Streaming and non-streaming chat completions yield the same tool call at T=0."""
+        msgs = [{"role": "user", "content": "What is the weather in Paris?"}]
+        kwargs = dict(model=self.MODEL, max_tokens=50, temperature=0.0, tools=[self._get_tool_def()])
+
+        ns = self.client.chat.completions.create(messages=msgs, stream=False, **kwargs)
+        ns_tc = ns.choices[0].message.tool_calls[0]
+
+        chunks = list(self.client.chat.completions.create(messages=msgs, stream=True, **kwargs))
+        tool_chunks = [c for c in chunks if c.choices[0].delta.tool_calls]
+        # Arguments may be split across deltas, accumulate then compare parsed dicts.
+        s_name = tool_chunks[0].choices[0].delta.tool_calls[0].function.name
+        s_args = "".join(
+            c.choices[0].delta.tool_calls[0].function.arguments or "" for c in tool_chunks
+        )
+
+        self.assertEqual(s_name, ns_tc.function.name)
+        self.assertEqual(json.loads(s_args), json.loads(ns_tc.function.arguments))
+
+    def test_responses_streaming_matches_non_streaming(self):
+        """Streaming and non-streaming Responses API yield the same tool call at T=0."""
+        kwargs = dict(
+            model=self.MODEL,
+            input="What is the weather in Paris?",
+            max_output_tokens=50,
+            tools=[self._get_tool_def()],
+        )
+
+        ns = self.client.responses.create(stream=False, **kwargs)
+        ns_tc = next(i for i in ns.output if i.type == "function_call")
+
+        events = list(self.client.responses.create(stream=True, **kwargs))
+        completed = next(e for e in events if e.type == "response.completed")
+        s_tc = next(i for i in completed.response.output if i.type == "function_call")
+
+        self.assertEqual(s_tc.name, ns_tc.name)
+        self.assertEqual(json.loads(s_tc.arguments), json.loads(ns_tc.arguments))
+
 
 @slow
 @require_serve
@@ -2241,6 +2281,7 @@ class _TestReasoningBase:
     def _reasoning_field(obj):
         """Return ``reasoning_content`` from a chat message or delta (handles model_extra)."""
         return getattr(obj, "reasoning_content", None) or (obj.model_extra or {}).get("reasoning_content")
+
 
     # ----- chat completions -----
 
@@ -2383,6 +2424,38 @@ class _TestReasoningBase:
             temperature=0.0,
         )
         self.assertEqual(second.status, "completed")
+
+    # ----- parser equivalence -----
+
+    def test_chat_streaming_matches_non_streaming(self):
+        """Streaming and non-streaming chat completions yield the same content + reasoning at T=0."""
+        msgs = [{"role": "user", "content": self.USER_PROMPT}]
+        kwargs = dict(model=self.MODEL, max_tokens=self.MAX_TOKENS, temperature=0.0)
+
+        ns_msg = self.client.chat.completions.create(messages=msgs, stream=False, **kwargs).choices[0].message
+        chunks = list(self.client.chat.completions.create(messages=msgs, stream=True, **kwargs))
+        stream_content = "".join(c.choices[0].delta.content or "" for c in chunks)
+        stream_reasoning = "".join(self._reasoning_field(c.choices[0].delta) or "" for c in chunks)
+
+        self.assertEqual(stream_content, ns_msg.content or "")
+        self.assertEqual(stream_reasoning, self._reasoning_field(ns_msg) or "")
+
+    def test_response_streaming_matches_non_streaming(self):
+        """Streaming and non-streaming Responses API yield the same content + reasoning at T=0."""
+        kwargs = dict(model=self.MODEL, input=self.USER_PROMPT, max_output_tokens=self.MAX_TOKENS, temperature=0.0)
+
+        ns = self.client.responses.create(stream=False, **kwargs)
+        ns_message = next(i for i in ns.output if i.type == "message")
+        ns_reasoning_item = next((i for i in ns.output if i.type == "reasoning"), None)
+        ns_content = ns_message.content[0].text
+        ns_reasoning = ns_reasoning_item.content[0].text if ns_reasoning_item else ""
+
+        events = list(self.client.responses.create(stream=True, **kwargs))
+        stream_content = "".join(e.delta for e in events if e.type == "response.output_text.delta")
+        stream_reasoning = "".join(e.delta for e in events if e.type == "response.reasoning_text.delta")
+
+        self.assertEqual(stream_content, ns_content)
+        self.assertEqual(stream_reasoning, ns_reasoning)
 
 
 @slow

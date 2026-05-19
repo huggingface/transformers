@@ -183,14 +183,20 @@ _DEFAULT_THINKING_TOKENS = {
             "thinking": {"type": "string"},
             "content": {"type": "string"},
         },
-        "x-regex": r"\s*(?:<think>)?(?P<thinking>.*?)</think>\s*(?P<content>.*)",
+        # Trailing ``(?:<\|...\|>)?\Z`` absorbs EOS markers (``<|im_end|>``,
+        # ``<|endoftext|>``, ``<|eot_id|>``) that would otherwise be captured by the
+        # content group, since ``parse_response`` decodes with ``skip_special_tokens=False``.
+        "x-regex": r"(?:<think>)?(?P<thinking>.*?)</think>(?P<content>.*?)(?:<\|[^|<>\s]+\|>)?\Z",
     },
 }
 # Streaming-side token IDs for families whose ``response_schema`` uses non-default
 # start/end tokens. Post-hoc parsing uses the schema; this only feeds the
 # streamer's token-level detector.
 _THINKING_TOKENS = {
-    "gemma4": {"start": ["<|channel>", "thought"], "end": "<channel|>"},
+    # Gemma 4's response_schema regex anchors on the literal ``<|channel>thought\n``,
+    # consuming the newline before the thinking capture begins. Include ``\n`` in the
+    # streamer's start sequence so it's suppressed the same way.
+    "gemma4": {"start": ["<|channel>", "thought", "\n"], "end": "<channel|>"},
 }
 
 
@@ -238,13 +244,13 @@ def parse_reasoning(processor, generated_ids, content: str, reasoning_config: di
     """
     parsed = processor.parse_response(generated_ids, reasoning_config["schema"])
     if parsed:
-        reasoning = parsed.get("thinking", "").strip()
+        reasoning = parsed.get("thinking", "")
         if reasoning:
             return parsed.get("content", ""), reasoning
     # Prefilled opener (QwQ-32B, DeepSeek-R1) truncated before ``</think>`` —
     # no anchor for the schema regex; treat all output as reasoning.
     if reasoning_config.get("start_in_thinking"):
-        return "", content.strip()
+        return "", content
     return content, None
 
 
@@ -274,6 +280,31 @@ def _starts_in_thinking(input_ids, start_ids: list[int]) -> bool:
             if input_ids[end - n : end] == start_ids:
                 return True
     return False
+
+
+def _advance_thinking_state(streamer, token_id: int) -> bool:
+    """Mutate ``streamer``'s thinking state; return ``True`` if ``token_id`` is a start or end token.
+
+    Shared between :class:`DirectStreamer` and :class:`CBStreamer` — both track the
+    same four attributes (``_thinking_start_ids``, ``_thinking_end_id``,
+    ``_inside_thinking``, ``_thinking_prefix``) and need identical edge handling.
+    """
+    if streamer._thinking_start_ids is None:
+        return False
+    if streamer._inside_thinking:
+        if token_id == streamer._thinking_end_id:
+            streamer._inside_thinking = False
+            return True
+        return False
+    expected = streamer._thinking_start_ids[len(streamer._thinking_prefix)]
+    if token_id != expected:
+        streamer._thinking_prefix = []
+        return False
+    streamer._thinking_prefix.append(token_id)
+    if len(streamer._thinking_prefix) == len(streamer._thinking_start_ids):
+        streamer._inside_thinking = True
+        streamer._thinking_prefix = []
+    return True
 
 
 class DownloadAggregator:
@@ -457,7 +488,7 @@ class DirectStreamer:
             elif token_id == self._etc_id:
                 self._inside_tool_call = False
 
-            is_start_or_end_token = self._advance_thinking_state(token_id)
+            is_start_or_end_token = _advance_thinking_state(self, token_id)
 
             text = self._decode_stream.step(self._tokenizer, token_id)
             if text is None or self._inside_tool_call or token_id == self._etc_id or is_start_or_end_token:
@@ -465,25 +496,6 @@ class DirectStreamer:
             if self._inside_thinking:
                 text = ReasoningText(text)
             self._loop.call_soon_threadsafe(self._queue.put_nowait, text)
-
-    def _advance_thinking_state(self, token_id: int) -> bool:
-        """Mutate thinking state; return ``True`` if ``token_id`` is a start or end token — suppress from output."""
-        if self._thinking_start_ids is None:
-            return False
-        if self._inside_thinking:
-            if token_id == self._thinking_end_id:
-                self._inside_thinking = False
-                return True
-            return False
-        expected = self._thinking_start_ids[len(self._thinking_prefix)]
-        if token_id != expected:
-            self._thinking_prefix = []
-            return False
-        self._thinking_prefix.append(token_id)
-        if len(self._thinking_prefix) == len(self._thinking_start_ids):
-            self._inside_thinking = True
-            self._thinking_prefix = []
-        return True
 
     def end(self) -> None:
         """Called by ``model.generate()`` when generation is complete."""
@@ -555,7 +567,7 @@ class CBStreamer:
             elif token_id == self._etc_id:
                 self._inside_tool_call = False
 
-            is_start_or_end_token = self._advance_thinking_state(token_id)
+            is_start_or_end_token = _advance_thinking_state(self, token_id)
 
             text = self._decode_stream.step(self._tokenizer, token_id)
             if text is None or self._inside_tool_call or token_id == self._etc_id or is_start_or_end_token:
@@ -563,25 +575,6 @@ class CBStreamer:
             if self._inside_thinking:
                 text = ReasoningText(text)
             self._queue.put_nowait(text)
-
-    def _advance_thinking_state(self, token_id: int) -> bool:
-        """Mutate thinking state; return ``True`` if ``token_id`` is a start or end token — suppress from output."""
-        if self._thinking_start_ids is None:
-            return False
-        if self._inside_thinking:
-            if token_id == self._thinking_end_id:
-                self._inside_thinking = False
-                return True
-            return False
-        expected = self._thinking_start_ids[len(self._thinking_prefix)]
-        if token_id != expected:
-            self._thinking_prefix = []
-            return False
-        self._thinking_prefix.append(token_id)
-        if len(self._thinking_prefix) == len(self._thinking_start_ids):
-            self._inside_thinking = True
-            self._thinking_prefix = []
-        return True
 
     def end(self) -> None:
         """Signal end of stream."""
