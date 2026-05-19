@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_cohere2moe import *
-    from .modeling_cohere2moe import *
+    from .configuration_cohere2_moe import *
+    from .modeling_cohere2_moe import *
 else:
     import sys
 

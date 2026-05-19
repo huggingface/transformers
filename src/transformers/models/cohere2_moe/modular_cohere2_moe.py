@@ -46,7 +46,7 @@ from ..cohere2.modeling_cohere2 import (
 )
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..mixtral.modeling_mixtral import MixtralExperts
-from .configuration_cohere2moe import Cohere2MoeConfig
+from .configuration_cohere2_moe import Cohere2MoeConfig
 
 
 class Cohere2MoeMLP(Cohere2MLP):
