@@ -595,6 +595,7 @@ class WeightTransform:
         "_original_target_patterns",
         "_was_used",
         "scope_prefix",
+        "base_model_prefix",
     )
 
     def __init__(self, source_patterns: str | list[str], target_patterns: str | list[str]):
@@ -612,9 +613,11 @@ class WeightTransform:
 
         # Flag to notice if the Transform was used
         self._was_used = False
-        # Optional prefix scope: when set, this transform only applies to keys starting with
-        # `scope_prefix + "."`, stripping / re-attaching the prefix around the pattern match.
+
+        # Optional scope_prefix/base_model_prefix. When used, the transform will only match and apply to keys containing
+        # either `base_model_prefix.scope_prefix.` or `scope_prefix.` prefixes
         self.scope_prefix: str | None = None
+        self.base_model_prefix: str | None = None
 
         # We need to process a few exceptions here when instantiating the reverse mapping (i.e. the targets become
         # sources, and sources become targets). The issues lie in the sources usually, so here we need to check the
@@ -680,9 +683,7 @@ class WeightTransform:
         self.collected_tensors[source_pattern].append(future)
         self.layer_targets[target_key].add(source_key)
 
-    def _scoped_match(
-        self, source_key: str, base_model_prefix: str | None = None
-    ) -> tuple[str | None, str, re.Match[str]] | None:
+    def _scoped_match(self, source_key: str) -> tuple[str | None, str, re.Match[str]] | None:
         """
         Strip `scope_prefix` (if any) from `source_key`, then match `compiled_sources` against the
         remaining suffix.
@@ -692,44 +693,35 @@ class WeightTransform:
         one `base_model_prefix` level stripped or prepended when the former didn't match.
         `None` when `scope_prefix` is unset.
         """
-        if self.scope_prefix is None:
-            match_object = self.compiled_sources.search(source_key)
-            if match_object is None:
-                return None
-            return (None, source_key, match_object)
-
-        scope_prefix_dot = self.scope_prefix + "."
-        # Try `scope_prefix.` first; then a single `base_model_prefix` adjustment - strip it off if
-        # `scope_prefix.` already starts with it, otherwise prepend it.
-        candidates = [scope_prefix_dot]
-        if base_model_prefix is not None:
-            base_dot = base_model_prefix + "."
-            if scope_prefix_dot.startswith(base_dot):
-                candidates.append(scope_prefix_dot[len(base_dot) :])
+        key_to_match = source_key
+        prefix = None
+        if self.scope_prefix is not None:
+            scope_prefix = f"{self.scope_prefix}." if self.scope_prefix != "" else ""
+            base_model_prefix = f"{self.base_model_prefix}." if self.base_model_prefix != "" else ""
+            # First, try to match the longest sequence, i.e. base_model_prefix + scope_prefix
+            if source_key.startswith(base_model_prefix + scope_prefix):
+                prefix = base_model_prefix + scope_prefix
+            # Then, try to strip the base_model_prefix, in case we load a ForXXX model from BaseModel weights
+            elif source_key.startswith(scope_prefix):
+                prefix = scope_prefix
+            # In this case, no match is ever possible
             else:
-                candidates.append(base_dot + scope_prefix_dot)
-
-        for candidate in candidates:
-            if source_key.startswith(candidate):
-                key_to_match = source_key[len(candidate) :]
-                prefix_dot = candidate
-                break
-        else:
-            return None
+                return None
+            key_to_match = source_key.removeprefix(prefix)
 
         match_object = self.compiled_sources.search(key_to_match)
         if match_object is None:
             return None
-        return (prefix_dot, key_to_match, match_object)
+        return (prefix, key_to_match, match_object)
 
-    def rename_source_key(self, source_key: str, base_model_prefix: str | None = None) -> tuple[str, str | None]:
+    def rename_source_key(self, source_key: str) -> tuple[str, str | None]:
         """
         Return a tuple (renamed_key, source_pattern_producing_the_match).
         Try renaming `source_key` according to the source and target patterns of the current WeightTransform.
         In case of a one-to-many transform, i.e. we have several target patterns, the matching source pattern
         will be replaced by the first of all the target patterns (they are then correctly expanded in the Operations).
         """
-        matched = self._scoped_match(source_key, base_model_prefix)
+        matched = self._scoped_match(source_key)
         if matched is None:
             return source_key, None
 
@@ -775,6 +767,7 @@ class WeightTransform:
             source_patterns=self._original_target_patterns, target_patterns=self._original_source_patterns, **kwargs
         )
         reverse_transform.scope_prefix = self.scope_prefix
+        reverse_transform.base_model_prefix = self.base_model_prefix
         return reverse_transform
 
     def materialize_tensors(self) -> dict[str, list[torch.Tensor]]:
@@ -897,6 +890,7 @@ class PrefixChange(WeightRenaming):
             prefix_to_add=self.prefix_to_remove, prefix_to_remove=self.prefix_to_add, model_prefix=self.model_prefix
         )
         result.scope_prefix = self.scope_prefix
+        result.base_model_prefix = self.base_model_prefix
         return result
 
 
@@ -1198,13 +1192,13 @@ def rename_source_key(
     # 1. apply all renamings in turns (if multiple match, it's the responsibility of the mappings to make sure they
     # are coherent)
     for renaming in weight_renamings:
-        renamed_key, _ = renaming.rename_source_key(renamed_key, base_model_prefix=base_model_prefix)
+        renamed_key, _ = renaming.rename_source_key(renamed_key)
 
     # 2. apply renaming through weight conversions on the key if we have any WeightConverter (here we stop after
     # the first match, as we assume only 1 converter can match any source key)
     source_pattern = None
     for converter in weight_converters:
-        renamed_key, source_pattern = converter.rename_source_key(renamed_key, base_model_prefix=base_model_prefix)
+        renamed_key, source_pattern = converter.rename_source_key(renamed_key)
         if source_pattern is not None:
             break
 
@@ -1370,8 +1364,8 @@ def convert_and_load_state_dict_in_model(
             original_key,
             renamings,
             converters,
-            base_model_prefix=base_model_prefix,
-            meta_state_dict=meta_model_state_dict,
+            base_model_prefix,
+            meta_model_state_dict,
         )
         if renamed_key not in meta_model_state_dict and original_key in meta_model_state_dict:
             # Key should probably not have been renamed but we might need the `prefix` to be added.
