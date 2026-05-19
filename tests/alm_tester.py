@@ -102,10 +102,8 @@ class ALMModelTester(MultiModalModelTester):
         """
         # Use a locally-seeded RNG so repeated calls within a test produce the same mask
         rng = random.Random(0)
-        # Sample lengths in [min_audio_mask_length, feat_seq_length] and offsets in [0, feat_seq_length - length]
-        min_length = self.min_audio_mask_length
-        range_size = self.feat_seq_length - min_length + 1
-        lengths = ids_tensor([self.batch_size], vocab_size=range_size, rng=rng).abs() + min_length
+        # Sample lengths in [1, feat_seq_length] and offsets in [0, feat_seq_length - length]
+        lengths = ids_tensor([self.batch_size], vocab_size=self.feat_seq_length, rng=rng).abs() + 1
         lengths = lengths.clamp(max=self.feat_seq_length)
         offsets = ids_tensor([self.batch_size], vocab_size=self.feat_seq_length, rng=rng).abs()
         offsets = offsets % (self.feat_seq_length - lengths + 1)
