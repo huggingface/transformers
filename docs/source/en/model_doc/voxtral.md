@@ -269,7 +269,7 @@ conversations = [
                 },
                 {
                     "type": "text",
-                    "text": "Who's speaking in the speach and what city's weather is being discussed?",
+                    "text": "Who's speaking in the speech and what city's weather is being discussed?",
                 },
             ],
         }
