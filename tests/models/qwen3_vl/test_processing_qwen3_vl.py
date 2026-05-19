@@ -68,6 +68,25 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))
 
+    @require_vision
+    @require_torch
+    @require_torchvision
+    def test_multiple_images_per_sample_preserves_batch(self):
+        # Build a processor from the small tmp pretrained saved in setUpClass
+        processor = self.get_processor()
+        # Create two samples: first has 2 images, second has 1 image
+        img1 = np.zeros((224, 224, 3), dtype=np.uint8)
+        img2 = np.zeros((224, 224, 3), dtype=np.uint8)
+        images = [[img1, img2], [img1]]
+        text = ["caption one", "caption two"]
+
+        inputs = processor(images=images, text=text, return_tensors="np", padding=True)
+        pixel_values = inputs["pixel_values"]
+
+        # Should preserve batch dimension (batch-first) and return an ndarray when tensors='np'
+        self.assertIsInstance(pixel_values, np.ndarray)
+        self.assertEqual(pixel_values.shape[0], len(images))
+
     @require_torch
     @require_av
     def _test_apply_chat_template(
