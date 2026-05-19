@@ -949,6 +949,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("pp_lcnet", {"torchvision": "PPLCNetImageProcessor"}),
         ("pp_ocrv5_server_det", {"torchvision": "PPOCRV5ServerDetImageProcessor"}),
         ("pp_ocrv5_server_rec", {"torchvision": "PPOCRV5ServerRecImageProcessor"}),
+        ("pp_ocrv6_small_rec", {"torchvision": "PPOCRV6SmallRecImageProcessor"}),
         (
             "prompt_depth_anything",
             {"pil": "PromptDepthAnythingImageProcessorPil", "torchvision": "PromptDepthAnythingImageProcessor"},
