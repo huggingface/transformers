@@ -33,32 +33,40 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, CausalLMOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    ModelOutput,
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    is_torchdynamo_compiling,
-    logging,
-)
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig, ParakeetRNNTConfig, ParakeetTDTConfig
-from .generation_parakeet import ParakeetRNNTGenerationMixin, ParakeetTDTGenerationMixin
+from .generation_parakeet import ParakeetRNNTGenerationMixin, ParakeetTDTDecoderCache, ParakeetTDTGenerationMixin
 
 
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Extends [~modeling_outputs.BaseModelOutputWithPooling] to include the output attention mask and
     optional streaming caches. Caches are only populated for cache-aware models when `use_cache=True`.
     """
 )
+@dataclass
 class ParakeetEncoderModelOutput(BaseModelOutputWithPooling):
+    r"""
+    attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        Mask to avoid performing attention on padding token indices after sequence compression. Returned because the
+        sequence length may differ from the input sequence length. Mask values selected in `[0, 1]`:
+
+        - 1 for tokens that are **not masked**,
+        - 0 for tokens that are **masked**.
+    cache_last_channel (`torch.Tensor` of shape `(num_layers, batch, left_ctx, hidden_size)`, *optional*):
+        Updated attention cache from the encoder (sliding KV window). Pass to the next chunk call.
+    cache_last_time (`torch.Tensor` of shape `(num_layers, batch, hidden_size, conv_left_ctx)`, *optional*):
+        Updated convolution cache from the encoder. Pass to the next chunk call.
+    cache_last_channel_len (`torch.Tensor` of shape `(batch,)`, *optional*):
+        Number of valid frames currently stored in `cache_last_channel`.
+    """
+
     attention_mask: torch.Tensor | None = None
     cache_last_channel: torch.Tensor | None = None
     cache_last_time: torch.Tensor | None = None
@@ -1009,7 +1017,7 @@ class ParakeetGenerateOutput(ParakeetCTCGenerateOutput):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         logger.warning_once(
-            "`ParakeetGenerateOutput` is deprecated and removed starting from version 5.5.0; please use `ParakeetCTCGenerateOutput` instead.",
+            "`ParakeetGenerateOutput` is deprecated and removed starting from version 5.11.0; please use `ParakeetCTCGenerateOutput` instead.",
         )
 
 
@@ -1187,69 +1195,6 @@ class ParakeetForCTC(ParakeetPreTrainedModel, GenerationMixin):
         return sequences
 
 
-class ParakeetTDTDecoderCache:
-    def __init__(self):
-        self.cache: torch.Tensor | None = None
-        self.hidden_state: torch.Tensor | None = None
-        self.cell_state: torch.Tensor | None = None
-        self.is_initialized: bool = False
-
-    def lazy_initialization(self, hidden_states, lstm_module):
-        self.cache = torch.zeros(
-            hidden_states.shape[0], 1, lstm_module.hidden_size, device=hidden_states.device, dtype=hidden_states.dtype
-        )
-        self.hidden_state = torch.zeros(
-            lstm_module.num_layers,
-            hidden_states.shape[0],
-            lstm_module.hidden_size,
-            device=hidden_states.device,
-            dtype=hidden_states.dtype,
-        )
-        self.cell_state = torch.zeros(
-            lstm_module.num_layers,
-            hidden_states.shape[0],
-            lstm_module.hidden_size,
-            device=hidden_states.device,
-            dtype=hidden_states.dtype,
-        )
-
-        if not is_torchdynamo_compiling():
-            torch._dynamo.mark_static_address(self.cache)
-            torch._dynamo.mark_static_address(self.hidden_state)
-            torch._dynamo.mark_static_address(self.cell_state)
-
-        self.is_initialized = True
-
-    def update(
-        self,
-        decoder_output,
-        hidden_state,
-        cell_state,
-        lstm_module=None,
-        mask=None,
-    ):
-        if not self.is_initialized and lstm_module is not None:
-            self.lazy_initialization(decoder_output, lstm_module)
-        elif not self.is_initialized:
-            raise ValueError(
-                "ParakeetTDTDecoderCache is not initialized. Make sure to provide lstm_module to the update method."
-            )
-
-        if mask is None:
-            self.hidden_state.copy_(hidden_state)
-            self.cell_state.copy_(cell_state)
-            self.cache.copy_(decoder_output)
-        else:
-            # Mask to update specific batch elements
-            mask = mask.to(decoder_output.device)
-            batch_size = decoder_output.shape[0]
-            mask_h = mask.view(1, batch_size, 1)
-            mask_d = mask.view(batch_size, 1, 1)
-            self.cache = torch.where(mask_d, decoder_output, self.cache)
-            self.hidden_state = torch.where(mask_h, hidden_state, self.hidden_state)
-            self.cell_state = torch.where(mask_h, cell_state, self.cell_state)
-
-
 class ParakeetTDTDecoder(nn.Module):
     """LSTM-based prediction network for TDT."""
 
@@ -1270,22 +1215,29 @@ class ParakeetTDTDecoder(nn.Module):
         input_ids: torch.LongTensor,
         cache: ParakeetTDTDecoderCache | None = None,
     ) -> torch.Tensor:
-        # All-blank fast path
-        if cache is not None and cache.is_initialized:
+        if cache is not None:
             blank_mask = input_ids[:, -1] == self.blank_token_id
-            if blank_mask.all():
+            # All-blank fast path: skip decoder when all batch elements predict blank
+            if cache.is_initialized and blank_mask.all():
                 return cache.cache
 
-        hidden_cell_states = (
-            (cache.hidden_state, cache.cell_state) if cache is not None and cache.is_initialized else None
-        )
         embeddings = self.embedding(input_ids)
+
+        # Get cached hidden/cell states if available, otherwise initialize with ParakeetTDTDecoderCache
+        if cache is not None:
+            was_initialized = cache.is_initialized
+            if not was_initialized:
+                cache.lazy_initialization(embeddings)
+            hidden_cell_states = (cache.hidden_state, cache.cell_state)
+        else:
+            hidden_cell_states = None
+
         lstm_output, (hidden_state, cell_state) = self.lstm(embeddings, hidden_cell_states)
         decoder_output = self.decoder_projector(lstm_output)
 
         if cache is not None:
-            mask = ~blank_mask if cache.is_initialized else None
-            cache.update(decoder_output, hidden_state, cell_state, lstm_module=self.lstm, mask=mask)
+            mask = ~blank_mask if was_initialized else None
+            cache.update(decoder_output, hidden_state, cell_state, mask=mask)
             return cache.cache
 
         return decoder_output
@@ -1414,17 +1366,9 @@ class ParakeetForTDT(ParakeetPreTrainedModel, ParakeetTDTGenerationMixin):
                 attention_mask=attention_mask,
                 **kwargs,
             )
-        elif not isinstance(encoder_outputs, ParakeetEncoderModelOutput):
-            encoder_outputs = ParakeetEncoderModelOutput(
-                last_hidden_state=encoder_outputs[0] if len(encoder_outputs) > 0 else None,
-                pooler_output=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                hidden_states=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-                attentions=encoder_outputs[3] if len(encoder_outputs) > 3 else None,
-                attention_mask=encoder_outputs[4] if len(encoder_outputs) > 4 else None,
-            )
 
         if use_decoder_cache and decoder_cache is None:
-            decoder_cache = ParakeetTDTDecoderCache()
+            decoder_cache = ParakeetTDTDecoderCache(self.config)
 
         decoder_hidden_states = self.decoder(decoder_input_ids, cache=decoder_cache)
         logits = self.joint(
@@ -1916,7 +1860,7 @@ class ParakeetCacheAwareStreamingBuffer:
     ```
     """
 
-    def __init__(self, model: "ParakeetForCTC", processor, att_context_size=None):
+    def __init__(self, model: "ParakeetForCTC", processor, att_context_size=None, pad_and_drop_preencoded=True):
         import numpy as np
 
         self._np = np
@@ -1939,9 +1883,18 @@ class ParakeetCacheAwareStreamingBuffer:
         self._n_fft_half = processor.feature_extractor.n_fft // 2
 
         pre_encode_cache_mel = S + 1
+        self._pre_cache_mel = pre_encode_cache_mel
         self._pre_cache_samples = pre_encode_cache_mel * hop
         self._drop = 1 + (pre_encode_cache_mel - 1) // S
-        self._first_chunk_mel = 1 + S * right_ctx
+        # When pad_and_drop_preencoded is True (NeMo's reference inference mode), chunk 0
+        # uses the same layout as subsequent chunks (steady-state size, zero pre-encode
+        # pad, drop applied). When False, chunk 0 is smaller (no pad, no drop) which
+        # mismatches what the encoder saw during training and degrades early-utterance WER.
+        self.pad_and_drop_preencoded = pad_and_drop_preencoded
+        if pad_and_drop_preencoded:
+            self._first_chunk_mel = S * (right_ctx + 1)
+        else:
+            self._first_chunk_mel = 1 + S * right_ctx
         self._first_chunk_samples = self._first_chunk_mel * hop
         self._chunk_mel = S * (right_ctx + 1)
         self._chunk_samples = self._chunk_mel * hop
@@ -1973,7 +1926,26 @@ class ParakeetCacheAwareStreamingBuffer:
         np = self._np
         past = np.zeros(self._pre_cache_samples, dtype=np.float32)
         for idx, chunk in enumerate(self._chunks):
-            if idx == 0:
+            if idx == 0 and self.pad_and_drop_preencoded:
+                # NeMo-style chunk 0: real audio occupies the steady-state chunk_size, and the
+                # pre-encode cache is filled with zero mel frames (in normalized space). This
+                # matches the encoder's training-time input layout so the first chunk's encoder
+                # output is consistent with subsequent chunks.
+                ns = self._first_chunk_samples
+                lookahead = self._audio[ns : ns + self._n_fft_half]
+                ext = np.concatenate([chunk, lookahead])
+                inputs = self._processor([ext], return_tensors="pt", sampling_rate=self._sr)
+                if inputs["input_features"].shape[1] > self._chunk_mel:
+                    inputs["input_features"] = inputs["input_features"][:, : self._chunk_mel, :]
+                    inputs["attention_mask"] = inputs["attention_mask"][:, : self._chunk_mel]
+                feats = inputs["input_features"]
+                mask = inputs["attention_mask"]
+                pad_feats = torch.zeros(feats.shape[0], self._pre_cache_mel, feats.shape[-1], dtype=feats.dtype)
+                pad_mask = torch.ones(mask.shape[0], self._pre_cache_mel, dtype=mask.dtype)
+                inputs["input_features"] = torch.cat([pad_feats, feats], dim=1)
+                inputs["attention_mask"] = torch.cat([pad_mask, mask], dim=1)
+                drop = self._drop
+            elif idx == 0:
                 inputs = self._processor([chunk], return_tensors="pt", sampling_rate=self._sr)
                 if inputs["input_features"].shape[1] > self._first_chunk_mel:
                     inputs["input_features"] = inputs["input_features"][:, : self._first_chunk_mel, :]

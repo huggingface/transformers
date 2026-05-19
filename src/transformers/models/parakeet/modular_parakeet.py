@@ -61,6 +61,12 @@ class ParakeetEncoderModelOutput(BaseModelOutputWithPooling):
 
         - 1 for tokens that are **not masked**,
         - 0 for tokens that are **masked**.
+    cache_last_channel (`torch.Tensor` of shape `(num_layers, batch, left_ctx, hidden_size)`, *optional*):
+        Updated attention cache from the encoder (sliding KV window). Pass to the next chunk call.
+    cache_last_time (`torch.Tensor` of shape `(num_layers, batch, hidden_size, conv_left_ctx)`, *optional*):
+        Updated convolution cache from the encoder. Pass to the next chunk call.
+    cache_last_channel_len (`torch.Tensor` of shape `(batch,)`, *optional*):
+        Number of valid frames currently stored in `cache_last_channel`.
     """
 
     attention_mask: torch.Tensor | None = None
@@ -1721,7 +1727,7 @@ class ParakeetCacheAwareStreamingBuffer:
     ```
     """
 
-    def __init__(self, model: "ParakeetForCTC", processor, att_context_size=None):
+    def __init__(self, model: "ParakeetForCTC", processor, att_context_size=None, pad_and_drop_preencoded=True):
         import numpy as np
 
         self._np = np
@@ -1744,9 +1750,18 @@ class ParakeetCacheAwareStreamingBuffer:
         self._n_fft_half = processor.feature_extractor.n_fft // 2
 
         pre_encode_cache_mel = S + 1
+        self._pre_cache_mel = pre_encode_cache_mel
         self._pre_cache_samples = pre_encode_cache_mel * hop
         self._drop = 1 + (pre_encode_cache_mel - 1) // S
-        self._first_chunk_mel = 1 + S * right_ctx
+        # When pad_and_drop_preencoded is True (NeMo's reference inference mode), chunk 0
+        # uses the same layout as subsequent chunks (steady-state size, zero pre-encode
+        # pad, drop applied). When False, chunk 0 is smaller (no pad, no drop) which
+        # mismatches what the encoder saw during training and degrades early-utterance WER.
+        self.pad_and_drop_preencoded = pad_and_drop_preencoded
+        if pad_and_drop_preencoded:
+            self._first_chunk_mel = S * (right_ctx + 1)
+        else:
+            self._first_chunk_mel = 1 + S * right_ctx
         self._first_chunk_samples = self._first_chunk_mel * hop
         self._chunk_mel = S * (right_ctx + 1)
         self._chunk_samples = self._chunk_mel * hop
@@ -1778,7 +1793,28 @@ class ParakeetCacheAwareStreamingBuffer:
         np = self._np
         past = np.zeros(self._pre_cache_samples, dtype=np.float32)
         for idx, chunk in enumerate(self._chunks):
-            if idx == 0:
+            if idx == 0 and self.pad_and_drop_preencoded:
+                # NeMo-style chunk 0: real audio occupies the steady-state chunk_size, and the
+                # pre-encode cache is filled with zero mel frames (in normalized space). This
+                # matches the encoder's training-time input layout so the first chunk's encoder
+                # output is consistent with subsequent chunks.
+                ns = self._first_chunk_samples
+                lookahead = self._audio[ns : ns + self._n_fft_half]
+                ext = np.concatenate([chunk, lookahead])
+                inputs = self._processor([ext], return_tensors="pt", sampling_rate=self._sr)
+                if inputs["input_features"].shape[1] > self._chunk_mel:
+                    inputs["input_features"] = inputs["input_features"][:, : self._chunk_mel, :]
+                    inputs["attention_mask"] = inputs["attention_mask"][:, : self._chunk_mel]
+                feats = inputs["input_features"]
+                mask = inputs["attention_mask"]
+                pad_feats = torch.zeros(
+                    feats.shape[0], self._pre_cache_mel, feats.shape[-1], dtype=feats.dtype
+                )
+                pad_mask = torch.ones(mask.shape[0], self._pre_cache_mel, dtype=mask.dtype)
+                inputs["input_features"] = torch.cat([pad_feats, feats], dim=1)
+                inputs["attention_mask"] = torch.cat([pad_mask, mask], dim=1)
+                drop = self._drop
+            elif idx == 0:
                 inputs = self._processor([chunk], return_tensors="pt", sampling_rate=self._sr)
                 if inputs["input_features"].shape[1] > self._first_chunk_mel:
                     inputs["input_features"] = inputs["input_features"][:, : self._first_chunk_mel, :]
