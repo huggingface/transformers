@@ -969,6 +969,9 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         self.model = WhisperModel(config)
         self.proj_out = nn.Linear(config.d_model, config.vocab_size, bias=False)
         self.max_target_positions = config.max_target_positions
+        # Encoder-decoder models receive labels already aligned with decoder logits
+        # (no token shift needed), so ForMaskedLMLoss is the correct loss function.
+        self.loss_type = "ForMaskedLM"
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1136,6 +1139,9 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
         self.model = WhisperDecoderWrapper(config)
 
         self.proj_out = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        # WhisperForCausalLM receives labels already aligned with logits (no shift),
+        # matching the original CrossEntropyLoss behavior preserved here.
+        self.loss_type = "ForMaskedLM"
 
         # Initialize weights and apply final processing
         self.post_init()
