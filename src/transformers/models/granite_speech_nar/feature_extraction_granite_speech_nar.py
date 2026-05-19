@@ -58,7 +58,6 @@ class GraniteSpeechNarFeatureExtractor(FeatureExtractionMixin):
             n_mels=n_mels,
         )
 
-    @torch.no_grad()
     def _extract_features(self, raw_audio: torch.Tensor) -> torch.Tensor:
         mel_transform = self.mel_transform.to(raw_audio.device)
         B, T = raw_audio.shape
