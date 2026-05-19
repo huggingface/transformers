@@ -534,7 +534,7 @@ def _build_checkpoint_conversion_mapping():
                 ],  # we want the loading to add this shard operation here. Though we can't shard after concats and merge, needs to be first
             ),
         ],
-        "cohere2moe": [
+        "cohere2_moe": [
             WeightConverter(
                 source_patterns=[
                     "mlp.experts.*.gate_proj.weight",
