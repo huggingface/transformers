@@ -295,17 +295,17 @@ class Sapiens2Attention(nn.Module):
         self.is_causal = False
 
         self.dropout = config.attention_dropout
-        self.k_proj = nn.Linear(self.embed_dim, kv_dim, bias=config.key_bias)
-        self.v_proj = nn.Linear(self.embed_dim, kv_dim, bias=config.value_bias)
 
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.query_bias)
         self.o_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.proj_bias)
-        num_key_value_heads = (
+        self.num_key_value_heads = (
             self.num_heads if config.layer_types[layer_idx] == "full_attention" else config.num_key_value_heads
         )
-        self.num_key_value_heads = num_key_value_heads
-        self.num_key_value_groups = self.num_heads // num_key_value_heads
-        kv_dim = num_key_value_heads * self.head_dim
+        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+        kv_dim = self.num_key_value_heads * self.head_dim
+
+        self.k_proj = nn.Linear(self.embed_dim, kv_dim, bias=config.key_bias)
+        self.v_proj = nn.Linear(self.embed_dim, kv_dim, bias=config.value_bias)
         self.q_norm = nn.RMSNorm(self.head_dim, eps=config.layer_norm_eps) if config.use_qk_norm else nn.Identity()
         self.k_norm = nn.RMSNorm(self.head_dim, eps=config.layer_norm_eps) if config.use_qk_norm else nn.Identity()
 
@@ -487,7 +487,16 @@ class Sapiens2ConvTransposeLayer(nn.Module):
 
 class Sapiens2ConvLayer(nn.Module):
     def __init__(
-        self, in_channels: int, out_channels: int, kernel_size: int = 1, bias: bool = True, activation: str = "silu"
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int | tuple[int, int] = 1,
+        stride: int = 1,
+        padding: int | tuple[int, int] | str = 0,
+        bias: bool = True,
+        dilation: int | tuple[int, int] = 1,
+        groups: int = 1,
+        activation: str = "silu",
     ):
         super().__init__()
         self.convolution = nn.Conv2d(
