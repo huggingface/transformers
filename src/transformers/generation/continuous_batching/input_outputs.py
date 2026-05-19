@@ -622,12 +622,12 @@ class ContinuousBatchingAsyncIOs:
 
                                     inputs
                       ┌──────────┐ ────────► ┌────────────┐
-    IO pair object:   │ Host IOs │           │ Device IOs │       (for a CUDA sytem, Host = CPU and Device = GPU)
+    IO pair object:   │ Host IOs │           │ Device IOs │       (for a CUDA system, Host = CPU and Device = GPU)
                       └──────────┘ ◄──────── └────────────┘
                                     outputs
 
     Each pair is separate from the other. This means that each pairs has its own CUDA graphs set, because CUDA graphs
-    need to have static adresses for input tensors. To have a unique set of CUDA graph, we would need to copy the input
+    need to have static addresses for input tensors. To have a unique set of CUDA graph, we would need to copy the input
     tensors to a third device-side buffer. This could limit the memory cost of CUDA graphs but would slow down the
     forward pass.
     But the CUDA streams orchestrating the transfer from host to device (H2D) and device to host (D2H) are the same for
