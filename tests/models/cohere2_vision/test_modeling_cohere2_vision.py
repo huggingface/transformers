@@ -452,8 +452,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
 @slow
 @require_torch_large_accelerator
 class Cohere2MoeVisionIntegrationTest(unittest.TestCase):
-    """Integration tests for Cohere2VisionForConditionalGeneration with the Command A+ Model.
-    """
+    """Integration tests for Cohere2VisionForConditionalGeneration with the Command A+ Model."""
 
     model_checkpoint = "/root/repos/moe/engines/command_a+_bf16"
 
@@ -517,7 +516,7 @@ class Cohere2MoeVisionIntegrationTest(unittest.TestCase):
 
         with torch.no_grad():
             gen_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        decoded = processor.decode(gen_ids[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+        decoded = processor.decode(gen_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
 
         expected = "<|START_THINKING|><|END_THINKING|><|START_TEXT|>The image shows two tabby cats sleeping on a bright pink blanket or couch. Both"
         self.assertEqual(decoded, expected, f"Decoded: {decoded!r}")

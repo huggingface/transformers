@@ -240,7 +240,7 @@ class Cohere2MoeIntegrationTest(unittest.TestCase):
 
     def test_model_bf16(self):
         EXPECTED_TEXTS = [
-            '<BOS_TOKEN>Hello I am doing a project on the history of the internet. I am trying to ARexx script a program that',
+            "<BOS_TOKEN>Hello I am doing a project on the history of the internet. I am trying to ARexx script a program that",
             '<PAD><PAD><BOS_TOKEN>Hi today we are going to discuss about the concept of "Self-Confidence". Self-confidence is a term that',
         ]
 
@@ -318,7 +318,9 @@ class Cohere2MoeIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(self.model_id, padding="left")
         inputs = tokenizer(input_text, padding=True, return_tensors="pt").to("cuda:0")
 
-        model = self._load_model(torch.float16, attn_implementation=attn_implementation, text_config_overrides={"sliding_window": 1024})
+        model = self._load_model(
+            torch.float16, attn_implementation=attn_implementation, text_config_overrides={"sliding_window": 1024}
+        )
 
         input_size = inputs.input_ids.shape[-1]
         self.assertTrue(input_size > model.config.text_config.sliding_window)

@@ -124,9 +124,7 @@ class CohereTokenizer(TokenizersBackend):
         # `<|END_OF_TURN_TOKEN|>` + `<EOS_TOKEN>`) would diverge.
         kwargs.setdefault("add_bos_token", True)
         kwargs.setdefault("add_eos_token", False)
-        return super().convert_to_native_format(
-            trust_remote_code=trust_remote_code, **kwargs
-        )
+        return super().convert_to_native_format(trust_remote_code=trust_remote_code, **kwargs)
 
     def apply_tool_use_template(
         self,

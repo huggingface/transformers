@@ -239,16 +239,10 @@ Finally, Write 'Grounded answer:' followed by a response to the user's last inpu
             alphabet = pre_tokenizers.ByteLevel.alphabet()
             vocab = {tok: i for i, tok in enumerate(sorted(alphabet))}
             base = len(vocab)
-            for i, special in enumerate(
-                ["<PAD>", "<UNK>", "<BOS_TOKEN>", "<|END_OF_TURN_TOKEN|>"]
-            ):
+            for i, special in enumerate(["<PAD>", "<UNK>", "<BOS_TOKEN>", "<|END_OF_TURN_TOKEN|>"]):
                 vocab[special] = base + i
-            tok = Tokenizer(
-                BPE(vocab=vocab, merges=[], unk_token="<UNK>")
-            )
-            tok.pre_tokenizer = pre_tokenizers.ByteLevel(
-                add_prefix_space=add_prefix_space, trim_offsets=True
-            )
+            tok = Tokenizer(BPE(vocab=vocab, merges=[], unk_token="<UNK>"))
+            tok.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space, trim_offsets=True)
             tok.decoder = decoders.ByteLevel()
             return tok
 
@@ -260,12 +254,8 @@ Finally, Write 'Grounded answer:' followed by a response to the user's last inpu
             self._write_test_tokenizer(td_no, _make_tokenizer(add_prefix_space=False))
             self._write_test_tokenizer(td_yes, _make_tokenizer(add_prefix_space=True))
 
-            tokens_wo_prefix = CohereTokenizer.from_pretrained(
-                str(td_no)
-            ).tokenize("Hey")
-            tokens_w_prefix = CohereTokenizer.from_pretrained(
-                str(td_yes)
-            ).tokenize("Hey")
+            tokens_wo_prefix = CohereTokenizer.from_pretrained(str(td_no)).tokenize("Hey")
+            tokens_w_prefix = CohereTokenizer.from_pretrained(str(td_yes)).tokenize("Hey")
 
         self.assertNotEqual(
             tokens_wo_prefix,
@@ -305,21 +295,15 @@ Finally, Write 'Grounded answer:' followed by a response to the user's last inpu
             "i": 8,
             "hi": 9,
         }
-        source = Tokenizer(
-            BPE(vocab=vocab, merges=[("h", "i")], unk_token="<UNK>")
-        )
+        source = Tokenizer(BPE(vocab=vocab, merges=[("h", "i")], unk_token="<UNK>"))
         source.pre_tokenizer = pre_tokenizers.Sequence(
             [
                 pre_tokenizers.Digits(individual_digits=False),
-                pre_tokenizers.ByteLevel(
-                    add_prefix_space=True, trim_offsets=False
-                ),
+                pre_tokenizers.ByteLevel(add_prefix_space=True, trim_offsets=False),
             ]
         )
         source.normalizer = normalizers.NFKC()
-        source.decoder = decoders.ByteLevel(
-            add_prefix_space=True, trim_offsets=False
-        )
+        source.decoder = decoders.ByteLevel(add_prefix_space=True, trim_offsets=False)
         source_json = json.loads(source.to_str())
 
         with tempfile.TemporaryDirectory() as raw_td:
