@@ -139,16 +139,21 @@ class DeepseekV3MLP(nn.Module):
 class DeepseekV3TopkRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.config = config
+        self.top_k = config.num_experts_per_tok
         self.n_routed_experts = config.n_routed_experts
-
+        self.num_experts = config.n_routed_experts
+        self.hidden_size = config.hidden_size
         self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
         self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
 
     def forward(self, hidden_states):
-        hidden_states = hidden_states.view(-1, self.config.hidden_size)
-        router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
-        return router_logits
+        hidden_states = hidden_states.reshape(-1, self.hidden_size)
+        router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
+        router_probs = torch.nn.functional.softmax(router_logits.float(), dim=-1)
+        router_top_value, router_indices = torch.topk(router_probs, self.top_k, dim=-1)  # (seq_len, top_k)
+        router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
+        router_scores = router_top_value
+        return router_logits, router_scores, router_indices
 
 
 @use_experts_implementation
@@ -236,13 +241,14 @@ class DeepseekV3MoE(nn.Module):
         topk_weights = topk_weights * self.routed_scaling_factor
         return topk_indices, topk_weights
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
         residuals = hidden_states
-        orig_shape = hidden_states.shape
-        router_logits = self.gate(hidden_states)
-        topk_indices, topk_weights = self.route_tokens_to_experts(router_logits)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(
+            batch_size, sequence_length, hidden_dim
+        )
         hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states
 
