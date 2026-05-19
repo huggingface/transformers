@@ -2211,9 +2211,7 @@ class _TestToolCallBase:
         tool_chunks = [c for c in chunks if c.choices[0].delta.tool_calls]
         # Arguments may be split across deltas, accumulate then compare parsed dicts.
         s_name = tool_chunks[0].choices[0].delta.tool_calls[0].function.name
-        s_args = "".join(
-            c.choices[0].delta.tool_calls[0].function.arguments or "" for c in tool_chunks
-        )
+        s_args = "".join(c.choices[0].delta.tool_calls[0].function.arguments or "" for c in tool_chunks)
 
         self.assertEqual(s_name, ns_tc.function.name)
         self.assertEqual(json.loads(s_args), json.loads(ns_tc.function.arguments))
@@ -2281,7 +2279,6 @@ class _TestReasoningBase:
     def _reasoning_field(obj):
         """Return ``reasoning_content`` from a chat message or delta (handles model_extra)."""
         return getattr(obj, "reasoning_content", None) or (obj.model_extra or {}).get("reasoning_content")
-
 
     # ----- chat completions -----
 

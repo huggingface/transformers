@@ -110,9 +110,9 @@ class _ResponseStreamBuilder:
         self.full_reasoning = ""
         self.reasoning_open = False
         self.message_open = False
-        self.reasoning_item: "ResponseReasoningItem | None" = None
-        self.message_item: "ResponseOutputMessage | None" = None
-        self.tool_calls: list["ResponseFunctionToolCall"] = []
+        self.reasoning_item: ResponseReasoningItem | None = None
+        self.message_item: ResponseOutputMessage | None = None
+        self.tool_calls: list[ResponseFunctionToolCall] = []
 
     def _emit(self, event) -> str:
         sse = BaseHandler.chunk_to_sse(event)
@@ -658,7 +658,9 @@ class ResponseHandler(BaseHandler):
                     parsed = parse_tool_calls(processor, streamer.generated_token_ids, tool_config["schema"])
                     if parsed:
                         for i, tc in enumerate(parsed):
-                            yield "".join(builder.tool_call(f"{request_id}_tool_call_{i}", tc["name"], tc["arguments"]))
+                            yield "".join(
+                                builder.tool_call(f"{request_id}_tool_call_{i}", tc["name"], tc["arguments"])
+                            )
 
                 yield "".join(builder.completed(compute_usage(input_len, streamer.total_tokens)))
             except (GeneratorExit, asyncio.CancelledError):
