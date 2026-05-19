@@ -44,6 +44,7 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
     config: ShieldGemma2Config
     input_modalities = ("image", "text")
     base_model_prefix = "model"
+    _supports_sdpa = True
 
     def __init__(self, config: ShieldGemma2Config):
         super().__init__(config=config)
