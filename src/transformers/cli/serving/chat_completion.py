@@ -30,16 +30,20 @@ if is_serve_available():
     from fastapi.responses import JSONResponse, StreamingResponse
     from openai.types.chat import (
         ChatCompletion,
-        ChatCompletionMessage as OpenAIChatCompletionMessage,
         ChatCompletionMessageToolCall,
+    )
+    from openai.types.chat import (
+        ChatCompletionMessage as OpenAIChatCompletionMessage,
     )
     from openai.types.chat.chat_completion import Choice
     from openai.types.chat.chat_completion_chunk import (
         ChatCompletionChunk,
-        ChoiceDelta as OpenAIChoiceDelta,
         ChoiceDeltaToolCall,
     )
     from openai.types.chat.chat_completion_chunk import Choice as ChoiceChunk
+    from openai.types.chat.chat_completion_chunk import (
+        ChoiceDelta as OpenAIChoiceDelta,
+    )
     from openai.types.chat.completion_create_params import CompletionCreateParamsStreaming
     from openai.types.completion_usage import CompletionUsage
 
