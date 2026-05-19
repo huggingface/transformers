@@ -38,7 +38,7 @@ from ...image_utils import (
     make_nested_list_of_images,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring
+from ...utils import TensorType, auto_docstring, is_torchdynamo_compiling
 from .processing_molmo2 import Molmo2ImagesKwargs
 
 
@@ -151,6 +151,8 @@ def build_resized_image(
     image_std: list[float],
     image_patch_size: int,
 ) -> tuple[torch.Tensor, torch.Tensor]:
+    if image_chw.dtype == torch.uint8 and is_torchdynamo_compiling():
+        image_chw = image_chw.to(torch.float32)
     chw_resized = backend.resize(
         image_chw,
         size=SizeDict(height=base_image_input_size[0], width=base_image_input_size[1]),
@@ -229,6 +231,8 @@ class Molmo2ImageProcessor(TorchvisionBackend):
 
         src_h = tiling_h * crop_window_size + total_margin_pixels
         src_w = tiling_w * crop_window_size + total_margin_pixels
+        if image_chw.dtype == torch.uint8 and is_torchdynamo_compiling():
+            image_chw = image_chw.to(torch.float32)
         chw_resized = self.resize(
             image_chw,
             size=SizeDict(height=src_h, width=src_w),

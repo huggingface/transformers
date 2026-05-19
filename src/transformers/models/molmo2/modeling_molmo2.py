@@ -40,7 +40,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseMo
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.generic import maybe_autocast
 from ...utils.output_capturing import capture_outputs
 from .configuration_molmo2 import Molmo2AdapterConfig, Molmo2Config, Molmo2TextConfig, Molmo2VitConfig
@@ -423,6 +423,7 @@ class Molmo2VisionBackbone(PreTrainedModel):
         self,
         images: torch.Tensor,
         pooled_patches_idx: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         # image_features: (batch_size, num_crops(=num_image), num_patch, nximage_emb_dim)
         batch_size, num_image = images.shape[:2]
@@ -1065,31 +1066,39 @@ class Molmo2Model(Molmo2PreTrainedModel):
             return pixel_values_videos, video_token_pooling
         return None, None
 
-    def build_input_embeddings(
+    @can_return_tuple
+    def get_image_features(
         self,
-        input_ids: torch.LongTensor,
-        images: torch.FloatTensor | None = None,  # image inputs
-        token_pooling: torch.LongTensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        # Get embeddings of input.
-        # shape: (batch_size, seq_len, d_model)
-        x = self.language_model.wte(input_ids)
+        pixel_values: torch.FloatTensor,
+        image_token_pooling: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        if pixel_values.dim() == 4:
+            B, T, N, D = pixel_values.shape
+            pixel_values = pixel_values.view(B * T, N, D)
+        return self.vision_backbone.image_vit(pixel_values, **kwargs)
 
-        image_features: torch.FloatTensor | None = None
-        if images is not None:
-            image_features = self.vision_backbone(images, token_pooling)
-            is_image_patch = input_ids.view(-1) == self.config.image_patch_id
-            if not is_torchdynamo_compiling() and is_image_patch.sum() != len(image_features):
-                raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {is_image_patch.sum()}, "
-                    f"features: {len(image_features)}"
-                )
-            x.view(-1, x.shape[-1])[is_image_patch] += image_features
-
-        # shape: (batch_size, seq_len, d_model)
-        x = self.language_model.emb_drop(x)  # type: ignore
-
-        return x, image_features
+    def get_placeholder_mask(
+        self,
+        input_ids: torch.LongTensor | None,
+        inputs_embeds: torch.FloatTensor,
+        image_features: torch.FloatTensor,
+    ) -> torch.Tensor:
+        if input_ids is None:
+            image_patch_embed = self.language_model.wte(
+                torch.tensor(self.config.image_patch_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = (inputs_embeds == image_patch_embed).all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_patch_id
+        torch_compilable_check(
+            special_image_mask.sum() == image_features.shape[0],
+            lambda: (
+                f"Image features and image tokens do not match: "
+                f"tokens: {int(special_image_mask.sum())}, features: {image_features.shape[0]}"
+            ),
+        )
+        return special_image_mask
 
     @can_return_tuple
     def forward(
@@ -1126,13 +1135,16 @@ class Molmo2Model(Molmo2PreTrainedModel):
             raise ValueError("You cannot specify both images and inputs_embeds at the same time.")
 
         if inputs_embeds is None:
-            inputs_embeds, image_features = self.build_input_embeddings(
-                input_ids,
-                images,
-                token_pooling,
-            )
-        else:
-            image_features = None
+            inputs_embeds = self.language_model.wte(input_ids)
+
+        image_features: torch.FloatTensor | None = None
+        if images is not None:
+            image_features = self.vision_backbone(images, token_pooling)
+            special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
+            hidden_dim = inputs_embeds.shape[-1]
+            inputs_embeds.view(-1, hidden_dim)[special_image_mask.view(-1)] += image_features
+
+        inputs_embeds = self.language_model.emb_drop(inputs_embeds)
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
@@ -1260,30 +1272,6 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
-
-    @can_return_tuple
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_token_pooling: torch.Tensor | None = None,
-        **kwargs,
-    ) -> BaseModelOutputWithPooling:
-        if pixel_values.dim() == 4:
-            B, T, N, D = pixel_values.shape
-            pixel_values = pixel_values.view(B * T, N, D)
-        return self.model.vision_backbone.image_vit(pixel_values, **kwargs)
-
-    @can_return_tuple
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_token_pooling: torch.Tensor | None = None,
-        **kwargs,
-    ) -> BaseModelOutputWithPooling:
-        if pixel_values_videos.dim() == 4:
-            B, T, N, D = pixel_values_videos.shape
-            pixel_values_videos = pixel_values_videos.view(B * T, N, D)
-        return self.model.vision_backbone.image_vit(pixel_values_videos, **kwargs)
 
     def prepare_inputs_for_generation(
         self,

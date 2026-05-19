@@ -27,7 +27,7 @@ from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, logging
+from ...utils import TensorType, auto_docstring, is_torchdynamo_compiling, logging
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata
 from .processing_molmo2 import Molmo2VideosKwargs
@@ -89,6 +89,8 @@ def build_resized_image(
     image_std: list[float],
     image_patch_size: int,
 ) -> tuple[torch.Tensor, torch.Tensor]:
+    if image_chw.dtype == torch.uint8 and is_torchdynamo_compiling():
+        image_chw = image_chw.to(torch.float32)
     chw_resized = backend.resize(
         image_chw,
         size=SizeDict(height=base_image_input_size[0], width=base_image_input_size[1]),

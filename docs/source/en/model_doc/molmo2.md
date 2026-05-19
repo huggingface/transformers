@@ -90,7 +90,7 @@ model_id = "allenai/Molmo2-8B"
 video_url = "https://storage.googleapis.com/oe-training-public/demo_videos/many_penguins.mp4"
 
 processor = Molmo2Processor.from_pretrained(model_id)
-model = Molmo2ForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="auto")
+model = Molmo2ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 model.eval()
 
 video, metadata = load_video(video_url)
