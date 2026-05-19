@@ -64,7 +64,7 @@ from .distributed.utils import (
     distribute_model,
     gather_full_state_dict,
     init_device_mesh,
-    save_model_checkpoint,
+    save_model_checkpoint_distributed,
 )
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
@@ -3466,7 +3466,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     "save_pretrained(distributed_checkpoint=True) requires the model to have been "
                     "initialized with a distributed_config (device_mesh is None)."
                 )
-            save_model_checkpoint(self, save_directory)
+            save_model_checkpoint_distributed(self, save_directory)
             return
 
         # Get the model state_dict (handles FSDP unshard + TP gather in one call)

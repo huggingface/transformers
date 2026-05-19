@@ -196,7 +196,7 @@ def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
     return result
 
 
-def save_model_checkpoint(model, checkpoint_dir: str) -> None:
+def save_model_checkpoint_distributed(model, checkpoint_dir: str) -> None:
     """Save model parameters as standard HF-format sharded safetensors using
     DCP + HuggingFaceStorageWriter with consolidation enabled.
 
