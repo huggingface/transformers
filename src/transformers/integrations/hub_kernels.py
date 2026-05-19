@@ -526,6 +526,7 @@ class FusedModuleBase(nn.Module):
         self,
         modules_to_fuse: list["nn.Module"],
         fused_module_names: list[str] | None = None,
+        conversion_mapping: list | None = None,
     ):
         """
         Args:
@@ -534,6 +535,9 @@ class FusedModuleBase(nn.Module):
                 child of this container (i.e. `self.<name>`). When `None`, the
                 `kernel_layer_name` attribute of each source module is used. Pass this
                 explicitly when the source modules do not carry `@use_kernel_forward_from_hub`.
+            conversion_mapping: Optional list of WeightConverter transforms to apply immediately
+                after the child modules are registered, reshaping parameters to the structure
+                the kernel expects (e.g. concatenating q/k/v into qkv). Cost-free on meta device.
         """
         super().__init__()
         if len(modules_to_fuse) == 0:
@@ -557,6 +561,9 @@ class FusedModuleBase(nn.Module):
                     )
                 self.add_module(attr_name, module)
             self._fused_module_names = [m.kernel_layer_name for m in modules_to_fuse]
+
+        if conversion_mapping:
+            self._apply_weight_conversions(conversion_mapping)
 
         # `kernelize` validates the kernel's forward signature against the class being replaced.
         # Since the fused container sits at the position of the first module in the chain, the
@@ -717,9 +724,11 @@ def make_fused_parent_class(
     def fused_init(self, *args, **kwargs):
         original_init(self, *args, **kwargs)
         modules_to_fuse = [getattr(self, name) for name in _child_names]
-        fused = fused_module_cls(modules_to_fuse, fused_module_names=list(_source_names))
-        if _conversion_mapping:
-            fused._apply_weight_conversions(_conversion_mapping)
+        fused = fused_module_cls(
+            modules_to_fuse,
+            fused_module_names=list(_source_names),
+            conversion_mapping=_conversion_mapping or None,
+        )
         setattr(self, _child_names[0], fused)
         for name in _child_names[1:]:
             setattr(self, name, nn.Identity())
