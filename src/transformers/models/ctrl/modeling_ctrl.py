@@ -127,7 +127,7 @@ class MultiHeadAttention(nn.Module):
         attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(attn_implementation, eager_attention_forward)
         if attn_implementation == "eager":
             causal_mask = mask
-        elif mask is not None:
+        elif mask is not None and (attention_mask is not None or (q.size(-2) != k.size(-2) and q.size(-2) != 1)):
             nd, ns = q.size(-2), k.size(-2)
             causal_mask = mask[ns - nd : ns, :ns].to(dtype=q.dtype) * -1e4
             attention_mask = causal_mask[None, None, :, :] if attention_mask is None else attention_mask + causal_mask
