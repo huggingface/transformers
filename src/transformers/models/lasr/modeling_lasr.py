@@ -460,13 +460,13 @@ class LasrPreTrainedModel(PreTrainedModel):
         return attention_mask
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Extends [~modeling_outputs.BaseModelOutputWithPooling] to include the output attention mask since sequence length
     is not preserved in the model's forward.
     """
 )
+@dataclass
 class LasrEncoderModelOutput(BaseModelOutputWithPooling):
     attention_mask: torch.Tensor | None = None
 
