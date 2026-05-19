@@ -120,7 +120,6 @@ else:
             ("pp_ocrv5_mobile_rec", {"torchvision": "PPOCRV5ServerRecImageProcessor"}),
             ("pp_ocrv6_medium_det", {"torchvision": "PPOCRV5ServerDetImageProcessor"}),
             ("pp_ocrv6_small_det", {"torchvision": "PPOCRV5ServerDetImageProcessor"}),
-            ("pp_ocrv6_small_rec", {"torchvision": "PPOCRV6SmallRecImageProcessor"}),
             ("pp_ocrv6_tiny_rec", {"torchvision": "PPOCRV6SmallRecImageProcessor"}),
             ("pvt_v2", {"torchvision": "PvtImageProcessor", "pil": "PvtImageProcessorPil"}),
             ("qianfan_ocr", {"torchvision": "GotOcr2ImageProcessor", "pil": "GotOcr2ImageProcessorPil"}),
