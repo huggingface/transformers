@@ -114,7 +114,7 @@ class VideoPrismTubeletEmbeddings(nn.Module):
         self.projection = nn.Conv3d(
             config.num_channels, config.hidden_size, kernel_size=tubelet_size, stride=tubelet_size
         )
-        self.pos_emb_shape = [self.image_size[0] // tubelet_size[1], self.image_size[1] // tubelet_size[2]]
+        self.pos_emb_shape = [self.image_size[0] // tubelet_size[1], self.image_size[1] // tubelet_size[2]]  # noqa: F821
         self.num_patches = self.pos_emb_shape[0] * self.pos_emb_shape[1]
 
     def forward(self, pixel_values_videos: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
@@ -147,7 +147,7 @@ class VideoPrismSpatialEmbeddings(nn.Module):
         super().__init__()
         self.patch_embeddings = VideoPrismTubeletEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches, config.hidden_size))
+        self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches, config.hidden_size))  # noqa: F821
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # patch_size is the spatial (height, width) part of the tubelet for pos encoding interpolation
         self.patch_size = config.tubelet_size[1:]

@@ -286,7 +286,7 @@ class VideoPrismTubeletEmbeddings(VivitTubeletEmbeddings):
     def __init__(self, config: VideoPrismVisionConfig):
         super().__init__(config)
         del self.num_patches
-        self.pos_emb_shape = [self.image_size[0] // tubelet_size[1], self.image_size[1] // tubelet_size[2]]
+        self.pos_emb_shape = [self.image_size[0] // tubelet_size[1], self.image_size[1] // tubelet_size[2]]  # noqa: F821
         self.num_patches = self.pos_emb_shape[0] * self.pos_emb_shape[1]
 
     def forward(self, pixel_values_videos: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
@@ -319,7 +319,7 @@ class VideoPrismSpatialEmbeddings(VivitEmbeddings):
         super().__init__(config)
         del self.cls_token
         del self.image_size
-        self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches, config.hidden_size))
+        self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches, config.hidden_size))  # noqa: F821
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
@@ -392,7 +392,7 @@ class VideoPrismTemporalEmbeddings(VivitEmbeddings):
         del self.cls_token
         del self.patch_embeddings
         del self.patch_size
-        del num_patches
+        del num_patches  # noqa: F821
         del self.image_size
         self.position_embeddings = nn.Parameter(torch.zeros(1, config.num_frames, config.hidden_size))
 
