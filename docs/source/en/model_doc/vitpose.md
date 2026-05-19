@@ -153,7 +153,7 @@ image_pose_result = pose_results[0]
 ## Notes
 
 - Use [`AutoProcessor`] to automatically prepare bounding box and image inputs.
-- ViTPose is a top-down pose estimator. It uses a object detector to detect individuals first before keypoint prediction.
+- ViTPose is a top-down pose estimator. It uses an object detector to detect individuals first before keypoint prediction.
 - ViTPose++ has 6 different MoE expert heads (COCO validation `0`, AiC `1`, MPII `2`, AP-10K `3`, APT-36K `4`, COCO-WholeBody `5`) which supports 6 different datasets. Pass a specific value corresponding to the dataset to the `dataset_index` to indicate which expert to use.
 
     ```py
