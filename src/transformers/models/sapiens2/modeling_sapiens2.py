@@ -204,26 +204,44 @@ def eager_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: torch.Tensor | None,
+    dropout: float | int = 0.0,
     scaling: float | None = None,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
+    softcap: float | None = None,
+    **kwargs,
+) -> tuple[torch.Tensor, torch.Tensor]:
     if scaling is None:
-        scaling = query.size(-1) ** -0.5
+        scaling = module.head_dim**-0.5
 
-    # Take the dot product between "query" and "key" to get the raw attention scores.
-    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
 
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+
+    if softcap is not None:
+        attn_weights = attn_weights / softcap
+        attn_weights = torch.tanh(attn_weights)
+        attn_weights = attn_weights * softcap
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    # upcast attention to fp32
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
-    attn_output = torch.matmul(attn_weights, value)
+    attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
-
     return attn_output, attn_weights
+
+
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
 def apply_rotary_pos_emb(
@@ -261,6 +279,10 @@ def apply_rotary_pos_emb(
 
 
 class Sapiens2Attention(nn.Module):
+    """
+    Multi-headed attention compatible with ALL_ATTENTION_FUNCTIONS.
+    """
+
     def __init__(self, config: Sapiens2Config, layer_idx: int):
         super().__init__()
         self.config = config
@@ -268,23 +290,24 @@ class Sapiens2Attention(nn.Module):
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
         self.is_causal = False
+
         self.scaling = self.head_dim**-0.5
+        self.is_causal = False
+
         self.dropout = config.attention_dropout
-        self.use_qk_norm = config.use_qk_norm
-
-        self.num_kv_heads = (
-            self.num_heads if config.layer_types[layer_idx] == "full_attention" else config.num_key_value_heads
-        )
-        kv_dim = self.num_kv_heads * self.head_dim
-
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.query_bias)
         self.k_proj = nn.Linear(self.embed_dim, kv_dim, bias=config.key_bias)
         self.v_proj = nn.Linear(self.embed_dim, kv_dim, bias=config.value_bias)
-        self.o_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.proj_bias)
 
-        if self.use_qk_norm:
-            self.q_norm = nn.RMSNorm(self.head_dim, eps=config.layer_norm_eps)
-            self.k_norm = nn.RMSNorm(self.head_dim, eps=config.layer_norm_eps)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.query_bias)
+        self.o_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.proj_bias)
+        num_key_value_heads = (
+            self.num_heads if config.layer_types[layer_idx] == "full_attention" else config.num_key_value_heads
+        )
+        self.num_key_value_heads = num_key_value_heads
+        self.num_key_value_groups = self.num_heads // num_key_value_heads
+        kv_dim = num_key_value_heads * self.head_dim
+        self.q_norm = nn.RMSNorm(self.head_dim, eps=config.layer_norm_eps) if config.use_qk_norm else nn.Identity()
+        self.k_norm = nn.RMSNorm(self.head_dim, eps=config.layer_norm_eps) if config.use_qk_norm else nn.Identity()
 
     def forward(
         self,
@@ -293,6 +316,7 @@ class Sapiens2Attention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """Input shape: Batch x Time x Channel"""
         batch_size, patches, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
@@ -300,20 +324,14 @@ class Sapiens2Attention(nn.Module):
         value_states = self.v_proj(hidden_states)
 
         query_states = query_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(batch_size, patches, self.num_kv_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(batch_size, patches, self.num_kv_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(batch_size, patches, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(batch_size, patches, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        if self.use_qk_norm:
-            query_states = self.q_norm(query_states)
-            key_states = self.k_norm(key_states)
+        query_states = self.q_norm(query_states)
+        key_states = self.k_norm(key_states)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        if self.num_kv_heads != self.num_heads:
-            factor = self.num_heads // self.num_kv_heads
-            key_states = key_states.repeat_interleave(factor, dim=1)
-            value_states = value_states.repeat_interleave(factor, dim=1)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -472,12 +490,24 @@ class Sapiens2ConvLayer(nn.Module):
         self, in_channels: int, out_channels: int, kernel_size: int = 1, bias: bool = True, activation: str = "silu"
     ):
         super().__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, bias=bias)
-        self.norm = nn.InstanceNorm2d(out_channels)
-        self.activation = ACT2FN[activation]
+        self.convolution = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            padding=padding,
+            dilation=dilation,
+            groups=groups,
+            bias=bias,
+        )
+        self.normalization = nn.InstanceNorm2d(out_channels)
+        self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.activation(self.norm(self.conv(hidden_states)))
+        hidden_states = self.convolution(hidden_states)
+        hidden_states = self.normalization(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        return hidden_states
 
 
 class Sapiens2SegmentationHead(nn.Module):
@@ -796,10 +826,6 @@ class Sapiens2ForSemanticSegmentation(Sapiens2PreTrainedModel):
         )
 
 
-class Sapiens2PoseHead(Sapiens2SegmentationHead):
-    pass
-
-
 @auto_docstring(
     checkpoint="facebook/sapiens2-pose-0.4b",
     custom_intro="""
@@ -811,7 +837,7 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.sapiens2 = Sapiens2Model(config)
-        self.decode_head = Sapiens2PoseHead(config)
+        self.decode_head = Sapiens2SegmentationHead(config)
         self.post_init()
 
     @can_return_tuple

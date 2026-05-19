@@ -40,6 +40,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, is_cv2_available, logging, requires_backends
 from ...utils.generic import can_return_tuple, maybe_autocast
+from ..beit.modeling_beit import BeitConvLayer
 from ..dinov3_vit.configuration_dinov3_vit import DINOv3ViTConfig
 from ..dinov3_vit.modeling_dinov3_vit import (
     DINOv3ViTAttention,
@@ -54,7 +55,6 @@ from ..dinov3_vit.modeling_dinov3_vit import (
     get_patches_center_coordinates,
     rotate_half,
 )
-from ..beit.modeling_beit import BeitConvLayer
 from ..gemma2.modeling_gemma2 import eager_attention_forward
 
 
@@ -542,10 +542,6 @@ class Sapiens2ForSemanticSegmentation(Sapiens2PreTrainedModel):
         )
 
 
-class Sapiens2PoseHead(Sapiens2SegmentationHead):
-    pass
-
-
 @auto_docstring(
     checkpoint="facebook/sapiens2-pose-0.4b",
     custom_intro="""
@@ -557,7 +553,7 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.sapiens2 = Sapiens2Model(config)
-        self.decode_head = Sapiens2PoseHead(config)
+        self.decode_head = Sapiens2SegmentationHead(config)
         self.post_init()
 
     @can_return_tuple
