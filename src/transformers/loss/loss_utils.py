@@ -180,7 +180,7 @@ LOSS_MAPPING = {
     "ForTokenClassification": ForTokenClassification,
     "ForSegmentation": ForSegmentationLoss,
     "ForObjectDetection": ForObjectDetectionLoss,
-    "ForConditionalGeneration": ForCausalLMLoss,
+    "ForConditionalGeneration": ForMaskedLMLoss,
     "DeformableDetrForObjectDetection": DeformableDetrForObjectDetectionLoss,
     "ConditionalDetrForObjectDetection": DeformableDetrForObjectDetectionLoss,
     "DabDetrForObjectDetection": DeformableDetrForObjectDetectionLoss,

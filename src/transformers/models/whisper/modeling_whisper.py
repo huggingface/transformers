@@ -1003,6 +1003,7 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         decoder_position_ids: tuple[torch.LongTensor] | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
+        num_items_in_batch: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | Seq2SeqLMOutput:
         r"""
@@ -1081,10 +1082,9 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
 
         loss = None
         if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            # move labels to correct device to enable PP
-            labels = labels.to(lm_logits.device)
-            loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.reshape(-1))
+            loss = self.loss_function(
+                logits=lm_logits, labels=labels, vocab_size=self.config.vocab_size, num_items_in_batch=num_items_in_batch
+            )
 
         return Seq2SeqLMOutput(
             loss=loss,
@@ -1163,6 +1163,7 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
+        num_items_in_batch: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | CausalLMOutputWithCrossAttentions:
         r"""
@@ -1218,9 +1219,9 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            labels = labels.to(logits.device)
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.config.vocab_size), labels.view(-1))
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.vocab_size, num_items_in_batch=num_items_in_batch
+            )
 
         return CausalLMOutputWithCrossAttentions(
             loss=loss,
