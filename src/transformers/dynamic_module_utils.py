@@ -316,7 +316,7 @@ def _compute_local_source_files_hash(
     resolved_module_file: str | os.PathLike,
 ) -> str:
     """
-    Computes a stable hash from the bytes of the local source file and its transitive relative-import source files.
+    Computes a stable hash from the bytes of the local source file and its relative-import source files.
     """
     model_path = Path(pretrained_model_name_or_path).resolve()
     resolved_module_file = Path(resolved_module_file).resolve()
