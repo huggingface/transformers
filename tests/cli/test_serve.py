@@ -2439,7 +2439,12 @@ class _TestReasoningBase:
 
     def test_response_streaming_matches_non_streaming(self):
         """Streaming and non-streaming Responses API yield the same content + reasoning at T=0."""
-        kwargs = {"model": self.MODEL, "input": self.USER_PROMPT, "max_output_tokens": self.MAX_TOKENS, "temperature": 0.0}
+        kwargs = {
+            "model": self.MODEL,
+            "input": self.USER_PROMPT,
+            "max_output_tokens": self.MAX_TOKENS,
+            "temperature": 0.0,
+        }
 
         ns = self.client.responses.create(stream=False, **kwargs)
         ns_message = next(i for i in ns.output if i.type == "message")
