@@ -89,18 +89,49 @@ class CBWorkerDeadError(RuntimeError):
     """
 
 
-# Fallback tool call configs for models that don't declare stc_token/etc_token/response_schema
-# on their tokenizer.
-# Keys are matched via substring against model_type (e.g. "qwen" matches "qwen2", "qwen3_vl", etc.).
-# If a model family changes its tool call format, split into separate keys (e.g. "qwen2", "qwen3").
+# Fallback tool-call configs for model_types whose tokenizer doesn't declare its own. Keys are
+# tuples of exact model_type strings (matched against model.config.model_type). Models not listed
+# here get no tool-call parsing.
 _TOOL_CALL_FALLBACKS = {
-    "qwen": {
+    # Pre-3.5 Qwen family: <tool_call>{"name": ..., "arguments": {...}}</tool_call>
+    (
+        "qwen2",
+        "qwen2_moe",
+        "qwen2_vl",
+        "qwen2_5_vl",
+        "qwen3",
+        "qwen3_moe",
+        "qwen3_next",
+        "qwen3_vl",
+        "qwen3_vl_moe",
+    ): {
         "stc": "<tool_call>",
         "etc": "</tool_call>",
         "schema": {
             "x-regex-iterator": r"<tool_call>(.*?)</tool_call>",
             "type": "array",
             "items": {"type": "object", "x-parser": "json"},
+        },
+    },
+    # Qwen 3.5 family wraps tool calls in <tool_call>...</tool_call> (single-token delimiters,
+    # so the streamer filters them out cleanly) around an inner
+    # <function=NAME><parameter=KEY>VALUE</parameter></function> markup that holds the call data.
+    ("qwen3_5", "qwen3_5_moe"): {
+        "stc": "<tool_call>",
+        "etc": "</tool_call>",
+        "schema": {
+            "x-regex-iterator": r"<function=(?P<name>[^>\n]+)>(?P<arguments>.*?)</function>",
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "arguments": {
+                        "type": "object",
+                        "x-regex-key-value": r"<parameter=(?P<key>[^>\n]+)>\s*(?P<value>.*?)\s*</parameter>",
+                    },
+                },
+            },
         },
     },
 }
@@ -123,8 +154,10 @@ def get_tool_call_config(processor, model: "PreTrainedModel") -> dict | None:
     if stc and etc and response_schema:
         schema = response_schema["properties"]["tool_calls"]
     else:
-        # Fallback: known model families without full tokenizer config
-        fallback = next((v for k, v in _TOOL_CALL_FALLBACKS.items() if k in model.config.model_type), None)
+        # Fallback: known model families without full tokenizer config. Matched by exact
+        # model_type against the tuple keys of _TOOL_CALL_FALLBACKS.
+        model_type = model.config.model_type
+        fallback = next((v for types, v in _TOOL_CALL_FALLBACKS.items() if model_type in types), None)
         if fallback is None:
             return None
         stc, etc, schema = fallback["stc"], fallback["etc"], fallback["schema"]
@@ -1168,9 +1201,15 @@ class BaseHandler:
         for message in messages:
             parsed = {"role": message["role"], "content": []}
 
-            # Forward tool-use fields so apply_chat_template can handle multi-turn tool conversations
+            # Parse function.arguments back to a dict — chat templates iterate it as a mapping.
             if "tool_calls" in message:
-                parsed["tool_calls"] = message["tool_calls"]
+                tool_calls = []
+                for tc in message["tool_calls"]:
+                    tc = copy.deepcopy(tc)
+                    fn = tc.get("function") or tc
+                    fn["arguments"] = json.loads(fn["arguments"])
+                    tool_calls.append(tc)
+                parsed["tool_calls"] = tool_calls
             if "tool_call_id" in message:
                 parsed["tool_call_id"] = message["tool_call_id"]
 

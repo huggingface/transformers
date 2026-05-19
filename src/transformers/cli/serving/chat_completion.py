@@ -28,12 +28,30 @@ from ...utils.import_utils import is_serve_available
 
 if is_serve_available():
     from fastapi.responses import JSONResponse, StreamingResponse
-    from openai.types.chat import ChatCompletion, ChatCompletionMessage, ChatCompletionMessageToolCall
+    from openai.types.chat import (
+        ChatCompletion,
+        ChatCompletionMessage as OpenAIChatCompletionMessage,
+        ChatCompletionMessageToolCall,
+    )
     from openai.types.chat.chat_completion import Choice
-    from openai.types.chat.chat_completion_chunk import ChatCompletionChunk, ChoiceDelta, ChoiceDeltaToolCall
+    from openai.types.chat.chat_completion_chunk import (
+        ChatCompletionChunk,
+        ChoiceDelta as OpenAIChoiceDelta,
+        ChoiceDeltaToolCall,
+    )
     from openai.types.chat.chat_completion_chunk import Choice as ChoiceChunk
     from openai.types.chat.completion_create_params import CompletionCreateParamsStreaming
     from openai.types.completion_usage import CompletionUsage
+
+    class ChatCompletionMessage(OpenAIChatCompletionMessage):
+        """OpenAI ``ChatCompletionMessage`` extended with the ``reasoning_content`` field."""
+
+        reasoning_content: str | None = None
+
+    class ChoiceDelta(OpenAIChoiceDelta):
+        """OpenAI ``ChoiceDelta`` extended with the ``reasoning_content`` field."""
+
+        reasoning_content: str | None = None
 
 
 from .utils import (
