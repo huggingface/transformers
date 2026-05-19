@@ -5,24 +5,6 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
-"""Inference-time GGUF Linear / Experts modules + the meta-time swap helper.
-
-Two building blocks:
-
-* :class:`GgufLinear`: drop-in replacement for ``nn.Linear`` that holds the
-  raw GGUF block bytes (uint8) and dispatches to ``mul_mat_<fmt>_f32`` /
-  ``mul_mat_vec_<fmt>_f32`` Metal kernels at forward time. There is no slow
-  CPU/CUDA fallback — callers that want dequantize-on-load go through the
-  ``GGUFDequantize`` conversion op instead.
-* :class:`GgufExperts`: drop-in for ``Qwen2MoeExperts`` / ``Qwen3MoeExperts``
-  / ``MiniMaxM2Experts`` that stores all expert weights as per-projection
-  uint8 buffers and dispatches into the ``mul_mat_id_<fmt>_f32`` Metal kernels.
-
-:func:`replace_with_gguf_linear` walks a meta-device model and performs both
-the Linear and the ``.experts`` swap in a single pass — same pattern as
-``replace_with_fp8_linear`` in :mod:`integrations.finegrained_fp8`.
-"""
-
 from __future__ import annotations
 
 import torch
@@ -79,9 +61,9 @@ class GgufLinear(nn.Module):
             self.bias = nn.Parameter(torch.zeros(out_features, dtype=torch.float32), requires_grad=False)
         else:
             self.register_parameter("bias", None)
-        # Explicit kernel refs. Both names are deterministic from quant_type so
-        # we resolve them once at construction. When kernels aren't loadable
-        # (non-MPS / CI) leave the attrs None — forward errors out clearly.
+
+        # We want to support all quant types in a single layer, here we fetch the corresponding
+        # operations
         try:
             ops = ensure_metal_kernels()._ops
             fmt = _KERNEL_FMT[quant_type]
@@ -133,32 +115,7 @@ class GgufLinear(nn.Module):
         return y
 
 
-# ----------------------------------------------------------------------------
-# GgufExperts — quantized replacement for fused-expert MoE modules
-# (Qwen2MoeExperts / Qwen3MoeExperts / MiniMaxM2Experts — same layout).
-# ----------------------------------------------------------------------------
-
-
 class GgufExperts(nn.Module):
-    """Drop-in for fused-expert MoE modules (MixtralExperts / Qwen2MoeExperts
-    / DeepseekV3NaiveMoe — same layout). Holds the same buffer names as the
-    unswapped module (gate_up_proj + down_proj) but as raw uint8 GGUF bytes,
-    so the standard GGUF rename pipeline's merge WeightConverter
-    (ffn_gate_exps + ffn_up_exps -> gate_up_proj) lands bytes here without
-    any per-quantizer rewrite.
-
-    gate_up_quant is assumed equal across gate and up (the merge can only run
-    when both halves share a quant type — Q4_K_M ships them both as Q4_K).
-    down_quant may differ (Q4_K_M ships down as Q8_0).
-
-    Configs across MoE archs spell these dims differently — Qwen2MoE uses
-    num_experts, Mixtral uses num_local_experts, DeepSeek-V3 uses
-    n_routed_experts. PretrainedConfig's attribute_map aliases the names so
-    config.num_experts / config.moe_intermediate_size resolve consistently;
-    archs missing an alias need it added to their config (one-line fix there,
-    not here).
-    """
-
     def __init__(self, config, gate_up_quant: str, down_quant: str):
         super().__init__()
         for label, qt in (("gate_up", gate_up_quant), ("down", down_quant)):
@@ -170,10 +127,6 @@ class GgufExperts(nn.Module):
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_quant, self.down_quant = gate_up_quant, down_quant
 
-        # Buffer layout matches MixtralExperts.gate_up_proj (3D Parameter):
-        # rows = 2*intermediate (gate first, then up — natural output of the
-        # merge converter's Concatenate(dim=1)), cols-in-bytes = hidden /
-        # block_elems * block_bytes.
         gate_up_rows = 2 * self.intermediate_dim
         gate_up_bytes_per_row = (self.hidden_dim // _QUANT_INFO[gate_up_quant][1]) * _QUANT_INFO[gate_up_quant][0]
         down_bytes_per_row = (self.intermediate_dim // _QUANT_INFO[down_quant][1]) * _QUANT_INFO[down_quant][0]
@@ -197,20 +150,16 @@ class GgufExperts(nn.Module):
         self.is_transposed = False
         self.is_concatenated = True
 
-        # Explicit kernel refs + decode-shape scratch. Same rationale as the
-        # GgufLinear case (eager resolution from quant_type, None when kernels
-        # are unloadable so non-MPS construction still succeeds). The scratch
-        # buffers are registered as non-persistent meta tensors here; ``.to``
-        # materialises them when the model lands on its real device. They feed
-        # the decode hot path so torch.compile doesn't see fresh ``torch.empty``
-        # mutations on the second call (that would force a re-trace).
+        # Same as linear layers, we need to record the specifc quant type / operation names.
         try:
             ops = ensure_metal_kernels()._ops
             self._id_op_gate_up = getattr(ops, f"mul_mat_id_{_KERNEL_FMT[gate_up_quant]}_f32").default
             self._id_op_down = getattr(ops, f"mul_mat_id_{_KERNEL_FMT[down_quant]}_f32").default
         except Exception:
             self._id_op_gate_up = self._id_op_down = None
+
         decode_size = getattr(config, "num_experts_per_tok", None) or 4
+        # For fast inference, we register buffers that are used during the forward pass for compile friendly!
         self.register_buffer(
             "_gate_buf", torch.empty(decode_size, self.intermediate_dim, dtype=torch.float32), persistent=False
         )

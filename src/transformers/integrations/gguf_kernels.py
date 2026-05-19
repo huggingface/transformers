@@ -5,13 +5,6 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
-"""Tiny loader for the GGUF Metal kernel package.
-
-Owns the ``ensure_metal_kernels`` cache + the kernel-name table used by
-``GgufLinear`` / ``GgufExperts``. The kernel itself lives on the Hub and is
-loaded via the standard ``kernels`` package (``pip install kernels``).
-"""
-
 from __future__ import annotations
 
 
@@ -35,7 +28,7 @@ _KERNEL_FMT: dict[str, str] = {
     "IQ4_XS": "iq4_xs",
 }
 
-
+# TODO Change the repo name to kernel community once merged.
 def ensure_metal_kernels(repo: str = "ArthurZ/gguf-kernels"):
     """Return the loaded kernels handle, caching across calls. Raises
     ``RuntimeError`` on failure — no fallback."""
@@ -54,9 +47,7 @@ def ensure_metal_kernels(repo: str = "ArthurZ/gguf-kernels"):
             "The GGUF fast path requires the `kernels` package. Install it with `pip install kernels`."
         ) from exc
     try:
-        # trust_remote_code=True lifts the publisher-allowlist check on the
-        # kernels backend for repos outside kernels-community/.
-        _GGUF_METAL_KERNELS = get_kernel(repo, trust_remote_code=True)
+        _GGUF_METAL_KERNELS = get_kernel(repo)
     except Exception as exc:
         raise RuntimeError(
             f"Could not load GGUF metal kernels from {repo!r}: {exc!r}. The kernel repo must be "
