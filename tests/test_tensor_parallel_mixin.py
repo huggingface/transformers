@@ -180,7 +180,7 @@ def _verify_tp_sharding(rank, model_tp, model_ref):
             for dim in range(param_local.ndim):
                 if param_local.size(dim) != param_full.size(dim):
                     param_plan = _get_parameter_tp_plan(name, tp_plan, is_weight=True)
-                    if _is_packed_colwise_plan(param_plan):
+                    if param_plan == "packed_colwise":
                         expected_size = param_full.size(dim) // world_size
                         assert param_local.size(dim) == expected_size, (
                             f"Packed weight {name} sharding incorrect: expected {expected_size}, got {param_local.size(dim)}"
@@ -265,7 +265,7 @@ def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol):
                 for dim in range(grad.ndim):
                     if grad.size(dim) != grad_tp.size(dim):
                         param_plan = _get_parameter_tp_plan(name, tp_plan, is_weight=True)
-                        if _is_packed_colwise_plan(param_plan):
+                        if param_plan == "packed_colwise":
                             # interleaved slicing
                             grad = get_packed_grad_shard(grad, world_size, rank, dim)
                         else:
