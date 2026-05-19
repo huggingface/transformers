@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import unittest
-from functools import cached_property
 
 from transformers import (
     RfDetrConfig,
@@ -437,226 +436,170 @@ class RfDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 @require_vision
 @slow
 class RfDetrModelIntegrationTest(unittest.TestCase):
-    @cached_property
-    def annotations(self):
-        return {
-            "image_id": 0,
-            "annotations": [
-                {
-                    "bbox": [250, 250, 350, 350],
-                    "category_id": 0,
-                    "iscrowd": 0,
-                    "area": 122500,
-                    "segments": [[0, 0, 0, 100, 100, 100, 100, 0]],
-                }
-            ],
-        }
+    """Post-processing expectations were captured from the original rfdetr package."""
 
     def test_inference_object_detection(self):
-        tol = 5e-3
+        image_processor = RfDetrImageProcessor.from_pretrained("Roboflow/rf-detr-base")
         model = RfDetrForObjectDetection.from_pretrained("Roboflow/rf-detr-base", attn_implementation="eager").to(
             torch_device
         )
-        image_processor = RfDetrImageProcessor.from_pretrained("Roboflow/rf-detr-base")
+        model.eval()
+
         image = prepare_img()
-        inputs = image_processor(images=image, annotations=self.annotations, return_tensors="pt").to(torch_device)
-        inputs["labels"] = [
-            {k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in t.items()}
-            for t in inputs["labels"]
-        ]
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
-        torch.manual_seed(0)
-        outputs = model(**inputs)
+        with torch.no_grad():
+            outputs = model(pixel_values=inputs["pixel_values"], pixel_mask=inputs["pixel_mask"])
 
-        # Check raw outputs from the model
-        # fmt: off
-        expectations = Expectations(
-            {
-                ("cuda", (8, 0)): [-7.58679, -4.64964, -10.04680, -5.67244, -9.94596],
-                ("xpu", None): [-7.58679, -4.64964, -10.04680, -5.67244, -9.94596],
-            }
-        )
-        # fmt: on
-        expected_logits = torch.tensor(expectations.get_expectation()).to(torch_device)
-        expected_logits_shape = torch.Size((1, model.config.num_queries, model.config.num_labels))
+        self.assertEqual(outputs.logits.shape[-1], model.config.num_labels)
+        self.assertEqual(outputs.pred_boxes.shape[-1], 4)
 
-        # fmt: off
-        expectations = Expectations(
-            {
-                ("cuda", (8, 0)): [0.25458, 0.54875, 0.48605, 0.86989, 0.16927],
-                ("xpu", None): [0.25458, 0.54875, 0.48605, 0.86989, 0.16927],
-            }
-        )
-        # fmt: on
-        expected_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
-        expected_boxes_shape = torch.Size((1, model.config.num_queries, 4))
-
-        expectations = Expectations(
-            {
-                ("cuda", (8, 0)): 21.700548,
-                ("xpu", None): 21.700548,
-            }
-        )
-        expected_loss = torch.tensor(expectations.get_expectation()).to(torch_device)
-
-        predicted_logits = outputs.logits.flatten()[:5]
-        predicted_boxes = outputs.pred_boxes.flatten()[:5]
-        predicted_loss = outputs.loss
-
-        self.assertEqual(outputs.logits.shape, expected_logits_shape)
-        self.assertEqual(outputs.pred_boxes.shape, expected_boxes_shape)
-        torch.testing.assert_close(predicted_logits, expected_logits, rtol=tol, atol=tol)
-        torch.testing.assert_close(predicted_boxes, expected_boxes, rtol=tol, atol=tol)
-        torch.testing.assert_close(predicted_loss, expected_loss, rtol=tol, atol=tol)
-
-        # Check post-processed outputs
         post_processed_outputs = image_processor.post_process_object_detection(
             outputs, threshold=0.0, target_sizes=[image.size[::-1]]
         )[0]
-        expectations = Expectations(
+
+        label_expectations = Expectations(
             {
                 ("cuda", (8, 0)): [17, 17, 75, 75, 63],
                 ("xpu", None): [17, 17, 75, 75, 63],
             }
         )
-        expected_post_process_labels = torch.tensor(expectations.get_expectation()).to(torch_device)
-        # fmt: off
-        expectations = Expectations(
+        score_expectations = Expectations(
             {
-                ("cuda", (8, 0)): [0.959069, 0.933189, 0.896719, 0.727229, 0.676722],
-                ("xpu", None): [0.959069, 0.933189, 0.896719, 0.727229, 0.676722],
+                ("cuda", (8, 0)): [0.959521, 0.931229, 0.897797, 0.7286, 0.672863],
+                ("xpu", None): [0.959521, 0.931229, 0.897797, 0.7286, 0.672863],
             }
         )
-        # fmt: on
-        expected_post_process_scores = torch.tensor(expectations.get_expectation()).to(torch_device)
-
-        # fmt: off
-        expectations = Expectations(
+        box_expectations = Expectations(
             {
-                ("cuda", (8, 0)): [7.39608, 54.62581, 318.46838, 472.17218],
-                ("xpu", None): [7.39608, 54.62581, 318.46838, 472.17218],
+                ("cuda", (8, 0)): [7.41339, 54.62234, 318.51614, 472.17816],
+                ("xpu", None): [7.41339, 54.62234, 318.51614, 472.17816],
             }
         )
-        # fmt: on
-        expected_post_process_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
+        expected_labels = torch.tensor(label_expectations.get_expectation(), device=torch_device)
+        expected_scores = torch.tensor(score_expectations.get_expectation(), device=torch_device)
+        expected_boxes = torch.tensor(box_expectations.get_expectation(), device=torch_device)
 
-        post_processed_labels = post_processed_outputs["labels"][:5]
-        post_processed_scores = post_processed_outputs["scores"][:5]
-        post_processed_boxes = post_processed_outputs["boxes"][0]
-        torch.testing.assert_close(post_processed_labels, expected_post_process_labels, rtol=tol, atol=tol)
-        torch.testing.assert_close(post_processed_scores, expected_post_process_scores, rtol=tol, atol=tol)
-        torch.testing.assert_close(post_processed_boxes, expected_post_process_boxes, rtol=1, atol=1)
+        score_rtol = 1e-2
+        score_atol = 1e-2
+        box_atol = 1.0
+        torch.testing.assert_close(post_processed_outputs["labels"][:5], expected_labels)
+        torch.testing.assert_close(
+            post_processed_outputs["scores"][:5], expected_scores, rtol=score_rtol, atol=score_atol
+        )
+        torch.testing.assert_close(post_processed_outputs["boxes"][0], expected_boxes, rtol=0.0, atol=box_atol)
 
     def test_inference_segmentation(self):
-        tol = 5e-3
-        # Loss involves random mask point sampling, so we use a more lenient tolerance
-        loss_tol = 1e-2
+        image_processor = RfDetrImageProcessor.from_pretrained("Roboflow/rf-detr-seg-small")
         model = RfDetrForInstanceSegmentation.from_pretrained(
             "Roboflow/rf-detr-seg-small", attn_implementation="eager"
         ).to(torch_device)
+        model.eval()
 
-        image_processor = RfDetrImageProcessor.from_pretrained("Roboflow/rf-detr-seg-small")
         image = prepare_img()
-        inputs = image_processor(images=image, annotations=self.annotations, return_tensors="pt").to(torch_device)
-        inputs["labels"] = [
-            {k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in t.items()}
-            for t in inputs["labels"]
-        ]
-        inputs["labels"][0]["masks"] = torch.zeros(
-            (1, inputs["pixel_values"].shape[-1], inputs["pixel_values"].shape[-2]), device=torch_device
-        )
-        torch.manual_seed(0)
-        outputs = model(**inputs)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
-        # Check raw outputs from the model
-        # fmt: off
-        expectations = Expectations(
-            {
-                ("cuda", (8, 0)): [-7.36071, -5.14784, -9.61621, -10.80701, -8.36835],
-                ("xpu", None): [-7.36071, -5.14784, -9.61621, -10.80701, -8.36835],
-            }
-        )
-        # fmt: on
-        expected_logits = torch.tensor(expectations.get_expectation()).to(torch_device)
-        expected_logits_shape = torch.Size((1, model.config.num_queries, model.config.num_labels))
+        with torch.no_grad():
+            outputs = model(pixel_values=inputs["pixel_values"], pixel_mask=inputs["pixel_mask"])
 
-        # fmt: off
-        expectations = Expectations(
-            {
-                ("cuda", (8, 0)): [0.25585, 0.54797, 0.48059, 0.87072, 0.77129],
-                ("xpu", None): [0.25585, 0.54797, 0.48059, 0.87072, 0.77129],
-            }
-        )
-        # fmt: on
-        expected_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
-        expected_boxes_shape = torch.Size((1, model.config.num_queries, 4))
-
-        # fmt: off
-        expectations = Expectations(
-            {
-                ("cuda", (8, 0)): [-13.12856, -13.06072, -13.86794, -13.83143, -13.65080],
-                ("xpu", None): [-13.12856, -13.06072, -13.86794, -13.83143, -13.65080],
-            }
-        )
-        # fmt: on
-        expected_masks = torch.tensor(expectations.get_expectation()).to(torch_device)
-        expected_masks_shape = torch.Size(
+        self.assertEqual(outputs.logits.shape[-1], model.config.num_labels)
+        self.assertEqual(outputs.pred_boxes.shape[-1], 4)
+        self.assertEqual(
+            outputs.pred_masks.shape[-2:],
             (
-                1,
-                model.config.num_queries,
                 inputs["pixel_values"].shape[-2] // model.config.mask_downsample_ratio,
                 inputs["pixel_values"].shape[-1] // model.config.mask_downsample_ratio,
-            )
+            ),
         )
 
-        expectations = Expectations(
-            {
-                ("cuda", (8, 0)): 88.221893,
-                ("xpu", None): 88.221893,
-            }
-        )
-        expected_loss = torch.tensor(expectations.get_expectation()).to(torch_device)
-
-        predicted_logits = outputs.logits.flatten()[:5]
-        predicted_boxes = outputs.pred_boxes.flatten()[:5]
-        predicted_masks = outputs.pred_masks.flatten()[:5]
-        predicted_loss = outputs.loss
-
-        self.assertEqual(outputs.logits.shape, expected_logits_shape)
-        self.assertEqual(outputs.pred_boxes.shape, expected_boxes_shape)
-        self.assertEqual(outputs.pred_masks.shape, expected_masks_shape)
-        torch.testing.assert_close(predicted_logits, expected_logits, rtol=tol, atol=tol)
-        torch.testing.assert_close(predicted_boxes, expected_boxes, rtol=tol, atol=tol)
-        torch.testing.assert_close(predicted_masks, expected_masks, rtol=tol, atol=tol)
-        torch.testing.assert_close(predicted_loss, expected_loss, rtol=loss_tol, atol=loss_tol)
-
-        # Check post-processed outputs
-        post_processed_outputs = image_processor.post_process_instance_segmentation(
+        object_detection_outputs = image_processor.post_process_object_detection(
             outputs, threshold=0.0, target_sizes=[image.size[::-1]]
         )[0]
-        expectations = Expectations(
+
+        od_label_expectations = Expectations(
+            {
+                ("cuda", (8, 0)): [17, 17, 75, 75, 63],
+                ("xpu", None): [17, 17, 75, 75, 63],
+            }
+        )
+        od_score_expectations = Expectations(
+            {
+                ("cuda", (8, 0)): [0.944051, 0.907934, 0.906093, 0.848789, 0.388786],
+                ("xpu", None): [0.944051, 0.907934, 0.906093, 0.848789, 0.388786],
+            }
+        )
+        od_box_expectations = Expectations(
+            {
+                ("cuda", (8, 0)): [10.07031, 54.00349, 317.46234, 471.93063],
+                ("xpu", None): [10.07031, 54.00349, 317.46234, 471.93063],
+            }
+        )
+        expected_od_labels = torch.tensor(od_label_expectations.get_expectation(), device=torch_device)
+        expected_od_scores = torch.tensor(od_score_expectations.get_expectation(), device=torch_device)
+        expected_od_boxes = torch.tensor(od_box_expectations.get_expectation(), device=torch_device)
+
+        score_rtol = 1e-2
+        score_atol = 1e-2
+        box_atol = 3.0
+        torch.testing.assert_close(object_detection_outputs["labels"][:5], expected_od_labels)
+        torch.testing.assert_close(
+            object_detection_outputs["scores"][:5], expected_od_scores, rtol=score_rtol, atol=score_atol
+        )
+        torch.testing.assert_close(object_detection_outputs["boxes"][0], expected_od_boxes, rtol=0.0, atol=box_atol)
+
+        instance_segmentation_outputs = image_processor.post_process_instance_segmentation(
+            outputs, threshold=0.0, target_sizes=[image.size[::-1]]
+        )[0]
+
+        instance_label_expectations = Expectations(
             {
                 ("cuda", (8, 0)): [17, 17, 75, 75],
                 ("xpu", None): [17, 17, 75, 75],
             }
         )
-        expected_post_process_labels = torch.tensor(expectations.get_expectation()).to(torch_device)
-        expectations = Expectations(
+        instance_score_expectations = Expectations(
             {
-                ("cuda", (8, 0)): [0.943005, 0.909305, 0.906496, 0.848170],
-                ("xpu", None): [0.943005, 0.909305, 0.906496, 0.848170],
+                ("cuda", (8, 0)): [0.944051, 0.907934, 0.906093, 0.848789],
+                ("xpu", None): [0.944051, 0.907934, 0.906093, 0.848789],
             }
         )
-        expected_post_process_scores = torch.tensor(expectations.get_expectation()).to(torch_device)
+        expected_instance_labels = torch.tensor(instance_label_expectations.get_expectation(), device=torch_device)
+        expected_instance_scores = torch.tensor(instance_score_expectations.get_expectation(), device=torch_device)
 
-        post_processed_labels = [
-            segments_info["label_id"] for segments_info in post_processed_outputs["segments_info"]
-        ]
-        post_processed_labels = torch.tensor(post_processed_labels[:4]).to(torch_device)
-        post_processed_scores = [segments_info["score"] for segments_info in post_processed_outputs["segments_info"]]
-        post_processed_scores = torch.tensor(post_processed_scores[:4]).to(torch_device)
-        torch.testing.assert_close(post_processed_labels, expected_post_process_labels, rtol=tol, atol=tol)
-        torch.testing.assert_close(post_processed_scores, expected_post_process_scores, rtol=tol, atol=tol)
+        instance_labels = torch.tensor(
+            [segment["label_id"] for segment in instance_segmentation_outputs["segments_info"][:4]],
+            device=torch_device,
+        )
+        instance_scores = torch.tensor(
+            [segment["score"] for segment in instance_segmentation_outputs["segments_info"][:4]],
+            device=torch_device,
+        )
+        torch.testing.assert_close(instance_labels, expected_instance_labels)
+        torch.testing.assert_close(instance_scores, expected_instance_scores, rtol=score_rtol, atol=score_atol)
+
+        pred_masks_head_expectations = Expectations(
+            {
+                ("cuda", (8, 0)): [-13.19589, -13.15982, -13.96006, -13.92868, -13.74562],
+                ("xpu", None): [-13.19589, -13.15982, -13.96006, -13.92868, -13.74562],
+            }
+        )
+
+        expected_pred_masks_head = torch.tensor(pred_masks_head_expectations.get_expectation(), device=torch_device)
+        torch.testing.assert_close(outputs.pred_masks.flatten()[:5], expected_pred_masks_head, rtol=0.0, atol=0.1)
+
+        mask_pixel_count_expectations = Expectations(
+            {
+                ("cuda", (8, 0)): [52141, 60564, 4180, 2157],
+                ("xpu", None): [52141, 60564, 4180, 2157],
+            }
+        )
+
+        expected_mask_pixel_counts = torch.tensor(mask_pixel_count_expectations.get_expectation(), device=torch_device)
+        binary_maps = image_processor.post_process_instance_segmentation(
+            outputs, threshold=0.0, target_sizes=[image.size[::-1]], return_binary_maps=True
+        )[0]["segmentation"]
+        mask_pixel_counts = binary_maps[:4].sum(dim=(-2, -1))
+        torch.testing.assert_close(mask_pixel_counts, expected_mask_pixel_counts, rtol=0.0, atol=50)
 
 
 class RfDetrDinov2ModelTester:

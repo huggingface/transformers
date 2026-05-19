@@ -266,6 +266,7 @@ class RfDetrImageProcessor(DetrImageProcessor):
         mask_threshold: float = 0.0,
         target_sizes: list[tuple[int, int]] | None = None,
         return_coco_annotation: bool = False,
+        return_binary_maps: bool = False,
         top_k: int | None = None,
     ) -> list[dict[str, Any]]:
         """
@@ -282,6 +283,12 @@ class RfDetrImageProcessor(DetrImageProcessor):
                 Target ``(height, width)`` for each image. If unset, masks are not resized.
             return_coco_annotation (`bool`, *optional*, defaults to `False`):
                 If `True`, return segmentation maps as COCO run-length encoding instead of tensors.
+                Mutually exclusive with `return_binary_maps`.
+            return_binary_maps (`bool`, *optional*, defaults to `False`):
+                If `True`, return segmentation maps as a stacked tensor of binary instance masks
+                (one per detected instance), without overlap resolution. This matches the output
+                format of the original ``rfdetr`` package. Mutually exclusive with
+                `return_coco_annotation`.
             top_k (`int`, *optional*):
                 Maximum number of candidate queries evaluated before score thresholding.
                 Defaults to the total number of queries.
@@ -289,9 +296,12 @@ class RfDetrImageProcessor(DetrImageProcessor):
         Returns:
             `list[dict]`: One dict per image with keys:
             - **segmentation** -- `Tensor[H, W]` of ``int32`` segment ids (``-1`` = background),
+              `Tensor[num_instances, H, W]` of bool binary masks when `return_binary_maps=True`,
               or a list of RLE encodings when `return_coco_annotation=True`.
             - **segments_info** -- List of dicts with keys ``id``, ``label_id``, and ``score``.
         """
+        if return_coco_annotation and return_binary_maps:
+            raise ValueError("`return_coco_annotation` and `return_binary_maps` cannot both be `True`.")
         out_logits, out_masks = outputs.logits, outputs.pred_masks
         top_k = top_k if top_k is not None else out_logits.shape[1]
 
@@ -334,23 +344,34 @@ class RfDetrImageProcessor(DetrImageProcessor):
 
             segmentation = torch.full((height, width), -1, dtype=torch.int32, device=out_logits.device)
             segments: list[dict] = []
+            instance_maps: list = []
             current_id = 0
 
             for i in range(pred_scores.shape[0]):
                 binary_mask = mask_logits_resized[i] > mask_threshold
                 if not binary_mask.any():
                     continue
-                pixels_to_paint = binary_mask & (segmentation == -1)
-                if not pixels_to_paint.any():
-                    continue
+                if return_binary_maps:
+                    instance_maps.append(binary_mask)
+                else:
+                    pixels_to_paint = binary_mask & (segmentation == -1)
+                    if not pixels_to_paint.any():
+                        continue
                 current_id += 1
-                segmentation[pixels_to_paint] = current_id
+                if not return_binary_maps:
+                    segmentation[pixels_to_paint] = current_id
                 segments.append(
                     {"id": current_id, "label_id": int(pred_labels[i]), "score": round(pred_scores[i].item(), 6)}
                 )
 
             if return_coco_annotation:
                 segmentation = convert_segmentation_to_rle(segmentation)
+            elif return_binary_maps:
+                segmentation = (
+                    torch.stack(instance_maps, dim=0)
+                    if instance_maps
+                    else torch.zeros(0, height, width, dtype=torch.bool, device=out_logits.device)
+                )
 
             results.append({"segmentation": segmentation, "segments_info": segments})
 
@@ -922,6 +943,9 @@ class RfDetrModel(LwDetrModel):
         # Step 2.
         enc_outputs_class_proposals = self.enc_out_class_embed[group_id](object_query)
         delta_bbox = self.enc_out_bbox_embed[group_id](object_query)
+        enc_outputs_class_proposals = enc_outputs_class_proposals.masked_fill(
+            invalid_mask.to(enc_outputs_class_proposals.device), float("-inf")
+        )
 
         # Step 3.
         enc_outputs_coord = refine_bboxes(output_proposals, delta_bbox)

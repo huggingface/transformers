@@ -1486,7 +1486,6 @@ class RfDetrModel(RfDetrPreTrainedModel):
             _cur += height * width
         output_proposals = torch.cat(proposals, 1)
         output_proposals_valid = ((output_proposals > 0.01) & (output_proposals < 0.99)).all(-1, keepdim=True)
-        invalid_mask = padding_mask | ~output_proposals_valid.squeeze(-1)
         invalid_mask = padding_mask.unsqueeze(-1) | ~output_proposals_valid
         output_proposals = output_proposals.masked_fill(invalid_mask, float(0))
 
@@ -1648,6 +1647,9 @@ class RfDetrModel(RfDetrPreTrainedModel):
         # Step 2.
         enc_outputs_class_proposals = self.enc_out_class_embed[group_id](object_query)
         delta_bbox = self.enc_out_bbox_embed[group_id](object_query)
+        enc_outputs_class_proposals = enc_outputs_class_proposals.masked_fill(
+            invalid_mask.to(enc_outputs_class_proposals.device), float("-inf")
+        )
 
         # Step 3.
         enc_outputs_coord = refine_bboxes(output_proposals, delta_bbox)

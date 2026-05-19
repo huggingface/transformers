@@ -65,7 +65,7 @@ The example below demonstrates how to perform object detection with the [`Pipeli
 from transformers import pipeline
 import torch
 
-pipeline = pipeline("object-detection", model="Roboflow/rf-detr-base", device_map="auto")
+pipeline = pipeline("object-detection", model="Roboflow/rf-detr-medium", device_map="auto")
 
 pipeline("http://images.cocodataset.org/val2017/000000039769.jpg")
 ```
@@ -82,8 +82,8 @@ import torch
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 
-image_processor = AutoImageProcessor.from_pretrained("Roboflow/rf-detr-base")
-model = AutoModelForObjectDetection.from_pretrained("Roboflow/rf-detr-base", device_map="auto")
+image_processor = AutoImageProcessor.from_pretrained("Roboflow/rf-detr-medium")
+model = AutoModelForObjectDetection.from_pretrained("Roboflow/rf-detr-medium", device_map="auto")
 
 # prepare image for the model
 inputs = image_processor(images=image, return_tensors="pt").to(model.device)
@@ -102,6 +102,57 @@ for result in results:
 
 </hfoption>
 </hfoptions>
+
+RF-DETR also supports instance segmentation via the `Roboflow/rf-detr-seg-*` checkpoints. The
+[`RfDetrImageProcessor.post_process_instance_segmentation`] method offers two output formats controlled by
+`return_binary_maps`:
+
+- **`return_binary_maps=False` (default)** returns a single `Tensor[H, W]` segmentation map where each pixel holds a
+  segment id (`-1` for background), with overlap resolved by score priority (highest-scoring instances claim pixels
+  first). This is the standard instance segmentation output format in Transformers, shared by models such as DETR.
+- **`return_binary_maps=True`** returns a `Tensor[num_instances, H, W]` stack of independent boolean masks, one per
+  detected instance, with no overlap resolution. Instances can overlap freely. This matches the output format of the
+  original [`rfdetr`](https://github.com/roboflow/rf-detr) library.
+
+```python
+from transformers import AutoImageProcessor, AutoModelForInstanceSegmentation
+from PIL import Image
+import requests
+import torch
+
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+
+image_processor = AutoImageProcessor.from_pretrained("Roboflow/rf-detr-seg-medium")
+model = AutoModelForInstanceSegmentation.from_pretrained("Roboflow/rf-detr-seg-medium", device_map="auto")
+
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
+
+with torch.no_grad():
+    outputs = model(**inputs)
+
+target_sizes = [image.size[::-1]]
+
+# Segmentation map: single Tensor[H, W] where each pixel holds a segment id (-1 = background)
+results = image_processor.post_process_instance_segmentation(
+    outputs, target_sizes=target_sizes, threshold=0.3
+)
+for result in results:
+    segmentation = result["segmentation"]
+    for segment in result["segments_info"]:
+        mask = segmentation == segment["id"]
+        label = model.config.id2label[segment["label_id"]]
+        print(f"{label}: {segment['score']:.2f}, pixels={mask.sum().item()}")
+
+# Binary maps: Tensor[num_instances, H, W] of independent boolean masks (instances can overlap)
+results = image_processor.post_process_instance_segmentation(
+    outputs, target_sizes=target_sizes, threshold=0.3, return_binary_maps=True
+)
+for result in results:
+    for mask, segment in zip(result["segmentation"], result["segments_info"]):
+        label = model.config.id2label[segment["label_id"]]
+        print(f"{label}: {segment['score']:.2f}, pixels={mask.sum().item()}")
+```
 
 ## Resources
 
