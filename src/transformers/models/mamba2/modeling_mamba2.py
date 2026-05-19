@@ -255,53 +255,119 @@ class Mamba2Mixer(nn.Module):
             - self.num_heads
         ) // 2
 
-        # Single step calculations via cache
+        # Handeling cache and Sequence Length accordingly
         if cache_params is not None and cache_params.has_previous_state(self.layer_idx):
-            _, _, gate, hidden_states_B_C, dt = projected_states.squeeze(1).split(
-                [d_mlp, d_mlp, self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
-            )
+            if seq_len == 1:
+                _, _, gate, hidden_states_B_C, dt = projected_states.squeeze(1).split(
+                    [d_mlp, d_mlp, self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
+                )
 
-            # 2. Convolution sequence transformation
-            hidden_states_B_C = causal_conv1d_update(
-                hidden_states_B_C,
-                cache_params.layers[self.layer_idx].conv_states,
-                self.conv1d.weight.squeeze(1),
-                self.conv1d.bias,
-                self.activation,
-            )
+                # 2. Convolution sequence transformation
+                hidden_states_B_C = causal_conv1d_update(
+                    hidden_states_B_C,
+                    cache_params.layers[self.layer_idx].conv_states,
+                    self.conv1d.weight.squeeze(1),
+                    self.conv1d.bias,
+                    self.activation,
+                )
 
-            hidden_states, B, C = torch.split(
-                hidden_states_B_C,
-                [self.intermediate_size, groups_time_state_size, groups_time_state_size],
-                dim=-1,
-            )
+                hidden_states, B, C = torch.split(
+                    hidden_states_B_C,
+                    [self.intermediate_size, groups_time_state_size, groups_time_state_size],
+                    dim=-1,
+                )
 
-            # 3. SSM transformation
-            A = -torch.exp(self.A_log.float())  # (nheads,)
-            A = A[:, None, ...][:, :, None].expand(-1, self.head_dim, self.ssm_state_size).to(dtype=torch.float32)
-            dt = dt[:, :, None].expand(-1, -1, self.head_dim)
-            dt_bias = self.dt_bias[:, None, ...].expand(-1, self.head_dim)
-            D = self.D[:, None, ...].expand(-1, self.head_dim)
-            B = B.view(batch_size, self.n_groups, B.shape[1] // self.n_groups)
-            C = C.view(batch_size, self.n_groups, C.shape[1] // self.n_groups)
-            hidden_states_reshaped = hidden_states.view(batch_size, self.num_heads, self.head_dim)
-            hidden_states = selective_state_update(
-                cache_params.layers[self.layer_idx].recurrent_states,
-                hidden_states_reshaped,
-                dt,
-                A,
-                B,
-                C,
-                D,
-                z=None,
-                dt_bias=dt_bias,
-                dt_softplus=True,
-            )
-            hidden_states = hidden_states.view(batch_size, self.num_heads * self.head_dim)
-            hidden_states = self.norm(hidden_states, gate)
+                # 3. SSM transformation
+                A = -torch.exp(self.A_log.float())  # (nheads,)
+                A = A[:, None, ...][:, :, None].expand(-1, self.head_dim, self.ssm_state_size).to(dtype=torch.float32)
+                dt = dt[:, :, None].expand(-1, -1, self.head_dim)
+                dt_bias = self.dt_bias[:, None, ...].expand(-1, self.head_dim)
+                D = self.D[:, None, ...].expand(-1, self.head_dim)
+                B = B.view(batch_size, self.n_groups, B.shape[1] // self.n_groups)
+                C = C.view(batch_size, self.n_groups, C.shape[1] // self.n_groups)
+                hidden_states_reshaped = hidden_states.view(batch_size, self.num_heads, self.head_dim)
+                hidden_states = selective_state_update(
+                    cache_params.layers[self.layer_idx].recurrent_states,
+                    hidden_states_reshaped,
+                    dt,
+                    A,
+                    B,
+                    C,
+                    D,
+                    z=None,
+                    dt_bias=dt_bias,
+                    dt_softplus=True,
+                )
+                hidden_states = hidden_states.view(batch_size, self.num_heads * self.head_dim)
+                hidden_states = self.norm(hidden_states, gate)
 
-            # 4. Final linear projection
-            out = self.out_proj(hidden_states)[:, None, ...]
+                # 4. Final linear projection
+                out = self.out_proj(hidden_states)[:, None, ...]
+
+            else:  # seq_len > 1: chunked prefill with cache
+                logger.warning_once(
+                    "Chunked prefill with cache requires `causal-conv1d>=1.2.0` and `mamba-ssm>=2.0.0` "
+                    "which support `initial_states` and `return_final_states`. If you see a TypeError, please upgrade."
+                )
+
+                # Split without squeezing
+                _, _, gate, hidden_states_B_C, dt = projected_states.split(
+                    [d_mlp, d_mlp, self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
+                )
+
+                # A. Convolution with state carry-over
+                conv_state = cache_params.layers[self.layer_idx].conv_states  # (B, conv_dim, conv_kernel)
+
+                # Use causal_conv1d_fn with initial state
+                conv_out, final_conv_state = causal_conv1d_fn(
+                    x=hidden_states_B_C.transpose(1, 2),  # (B, conv_dim, L)
+                    weight=self.conv1d.weight.squeeze(1),
+                    bias=self.conv1d.bias,
+                    initial_states=conv_state,
+                    return_final_states=True,
+                    activation=self.activation,
+                )
+                # Update conv state in cache
+                cache_params.update_conv_state(final_conv_state, layer_idx=self.layer_idx)
+
+                # Transpose back and split
+                hidden_states_B_C = conv_out.transpose(1, 2).contiguous()
+                hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C, attention_mask)
+                hidden_states, B, C = torch.split(
+                    hidden_states_B_C,
+                    [self.intermediate_size, groups_time_state_size, groups_time_state_size],
+                    dim=-1,
+                )
+
+                # B. SSM with state carry-over
+                ssm_state = cache_params.layers[self.layer_idx].recurrent_states
+                dt_limit_kwargs = (
+                    {} if self.time_step_limit == (0.0, float("inf")) else {"dt_limit": self.time_step_limit}
+                )
+                A = -torch.exp(self.A_log.float())
+
+                scan_output, final_ssm_state = mamba_chunk_scan_combined(
+                    hidden_states.view(batch_size, seq_len, -1, self.head_dim),
+                    dt,
+                    A,
+                    B.view(batch_size, seq_len, self.n_groups, -1),
+                    C.view(batch_size, seq_len, self.n_groups, -1),
+                    chunk_size=self.chunk_size,
+                    D=self.D,
+                    z=None,
+                    seq_idx=None,
+                    initial_states=ssm_state,
+                    return_final_states=True,
+                    dt_bias=self.dt_bias,
+                    dt_softplus=True,
+                    **dt_limit_kwargs,
+                )
+
+                if final_ssm_state is not None:
+                    cache_params.update_recurrent_state(final_ssm_state, layer_idx=self.layer_idx)
+                scan_output = scan_output.view(batch_size, seq_len, -1)
+                scan_output = self.norm(scan_output, gate)
+                out = self.out_proj(scan_output)
 
         # Fused calculations or step by step if no initialized cache is found
         else:
@@ -414,6 +480,15 @@ class Mamba2Mixer(nn.Module):
         hidden_states_B_C = hidden_states_B_C.transpose(1,2)
 
         is_decoding = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+
+        if is_decoding and seq_len > 1:
+            outputs = []
+            for t in range(seq_len):
+                token = hidden_states[:, t:t+1, :]
+                token_mask = attention_mask[:, t:t+1] if attention_mask is not None else None
+                token_out = self.torch_forward(token, cache_params, token_mask)
+                outputs.append(token_out)
+            return torch.cat(outputs, dim=1)
 
         # 2. Convolution sequence transformation
         if is_decoding:
