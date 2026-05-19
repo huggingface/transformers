@@ -319,5 +319,34 @@ is a list and we want to transform every element, which often occurs with Cohere
 "transform": "content[*].{type: 'function', function: {name: tool_name, arguments: parameters}}"
 ```
 
-Using `transform` requires the optional `jmespath` package (`pip install jmespath`); it's only imported when a template
-actually uses the key. It is installed with the `transformers["chat_template"]` extra.
+Using `transform` requires the optional `jmespath` package, although it's only imported when a template
+actually uses the key. It is installed with the `transformers["chat_template"]` extra, or you can just 
+`pip install jmespath`.
+
+## Very advanced: Regex portability
+
+`open_pattern`, `close_pattern`, and `start_anchor_pattern` are regex strings. For most users, and even for most
+model authors, this shouldn't be a problem, but if you are a developer writing an implementation of response parsing
+in another language, you should be aware of our implementation details. We apologize
+to everyone who had to implement an entire Jinja parser to get chat templating to work - we hope that if you follow the
+simple guidelines below, then response templates should be much less painful:
+
+- We use Python's `re` module for regexes. Since all Python3 strings are unicode, this means **all of our regex matches
+  are unicode-aware.** This particularly affects common characters like `\w`. Make sure you set the relevant
+  unicode flags in your engine.
+- We compile all regexes with `re.DOTALL` enabled and `re.MULTILINE` disabled, so `.` matches `\n` but `^` and `$`
+  only match the start/end of the whole input, not line breaks.
+- We use the `(?P<name>...)` syntax for named groups. In some regex implementations, angle brackets `<>` are treated
+  as part of the name, so this would capture a group called `"<name>"`. If your implementation of regex does this, you'll
+  need to get rid of the extra angle brackets somehow, or else the groups will not match later `transform` expressions.
+- Your regex engine may (rarely) not support lookarounds like `(?!...)`. Although these aren't commonly used in response
+  templates, they can appear and we do support them! You might need to either throw an error in those cases, or manually
+  extract the lookarounds and enforce them in your code when the regex engine finds a possible match.
+- Other advanced features like backreferences, atomic groups, possessive quantifiers, recursion and so on are generally
+  not used in response templates. We'll try to dissuade model authors from using them, so you can hopefully safely 
+  ignore them.
+
+The other major source of portability issues is the use of `jmespath` expressions for the `transform` feature. 
+Thankfully, there are ports of `jmespath` to most major languages. Additionally, `jmespath` is a very small 
+and self-contained library with strong spec guarantees and an excellent test suite, so we expect that a modern
+code agent should have few problems porting it to a new language, if needed.
