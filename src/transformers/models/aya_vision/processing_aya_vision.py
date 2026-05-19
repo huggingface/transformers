@@ -116,7 +116,7 @@ class AyaVisionProcessor(ProcessorMixin):
         Checks that number of special tokens in text and processed text is same. The count can be different
         if tokenized text was truncated, leading to issues in model code.
         """
-        # Aya visino uses `img_patch_token` instead of image token`
+        # Aya vision uses `img_patch_token` instead of `image_token`
         token_str = self.img_patch_token
         token_id = self.image_token_id
         if token_str is not None and token_id is not None:
