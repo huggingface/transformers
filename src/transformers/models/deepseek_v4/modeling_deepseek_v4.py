@@ -990,11 +990,11 @@ class DeepseekV4MLP(nn.Module):
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
         self.act_fn = ACT2FN[config.hidden_act]
+        self.limit = config.swiglu_limit
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        limit = self.config.swiglu_limit
-        gate = self.gate_proj(x).clamp(max=limit)
-        up = self.up_proj(x).clamp(min=-limit, max=limit)
+        gate = self.gate_proj(x).clamp(max=self.limit)
+        up = self.up_proj(x).clamp(min=-self.limit, max=self.limit)
         return self.down_proj(self.act_fn(gate) * up)
 
 
@@ -1042,7 +1042,6 @@ class DeepseekV4Experts(nn.Module):
 class DeepseekV4TopKRouter(nn.Module):
     def __init__(self, config: DeepseekV4Config):
         super().__init__()
-        self.config = config
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
@@ -1072,7 +1071,6 @@ class DeepseekV4HashRouter(nn.Module):
 
     def __init__(self, config: DeepseekV4Config):
         super().__init__()
-        self.config = config
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size

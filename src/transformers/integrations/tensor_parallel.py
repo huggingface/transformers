@@ -1120,6 +1120,11 @@ class RouterParallel(TensorParallelLayer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
+    def prepare_module_tp(self, module, device_mesh, config=None, **kwargs):
+        super().prepare_module_tp(module, device_mesh, **kwargs)
+        if not hasattr(module, "config") and config is not None:
+            module.config = config
+
     def _prepare_input_fn(self, mod, inputs, device_mesh):
         return inputs
 

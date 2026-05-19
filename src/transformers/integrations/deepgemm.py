@@ -512,12 +512,6 @@ def deepgemm_fp8_fp4_experts_forward(
     )
 
 
-def _ue8m0_to_fp32(sf: torch.Tensor) -> torch.Tensor:
-    """UE8M0 byte → fp32 (`2**(b - 127)`) via bit-shift into the float32 exponent field.
-    `transform_sf_into_required_layout` requires fp32 input."""
-    return (sf.contiguous().view(torch.uint8).to(torch.int32) << 23).view(torch.float32)
-
-
 def _megamoe_setup_weights(
     self: torch.nn.Module,
     deepgemm: DeepGEMM,
@@ -544,14 +538,14 @@ def _megamoe_setup_weights(
     down_w = to_local(self.down_proj.data).view(torch.int8).contiguous()
 
     gate_up_sf = deepgemm.transform_sf_into_required_layout(
-        _ue8m0_to_fp32(gate_up_sf_raw),
+        gate_up_sf_raw.float(),
         gate_up_w.size(1),  # 2 * intermediate
         hidden_dim,
         recipe=(1, 32),
         num_groups=num_experts,
     )
     down_sf = deepgemm.transform_sf_into_required_layout(
-        _ue8m0_to_fp32(down_sf_raw),
+        down_sf_raw.float(),
         down_w.size(1),  # hidden
         intermediate_hidden,
         recipe=(1, 32),
