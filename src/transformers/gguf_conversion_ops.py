@@ -149,11 +149,20 @@ class GGUFQuantize(ConversionOps):
     def __deepcopy__(self, memo):
         return GGUFQuantize(self.hf_quantizer)
 
+    # Subset of quant types gguf-py ships a Python quantizer for. The loader
+    # path handles the rest read-only.
+    _GGUF_PY_QUANTIZE_SUPPORTED = ("Q4_0", "Q8_0")
+
     def _quantize_one(self, key: str, value):
         import gguf
         import torch
 
         quant_type = getattr(getattr(self.hf_quantizer, "quantization_config", None), "quant_type", None) or "Q4_0"
+        if quant_type not in self._GGUF_PY_QUANTIZE_SUPPORTED:
+            raise ValueError(
+                f"On-the-fly GGUF quantize only supports {self._GGUF_PY_QUANTIZE_SUPPORTED} (gguf-py limit); "
+                f"got quant_type={quant_type!r}. Pick Q4_0 or Q8_0, or load an existing .gguf via `gguf_file=`."
+            )
         ggml_type = getattr(gguf.GGMLQuantizationType, quant_type)
         # gguf-py expects a numpy array in fp32.
         fp = value.detach().to("cpu", dtype=torch.float32).contiguous().numpy()

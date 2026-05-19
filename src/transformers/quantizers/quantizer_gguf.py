@@ -46,14 +46,20 @@ class GGUFQuantizer(HfQuantizer):
 
         if quantization_config is None:
             quantization_config = GgufQuantizeConfig()
-        # On-the-fly path = caller passed a ``GgufQuantizeConfig`` without a
-        # source file (we're packing a live fp16/bf16 checkpoint). ``gguf_file=``
-        # path = config carries a source file (we're loading existing GGUF bytes).
-        on_the_fly = getattr(quantization_config, "gguf_file", None) is None
+        # Three load paths:
+        #   - safetensors reload: ``module_quant_types`` carries the swap plan
+        #     from a prior ``save_pretrained`` — bytes live in the model's own
+        #     safetensors, no .gguf file needed. pre_quantized=True.
+        #   - gguf_file=: source bytes come from an external .gguf — quantizer
+        #     loads them via ``load_checkpoint_state``. pre_quantized=True.
+        #   - on-the-fly: live fp16/bf16 checkpoint, GGUFQuantize op packs at
+        #     load time. pre_quantized=False.
+        has_module_map = bool(getattr(quantization_config, "module_quant_types", None))
+        has_gguf_file = getattr(quantization_config, "gguf_file", None) is not None
+        on_the_fly = not (has_module_map or has_gguf_file)
         kwargs.setdefault("pre_quantized", not on_the_fly)
         super().__init__(quantization_config=quantization_config, **kwargs)
-        # Re-annotate with the concrete type so attribute accesses (``quant_type``,
-        # ``modules_to_convert``, ``dequantize``, …) type-check without casts.
+        # Re-annotate with the concrete type so attribute accesses type-check.
         self.quantization_config: GgufQuantizeConfig = quantization_config
         self.on_the_fly = on_the_fly
         # ``linear_mode`` is the on-the-fly default and the gguf_file default on
@@ -144,18 +150,30 @@ class GGUFQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(self, model, **kwargs):
         """Swap nn.Linear / fused-expert modules in place at meta time.
 
-        For the gguf_file path, finalize ``self.linear_mode`` here: native
-        kernels run on MPS today (matching CUDA kernels are a TODO), so we
-        swap when MPS is available and the caller didn't explicitly request
-        dequantize-on-load (``dtype=`` -> ``GgufQuantizeConfig.dequantize``).
+        Three paths converge here:
+          * safetensors reload (``module_quant_types`` non-empty): swap from
+            the saved plan unconditionally — the bytes are already uint8 in
+            safetensors and only GgufLinear/GgufExperts have buffers shaped
+            to receive them.
+          * gguf_file= load: finalize ``linear_mode`` from MPS availability
+            and the caller's ``dtype=`` choice. The plan comes from
+            ``_build_quant_info_from_gguf_file`` walking ``gguf_tensors``.
+          * on-the-fly: swap unconditionally (the config asked for it).
+
+        Records the swap plan on ``quantization_config.module_quant_types``
+        so it survives ``save_pretrained`` → ``from_pretrained``.
         """
-        if not self.on_the_fly:
+        has_module_map = bool(getattr(self.quantization_config, "module_quant_types", None))
+        if has_module_map:
+            self.linear_mode = True
+        elif not self.on_the_fly:
             self.linear_mode = torch.backends.mps.is_available() and not self.quantization_config.dequantize
         if not self.linear_mode:
             return
         from ..integrations.gguf_linear import replace_with_gguf_linear
 
         quant_info_by_target = self._build_quant_info(model)
+        self.quantization_config.module_quant_types = dict(quant_info_by_target)
         replace_with_gguf_linear(model, quant_info_by_target)
 
     def postprocess_model(self, model, **kwargs):
@@ -180,13 +198,21 @@ class GGUFQuantizer(HfQuantizer):
     def is_trainable(self):
         return True
 
-    def is_serializable(self):
-        return False
+    def is_serializable(self, safe_serialization: bool = True) -> bool:
+        # save_pretrained → safetensors works: GgufLinear / GgufExperts buffers
+        # are uint8, biases / norms are fp32, all native safetensors dtypes.
+        # The swap layout is replayed on reload via
+        # ``GgufQuantizeConfig.module_quant_types`` (filled in
+        # ``_process_model_before_weight_loading``).
+        return True
 
     # ---- Internals ------------------------------------------------------------
 
     def _build_quant_info(self, model) -> dict[str, dict]:
         """Walk the live model and emit one entry per module that should swap.
+
+        Safetensors reload path: ``module_quant_types`` already carries the
+        full plan; return it verbatim.
 
         On-the-fly path (``GgufQuantizeConfig`` without a source file): every
         :class:`nn.Linear` matching ``modules_to_convert`` gets the config's
@@ -200,6 +226,9 @@ class GGUFQuantizer(HfQuantizer):
         import torch.nn as nn
 
         from ..integrations.gguf_linear import MODEL_TYPE_TO_GGUF_EXPERTS
+
+        if self.quantization_config.module_quant_types:
+            return dict(self.quantization_config.module_quant_types)
 
         if self.on_the_fly:
             import fnmatch

@@ -1111,8 +1111,12 @@ class GgufQuantizeConfig(QuantizationConfigMixin):
 
     Args:
         quant_type (`str`, *optional*, defaults to `"Q4_0"`):
-            GGUF quantization name. Only `"Q4_0"` and `"Q8_0"` are supported today
-            (gguf-py limitation — K-quants are read-only upstream).
+            GGUF quantization name. The loader path (`gguf_file=` or safetensors
+            reload via `module_quant_types`) supports the full kernel suite —
+            Q4_0 / Q5_0 / Q5_1 / Q8_0 / Q4_K / Q5_K / Q6_K / IQ4_NL / IQ4_XS.
+            The on-the-fly quantize path is gated by gguf-py's own quantizer,
+            which only ships Python implementations for Q4_0 and Q8_0 today
+            (K-quants and IQ4_* are read-only upstream).
         modules_to_convert (`list[str]`, *optional*):
             Glob-style names of `nn.Linear` modules to quantize. `None` means every
             quantizable `nn.Linear` is converted.
@@ -1128,6 +1132,15 @@ class GgufQuantizeConfig(QuantizationConfigMixin):
             Force the dequantize-on-load path even with a GGUF source. Set
             automatically when `from_pretrained` receives an explicit `dtype=`,
             so the caller-requested precision wins over native GGUF kernels.
+        module_quant_types (`dict[str, str | dict[str, str]]`, *optional*):
+            Per-module quant info, populated by the quantizer at swap time and
+            replayed on `from_pretrained` so a `save_pretrained` →
+            `from_pretrained` round-trip reconstructs the same GGUF modules
+            from safetensors (no .gguf file needed). For `nn.Linear`:
+            `{name: "Q4_K"}`. For fused-expert modules: `{name: {"gate_up_quant":
+            "Q4_K", "down_quant": "Q8_0"}}`. Mixed-quant GGUFs (Q4_K_M etc.) need
+            this to round-trip — the on-the-fly path can also rely on it to
+            avoid re-walking the model on reload.
     """
 
     def __init__(
@@ -1137,6 +1150,7 @@ class GgufQuantizeConfig(QuantizationConfigMixin):
         modules_to_not_convert: list[str] | None = None,
         gguf_file: str | None = None,
         dequantize: bool = False,
+        module_quant_types: dict | None = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.GGUF
@@ -1145,13 +1159,37 @@ class GgufQuantizeConfig(QuantizationConfigMixin):
         self.modules_to_not_convert = modules_to_not_convert
         self.gguf_file = gguf_file
         self.dequantize = dequantize
+        self.module_quant_types = dict(module_quant_types) if module_quant_types else None
         self.post_init()
 
+    # All quant types the GGUF metal kernels handle. The on-the-fly path is
+    # narrower (gguf-py limit) and validated lazily inside ``GGUFQuantize.convert``.
+    _SUPPORTED_QUANT_TYPES = (
+        "Q4_0",
+        "Q5_0",
+        "Q5_1",
+        "Q8_0",
+        "Q4_K",
+        "Q5_K",
+        "Q6_K",
+        "IQ4_NL",
+        "IQ4_XS",
+    )
+
     def post_init(self):
-        if self.quant_type not in ("Q4_0", "Q8_0"):
+        if self.quant_type not in self._SUPPORTED_QUANT_TYPES:
             raise ValueError(
-                f"GgufQuantizeConfig.quant_type must be one of Q4_0 / Q8_0 today (gguf-py limitation), got {self.quant_type!r}"
+                f"GgufQuantizeConfig.quant_type must be one of {self._SUPPORTED_QUANT_TYPES}, got {self.quant_type!r}"
             )
+
+    def to_dict(self):
+        """Serialise for ``config.json``. ``gguf_file`` is a load-time pointer
+        to an external file and shouldn't survive into the saved config — once
+        the model is saved as safetensors the bytes live there. Reload picks
+        up the swap layout via :attr:`module_quant_types`."""
+        out = super().to_dict()
+        out.pop("gguf_file", None)
+        return out
 
 
 class CompressedTensorsConfig(QuantizationConfigMixin):
