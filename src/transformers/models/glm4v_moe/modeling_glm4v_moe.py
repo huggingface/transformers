@@ -46,7 +46,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
-from ...utils.deprecation import deprecate_attribute, deprecate_kwarg
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     can_return_tuple,
@@ -442,9 +442,6 @@ class Glm4vMoePreTrainedModel(PreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
 
 
-@deprecate_attribute(
-    "rope_deltas", version="v5.20", additional_message="Please use `model.base_model.rope_deltas` instead."
-)
 @auto_docstring
 @dataclass
 class Glm4vMoeCausalLMOutputWithPast(CausalLMOutputWithPast):
@@ -1035,9 +1032,6 @@ class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
         )
 
 
-@deprecate_attribute(
-    "rope_deltas", version="v5.20", additional_message="Please use `model.base_model.rope_deltas` instead."
-)
 @auto_docstring
 @dataclass
 class Glm4vMoeModelOutputWithPast(BaseModelOutputWithPast):

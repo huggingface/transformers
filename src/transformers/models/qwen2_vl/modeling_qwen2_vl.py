@@ -51,7 +51,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.deprecation import deprecate_attribute, deprecate_kwarg
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     is_flash_attention_requested,
@@ -66,9 +66,6 @@ from .configuration_qwen2_vl import Qwen2VLConfig, Qwen2VLTextConfig, Qwen2VLVis
 logger = logging.get_logger(__name__)
 
 
-@deprecate_attribute(
-    "rope_deltas", version="v5.20", additional_message="Please use `model.base_model.rope_deltas` instead."
-)
 @auto_docstring
 @dataclass
 class Qwen2VLModelOutputWithPast(BaseModelOutputWithPast):
@@ -81,9 +78,6 @@ class Qwen2VLModelOutputWithPast(BaseModelOutputWithPast):
     rope_deltas: torch.LongTensor | None = None
 
 
-@deprecate_attribute(
-    "rope_deltas", version="v5.20", additional_message="Please use `model.base_model.rope_deltas` instead."
-)
 @auto_docstring
 @dataclass
 class Qwen2VLCausalLMOutputWithPast(CausalLMOutputWithPast):

@@ -55,7 +55,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, torch_compilable_check
-from ...utils.deprecation import deprecate_attribute
 from ...utils.generic import (
     TransformersKwargs,
     accepts_precomputed_kwargs,
@@ -1787,9 +1786,6 @@ class Qwen3OmniMoeThinkerTextModel(Qwen3OmniMoePreTrainedModel):
         return hidden_states
 
 
-@deprecate_attribute(
-    "rope_deltas", version="v5.20", additional_message="Please use `model.base_model.rope_deltas` instead."
-)
 @auto_docstring
 @dataclass
 class Qwen3OmniMoeThinkerCausalLMOutputWithPast(MoeCausalLMOutputWithPast):

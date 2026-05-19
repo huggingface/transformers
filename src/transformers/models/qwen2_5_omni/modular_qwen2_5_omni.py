@@ -43,7 +43,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.deprecation import deprecate_attribute, deprecate_kwarg
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import accepts_precomputed_kwargs, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.hub import cached_file
 from ...utils.output_capturing import capture_outputs
@@ -1130,9 +1130,6 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
 ############################
 
 
-@deprecate_attribute(
-    "rope_deltas", version="v5.20", additional_message="Please use `model.base_model.rope_deltas` instead."
-)
 @auto_docstring
 @dataclass
 class Qwen2_5OmniThinkerCausalLMOutputWithPast(CausalLMOutputWithPast):
@@ -2063,9 +2060,6 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
 ############################
 
 
-@deprecate_attribute(
-    "rope_deltas", version="v5.20", additional_message="Please use `model.base_model.rope_deltas` instead."
-)
 @auto_docstring
 @dataclass
 class Qwen2_5OmniTalkerCausalLMOutputWithPast(CausalLMOutputWithPast):
