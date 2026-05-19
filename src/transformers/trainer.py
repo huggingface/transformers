@@ -1424,12 +1424,16 @@ class Trainer:
         # Disable progress bars when uploading models during checkpoints to avoid polluting stdout
         ctx = suppress_progress_bars() if args.push_to_hub else contextlib.nullcontext()
         with ctx:
-            return inner_training_loop(
-                args=args,
-                resume_from_checkpoint=resume_from_checkpoint,
-                trial=trial,
-                ignore_keys_for_eval=ignore_keys_for_eval,
-            )
+            try:
+                return inner_training_loop(
+                    args=args,
+                    resume_from_checkpoint=resume_from_checkpoint,
+                    trial=trial,
+                    ignore_keys_for_eval=ignore_keys_for_eval,
+                )
+            except Exception:
+                self.callback_handler.on_exception(args, self.state, self.control)
+                raise
 
     def _inner_training_loop(
         self,

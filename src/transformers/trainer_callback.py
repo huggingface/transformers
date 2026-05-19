@@ -425,6 +425,11 @@ class TrainerCallback:
         Event called before pushing the model to the hub, at the beginning of Trainer.push_to_hub and Trainer._push_from_checkpoint.
         """
 
+    def on_exception(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """
+        Event called when an exception is raised during training.
+        """
+
 
 class CallbackHandler(TrainerCallback):
     """Internal class that just calls the list of callbacks in order."""
@@ -539,6 +544,9 @@ class CallbackHandler(TrainerCallback):
 
     def on_push_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         return self.call_event("on_push_begin", args, state, control, **kwargs)
+
+    def on_exception(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        return self.call_event("on_exception", args, state, control, **kwargs)
 
     def call_event(self, event, args, state, control, **kwargs):
         for callback in self.callbacks:

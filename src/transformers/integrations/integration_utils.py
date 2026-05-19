@@ -1450,6 +1450,11 @@ class MLflowCallback(TrainerCallback):
                 python_model=self._ml_flow.pyfunc.PythonModel(),
             )
 
+    def on_exception(self, args, state, control, **kwargs):
+        if self._initialized and state.is_world_process_zero:
+            if self._auto_end_run and self._ml_flow.active_run():
+                self._ml_flow.end_run(status="FAILED")
+
     def __del__(self):
         # if the previous run is not terminated correctly, the fluent API will
         # not let you start a new run before the previous one is killed
