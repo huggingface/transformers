@@ -65,12 +65,34 @@ def convert_key(key, mapping):
     return key
 
 
+
+def _safe_extractall(tar: "tarfile.TarFile", dest_dir: str) -> None:
+    """Reject tar members whose resolved paths would escape ``dest_dir`` (CWE-22).
+
+    Defense-in-depth helper. ``tarfile.extractall`` does not validate per-entry
+    paths, so a malicious archive can write outside the destination. We resolve
+    each member against ``dest_dir`` and raise ``ValueError`` if the entry
+    would land outside.
+    """
+    dest_real = os.path.realpath(dest_dir)
+    for member in tar.getmembers():
+        member_path = member.name
+        if os.path.isabs(member_path) or member_path.startswith(("/", "\")):
+            raise ValueError(f"Tar member has absolute path: {member_path!r}")
+        resolved = os.path.realpath(os.path.join(dest_real, member_path))
+        if os.path.commonpath([dest_real, resolved]) != dest_real:
+            raise ValueError(
+                f"Tar member resolves outside destination: {member_path!r}"
+            )
+    tar.extractall(dest_dir)
+
+
 def extract_nemo_archive(nemo_file_path: str, extract_dir: str) -> dict[str, str]:
     """Extract .nemo file (tar archive) and return paths to important files."""
     print(f"Extracting NeMo archive: {nemo_file_path}")
 
     with tarfile.open(nemo_file_path, "r", encoding="utf-8") as tar:
-        tar.extractall(extract_dir)
+        _safe_extractall(tar, extract_dir)
 
     all_files = []
     for root, dirs, files in os.walk(extract_dir):
