@@ -289,15 +289,6 @@ def _convert_moe_packed_tensors(
     """
     import math
 
-    # Multi-GPU stuff.
-    assert blocks.device == scales.device, (
-        f"Can't dequantize mxfp4 to {dtype}: "
-        f"blocks are in device '{blocks.device}', but scales are in device '{scales.device}'."
-    )
-    device = blocks.device
-    if device.type == "cuda":
-        torch.cuda.set_device(device)
-
     blocks = blocks.to(torch.uint8)
     scales = scales.to(torch.int32) - 127  # TODO that's because 128=2**7
 
@@ -355,13 +346,15 @@ def convert_moe_packed_tensors(
     # torch statistics are not accurate enough to estimate if we will have enough memory due to fragmentation and
     # in-place operation on non-contiguous tensors (may sometimes require more temporary copies)
     try:
-        return _convert_moe_packed_tensors(blocks, scales, dtype=dtype, rows_per_chunk=rows_per_chunk)
+        with on_device(blocks):
+            return _convert_moe_packed_tensors(blocks, scales, dtype=dtype, rows_per_chunk=rows_per_chunk)
     # In the case of OOM due to very tight device_map, we convert and return on cpu - it will then be put back on correct
     # devide with the accelerate dispatch (doing it right away may still lead to OOM, but more memory is available later)
     except torch.OutOfMemoryError:
         blocks = blocks.to("cpu")
         scales = scales.to("cpu")
-        return _convert_moe_packed_tensors(blocks, scales, dtype=dtype, rows_per_chunk=rows_per_chunk)
+        with on_device(blocks):
+            return _convert_moe_packed_tensors(blocks, scales, dtype=dtype, rows_per_chunk=rows_per_chunk)
 
 
 class Mxfp4GptOssExperts(nn.Module):
