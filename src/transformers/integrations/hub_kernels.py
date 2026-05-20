@@ -379,8 +379,9 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
             version = _HUB_KERNEL_MAPPING[kernel_name].get("version", None)
             kernel = get_kernel(repo_id, revision=revision, version=version)
             mapping[kernel_name] = kernel
-        except FileNotFoundError:
+        except FileNotFoundError as e:
             mapping[kernel_name] = None
+            logger.warning_once(f"Failed to load kernel {kernel_name}: {e}")
         except AssertionError:
             # Happens when torch is built without an accelerator backend; fall back to slow path.
             mapping[kernel_name] = None
