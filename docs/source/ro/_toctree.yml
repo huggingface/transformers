@@ -1,3 +1,5 @@
 - sections:
   - local: index
     title: Transformers
+  - local: installation
+    title: Instalare
