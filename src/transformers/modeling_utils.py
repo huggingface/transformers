@@ -4806,6 +4806,20 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 _load_parameter_into_model(self, key, value)
             return
 
+        # When loading via distributed_config the device_map is None, so get_device(None, key) always returns "cpu".
+        # This means that the missing params and non-persistent buffers (like RoPE's `inv_freq`) are left on CPU.
+        # Then in every forward pass, they are transfered to the device, which is slow and not CUDA graphable.
+        # To avoid this, we use the local accelerator as a default device (inferred only once and cached).
+        if device_map is None and device_mesh is not None and device_mesh.device_type != "cpu":
+            default_device = torch.device(device_mesh.device_type, int(os.environ.get("LOCAL_RANK", 0)))
+        else:
+            default_device = None
+
+        def default_or_get_device(key: str) -> torch.device | str | int:
+            if default_device is not None:
+                return default_device
+            return get_device(device_map, key, valid_torch_device=True)
+
         # The tied weight keys are in the "missing" usually, but they should not be moved (they will be tied anyway)
         # This is especially important because if they are moved, they will lose the `_is_hf_initialized` flag, and they
         # will be re-initialized for nothing (which can be quite long)
@@ -4823,13 +4837,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     new_param = torch.nn.Parameter(new_dtensor, requires_grad=param.requires_grad)
                     torch.utils.swap_tensors(param, new_param)
             else:
-                param_device = get_device(device_map, key, valid_torch_device=True)
-                value = torch.empty_like(param, device=param_device)
+                value = torch.empty_like(param, device=default_or_get_device(key))
                 _load_parameter_into_model(self, key, value)
         # We need to move back non-persistent buffers as well, as they are not part of loaded weights anyway
         for key, buffer in self.named_non_persistent_buffers():
-            buffer_device = get_device(device_map, key, valid_torch_device=True)
-            value = torch.empty_like(buffer, device=buffer_device)
+            value = torch.empty_like(buffer, device=default_or_get_device(key))
             _load_parameter_into_model(self, key, value)
 
     def _initialize_missing_keys(self, is_quantized: bool) -> None:
