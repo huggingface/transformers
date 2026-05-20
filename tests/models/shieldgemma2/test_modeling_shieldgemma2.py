@@ -304,7 +304,8 @@ class ShieldGemma2IntegrationTest(unittest.TestCase):
         model = ShieldGemma2ForImageClassification.from_pretrained(
             model_id,
             quantization_config=BitsAndBytesConfig(load_in_4bit=True),
-            attn_implementation="eager",
+            # The full-size SigLIP tower materializes multi-GB attention scores with eager attention.
+            attn_implementation={"": "eager", "text_config": "eager", "vision_config": "sdpa"},
         )
 
         inputs = processor(images=[image], return_tensors="pt").to(torch_device)
