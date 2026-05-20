@@ -87,6 +87,7 @@ class SolarOpenConfig(PreTrainedConfig):
     pad_token_id: int | None = None
     default_theta = 1_000_000.0
     base_model_sp_plan = {
+        "@self": "sp_inject_position_ids",
         "embed_tokens": "vocab_reduce_scatter",
         "layers.*.input_layernorm": "activation",
         "layers.*.self_attn": "module_allgather_hidden_states",

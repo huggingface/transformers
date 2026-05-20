@@ -1405,7 +1405,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if self.base_model is self:
             self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else {}
             self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
-            self._sp_plan = self.config.base_model_sp_plan.copy() if self.config.base_model_sp_plan is not None else {}
+            # "@self" in an SP plan targets the base module itself. Normalize to "" so
+            # downstream prefix/lookup logic treats it as the module's own FQN.
+            sp_plan = self.config.base_model_sp_plan or {}
+            self._sp_plan = {("" if k == "@self" else k): v for k, v in sp_plan.items()}
             self._ep_plan = self.config.base_model_ep_plan.copy() if self.config.base_model_ep_plan is not None else {}
             self._fsdp_plan = (
                 self.config.base_model_fsdp_plan.copy() if self.config.base_model_fsdp_plan is not None else {}
@@ -1433,7 +1436,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if plan := getattr(module, "_tp_plan", None):
                 self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_sp_plan", None):
-                self._sp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+                # Empty key denotes "this child module itself" (from the "@self" sentinel);
+                # prefix it to just `name` so it matches the child's FQN, not "{name}.".
+                self._sp_plan.update({(name if k == "" else f"{name}.{k}"): v for k, v in plan.copy().items()})
             if plan := getattr(module, "_pp_plan", None):
                 self._pp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_fsdp_plan", None):

@@ -53,6 +53,7 @@ class MixtralConfig(PreTrainedConfig):
 
     # TP + Sequence Parallelism plan (for training).
     base_model_sp_plan = {
+        "@self": "sp_inject_position_ids",
         "embed_tokens": "vocab_reduce_scatter",
         "layers.*.input_layernorm": "activation",
         "layers.*.self_attn": "module_allgather_hidden_states",

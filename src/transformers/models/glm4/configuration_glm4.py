@@ -48,6 +48,7 @@ class Glm4Config(PreTrainedConfig):
         "layers.*.mlp.down_proj": "vocab_allreduce",  # input is replicated due to the `chunk` operation
     }
     base_model_sp_plan = {
+        "@self": "sp_inject_position_ids",
         "embed_tokens": "vocab_reduce_scatter",
         "layers.*.input_layernorm": "activation",
         "layers.*.self_attn": "module_allgather_hidden_states",

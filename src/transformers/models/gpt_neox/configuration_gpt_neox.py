@@ -52,6 +52,7 @@ class GPTNeoXConfig(PreTrainedConfig):
         "layers.*.mlp.dense_4h_to_h": "rowwise_allreduce",
     }
     base_model_sp_plan = {
+        "@self": "sp_inject_position_ids",
         "embed_tokens": "vocab_reduce_scatter",
         "layers.*.input_layernorm": "activation",
         "layers.*.post_attention_layernorm": "activation",
