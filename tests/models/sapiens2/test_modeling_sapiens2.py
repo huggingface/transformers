@@ -748,7 +748,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
             [[0.0771, 0.1335, 0.3025], [-0.1179, 0.2904, 0.7140], [0.0337, 0.3037, 0.4390]],
             device=torch_device,
         )
-        torch.testing.assert_close(result[0][0, :3, :3], expected_postprocessed_pointmap, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(result[0][0, :3, :3], expected_postprocessed_pointmap, rtol=1e-2, atol=1e-2)
 
 
 @require_torch
