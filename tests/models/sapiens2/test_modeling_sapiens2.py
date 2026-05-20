@@ -589,6 +589,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
 
         image_processor = self.default_image_processor
         image = prepare_img()
+        image_height, image_width = image.shape[-2:]
         inputs = image_processor(image, do_pad=True, return_tensors="pt").to(torch_device)
 
         with torch.no_grad():
@@ -604,7 +605,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         )
         torch.testing.assert_close(outputs.normals[0, 0, :3, :3], expected_normals, rtol=1e-2, atol=1e-2)
 
-        result = image_processor.post_process_normal_estimation(outputs, source_sizes=inputs.original_sizes)
+        result = image_processor.post_process_normal_estimation(outputs, source_sizes=[(image_height, image_width)])
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].shape, torch.Size([3, 432, 640]))
 

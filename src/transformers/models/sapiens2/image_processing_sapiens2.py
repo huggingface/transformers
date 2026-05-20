@@ -261,12 +261,10 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         images = self._prepare_image_like_inputs(
             images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
         )
-        original_sizes = [image.shape[-2:] for image in images]
         images_kwargs = kwargs.copy()
         images_kwargs["do_reduce_labels"] = False
         data = {}
         data["pixel_values"] = self._preprocess(images, boxes=boxes, **images_kwargs)
-        data["original_sizes"] = original_sizes
 
         if segmentation_maps is not None:
             processed_segmentation_maps = self._prepare_image_like_inputs(
@@ -527,6 +525,8 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         model_h = self.size["height"]
         model_w = self.size["width"]
 
+        normals = F.normalize(normals, p=2, dim=1, eps=1e-8)
+
         # TODO(guarin): Group by shape and resize in batch instead of looping, like in `preprocess`.
         for idx in range(len(normals)):
             normal = normals[idx]
@@ -553,7 +553,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
                     antialias=False,
                 )[0]
 
-            result.append(F.normalize(normal, p=2, dim=0))
+            result.append()
 
         return result
 
