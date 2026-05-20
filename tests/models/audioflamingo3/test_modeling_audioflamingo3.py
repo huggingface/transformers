@@ -58,11 +58,6 @@ class AudioFlamingo3ModelTester(ALMModelTester):
         kwargs.setdefault("max_source_positions", (kwargs["feat_seq_length"] - 1) // 2 + 1)
         super().__init__(parent, **kwargs)
 
-    def create_audio_mask(self):
-        # Full-length mask matches real processor output and lets the audio encoder dispatch to Flash
-        # Attention (which rejects non-null attn_masks) on `test_sdpa_can_dispatch_on_flash`.
-        return torch.ones([self.batch_size, self.feat_seq_length], dtype=torch.bool).to(torch_device)
-
     def get_audio_embeds_mask(self, audio_mask):
         # Mirrors AudioFlamingo3Encoder._get_feat_extract_output_lengths:
         # conv2 (k=3,s=2,p=1) then avg_pool (k=2,s=2).
