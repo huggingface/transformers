@@ -319,9 +319,7 @@ class Mamba2Mixer(nn.Module):
                 return_final_states=True,
             )
             hidden_states_B_C = hidden_states_B_C.transpose(1, 2)
-            cache_params.update_conv_state(
-                nn.functional.pad(new_conv_state, (1, 0)), layer_idx=self.layer_idx
-            )
+            cache_params.update_conv_state(nn.functional.pad(new_conv_state, (1, 0)), layer_idx=self.layer_idx)
             hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C, attention_mask)
             hidden_states, B, C = torch.split(
                 hidden_states_B_C,
