@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING
 from ..utils import _LazyModule
 from ..utils.import_utils import define_import_structure
 
-
 if TYPE_CHECKING:
     from .afmoe import *
     from .aimv2 import *
@@ -253,6 +252,7 @@ if TYPE_CHECKING:
     from .mbart50 import *
     from .megatron_bert import *
     from .megatron_gpt2 import *
+    from .mellum import *
     from .metaclip_2 import *
     from .mgp_str import *
     from .mimi import *
@@ -484,4 +484,6 @@ else:
     import sys
 
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, _file, define_import_structure(_file), module_spec=__spec__
+    )
