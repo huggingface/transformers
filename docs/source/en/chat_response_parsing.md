@@ -173,7 +173,7 @@ And here's the template that parses it. Don't be intimidated - a lot of it is fa
             "close": "</tool_call>",
             "repeats": True,
             "content": "json",
-            "transform": "{type: 'function', function: content}",
+            "transform": {"type": "function", "function": "{content}"},
         },
         "content": {
             "close": "<|im_end|>",
@@ -243,11 +243,12 @@ The end of generation will close and finalize any open regions, even if their cl
 Once we define how to capture a field, we also need to specify how to parse the raw text inside that capture. There are three
 keys that control this:
 
-| Key             | Type             | Purpose                                                                                  |
-|-----------------|------------------|------------------------------------------------------------------------------------------|
-| `content`       | str              | The content type inside this region. Defaults to `"text"`. Each type has its own parser. |
-| `content_args`  | dict             | Arguments to be passed to the content parser for this region.                            |
-| `transform`     | str (jmespath)   | Optional post-parse [jmespath](https://jmespath.org/) expression (see **Transform**).    |
+| Key              | Type         | Purpose                                                                                  |
+|------------------|--------------|------------------------------------------------------------------------------------------|
+| `content`        | str          | The content type inside this region. Defaults to `"text"`. Each type has its own parser. |
+| `content_args`   | dict         | Arguments to be passed to the content parser for this region.                            |
+| `transform`      | dict/list    | Optional post-parse template that reshapes the parsed body (see **Transform**).          |
+| `transform_each` | bool         | If true, the parsed content must be a list and `transform` is applied per-element.       |
 
 Let's go through these keys in order. The first (and most important) key is `content`. This indicates the content type
 of the field, which determines the parser that will be used to convert the raw text captured in the field to the final output.
@@ -275,9 +276,10 @@ For most fields, the `transform` key is unnecessary. It's used when the parsed b
 output, or when information from the delimiters has to be merged into the result. It most commonly appears in
 `tool_calls` fields, as these often have complex structure.
 
-`transform` is a [jmespath](https://jmespath.org/) expression. The input is a dict containing `content` (the parsed body)
-plus any named groups captured by `open_pattern` / `close_pattern`. A very common use-case is to wrap a tool call
-dict in an outer dict with a `function` key, as these are part of our standard tool call format:
+`transform` is a **template**: a dict (or list) that describes the output shape, where any string of the
+form `"{name}"` is replaced with the corresponding value. Values can be accessed from `content` (the parsed
+body of this region) and any named groups captured by `open_pattern` / `close_pattern`. A very common use-case is to wrap a tool
+call dict in an outer dict with a `function` key, as these are part of our standard tool call format:
 
 ```python
 "tool_calls": {
@@ -285,15 +287,18 @@ dict in an outer dict with a `function` key, as these are part of our standard t
     "close": "</tool_call>",
     "repeats": True,
     "content": "json",
-    "transform": "{type: 'function', function: content}",
+    "transform": {"type": "function", "function": "{content}"},
 },
 ```
 
-You can abuse `transform` quite a lot though, which becomes necessary when the model output has a wildly
-different format to our standard API. GPT-OSS is a good example - it embeds the function name in the channel header
-rather than in the JSON body, so we have to capture it with a named group in `open_pattern` 
-and merge it with `content` inside the transform. All named groups in `open_pattern` and `close_pattern` become
-available as variables in the transform:
+A whole-string placeholder like `"{content}"` returns the looked-up value with its type preserved — so above, the
+parsed JSON dict slots in directly as the value of `function`. A placeholder must be the entire string: mixing
+text and placeholders (`"abc {name} def"`) is not permitted. They're not f-strings!
+
+You can abuse `transform` quite a lot, which becomes necessary when the model output has a wildly different format
+to our standard API. GPT-OSS is a good example - it embeds the function name in the channel header rather than in
+the JSON body, so we have to capture it with a named group in `open_pattern` and merge it with `content` inside the
+transform. All named groups in `open_pattern` and `close_pattern` become available as variables alongside `content`:
 
 ```python
 "tool_calls": {
@@ -301,27 +306,28 @@ available as variables in the transform:
     "close": "<|call|>",
     "repeats": True,
     "content": "json",
-    "transform": "{type: 'function', function: {name: name, arguments: content}}",
+    "transform": {"type": "function", "function": {"name": "{name}", "arguments": "{content}"}},
 },
 ```
 
-The `transform` here builds the output dict: Most of what we need is emitted by GPT-OSS in the field body, which
-forms the `content` input. We get `name` by capturing it in the `open_pattern` regex, and merge it with `content` into
-a tool call dict. Finally, we wrap the tool call dict in an outer dict, which adds `type: "function"` as in the SmolLM
-example.
-
-In general, the `jmespath` syntax is very straightforward. `jmespath` experts may be familiar with the
-special symbols `@` (meaning the entire input dict, including any capture groups) and `*` (the input iterator). These are usually not necessary,
-but they are supported if you really need them. The main case when `*` becomes necessary is when the field content
-is a list and we want to transform every element, which often occurs with Cohere models:
+Sometimes a field's parsed content is *itself* a list of records and you want to reshape each one. The Cohere
+template is a good example: It emits all tool calls inside a single JSON array, so we set `transform_each: True` to 
+apply the transform per element. Each array element's keys are unpacked into the template scope, so 
+`"{tool_name}"` looks up `tool_name` in the current element:
 
 ```python
-"transform": "content[*].{type: 'function', function: {name: tool_name, arguments: parameters}}"
+"tool_calls": {
+    "open": "<|START_ACTION|>",
+    "close": "<|END_ACTION|>",
+    "content": "json",
+    "transform_each": True,
+    "transform": {"type": "function", "function": {"name": "{tool_name}", "arguments": "{parameters}"}},
+},
 ```
 
-Using `transform` requires the optional `jmespath` package, although it's only imported when a template
-actually uses the key. It is installed with the `transformers["chat_template"]` extra, or you can just 
-`pip install jmespath`.
+The `transform_each` flag is only needed when `content` is already a list; for the more common case where each
+match contributes one element (and `repeats: True` accumulates them), then the transform will apply to each element
+by default.
 
 ## Very advanced: Regex portability
 
@@ -344,8 +350,3 @@ follow the simple guidelines below, then response templates should be much less 
 - Other advanced features like backreferences, atomic groups, possessive quantifiers, recursion and so on are generally
   not used in response templates. We'll try to dissuade model authors from using them, so you can hopefully safely 
   ignore them.
-
-The other major source of portability issues is the use of `jmespath` expressions for the `transform` feature. 
-Thankfully, there are ports of `jmespath` to most major languages. Additionally, `jmespath` is a very small 
-and self-contained library with strong spec guarantees and an excellent test suite, so we expect that a modern
-code agent should have few problems porting it to a new language, if needed.
