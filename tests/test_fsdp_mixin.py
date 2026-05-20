@@ -46,7 +46,6 @@ if is_torch_available():
     from torch.nn.parallel import DistributedDataParallel as DDP
 
     from transformers.distributed import DistributedConfig
-    from transformers.distributed.fsdp import apply_fully_shard_data_parallel, initialize_fsdp
     from transformers.distributed.tensor_parallel import replace_layer_number_by_wildcard
     from transformers.distributed.utils import (
         gather_full_state_dict,
@@ -513,11 +512,18 @@ def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_wor
     config = config_class.from_dict(config_dict)
     config.tie_word_embeddings = tie_word_embeddings
 
-    auto_plan = None
-    device_map, device_mesh, _ = initialize_fsdp(fsdp_plan={})
-
-    set_seed(SEED)
-    model = AutoModelForCausalLM.from_config(config).to(device_map)
+    init_tmpdir, init_tmpdir_obj = _save_init_pretrained(rank, config, torch.float32)
+    try:
+        _set_determinism(SEED)
+        model = AutoModelForCausalLM.from_pretrained(
+            init_tmpdir,
+            distributed_config=DistributedConfig(fsdp_size=dist.get_world_size()),
+            attn_implementation="eager",
+        )
+        dist.barrier()
+    finally:
+        if rank == 0 and init_tmpdir_obj is not None:
+            init_tmpdir_obj.cleanup()
 
     # Expected FSDP targets come from model._fsdp_plan: every resolved path gets a
     # fully_shard call (keep_full_weight entries are bundled into one group, but each
@@ -525,8 +531,6 @@ def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_wor
     expected_targets = {""}
     for paths, _strategy in _resolve_fsdp_plan_paths(model):
         expected_targets.update(paths)
-
-    model = apply_fully_shard_data_parallel(model, device_mesh, fsdp_plan=auto_plan)
 
     actual_targets = {name for name, module in model.named_modules() if type(module).__name__.startswith("FSDP")}
 

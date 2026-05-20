@@ -4341,6 +4341,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
         if distributed_config is not None:
+            # Tie weights before sharding so `apply_fully_shard_data_parallel` /
+            # `apply_tensor_parallel` see the shared-parameter graph and can route tied
+            # entries (e.g. `lm_head` -> `embed_tokens`) correctly. `_finalize_model_loading`
+            # re-runs `tie_weights` after the checkpoint is loaded to handle missing-key edge cases.
+            model.tie_weights()
             model = distribute_model(model, distributed_config, device_mesh)
         else:
             # Accelerate path: auto device mapping
