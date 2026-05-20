@@ -28,9 +28,8 @@ if is_torch_available() and is_torch_greater_or_equal("2.5"):
     import torch.distributed as dist
     from torch.distributed.tensor import DTensor, Partial, Replicate, Shard, distribute_tensor
     from torch.distributed.tensor.parallel import (
-        ColwiseParallel,
         PrepareModuleInput,
-        RowwiseParallel,
+        RowwiseParallel as TorchRowwiseParallel,
         SequenceParallel,
     )
     from torch.distributed.tensor.parallel.style import ParallelStyle
@@ -301,6 +300,104 @@ class PackedColwiseParallel(TensorParallelStyle):
         )
 
 
+class ColwiseParallel(TensorParallelStyle):
+    """Column-wise sharded linear, mode-aware forward.
+
+    Load-time: weight is a DTensor with Shard(-2); bias (if present) is Shard(-1).
+    `DtensorShardOperation` uses these placements to slice the checkpoint.
+
+    Forward path depends on `module.training` (toggled by `model.eval()` / `model.train()`):
+    - **training**: input wrapped as Replicate DTensor, matmul produces Shard(-1)
+      DTensor, output redistributed via DTensor's autograd-aware path.
+    - **inference (eval)**: input wrapped, matmul still goes through DTensor,
+      but the output is unwrapped via `.to_local()` — no `redistribute()` call.
+
+    `colwise` plan entries produce Shard(-1) output that feeds straight into the
+    matching `rowwise_allreduce` without any inter-layer collective."""
+
+    def __init__(self, *, input_layouts=None, output_layouts=None, use_local_output=True):
+        super().__init__()
+        self.input_layouts = input_layouts or Replicate()
+        self.output_layouts = output_layouts or Shard(-1)
+        self.use_local_output = use_local_output
+
+    def _apply(self, module, mesh):
+        for name, dim in (("weight", -2), ("bias", -1)):
+            meta = module._parameters.get(name)
+            if meta is None:
+                continue
+            module._parameters[name] = torch.nn.Parameter(
+                distribute_tensor(meta, mesh, [Shard(dim)], src_data_rank=None),
+                requires_grad=meta.requires_grad,
+            )
+        module._tp_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
+        return super()._apply(module, mesh)
+
+    def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
+        x = args[0]
+        if not isinstance(x, DTensor):
+            x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
+        return (x,) + args[1:], kwargs
+
+    def transform_output_post_forward(self, module, output, mesh):
+        # Inference path
+        if not module.training and self.output_layouts == Shard(-1):
+            return output.to_local() if isinstance(output, DTensor) else output
+        # Training path
+        if isinstance(output, DTensor) and output.placements != (self.output_layouts,):
+            output = output.redistribute(placements=[self.output_layouts])
+        if self.use_local_output and isinstance(output, DTensor):
+            return output.to_local()
+        return output
+
+
+class RowwiseParallel(TensorParallelStyle):
+    """Row-wise sharded linear with all-reduce on output, mode-aware forward.
+
+    Load-time: weight is a DTensor with Shard(-1); bias stays replicated.
+
+    Forward path depends on `module.training`:
+    - **training**: output is a Partial DTensor; redistribute to Replicate
+      runs the autograd-aware all-reduce (forward sums partials, backward is
+      identity).
+    - **inference (eval)**: output is unwrapped via `.to_local()` and a raw
+      `dist.all_reduce` runs in place. Skips DTensor's `redistribute()` Python
+      machinery for inference speed."""
+
+    def __init__(self, *, input_layouts=None, output_layouts=None):
+        super().__init__()
+        self.input_layouts = input_layouts or Shard(-1)
+        self.output_layouts = output_layouts or Replicate()
+
+    def _apply(self, module, mesh):
+        meta = module._parameters.get("weight")
+        if meta is not None:
+            module._parameters["weight"] = torch.nn.Parameter(
+                distribute_tensor(meta, mesh, [Shard(-1)], src_data_rank=None),
+                requires_grad=meta.requires_grad,
+            )
+        # bias stays replicated (no sharding for rowwise)
+        module._tp_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
+        return super()._apply(module, mesh)
+
+    def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
+        x = args[0]
+        if not isinstance(x, DTensor):
+            x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
+        return (x,) + args[1:], kwargs
+
+    def transform_output_post_forward(self, module, output, mesh):
+        # Inference path
+        if not module.training and self.output_layouts == Replicate():
+            local = output.to_local() if isinstance(output, DTensor) else output
+            dist.all_reduce(local, op=dist.ReduceOp.SUM, group=module._tp_group)
+            return local
+        # Training path
+        if isinstance(output, DTensor):
+            return output.redistribute(placements=[self.output_layouts]).to_local()
+        return output
+
+
 if is_torch_available() and is_torch_greater_or_equal("2.5"):
 
     class _AllReduceBackward(torch.autograd.Function):
@@ -422,9 +519,8 @@ class ParallelInterface(GeneralInterface):
             # Row-parallel
             "rowwise_allreduce": RowwiseParallel(input_layouts=Shard(-1), output_layouts=Replicate()),
             "rowwise_reduce_scatter": RowwiseParallel(input_layouts=Shard(-1), output_layouts=Shard(1)),
-            # Vocab / embedding (rowwise sharding on vocab dim)
-            "vocab_allreduce": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
-            "vocab_reduce_scatter": RowwiseParallel(input_layouts=Replicate(), output_layouts=Shard(1)),
+            "vocab_allreduce": TorchRowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
+            "vocab_reduce_scatter": TorchRowwiseParallel(input_layouts=Replicate(), output_layouts=Shard(1)),
             # Activation / norm (sequence-parallel passthrough)
             # use_local_output=True: torch defaults to False here, but downstream modeling
             # code expects plain tensors, not DTensors.
