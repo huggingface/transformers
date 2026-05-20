@@ -182,7 +182,7 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
                 pipeline.
             padding_value (`float`, *optional*, defaults to 0.0):
                 The value that is used to fill the padding values / vectors.
-            do_normalize (`bool`, *optional*, defaults to `False`):
+            do_normalize (`bool`, *optional*, defaults to `True`):
                 Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
                 improve the performance of the model.
             device (`str`, *optional*, defaults to `'cpu'`):
@@ -271,10 +271,13 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
         mask = attention_mask.unsqueeze(-1)
         if normalize:
             input_features_masked = input_features * mask
-            mean = input_features_masked.sum(dim=1) / features_lengths.unsqueeze(-1)
-            mean = mean.unsqueeze(1)
-            variance = ((input_features_masked - mean) ** 2 * mask).sum(dim=1) / (features_lengths - 1).unsqueeze(-1)
-            std = torch.sqrt(variance).unsqueeze(1)
+            # Mean uses n divisor; std uses Bessel-corrected n-1, both clamped to at least 1
+            # so single-frame / empty utterances don't divide by zero.
+            mean_denom = features_lengths.clamp_min(1).unsqueeze(-1)
+            std_denom = (features_lengths - 1).clamp_min(1).unsqueeze(-1)
+            mean = (input_features_masked.sum(dim=1) / mean_denom).unsqueeze(1)
+            variance = ((input_features_masked - mean) ** 2 * mask).sum(dim=1) / std_denom
+            std = torch.sqrt(variance.clamp_min(0.0)).unsqueeze(1)
             input_features = (input_features - mean) / (std + EPSILON)
         input_features *= mask
 

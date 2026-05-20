@@ -703,9 +703,12 @@ class ParakeetForRNNTModelTester:
         )
 
     def create_and_check_streaming_state(self, config, input_features, attention_mask):
-        # Only valid for cache-aware encoder configs; the tester's default is offline.
-        if config.encoder_config.att_context_size is None:
-            return
+        """Build a cache-aware variant of the test config and check the streaming state shape.
+
+        The default tester uses an offline encoder (att_context_size=None); force a small
+        cache-aware context here so the code path is actually exercised rather than skipped.
+        """
+        config.encoder_config.att_context_size = [3, 1]
         model = ParakeetForRNNT(config=config)
         model.to(torch_device).eval()
         target_lang = next(iter(self.prompt_dictionary)) if self.num_prompts else None
@@ -716,6 +719,11 @@ class ParakeetForRNNTModelTester:
         self.parent.assertIn("last_token", state)
         self.parent.assertEqual(state["last_token"].shape, (self.batch_size, 1))
         self.parent.assertEqual(state["last_token"].dtype, torch.long)
+        # cache_last_channel: (num_layers, batch, left_ctx, hidden_size)
+        self.parent.assertEqual(
+            state["cache_last_channel"].shape,
+            (self.num_hidden_layers, self.batch_size, 3, self.hidden_size),
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config, input_features, attention_mask = self.prepare_config_and_inputs()

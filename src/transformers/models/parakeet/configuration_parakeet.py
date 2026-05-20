@@ -295,6 +295,8 @@ class ParakeetRNNTConfig(PreTrainedConfig):
                 "RNNT checkpoints satisfy this; if you have a checkpoint where they differ, please "
                 "open an issue."
             )
+        if self.num_prompts < 0:
+            raise ValueError(f"num_prompts must be >= 0, got {self.num_prompts}.")
         if self.num_prompts > 0:
             if not self.prompt_dictionary:
                 raise ValueError("prompt_dictionary must be provided when num_prompts > 0.")
