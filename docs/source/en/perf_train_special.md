@@ -43,6 +43,14 @@ training_args = TrainingArguments(
 )
 ```
 
+## Graph cache
+
+MPS compiles a separate Metal kernel for each unique tensor shape and stores them in a graph cache with no eviction policy. Training with variable-length inputs (padded sequences, dynamic batches) grows the cache on every new shape and eventually exhausts unified memory.
+
+[`Trainer`] clears the cache after each optimizer step on MPS which limits memory growth at a small throughput cost. Forward and backward graphs from the same step are still reused, so only inter-step compiled graphs are discarded.
+
+The cache clearing requires PyTorch 2.13 or later. On older versions, [`Trainer`] skips the call and behavior is unchanged.
+
 ## Next steps
 
 - Read the [Introducing Accelerated PyTorch Training on Mac](https://pytorch.org/blog/introducing-accelerated-pytorch-training-on-mac/) blog post for background on the MPS backend.
