@@ -107,6 +107,8 @@ def convert_weight_name(name: str, old_num_hidden_layers: int | None = None) -> 
 
     match = _LAYER_PATTERN.match(name)
     if match is None:
+        if name.startswith("model.final_norm."):
+            return f"model.norm.{name.removeprefix('model.final_norm.')}"
         if old_num_hidden_layers is not None and name.startswith("model.res_scale."):
             new_layer_idx = old_num_hidden_layers // 2 - 1
             return f"model.layers.{new_layer_idx}.post_mlp_residual_scale.{name.removeprefix('model.res_scale.')}"

@@ -697,11 +697,11 @@ class ZayaModel(ZayaPreTrainedModel):
         self.layers = nn.ModuleList(
             [ZayaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
+        self.norm = ZayaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = ZayaRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.input_hidden_states_scale = nn.Parameter(torch.ones(config.hidden_size))
         self.input_hidden_states_bias = nn.Parameter(torch.zeros(config.hidden_size))
-        self.final_norm = ZayaRMSNorm(self.config.hidden_size, eps=self.config.rms_norm_eps)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -779,7 +779,7 @@ class ZayaModel(ZayaPreTrainedModel):
                 **kwargs,
             )
 
-        hidden_states = self.final_norm(hidden_states.to(dtype=self.final_norm.weight.dtype))
+        hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
 
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
@@ -803,6 +803,7 @@ class ZayaForCausalLM(ZayaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
     _is_stateful = True
 
     def __init__(self, config, **kwargs):
