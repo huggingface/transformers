@@ -213,6 +213,7 @@ def apply_rotary_time_emb(hidden_states, cos, sin):
 )
 class MusicFlamingoModel(MusicFlamingoPreTrainedModel):
     _tp_plan = None
+    _sp_plan = None
     _pp_plan = None
     _keep_in_fp32_modules_strict = None
 
@@ -223,12 +224,6 @@ class MusicFlamingoModel(MusicFlamingoPreTrainedModel):
         self.multi_modal_projector = MusicFlamingoMultiModalProjector(config)
         self.pos_emb = MusicFlamingoRotaryEmbedding(config)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
 
     @can_return_tuple
     @auto_docstring(
@@ -414,10 +409,8 @@ class MusicFlamingoCausalLMOutputWithPast(ModelOutput):
     """
 )
 class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, GenerationMixin):
-    _keep_in_fp32_modules_strict = None
+    _keep_in_fp32_modules_strict = ["embed_positions"]
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-    _tp_plan = None
-    _pp_plan = None
 
     def __init__(self, config: MusicFlamingoConfig):
         super().__init__(config)
