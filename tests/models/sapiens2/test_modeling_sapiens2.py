@@ -580,6 +580,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
             head_conv_out_channels=[64, 32, 16],
             head_conv_kernel_sizes=[3, 3, 3],
         )
+        config.transformers_weights = "sapiens2_0.4b_normal.safetensors"
         model = (
             Sapiens2ForNormalEstimation.from_pretrained("facebook/sapiens2-normal-0.4b", config=config)
             .eval()
@@ -588,7 +589,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
 
         image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = image_processor(image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(image, do_pad=True, return_tensors="pt").to(torch_device)
 
         with torch.no_grad():
             outputs = model(**inputs)
@@ -596,11 +597,22 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         _, _, height, width = inputs["pixel_values"].shape
         self.assertEqual(outputs.normals.shape, torch.Size([1, 3, height, width]))
 
-        result = image_processor.post_process_normal_estimation(outputs, target_sizes=[(height, width)])
+        # TODO(guarin): We can get closer to expected values by using cv2 resize instead of torchvision.
+        expected_normals = torch.tensor(
+            [[0.9577, 1.8808, 0.9826], [1.6904, 1.7351, 1.9120], [2.4828, 1.9887, 2.5168]],
+            device=torch_device,
+        )
+        torch.testing.assert_close(outputs.normals[0, 0, :3, :3], expected_normals, rtol=1e-2, atol=1e-2)
+
+        result = image_processor.post_process_normal_estimation(outputs, source_sizes=inputs.original_sizes)
         self.assertEqual(len(result), 1)
-        self.assertEqual(result[0].shape, torch.Size([3, height, width]))
-        # values should be in [-1, 1] after L2 normalization
-        self.assertTrue(result[0].abs().max().item() <= 1.0 + 1e-4)
+        self.assertEqual(result[0].shape, torch.Size([3, 432, 640]))
+
+        expected_postprocessed_normals = torch.tensor(
+            [[-0.8266, -0.7899, -0.7512], [-0.8227, -0.7843, -0.7440], [-0.8098, -0.7721, -0.7318]],
+            device=torch_device,
+        )
+        torch.testing.assert_close(result[0][0, :3, :3], expected_postprocessed_normals, rtol=1e-2, atol=1e-2)
 
 
 @require_torch
