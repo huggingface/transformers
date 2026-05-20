@@ -49,6 +49,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "glm4_moe": "qwen2_moe",
     "glm4_moe_lite": "qwen2_moe",
     "glm_moe_dsa": "qwen2_moe",
+    "glm5_next": "qwen2_moe",
     "glm4v_moe": "qwen2_moe",
     "longcat_flash": "qwen2_moe",
     "solar_open": "qwen2_moe",
@@ -935,6 +936,15 @@ def _build_checkpoint_conversion_mapping():
             source_patterns=".weight_v$",
             target_patterns=".parametrizations.weight.original1",
         ),
+        # Older GLM-5-Next checkpoints store HyperConnection parameters as flat
+        # per-layer tensors. The implementation keeps them inside `attn_hc` /
+        # `ffn_hc` submodules so the MHC flow can reuse the DeepSeek-V4 layout.
+        WeightRenaming(source_patterns="hc_attn_fn", target_patterns="attn_hc.fn"),
+        WeightRenaming(source_patterns="hc_attn_base", target_patterns="attn_hc.base"),
+        WeightRenaming(source_patterns="hc_attn_scale", target_patterns="attn_hc.scale"),
+        WeightRenaming(source_patterns="hc_ffn_fn", target_patterns="ffn_hc.fn"),
+        WeightRenaming(source_patterns="hc_ffn_base", target_patterns="ffn_hc.base"),
+        WeightRenaming(source_patterns="hc_ffn_scale", target_patterns="ffn_hc.scale"),
     ]
     # Base DetrModel/ConditionalDetrModel transforms are picked up automatically as
     # scoped sub-module transforms; only the segmentation-specific patterns are needed here.
@@ -999,7 +1009,6 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming("mlp.experts.e_score_correction_bias", "mlp.gate.e_score_correction_bias"),
         WeightRenaming("mlp.shared_expert.", "mlp.shared_experts."),
     ]
-
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:
             continue

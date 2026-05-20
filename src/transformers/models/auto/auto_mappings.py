@@ -218,6 +218,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("glm4v_moe_vision", "Glm4vMoeVisionConfig"),
         ("glm4v_text", "Glm4vTextConfig"),
         ("glm4v_vision", "Glm4vVisionConfig"),
+        ("glm5_next", "Glm5NextConfig"),
         ("glm_image", "GlmImageConfig"),
         ("glm_image_text", "GlmImageTextConfig"),
         ("glm_image_vision", "GlmImageVisionConfig"),
