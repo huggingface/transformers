@@ -521,9 +521,9 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
                     ]
         """
         num_audios, max_audio_tokens, embed_dim = audio_features.shape
-        audio_features_mask = torch.arange(max_audio_tokens).expand(num_audios, max_audio_tokens).to(
-            num_audio_tokens.device
-        ) < num_audio_tokens.unsqueeze(1)
+        audio_features_mask = torch.arange(max_audio_tokens, device=audio_features.device).expand(
+            num_audios, max_audio_tokens
+        ) < num_audio_tokens.to(audio_features.device).unsqueeze(1)
         masked_audio_features = audio_features[audio_features_mask].view(-1, embed_dim)
         batch_size, sequence_length = input_ids.shape
         _left_padding = torch.any(attention_mask[:, 0] == 0)
@@ -737,8 +737,8 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
                     )
                 else:
                     num_audios, max_audio_tokens, embed_dim = audio_features.shape
-                    audio_features_mask = torch.arange(max_audio_tokens, device=audio_output_lengths.device)[None, :]
-                    audio_features_mask = audio_features_mask < audio_output_lengths[:, None]
+                    audio_features_mask = torch.arange(max_audio_tokens, device=audio_features.device)[None, :]
+                    audio_features_mask = audio_features_mask < audio_output_lengths[:, None].to(audio_features.device)
                     audio_features = audio_features[audio_features_mask]
 
                     n_audio_tokens = (input_ids == self.config.audio_token_id).sum().item()
