@@ -94,54 +94,6 @@ print(processor.decode(outputs))
 </hfoption>
 </hfoptions>
 
-### Cache-aware streaming CTC
-
-Cache-aware Parakeet CTC checkpoints are trained with a sliding-window attention context
-(`att_context_size`), causal convolutions, and causal subsampling. They can run offline
-through the standard `pipeline` or `generate` calls, and they can also run **chunk-by-chunk
-online** by carrying a small KV cache between calls.
-
-[`ParakeetCacheAwareStreamingBuffer`] handles chunk sizing, the pre-encode cache, and STFT
-lookahead automatically. Pass `[left, right]` from the model's trained
-`att_context_size` (e.g. `[70, 6]` ≈ 80 ms lookahead).
-
-```py
-import torch
-import soundfile as sf
-from transformers import AutoProcessor, ParakeetForCTC, ParakeetCacheAwareStreamingBuffer
-
-processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-streaming")
-model = ParakeetForCTC.from_pretrained("nvidia/parakeet-ctc-streaming")
-model.eval()
-
-audio, _ = sf.read("audio.wav", dtype="float32")  # 16 kHz mono
-
-buffer = ParakeetCacheAwareStreamingBuffer(model, processor, att_context_size=[70, 6])
-buffer.append_audio(audio)
-
-cache = model.encoder.get_initial_cache_state(batch_size=1)
-accumulated_ids = None
-for inputs, drop in buffer:
-    with torch.no_grad():
-        out = model(
-            **inputs,
-            use_cache=True,
-            att_context_size=buffer.att_context_size,
-            drop_extra_pre_encoded=drop,
-            **cache,
-        )
-    cache = {
-        "cache_last_channel":     out.cache_last_channel,
-        "cache_last_time":        out.cache_last_time,
-        "cache_last_channel_len": out.cache_last_channel_len,
-    }
-    chunk_ids = out.logits.argmax(-1).squeeze(0)
-    accumulated_ids = chunk_ids if accumulated_ids is None else torch.cat([accumulated_ids, chunk_ids])
-
-text = processor.batch_decode(accumulated_ids.unsqueeze(0), skip_special_tokens=True)[0]
-print(text)
-```
-
 ### `ParakeetForTDT` usage
 
 <hfoptions id="tdt-usage">
@@ -221,7 +173,8 @@ Parakeet RNN-T uses an LSTM prediction network and a joint network producing voc
 Both the regular checkpoint and cache-aware variants (trained with limited attention context, causal
 convolutions, layer norm) load through the same class and run offline through `generate`. Cache-aware
 checkpoints can additionally run chunk-by-chunk online — see the
-[cache-aware streaming RN-T](#cache-aware-streaming-rn-t) section below.
+[Cache-aware streaming (Nemotron Speech Streaming)](#cache-aware-streaming-nemotron-speech-streaming)
+section below.
 
 <hfoptions id="rnnt-usage">
 <hfoption id="Pipeline">
@@ -261,19 +214,26 @@ print(processor.batch_decode(outputs.sequences, skip_special_tokens=True))
 </hfoption>
 </hfoptions>
 
-### Cache-aware streaming RN-T
+### Cache-aware streaming (Nemotron Speech Streaming)
 
-Cache-aware Parakeet RN-T checkpoints stream the same way as their CTC counterparts: chunk audio
-through [`ParakeetCacheAwareStreamingBuffer`], thread the encoder KV cache and the RN-T decoder
-LSTM state across chunks via [`ParakeetForRNNT.streaming_step`] and [`ParakeetForRNNT.get_initial_streaming_state`].
+The cache-aware variant is published as **Nemotron Speech Streaming**. It is trained with a
+sliding-window attention context (`att_context_size`), causal convolutions, and causal subsampling.
+It can run offline through the standard `pipeline` or `generate` calls, and it can also run
+**chunk-by-chunk online** by carrying a small KV cache between calls.
+
+[`ParakeetCacheAwareStreamingBuffer`] handles chunk sizing, the pre-encode cache, and STFT
+lookahead automatically. Thread the encoder KV cache and the RN-T decoder LSTM state across chunks
+via [`ParakeetForRNNT.streaming_step`] and [`ParakeetForRNNT.get_initial_streaming_state`]. Pass
+`[left, right]` from the model's trained `att_context_size` (e.g. `[70, 6]` ≈ 80 ms lookahead).
 
 ```py
 import torch
 import soundfile as sf
 from transformers import AutoProcessor, ParakeetForRNNT, ParakeetCacheAwareStreamingBuffer
 
-processor = AutoProcessor.from_pretrained("nvidia/parakeet-rnnt-streaming")
-model = ParakeetForRNNT.from_pretrained("nvidia/parakeet-rnnt-streaming").eval()
+model_id = "nvidia/nemotron-speech-streaming-en-0.6b"
+processor = AutoProcessor.from_pretrained(model_id)
+model = ParakeetForRNNT.from_pretrained(model_id).eval()
 
 audio, _ = sf.read("audio.wav", dtype="float32")  # 16 kHz mono
 

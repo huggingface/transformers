@@ -1810,57 +1810,47 @@ class ParakeetForRNNT(ParakeetPreTrainedModel, ParakeetRNNTGenerationMixin):
 
 class ParakeetCacheAwareStreamingBuffer:
     """
-    Streaming audio buffer for cache-aware Parakeet CTC models.
+    Streaming audio buffer for cache-aware Parakeet models (the **Nemotron Speech Streaming**
+    family). Works with both CTC ([`ParakeetForCTC`]) and RN-T ([`ParakeetForRNNT`]) cache-aware
+    checkpoints.
 
     Splits audio into correctly-sized chunks and yields processor inputs ready to pass directly
     to the encoder, handling the pre-encode cache, STFT lookahead, and mel frame trimming internally.
 
     Args:
-        model ([`ParakeetForCTC`]):
-            The streaming CTC model.
+        model ([`ParakeetForCTC`] or [`ParakeetForRNNT`]):
+            The streaming model.
         processor ([`ParakeetProcessor`]):
             Matching processor (provides the feature extractor and tokenizer).
         att_context_size (`list[int]`, *optional*):
             `[left, right]` attention context to use. Defaults to the first (largest lookahead)
             entry in `model.encoder.config.att_context_size`.
 
-    Example:
+    Example (RN-T streaming with the public Nemotron Speech Streaming checkpoint):
 
     ```python
     import torch
     import soundfile as sf
-    from transformers import AutoProcessor, ParakeetForCTC, ParakeetCacheAwareStreamingBuffer
+    from transformers import AutoProcessor, ParakeetForRNNT, ParakeetCacheAwareStreamingBuffer
 
-    processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-streaming")
-    model = ParakeetForCTC.from_pretrained("nvidia/parakeet-ctc-streaming")
-    model.eval()
+    model_id = "nvidia/nemotron-speech-streaming-en-0.6b"
+    processor = AutoProcessor.from_pretrained(model_id)
+    model = ParakeetForRNNT.from_pretrained(model_id).eval()
 
     audio, _ = sf.read("audio.wav", dtype="float32")  # resample to 16 kHz if needed
 
-    buffer = ParakeetCacheAwareStreamingBuffer(model, processor)
+    buffer = ParakeetCacheAwareStreamingBuffer(model, processor, att_context_size=[70, 6])
     buffer.append_audio(audio)
 
-    cache = model.encoder.get_initial_cache_state(batch_size=1)
-    accumulated_ids = None
+    state = model.get_initial_streaming_state(batch_size=1, device=model.device, dtype=model.dtype)
+    all_tokens = []
     for inputs, drop in buffer:
+        inputs = {k: v.to(model.device) for k, v in inputs.items()}
         with torch.no_grad():
-            out = model(
-                **inputs,
-                use_cache=True,
-                att_context_size=buffer.att_context_size,
-                drop_extra_pre_encoded=drop,
-                **cache,
-            )
-        cache = {
-            "cache_last_channel":     out.cache_last_channel,
-            "cache_last_time":        out.cache_last_time,
-            "cache_last_channel_len": out.cache_last_channel_len,
-        }
-        chunk_ids = out.logits.argmax(-1).squeeze(0)
-        accumulated_ids = chunk_ids if accumulated_ids is None else torch.cat([accumulated_ids, chunk_ids])
+            chunk_tokens = model.streaming_step(inputs, drop, state)
+        all_tokens.extend(chunk_tokens[0])
 
-    text = processor.batch_decode(accumulated_ids.unsqueeze(0), skip_special_tokens=True)[0]
-    print(text)
+    print(processor.batch_decode(torch.tensor([all_tokens]), skip_special_tokens=True)[0])
     ```
     """
 
