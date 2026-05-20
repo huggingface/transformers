@@ -22,7 +22,7 @@ import torch.nn.functional as F
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import MoeModelOutputWithPast
+from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
@@ -212,7 +212,8 @@ class Cohere2MoeModel(Cohere2Model):
             else Cohere2MoeLayerNorm(hidden_size=config.hidden_size, eps=config.layer_norm_eps)
         )
 
-    def forward(self,
+    def forward(
+        self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -281,7 +282,7 @@ class Cohere2MoeForCausalLM(Cohere2ForCausalLM):
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> MoeModelOutputWithPast:
+    ) -> MoeCausalLMOutputWithPast:
         outputs: MoeModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -301,7 +302,7 @@ class Cohere2MoeForCausalLM(Cohere2ForCausalLM):
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
-        return MoeModelOutputWithPast(  # only diff with Cohere2 is the output type, we need MoE
+        return MoeCausalLMOutputWithPast(  # only diff with Cohere2 is the output type, we need MoE
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
