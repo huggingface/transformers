@@ -57,7 +57,7 @@ FSDP2 controls sharding with [fsdp_config](https://huggingface.co/docs/transform
 | `true` | reshard parameters after the forward pass to save more memory |
 | `false` | keep parameters gathered between forward and backward to avoid the re-all-gather, at the cost of higher peak memory |
 
-Use `auto_wrap_policy` to enable wrapping. Without wrapping, the entire model is one FSDP unit and you lose the memory benefit of sharding.
+`auto_wrap_policy` controls how modules are wrapped into FSDP units. It defaults to `"TRANSFORMER_BASED_WRAP"`, which wraps the model's transformer layers. Without wrapping (`"NO_WRAP"`), the entire model is one FSDP unit and you lose the memory benefit of sharding.
 
 ## Configure FSDP
 
@@ -67,7 +67,7 @@ These fields control how FSDP2 wraps, shards, and loads the model.
 
 - `cpu_offload` offloads parameters and gradients to CPU when they aren't in use to save GPU memory.
 
-- `auto_wrap_policy` determines how modules are wrapped into FSDP units. Use `"TRANSFORMER_BASED_WRAP"` for transformer layers, `"SIZE_BASED_WRAP"` for modules above a parameter-count threshold, or `"NO_WRAP"` to disable auto wrapping.
+- `auto_wrap_policy` determines how modules are wrapped into FSDP units. Defaults to `"TRANSFORMER_BASED_WRAP"`, which wraps transformer layers. Use `"SIZE_BASED_WRAP"` for modules above a parameter-count threshold, or `"NO_WRAP"` to disable auto wrapping.
 
 - `transformer_layer_cls_to_wrap` defines the transformer layer to wrap into an FSDP unit when `auto_wrap_policy` is `"TRANSFORMER_BASED_WRAP"`. Each unit manages its own gather and scatter ops. Only the current unit's parameters are gathered during the forward pass. The previous units' parameters are released to save memory.
 
@@ -75,7 +75,7 @@ These fields control how FSDP2 wraps, shards, and loads the model.
 
 - `min_num_params` sets the minimum number of parameters per module for size-based wrapping. It is only used when `auto_wrap_policy` is `"SIZE_BASED_WRAP"`.
 
-- `state_dict_type` controls the checkpoint format. Use `"FULL_STATE_DICT"` for a single Transformers-compatible checkpoint or `"SHARDED_STATE_DICT"` for one checkpoint file per rank.
+- `state_dict_type` controls the checkpoint format. Defaults to `"FULL_STATE_DICT"` for a single Transformers-compatible checkpoint. Use `"SHARDED_STATE_DICT"` for one checkpoint file per rank.
 
 - `cpu_ram_efficient_loading` loads the checkpoint from disk on rank 0 only. Other GPUs initialize an empty model and receive the weights by broadcast, avoiding multiple processes loading a large model into CPU RAM.
 
