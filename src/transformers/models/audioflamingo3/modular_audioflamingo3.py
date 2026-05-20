@@ -274,7 +274,6 @@ class AudioFlamingo3Model(VoxtralModel):
     """
 )
 class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
-
     def __init__(self, config):
         super().__init__(config)
         self.model = AudioFlamingo3Model(config)
