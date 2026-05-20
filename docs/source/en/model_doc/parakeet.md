@@ -44,8 +44,8 @@ Parakeet models, [introduced by NVIDIA NeMo](https://developer.nvidia.com/blog/p
     - Joint network projects encoder and decoder outputs and emits vocabulary-sized logits.
     - Greedy decoding emits a non-blank symbol or advances one encoder frame on blank.
   - Supports cache-aware checkpoints trained with `att_context_size`, `causal_downsampling`, and
-    `conv_norm_type=layer_norm`. They run offline in this PR; streaming inference will land
-    alongside the cache-aware encoder PR.
+    `conv_norm_type=layer_norm`. They run offline through `generate` and chunk-by-chunk through
+    [`ParakeetCacheAwareStreamingBuffer`] + [`ParakeetForRNNT.streaming_step`].
 
 The original implementation can be found in [NVIDIA NeMo](https://github.com/NVIDIA/NeMo).
 Model checkpoints are to be found under [the NVIDIA organization](https://huggingface.co/nvidia/models?search=parakeet).
@@ -222,7 +222,7 @@ It can run offline through the standard `pipeline` or `generate` calls, and it c
 **chunk-by-chunk online** by carrying a small KV cache between calls.
 
 [`ParakeetCacheAwareStreamingBuffer`] handles chunk sizing, the pre-encode cache, and STFT
-lookahead automatically. Thread the encoder KV cache and the RN-T decoder LSTM state across chunks
+lookahead automatically. Thread the encoder KV cache and the RNN-T decoder LSTM state across chunks
 via [`ParakeetForRNNT.streaming_step`] and [`ParakeetForRNNT.get_initial_streaming_state`]. Pass
 `[left, right]` from the model's trained `att_context_size` (e.g. `[70, 6]` ≈ 80 ms lookahead).
 
@@ -251,9 +251,9 @@ for inputs, drop in buffer:
 print(processor.batch_decode(torch.tensor([all_tokens]), skip_special_tokens=True)[0])
 ```
 
-### Prompt-conditioned multilingual RN-T
+### Prompt-conditioned multilingual RNN-T
 
-Multilingual Parakeet RN-T checkpoints (`config.num_prompts > 0`) accept a `target_lang` string at
+Multilingual Parakeet RNN-T checkpoints (`config.num_prompts > 0`) accept a `target_lang` string at
 inference time that selects the language prompt injected after the encoder. Use `"auto"` to let the
 model self-detect, or a specific language code (e.g. `"en-US"`, `"de-DE"`). The same flag works for
 both offline `generate` and the streaming path.
@@ -284,7 +284,7 @@ For streaming, the language is fixed at the start of an utterance by passing `ta
 state = model.get_initial_streaming_state(
     batch_size=1, target_lang="auto", device=model.device, dtype=model.dtype
 )
-# then iterate the buffer as in the cache-aware streaming RN-T example above
+# then iterate the buffer as in the cache-aware streaming RNN-T example above
 ```
 
 ### Making The Model Go Brrr

@@ -1811,7 +1811,7 @@ class ParakeetForRNNT(ParakeetPreTrainedModel, ParakeetRNNTGenerationMixin):
 class ParakeetCacheAwareStreamingBuffer:
     """
     Streaming audio buffer for cache-aware Parakeet models (the **Nemotron Speech Streaming**
-    family). Works with both CTC ([`ParakeetForCTC`]) and RN-T ([`ParakeetForRNNT`]) cache-aware
+    family). Works with both CTC ([`ParakeetForCTC`]) and RNN-T ([`ParakeetForRNNT`]) cache-aware
     checkpoints.
 
     Splits audio into correctly-sized chunks and yields processor inputs ready to pass directly
@@ -1826,7 +1826,7 @@ class ParakeetCacheAwareStreamingBuffer:
             `[left, right]` attention context to use. Defaults to the first (largest lookahead)
             entry in `model.encoder.config.att_context_size`.
 
-    Example (RN-T streaming with the public Nemotron Speech Streaming checkpoint):
+    Example (RNN-T streaming with the public Nemotron Speech Streaming checkpoint):
 
     ```python
     import torch
