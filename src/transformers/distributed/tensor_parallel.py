@@ -29,8 +29,10 @@ if is_torch_available() and is_torch_greater_or_equal("2.5"):
     from torch.distributed.tensor import DTensor, Partial, Replicate, Shard, distribute_tensor
     from torch.distributed.tensor.parallel import (
         PrepareModuleInput,
-        RowwiseParallel as TorchRowwiseParallel,
         SequenceParallel,
+    )
+    from torch.distributed.tensor.parallel import (
+        RowwiseParallel as TorchRowwiseParallel,
     )
     from torch.distributed.tensor.parallel.style import ParallelStyle
     from torch.distributed.tensor.placement_types import _StridedShard

@@ -1461,9 +1461,8 @@ def _tp_continuous_batching_worker(
     import torch
     import torch.distributed as dist
 
-    from transformers.generation.continuous_batching.distributed import DistributedHelper
-
     from transformers.distributed.configuration_utils import DistributedConfig
+    from transformers.generation.continuous_batching.distributed import DistributedHelper
 
     tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
     if not hasattr(tokenizer, "pad_token") and hasattr(tokenizer, "eos_token"):
