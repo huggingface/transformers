@@ -127,6 +127,7 @@ class TorchAoTestBase:
             {
                 ("cuda", None): "What are we having for dinner?\nRed, white, and green beans,",
                 ("xpu", None): "What are we having for dinner?\n\nJessica: (smiling)",
+                ("xpu", 5): "What are we having for dinner?\n\n[Scene 2]\n\n[",
             }
         )
         # fmt: on
@@ -539,6 +540,7 @@ class TorchAoAcceleratorTest(TorchAoTestBase, unittest.TestCase):
             {
                 ("cuda", None): "What are we having for dinner?\nRed, white, and green beans,",
                 ("xpu", None): "What are we having for dinner?\n\nJessica: (smiling)",
+                ("xpu", 5): "What are we having for dinner?\n\n[Scene 2]\n\n[",
             }
         )
         # fmt: on
@@ -572,6 +574,7 @@ class TorchAoAcceleratorTest(TorchAoTestBase, unittest.TestCase):
             {
                 ("cuda", None): "What are we having for dinner?\nRed, white, and green beans,",
                 ("xpu", None): "What are we having for dinner?\n\nJessica: (smiling)",
+                ("xpu", 5): "What are we having for dinner?\n\n[Scene 2]\n\n[",
             }
         )
         self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), EXPECTED_OUTPUT.get_expectation())
@@ -595,7 +598,7 @@ class TorchAoSerializationTest(unittest.TestCase):
             ("Int8DynamicActivationInt8WeightConfig", Int8DynamicActivationInt8WeightConfig(version=2), ALL_DEVICES_COMMON),
             ("Float8DynamicActivationFloat8WeightConfig", Float8DynamicActivationFloat8WeightConfig(), Expectations({("cuda", None): COMMON_OUTPUT, ("xpu", None): "What are we having for dinner?\n\nJess: (smiling) I"})),
             ("Float8WeightOnlyConfig", Float8WeightOnlyConfig(), Expectations({("cuda", None): COMMON_OUTPUT, ("xpu", None): COMMON_OUTPUT})),
-            ("Int4WeightOnlyConfig", Int4WeightOnlyConfig(int4_packing_format="plain_int32" if torch_device == "xpu" else "tile_packed_to_4d"), Expectations({("cuda", None): "What are we having for dinner?\nRed, white, and green beans,", ("xpu", None): COMMON_OUTPUT})),
+            ("Int4WeightOnlyConfig", Int4WeightOnlyConfig(int4_packing_format="plain_int32" if torch_device == "xpu" else "tile_packed_to_4d"), Expectations({("cuda", None): "What are we having for dinner?\nRed, white, and green beans,", ("xpu", None): COMMON_OUTPUT, ("xpu", 5): "What are we having for dinner?\n\n[Scene 2]\n\n["})),
             ("Int8DynamicActivationIntxWeightConfig", Int8DynamicActivationIntxWeightConfig(), Expectations({("cpu", None): COMMON_OUTPUT, ("cuda", 9): COMMON_OUTPUT, ("cuda", 8): "What are we having for dinner?\n\nJEN: (smiling) I", ("xpu", None): COMMON_OUTPUT})),
             ("IntxWeightOnlyConfig", IntxWeightOnlyConfig(), ALL_DEVICES_COMMON),
             ("NVFP4DynamicActivationNVFP4WeightConfig", NVFP4DynamicActivationNVFP4WeightConfig(), Expectations({("cuda", None): "What are we having for dinner?\n\n10. Avoid using \"I"})),
