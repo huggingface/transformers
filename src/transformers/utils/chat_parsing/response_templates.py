@@ -11,9 +11,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import Any
 
 from ...utils import logging
-from .content_parsers import CONTENT_PARSERS
+from .content_parsers import CONTENT_PARSERS, validate_transform_strings
 
 
 logger = logging.get_logger(__name__)
@@ -32,7 +33,8 @@ class ResponseTemplateField:
     content_args: dict
     repeats: bool
     optional: bool
-    transform: str | None
+    transform: Any
+    transform_each: bool
 
 
 @dataclass
@@ -123,6 +125,7 @@ def load_response_template(spec: dict | ResponseTemplate) -> ResponseTemplate:
         "repeats",
         "optional",
         "transform",
+        "transform_each",
     }
     # Error checking / validation block
     if isinstance(spec, ResponseTemplate):
@@ -160,6 +163,13 @@ def load_response_template(spec: dict | ResponseTemplate) -> ResponseTemplate:
         if open_re is None:
             implicit_fields.append(name)
         transform = field.get("transform")
+        transform_each = field.get("transform_each", False)
+        if not isinstance(transform_each, bool):
+            raise ValueError(f"Field '{name}': transform_each must be a bool, got {type(transform_each).__name__}")
+        if transform_each and transform is None:
+            raise ValueError(f"Field '{name}': transform_each is set but no transform was provided")
+        if transform is not None:
+            validate_transform_strings(f"Field '{name}'", transform)
         if transform is None:
             captured_names = set()
             if open_re is not None:
@@ -170,7 +180,7 @@ def load_response_template(spec: dict | ResponseTemplate) -> ResponseTemplate:
                 raise ValueError(
                     f"Field '{name}': open_pattern/close_pattern declares named group(s) "
                     f"{sorted(captured_names)}, but the field has no 'transform'. Named captures "
-                    f"are only surfaced through a 'transform' jmespath expression (where they appear "
+                    f"are only surfaced through a 'transform' template (where they appear "
                     f"alongside 'content'). Either add a 'transform' that uses the captures, or "
                     f"remove the named groups from the pattern."
                 )
@@ -187,6 +197,7 @@ def load_response_template(spec: dict | ResponseTemplate) -> ResponseTemplate:
             repeats=field.get("repeats", False),
             optional=field.get("optional", True),
             transform=transform,
+            transform_each=transform_each,
         )
     if len(implicit_fields) > 1:
         raise ValueError(

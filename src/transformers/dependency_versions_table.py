@@ -21,7 +21,6 @@ deps = {
     "huggingface-hub": "huggingface-hub>=1.5.0,<2.0",
     "ipadic": "ipadic>=1.0.0,<2.0",
     "jinja2": "jinja2>=3.1.0",
-    "jmespath": "jmespath>=1.0.1",
     "kenlm": "kenlm",
     "kernels": "kernels>=0.12.0,<0.13",
     "librosa": "librosa",

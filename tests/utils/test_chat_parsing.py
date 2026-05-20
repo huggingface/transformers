@@ -16,7 +16,6 @@ import tempfile
 import unittest
 
 from transformers import AutoTokenizer
-from transformers.testing_utils import require_jmespath
 from transformers.utils.chat_parsing import ResponseParser, parse_response
 
 
@@ -37,7 +36,8 @@ cohere_template = {
             "open": "<|START_ACTION|>",
             "close": "<|END_ACTION|>",
             "content": "json",
-            "transform": "content[*].{type: 'function', function: {name: tool_name, arguments: parameters}}",
+            "transform_each": True,
+            "transform": {"type": "function", "function": {"name": "{tool_name}", "arguments": "{parameters}"}},
         },
     },
 }
@@ -61,7 +61,7 @@ ernie_template = {
             "close": "</tool_call>",
             "repeats": True,
             "content": "json",
-            "transform": "{type: 'function', function: content}",
+            "transform": {"type": "function", "function": "{content}"},
         },
     },
 }
@@ -85,7 +85,7 @@ gpt_oss_template = {
             "close": "<|call|>",
             "repeats": True,
             "content": "json",
-            "transform": "{type: 'function', function: {name: name, arguments: content}}",
+            "transform": {"type": "function", "function": {"name": "{name}", "arguments": "{content}"}},
         },
     },
 }
@@ -100,7 +100,7 @@ smollm_template = {
             "close": "</tool_call>",
             "repeats": True,
             "content": "json",
-            "transform": "{type: 'function', function: content}",
+            "transform": {"type": "function", "function": "{content}"},
         },
         "content": {
             "close": "<|im_end|>",
@@ -123,7 +123,7 @@ qwen3_template = {
                 "tag_pattern": r"<parameter=(?P<key>\w+)>\s*(?P<value>.*?)\s*</parameter>",
                 "value_parser": {"name": "json", "args": {"allow_non_json": True}},
             },
-            "transform": "{type: 'function', function: {name: name, arguments: content}}",
+            "transform": {"type": "function", "function": {"name": "{name}", "arguments": "{content}"}},
         },
     },
 }
@@ -146,13 +146,12 @@ gemma4_template = {
                 "unquoted_keys": True,
                 "string_delims": [['<|"|>', '<|"|>']],
             },
-            "transform": "{type: 'function', function: {name: name, arguments: content}}",
+            "transform": {"type": "function", "function": {"name": "{name}", "arguments": "{content}"}},
         },
     },
 }
 
 
-@require_jmespath
 class ChatResponseTemplateParserTest(unittest.TestCase):
     def test_response_template_save_load(self):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
@@ -550,6 +549,24 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_response("hello", bad_template)
 
+    def test_transform_string_interpolation_rejected(self):
+        bad_template = {
+            "defaults": {"role": "assistant"},
+            "fields": {
+                "tool": {
+                    "open": "<tool>",
+                    "close": "</tool>",
+                    "content": "text",
+                    "transform": {"label": "name: {content}"},
+                },
+            },
+        }
+        with self.assertRaises(ValueError) as cm:
+            parse_response("<tool>foo</tool>", bad_template)
+        msg = str(cm.exception)
+        self.assertIn("interpolation", msg)
+        self.assertIn("{content}", msg)
+
     def test_named_groups_without_transform_rejected(self):
         bad_template = {
             "defaults": {"role": "assistant"},
@@ -714,7 +731,6 @@ def _chunk_random(text: str, rng: random.Random):
     yield text[prev:]
 
 
-@require_jmespath
 class ResponseEventStreamTest(unittest.TestCase):
     def test_stream_matches_whole_string_all_templates_fixed_chunking(self):
         """For every fixed chunking step we try, the streamed finalize()
@@ -910,7 +926,6 @@ qwen3_template_with_anchor = {**qwen3_template, "start_anchor": _CHATML_ANCHOR}
 smollm_template_with_anchor = {**smollm_template, "start_anchor": _CHATML_ANCHOR}
 
 
-@require_jmespath
 class PrefixAndTruncationTest(unittest.TestCase):
     def test_prefix_lands_inside_explicit_region(self):
         """A Qwen-style template emits `<|im_start|>assistant\\n<think>\\n` as the
