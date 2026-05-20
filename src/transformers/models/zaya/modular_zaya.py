@@ -93,12 +93,6 @@ class ZayaConfig(LagunaConfig):
     cca_time0: int = 2
     cca_time1: int = 2
 
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
-    }
-
     # Fields declared by LagunaConfig but not used by ZAYA.
     # TODO: add TP/PP plans. TP needs the router mlp, moe experts, and CCA projections to shard consistently; PP needs coverage for the cross-layer router state. For TP, see discussion https://github.com/huggingface/transformers/pull/45862#discussion_r3266709862
     base_model_tp_plan = AttributeError()
@@ -655,7 +649,6 @@ class ZayaModel(LagunaModel):
 @auto_docstring(checkpoint="Zyphra/ZAYA1-8B")
 class ZayaForCausalLM(AfmoeForCausalLM, ZayaPreTrainedModel):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _fsdp_plan = {"lm_head": "keep_full_weight"}
     _is_stateful = True
 
     _tp_plan = AttributeError()

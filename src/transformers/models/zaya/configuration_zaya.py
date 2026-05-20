@@ -53,6 +53,12 @@ class ZayaConfig(PreTrainedConfig):
     model_type = "zaya"
     keys_to_ignore_at_inference = ["past_key_values"]
 
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
+
     vocab_size: int = 262272
     hidden_size: int = 2048
     num_hidden_layers: int = 40
@@ -85,12 +91,6 @@ class ZayaConfig(PreTrainedConfig):
     router_hidden_size: int = 256
     cca_time0: int = 2
     cca_time1: int = 2
-
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
-    }
 
     def __post_init__(self, **kwargs):
         self.layer_types = ["hybrid"] * self.num_hidden_layers if self.layer_types is None else list(self.layer_types)
