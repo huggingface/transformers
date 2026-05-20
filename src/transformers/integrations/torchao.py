@@ -69,7 +69,7 @@ class TorchAoQuantize(ConversionOps):
 
         target_device = next(module.parameters()).device
         if self.hf_quantizer.offload_to_cpu and target_device.type == "cpu":
-            module.to("cuda")
+            module.to(torch.accelerator.current_accelerator())
             quantize_(module, config, *args, **kwargs)
             module.to("cpu")
         else:
