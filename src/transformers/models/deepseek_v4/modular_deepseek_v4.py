@@ -1034,10 +1034,14 @@ class DeepseekV4NextNPredictor(DeepseekV4DecoderLayer):
         # These lists are sized for `num_hidden_layers`; auto-extend so the
         # MTP block's layer_idx (== num_hidden_layers + i) is in range.
         n_mtp = getattr(config, "num_nextn_predict_layers", 0)
-        for attr in ("layer_types", "mlp_layer_types"):
+        # MTP uses sliding_attention (the only layer_type where Attention sets
+        # compressor=None) since the upstream MTP checkpoint has no
+        # compressor.*/indexer.* keys. mlp uses the standard moe type.
+        _MTP_LAYER_TYPES = {"layer_types": "sliding_attention", "mlp_layer_types": "moe"}
+        for attr, mtp_type in _MTP_LAYER_TYPES.items():
             lst = getattr(config, attr, None)
             if lst is not None and len(lst) < config.num_hidden_layers + n_mtp:
-                ext = [lst[-1]] * (config.num_hidden_layers + n_mtp - len(lst))
+                ext = [mtp_type] * (config.num_hidden_layers + n_mtp - len(lst))
                 setattr(config, attr, list(lst) + ext)
         super().__init__(config, layer_idx)
         hidden = config.hidden_size
