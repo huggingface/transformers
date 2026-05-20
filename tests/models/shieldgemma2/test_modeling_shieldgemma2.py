@@ -302,7 +302,9 @@ class ShieldGemma2IntegrationTest(unittest.TestCase):
         image = Image.open(BytesIO(response.content))
 
         model = ShieldGemma2ForImageClassification.from_pretrained(
-            model_id, quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+            model_id,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+            attn_implementation="eager",
         )
 
         inputs = processor(images=[image], return_tensors="pt").to(torch_device)
