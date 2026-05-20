@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch VITS model."""
 
 import copy
+import math
 import os
 import tempfile
 import unittest
@@ -150,7 +151,8 @@ class VitsModelTester:
         attention_mask = inputs_dict["attention_mask"]
 
         result = model(input_ids, attention_mask=attention_mask)
-        self.parent.assertEqual((self.batch_size, 624), result.waveform.shape)
+        expected_length = result.spectrogram.shape[-1] * math.prod(config.upsample_rates)
+        self.parent.assertEqual((self.batch_size, expected_length), result.waveform.shape)
 
 
 @require_torch
@@ -181,7 +183,6 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_pipeline_feature_extraction_fp16(self):
         super().test_pipeline_feature_extraction_fp16()
 
-    @unittest.skip(reason="Need to fix this after #26538")
     def test_model_forward(self):
         set_seed(12345)
         global_rng.seed(12345)
