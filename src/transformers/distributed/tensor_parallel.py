@@ -356,11 +356,7 @@ class ColwiseParallel(TensorParallelStyle):
         # AND the caller wants a plain local tensor. colwise_loss_parallel has
         # use_local_output=False (loss_parallel consumes a DTensor downstream) — let
         # that case fall through to the DTensor path.
-        if (
-            not module.training
-            and self.output_layouts == Shard(-1)
-            and self.use_local_output
-        ):
+        if not module.training and self.output_layouts == Shard(-1) and self.use_local_output:
             return output.to_local() if isinstance(output, DTensor) else output
         # Training
         if isinstance(output, DTensor) and output.placements != (self.output_layouts,):
