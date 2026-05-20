@@ -585,8 +585,10 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
 @auto_docstring
 class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _tp_plan = {"lm_head": "colwise_allgather"}
+    _sp_plan = {"lm_head": "colwise_loss_parallel"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
     config: Gemma3TextConfig
 
     def __init__(self, config: Gemma3TextConfig):
@@ -727,12 +729,6 @@ class Gemma3Model(Gemma3PreTrainedModel):
         language_model = AutoModel.from_config(config=config.text_config)
         self.language_model = language_model
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
