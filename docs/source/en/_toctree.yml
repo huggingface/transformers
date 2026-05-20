@@ -546,6 +546,8 @@
         title: Cohere
       - local: model_doc/cohere2
         title: Cohere2
+      - local: model_doc/cohere2_moe
+        title: Cohere2Moe
       - local: model_doc/convbert
         title: ConvBERT
       - local: model_doc/cpm

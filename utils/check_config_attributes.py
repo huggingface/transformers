@@ -105,6 +105,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],
     "HiggsAudioV2Config": ["audio_bos_token", "audio_stream_bos_id", "audio_stream_eos_id"],
     "HiggsAudioV2TokenizerConfig": ["downsample_factor"],
+    "Cohere2MoeConfig": ["rope_scaling", "sliding_window_pattern"],
     "CsmConfig": ["tie_codebooks_embeddings"],
     "DeepseekV2Config": ["norm_topk_prob"],
     "DeepseekV4Config": [

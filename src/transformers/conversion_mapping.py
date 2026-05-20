@@ -60,6 +60,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "flex_olmo": "qwen2_moe",
     "olmoe": "qwen2_moe",
     "exaone_moe": "qwen2_moe",
+    "cohere2_moe": "qwen2_moe",
     "rt_detr_v2": "rt_detr",
     "pp_doclayout_v2": "rt_detr",
     "pp_doclayout_v3": "rt_detr",
