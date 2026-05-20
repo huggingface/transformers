@@ -219,9 +219,9 @@ Timestamped tokens: [[{'token': 'm', 'start': 0.24, 'end': 0.48}, {'token': 'ist
 
 Parakeet RNN-T uses an LSTM prediction network and a joint network producing vocabulary-only logits.
 Both the regular checkpoint and cache-aware variants (trained with limited attention context, causal
-convolutions, layer norm) load through the same class and run offline through `generate`. Streaming
-inference for cache-aware checkpoints requires the cache-aware encoder support being added in a
-companion PR.
+convolutions, layer norm) load through the same class and run offline through `generate`. Cache-aware
+checkpoints can additionally run chunk-by-chunk online — see the
+[cache-aware streaming RN-T](#cache-aware-streaming-rn-t) section below.
 
 <hfoptions id="rnnt-usage">
 <hfoption id="Pipeline">
@@ -260,6 +260,72 @@ print(processor.batch_decode(outputs.sequences, skip_special_tokens=True))
 
 </hfoption>
 </hfoptions>
+
+### Cache-aware streaming RN-T
+
+Cache-aware Parakeet RN-T checkpoints stream the same way as their CTC counterparts: chunk audio
+through [`ParakeetCacheAwareStreamingBuffer`], thread the encoder KV cache and the RN-T decoder
+LSTM state across chunks via [`ParakeetForRNNT.streaming_step`] and [`ParakeetForRNNT.get_initial_streaming_state`].
+
+```py
+import torch
+import soundfile as sf
+from transformers import AutoProcessor, ParakeetForRNNT, ParakeetCacheAwareStreamingBuffer
+
+processor = AutoProcessor.from_pretrained("nvidia/parakeet-rnnt-streaming")
+model = ParakeetForRNNT.from_pretrained("nvidia/parakeet-rnnt-streaming").eval()
+
+audio, _ = sf.read("audio.wav", dtype="float32")  # 16 kHz mono
+
+buffer = ParakeetCacheAwareStreamingBuffer(model, processor, att_context_size=[70, 6])
+buffer.append_audio(audio)
+
+state = model.get_initial_streaming_state(batch_size=1, device=model.device, dtype=model.dtype)
+all_tokens = []
+for inputs, drop in buffer:
+    inputs = {k: v.to(model.device) for k, v in inputs.items()}
+    with torch.no_grad():
+        chunk_tokens = model.streaming_step(inputs, drop, state)
+    all_tokens.extend(chunk_tokens[0])
+
+print(processor.batch_decode(torch.tensor([all_tokens]), skip_special_tokens=True)[0])
+```
+
+### Prompt-conditioned multilingual RN-T
+
+Multilingual Parakeet RN-T checkpoints (`config.num_prompts > 0`) accept a `target_lang` string at
+inference time that selects the language prompt injected after the encoder. Use `"auto"` to let the
+model self-detect, or a specific language code (e.g. `"en-US"`, `"de-DE"`). The same flag works for
+both offline `generate` and the streaming path.
+
+```py
+import torch
+from datasets import Audio, load_dataset
+from transformers import AutoProcessor, ParakeetForRNNT
+
+processor = AutoProcessor.from_pretrained("nvidia/parakeet-rnnt-multilingual")
+model = ParakeetForRNNT.from_pretrained("nvidia/parakeet-rnnt-multilingual", device_map="auto").eval()
+
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+speech_samples = [el["array"] for el in ds["audio"][:2]]
+
+# Offline transcription with explicit language prompt
+inputs = processor(speech_samples, sampling_rate=processor.feature_extractor.sampling_rate)
+inputs.to(model.device, dtype=model.dtype)
+outputs = model.generate(**inputs, target_lang="en-US")
+print(processor.batch_decode(outputs.sequences, skip_special_tokens=True))
+```
+
+For streaming, the language is fixed at the start of an utterance by passing `target_lang` to
+`get_initial_streaming_state`:
+
+```py
+state = model.get_initial_streaming_state(
+    batch_size=1, target_lang="auto", device=model.device, dtype=model.dtype
+)
+# then iterate the buffer as in the cache-aware streaming RN-T example above
+```
 
 ### Making The Model Go Brrr
 
