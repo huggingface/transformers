@@ -60,6 +60,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "flex_olmo": "qwen2_moe",
     "olmoe": "qwen2_moe",
     "exaone_moe": "qwen2_moe",
+    "cohere2_moe": "qwen2_moe",
     "rt_detr_v2": "rt_detr",
     "pp_doclayout_v2": "rt_detr",
     "pp_doclayout_v3": "rt_detr",
@@ -550,21 +551,6 @@ def _build_checkpoint_conversion_mapping():
                         dim=0
                     ),  # each process has two lists of tensors, we cat each list. -> we end up with 2 tensors
                 ],  # we want the loading to add this shard operation here. Though we can't shard after concats and merge, needs to be first
-            ),
-        ],
-        "cohere2_moe": [
-            WeightConverter(
-                source_patterns=[
-                    "mlp.experts.*.gate_proj.weight",
-                    "mlp.experts.*.up_proj.weight",
-                ],
-                target_patterns="mlp.experts.gate_up_proj",
-                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
-            ),
-            WeightConverter(
-                source_patterns="mlp.experts.*.down_proj.weight",
-                target_patterns="mlp.experts.down_proj",
-                operations=[MergeModulelist(dim=0)],
             ),
         ],
         "qwen2_moe": [
