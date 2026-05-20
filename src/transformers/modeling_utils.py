@@ -4810,8 +4810,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # This means that the missing params and non-persistent buffers (like RoPE's `inv_freq`) are left on CPU.
         # Then in every forward pass, they are transfered to the device, which is slow and not CUDA graphable.
         # To avoid this, we use the local accelerator as a default device (inferred only once and cached).
-        if device_map is None and device_mesh is not None and device_mesh.device_type != "cpu":
-            default_device = torch.device(device_mesh.device_type, int(os.environ.get("LOCAL_RANK", 0)))
+        if device_map is None and device_mesh is not None:
+            if device_mesh.device_type == "cpu":
+                default_device = "cpu"
+            else:
+                default_device = torch.device(device_mesh.device_type, int(os.environ.get("LOCAL_RANK", 0)))
         else:
             default_device = None
 
