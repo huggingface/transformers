@@ -740,7 +740,8 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
         Resolve the effective `[left, right]` attention context for this forward pass.
 
         - If the model is offline (config.att_context_size is None) → returns None.
-        - If `att_context_size` is provided by the caller → validates and uses it.
+        - If `att_context_size` is provided by the caller → uses it (and warns once if the
+          requested context is outside the model's trained set).
         - Otherwise → uses the first entry from config (the inference default).
         """
         configured = self.config.att_context_size
@@ -748,8 +749,10 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
             return None
         if att_context_size is not None:
             if isinstance(configured[0], list) and att_context_size not in configured:
-                raise ValueError(
-                    f"att_context_size {att_context_size} was not used during training. Trained contexts: {configured}"
+                logger.warning_once(
+                    f"att_context_size {att_context_size} was not used during training "
+                    f"(trained contexts: {configured}). The model may still produce reasonable "
+                    f"output, but quality is not guaranteed."
                 )
             return att_context_size
         if isinstance(configured[0], list):
