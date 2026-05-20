@@ -43,12 +43,6 @@ h2{margin:0 0 12px 0;font-size:1rem}
 <div class="models"><strong>Affected models:</strong><ul>
 <li><a href="https://huggingface.co/allenai/dolma2-tokenizer" target="_blank">allenai/dolma2-tokenizer</a> <span class="muted">tests/models/flex_olmo/test_modeling_flex_olmo.py, tests/models/olmo3/test_modeling_olmo3.py</span></li>
 </ul></div></div>
-<div class="card" id="pattern-4"><h2>Pattern #4 <span class="badge">1 models</span></h2>
-<pre class="diff"><span class="del">-vocab_size:	32005
-</span><span class="add">+vocab_size:	32004</span></pre>
-<div class="models"><strong>Affected models:</strong><ul>
-<li><a href="https://huggingface.co/almanach/camembert-base" target="_blank">almanach/camembert-base</a> <span class="muted">tests/models/camembert/test_modeling_camembert.py</span></li>
-</ul></div></div>
 <div class="card" id="pattern-5"><h2>Pattern #5 <span class="badge">1 models</span></h2>
 <pre class="diff"><span class="del">-pre_tokenizer:	Split(pattern=String(&quot; &quot;), behavior=MergedWithPrevious, invert=False)
 </span><span class="add">+pre_tokenizer:	None</span></pre>
