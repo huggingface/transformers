@@ -195,8 +195,6 @@ class Cohere2MoeRotaryEmbedding(Cohere2RotaryEmbedding):
 
 
 class Cohere2MoePreTrainedModel(Cohere2PreTrainedModel):
-    config_class = Cohere2MoeConfig
-    _no_split_modules = ["Cohere2MoeDecoderLayer"]
     _can_record_outputs = {
         "hidden_states": Cohere2MoeDecoderLayer,
         "attentions": Cohere2MoeAttention,
@@ -221,7 +219,7 @@ class Cohere2MoeModel(Cohere2Model):
 
 
 class Cohere2MoeForCausalLM(Cohere2ForCausalLM):
-    _tp_plan = {"lm_head": "colwise_rep"}
+    pass
 
 
 __all__ = ["Cohere2MoeForCausalLM", "Cohere2MoeModel", "Cohere2MoePreTrainedModel"]
