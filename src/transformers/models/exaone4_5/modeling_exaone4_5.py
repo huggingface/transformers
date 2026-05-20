@@ -18,6 +18,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import warnings
 from collections.abc import Callable
 from typing import Any
@@ -619,6 +620,7 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_features(
