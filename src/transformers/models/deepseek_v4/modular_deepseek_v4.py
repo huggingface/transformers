@@ -1006,6 +1006,54 @@ class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
         )
 
 
+class DeepseekV4NextNPredictor(DeepseekV4DecoderLayer):
+    r"""DSv4 Multi-Token-Prediction (MTP) draft-head block.
+
+    Structurally a :class:`DeepseekV4DecoderLayer` (full attention + MoE +
+    hyper-connection plumbing) plus four MTP-specific projections that
+    blend the previous draft hidden state ``h`` with the next-token
+    embedding ``e``:
+
+        e = self.enorm(embed_tokens(next_token_ids))
+        h = self.hnorm(hidden_states)
+        x = self.e_proj(e).unsqueeze(2) + self.h_proj(h).unsqueeze(2)
+        x = super().forward(x, ...)         # main DecoderLayer body
+        logits = shared_head(self.norm(x), self.hc_head_fn, ...)
+
+    Instantiated by :class:`DeepseekV4Model` when
+    ``config.num_nextn_predict_layers > 0``. Prior to this class existing,
+    ``DeepseekV4PreTrainedModel`` carried
+    ``_keys_to_ignore_on_load_unexpected = [r"(^|\\.)mtp\\..*"]`` which
+    silently dropped every ``mtp.*`` weight on ``from_pretrained`` — making
+    the MTP draft head unusable for vLLM speculative decoding.
+    """
+
+    def __init__(self, config: "DeepseekV4Config", layer_idx: int):
+        # `DeepseekV4Attention` / `DeepseekV4SparseMoeBlock` index into
+        # `config.layer_types[layer_idx]` and `config.mlp_layer_types[layer_idx]`.
+        # These lists are sized for `num_hidden_layers`; auto-extend so the
+        # MTP block's layer_idx (== num_hidden_layers + i) is in range.
+        n_mtp = getattr(config, "num_nextn_predict_layers", 0)
+        for attr in ("layer_types", "mlp_layer_types"):
+            lst = getattr(config, attr, None)
+            if lst is not None and len(lst) < config.num_hidden_layers + n_mtp:
+                ext = [lst[-1]] * (config.num_hidden_layers + n_mtp - len(lst))
+                setattr(config, attr, list(lst) + ext)
+        super().__init__(config, layer_idx)
+        hidden = config.hidden_size
+        eps = config.rms_norm_eps
+        self.e_proj = nn.Linear(hidden, hidden, bias=False)
+        self.h_proj = nn.Linear(hidden, hidden, bias=False)
+        self.enorm = DeepseekV4RMSNorm(hidden, eps=eps)
+        self.hnorm = DeepseekV4RMSNorm(hidden, eps=eps)
+        self.norm = DeepseekV4RMSNorm(hidden, eps=eps)
+        hc_mult = config.hc_mult
+        hc_dim = hc_mult * hidden
+        self.hc_head_fn = nn.Parameter(torch.empty(hc_mult, hc_dim, dtype=torch.float32))
+        self.hc_head_base = nn.Parameter(torch.empty(hc_mult, dtype=torch.float32))
+        self.hc_head_scale = nn.Parameter(torch.empty(1, dtype=torch.float32))
+
+
 class DeepseekV4PreTrainedModel(MixtralPreTrainedModel):
     config_class = DeepseekV4Config
     base_model_prefix = "model"
@@ -1047,7 +1095,9 @@ class DeepseekV4PreTrainedModel(MixtralPreTrainedModel):
         "post_attention_layernorm",
         "norm",
     ]
-    _keys_to_ignore_on_load_unexpected = [r"(^|\.)mtp\..*"]
+    # MTP keys are loaded into DeepseekV4NextNPredictor instances attached
+    # to DeepseekV4Model.mtp; no longer dropped on load.
+    _keys_to_ignore_on_load_unexpected = []
     # ``_is_stateful`` opts out of generation modes that need to roll the cache
     # back across drafts (assisted generation, prompt lookup, contrastive search).
     # The compressor's running-window state isn't rewindable, so `generate`
@@ -1104,6 +1154,16 @@ class DeepseekV4Model(LlamaModel):
         )
         self.rotary_emb = DeepseekV4RotaryEmbedding(config)
         self.hc_head = DeepseekV4HyperHead(config)
+        # Multi-Token-Prediction (MTP) draft heads. Each block predicts one
+        # additional token beyond the main model's output, enabling vLLM
+        # `--speculative-config '{"method":"mtp","num_speculative_tokens":N}'`.
+        # DSv4-Flash ships with ``num_nextn_predict_layers = 1``.
+        self.mtp = nn.ModuleList(
+            [
+                DeepseekV4NextNPredictor(config, config.num_hidden_layers + i)
+                for i in range(getattr(config, "num_nextn_predict_layers", 0))
+            ]
+        )
         self.post_init()
 
     @merge_with_config_defaults
