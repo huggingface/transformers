@@ -108,9 +108,9 @@ class Sapiens2PointmapEstimatorOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Pointmap estimation loss.
-    pointmap (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
+    pointmaps (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
         Per-pixel 3D XYZ coordinate predictions in canonical camera space.
-    scale (`torch.FloatTensor` of shape `(batch_size, 1)`, *optional*):
+    scales (`torch.FloatTensor` of shape `(batch_size, 1)`, *optional*):
         Canonical focal length / actual focal length ratio. `None` when no scale branch is configured.
     hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
         Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage)
@@ -122,8 +122,35 @@ class Sapiens2PointmapEstimatorOutput(ModelOutput):
     """
 
     loss: torch.FloatTensor | None = None
-    pointmap: torch.FloatTensor | None = None
-    scale: torch.FloatTensor | None = None
+    pointmaps: torch.FloatTensor | None = None
+    scales: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+
+
+@auto_docstring(
+    custom_intro="""
+    Class for outputs of matting models.
+    """
+)
+@dataclass
+class Sapiens2MattingOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Matting loss.
+    alphas (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`):
+        Alpha matte predictions in `[0, 1]` (sigmoid-activated).
+    foregrounds (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
+        Pre-multiplied RGB foreground predictions in `[0, 1]` (sigmoid-activated).
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, ...):
+        ...
+    attentions (`tuple(torch.FloatTensor)`, *optional*, ...):
+        ...
+    """
+
+    loss: torch.FloatTensor | None = None
+    alphas: torch.FloatTensor | None = None
+    foregrounds: torch.FloatTensor | None = None
     hidden_states: tuple[torch.FloatTensor, ...] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
@@ -1164,8 +1191,8 @@ class Sapiens2ForPointmapEstimation(Sapiens2PreTrainedModel):
         patch_tokens = outputs.last_hidden_state[:, 1 + self.config.num_register_tokens :]
         feature_map = patch_tokens.transpose(1, 2).reshape(batch_size, -1, patch_height, patch_width)
 
-        pointmap = self.decode_head(feature_map)
-        scale = None if isinstance(self.scale_head, nn.Identity) else self.scale_head(feature_map)
+        pointmaps = self.decode_head(feature_map)
+        scales = None if isinstance(self.scale_head, nn.Identity) else self.scale_head(feature_map)
 
         loss = None
         if labels is not None:
@@ -1173,8 +1200,60 @@ class Sapiens2ForPointmapEstimation(Sapiens2PreTrainedModel):
 
         return Sapiens2PointmapEstimatorOutput(
             loss=loss,
-            pointmap=pointmap,
-            scale=scale,
+            pointmaps=pointmaps,
+            scales=scales,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@auto_docstring(
+    checkpoint="facebook/sapiens2-matting-1b",
+    custom_intro="""
+    The Sapiens2 model with a matting head on top (a PixelShuffle-based decoder that predicts a
+    pre-multiplied RGB foreground and an alpha matte).
+    """,
+)
+class Sapiens2ForMatting(Sapiens2PreTrainedModel):
+    def __init__(self, config: Sapiens2Config):
+        super().__init__(config)
+        self.sapiens2 = Sapiens2Model(config)
+        self.decode_head = Sapiens2NormalHead(config)  # config.num_labels = 4
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        labels: torch.FloatTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Sapiens2MattingOutput:
+        r"""
+        labels (`torch.FloatTensor` of shape `(batch_size, 4, height, width)`, *optional*):
+            Ground-truth matting targets for computing the loss.
+        """
+        outputs = self.sapiens2(pixel_values, **kwargs)
+
+        batch_size, _, height, width = pixel_values.shape
+        patch_height = height // self.config.patch_size
+        patch_width = width // self.config.patch_size
+
+        patch_tokens = outputs.last_hidden_state[:, 1 + self.config.num_register_tokens :]
+        feature_map = patch_tokens.transpose(1, 2).reshape(batch_size, -1, patch_height, patch_width)
+
+        matting = self.decode_head(feature_map).sigmoid()  # (B, 4, H, W)
+        foregrounds = matting[:, :3]  # (B, 3, H, W)
+        alphas = matting[:, 3:]  # (B, 1, H, W)
+
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Training is not yet supported")
+
+        return Sapiens2MattingOutput(
+            loss=loss,
+            alphas=alphas,
+            foregrounds=foregrounds,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -1188,8 +1267,10 @@ __all__ = [
     "Sapiens2ForPoseEstimation",
     "Sapiens2ForNormalEstimation",
     "Sapiens2ForPointmapEstimation",
+    "Sapiens2ForMatting",
     "Sapiens2PointmapScaleHead",
     "Sapiens2NormalEstimatorOutput",
     "Sapiens2PoseEstimatorOutput",
     "Sapiens2PointmapEstimatorOutput",
+    "Sapiens2MattingOutput",
 ]

@@ -160,6 +160,38 @@ normal_maps = image_processor.post_process_normal_estimation(
 print("Normal map shape:", normal_maps.shape)   # [3, original_height, original_width]
 ```
 
+### Matting
+
+The example below shows how to run image matting with [`Sapiens2ForMatting`].
+The matting checkpoints are named `sapiens2_0.4b_matting.safetensors`, so `transformers_weights`
+must be set on the config. Outputs are sigmoid-activated and already in `[0, 1]`; use
+`post_process_matting` to resize and split into `alphas` and `foregrounds`.
+
+```python
+import torch
+from transformers import Sapiens2Config, Sapiens2ImageProcessor, Sapiens2ForMatting
+from transformers.image_utils import load_image
+
+url = "http://images.cocodataset.org/val2017/000000004016.jpg"
+image = load_image(url)
+
+image_processor = Sapiens2ImageProcessor()
+
+config = Sapiens2Config(num_labels=4)
+config.transformers_weights = "sapiens2_0.4b_matting.safetensors"
+model = Sapiens2ForMatting.from_pretrained("facebook/sapiens2-matting-1b", config=config)
+
+inputs = image_processor(image, return_tensors="pt")
+with torch.inference_mode():
+    outputs = model(**inputs)
+
+# outputs.foregrounds: (1, 3, H, W), outputs.alphas: (1, 1, H, W) — both in [0, 1]
+original_size = (image.height, image.width)
+result = image_processor.post_process_matting(outputs, target_sizes=[original_size])[0]
+print("Alpha shape:", result["alpha"].shape)        # [1, original_height, original_width]
+print("Foreground shape:", result["foreground"].shape)  # [3, original_height, original_width]
+```
+
 ## Sapiens2Config
 
 [[autodoc]] Sapiens2Config
@@ -182,6 +214,11 @@ print("Normal map shape:", normal_maps.shape)   # [3, original_height, original_
 ## Sapiens2ForNormalEstimation
 
 [[autodoc]] Sapiens2ForNormalEstimation
+    - forward
+
+## Sapiens2ForMatting
+
+[[autodoc]] Sapiens2ForMatting
     - forward
 
 ## Sapiens2ImageProcessor

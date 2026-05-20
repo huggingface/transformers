@@ -40,6 +40,7 @@ from ...modeling_outputs import SemanticSegmenterOutput
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_cv2_available, requires_backends
 from .modeling_sapiens2 import (
+    Sapiens2MattingOutput,
     Sapiens2NormalEstimatorOutput,
     Sapiens2PointmapEstimatorOutput,
     Sapiens2PoseEstimatorOutput,
@@ -588,7 +589,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         Returns:
             `list[torch.Tensor]` of length `batch_size`, each of shape `(3, height, width)`.
             Values are per-pixel 3D XYZ coordinates in canonical camera space, optionally divided
-            by `outputs.scale` to convert to metric coordinates.
+            by `outputs.scales` to convert to metric coordinates.
         """
         if do_remove_padding is None:
             do_remove_padding = source_sizes is not None
@@ -596,22 +597,22 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         if do_remove_padding and source_sizes is None:
             raise ValueError("`source_sizes` must be provided when `do_remove_padding=True`.")
 
-        pointmap = outputs.pointmap
+        pointmaps = outputs.pointmaps
 
-        if source_sizes is not None and len(pointmap) != len(source_sizes):
+        if source_sizes is not None and len(pointmaps) != len(source_sizes):
             raise ValueError("Make sure that you pass in as many source sizes as the batch dimension of the pointmap")
-        if target_sizes is not None and len(pointmap) != len(target_sizes):
+        if target_sizes is not None and len(pointmaps) != len(target_sizes):
             raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the pointmap")
 
         result = []
         model_h = self.size["height"]
         model_w = self.size["width"]
 
-        for idx in range(len(pointmap)):
-            pm = pointmap[idx]
+        for idx in range(len(pointmaps)):
+            pm = pointmaps[idx]
 
-            if outputs.scale is not None:
-                pm = pm / outputs.scale[idx]
+            if outputs.scales is not None:
+                pm = pm / outputs.scales[idx]
 
             if do_remove_padding:
                 orig_h, orig_w = source_sizes[idx]
@@ -636,6 +637,52 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
                 )[0]
 
             result.append(pm)
+
+        return result
+
+    def post_process_matting(
+        self,
+        outputs: Sapiens2MattingOutput,
+        target_sizes: list[tuple] | None = None,
+    ) -> list[dict[str, torch.Tensor]]:
+        """
+        Converts the output of [`Sapiens2ForMatting`] into alpha mattes and foreground maps.
+
+        Args:
+            outputs (`Sapiens2MattingOutput`):
+                Raw outputs of the model.
+            target_sizes (`list[tuple]` of length `batch_size`, *optional*):
+                Requested final `(height, width)` for each prediction. Resized with bilinear
+                interpolation. If unset, predictions are returned at the model output resolution.
+
+        Returns:
+            `list[dict]` of length `batch_size`. Each dict has:
+            - `"alpha"` (`torch.Tensor` of shape `(1, height, width)`): alpha values in `[0, 1]`.
+            - `"foreground"` (`torch.Tensor` of shape `(3, height, width)`): pre-multiplied RGB in `[0, 1]`.
+        """
+        matting = torch.cat([outputs.foregrounds, outputs.alphas], dim=1)  # (B, 4, H, W)
+
+        if target_sizes is not None:
+            if len(matting) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the matting output"
+                )
+
+        result = []
+        for idx in range(len(matting)):
+            mat = matting[idx]
+
+            if target_sizes is not None:
+                mat = F.interpolate(
+                    mat.unsqueeze(0),
+                    size=target_sizes[idx],
+                    mode="bilinear",
+                    align_corners=False,
+                    antialias=False,
+                )[0]
+
+            mat = mat.clamp(0.0, 1.0)
+            result.append({"foreground": mat[:3], "alpha": mat[3:]})
 
         return result
 

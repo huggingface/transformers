@@ -1035,6 +1035,34 @@ def _build_checkpoint_conversion_mapping():
                 r"scale_head.predictor.mlp.",
             ),
         ],
+        "Sapiens2ForMatting": [
+            WeightRenaming(r"^backbone\.", r"sapiens2."),
+            WeightRenaming(
+                r"decode_head\.input_conv\.0\.(weight|bias)",
+                r"decode_head.input_conv.convolution.\1",
+            ),
+            WeightRenaming(
+                r"decode_head\.upsample_blocks\.(\d+)\.0\.weight",
+                r"decode_head.upsample_layers.\1.conv.weight",
+            ),
+            WeightRenaming(
+                r"decode_head\.upsample_blocks\.(\d+)\.0\.bias",
+                r"decode_head.upsample_layers.\1.conv.bias",
+            ),
+            WeightRenaming(
+                r"decode_head\.conv_layers\.0\.(weight|bias)",
+                r"decode_head.conv_layers.0.convolution.\1",
+            ),
+            WeightRenaming(
+                r"decode_head\.conv_layers\.3\.(weight|bias)",
+                r"decode_head.conv_layers.1.convolution.\1",
+            ),
+            WeightRenaming(
+                r"decode_head\.conv_layers\.6\.(weight|bias)",
+                r"decode_head.conv_layers.2.convolution.\1",
+            ),
+            WeightRenaming(r"decode_head\.conv_matting\.", r"decode_head.predictor."),
+        ],
     }
     # The legacy mapping is added to the esm model here since the extra weight renaming do not apply to the esm model.
     mapping["esm"] += mapping["legacy"].copy()

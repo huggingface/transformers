@@ -33,10 +33,12 @@ if is_torch_available():
 
     from transformers import (
         Sapiens2Backbone,
+        Sapiens2ForMatting,
         Sapiens2ForNormalEstimation,
         Sapiens2ForPointmapEstimation,
         Sapiens2ForPoseEstimation,
         Sapiens2ForSemanticSegmentation,
+        Sapiens2MattingOutput,
         Sapiens2Model,
         Sapiens2NormalEstimatorOutput,
         Sapiens2PointmapEstimatorOutput,
@@ -156,6 +158,16 @@ class Sapiens2ModelTester:
         config.head_conv_kernel_sizes = [3]
         return config
 
+    def get_config_for_matting(self):
+        config = self.get_config()
+        config.num_labels = 4
+        config.image_size = 32
+        config.head_upsample_out_channels = [8, 4]
+        config.head_upsample_kernel_sizes = [3, 3]
+        config.head_conv_out_channels = [4]
+        config.head_conv_kernel_sizes = [3]
+        return config
+
     def get_config_for_pointmap_estimation(self):
         config = self.get_config()
         config.num_labels = 3
@@ -245,6 +257,25 @@ class Sapiens2ModelTester:
         with self.parent.assertRaises(NotImplementedError):
             model(pixel_values, labels=torch.randn_like(result.normals))
 
+    def create_and_check_for_matting(self, config, pixel_values, labels):
+        model = Sapiens2ForMatting(config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            result = model(pixel_values)
+        patch_height = config.image_size // self.patch_size
+        expected_h = patch_height * (2 ** len(config.head_upsample_out_channels))
+        self.parent.assertEqual(result.foregrounds.shape, (self.batch_size, 3, expected_h, expected_h))
+        self.parent.assertEqual(result.alphas.shape, (self.batch_size, 1, expected_h, expected_h))
+        # outputs are sigmoid-activated
+        self.parent.assertGreaterEqual(result.foregrounds.min().item(), 0.0)
+        self.parent.assertLessEqual(result.foregrounds.max().item(), 1.0)
+        self.parent.assertGreaterEqual(result.alphas.min().item(), 0.0)
+        self.parent.assertLessEqual(result.alphas.max().item(), 1.0)
+        self.parent.assertIsNone(result.loss)
+        with self.parent.assertRaises(NotImplementedError):
+            model(pixel_values, labels=torch.randn(self.batch_size, 4, expected_h, expected_h))
+
     def create_and_check_for_pointmap_estimation(self, config, pixel_values, labels):
         model = Sapiens2ForPointmapEstimation(config)
         model.to(torch_device)
@@ -255,13 +286,13 @@ class Sapiens2ModelTester:
         patch_height = config.image_size // self.patch_size
         expected_h = patch_height * (2 ** len(config.head_upsample_out_channels))
         self.parent.assertEqual(
-            result.pointmap.shape,
+            result.pointmaps.shape,
             (self.batch_size, config.num_labels, expected_h, expected_h),
         )
-        self.parent.assertEqual(result.scale.shape, (self.batch_size, 1))
+        self.parent.assertEqual(result.scales.shape, (self.batch_size, 1))
         self.parent.assertIsNone(result.loss)
         with self.parent.assertRaises(NotImplementedError):
-            model(pixel_values, labels=torch.randn_like(result.pointmap))
+            model(pixel_values, labels=torch.randn_like(result.pointmaps))
 
     def prepare_config_and_inputs_for_semantic_segmentation(self):
         config = self.get_config_for_semantic_segmentation()
@@ -277,6 +308,12 @@ class Sapiens2ModelTester:
 
     def prepare_config_and_inputs_for_normal_estimation(self):
         config = self.get_config_for_normal_estimation()
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, config.image_size, config.image_size])
+        labels = None
+        return config, pixel_values, labels
+
+    def prepare_config_and_inputs_for_matting(self):
+        config = self.get_config_for_matting()
         pixel_values = floats_tensor([self.batch_size, self.num_channels, config.image_size, config.image_size])
         labels = None
         return config, pixel_values, labels
@@ -363,6 +400,10 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_normal_estimation()
         self.model_tester.create_and_check_for_normal_estimation(*config_and_inputs)
 
+    def test_for_matting(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_matting()
+        self.model_tester.create_and_check_for_matting(*config_and_inputs)
+
     def test_for_pointmap_estimation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_pointmap_estimation()
         self.model_tester.create_and_check_for_pointmap_estimation(*config_and_inputs)
@@ -446,7 +487,7 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         batch_size = 2
         num_labels = 3
         height = width = 16
-        outputs = Sapiens2PointmapEstimatorOutput(pointmap=torch.randn(batch_size, num_labels, height, width))
+        outputs = Sapiens2PointmapEstimatorOutput(pointmaps=torch.randn(batch_size, num_labels, height, width))
 
         # without target_sizes: spatial dims match pointmap
         result = image_processor.post_process_pointmap(outputs)
@@ -459,10 +500,10 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         self.assertEqual(len(result), batch_size)
         self.assertEqual(result[0].shape, torch.Size([num_labels, height * 2, width * 2]))
 
-        # with scale: scale division is applied
+        # with scales: scale division is applied
         scale = torch.tensor([[2.0], [0.5]])
         outputs_with_scale = Sapiens2PointmapEstimatorOutput(
-            pointmap=torch.ones(batch_size, num_labels, height, width), scale=scale
+            pointmaps=torch.ones(batch_size, num_labels, height, width), scales=scale
         )
         result = image_processor.post_process_pointmap(outputs_with_scale)
         torch.testing.assert_close(result[0], torch.full((num_labels, height, width), 0.5))
@@ -471,6 +512,33 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         # mismatched batch size raises ValueError
         with self.assertRaises(ValueError):
             image_processor.post_process_pointmap(outputs, target_sizes=[(100, 100)])
+
+    def test_post_process_matting(self):
+        image_processor = Sapiens2ImageProcessor()
+        batch_size = 2
+        height = width = 16
+        outputs = Sapiens2MattingOutput(
+            foregrounds=torch.rand(batch_size, 3, height, width),
+            alphas=torch.rand(batch_size, 1, height, width),
+        )
+
+        # without target_sizes: spatial dims unchanged
+        result = image_processor.post_process_matting(outputs)
+        self.assertEqual(len(result), batch_size)
+        self.assertEqual(result[0]["foreground"].shape, torch.Size([3, height, width]))
+        self.assertEqual(result[0]["alpha"].shape, torch.Size([1, height, width]))
+        # values stay in [0, 1]
+        self.assertGreaterEqual(result[0]["alpha"].min().item(), 0.0)
+        self.assertLessEqual(result[0]["alpha"].max().item(), 1.0)
+
+        # with target_sizes: output is resized
+        target_sizes = [(height * 2, width * 2)] * batch_size
+        result = image_processor.post_process_matting(outputs, target_sizes=target_sizes)
+        self.assertEqual(result[0]["foreground"].shape, torch.Size([3, height * 2, width * 2]))
+
+        # mismatched batch size raises ValueError
+        with self.assertRaises(ValueError):
+            image_processor.post_process_matting(outputs, target_sizes=[(100, 100)])
 
     @slow
     def test_model_from_pretrained(self):
@@ -719,17 +787,17 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
 
         self.assertIsInstance(outputs, Sapiens2PointmapEstimatorOutput)
         _, _, height, width = inputs["pixel_values"].shape
-        self.assertEqual(outputs.pointmap.shape, torch.Size([1, 3, height, width]))
-        self.assertEqual(outputs.scale.shape, torch.Size([1, 1]))
+        self.assertEqual(outputs.pointmaps.shape, torch.Size([1, 3, height, width]))
+        self.assertEqual(outputs.scales.shape, torch.Size([1, 1]))
 
         expected_scale = torch.tensor([[0.9931]], device=torch_device)
-        torch.testing.assert_close(outputs.scale, expected_scale, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(outputs.scales, expected_scale, rtol=1e-3, atol=1e-3)
 
         expected_pointmap = torch.tensor(
             [[-0.0096, -0.0567, -0.0460], [-0.0657, -0.0583, -0.0688], [-0.1035, -0.0363, -0.0659]],
             device=torch_device,
         )
-        torch.testing.assert_close(outputs.pointmap[0, 0, :3, :3], expected_pointmap, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(outputs.pointmaps[0, 0, :3, :3], expected_pointmap, rtol=1e-3, atol=1e-3)
 
         result = image_processor.post_process_pointmap(outputs, source_sizes=[(image_height, image_width)])
         self.assertEqual(len(result), 1)
@@ -742,6 +810,74 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
         torch.testing.assert_close(result[0][0, :3, :3], expected_postprocessed_pointmap, rtol=1e-2, atol=1e-2)
+
+    @slow
+    def test_inference_matting(self):
+        config = Sapiens2Config(
+            num_labels=4,
+            hidden_size=1536,
+            num_hidden_layers=40,
+            num_attention_heads=24,
+            image_size=[1024, 768],
+            head_upsample_out_channels=[768, 512, 256, 128],
+            head_upsample_kernel_sizes=[3, 3, 3, 3],
+            head_conv_out_channels=[64, 32, 16],
+            head_conv_kernel_sizes=[3, 3, 3],
+        )
+        config.transformers_weights = "sapiens2_1b_matting_gss_p3m_metasim.safetensors"
+        model = (
+            Sapiens2ForMatting.from_pretrained("facebook/sapiens2-matting-1b", config=config).eval().to(torch_device)
+        )
+
+        image_processor = self.default_image_processor
+        image = prepare_img()
+        image_height, image_width = image.shape[-2:]
+        inputs = image_processor(image, return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        self.assertIsInstance(outputs, Sapiens2MattingOutput)
+        _, _, height, width = inputs["pixel_values"].shape
+        self.assertEqual(outputs.foregrounds.shape, torch.Size([1, 3, height, width]))
+        self.assertEqual(outputs.alphas.shape, torch.Size([1, 1, height, width]))
+
+        expected_foregrounds = torch.tensor(
+            [
+                [1.5178e-04, 3.9458e-05, 7.3572e-05],
+                [7.7809e-05, 2.2595e-05, 1.8961e-05],
+                [6.2418e-05, 3.4820e-05, 3.5919e-05],
+            ],
+            device=torch_device,
+        )
+        torch.testing.assert_close(outputs.foregrounds[0, 0, :3, :3], expected_foregrounds, rtol=1e-3, atol=1e-3)
+
+        result = image_processor.post_process_matting(outputs, target_sizes=[(image_height, image_width)])
+        self.assertEqual(len(result), 1)
+        alpha = result[0]["alpha"]
+        foreground = result[0]["foreground"]
+        self.assertEqual(alpha.shape, torch.Size([1, image_height, image_width]))
+        self.assertEqual(foreground.shape, torch.Size([3, image_height, image_width]))
+
+        expected_alpha = torch.tensor(
+            [
+                [2.0024476e-05, 2.0769371e-06, 3.0109459e-06],
+                [9.7945522e-06, 2.6746864e-06, 3.6666975e-06],
+                [7.9275032e-06, 3.6702979e-06, 4.7998810e-06],
+            ],
+            device=torch_device,
+        )
+        torch.testing.assert_close(alpha[0, :3, :3], expected_alpha, rtol=1e-3, atol=1e-3)
+
+        expected_foreground = torch.tensor(
+            [
+                [9.3778086e-05, 3.0378451e-05, 3.8602211e-05],
+                [1.2016910e-04, 4.7495283e-05, 4.9707534e-05],
+                [8.3139930e-05, 5.2547144e-05, 5.6263394e-05],
+            ],
+            device=torch_device,
+        )
+        torch.testing.assert_close(foreground[0, :3, :3], expected_foreground, rtol=1e-3, atol=1e-3)
 
 
 @require_torch
