@@ -1766,9 +1766,7 @@ def token_type_ids_mask_function(
     return inner_mask
 
 
-def get_block_sequence_ids_for_mask(
-    mm_token_type_ids: torch.Tensor, device: torch.device
-) -> torch.Tensor:
+def get_block_sequence_ids_for_mask(mm_token_type_ids: torch.Tensor, device: torch.device) -> torch.Tensor:
     mm_token_type_ids = mm_token_type_ids.to(device)
 
     is_vision = (mm_token_type_ids == 1) | (mm_token_type_ids == 2)
