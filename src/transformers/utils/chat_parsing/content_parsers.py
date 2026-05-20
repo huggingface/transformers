@@ -156,27 +156,86 @@ def parse_content(text: str, name: str, args: dict) -> Any:
     return CONTENT_PARSERS[name](text, args)
 
 
-def _apply_transform(transform: str | None, captures: dict, content: Any) -> Any:
-    if transform is None:
-        return content
-    from ...utils import is_jmespath_available
+_PLACEHOLDER = re.compile(r"\{(\w+)\}")
 
-    if not is_jmespath_available():
-        raise ImportError(
-            "response_template uses a jmespath 'transform', but jmespath is not installed. "
-            "Install with `pip install jmespath`."
+
+def _apply_transform(transform: Any, scope: dict) -> Any:
+    """Recursively walk a transform template. A string matching the whole-string
+    placeholder pattern `{name}` is replaced with the value of `name` in
+    `scope`, with the value's type preserved (so `"{content}"` resolving to a
+    dict stays a dict). Strings without any placeholder are literals. Mixing
+    a placeholder with literal text in the same string is rejected at
+    template load time; see `validate_transform_strings`."""
+    if isinstance(transform, dict):
+        return {k: _apply_transform(v, scope) for k, v in transform.items()}
+    if isinstance(transform, list):
+        return [_apply_transform(v, scope) for v in transform]
+    if not isinstance(transform, str):
+        return transform
+    whole = _PLACEHOLDER.fullmatch(transform)
+    if not whole:
+        return transform
+    key = whole.group(1)
+    if key not in scope:
+        raise KeyError(f"transform placeholder '{{{key}}}' is not defined. Available: {sorted(scope)}")
+    return scope[key]
+
+
+def validate_transform_strings(scope: str, transform: Any) -> None:
+    """Walk a transform template and reject any string that mixes a `{name}`
+    placeholder with literal text. Only whole-string placeholders (e.g.
+    `"{content}"`) and plain literals are supported. Called from the template
+    loader so authors get a clear error at load time, not at parse time."""
+    if isinstance(transform, dict):
+        for v in transform.values():
+            validate_transform_strings(scope, v)
+        return
+    if isinstance(transform, list):
+        for v in transform:
+            validate_transform_strings(scope, v)
+        return
+    if not isinstance(transform, str):
+        return
+    if _PLACEHOLDER.search(transform) and not _PLACEHOLDER.fullmatch(transform):
+        raise ValueError(
+            f"{scope}: transform string {transform!r} mixes a {{placeholder}} with literal text. "
+            'Use either a whole-string placeholder (e.g. "{content}") or a plain literal; '
+            "string interpolation is not supported."
         )
-    import jmespath
-
-    return jmespath.search(transform, {**captures, "content": content})
 
 
 def process_field(body: str, fld, captures: dict) -> Any:
-    """Run `body` through the field's content parser and optional jmespath transform.
+    """Run `body` through the field's content parser, then optionally apply the
+    transform template. When `transform_each` is set, the parsed content must
+    be a list and the template is applied to each element (with the element's
+    keys unpacked into the template scope, alongside any regex captures).
 
     `fld` is a `spec.Field`; typed via duck-typing to avoid a cyclic import."""
     value = parse_content(body, fld.content, fld.content_args)
-    return _apply_transform(fld.transform, captures, value)
+    if fld.transform is None:
+        return value
+    if fld.transform_each:
+        if not isinstance(value, list):
+            raise ValueError(
+                f"Field '{fld.name}': transform_each requires the parsed content to be a list, "
+                f"got {type(value).__name__}."
+            )
+        out = []
+        for item in value:
+            if not isinstance(item, dict):
+                raise ValueError(
+                    f"Field '{fld.name}': transform_each requires each list element to be a dict, "
+                    f"got {type(item).__name__}."
+                )
+            out.append(_apply_transform(fld.transform, {**captures, **item}))
+        return out
+    return _apply_transform(fld.transform, {**captures, "content": value})
 
 
-__all__ = ["CONTENT_PARSERS", "STREAMABLE_PARSERS", "parse_content", "process_field"]
+__all__ = [
+    "CONTENT_PARSERS",
+    "STREAMABLE_PARSERS",
+    "parse_content",
+    "process_field",
+    "validate_transform_strings",
+]
