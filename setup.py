@@ -89,7 +89,6 @@ _deps = [
     "huggingface-hub>=1.5.0,<2.0",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
-    "jmespath>=1.0.1",
     "kenlm",
     "kernels>=0.12.0,<0.13",
     "librosa",
@@ -190,7 +189,7 @@ extras["kernels"] = deps_list("kernels")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
 extras["mistral-common"] = deps_list("mistral-common[image]")
-extras["chat_template"] = deps_list("jinja2", "jmespath")
+extras["chat_template"] = deps_list("jinja2")
 extras["sklearn"] = deps_list("scikit-learn")
 extras["accelerate"] = deps_list("accelerate")
 extras["retrieval"] = deps_list("faiss-cpu", "datasets")
