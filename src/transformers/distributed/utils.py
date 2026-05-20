@@ -179,7 +179,13 @@ def clip_grad_norm(parameters, max_norm: float, norm_type: float = 2.0):
             accum.add_(g.detach().to(torch.float32).abs().pow_(norm_p).sum())
 
     total_norm = accum.pow_(1.0 / norm_p)
-    torch.nn.utils.clip_grads_with_norm_(parameters, max_norm=max_norm, total_norm=total_norm)
+    clip_coef = (max_norm / (total_norm + 1e-6)).clamp(max=1.0)
+    for p in parameters:
+        g = p.grad
+        if isinstance(g, DTensor):
+            g._local_tensor.mul_(clip_coef)
+        else:
+            g.mul_(clip_coef)
     return total_norm
 
 
