@@ -528,10 +528,7 @@ class GlmAsrCausalLMOutputWithPast(ModelOutput):
     """
 )
 class GlmAsrForConditionalGeneration(GlmAsrPreTrainedModel, GenerationMixin):
-    _keep_in_fp32_modules_strict = None
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-    _tp_plan = None
-    _pp_plan = None
 
     def __init__(self, config):
         super().__init__(config)
