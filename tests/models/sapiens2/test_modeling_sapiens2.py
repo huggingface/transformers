@@ -33,6 +33,7 @@ if is_torch_available():
 
     from transformers import (
         Sapiens2Backbone,
+        Sapiens2ForNormalEstimation,
         Sapiens2ForPoseEstimation,
         Sapiens2ForSemanticSegmentation,
         Sapiens2Model,
@@ -142,6 +143,16 @@ class Sapiens2ModelTester:
         config.head_conv_kernel_sizes = [1, 1, 1]
         return config
 
+    def get_config_for_normal_estimation(self):
+        config = self.get_config()
+        config.num_labels = 3
+        config.image_size = 32
+        config.head_upsample_out_channels = [8, 4]
+        config.head_upsample_kernel_sizes = [3, 3]
+        config.head_conv_out_channels = [4]
+        config.head_conv_kernel_sizes = [3]
+        return config
+
     def create_and_check_backbone(self, config, pixel_values, labels):
         config.out_features = ["stage1", "stage2"]
         config.reshape_hidden_states = True
@@ -201,6 +212,23 @@ class Sapiens2ModelTester:
             (self.batch_size, config.num_labels, expected_h, expected_h),
         )
 
+    def create_and_check_for_normal_estimation(self, config, pixel_values, labels):
+        model = Sapiens2ForNormalEstimation(config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            result = model(pixel_values)
+        # PixelShuffle with scale_factor=2 doubles spatial dims per block
+        patch_height = config.image_size // self.patch_size
+        expected_h = patch_height * (2 ** len(config.head_upsample_out_channels))
+        self.parent.assertEqual(
+            result.normals.shape,
+            (self.batch_size, config.num_labels, expected_h, expected_h),
+        )
+        self.parent.assertIsNone(result.loss)
+        with self.parent.assertRaises(NotImplementedError):
+            model(pixel_values, labels=torch.randn_like(result.normals))
+
     def prepare_config_and_inputs_for_semantic_segmentation(self):
         config = self.get_config_for_semantic_segmentation()
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -211,6 +239,12 @@ class Sapiens2ModelTester:
         config = self.get_config_for_pose_estimation()
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         labels = ids_tensor([self.batch_size, self.image_size, self.image_size], config.num_labels)
+        return config, pixel_values, labels
+
+    def prepare_config_and_inputs_for_normal_estimation(self):
+        config = self.get_config_for_normal_estimation()
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, config.image_size, config.image_size])
+        labels = None
         return config, pixel_values, labels
 
     def prepare_config_and_inputs_for_common(self):
@@ -228,7 +262,13 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     """
 
     all_model_classes = (
-        (Sapiens2Model, Sapiens2Backbone, Sapiens2ForSemanticSegmentation, Sapiens2ForPoseEstimation)
+        (
+            Sapiens2Model,
+            Sapiens2Backbone,
+            Sapiens2ForSemanticSegmentation,
+            Sapiens2ForPoseEstimation,
+            Sapiens2ForNormalEstimation,
+        )
         if is_torch_available()
         else ()
     )
@@ -277,6 +317,10 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_for_pose_estimation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_pose_estimation()
         self.model_tester.create_and_check_for_pose_estimation(*config_and_inputs)
+
+    def test_for_normal_estimation(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_normal_estimation()
+        self.model_tester.create_and_check_for_normal_estimation(*config_and_inputs)
 
     def test_output_hidden_states(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -327,6 +371,32 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         # mismatched batch size raises ValueError
         with self.assertRaises(ValueError):
             image_processor.post_process_semantic_segmentation(outputs, target_sizes=[(100, 100)])
+
+    def test_post_process_normal_estimation(self):
+        from transformers import Sapiens2NormalEstimatorOutput
+
+        image_processor = Sapiens2ImageProcessor()
+        batch_size = 2
+        num_labels = 3
+        height = width = 16
+        outputs = Sapiens2NormalEstimatorOutput(normals=torch.randn(batch_size, num_labels, height, width))
+
+        # without target_sizes: spatial dims match normals, values are L2-normalized
+        result = image_processor.post_process_normal_estimation(outputs)
+        self.assertEqual(len(result), batch_size)
+        self.assertEqual(result[0].shape, torch.Size([num_labels, height, width]))
+        norms = result[0].norm(p=2, dim=0)
+        torch.testing.assert_close(norms, torch.ones_like(norms), rtol=1e-4, atol=1e-4)
+
+        # with target_sizes: output is resized before normalization
+        target_sizes = [(height * 2, width * 2)] * batch_size
+        result = image_processor.post_process_normal_estimation(outputs, target_sizes=target_sizes)
+        self.assertEqual(len(result), batch_size)
+        self.assertEqual(result[0].shape, torch.Size([num_labels, height * 2, width * 2]))
+
+        # mismatched batch size raises ValueError
+        with self.assertRaises(ValueError):
+            image_processor.post_process_normal_estimation(outputs, target_sizes=[(100, 100)])
 
     @slow
     def test_model_from_pretrained(self):
@@ -500,6 +570,37 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         scores = person["scores"]
         expected_scores = torch.tensor([1.0007433, 0.9987416, 1.0015154])
         torch.testing.assert_close(scores[:3], expected_scores, rtol=1e-3, atol=1e-3)
+
+    @slow
+    def test_inference_normal_estimation(self):
+        config = Sapiens2Config(
+            num_labels=3,
+            head_upsample_out_channels=[768, 512, 256, 128],
+            head_upsample_kernel_sizes=[3, 3, 3, 3],
+            head_conv_out_channels=[64, 32, 16],
+            head_conv_kernel_sizes=[3, 3, 3],
+        )
+        model = (
+            Sapiens2ForNormalEstimation.from_pretrained("facebook/sapiens2-normal-0.4b", config=config)
+            .eval()
+            .to(torch_device)
+        )
+
+        image_processor = self.default_image_processor
+        image = prepare_img()
+        inputs = image_processor(image, return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        _, _, height, width = inputs["pixel_values"].shape
+        self.assertEqual(outputs.normals.shape, torch.Size([1, 3, height, width]))
+
+        result = image_processor.post_process_normal_estimation(outputs, target_sizes=[(height, width)])
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].shape, torch.Size([3, height, width]))
+        # values should be in [-1, 1] after L2 normalization
+        self.assertTrue(result[0].abs().max().item() <= 1.0 + 1e-4)
 
 
 @require_torch

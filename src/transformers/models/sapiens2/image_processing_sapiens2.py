@@ -34,11 +34,12 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
+    get_image_size_for_max_height_width,
 )
 from ...modeling_outputs import SemanticSegmenterOutput
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_cv2_available, requires_backends
-from .modeling_sapiens2 import Sapiens2PoseEstimatorOutput
+from .modeling_sapiens2 import Sapiens2NormalEstimatorOutput, Sapiens2PoseEstimatorOutput
 
 
 # TODO(guarin): Check if we can drop cv2 dependency. Ideally re-use as much as possible from ViTPoseProcessor.
@@ -218,6 +219,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
     do_rescale = True
     do_normalize = True
     do_reduce_labels = False
+    do_pad = False  # Set to True for normal, albedo, and pointmap estimation
 
     def __init__(self, **kwargs: Unpack[Sapiens2ImageProcessorKwargs]):
         super().__init__(**kwargs)
@@ -259,10 +261,12 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         images = self._prepare_image_like_inputs(
             images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
         )
+        original_sizes = [image.shape[-2:] for image in images]
         images_kwargs = kwargs.copy()
         images_kwargs["do_reduce_labels"] = False
         data = {}
         data["pixel_values"] = self._preprocess(images, boxes=boxes, **images_kwargs)
+        data["original_sizes"] = original_sizes
 
         if segmentation_maps is not None:
             processed_segmentation_maps = self._prepare_image_like_inputs(
@@ -311,6 +315,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         image_std: float | list[float] | None,
         disable_grouping: bool | None,
         do_reduce_labels: bool = False,
+        do_pad: bool = False,
         boxes: list[list[list[float]]] | None = None,
         **kwargs,
     ) -> list["torch.Tensor"]:
@@ -336,7 +341,13 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                stacked_images = self.resize(stacked_images, size, resample)
+                if do_pad:
+                    # Resize while preserving aspect ratio. Then add symmetric padding on all sides to reach the target size.
+                    aspect_ratio_size = SizeDict(max_height=size["height"], max_width=size["width"])
+                    stacked_images = self.resize(stacked_images, aspect_ratio_size, resample)
+                    stacked_images = self.center_crop(stacked_images, size)
+                else:
+                    stacked_images = self.resize(stacked_images, size, resample)
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
@@ -469,6 +480,82 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             semantic_segmentation = list(logits.argmax(dim=1))
 
         return semantic_segmentation
+
+    def post_process_normal_estimation(
+        self,
+        outputs: Sapiens2NormalEstimatorOutput,
+        source_sizes: list[tuple] | None = None,
+        target_sizes: list[tuple] | None = None,
+        do_remove_padding: bool | None = None,
+    ) -> list[torch.Tensor]:
+        """
+        Converts the output of [`Sapiens2ForNormalEstimation`] into L2-normalized surface normal maps.
+
+        Args:
+            outputs (`Sapiens2NormalEstimatorOutput`):
+                Raw outputs of the model.
+            source_sizes (`list[tuple]` of length `batch_size`, *optional*):
+                Original `(height, width)` of each image before preprocessing. When provided,
+                the padding added during preprocessing is removed and predictions are resized back
+                to the original image size (unless `target_sizes` overrides the final size).
+                Can be passed directly as `inputs["original_sizes"]`.
+            target_sizes (`list[tuple]` of length `batch_size`, *optional*):
+                Requested final `(height, width)` for each prediction. Overrides `source_sizes`
+                as the resize target. Resized with bilinear interpolation before normalization.
+            do_remove_padding (`bool`, *optional*):
+                Whether to crop away the zero-padding added during preprocessing before resizing.
+                Defaults to `True` when `source_sizes` is provided, `False` otherwise.
+
+        Returns:
+            `list[torch.Tensor]` of length `batch_size`, each of shape `(3, height, width)`.
+            Values are L2-normalized unit vectors in `[-1, 1]` per channel (XYZ surface normals).
+        """
+        if do_remove_padding is None:
+            do_remove_padding = source_sizes is not None
+
+        if do_remove_padding and source_sizes is None:
+            raise ValueError("`source_sizes` must be provided when `do_remove_padding=True`.")
+
+        normals = outputs.normals
+
+        if source_sizes is not None and len(normals) != len(source_sizes):
+            raise ValueError("Make sure that you pass in as many source sizes as the batch dimension of the normals")
+        if target_sizes is not None and len(normals) != len(target_sizes):
+            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the normals")
+
+        result = []
+        model_h = self.size["height"]
+        model_w = self.size["width"]
+
+        # TODO(guarin): Group by shape and resize in batch instead of looping, like in `preprocess`.
+        for idx in range(len(normals)):
+            normal = normals[idx]
+
+            if do_remove_padding:
+                orig_h, orig_w = source_sizes[idx]
+                new_h, new_w = get_image_size_for_max_height_width((orig_h, orig_w), model_h, model_w)
+                pad_top = (model_h - new_h) // 2 if new_h < model_h else 0
+                pad_left = (model_w - new_w) // 2 if new_w < model_w else 0
+                normal = normal[:, pad_top : pad_top + min(new_h, model_h), pad_left : pad_left + min(new_w, model_w)]
+
+            final_size = (
+                target_sizes[idx]
+                if target_sizes is not None
+                else (source_sizes[idx] if source_sizes is not None else None)
+            )
+
+            if final_size is not None:
+                normal = F.interpolate(
+                    normal.unsqueeze(0),
+                    size=final_size,
+                    mode="bilinear",
+                    align_corners=False,
+                    antialias=False,
+                )[0]
+
+            result.append(F.normalize(normal, p=2, dim=0))
+
+        return result
 
 
 __all__ = ["Sapiens2ImageProcessor"]

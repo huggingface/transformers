@@ -124,6 +124,42 @@ segmentation = image_processor.post_process_semantic_segmentation(
 print("Segmentation map shape:", segmentation.shape)  # [original_height, original_width]
 ```
 
+### Normal estimation
+
+The example below shows how to estimate surface normals with [`Sapiens2ForNormalEstimation`].
+The normal estimation checkpoints are named `sapiens2_0.4b_normal.safetensors` rather than
+`model.safetensors`, so `transformers_weights` must be set on the config. The output normals
+are raw (unnormalized); use `post_process_normal_estimation` to resize and L2-normalize them.
+
+```python
+import torch
+from transformers import Sapiens2Config, Sapiens2ImageProcessor, Sapiens2ForNormalEstimation
+from transformers.image_utils import load_image
+
+url = "http://images.cocodataset.org/val2017/000000004016.jpg"
+image = load_image(url)
+
+image_processor = Sapiens2ImageProcessor()
+
+config = Sapiens2Config(num_labels=3)
+config.transformers_weights = "sapiens2_0.4b_normal.safetensors"
+model = Sapiens2ForNormalEstimation.from_pretrained("facebook/sapiens2-normal-0.4b", config=config)
+
+inputs = image_processor(image, return_tensors="pt")
+with torch.inference_mode():
+    outputs = model(**inputs)
+
+# outputs.normals shape: (batch_size, 3, height, width) — raw, unnormalized XYZ normals
+print("Normals shape:", outputs.normals.shape)  # [1, 3, 1024, 768]
+
+# Remove preprocessing padding, resize to original size, and L2-normalize to unit vectors in [-1, 1]
+original_size = (image.height, image.width)
+normal_maps = image_processor.post_process_normal_estimation(
+    outputs, source_sizes=inputs["original_sizes"], target_sizes=[original_size]
+)[0]
+print("Normal map shape:", normal_maps.shape)   # [3, original_height, original_width]
+```
+
 ## Sapiens2Config
 
 [[autodoc]] Sapiens2Config
@@ -141,6 +177,11 @@ print("Segmentation map shape:", segmentation.shape)  # [original_height, origin
 ## Sapiens2ForSemanticSegmentation
 
 [[autodoc]] Sapiens2ForSemanticSegmentation
+    - forward
+
+## Sapiens2ForNormalEstimation
+
+[[autodoc]] Sapiens2ForNormalEstimation
     - forward
 
 ## Sapiens2ImageProcessor

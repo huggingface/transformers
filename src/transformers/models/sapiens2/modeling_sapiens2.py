@@ -71,6 +71,33 @@ class Sapiens2PoseEstimatorOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
+@auto_docstring(
+    custom_intro="""
+    Class for outputs of normal estimation models.
+    """
+)
+@dataclass
+class Sapiens2NormalEstimatorOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Normal estimation loss.
+    normals (`torch.FloatTensor` of shape `(batch_size, num_labels, height, width)`):
+        Raw normal map predictions as output by the model (unnormalized).
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage)
+        of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
+        each layer plus the initial embedding outputs.
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one per layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`. Attentions weights after the attention softmax.
+    """
+
+    loss: torch.FloatTensor | None = None
+    normals: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+
+
 class Sapiens2Embeddings(nn.Module):
     """
     Construct the CLS token, mask token, position and patch embeddings.
@@ -512,6 +539,29 @@ class Sapiens2ConvTransposeLayer(nn.Module):
         return self.activation(self.norm(self.conv(hidden_states)))
 
 
+class Sapiens2PixelShuffleLayer(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int = 3,
+        scale_factor: int = 2,
+        padding: int = 1,
+        bias: bool = True,
+        activation: str = "silu",
+    ):
+        super().__init__()
+        self.conv = nn.Conv2d(
+            in_channels, out_channels * scale_factor**2, kernel_size=kernel_size, padding=padding, bias=bias
+        )
+        self.pixel_shuffle = nn.PixelShuffle(scale_factor)
+        self.norm = nn.InstanceNorm2d(out_channels)
+        self.activation = ACT2FN[activation]
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.activation(self.norm(self.pixel_shuffle(self.conv(hidden_states))))
+
+
 class Sapiens2ConvLayer(nn.Module):
     def __init__(
         self,
@@ -563,16 +613,50 @@ class Sapiens2SegmentationHead(nn.Module):
                 conv_in_channels, config.head_conv_out_channels, config.head_conv_kernel_sizes
             )
         )
-        classifier_in = (
+        predictor_in = (
             config.head_conv_out_channels[-1]
             if config.head_conv_out_channels
             else config.head_upsample_out_channels[-1]
         )
-        self.predictor = nn.Conv2d(classifier_in, config.num_labels, kernel_size=1)
+        self.predictor = nn.Conv2d(predictor_in, config.num_labels, kernel_size=1)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         for layer in self.deconv_layers:
             hidden_states = layer(hidden_states)
+        for layer in self.conv_layers:
+            hidden_states = layer(hidden_states)
+        return self.predictor(hidden_states)
+
+
+class Sapiens2NormalHead(nn.Module):
+    def __init__(self, config: Sapiens2Config):
+        super().__init__()
+        self.input_conv = Sapiens2ConvLayer(config.hidden_size, config.hidden_size, kernel_size=3, padding=1)
+        upsample_in_channels = [config.hidden_size] + config.head_upsample_out_channels[:-1]
+        self.upsample_layers = nn.ModuleList(
+            Sapiens2PixelShuffleLayer(in_ch, out_ch, kernel_size=ks, padding=(ks - 1) // 2)
+            for in_ch, out_ch, ks in zip(
+                upsample_in_channels, config.head_upsample_out_channels, config.head_upsample_kernel_sizes
+            )
+        )
+        conv_in_channels = [config.head_upsample_out_channels[-1]] + config.head_conv_out_channels[:-1]
+        self.conv_layers = nn.ModuleList(
+            Sapiens2ConvLayer(in_ch, out_ch, kernel_size=ks, padding=(ks - 1) // 2)
+            for in_ch, out_ch, ks in zip(
+                conv_in_channels, config.head_conv_out_channels, config.head_conv_kernel_sizes
+            )
+        )
+        predictor_in = (
+            config.head_conv_out_channels[-1]
+            if config.head_conv_out_channels
+            else config.head_upsample_out_channels[-1]
+        )
+        self.predictor = nn.Conv2d(predictor_in, config.num_labels, kernel_size=1)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.input_conv(hidden_states)
+        for block in self.upsample_layers:
+            hidden_states = block(hidden_states)
         for layer in self.conv_layers:
             hidden_states = layer(hidden_states)
         return self.predictor(hidden_states)
@@ -884,11 +968,62 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
         )
 
 
+@auto_docstring(
+    checkpoint="facebook/sapiens2-normal-0.4b",
+    custom_intro="""
+    The Sapiens2 model with a normal estimation head on top (a PixelShuffle-based decoder that predicts surface normal maps).
+    """,
+)
+class Sapiens2ForNormalEstimation(Sapiens2PreTrainedModel):
+    def __init__(self, config: Sapiens2Config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+        self.sapiens2 = Sapiens2Model(config)
+        self.decode_head = Sapiens2NormalHead(config)
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        labels: torch.FloatTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Sapiens2NormalEstimatorOutput:
+        r"""
+        labels (`torch.FloatTensor` of shape `(batch_size, num_labels, height, width)`, *optional*):
+            Ground-truth surface normal maps for computing the loss.
+        """
+        outputs = self.sapiens2(pixel_values, **kwargs)
+
+        batch_size, _, height, width = pixel_values.shape
+        patch_height = height // self.config.patch_size
+        patch_width = width // self.config.patch_size
+
+        patch_tokens = outputs.last_hidden_state[:, 1 + self.config.num_register_tokens :]
+        feature_map = patch_tokens.transpose(1, 2).reshape(batch_size, -1, patch_height, patch_width)
+
+        normals = self.decode_head(feature_map)
+
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Training is not yet supported")
+
+        return Sapiens2NormalEstimatorOutput(
+            loss=loss,
+            normals=normals,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
 __all__ = [
     "Sapiens2Model",
     "Sapiens2PreTrainedModel",
     "Sapiens2Backbone",
     "Sapiens2ForSemanticSegmentation",
     "Sapiens2ForPoseEstimation",
+    "Sapiens2ForNormalEstimation",
+    "Sapiens2NormalEstimatorOutput",
     "Sapiens2PoseEstimatorOutput",
 ]

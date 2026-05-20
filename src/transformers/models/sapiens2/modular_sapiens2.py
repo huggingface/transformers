@@ -34,6 +34,7 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
+    get_image_size_for_max_height_width,
 )
 from ...modeling_outputs import ModelOutput, SemanticSegmenterOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -90,6 +91,33 @@ class Sapiens2PoseEstimatorOutput(ModelOutput):
 
     loss: torch.FloatTensor | None = None
     heatmaps: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+
+
+@auto_docstring(
+    custom_intro="""
+    Class for outputs of normal estimation models.
+    """
+)
+@dataclass
+class Sapiens2NormalEstimatorOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Normal estimation loss.
+    normals (`torch.FloatTensor` of shape `(batch_size, num_labels, height, width)`):
+        Raw normal map predictions as output by the model (unnormalized).
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage)
+        of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
+        each layer plus the initial embedding outputs.
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one per layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`. Attentions weights after the attention softmax.
+    """
+
+    loss: torch.FloatTensor | None = None
+    normals: torch.FloatTensor | None = None
     hidden_states: tuple[torch.FloatTensor, ...] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
@@ -196,6 +224,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
     do_rescale = True
     do_normalize = True
     do_reduce_labels = False
+    do_pad = False  # Set to True for normal, albedo, and pointmap estimation
 
     def __init__(self, **kwargs: Unpack[Sapiens2ImageProcessorKwargs]):
         super().__init__(**kwargs)
@@ -237,10 +266,12 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         images = self._prepare_image_like_inputs(
             images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
         )
+        original_sizes = [image.shape[-2:] for image in images]
         images_kwargs = kwargs.copy()
         images_kwargs["do_reduce_labels"] = False
         data = {}
         data["pixel_values"] = self._preprocess(images, boxes=boxes, **images_kwargs)
+        data["original_sizes"] = original_sizes
 
         if segmentation_maps is not None:
             processed_segmentation_maps = self._prepare_image_like_inputs(
@@ -289,6 +320,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         image_std: float | list[float] | None,
         disable_grouping: bool | None,
         do_reduce_labels: bool = False,
+        do_pad: bool = False,
         boxes: list[list[list[float]]] | None = None,
         **kwargs,
     ) -> list["torch.Tensor"]:
@@ -314,7 +346,13 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                stacked_images = self.resize(stacked_images, size, resample)
+                if do_pad:
+                    # Resize while preserving aspect ratio. Then add symmetric padding on all sides to reach the target size.
+                    aspect_ratio_size = SizeDict(max_height=size["height"], max_width=size["width"])
+                    stacked_images = self.resize(stacked_images, aspect_ratio_size, resample)
+                    stacked_images = self.center_crop(stacked_images, size)
+                else:
+                    stacked_images = self.resize(stacked_images, size, resample)
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
@@ -447,6 +485,82 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             semantic_segmentation = list(logits.argmax(dim=1))
 
         return semantic_segmentation
+
+    def post_process_normal_estimation(
+        self,
+        outputs: Sapiens2NormalEstimatorOutput,
+        source_sizes: list[tuple] | None = None,
+        target_sizes: list[tuple] | None = None,
+        do_remove_padding: bool | None = None,
+    ) -> list[torch.Tensor]:
+        """
+        Converts the output of [`Sapiens2ForNormalEstimation`] into L2-normalized surface normal maps.
+
+        Args:
+            outputs (`Sapiens2NormalEstimatorOutput`):
+                Raw outputs of the model.
+            source_sizes (`list[tuple]` of length `batch_size`, *optional*):
+                Original `(height, width)` of each image before preprocessing. When provided,
+                the padding added during preprocessing is removed and predictions are resized back
+                to the original image size (unless `target_sizes` overrides the final size).
+                Can be passed directly as `inputs["original_sizes"]`.
+            target_sizes (`list[tuple]` of length `batch_size`, *optional*):
+                Requested final `(height, width)` for each prediction. Overrides `source_sizes`
+                as the resize target. Resized with bilinear interpolation before normalization.
+            do_remove_padding (`bool`, *optional*):
+                Whether to crop away the zero-padding added during preprocessing before resizing.
+                Defaults to `True` when `source_sizes` is provided, `False` otherwise.
+
+        Returns:
+            `list[torch.Tensor]` of length `batch_size`, each of shape `(3, height, width)`.
+            Values are L2-normalized unit vectors in `[-1, 1]` per channel (XYZ surface normals).
+        """
+        if do_remove_padding is None:
+            do_remove_padding = source_sizes is not None
+
+        if do_remove_padding and source_sizes is None:
+            raise ValueError("`source_sizes` must be provided when `do_remove_padding=True`.")
+
+        normals = outputs.normals
+
+        if source_sizes is not None and len(normals) != len(source_sizes):
+            raise ValueError("Make sure that you pass in as many source sizes as the batch dimension of the normals")
+        if target_sizes is not None and len(normals) != len(target_sizes):
+            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the normals")
+
+        result = []
+        model_h = self.size["height"]
+        model_w = self.size["width"]
+
+        # TODO(guarin): Group by shape and resize in batch instead of looping, like in `preprocess`.
+        for idx in range(len(normals)):
+            normal = normals[idx]
+
+            if do_remove_padding:
+                orig_h, orig_w = source_sizes[idx]
+                new_h, new_w = get_image_size_for_max_height_width((orig_h, orig_w), model_h, model_w)
+                pad_top = (model_h - new_h) // 2 if new_h < model_h else 0
+                pad_left = (model_w - new_w) // 2 if new_w < model_w else 0
+                normal = normal[:, pad_top : pad_top + min(new_h, model_h), pad_left : pad_left + min(new_w, model_w)]
+
+            final_size = (
+                target_sizes[idx]
+                if target_sizes is not None
+                else (source_sizes[idx] if source_sizes is not None else None)
+            )
+
+            if final_size is not None:
+                normal = F.interpolate(
+                    normal.unsqueeze(0),
+                    size=final_size,
+                    mode="bilinear",
+                    align_corners=False,
+                    antialias=False,
+                )[0]
+
+            result.append(F.normalize(normal, p=2, dim=0))
+
+        return result
 
 
 @auto_docstring(checkpoint="facebook/sapiens2-pretrain-0.4b")
@@ -757,6 +871,29 @@ class Sapiens2ConvTransposeLayer(nn.Module):
         return self.activation(self.norm(self.conv(hidden_states)))
 
 
+class Sapiens2PixelShuffleLayer(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int = 3,
+        scale_factor: int = 2,
+        padding: int = 1,
+        bias: bool = True,
+        activation: str = "silu",
+    ):
+        super().__init__()
+        self.conv = nn.Conv2d(
+            in_channels, out_channels * scale_factor**2, kernel_size=kernel_size, padding=padding, bias=bias
+        )
+        self.pixel_shuffle = nn.PixelShuffle(scale_factor)
+        self.norm = nn.InstanceNorm2d(out_channels)
+        self.activation = ACT2FN[activation]
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.activation(self.norm(self.pixel_shuffle(self.conv(hidden_states))))
+
+
 class Sapiens2ConvLayer(BeitConvLayer):
     def __init__(
         self,
@@ -801,16 +938,50 @@ class Sapiens2SegmentationHead(nn.Module):
                 conv_in_channels, config.head_conv_out_channels, config.head_conv_kernel_sizes
             )
         )
-        classifier_in = (
+        predictor_in = (
             config.head_conv_out_channels[-1]
             if config.head_conv_out_channels
             else config.head_upsample_out_channels[-1]
         )
-        self.predictor = nn.Conv2d(classifier_in, config.num_labels, kernel_size=1)
+        self.predictor = nn.Conv2d(predictor_in, config.num_labels, kernel_size=1)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         for layer in self.deconv_layers:
             hidden_states = layer(hidden_states)
+        for layer in self.conv_layers:
+            hidden_states = layer(hidden_states)
+        return self.predictor(hidden_states)
+
+
+class Sapiens2NormalHead(nn.Module):
+    def __init__(self, config: Sapiens2Config):
+        super().__init__()
+        self.input_conv = Sapiens2ConvLayer(config.hidden_size, config.hidden_size, kernel_size=3, padding=1)
+        upsample_in_channels = [config.hidden_size] + config.head_upsample_out_channels[:-1]
+        self.upsample_layers = nn.ModuleList(
+            Sapiens2PixelShuffleLayer(in_ch, out_ch, kernel_size=ks, padding=(ks - 1) // 2)
+            for in_ch, out_ch, ks in zip(
+                upsample_in_channels, config.head_upsample_out_channels, config.head_upsample_kernel_sizes
+            )
+        )
+        conv_in_channels = [config.head_upsample_out_channels[-1]] + config.head_conv_out_channels[:-1]
+        self.conv_layers = nn.ModuleList(
+            Sapiens2ConvLayer(in_ch, out_ch, kernel_size=ks, padding=(ks - 1) // 2)
+            for in_ch, out_ch, ks in zip(
+                conv_in_channels, config.head_conv_out_channels, config.head_conv_kernel_sizes
+            )
+        )
+        predictor_in = (
+            config.head_conv_out_channels[-1]
+            if config.head_conv_out_channels
+            else config.head_upsample_out_channels[-1]
+        )
+        self.predictor = nn.Conv2d(predictor_in, config.num_labels, kernel_size=1)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.input_conv(hidden_states)
+        for block in self.upsample_layers:
+            hidden_states = block(hidden_states)
         for layer in self.conv_layers:
             hidden_states = layer(hidden_states)
         return self.predictor(hidden_states)
@@ -968,6 +1139,55 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
         )
 
 
+@auto_docstring(
+    checkpoint="facebook/sapiens2-normal-0.4b",
+    custom_intro="""
+    The Sapiens2 model with a normal estimation head on top (a PixelShuffle-based decoder that predicts surface normal maps).
+    """,
+)
+class Sapiens2ForNormalEstimation(Sapiens2PreTrainedModel):
+    def __init__(self, config: Sapiens2Config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+        self.sapiens2 = Sapiens2Model(config)
+        self.decode_head = Sapiens2NormalHead(config)
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        labels: torch.FloatTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Sapiens2NormalEstimatorOutput:
+        r"""
+        labels (`torch.FloatTensor` of shape `(batch_size, num_labels, height, width)`, *optional*):
+            Ground-truth surface normal maps for computing the loss.
+        """
+        outputs = self.sapiens2(pixel_values, **kwargs)
+
+        batch_size, _, height, width = pixel_values.shape
+        patch_height = height // self.config.patch_size
+        patch_width = width // self.config.patch_size
+
+        patch_tokens = outputs.last_hidden_state[:, 1 + self.config.num_register_tokens :]
+        feature_map = patch_tokens.transpose(1, 2).reshape(batch_size, -1, patch_height, patch_width)
+
+        normals = self.decode_head(feature_map)
+
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Training is not yet supported")
+
+        return Sapiens2NormalEstimatorOutput(
+            loss=loss,
+            normals=normals,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
 __all__ = [
     "Sapiens2Config",
     "Sapiens2Model",
@@ -975,6 +1195,8 @@ __all__ = [
     "Sapiens2Backbone",
     "Sapiens2ForSemanticSegmentation",
     "Sapiens2ForPoseEstimation",
+    "Sapiens2ForNormalEstimation",
+    "Sapiens2NormalEstimatorOutput",
     "Sapiens2PoseEstimatorOutput",
     "Sapiens2ImageProcessor",
 ]
