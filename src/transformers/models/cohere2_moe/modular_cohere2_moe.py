@@ -127,35 +127,9 @@ class Cohere2MoeAttention(Cohere2Attention):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: Cohere2MoeConfig, layer_idx: int | None = None):
-        nn.Module.__init__(self)
-        self.config = config
-        self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
-        self.is_causal = True
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
-
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
-        )
-
-        first_k_dense_replace = getattr(config, "first_k_dense_replace", 0)
-        prefix_dense_sliding_window_pattern = getattr(config, "prefix_dense_sliding_window_pattern", 1)
+        super().__init__(config, layer_idx)
         self.force_rope = (
-            first_k_dense_replace
-            and prefix_dense_sliding_window_pattern == 1
-            and self.layer_idx < first_k_dense_replace
+            self.layer_idx < config.first_k_dense_replace and config.prefix_dense_sliding_window_pattern == 1
         )
 
     def forward(

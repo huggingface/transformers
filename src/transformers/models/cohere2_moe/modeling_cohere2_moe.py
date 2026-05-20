@@ -300,13 +300,8 @@ class Cohere2MoeAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-
-        first_k_dense_replace = getattr(config, "first_k_dense_replace", 0)
-        prefix_dense_sliding_window_pattern = getattr(config, "prefix_dense_sliding_window_pattern", 1)
         self.force_rope = (
-            first_k_dense_replace
-            and prefix_dense_sliding_window_pattern == 1
-            and self.layer_idx < first_k_dense_replace
+            self.layer_idx < config.first_k_dense_replace and config.prefix_dense_sliding_window_pattern == 1
         )
 
     def forward(
