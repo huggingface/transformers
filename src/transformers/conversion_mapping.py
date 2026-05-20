@@ -1008,27 +1008,31 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"decode_head\.conv_pointmap\.", r"decode_head.predictor."),
             WeightRenaming(
                 r"decode_head\.scale_conv_layers\.0\.weight",
-                r"decode_head.scale_conv_layers.0.convolution.weight",
+                r"scale_head.conv_layers.0.convolution.weight",
             ),
             WeightRenaming(
                 r"decode_head\.scale_conv_layers\.0\.bias",
-                r"decode_head.scale_conv_layers.0.convolution.bias",
+                r"scale_head.conv_layers.0.convolution.bias",
             ),
             WeightRenaming(
                 r"decode_head\.scale_conv_layers\.3\.weight",
-                r"decode_head.scale_conv_layers.1.convolution.weight",
+                r"scale_head.conv_layers.1.convolution.weight",
             ),
             WeightRenaming(
                 r"decode_head\.scale_conv_layers\.3\.bias",
-                r"decode_head.scale_conv_layers.1.convolution.bias",
+                r"scale_head.conv_layers.1.convolution.bias",
             ),
             WeightRenaming(
                 r"decode_head\.scale_conv_layers\.6\.weight",
-                r"decode_head.scale_conv_layers.2.convolution.weight",
+                r"scale_head.conv_layers.2.convolution.weight",
             ),
             WeightRenaming(
                 r"decode_head\.scale_conv_layers\.6\.bias",
-                r"decode_head.scale_conv_layers.2.convolution.bias",
+                r"scale_head.conv_layers.2.convolution.bias",
+            ),
+            WeightRenaming(
+                r"decode_head\.scale_final_layer\.",
+                r"scale_head.predictor.mlp.",
             ),
         ],
     }

@@ -742,10 +742,10 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].shape, torch.Size([3, image_height, image_width]))
 
-        # Head and post-processing are exactly identical to original code but differences from backbone
-        # get amplified after scaling and resizing so we need to relax the tolerance here.
+        # Head and post-processing are exactly identical to original code but differences from backbone
+        # get amplified after scaling and resizing so we need to relax the tolerance here.
         expected_postprocessed_pointmap = torch.tensor(
-            [[ 0.0771,  0.1335,  0.3025], [-0.1179,  0.2904,  0.7140], [ 0.0337,  0.3037,  0.4390]],
+            [[0.0771, 0.1335, 0.3025], [-0.1179, 0.2904, 0.7140], [0.0337, 0.3037, 0.4390]],
             device=torch_device,
         )
         torch.testing.assert_close(result[0][0, :3, :3], expected_postprocessed_pointmap, rtol=1e-3, atol=1e-3)

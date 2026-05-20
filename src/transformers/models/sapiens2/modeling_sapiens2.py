@@ -692,6 +692,51 @@ class Sapiens2NormalHead(nn.Module):
         return self.predictor(hidden_states)
 
 
+class Sapiens2PointmapFinalLayer(nn.Module):
+    def __init__(self, in_size: int, hidden_sizes: list[int]):
+        super().__init__()
+        layers = [nn.Flatten()]
+        in_channels = [in_size] + hidden_sizes[:-1]
+        for in_ch, out_ch in zip(in_channels, hidden_sizes):
+            layers.append(nn.Linear(in_ch, out_ch))
+            layers.append(nn.SiLU())
+        layers.append(nn.Linear(hidden_sizes[-1], 1))
+        self.mlp = nn.Sequential(*layers)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.mlp(hidden_states)
+
+
+class Sapiens2PointmapScaleHead(nn.Module):
+    def __init__(self, config: Sapiens2Config):
+        super().__init__()
+        image_size = config.image_size
+        image_h, image_w = image_size if isinstance(image_size, (list, tuple)) else (image_size, image_size)
+        patch_size = config.patch_size if isinstance(config.patch_size, int) else config.patch_size[0]
+        h = image_h // patch_size
+        w = image_w // patch_size
+        for ks in config.head_scale_conv_kernel_sizes:
+            padding = (ks - 1) // 2
+            h = (h + 2 * padding - ks) // 2 + 1
+            w = (w + 2 * padding - ks) // 2 + 1
+        flat_size = h * w * config.head_scale_conv_out_channels[-1]
+
+        self.conv_layers = nn.ModuleList()
+        scale_in_channels = [config.hidden_size] + config.head_scale_conv_out_channels[:-1]
+        for in_ch, out_ch, ks in zip(
+            scale_in_channels,
+            config.head_scale_conv_out_channels,
+            config.head_scale_conv_kernel_sizes,
+        ):
+            self.conv_layers.append(Sapiens2ConvLayer(in_ch, out_ch, kernel_size=ks, stride=2, padding=(ks - 1) // 2))
+        self.predictor = Sapiens2PointmapFinalLayer(flat_size, config.head_scale_final_hidden_sizes)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        for layer in self.conv_layers:
+            hidden_states = layer(hidden_states)
+        return self.predictor(hidden_states)
+
+
 class Sapiens2PointmapHead(nn.Module):
     def __init__(self, config: Sapiens2Config):
         super().__init__()
@@ -717,55 +762,13 @@ class Sapiens2PointmapHead(nn.Module):
         )
         self.predictor = nn.Conv2d(predictor_in, config.num_labels, kernel_size=1)
 
-        self.scale_conv_layers = None
-        self.scale_final_layer = None
-        if config.head_scale_conv_out_channels is not None:
-            image_size = config.image_size
-            image_h, image_w = image_size if isinstance(image_size, (list, tuple)) else (image_size, image_size)
-            patch_size = config.patch_size if isinstance(config.patch_size, int) else config.patch_size[0]
-            h = image_h // patch_size
-            w = image_w // patch_size
-            for ks in config.head_scale_conv_kernel_sizes:
-                padding = (ks - 1) // 2
-                h = (h + 2 * padding - ks) // 2 + 1
-                w = (w + 2 * padding - ks) // 2 + 1
-            flat_size = h * w * config.head_scale_conv_out_channels[-1]
-
-            scale_in_channels = [config.hidden_size] + config.head_scale_conv_out_channels[:-1]
-            self.scale_conv_layers = nn.ModuleList(
-                Sapiens2ConvLayer(in_ch, out_ch, kernel_size=ks, stride=2, padding=(ks - 1) // 2)
-                for in_ch, out_ch, ks in zip(
-                    scale_in_channels,
-                    config.head_scale_conv_out_channels,
-                    config.head_scale_conv_kernel_sizes,
-                )
-            )
-
-            layers = [nn.Flatten()]
-            in_size = flat_size
-            for h in config.head_scale_final_hidden_sizes:
-                layers.append(nn.Linear(in_size, h))
-                layers.append(nn.SiLU())
-                in_size = h
-            layers.append(nn.Linear(in_size, 1))
-            self.scale_final_layer = nn.Sequential(*layers)
-
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor | None]:
-        x = self.input_conv(hidden_states)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.input_conv(hidden_states)
         for block in self.upsample_layers:
-            x = block(x)
+            hidden_states = block(hidden_states)
         for layer in self.conv_layers:
-            x = layer(x)
-        pointmap = self.predictor(x)
-
-        scale = None
-        if self.scale_conv_layers is not None:
-            s = hidden_states
-            for layer in self.scale_conv_layers:
-                s = layer(s)
-            scale = self.scale_final_layer(s)
-
-        return pointmap, scale
+            hidden_states = layer(hidden_states)
+        return self.predictor(hidden_states)
 
 
 @auto_docstring
@@ -1135,6 +1138,9 @@ class Sapiens2ForPointmapEstimation(Sapiens2PreTrainedModel):
         super().__init__(config)
         self.sapiens2 = Sapiens2Model(config)
         self.decode_head = Sapiens2PointmapHead(config)
+        self.scale_head = (
+            Sapiens2PointmapScaleHead(config) if config.head_scale_conv_out_channels is not None else nn.Identity()
+        )
         self.post_init()
 
     @can_return_tuple
@@ -1158,7 +1164,8 @@ class Sapiens2ForPointmapEstimation(Sapiens2PreTrainedModel):
         patch_tokens = outputs.last_hidden_state[:, 1 + self.config.num_register_tokens :]
         feature_map = patch_tokens.transpose(1, 2).reshape(batch_size, -1, patch_height, patch_width)
 
-        pointmap, scale = self.decode_head(feature_map)
+        pointmap = self.decode_head(feature_map)
+        scale = None if isinstance(self.scale_head, nn.Identity) else self.scale_head(feature_map)
 
         loss = None
         if labels is not None:
@@ -1181,6 +1188,7 @@ __all__ = [
     "Sapiens2ForPoseEstimation",
     "Sapiens2ForNormalEstimation",
     "Sapiens2ForPointmapEstimation",
+    "Sapiens2PointmapScaleHead",
     "Sapiens2NormalEstimatorOutput",
     "Sapiens2PoseEstimatorOutput",
     "Sapiens2PointmapEstimatorOutput",
