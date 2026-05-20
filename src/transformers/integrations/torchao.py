@@ -18,7 +18,7 @@ import types
 import torch
 
 from transformers.utils import logging
-from transformers.utils.import_utils import is_torch_available, is_torchao_available
+from transformers.utils.import_utils import is_torch_accelerator_available, is_torch_available, is_torchao_available
 
 
 if is_torch_available():
@@ -69,7 +69,8 @@ class TorchAoQuantize(ConversionOps):
 
         target_device = next(module.parameters()).device
         if self.hf_quantizer.offload_to_cpu and target_device.type == "cpu":
-            module.to(torch.accelerator.current_accelerator())
+            device = torch.accelerator.current_accelerator() if is_torch_accelerator_available() else "cuda"
+            module.to(device)
             quantize_(module, config, *args, **kwargs)
             module.to("cpu")
         else:
