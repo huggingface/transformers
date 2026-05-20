@@ -37,6 +37,7 @@ from ...utils import (
     can_return_tuple,
     torch_compilable_check,
 )
+from ...utils.generic import accepts_precomputed_kwargs
 from ..auto import AutoModel
 from .configuration_glm46v import Glm46VConfig
 
@@ -96,12 +97,6 @@ class Glm46VModel(Glm46VPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
 
     def get_vision_position_ids(
         self,
@@ -254,6 +249,7 @@ class Glm46VModel(Glm46VPreTrainedModel):
         mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, mrope_position_deltas
 
+    @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_features(
@@ -270,12 +266,12 @@ class Glm46VModel(Glm46VPreTrainedModel):
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         # reshape video_grid_thw -> [b, 3] -> [1, h, w] * frames
-        temp_frames_hw = []
-        video_grid_thw_list = video_grid_thw.tolist()
-        for t, h, w in video_grid_thw_list:
-            repeated_row = torch.tensor([1, h, w]).unsqueeze(0).repeat(t, 1)
-            temp_frames_hw.append(repeated_row)
-        flattened_video_grid_thw = torch.cat(temp_frames_hw, dim=0)
+        t = video_grid_thw[:, 0]
+        hw = video_grid_thw[:, 1:]
+        # repeat each (h,w) row `t` times
+        flattened_hw = torch.repeat_interleave(hw, t, dim=0)
+        prefix_ones = video_grid_thw.new_ones(flattened_hw.shape[0], 1)
+        flattened_video_grid_thw = torch.cat([prefix_ones, flattened_hw], dim=1)
         vision_outputs = self.visual(
             pixel_values_videos, grid_thw=flattened_video_grid_thw, return_dict=True, **kwargs
         )
@@ -285,6 +281,7 @@ class Glm46VModel(Glm46VPreTrainedModel):
 
         return vision_outputs
 
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -430,13 +427,17 @@ class Glm46VModel(Glm46VPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw, return_dict=True).pooler_output
+            image_embeds = self.get_image_features(
+                pixel_values, image_grid_thw, return_dict=True, **kwargs
+            ).pooler_output
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(input_ids, inputs_embeds, image_features=image_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, return_dict=True).pooler_output
+            video_embeds = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            ).pooler_output
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_features=video_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
@@ -508,12 +509,6 @@ class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
 
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
     @auto_docstring
     def get_video_features(
         self,
@@ -527,9 +522,7 @@ class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
         """
-        return self.model.get_video_features(
-            pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs
-        )
+        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
 
     @auto_docstring
     def get_image_features(
@@ -544,7 +537,7 @@ class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        return self.model.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
+        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring

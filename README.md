@@ -76,9 +76,9 @@ and adjacent modeling libraries (llama.cpp, mlx, ...) which leverage the model d
 We pledge to help support new state-of-the-art models and democratize their usage by having their model definition be
 simple, customizable, and efficient.
 
-There are over 1M+ Transformers [model checkpoints](https://huggingface.co/models?library=transformers&sort=trending) on the [Hugging Face Hub](https://huggingface.com/models) you can use.
+There are over 1M+ Transformers [model checkpoints](https://huggingface.co/models?library=transformers&sort=trending) on the [Hugging Face Hub](https://huggingface.co/models) you can use.
 
-Explore the [Hub](https://huggingface.com/) today to find a model and use Transformers to help you get started right away.
+Explore the [Hub](https://huggingface.co/) today to find a model and use Transformers to help you get started right away.
 
 ## Installation
 
@@ -223,7 +223,7 @@ pipeline(
 1. Lower compute costs, smaller carbon footprint:
     - Share trained models instead of training from scratch.
     - Reduce compute time and production costs.
-    - Dozens of model architectures with 1M+ pretrained checkpoints across all modalities.
+    - Hundreds of model architectures with 1M+ pretrained checkpoints across all modalities.
 
 1. Choose the right framework for every part of a model's lifetime:
     - Train state-of-the-art models in 3 lines of code.
@@ -321,7 +321,7 @@ Expand each modality below to see a few example models for various use cases.
 
 ## Citation
 
-We now have a [paper](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) you can cite for the 🤗 Transformers library:
+We now have a [paper](https://aclanthology.org/2020.emnlp-demos.6/) you can cite for the 🤗 Transformers library:
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers,
     title = "Transformers: State-of-the-Art Natural Language Processing",
@@ -331,7 +331,7 @@ We now have a [paper](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) you 
     year = "2020",
     address = "Online",
     publisher = "Association for Computational Linguistics",
-    url = "https://www.aclweb.org/anthology/2020.emnlp-demos.6",
+    url = "https://aclanthology.org/2020.emnlp-demos.6/",
     pages = "38--45"
 }
 ```
