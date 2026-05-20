@@ -1926,8 +1926,7 @@ Reasoning models emit a hidden chain-of-thought before the final answer. The ser
 - Chat Completions returns reasoning as `reasoning_content` on the assistant message.
 - The Responses API returns reasoning as a `reasoning` output item that precedes the `message` item.
 
-> [!NOTE]
-> Reasoning detection relies on the model's chat template and tokenizer. Models with custom thinking delimiters (Gemma 4) declare them with the tokenizer's `response_schema`. Models with inline `<think>...</think>` tags (Qwen3, DeepSeek-R1) work with the default schema.
+Reasoning detection relies on the model's chat template and tokenizer. Models with custom thinking delimiters (Gemma 4) declare them with the tokenizer's `response_schema`. Models with inline `<think>...</think>` tags (Qwen3, DeepSeek-R1) work with the default schema.
 
 ### Enable reasoning on the server
 
@@ -1942,6 +1941,9 @@ Use `--reasoning` to control whether the chat template emits thinking tokens.
 ```sh
 transformers serve Qwen/Qwen3-1.7B --reasoning on
 ```
+
+> [!WARNING]
+> Not all models support reasoning. `--reasoning` only works when the model's chat template handles the `enable_thinking` variable (or when its tokenizer declares thinking delimiters). For other models, the flag is silently ignored.
 
 `--reasoning on` and `--reasoning off` work by setting the chat template variable `enable_thinking`. Some chat templates use a different variable name to toggle thinking, or accept extra variables that change how the prompt is rendered. Pass any chat template variable directly with `--chat-template-kwargs` as a JSON object.
 
