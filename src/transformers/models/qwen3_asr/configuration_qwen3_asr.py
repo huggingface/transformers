@@ -75,7 +75,7 @@ class Qwen3ASRConfig(PreTrainedConfig):
     timestamp_token_id (`int`, *optional*, defaults to 151705):
         Token ID of the ``<timestamp>`` marker in the tokenizer vocabulary. These markers
         delimit word boundaries in the forced-alignment input sequence.
-    score_bias (`bool`, *optional*, defaults to False):
+    token_classification_bias (`bool`, *optional*, defaults to False):
         Whether the token classification head for forced alignment should have a bias term.
 
     Example:
@@ -104,7 +104,7 @@ class Qwen3ASRConfig(PreTrainedConfig):
     eos_token_id: list[int] | tuple[int, ...] | int = (151643, 151645)
     initializer_range: float = 0.02
     tie_word_embeddings: bool = True
-    score_bias: bool = False
+    token_classification_bias: bool = False
 
     @property
     def hidden_size(self):
