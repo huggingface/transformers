@@ -26,6 +26,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -488,6 +489,16 @@ class Cohere2MoePreTrainedModel(PreTrainedModel):
         "attentions": Cohere2MoeAttention,
         "router_logits": OutputRecorder(Cohere2MoeTopKRouter, index=0),
     }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        std = self.config.initializer_range
+        if isinstance(module, Cohere2MoeExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
+        elif isinstance(module, Cohere2MoeTopKRouter):
+            init.normal_(module.weight, mean=0.0, std=std)
 
 
 @auto_docstring

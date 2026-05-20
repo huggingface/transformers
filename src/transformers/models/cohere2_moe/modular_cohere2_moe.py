@@ -19,11 +19,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
 from ...utils.output_capturing import OutputRecorder
@@ -201,6 +202,16 @@ class Cohere2MoePreTrainedModel(Cohere2PreTrainedModel):
         "attentions": Cohere2MoeAttention,
         "router_logits": OutputRecorder(Cohere2MoeTopKRouter, index=0),
     }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+        std = self.config.initializer_range
+        if isinstance(module, Cohere2MoeExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
+        elif isinstance(module, Cohere2MoeTopKRouter):
+            init.normal_(module.weight, mean=0.0, std=std)
 
 
 class Cohere2MoeModel(Cohere2Model):
