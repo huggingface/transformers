@@ -34,9 +34,12 @@ if is_torch_available():
     from transformers import (
         Sapiens2Backbone,
         Sapiens2ForNormalEstimation,
+        Sapiens2ForPointmapEstimation,
         Sapiens2ForPoseEstimation,
         Sapiens2ForSemanticSegmentation,
         Sapiens2Model,
+        Sapiens2NormalEstimatorOutput,
+        Sapiens2PointmapEstimatorOutput,
     )
     from transformers.modeling_outputs import SemanticSegmenterOutput
 
@@ -153,6 +156,20 @@ class Sapiens2ModelTester:
         config.head_conv_kernel_sizes = [3]
         return config
 
+    def get_config_for_pointmap_estimation(self):
+        config = self.get_config()
+        config.num_labels = 3
+        config.image_size = 32  # patch_size=2 → patch grid 16×16
+        config.head_upsample_out_channels = [8, 4]
+        config.head_upsample_kernel_sizes = [3, 3]
+        config.head_conv_out_channels = [4]
+        config.head_conv_kernel_sizes = [3]
+        config.head_scale_conv_out_channels = [8, 4]
+        config.head_scale_conv_kernel_sizes = [1, 1]
+        config.head_scale_final_hidden_sizes = [8]
+        # flat_size = (32/2 / 2^2) * (32/2 / 2^2) * 4 = 4*4*4 = 64
+        return config
+
     def create_and_check_backbone(self, config, pixel_values, labels):
         config.out_features = ["stage1", "stage2"]
         config.reshape_hidden_states = True
@@ -229,6 +246,24 @@ class Sapiens2ModelTester:
         with self.parent.assertRaises(NotImplementedError):
             model(pixel_values, labels=torch.randn_like(result.normals))
 
+    def create_and_check_for_pointmap_estimation(self, config, pixel_values, labels):
+        model = Sapiens2ForPointmapEstimation(config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            result = model(pixel_values)
+        # PixelShuffle with scale_factor=2 doubles spatial dims per block
+        patch_height = config.image_size // self.patch_size
+        expected_h = patch_height * (2 ** len(config.head_upsample_out_channels))
+        self.parent.assertEqual(
+            result.pointmap.shape,
+            (self.batch_size, config.num_labels, expected_h, expected_h),
+        )
+        self.parent.assertEqual(result.scale.shape, (self.batch_size, 1))
+        self.parent.assertIsNone(result.loss)
+        with self.parent.assertRaises(NotImplementedError):
+            model(pixel_values, labels=torch.randn_like(result.pointmap))
+
     def prepare_config_and_inputs_for_semantic_segmentation(self):
         config = self.get_config_for_semantic_segmentation()
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -247,8 +282,20 @@ class Sapiens2ModelTester:
         labels = None
         return config, pixel_values, labels
 
+    def prepare_config_and_inputs_for_pointmap_estimation(self):
+        config = self.get_config_for_pointmap_estimation()
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, config.image_size, config.image_size])
+        labels = None
+        return config, pixel_values, labels
+
     def prepare_config_and_inputs_for_common(self):
         config = self.get_config_for_semantic_segmentation()
+        # Add scale branch params so Sapiens2ForPointmapEstimation is fully instantiated.
+        # 3 layers to match the conversion mapping (indices 0, 3, 6 in the original Sequential).
+        # These fields are ignored by all other model classes.
+        config.head_scale_conv_out_channels = [8, 4, 4]
+        config.head_scale_conv_kernel_sizes = [1, 1, 1]
+        config.head_scale_final_hidden_sizes = [8]
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
@@ -268,6 +315,7 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             Sapiens2ForSemanticSegmentation,
             Sapiens2ForPoseEstimation,
             Sapiens2ForNormalEstimation,
+            Sapiens2ForPointmapEstimation,
         )
         if is_torch_available()
         else ()
@@ -322,6 +370,10 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_normal_estimation()
         self.model_tester.create_and_check_for_normal_estimation(*config_and_inputs)
 
+    def test_for_pointmap_estimation(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_pointmap_estimation()
+        self.model_tester.create_and_check_for_pointmap_estimation(*config_and_inputs)
+
     def test_output_hidden_states(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -373,8 +425,6 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             image_processor.post_process_semantic_segmentation(outputs, target_sizes=[(100, 100)])
 
     def test_post_process_normal_estimation(self):
-        from transformers import Sapiens2NormalEstimatorOutput
-
         image_processor = Sapiens2ImageProcessor()
         batch_size = 2
         num_labels = 3
@@ -397,6 +447,37 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         # mismatched batch size raises ValueError
         with self.assertRaises(ValueError):
             image_processor.post_process_normal_estimation(outputs, target_sizes=[(100, 100)])
+
+    def test_post_process_pointmap(self):
+        image_processor = Sapiens2ImageProcessor()
+        batch_size = 2
+        num_labels = 3
+        height = width = 16
+        outputs = Sapiens2PointmapEstimatorOutput(pointmap=torch.randn(batch_size, num_labels, height, width))
+
+        # without target_sizes: spatial dims match pointmap
+        result = image_processor.post_process_pointmap(outputs)
+        self.assertEqual(len(result), batch_size)
+        self.assertEqual(result[0].shape, torch.Size([num_labels, height, width]))
+
+        # with target_sizes: output is resized to requested size
+        target_sizes = [(height * 2, width * 2)] * batch_size
+        result = image_processor.post_process_pointmap(outputs, target_sizes=target_sizes)
+        self.assertEqual(len(result), batch_size)
+        self.assertEqual(result[0].shape, torch.Size([num_labels, height * 2, width * 2]))
+
+        # with scale: scale division is applied
+        scale = torch.tensor([[2.0], [0.5]])
+        outputs_with_scale = Sapiens2PointmapEstimatorOutput(
+            pointmap=torch.ones(batch_size, num_labels, height, width), scale=scale
+        )
+        result = image_processor.post_process_pointmap(outputs_with_scale)
+        torch.testing.assert_close(result[0], torch.full((num_labels, height, width), 0.5))
+        torch.testing.assert_close(result[1], torch.full((num_labels, height, width), 2.0))
+
+        # mismatched batch size raises ValueError
+        with self.assertRaises(ValueError):
+            image_processor.post_process_pointmap(outputs, target_sizes=[(100, 100)])
 
     @slow
     def test_model_from_pretrained(self):
@@ -614,6 +695,43 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
         torch.testing.assert_close(result[0][0, :3, :3], expected_postprocessed_normals, rtol=1e-2, atol=1e-2)
+
+    @slow
+    def test_inference_pointmap_estimation(self):
+        config = Sapiens2Config(
+            num_labels=3,
+            image_size=[1024, 768],
+            head_upsample_out_channels=[1536, 768, 512, 256],
+            head_upsample_kernel_sizes=[3, 3, 3, 3],
+            head_conv_out_channels=[64, 32, 16],
+            head_conv_kernel_sizes=[3, 3, 3],
+            head_scale_conv_out_channels=[1536, 512, 128],
+            head_scale_conv_kernel_sizes=[1, 1, 1],
+            head_scale_final_hidden_sizes=[512, 128],
+        )
+        config.transformers_weights = "sapiens2_0.4b_pointmap.safetensors"
+        model = (
+            Sapiens2ForPointmapEstimation.from_pretrained("facebook/sapiens2-pointmap-0.4b", config=config)
+            .eval()
+            .to(torch_device)
+        )
+
+        image_processor = self.default_image_processor
+        image = prepare_img()
+        image_height, image_width = image.shape[-2:]
+        inputs = image_processor(image, do_pad=True, return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        self.assertIsInstance(outputs, Sapiens2PointmapEstimatorOutput)
+        _, _, height, width = inputs["pixel_values"].shape
+        self.assertEqual(outputs.pointmap.shape, torch.Size([1, 3, height, width]))
+        self.assertEqual(outputs.scale.shape, torch.Size([1, 1]))
+
+        result = image_processor.post_process_pointmap(outputs, source_sizes=[(image_height, image_width)])
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].shape, torch.Size([3, image_height, image_width]))
 
 
 @require_torch

@@ -39,7 +39,11 @@ from ...image_utils import (
 from ...modeling_outputs import SemanticSegmenterOutput
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_cv2_available, requires_backends
-from .modeling_sapiens2 import Sapiens2NormalEstimatorOutput, Sapiens2PoseEstimatorOutput
+from .modeling_sapiens2 import (
+    Sapiens2NormalEstimatorOutput,
+    Sapiens2PointmapEstimatorOutput,
+    Sapiens2PoseEstimatorOutput,
+)
 
 
 # TODO(guarin): Check if we can drop cv2 dependency. Ideally re-use as much as possible from ViTPoseProcessor.
@@ -553,7 +557,85 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
                     antialias=False,
                 )[0]
 
-            result.append()
+            result.append(normal)
+
+        return result
+
+    def post_process_pointmap(
+        self,
+        outputs: Sapiens2PointmapEstimatorOutput,
+        source_sizes: list[tuple] | None = None,
+        target_sizes: list[tuple] | None = None,
+        do_remove_padding: bool | None = None,
+    ) -> list[torch.Tensor]:
+        """
+        Converts the output of [`Sapiens2ForPointmapEstimation`] into pointmap tensors in image space.
+
+        Args:
+            outputs (`Sapiens2PointmapEstimatorOutput`):
+                Raw outputs of the model.
+            source_sizes (`list[tuple]` of length `batch_size`, *optional*):
+                Original `(height, width)` of each image before preprocessing. When provided,
+                the padding added during preprocessing is removed and predictions are resized back
+                to the original image size (unless `target_sizes` overrides the final size).
+            target_sizes (`list[tuple]` of length `batch_size`, *optional*):
+                Requested final `(height, width)` for each prediction. Overrides `source_sizes`
+                as the resize target.
+            do_remove_padding (`bool`, *optional*):
+                Whether to crop away the zero-padding added during preprocessing before resizing.
+                Defaults to `True` when `source_sizes` is provided, `False` otherwise.
+
+        Returns:
+            `list[torch.Tensor]` of length `batch_size`, each of shape `(3, height, width)`.
+            Values are per-pixel 3D XYZ coordinates in canonical camera space, optionally divided
+            by `outputs.scale` to convert to metric coordinates.
+        """
+        if do_remove_padding is None:
+            do_remove_padding = source_sizes is not None
+
+        if do_remove_padding and source_sizes is None:
+            raise ValueError("`source_sizes` must be provided when `do_remove_padding=True`.")
+
+        pointmap = outputs.pointmap
+
+        if source_sizes is not None and len(pointmap) != len(source_sizes):
+            raise ValueError("Make sure that you pass in as many source sizes as the batch dimension of the pointmap")
+        if target_sizes is not None and len(pointmap) != len(target_sizes):
+            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the pointmap")
+
+        result = []
+        model_h = self.size["height"]
+        model_w = self.size["width"]
+
+        for idx in range(len(pointmap)):
+            pm = pointmap[idx]
+
+            if outputs.scale is not None:
+                pm = pm / outputs.scale[idx]
+
+            if do_remove_padding:
+                orig_h, orig_w = source_sizes[idx]
+                new_h, new_w = get_image_size_for_max_height_width((orig_h, orig_w), model_h, model_w)
+                pad_top = (model_h - new_h) // 2 if new_h < model_h else 0
+                pad_left = (model_w - new_w) // 2 if new_w < model_w else 0
+                pm = pm[:, pad_top : pad_top + min(new_h, model_h), pad_left : pad_left + min(new_w, model_w)]
+
+            final_size = (
+                target_sizes[idx]
+                if target_sizes is not None
+                else (source_sizes[idx] if source_sizes is not None else None)
+            )
+
+            if final_size is not None:
+                pm = F.interpolate(
+                    pm.unsqueeze(0),
+                    size=final_size,
+                    mode="bilinear",
+                    align_corners=False,
+                    antialias=False,
+                )[0]
+
+            result.append(pm)
 
         return result
 

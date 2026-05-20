@@ -88,6 +88,15 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     head_conv_kernel_sizes (`list[int]`, *optional*):
         Kernel size for each refinement conv layer. Defaults to `1` for every layer.
         Must have the same length as `head_conv_out_channels`.
+    head_scale_conv_out_channels (`list[int]`, *optional*):
+        Output channel counts for the stride-2 conv layers used to predict the focal-length scale.
+        When `None` (default), no scale branch is built.
+    head_scale_conv_kernel_sizes (`list[int]`, *optional*):
+        Kernel size for each scale conv layer. Auto-filled with `[1, ...]` when
+        `head_scale_conv_out_channels` is set but this is `None`.
+    head_scale_final_hidden_sizes (`list[int]`, *optional*):
+        Hidden-layer sizes for the MLP that maps flattened scale features to the scalar scale output.
+        When `None` (default), no scale branch is built.
     """
 
     model_type = "sapiens2"
@@ -136,6 +145,9 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     head_upsample_kernel_sizes: list[int] | None = None
     head_conv_out_channels: list[int] | None = None
     head_conv_kernel_sizes: list[int] | None = None
+    head_scale_conv_out_channels: list[int] | None = None
+    head_scale_conv_kernel_sizes: list[int] | None = None
+    head_scale_final_hidden_sizes: list[int] | None = None
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
@@ -158,6 +170,8 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
             self.head_conv_out_channels = [64, 64]
         if self.head_conv_kernel_sizes is None:
             self.head_conv_kernel_sizes = [1] * len(self.head_conv_out_channels)
+        if self.head_scale_conv_out_channels is not None and self.head_scale_conv_kernel_sizes is None:
+            self.head_scale_conv_kernel_sizes = [1] * len(self.head_scale_conv_out_channels)
         self.stage_names = ["stem"] + [f"stage{i}" for i in range(1, self.num_hidden_layers + 1)]
         self.set_output_features_output_indices(
             out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)

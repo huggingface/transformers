@@ -98,6 +98,36 @@ class Sapiens2NormalEstimatorOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
+@auto_docstring(
+    custom_intro="""
+    Class for outputs of pointmap estimation models.
+    """
+)
+@dataclass
+class Sapiens2PointmapEstimatorOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Pointmap estimation loss.
+    pointmap (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
+        Per-pixel 3D XYZ coordinate predictions in canonical camera space.
+    scale (`torch.FloatTensor` of shape `(batch_size, 1)`, *optional*):
+        Canonical focal length / actual focal length ratio. `None` when no scale branch is configured.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage)
+        of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
+        each layer plus the initial embedding outputs.
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one per layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`. Attentions weights after the attention softmax.
+    """
+
+    loss: torch.FloatTensor | None = None
+    pointmap: torch.FloatTensor | None = None
+    scale: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+
+
 class Sapiens2Embeddings(nn.Module):
     """
     Construct the CLS token, mask token, position and patch embeddings.
@@ -662,6 +692,82 @@ class Sapiens2NormalHead(nn.Module):
         return self.predictor(hidden_states)
 
 
+class Sapiens2PointmapHead(nn.Module):
+    def __init__(self, config: Sapiens2Config):
+        super().__init__()
+        self.input_conv = Sapiens2ConvLayer(config.hidden_size, config.hidden_size, kernel_size=3, padding=1)
+        upsample_in_channels = [config.hidden_size] + config.head_upsample_out_channels[:-1]
+        self.upsample_layers = nn.ModuleList(
+            Sapiens2PixelShuffleLayer(in_ch, out_ch, kernel_size=ks, padding=(ks - 1) // 2)
+            for in_ch, out_ch, ks in zip(
+                upsample_in_channels, config.head_upsample_out_channels, config.head_upsample_kernel_sizes
+            )
+        )
+        conv_in_channels = [config.head_upsample_out_channels[-1]] + config.head_conv_out_channels[:-1]
+        self.conv_layers = nn.ModuleList(
+            Sapiens2ConvLayer(in_ch, out_ch, kernel_size=ks, padding=(ks - 1) // 2)
+            for in_ch, out_ch, ks in zip(
+                conv_in_channels, config.head_conv_out_channels, config.head_conv_kernel_sizes
+            )
+        )
+        predictor_in = (
+            config.head_conv_out_channels[-1]
+            if config.head_conv_out_channels
+            else config.head_upsample_out_channels[-1]
+        )
+        self.predictor = nn.Conv2d(predictor_in, config.num_labels, kernel_size=1)
+
+        self.scale_conv_layers = None
+        self.scale_final_layer = None
+        if config.head_scale_conv_out_channels is not None:
+            image_size = config.image_size
+            image_h, image_w = image_size if isinstance(image_size, (list, tuple)) else (image_size, image_size)
+            patch_size = config.patch_size if isinstance(config.patch_size, int) else config.patch_size[0]
+            h = image_h // patch_size
+            w = image_w // patch_size
+            for ks in config.head_scale_conv_kernel_sizes:
+                padding = (ks - 1) // 2
+                h = (h + 2 * padding - ks) // 2 + 1
+                w = (w + 2 * padding - ks) // 2 + 1
+            flat_size = h * w * config.head_scale_conv_out_channels[-1]
+
+            scale_in_channels = [config.hidden_size] + config.head_scale_conv_out_channels[:-1]
+            self.scale_conv_layers = nn.ModuleList(
+                Sapiens2ConvLayer(in_ch, out_ch, kernel_size=ks, stride=2, padding=(ks - 1) // 2)
+                for in_ch, out_ch, ks in zip(
+                    scale_in_channels,
+                    config.head_scale_conv_out_channels,
+                    config.head_scale_conv_kernel_sizes,
+                )
+            )
+
+            layers = [nn.Flatten()]
+            in_size = flat_size
+            for h in config.head_scale_final_hidden_sizes:
+                layers.append(nn.Linear(in_size, h))
+                layers.append(nn.SiLU())
+                in_size = h
+            layers.append(nn.Linear(in_size, 1))
+            self.scale_final_layer = nn.Sequential(*layers)
+
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor | None]:
+        x = self.input_conv(hidden_states)
+        for block in self.upsample_layers:
+            x = block(x)
+        for layer in self.conv_layers:
+            x = layer(x)
+        pointmap = self.predictor(x)
+
+        scale = None
+        if self.scale_conv_layers is not None:
+            s = hidden_states
+            for layer in self.scale_conv_layers:
+                s = layer(s)
+            scale = self.scale_final_layer(s)
+
+        return pointmap, scale
+
+
 @auto_docstring
 class Sapiens2PreTrainedModel(PreTrainedModel):
     config: Sapiens2Config
@@ -1017,6 +1123,56 @@ class Sapiens2ForNormalEstimation(Sapiens2PreTrainedModel):
         )
 
 
+@auto_docstring(
+    checkpoint="facebook/sapiens2-pointmap-0.4b",
+    custom_intro="""
+    The Sapiens2 model with a pointmap head on top (a PixelShuffle-based decoder that predicts per-pixel 3D XYZ
+    coordinates, plus an optional scale branch for focal-length normalization).
+    """,
+)
+class Sapiens2ForPointmapEstimation(Sapiens2PreTrainedModel):
+    def __init__(self, config: Sapiens2Config):
+        super().__init__(config)
+        self.sapiens2 = Sapiens2Model(config)
+        self.decode_head = Sapiens2PointmapHead(config)
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        labels: torch.FloatTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Sapiens2PointmapEstimatorOutput:
+        r"""
+        labels (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`, *optional*):
+            Ground-truth pointmap for computing the loss.
+        """
+        outputs = self.sapiens2(pixel_values, **kwargs)
+
+        batch_size, _, height, width = pixel_values.shape
+        patch_height = height // self.config.patch_size
+        patch_width = width // self.config.patch_size
+
+        patch_tokens = outputs.last_hidden_state[:, 1 + self.config.num_register_tokens :]
+        feature_map = patch_tokens.transpose(1, 2).reshape(batch_size, -1, patch_height, patch_width)
+
+        pointmap, scale = self.decode_head(feature_map)
+
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Training is not yet supported")
+
+        return Sapiens2PointmapEstimatorOutput(
+            loss=loss,
+            pointmap=pointmap,
+            scale=scale,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
 __all__ = [
     "Sapiens2Model",
     "Sapiens2PreTrainedModel",
@@ -1024,6 +1180,8 @@ __all__ = [
     "Sapiens2ForSemanticSegmentation",
     "Sapiens2ForPoseEstimation",
     "Sapiens2ForNormalEstimation",
+    "Sapiens2ForPointmapEstimation",
     "Sapiens2NormalEstimatorOutput",
     "Sapiens2PoseEstimatorOutput",
+    "Sapiens2PointmapEstimatorOutput",
 ]
