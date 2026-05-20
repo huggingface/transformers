@@ -56,6 +56,9 @@ from ..utils.chat_template_utils import Chat, is_valid_message
 
 GenericTensor = Union[list["GenericTensor"], "torch.Tensor"]
 
+if TYPE_CHECKING:
+    from ..video_processing_utils import BaseVideoProcessor
+
 if is_torch_available() or TYPE_CHECKING:
     import torch
     from torch.utils.data import DataLoader, Dataset
@@ -776,7 +779,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         feature_extractor: PreTrainedFeatureExtractor | None = None,
         image_processor: BaseImageProcessor | None = None,
         processor: ProcessorMixin | None = None,
-        video_processor=None,
+        video_processor: BaseVideoProcessor | None = None,
         task: str = "",
         device: int | torch.device | None = None,
         binary_output: bool = False,
