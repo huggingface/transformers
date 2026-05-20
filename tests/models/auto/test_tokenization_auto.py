@@ -828,6 +828,7 @@ class NopConfig(PreTrainedConfig):
 
         fake_config = mock.MagicMock()
         fake_config.model_type = "m2m_100"
+        fake_config._name_or_path = ""
         mock_tokenizer = mock.MagicMock(spec=NllbTokenizer)
 
         with (
