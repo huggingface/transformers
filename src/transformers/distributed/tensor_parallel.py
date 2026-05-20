@@ -321,6 +321,11 @@ class ColwiseParallel(TensorParallelStyle):
         super().__init__()
         self.input_layouts = input_layouts or Replicate()
         self.output_layouts = output_layouts or Shard(-1)
+        # The colwise matmul always needs Replicate input internally; if the
+        # declared input_layouts is something else (e.g. Shard(1) for the
+        # SP+loss_parallel lm_head), we redistribute Shard(1) → Replicate
+        # before handing the tensor to F.linear.
+        self.desired_input_layouts = Replicate()
         self.use_local_output = use_local_output
 
     def _apply(self, module, mesh):
@@ -339,13 +344,25 @@ class ColwiseParallel(TensorParallelStyle):
         x = args[0]
         if not isinstance(x, DTensor):
             x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
+        # Linear matmul needs Replicate input — redistribute if it arrived sharded.
+        # Without this, F.linear's internal view(-1, in_features) crashes when the
+        # sequence dim is sharded (the SP path through colwise_loss_parallel).
+        if x.placements != (self.desired_input_layouts,):
+            x = x.redistribute(placements=[self.desired_input_layouts])
         return (x,) + args[1:], kwargs
 
     def transform_output_post_forward(self, module, output, mesh):
-        # Inference path
-        if not module.training and self.output_layouts == Shard(-1):
+        # Inference fast path: only safe when output_layouts is the natural Shard(-1)
+        # AND the caller wants a plain local tensor. colwise_loss_parallel has
+        # use_local_output=False (loss_parallel consumes a DTensor downstream) — let
+        # that case fall through to the DTensor path.
+        if (
+            not module.training
+            and self.output_layouts == Shard(-1)
+            and self.use_local_output
+        ):
             return output.to_local() if isinstance(output, DTensor) else output
-        # Training path
+        # Training
         if isinstance(output, DTensor) and output.placements != (self.output_layouts,):
             output = output.redistribute(placements=[self.output_layouts])
         if self.use_local_output and isinstance(output, DTensor):
@@ -370,6 +387,8 @@ class RowwiseParallel(TensorParallelStyle):
         super().__init__()
         self.input_layouts = input_layouts or Shard(-1)
         self.output_layouts = output_layouts or Replicate()
+        # Rowwise matmul needs Shard(-1) input internally. Mirrors torch's logic.
+        self.desired_input_layouts = Shard(-1)
 
     def _apply(self, module, mesh):
         meta = module._parameters.get("weight")
@@ -386,15 +405,16 @@ class RowwiseParallel(TensorParallelStyle):
         x = args[0]
         if not isinstance(x, DTensor):
             x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
+        if x.placements != (self.desired_input_layouts,):
+            x = x.redistribute(placements=[self.desired_input_layouts])
         return (x,) + args[1:], kwargs
 
     def transform_output_post_forward(self, module, output, mesh):
-        # Inference path
+        # Inference fast path: only for rowwise_allreduce (output_layouts=Replicate).
         if not module.training and self.output_layouts == Replicate():
             local = output.to_local() if isinstance(output, DTensor) else output
             dist.all_reduce(local, op=dist.ReduceOp.SUM, group=module._tp_group)
             return local
-        # Training path
         if isinstance(output, DTensor):
             return output.redistribute(placements=[self.output_layouts]).to_local()
         return output
