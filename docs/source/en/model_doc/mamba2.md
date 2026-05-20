@@ -84,10 +84,43 @@ input_ids = tokenizer("Plants create energy through a process known as", return_
 output = model.generate(**input_ids)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
+## Chunked generation for long sequences
+
+When you have a very long prompt (e.g., thousands of tokens) and you want to process it in smaller chunks to save memory or to pipeline inputs, you can use the **chunked prefill with cache** feature.
+
+Normally, if you pass `use_cache=True` and a sequence longer than 1, the model would either crash or silently produce wrong results. Starting from Transformers v4.xx, Mamba2 correctly supports this scenario: the internal convolution and SSM states are carried over between chunks, and the output is mathematically identical to processing the whole sequence at once.
+
+### How to use it
+
+```python
+from transformers import Mamba2ForCausalLM, AutoTokenizer, DynamicCache
+
+model = Mamba2ForCausalLM.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1")
+tokenizer = AutoTokenizer.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1")
+
+inputs = tokenizer("A long text that you want to split into chunks...", return_tensors="pt")
+cache = DynamicCache()
+
+# Process in chunks of 512 tokens
+chunk_size = 512
+all_logits = []
+for i in range(0, inputs.input_ids.shape[1], chunk_size):
+    chunk = inputs.input_ids[:, i:i+chunk_size]
+    outputs = model(input_ids=chunk, cache_params=cache, use_cache=True)
+    all_logits.append(outputs.logits)
+
+# Concatenate logits from all chunks
+logits = torch.cat(all_logits, dim=1)
+```
+outputs.logits now contains the final logits for the entire sequence
 
 ## Notes
 
 - Codestral Mamba has `groups=8` which are similar to the number of kv heads in an attention-based model.
+- The model supports three inference modes:
+  - **No cache** (`use_cache=False`): processes the entire sequence in one pass. Best for short prompts or training.
+  - **Single‑step decode** (`use_cache=True, seq_len=1`): generates one token at a time, updating the cache. Used for autoregressive generation.
+  - **Chunked prefill** (`use_cache=True, seq_len>1`): processes a chunk of tokens while correctly carrying over the state. Ideal for very long prompts (see the section on chunked generation).
 - Codestral Mamba has two different forward passes, `torch_forward` or `cuda_kernels_forward`, and their results are expected to be slightly different.
   - `torch_forward` without compilation is 3-4x faster than `cuda_kernels_forward`.
   - `cuda_kernels_forward` uses the original CUDA kernels if they're available in your environment. It is slower during prefill because it requires a "warmup run" due to the higher CPU overhead (see [these](https://github.com/state-spaces/mamba/issues/389#issuecomment-2171755306) [comments](https://github.com/state-spaces/mamba/issues/355#issuecomment-2147597457) for more details).
