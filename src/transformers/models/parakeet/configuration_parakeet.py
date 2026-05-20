@@ -119,9 +119,7 @@ class ParakeetEncoderConfig(PreTrainedConfig):
                 f"att_context_style must be 'regular' or 'chunked_limited', got {self.att_context_style!r}."
             )
         if self.conv_norm_type not in {"batch_norm", "layer_norm"}:
-            raise ValueError(
-                f"conv_norm_type must be 'batch_norm' or 'layer_norm', got {self.conv_norm_type!r}."
-            )
+            raise ValueError(f"conv_norm_type must be 'batch_norm' or 'layer_norm', got {self.conv_norm_type!r}.")
         super().__post_init__(**kwargs)
 
 

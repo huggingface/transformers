@@ -239,7 +239,7 @@ class ParakeetEncoderConvolutionModule(FastSpeech2ConformerConvolutionModule):
                 # cache_last_time: (B, C, _conv_left)
                 padded = torch.cat([cache_last_time, hidden_states], dim=2)
                 # Sliding-window update: keep the last `_conv_left` frames of [cache | current]
-                new_cache = padded[:, :, -self._conv_left:]
+                new_cache = padded[:, :, -self._conv_left :]
             else:
                 padded = nn.functional.pad(hidden_states, (self._conv_left, 0))
             if self._conv_right > 0:
@@ -778,10 +778,9 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
             if cache_len > 0:
                 if cache_last_channel_len is not None:
                     valid_start = cache_len - cache_last_channel_len  # (B,)
-                    cache_key_mask = (
-                        torch.arange(cache_len, device=output_mask.device).unsqueeze(0)
-                        >= valid_start.unsqueeze(1)
-                    )  # (B, cache_len)
+                    cache_key_mask = torch.arange(cache_len, device=output_mask.device).unsqueeze(
+                        0
+                    ) >= valid_start.unsqueeze(1)  # (B, cache_len)
                 else:
                     cache_key_mask = torch.ones(
                         output_mask.shape[0], cache_len, dtype=torch.bool, device=output_mask.device
@@ -794,8 +793,12 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
         elif effective_ctx is not None:
             # No padding mask supplied but the model was trained with a limited attention context.
             attention_mask_4d = torch.ones(
-                hidden_states.shape[0], 1, chunk_len, total_context_len,
-                dtype=torch.bool, device=hidden_states.device,
+                hidden_states.shape[0],
+                1,
+                chunk_len,
+                total_context_len,
+                dtype=torch.bool,
+                device=hidden_states.device,
             )
         else:
             attention_mask_4d = None
@@ -1462,8 +1465,7 @@ class ParakeetForRNNT(ParakeetPreTrainedModel, ParakeetRNNTGenerationMixin):
 
         if labels is not None:
             raise NotImplementedError(
-                "RNN-T training loss is not yet implemented for ParakeetForRNNT. "
-                "Inference (greedy decoding) works."
+                "RNN-T training loss is not yet implemented for ParakeetForRNNT. Inference (greedy decoding) works."
             )
 
         return ParakeetRNNTOutput(
@@ -1519,9 +1521,7 @@ class ParakeetForRNNT(ParakeetPreTrainedModel, ParakeetRNNTGenerationMixin):
             # Cached decoder output `g` (after projector); reused on blank predictions.
             # Lazily allocated on the first non-blank emission.
             "last_dec_g": None,
-            "last_token": torch.full(
-                (batch_size, 1), self.config.blank_token_id, dtype=torch.long, device=device
-            ),
+            "last_token": torch.full((batch_size, 1), self.config.blank_token_id, dtype=torch.long, device=device),
             "prompt_id": resolved_pid,
         }
 
@@ -1625,10 +1625,14 @@ class ParakeetForRNNT(ParakeetPreTrainedModel, ParakeetRNNTGenerationMixin):
                 # Run LSTM with last_token + (dec_h, dec_c). Compute lookahead WITHOUT
                 # committing the new state until we see whether the prediction is non-blank.
                 g, new_h, new_c = self._decoder_pred_step(last_token, dec_h, dec_c)
-                logits = self.joint(
-                    encoder_hidden_states=f[:, :, None, :],
-                    decoder_hidden_states=g[:, None, :, :],
-                ).squeeze(2).squeeze(1)
+                logits = (
+                    self.joint(
+                        encoder_hidden_states=f[:, :, None, :],
+                        decoder_hidden_states=g[:, None, :, :],
+                    )
+                    .squeeze(2)
+                    .squeeze(1)
+                )
                 tokens = logits.argmax(-1)  # (B,)
 
                 is_blank = tokens == blank_id
@@ -1811,9 +1815,7 @@ class ParakeetCacheAwareStreamingBuffer:
                     inputs["attention_mask"] = inputs["attention_mask"][:, : self._chunk_mel]
                 feats = inputs["input_features"]
                 mask = inputs["attention_mask"]
-                pad_feats = torch.zeros(
-                    feats.shape[0], self._pre_cache_mel, feats.shape[-1], dtype=feats.dtype
-                )
+                pad_feats = torch.zeros(feats.shape[0], self._pre_cache_mel, feats.shape[-1], dtype=feats.dtype)
                 pad_mask = torch.ones(mask.shape[0], self._pre_cache_mel, dtype=mask.dtype)
                 inputs["input_features"] = torch.cat([pad_feats, feats], dim=1)
                 inputs["attention_mask"] = torch.cat([pad_mask, mask], dim=1)

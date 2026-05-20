@@ -177,7 +177,12 @@ def write_processor(
     )
 
     feature_extractor_keys_to_ignore = [
-        "_target_", "pad_to", "frame_splicing", "dither", "window", "log",
+        "_target_",
+        "pad_to",
+        "frame_splicing",
+        "dither",
+        "window",
+        "log",
         "nb_augmentation_prob",  # parakeet-rnnt augmentation flag, training-only
     ]
     feature_extractor_config_keys_mapping = {
@@ -470,9 +475,7 @@ def convert_rnnt_config(nemo_config, encoder_config):
         num_prompts = int(model_defaults.get("num_prompts", 128))
         prompt_dictionary = dict(model_defaults.get("prompt_dictionary") or {})
         if not prompt_dictionary:
-            raise ValueError(
-                "initialize_prompt_feature=True but model_defaults.prompt_dictionary is empty."
-            )
+            raise ValueError("initialize_prompt_feature=True but model_defaults.prompt_dictionary is empty.")
 
     print(
         f"RNN-T config: vocab_size={vocab_size} (including blank token), "
@@ -643,7 +646,9 @@ python src/transformers/models/parakeet/convert_nemo_to_hf.py \
 """
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--hf_repo_id", required=True, help="Model repo on huggingface.co (or any identifier when --nemo_file is set)")
+    parser.add_argument(
+        "--hf_repo_id", required=True, help="Model repo on huggingface.co (or any identifier when --nemo_file is set)"
+    )
     parser.add_argument(
         "--nemo_file",
         default=None,

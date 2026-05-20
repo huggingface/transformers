@@ -353,12 +353,8 @@ class ParakeetRNNTGenerationMixin(GenerationMixin):
             )
         model_kwargs["encoder_valid_lengths"] = encoder_valid_lengths
 
-        model_kwargs["encoder_frame_idxs"] = torch.zeros(
-            inputs.shape[0], device=inputs.device, dtype=torch.long
-        )
-        model_kwargs["symbols_at_frame"] = torch.zeros(
-            inputs.shape[0], device=inputs.device, dtype=torch.long
-        )
+        model_kwargs["encoder_frame_idxs"] = torch.zeros(inputs.shape[0], device=inputs.device, dtype=torch.long)
+        model_kwargs["symbols_at_frame"] = torch.zeros(inputs.shape[0], device=inputs.device, dtype=torch.long)
 
         return inputs, input_name, model_kwargs
 
