@@ -2075,8 +2075,7 @@ class Gemma4MultimodalEmbedder(nn.Module):
 def get_block_sequence_ids_for_mask(
     mm_token_type_ids: torch.Tensor, device: torch.device | None = None
 ) -> torch.Tensor:
-    if device is not None:
-        mm_token_type_ids = mm_token_type_ids.to(device)
+mm_token_type_ids = mm_token_type_ids.to(device)
 
     is_vision = (mm_token_type_ids == 1) | (mm_token_type_ids == 2)
     is_prev_vision = torch.roll(is_vision, shifts=1, dims=-1)
