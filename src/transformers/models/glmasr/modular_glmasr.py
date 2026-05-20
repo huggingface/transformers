@@ -49,31 +49,8 @@ logger = logging.get_logger(__name__)
 class GlmAsrProcessorKwargs(AudioFlamingo3ProcessorKwargs): ...
 
 
+@auto_docstring
 class GlmAsrProcessor(AudioFlamingo3Processor):
-    r"""
-    Constructs an GlmAsr processor which wraps an GlmAsr feature extractor and an GlmAsr
-    tokenizer into a single processor.
-
-    [`GlmAsrProcessor`] offers all the functionalities of [`WhisperFeatureExtractor`] and
-    [`Qwen2TokenizerFast`]. See the [`~GlmAsrProcessor.__call__`] for more information.
-
-    Args:
-            feature_extractor ([`WhisperFeatureExtractor`]):
-                The feature extractor is a required input.
-            tokenizer ([`Qwen2TokenizerFast`]):
-                The tokenizer is a required input.
-            chat_template (`Optional[str]`, *optional*):
-                The Jinja template to use for formatting the conversation. If not provided, the tokenizer's default chat
-                template will be used.
-            audio_token (`Optional[str]`, *optional*, defaults to `"<|pad|>`"):
-                Special token used to represent audio inputs in the chat template.
-            default_transcription_prompt (`str`, *optional*, defaults to `"Please transcribe this audio into text"`):
-                Default prompt to use for transcription tasks when applying transcription requests.
-            max_audio_len (`int`, *optional*, defaults to 655):
-                Maximum length of audio sequences in seconds. Audio longer than this will be truncated.
-                655 gives approximately 8192 tokens, corresponding to the maximum sequence length of the text model.
-    """
-
     def __init__(
         self,
         feature_extractor,
@@ -83,6 +60,15 @@ class GlmAsrProcessor(AudioFlamingo3Processor):
         default_transcription_prompt="Please transcribe this audio into text",
         max_audio_len=655,
     ):
+        r"""
+        audio_token (`Optional[str]`, *optional*, defaults to `"<|pad|>`"):
+            Special token used to represent audio inputs in the chat template.
+        default_transcription_prompt (`str`, *optional*, defaults to `"Please transcribe this audio into text"`):
+            Default prompt to use for transcription tasks when applying transcription requests.
+        max_audio_len (`int`, *optional*, defaults to 655):
+            Maximum length of audio sequences in seconds. Audio longer than this will be truncated.
+            655 gives approximately 8192 tokens, corresponding to the maximum sequence length of the text model.
+        """
         super().__init__(
             feature_extractor,
             tokenizer,

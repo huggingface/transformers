@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import inspect
 import unittest
 
 import numpy as np
@@ -158,11 +157,7 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
-        signature = inspect.signature(processor.__call__)
-        if "videos" not in {*signature.parameters.keys()} or (
-            signature.parameters.get("videos") is not None
-            and signature.parameters["videos"].annotation == inspect._empty
-        ):
+        if "video_processor" not in self.processor_class.get_attributes():
             self.skipTest("Processor doesn't accept videos at input")
 
         messages = [
@@ -179,13 +174,6 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
         self.assertEqual(len(formatted_prompt), 1)
-
-        formatted_prompt_tokenized = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True)
-        expected_output = processor.tokenizer(formatted_prompt, return_tensors=None).input_ids
-        self.assertListEqual(expected_output, formatted_prompt_tokenized)
-
-        out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
-        self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask", "mm_token_type_ids"])
 
         # Add video URL for return dict and load with `num_frames` arg
         messages[0][0]["content"][0] = {

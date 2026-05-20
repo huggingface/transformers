@@ -52,6 +52,8 @@ class JanusProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class JanusProcessor(ProcessorMixin):
+    valid_processor_kwargs = JanusProcessorKwargs
+
     def __init__(self, image_processor, tokenizer, chat_template=None, use_default_system_prompt=False, **kwargs):
         r"""
         use_default_system_prompt (`bool`, *optional*, defaults to `False`):
@@ -87,37 +89,18 @@ class JanusProcessor(ProcessorMixin):
             JanusProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
         )
 
-        if text is None and images is None:
-            raise ValueError("You must specify either text or images.")
-
-        if text is not None:
-            if isinstance(text, str):
-                text = [text]
-            elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
-                raise ValueError("Invalid input text. Please provide a string, or a list of strings")
-
         generation_mode = output_kwargs["text_kwargs"].pop("generation_mode")
+        if self.use_default_system_prompt and generation_mode == "text":
+            text = [f"{DEFAULT_SYSTEM_PROMPT}{sample}" for sample in text]
+        elif generation_mode == "image":
+            text = [f"{sample}{self.image_start_token}" for sample in text]
 
-        # Replace the image token with expanded image tokens.
-        prompt_strings = []
+        model_inputs = super().__call__(images=images, text=text, **output_kwargs)
+        return model_inputs
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
         one_img_tokens = self.image_start_token + (self.image_token * self.num_image_tokens) + self.image_end_token
-        for prompt in text:
-            prompt = prompt.replace(self.image_token, one_img_tokens)
-            if self.use_default_system_prompt and generation_mode == "text":
-                prompt = DEFAULT_SYSTEM_PROMPT + prompt
-            if generation_mode == "image":
-                prompt += self.image_start_token
-            prompt_strings.append(prompt)
-
-        data = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
-
-        # Process images if pixel values are provided.
-        if images is not None and generation_mode != "image":
-            data["pixel_values"] = self.image_processor(images=images, **output_kwargs["images_kwargs"])[
-                "pixel_values"
-            ]
-
-        return BatchFeature(data=data)
+        return one_img_tokens
 
     def postprocess(self, images: ImageInput, **kwargs):
         """

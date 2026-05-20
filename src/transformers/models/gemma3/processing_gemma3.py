@@ -18,7 +18,10 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, to_py_obj
+from ...utils import auto_docstring, logging, to_py_obj
+
+
+logger = logging.get_logger(__name__)
 
 
 class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
@@ -39,6 +42,8 @@ class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class Gemma3Processor(ProcessorMixin):
+    valid_processor_kwargs = Gemma3ProcessorKwargs
+
     def __init__(
         self,
         image_processor,
@@ -50,7 +55,6 @@ class Gemma3Processor(ProcessorMixin):
         self.image_seq_length = image_seq_length
         self.image_token_id = tokenizer.image_token_id
         self.boi_token = tokenizer.boi_token
-        self.image_token = tokenizer.image_token
         image_tokens_expanded = "".join([tokenizer.image_token] * image_seq_length)
         self.full_image_sequence = f"\n\n{tokenizer.boi_token}{image_tokens_expanded}{tokenizer.eoi_token}\n\n"
 
@@ -154,12 +158,20 @@ class Gemma3Processor(ProcessorMixin):
         return MultiModalData(**vision_data)
 
     @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names + ["token_type_ids"]
-        image_processor_input_names = self.image_processor.model_input_names
+    def model_input_names(self) -> list[str]:
+        return super().model_input_names + ["token_type_ids"]
 
-        image_processor_input_names = [name for name in image_processor_input_names if name != "num_crops"]
-        return list(tokenizer_input_names + image_processor_input_names)
+    @property
+    def unused_input_names(self) -> list[str]:
+        return ["num_crops"]
+
+    @property
+    def image_token(self) -> list[str]:
+        logger.warning_once(
+            "Deprecated: `processor.image_token` will switch from returning "
+            "`tokenizer.image_token` to `tokenizer.boi_token` in v5.11."
+        )
+        return self.tokenizer.image_token
 
 
 __all__ = ["Gemma3Processor"]

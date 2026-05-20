@@ -89,21 +89,6 @@ class ColModernVBertProcessorKwargs(Idefics3ProcessorKwargs, total=False):
 @requires(backends=("torch",))
 @auto_docstring
 class ColModernVBertProcessor(Idefics3Processor):
-    r"""
-    Constructs a ColModernVBert processor which wraps a ModernVBertProcessor and special methods to process images and queries, as
-    well as to compute the late-interaction retrieval score.
-
-    [`ColModernVBertProcessor`] offers all the functionalities of [`ModernVBertProcessor`]. See the [`~ModernVBertProcessor.__call__`]
-    for more information.
-
-    Args:
-            image_processor ([`Idefics3ImageProcessor`]): An instance of [`Idefics3ImageProcessor`]. The image processor is a required input.
-            tokenizer (`PreTrainedTokenizerFast`, *optional*): An instance of [`PreTrainedTokenizerFast`]. This should correspond with the model's text model. The tokenizer is a required input.
-            image_seq_len (`int`, *optional*, defaults to 64): The length of the image sequence i.e. the number of <image> tokens per image in the input.
-            visual_prompt_prefix (`Optional`, *optional*): A prefix to be prepended to visual prompts.
-            query_prefix (`Optional`, *optional*): A prefix to be prepended to query prompts.
-    """
-
     def __init__(
         self,
         image_processor,
