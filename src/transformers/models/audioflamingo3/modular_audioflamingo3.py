@@ -273,8 +273,6 @@ class AudioFlamingo3Model(VoxtralModel):
     """
 )
 class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
-    _tp_plan = None
-    _pp_plan = None
 
     def __init__(self, config):
         super().__init__(config)
