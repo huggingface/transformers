@@ -120,14 +120,15 @@ class OlmoHybridConfig(LlamaConfig):
 
     model_type = "olmo_hybrid"
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.k_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.v_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.o_proj": "rowwise_split_input",  # input is replicated due to the added norm on q and k
+        "layers.*.self_attn.q_proj": "colwise_allgather",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.k_proj": "colwise_allgather",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.v_proj": "colwise_allgather",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.o_proj": "vocab_allreduce",  # input is replicated due to the added norm on q and k
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.down_proj": "rowwise_allreduce",
     }
+    base_model_sp_plan = None
 
     vocab_size: int = 100352
     hidden_size: int = 3840
@@ -752,7 +753,7 @@ class OlmoHybridModel(Qwen3NextModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             position_ids=position_ids,

@@ -28,8 +28,8 @@ from ..auto.modeling_auto import AutoModel
 from .configuration_gemma4_assistant import Gemma4AssistantConfig
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Gemma4AssistantOutput(BaseModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
@@ -110,6 +110,7 @@ class Gemma4AssistantPreTrainedModel(PreTrainedModel):
 class Gemma4AssistantForCausalLM(Gemma4AssistantPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config: Gemma4AssistantConfig):

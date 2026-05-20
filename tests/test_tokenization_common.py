@@ -1514,6 +1514,38 @@ Hey how are you doing"""  # noqa: W293
         )
 
     @require_jinja
+    def test_continue_final_message_string_and_reasoning(self):
+        dummy_template = """
+        {%- for message in messages %}
+            {{- "<|im_start|>" + message['role'] + "\n" }}
+            {%- if message['reasoning_content'] is defined %}
+                {{- "<think>\n" + message['reasoning_content'] + "\n</think>\n" }}
+            {%- endif %}
+            {{- message['content'] + "<|im_end|>" + "\n"}}
+        {%- endfor %}"""
+        dummy_conversation = [
+            {"role": "user", "content": "user message"},
+            {
+                "role": "assistant",
+                "reasoning_content": "assistant reasoning...",
+                "content": "assistant message",  # not shown because the continue_final_message is set at "reasoning_content"
+            },
+        ]
+        tokenizer = self.get_tokenizer()
+
+        # Test continue_final_message="reasoning_content"
+        prefill_output = tokenizer.apply_chat_template(
+            dummy_conversation,
+            chat_template=dummy_template,
+            tokenize=False,
+            continue_final_message="reasoning_content",
+        )
+        self.assertEqual(
+            prefill_output,
+            "<|im_start|>user\nuser message<|im_end|>\n<|im_start|>assistant\n<think>\nassistant reasoning...",
+        )
+
+    @require_jinja
     def test_chat_template_dict(self):
         dummy_template_1 = "{{'a'}}"
         dummy_template_2 = "{{'b'}}"

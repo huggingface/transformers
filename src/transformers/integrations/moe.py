@@ -247,7 +247,12 @@ def _grouped_mm_fallback_backward(ctx, grad_output):
 
 
 if is_torch_available():
-    torch.library.custom_op("transformers::grouped_mm_fallback", _grouped_mm_fallback, mutates_args=())
+    torch.library.custom_op(
+        "transformers::grouped_mm_fallback",
+        _grouped_mm_fallback,
+        mutates_args=(),
+        schema="(Tensor input, Tensor weight, Tensor offs) -> Tensor",
+    )
     torch.library.register_fake("transformers::grouped_mm_fallback", _grouped_mm_fallback_fake)
     torch.library.register_autograd(
         "transformers::grouped_mm_fallback",
@@ -361,7 +366,7 @@ def _grouped_linear(
         out = _grouped_mm(input, weight, offs=offs)
     else:
         # (S, input_dim) @ grouped (num_experts, output_dim, input_dim).T -> (S, output_dim)
-        out = _grouped_mm(input, weight.transpose(-2, -1), offs=offs)
+        out = _grouped_mm(input, weight.transpose(-2, -1).contiguous(), offs=offs)
 
     if bias is not None:
         # We should be able to pass bias to the grouped_mm call, but it's not yet supported.

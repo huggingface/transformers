@@ -167,8 +167,8 @@ class MoshiConditionalGenerationOutputWithPast(ModelOutput):
     depth_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class MoshiUnconditionalInput(ModelOutput):
     r"""
     input_ids (`torch.Tensor `of shape `(batch_size, sequence_length), *optional*):

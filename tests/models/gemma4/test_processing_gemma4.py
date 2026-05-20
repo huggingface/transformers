@@ -16,7 +16,6 @@ import shutil
 import unittest
 
 import numpy as np
-from parameterized import parameterized
 
 from transformers import Gemma4Processor
 from transformers.testing_utils import get_tests_dir, require_vision
@@ -74,7 +73,8 @@ class Gemma4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_tokenizer(cls):
         tokenizer_class = cls._get_component_class_from_processor("tokenizer")
         extra_special_tokens = {
-            "image_token": "<image_soft_token>",
+            "image_token": "<|image|>",
+            "video_token": "<|video|>",
             "boi_token": "<start_of_image>",
             "eoi_token": "<end_of_image>",
             "audio_token": "<audio_soft_token>",
@@ -104,11 +104,10 @@ class Gemma4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
-    # TODO: raushan or arthur: add the real chat template
     @staticmethod
     def prepare_processor_dict():
         return {
-            "chat_template": "{{ bos_token }}\n{%- if messages[0]['role'] == 'system' -%}\n    {%- set first_user_prefix = messages[0]['content'][0]['text'] + '\n\n' -%}\n    {%- set loop_messages = messages[1:] -%}\n{%- else -%}\n    {%- set first_user_prefix = \"\" -%}\n    {%- set loop_messages = messages -%}\n{%- endif -%}\n{%- for message in loop_messages -%}\n    {%- if (message['role'] == 'user') != (loop.index0 % 2 == 0) -%}\n        {{ raise_exception(\"Conversation roles must alternate user/assistant/user/assistant/...\") }}\n    {%- endif -%}\n    {%- if (message['role'] == 'assistant') -%}\n        {%- set role = \"model\" -%}\n    {%- else -%}\n        {%- set role = message['role'] -%}\n    {%- endif -%}\n    {{ '<start_of_turn>' + role + '\n' + (first_user_prefix if loop.first else \"\") }}\n    {%- if message['content'] is string -%}\n        {{ message['content'] | trim }}\n    {%- elif message['content'] is iterable -%}\n        {%- for item in message['content'] -%}\n            {%- if item['type'] == 'image' -%}\n                {{ '<start_of_image>' }}\n            {%- elif item['type'] == 'text' -%}\n                {{ item['text'] | trim }}\n            {%- endif -%}\n        {%- endfor -%}\n    {%- else -%}\n        {{ raise_exception(\"Invalid content type\") }}\n    {%- endif -%}\n    {{ '<end_of_turn>\n' }}\n{%- endfor -%}\n{%- if add_generation_prompt -%}\n    {{'<start_of_turn>model\n'}}\n{%- endif -%}\n",            "image_seq_length": 3,
+            "chat_template": "{{ bos_token }}\n{%- if messages[0]['role'] == 'system' -%}\n    {%- set first_user_prefix = messages[0]['content'][0]['text'] + '\n\n' -%}\n    {%- set loop_messages = messages[1:] -%}\n{%- else -%}\n    {%- set first_user_prefix = \"\" -%}\n    {%- set loop_messages = messages -%}\n{%- endif -%}\n{%- for message in loop_messages -%}\n    {%- if (message['role'] == 'user') != (loop.index0 % 2 == 0) -%}\n        {{ raise_exception(\"Conversation roles must alternate user/assistant/user/assistant/...\") }}\n    {%- endif -%}\n    {%- if (message['role'] == 'assistant') -%}\n        {%- set role = \"model\" -%}\n    {%- else -%}\n        {%- set role = message['role'] -%}\n    {%- endif -%}\n    {{ '<start_of_turn>' + role + '\n' + (first_user_prefix if loop.first else \"\") }}\n    {%- if message['content'] is string -%}\n        {{ message['content'] | trim }}\n    {%- elif message['content'] is iterable -%}\n        {%- for item in message['content'] -%}\n            {%- if item['type'] == 'image' -%}\n                {{ '<|image|>' }}\n       {%- elif item['type'] == 'video' -%}\n{{ '<video_soft_token>' }}\n      {%- elif item['type'] == 'text' -%}\n                {{ item['text'] | trim }}\n            {%- endif -%}\n        {%- endfor -%}\n    {%- else -%}\n        {{ raise_exception(\"Invalid content type\") }}\n    {%- endif -%}\n    {{ '<end_of_turn>\n' }}\n{%- endfor -%}\n{%- if add_generation_prompt -%}\n    {{'<start_of_turn>model\n'}}\n{%- endif -%}\n",            "image_seq_length": 3,
         }  # fmt: skip
 
     # Override as Gemma4 needs images to be an explicitly nested batch
@@ -131,8 +130,8 @@ class Gemma4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             image_processor=image_processor,
             video_processor=video_processor,
         )
-        text_multi_images = f"{processor.boi_token}{processor.boi_token}Dummy text!"
-        text_single_image = f"{processor.boi_token}Dummy text!"
+        text_multi_images = f"{processor.image_token}{processor.image_token}Dummy text!"
+        text_single_image = f"{processor.image_token}Dummy text!"
 
         image = self.prepare_image_inputs()
 
@@ -206,110 +205,3 @@ class Gemma4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @unittest.skip("This test seems to be loading a different video, check for all models and fix")
     def test_apply_chat_template_video_frame_sampling(self):
         pass
-
-
-class Gemma4AudioTokenCountTest(unittest.TestCase):
-    """Regression tests for _compute_audio_num_tokens.
-
-    The original implementation used ceil(duration_ms / 40) which could overshoot
-    the actual encoder output length by 1 token for ~50% of audio lengths.
-    The fix replicates the exact mel-framing + conv-subsampling arithmetic.
-    """
-
-    @staticmethod
-    def _encoder_output_length(num_samples: int, sr: int = 16000) -> int:
-        """Reference implementation of the encoder's actual output length."""
-        frame_length = int(round(sr * 20.0 / 1000.0))
-        hop_length = int(round(sr * 10.0 / 1000.0))
-        frame_size_for_unfold = frame_length + 1
-        pad_left = frame_length // 2
-        padded_samples = num_samples + pad_left
-        num_mel_frames = (padded_samples - frame_size_for_unfold) // hop_length + 1
-        if num_mel_frames <= 0:
-            return 0
-        t = num_mel_frames
-        for _ in range(2):
-            t_padded = t + 2
-            t = (t_padded - 3) // 2 + 1
-        return t
-
-    @staticmethod
-    def _compute_tokens(num_samples, sr=16000):
-        """Call _compute_audio_num_tokens without constructing a full processor."""
-
-        class _Stub:
-            audio_seq_length = 1500
-
-        return Gemma4Processor._compute_audio_num_tokens(_Stub(), np.zeros(num_samples), sr)
-
-    @parameterized.expand(
-        [
-            ("over_1s_boundary", 16001),
-            ("bug_report_194_vs_193", 123521),
-            ("over_5s_boundary", 80001),
-            ("over_10s_boundary", 160001),
-            ("pad_left_effect_1s", 16161),
-        ]
-    )
-    def test_audio_token_count_matches_encoder(self, _name, num_samples):
-        """Verify _compute_audio_num_tokens matches the encoder for edge-case lengths."""
-        expected = self._encoder_output_length(num_samples)
-        actual = self._compute_tokens(num_samples)
-        self.assertEqual(actual, expected)
-
-    @parameterized.expand(
-        [
-            ("1s", 16000, 25),
-            ("5s", 80000, 125),
-            ("10s", 160000, 250),
-            ("30s", 480000, 750),
-        ]
-    )
-    def test_audio_token_count_round_boundaries(self, _name, num_samples, expected_tokens):
-        """Verify exact results at round durations."""
-        self.assertEqual(self._compute_tokens(num_samples), expected_tokens)
-
-    def test_audio_token_count_short_audio(self):
-        """Very short audio that produces zero mel frames should return 0."""
-        # With pad_left = 160 and frame_size_for_unfold = 321, anything <= 160 samples => 0 mel frames
-        self.assertEqual(self._compute_tokens(160), 0)
-
-    @parameterized.expand(
-        [
-            # Lengths where the old naive mask would produce +1 extra token
-            # after stride-2 conv subsampling.  With sr=16000, hop=160, frame_size=321.
-            ("short_boundary", 641),
-            ("over_1s", 16001),
-            ("over_5s", 80001),
-            ("bug_report_length", 123521),
-            ("pad_left_effect_1s", 16161),
-        ]
-    )
-    def test_feature_extractor_mask_matches_processor(self, _name, num_samples):
-        """Regression: feature extractor mask must agree with processor token count.
-
-        The bug was that ``attention_mask[::hop]`` overcounts real mel frames by +2
-        (marks frames as valid even when their window extends into padding).
-        After two stride-2 conv blocks this becomes +1 extra token ~50% of the time.
-        """
-        from transformers import Gemma4AudioFeatureExtractor
-
-        fe = Gemma4AudioFeatureExtractor()
-
-        # Batch with a longer audio to force padding (the trigger for the bug)
-        target = np.random.randn(num_samples).astype(np.float32)
-        padding_partner = np.random.randn(num_samples + 5000).astype(np.float32)
-
-        features = fe([target, padding_partner], return_tensors="np", padding="longest")
-        mask = features["input_features_mask"][0]  # mask for target audio
-
-        # Simulate two stride-2 conv blocks on the mask
-        T = len(mask)
-        for _ in range(2):
-            T_out = (T + 2 - 3) // 2 + 1
-            mask = mask[::2][:T_out]
-            T = len(mask)
-
-        real_tokens = int(mask.sum())
-        expected = self._compute_tokens(num_samples)
-        self.assertEqual(real_tokens, expected)

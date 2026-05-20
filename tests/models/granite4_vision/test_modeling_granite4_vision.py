@@ -23,10 +23,12 @@ from transformers import (
     Granite4VisionModel,
     GraniteConfig,
     is_torch_available,
-    is_vision_available,
 )
+from transformers.image_utils import load_image
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
+    require_deterministic_for_xpu,
     require_torch,
     slow,
     torch_device,
@@ -39,10 +41,6 @@ from ...vlm_tester import VLMModelTest, VLMModelTester
 
 if is_torch_available():
     import torch
-
-
-if is_vision_available():
-    from PIL import Image
 
 
 class Granite4VisionModelTester(VLMModelTester):
@@ -149,7 +147,7 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained(self.model_id)
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        self.image = Image.open(url_to_local_path(url))
+        self.image = load_image(url_to_local_path(url))
 
     def make_prompt(self, question):
         messages = [{"role": "user", "content": [{"type": "image"}, {"type": "text", "text": question}]}]
@@ -158,6 +156,7 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+    @require_deterministic_for_xpu
     @slow
     def test_small_model_integration_test(self):
         model = Granite4VisionForConditionalGeneration.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(
@@ -169,9 +168,15 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         new_tokens = output[:, inputs["input_ids"].shape[1] :]
 
-        EXPECTED_RESPONSE = "The image depicts two cats resting on a pink couch. They are lying in a relaxed, sprawled position, with one cat appearing to be in a"  # fmt: skip
+        EXPECTED_RESPONSE = Expectations({
+            ("cuda", None): "The image depicts two cats resting on a pink couch. They are lying in a relaxed, sprawled position, with one cat appearing to be in a",
+            ("cuda", (8, 6)): "The image depicts two cats resting on a pink blanket. They are lying in a relaxed, sprawled position, with one cat appearing to be in a",
+            ("xpu", None): "The image depicts two cats resting on a pink blanket. They are lying in a relaxed, sprawled position, with one cat appearing to be in a",
+        }).get_expectation()  # fmt: skip
+
         self.assertEqual(self.processor.decode(new_tokens[0], skip_special_tokens=True), EXPECTED_RESPONSE)
 
+    @require_deterministic_for_xpu
     @slow
     def test_small_model_integration_test_batch(self):
         model = Granite4VisionForConditionalGeneration.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(
@@ -179,7 +184,7 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
         )
 
         url2 = "http://images.cocodataset.org/val2017/000000001000.jpg"
-        image2 = Image.open(url_to_local_path(url2))
+        image2 = load_image(url_to_local_path(url2))
 
         prompt = self.make_prompt("What do you see in this image?")
         inputs = self.processor(
@@ -192,8 +197,19 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
         new_tokens = output[:, inputs["input_ids"].shape[1] :]
         responses = self.processor.batch_decode(new_tokens, skip_special_tokens=True)
 
-        self.assertIn("cat", responses[0].lower())
-        self.assertIn("tennis", responses[1].lower())
+        EXPECTED_RESPONSE = Expectations({
+            ("cuda", (8, 6)): [
+                'i see two cats lying on a pink blanket. one cat is on the left side, and the other is on the right side. there are two',
+                'in the image, i see a group of people, including children and adults, standing on a tennis court. they appear to be posing for a group',
+            ],
+            ("xpu", None): [
+                'i see two cats lying on a pink blanket. one cat is on the left side, and the other is on the right side. there are two',
+                'in the image, i see a group of people, including children and adults, standing on a tennis court. they appear to be posing for a group',
+            ]
+        }).get_expectation()  # fmt: skip
+
+        self.assertEqual(responses[0].lower(), EXPECTED_RESPONSE[0])
+        self.assertEqual(responses[1].lower(), EXPECTED_RESPONSE[1])
 
     @slow
     def test_small_model_integration_test_batch_matches_single(self):
@@ -212,7 +228,7 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
 
         # Batch inference (same image as first in batch)
         url2 = "http://images.cocodataset.org/val2017/000000001000.jpg"
-        image2 = Image.open(url_to_local_path(url2))
+        image2 = load_image(url_to_local_path(url2))
         inputs_batch = self.processor(
             text=[prompt, prompt],
             images=[self.image, image2],

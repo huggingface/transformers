@@ -1,0 +1,207 @@
+<!--Copyright 2026 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+rendered properly in your Markdown viewer.
+
+-->
+*This model was released on 2024-04-05 and added to Hugging Face Transformers on 2026-05-07.*
+
+<div style="float: right;">
+ <div class="flex flex-wrap space-x-1">
+  <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+ </div>
+</div>
+
+# RF-DETR
+
+[RF-DETR](https://huggingface.co/papers/2511.09554) is a light-weight specialist Detection Transformer (DETR) from
+Roboflow that uses weight-sharing Neural Architecture Search (NAS) to discover accuracy-latency Pareto curves on any
+target dataset. It modernizes LW-DETR by initializing the encoder with a pre-trained DINOv2 backbone, and revisits the
+tunable knobs of NAS to improve the transferability of DETRs to diverse target domains, surpassing prior
+state-of-the-art real-time methods on COCO and Roboflow100-VL.
+
+The RF-DETR architecture is characterized by its simple and efficient structure: a DINOv2 Backbone, a Projector, and a
+shallow DETR Decoder.
+It enhances the DETR architecture for efficiency and speed using the following core modifications:
+
+1. **DINOv2 Backbone**: Uses a powerful DINOv2 backbone for robust feature extraction.
+2. **Group DETR Training**: Utilizes Group-Wise One-to-Many Assignment during training to accelerate convergence.
+3. **Richer Input**: Aggregates multi-level features from the backbone and uses a C2f Projector (similarly to YOLOv8) to
+   pass multi-scale features.
+4. **Faster Decoder**: Employs a shallow 3-layer DETR decoder with deformable cross-attention for lower latency.
+5. **Optimized Queries**: Uses a mixed-query scheme combining learnable content queries and generated spatial queries.
+
+You can find all the available RF-DETR checkpoints under the [Roboflow organization](https://huggingface.co/Roboflow)
+organization.
+The original code can be found [here](https://github.com/roboflow/rf-detr).
+
+Thanks to the weight conversion mapping, RfDetr is compatible with models from the original
+[rf-detr](https://github.com/roboflow/rf-detr) library as well as models that you trained using the
+[Roboflow](https://roboflow.com/) platform. This means you can use Roboflow platform to train your model and use
+`RfDetr` in `transformers` to import the weights and deploy your model anywhere.
+
+
+> [!TIP]
+>
+> Click on the RF-DETR models in the right sidebar for more examples of how to apply RF-DETR to different object
+> detection tasks.
+
+
+The example below demonstrates how to perform object detection with the [`Pipeline`] and the [`AutoModel`] class.
+
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```python
+from transformers import pipeline
+import torch
+
+pipeline = pipeline("object-detection", model="Roboflow/rf-detr-medium", device_map="auto")
+
+pipeline("http://images.cocodataset.org/val2017/000000039769.jpg")
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```python
+from transformers import AutoImageProcessor, AutoModelForObjectDetection
+from PIL import Image
+import requests
+import torch
+
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+
+image_processor = AutoImageProcessor.from_pretrained("Roboflow/rf-detr-medium")
+model = AutoModelForObjectDetection.from_pretrained("Roboflow/rf-detr-medium", device_map="auto")
+
+# prepare image for the model
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
+
+with torch.no_grad():
+    outputs = model(**inputs)
+
+results = image_processor.post_process_object_detection(outputs, target_sizes=torch.tensor([image.size[::-1]]), threshold=0.3)
+
+for result in results:
+    for score, label_id, box in zip(result["scores"], result["labels"], result["boxes"]):
+        score, label = score.item(), label_id.item()
+        box = [round(i, 2) for i in box.tolist()]
+        print(f"{model.config.id2label[label]}: {score:.2f} {box}")
+```
+
+</hfoption>
+</hfoptions>
+
+RF-DETR also supports instance segmentation via the `Roboflow/rf-detr-seg-*` checkpoints. The
+[`RfDetrImageProcessor.post_process_instance_segmentation`] method offers two output formats controlled by
+`return_binary_maps`:
+
+- **`return_binary_maps=False` (default)** returns a single `Tensor[H, W]` segmentation map where each pixel holds a
+  segment id (`-1` for background), with overlap resolved by score priority (highest-scoring instances claim pixels
+  first). This is the standard instance segmentation output format in Transformers, shared by models such as DETR.
+- **`return_binary_maps=True`** returns a `Tensor[num_instances, H, W]` stack of independent boolean masks, one per
+  detected instance, with no overlap resolution. Instances can overlap freely. This matches the output format of the
+  original [`rfdetr`](https://github.com/roboflow/rf-detr) library.
+
+```python
+from transformers import AutoImageProcessor, AutoModelForInstanceSegmentation
+from PIL import Image
+import requests
+import torch
+
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+
+image_processor = AutoImageProcessor.from_pretrained("Roboflow/rf-detr-seg-medium")
+model = AutoModelForInstanceSegmentation.from_pretrained("Roboflow/rf-detr-seg-medium", device_map="auto")
+
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
+
+with torch.no_grad():
+    outputs = model(**inputs)
+
+target_sizes = [image.size[::-1]]
+
+# Segmentation map: single Tensor[H, W] where each pixel holds a segment id (-1 = background)
+results = image_processor.post_process_instance_segmentation(
+    outputs, target_sizes=target_sizes, threshold=0.3
+)
+for result in results:
+    segmentation = result["segmentation"]
+    for segment in result["segments_info"]:
+        mask = segmentation == segment["id"]
+        label = model.config.id2label[segment["label_id"]]
+        print(f"{label}: {segment['score']:.2f}, pixels={mask.sum().item()}")
+
+# Binary maps: Tensor[num_instances, H, W] of independent boolean masks (instances can overlap)
+results = image_processor.post_process_instance_segmentation(
+    outputs, target_sizes=target_sizes, threshold=0.3, return_binary_maps=True
+)
+for result in results:
+    for mask, segment in zip(result["segmentation"], result["segments_info"]):
+        label = model.config.id2label[segment["label_id"]]
+        print(f"{label}: {segment['score']:.2f}, pixels={mask.sum().item()}")
+```
+
+## Resources
+
+
+- Scripts for finetuning [`RfDetrForObjectDetection`] with [`Trainer`]
+  or [Accelerate](https://huggingface.co/docs/accelerate/index) can be
+  found [here](https://github.com/huggingface/transformers/tree/main/examples/pytorch/object-detection).
+- See also: [Object detection task guide](../tasks/object_detection).
+
+## RfDetrConfig
+
+[[autodoc]] RfDetrConfig
+
+## RfDetrDinov2Config
+
+[[autodoc]] RfDetrDinov2Config
+
+## RfDetrImageProcessor
+
+[[autodoc]] RfDetrImageProcessor
+    - preprocess
+    - post_process_object_detection
+    - post_process_instance_segmentation
+
+
+## RF-DETR specific outputs
+
+[[autodoc]] models.rf_detr.modeling_rf_detr.RfDetrModelOutput
+
+[[autodoc]] models.rf_detr.modeling_rf_detr.RfDetrObjectDetectionOutput
+
+[[autodoc]] models.rf_detr.modeling_rf_detr.RfDetrInstanceSegmentationOutput
+
+## RfDetrModel
+
+[[autodoc]] RfDetrModel
+    - forward
+
+## RfDetrForObjectDetection
+
+[[autodoc]] RfDetrForObjectDetection
+    - forward
+
+## RfDetrForInstanceSegmentation
+
+[[autodoc]] RfDetrForInstanceSegmentation
+    - forward
+
+## RfDetrDinov2Backbone
+
+[[autodoc]] RfDetrDinov2Backbone
+    - forward
