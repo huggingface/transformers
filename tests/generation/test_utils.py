@@ -3813,11 +3813,10 @@ class GenerationIntegrationTests(unittest.TestCase):
         assistant_tokenizer = AutoTokenizer.from_pretrained(draft_name)
         target_tokenizer = AutoTokenizer.from_pretrained(target_name)
 
-        prompt_size = torch.randint(low=20, high=100, size=(1,))
-        max_new_tokens = torch.randint(low=10, high=50, size=(1,))
-        input_ids = (torch.rand(1, prompt_size[0]) * 100).to(int) + 50
+        text = "The quick brown fox jumps over the lazy dog. In a world where AI is everywhere,"
+        input_ids = target_tokenizer(text, return_tensors="pt").input_ids
 
-        max_new_tokens_item = max_new_tokens[0].item()
+        max_new_tokens_item = torch.randint(low=10, high=50, size=(1,))[0].item()
         expected_out = target_model.generate(input_ids, do_sample=False, max_new_tokens=max_new_tokens_item)
         predicted_out = target_model.generate(
             input_ids,

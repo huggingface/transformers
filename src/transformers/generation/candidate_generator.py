@@ -393,6 +393,12 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         self.target_lookbehind = self.assistant_generation_config.target_lookbehind
         self.assistant_lookbehind = self.assistant_generation_config.assistant_lookbehind
 
+        # Remove target-specific kwargs that will have wrong shapes/values for the assistant.
+        # This allows the assistant to regenerate them correctly for its own tokenizer's sequence length.
+        self.assistant_kwargs.pop("attention_mask", None)
+        self.assistant_kwargs.pop("position_ids", None)
+        self.assistant_kwargs.pop("token_type_ids", None)
+
     @staticmethod
     def _get_longest_diag_dict(input_matrix, nonzero_idx):
         """
@@ -487,6 +493,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         input_ids,
         source_tokenizer,
         destination_tokenizer,
+        add_special_tokens=True,
     ):
         """
         Convert token IDs from one tokenizer to another.
@@ -494,11 +501,12 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             input_ids: The input token IDs.
             source_tokenizer: The source tokenizer.
             destination_tokenizer: The destination tokenizer.
+            add_special_tokens: Whether to add special tokens during encoding.
         Returns:
             The converted token IDs.
         """
-        text = source_tokenizer.decode(input_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-        dest_ids = destination_tokenizer(text, add_special_tokens=True, return_tensors="pt")["input_ids"]
+        text = source_tokenizer.decode(input_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        dest_ids = destination_tokenizer(text, add_special_tokens=add_special_tokens, return_tensors="pt")["input_ids"]
         return dest_ids.to(input_ids.device)
 
     def get_candidates(self, input_ids: torch.LongTensor, **kwargs) -> tuple[torch.LongTensor, torch.FloatTensor]:
@@ -528,7 +536,6 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
         self._update_past_and_masks(assistant_input_ids, remove_from_pkv)
         generation_args = self._prepare_generation_args(assistant_input_ids, min_new_tokens, max_new_tokens)
-        self.assistant_kwargs.pop("attention_mask", None)
 
         assistant_output = self.assistant_model.generate(**generation_args, **self.assistant_kwargs)
         new_target_ids = self._process_assistant_outputs(input_ids, assistant_output.sequences)
@@ -556,7 +563,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             start_index_in_target_window = self.prev_target_ids_len - self.target_lookbehind
 
             new_assistant_ids = self.convert_source_tokens_to_target_tokens(
-                input_ids[:, start_index_in_target_window:], **convert_kwargs
+                input_ids[:, start_index_in_target_window:], **convert_kwargs, add_special_tokens=False
             )
             prompt_use_length = new_assistant_ids.shape[1]
             prompt_use = self.prev_assistant_ids[:, -prompt_use_length:]
@@ -601,6 +608,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             assistant_sequences[:, start_assistant_look_index:],
             source_tokenizer=self.assistant_tokenizer,
             destination_tokenizer=self.target_tokenizer,
+            add_special_tokens=False,
         )
         target_prompt_use_length = new_target_ids_from_window.shape[1]
 
@@ -994,10 +1002,11 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
             assistant_new_ids = self._atm_translator.target_to_assistant_input_ids.get(target_new_ids[0].item())
         if assistant_new_ids is None:
             target_new_text = self.target_tokenizer.decode(
-                target_new_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True
+                target_new_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
             )
+            # Add special tokens only on the first call (prefill) to include BOS
             assistant_new_ids = self.assistant_tokenizer(
-                target_new_text, add_special_tokens=False, return_tensors="pt"
+                target_new_text, add_special_tokens=(self._target_seq_len_with_candidates == 0), return_tensors="pt"
             )["input_ids"].to(self.assistant_model.device)
         else:
             assistant_new_ids = torch.tensor([[assistant_new_ids]], device=self.assistant_model.device)
