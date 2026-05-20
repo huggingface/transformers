@@ -95,6 +95,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("codegen", "CodeGenConfig"),
         ("cohere", "CohereConfig"),
         ("cohere2", "Cohere2Config"),
+        ("cohere2_moe", "Cohere2MoeConfig"),
         ("cohere2_vision", "Cohere2VisionConfig"),
         ("cohere_asr", "CohereAsrConfig"),
         ("colmodernvbert", "ColModernVBertConfig"),
