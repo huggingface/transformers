@@ -399,6 +399,56 @@ class MoEExpertsParallel(TensorParallelStyle):
         return output.to_local()
 
 
+class RouterParallel(TensorParallelStyle):
+    """Hooks the routing gate's output to mask non-local expert scores under EP.
+
+    Forward: route module returns `(router_logits, router_scores, router_indices)`.
+    Each EP rank computes the same logits/scores/indices (gate weight is replicated),
+    then this hook drops the entries that route to experts owned by other ranks:
+
+      - Zero `router_scores` where `(router_indices // num_local_experts) != ep_rank`.
+      - Remap `router_indices` to local-expert indices via `fmod(router_indices, num_local_experts)`.
+      - Mark non-local slots with a sentinel = `num_local_experts` so downstream
+        `one_hot` / `grouped_mm` paths know to skip them.
+
+    Gate weight stays replicated (no sharding) — see `_apply` below.
+
+    Adapted from the prod `RouterParallel` at
+    `transformers/integrations/tensor_parallel.py::RouterParallel` (same semantics).
+    """
+
+    def _apply(self, module, mesh):
+        # Keep the gate weight replicated on the EP mesh. The `TensorParallelStyle`
+        # base wraps `module.forward` to call our `transform_output_post_forward`.
+        return super()._apply(module, mesh)
+
+    def transform_output_post_forward(self, module, output, mesh):
+        ep_rank = mesh.get_local_rank()
+        ep_size = mesh.size()
+        num_experts = getattr(module, "num_experts", None)
+        if num_experts is None:
+            num_experts = getattr(getattr(module, "config", None), "num_experts", None)
+        if num_experts is None:
+            raise AttributeError(
+                f"Router module {type(module).__name__} is missing `num_experts` and `config.num_experts`"
+            )
+        if num_experts % ep_size != 0:
+            raise ValueError(f"num_experts ({num_experts}) must be divisible by ep_size ({ep_size})")
+        num_local_experts = num_experts // ep_size
+
+        router_logits, router_scores, router_indices = output
+        non_local_mask = (router_indices // num_local_experts) != ep_rank
+        router_scores = router_scores.masked_fill(non_local_mask, 0.0)
+        router_indices = router_indices.masked_fill(non_local_mask, -1)
+        # `-1 % 1 == 0`, so plain fmod doesn't work when num_local_experts == 1.
+        if num_local_experts > 1:
+            router_indices = torch.fmod(router_indices, num_local_experts)
+        else:
+            router_indices = router_indices.masked_fill(router_indices > 0, 0).masked_fill(router_indices < 0, -1)
+        router_indices = router_indices.masked_fill(router_indices == -1, num_local_experts)
+        return router_logits, router_scores, router_indices
+
+
 class ParallelInterface(GeneralInterface):
     """Registry of named TP styles. Configs and modeling files reference these by string name.
 
@@ -451,6 +501,18 @@ class ParallelInterface(GeneralInterface):
                     "down_proj": Shard(-1),
                 },
             ),
+            # MoE — EP variant: shards on the experts dim(0) so each rank holds
+            # `num_experts/ep_size` experts at full hidden_in.
+            "moe_experts_ep_allreduce": MoEExpertsParallel(
+                output_layouts=Replicate(),
+                shard_plan={
+                    "gate_up_proj": Shard(0),
+                    "down_proj": Shard(0),
+                },
+            ),
+            # EP — routing gate. Replicated weight; output hook masks non-local
+            # expert scores and remaps global indices to local. See `RouterParallel`.
+            "ep_router": RouterParallel(),
         }
         if is_torch_available() and is_torch_greater_or_equal("2.5") and _torch_distributed_available
         else {}
@@ -477,7 +539,7 @@ def apply_tensor_parallel(model, tp_mesh, tp_plan):
         if enable_sp:
             tp_plan = dict(model._sp_plan or {})
         else:
-            tp_plan = dict(model._tp_plan or {})
+            tp_plan = dict(model.tp_plan or {})
 
     # tie_weights() replaces lm_head.weight with embed_tokens.weight after TP is applied.
     # If embed_tokens isn't in the plan, sharding lm_head as a DTensor causes tie to
