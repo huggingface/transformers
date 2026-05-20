@@ -106,6 +106,8 @@ class ALMModelTester(MultiModalModelTester):
         # Sample lengths in [1, feat_seq_length] and offsets in [0, feat_seq_length - length]
         lengths = ids_tensor([self.batch_size], vocab_size=self.feat_seq_length, rng=rng).abs() + 1
         lengths = lengths.clamp(max=self.feat_seq_length)
+
+        # Presuming feat_seq_length is set correctly, ensure at least one batch has a full-length mask for valid audio tokens
         lengths[rng.randint(0, self.batch_size - 1)] = self.feat_seq_length
         offsets = ids_tensor([self.batch_size], vocab_size=self.feat_seq_length, rng=rng).abs()
         offsets = offsets % (self.feat_seq_length - lengths + 1)
