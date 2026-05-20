@@ -39,7 +39,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_cohere2_moe import Cohere2MoeConfig
 
 
@@ -142,16 +142,39 @@ class Cohere2MoeExperts(nn.Module):
         return final_hidden_states
 
 
-class Cohere2MoeSparseMoeBlock(nn.Module):
+class Cohere2MoeTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.expert_selection_fn = config.expert_selection_fn
         self.norm_topk_prob = config.norm_topk_prob
+        self.weight = nn.Parameter(torch.empty(config.num_experts, config.hidden_size))
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        router_logits = F.linear(hidden_states, self.weight)
+        router_scores, selected_experts = torch.topk(router_logits, self.top_k, dim=-1)
+        if self.expert_selection_fn == "softmax":
+            router_scores = F.softmax(router_scores, dim=1, dtype=torch.float)
+        elif self.expert_selection_fn == "sigmoid":
+            router_scores = F.sigmoid(router_scores)
+            if self.norm_topk_prob:
+                router_scores = router_scores / torch.sum(router_scores, dim=-1, keepdims=True)
+        else:
+            raise ValueError("`expert_selection_fn` can only be `softmax` or `sigmoid`")
+
+        # we cast back to the input dtype if it was upcasted in softmax
+        router_scores = router_scores.to(hidden_states.dtype)
+
+        return router_logits, router_scores, selected_experts
+
+
+class Cohere2MoeSparseMoeBlock(nn.Module):
+    def __init__(self, config):
+        super().__init__()
         self.num_shared_experts = config.num_shared_experts
         self.shared_expert_combination_strategy = config.shared_expert_combination_strategy
 
-        self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
+        self.gate = Cohere2MoeTopKRouter(config)
         self.experts = Cohere2MoeExperts(config)
         if self.num_shared_experts > 0:
             self.shared_experts = Cohere2MoeMLP(
@@ -162,22 +185,8 @@ class Cohere2MoeSparseMoeBlock(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_flat = hidden_states.view(-1, hidden_dim)
-
-        router_logits = self.gate(hidden_states_flat)
-        routing_weights, selected_experts = torch.topk(router_logits, self.top_k, dim=-1)
-        if self.expert_selection_fn == "softmax":
-            routing_weights = F.softmax(routing_weights, dim=1, dtype=torch.float)
-        elif self.expert_selection_fn == "sigmoid":
-            routing_weights = F.sigmoid(routing_weights)
-            if self.norm_topk_prob:
-                routing_weights = routing_weights / torch.sum(routing_weights, dim=-1, keepdims=True)
-        else:
-            raise NotImplementedError("Expert selection function can only be either Softmax or Sigmoid.")
-
-        # we cast back to the input dtype
-        routing_weights = routing_weights.to(hidden_states.dtype)
-
-        final_hidden_states = self.experts(hidden_states_flat, selected_experts, routing_weights)
+        _, router_scores, selected_experts = self.gate(hidden_states_flat)
+        final_hidden_states = self.experts(hidden_states_flat, selected_experts, router_scores)
 
         if self.num_shared_experts > 0:
             shared_expert_output = self.shared_experts(hidden_states_flat)
@@ -185,6 +194,8 @@ class Cohere2MoeSparseMoeBlock(nn.Module):
                 final_hidden_states = final_hidden_states + shared_expert_output
             elif self.shared_expert_combination_strategy == "average":
                 final_hidden_states = (final_hidden_states + shared_expert_output) / 2
+            else:
+                raise ValueError("`shared_expert_combination_strategy` can only be `sum` or `average`")
 
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
@@ -304,7 +315,6 @@ class Cohere2MoeAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         input_shape = hidden_states.shape[:-1]
@@ -481,6 +491,7 @@ class Cohere2MoePreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": Cohere2MoeDecoderLayer,
         "attentions": Cohere2MoeAttention,
+        "router_logits": OutputRecorder(Cohere2MoeTopKRouter, index=0),
     }
     config_class = Cohere2MoeConfig
 
