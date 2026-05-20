@@ -57,9 +57,14 @@ class DistributedConfig:
 
         if torch.distributed.is_available() and torch.distributed.is_initialized():
             world_size = torch.distributed.get_world_size()
-            assert self.tp_size * self.fsdp_size == world_size, (
-                f"tp_size ({self.tp_size}) * fsdp_size ({self.fsdp_size}) must be equal to world_size ({world_size})"
-            )
+            if self.tp_size * self.fsdp_size != world_size:
+                raise RuntimeError(
+                    f"tp_size ({self.tp_size}) * fsdp_size ({self.fsdp_size}) is not equal to world_size ({world_size})"
+                )
+        # TODO (remi-or) the check above should probably happen during actual model sharding, same as the check below
+        # elif self.tp_size > 1 or self.fsdp_size > 1:
+        #     issue = "not initialized" if torch.distributed.is_available() else "not available"
+        #     raise ValueError(f"Requested {self.tp_size = }, {self.fsdp_size = } but torch.distributed is {issue}.")
 
     @classmethod
     def from_dict(cls, config_dict: dict, **kwargs) -> "DistributedConfig":
