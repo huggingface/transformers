@@ -43,6 +43,44 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_cohere2_moe import Cohere2MoeConfig
 
 
+@use_kernel_forward_from_hub("RMSNorm")
+class Cohere2MoeRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        Cohere2MoeRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+class Cohere2MoeLayerNorm(nn.Module):
+    def __init__(self, hidden_size=None, eps=1e-5, bias=False):
+        """The hidden size can be a tuple or an int. The tuple is used for QKNorm to normalize across head_dim"""
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        mean = hidden_states.mean(-1, keepdim=True)
+        variance = (hidden_states - mean).pow(2).mean(-1, keepdim=True)
+        hidden_states = (hidden_states - mean) * torch.rsqrt(variance + self.variance_epsilon)
+        hidden_states = self.weight.to(torch.float32) * hidden_states
+        return hidden_states.to(input_dtype)
+
+
 class Cohere2MoeMLP(nn.Module):
     def __init__(self, config: Cohere2MoeConfig, intermediate_size=None):
         super().__init__()
@@ -115,7 +153,6 @@ class Cohere2MoeSparseMoeBlock(nn.Module):
 
         self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
         self.experts = Cohere2MoeExperts(config)
-
         if self.num_shared_experts > 0:
             self.shared_experts = Cohere2MoeMLP(
                 config,
@@ -150,44 +187,6 @@ class Cohere2MoeSparseMoeBlock(nn.Module):
                 final_hidden_states = (final_hidden_states + shared_expert_output) / 2
 
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
-
-
-@use_kernel_forward_from_hub("RMSNorm")
-class Cohere2MoeRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
-        """
-        Cohere2MoeRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-class Cohere2MoeLayerNorm(nn.Module):
-    def __init__(self, hidden_size=None, eps=1e-5, bias=False):
-        """The hidden size can be a tuple or an int. The tuple is used for QKNorm to normalize across head_dim"""
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        mean = hidden_states.mean(-1, keepdim=True)
-        variance = (hidden_states - mean).pow(2).mean(-1, keepdim=True)
-        hidden_states = (hidden_states - mean) * torch.rsqrt(variance + self.variance_epsilon)
-        hidden_states = self.weight.to(torch.float32) * hidden_states
-        return hidden_states.to(input_dtype)
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -401,26 +400,6 @@ class Cohere2MoeDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-@auto_docstring
-class Cohere2MoePreTrainedModel(PreTrainedModel):
-    config: Cohere2MoeConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["Cohere2MoeDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": Cohere2MoeDecoderLayer,
-        "attentions": Cohere2MoeAttention,
-    }
-    config_class = Cohere2MoeConfig
-
-
 class Cohere2MoeRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
@@ -484,6 +463,26 @@ class Cohere2MoeRotaryEmbedding(nn.Module):
             sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+@auto_docstring
+class Cohere2MoePreTrainedModel(PreTrainedModel):
+    config: Cohere2MoeConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["Cohere2MoeDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+
+    _can_compile_fullgraph = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": Cohere2MoeDecoderLayer,
+        "attentions": Cohere2MoeAttention,
+    }
+    config_class = Cohere2MoeConfig
 
 
 @auto_docstring

@@ -19,13 +19,6 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-def make_pattern(num_layers: int, pattern: int) -> list[str]:
-    # pattern N means: every N-th layer is full_attention, others sliding_attention
-    if num_layers <= 0 or pattern <= 0:
-        return []
-    return ["sliding_attention" if ((i + 1) % pattern) != 0 else "full_attention" for i in range(num_layers)]
-
-
 @auto_docstring(checkpoint="CohereLabs/command-a-plus-05-2026")
 @strict
 class Cohere2MoeConfig(PreTrainedConfig):
@@ -136,10 +129,15 @@ class Cohere2MoeConfig(PreTrainedConfig):
         self.validate_rope()
 
         if self.layer_types is None:
-            prefix_layers = make_pattern(self.first_k_dense_replace, self.prefix_dense_sliding_window_pattern)
-            rest_layers = make_pattern(
-                self.num_hidden_layers - self.first_k_dense_replace, self.sliding_window_pattern
-            )
+            # The first k dense layers (MLP instead of MoE) do not use the same sliding window pattern as the MoE layers
+            prefix_layers = [
+                "sliding_attention" if ((i + 1) % self.prefix_dense_sliding_window_pattern) != 0 else "full_attention"
+                for i in range(self.first_k_dense_replace)
+            ]
+            rest_layers = [
+                "sliding_attention" if ((i + 1) % self.sliding_window_pattern) != 0 else "full_attention"
+                for i in range(self.num_hidden_layers - self.first_k_dense_replace)
+            ]
             self.layer_types = prefix_layers + rest_layers
 
         self.validate_layer_type()
@@ -151,14 +149,6 @@ class Cohere2MoeConfig(PreTrainedConfig):
             )
 
         super().__post_init__(**kwargs)
-
-    @classmethod
-    def from_dict(cls, config_dict, **kwargs):
-        # Normalise the legacy "cohere2moe" model type (no underscore) to the canonical
-        # "cohere2_moe" so that checkpoints saved with either spelling load correctly.
-        if config_dict.get("model_type") == "cohere2moe":
-            config_dict = {**config_dict, "model_type": "cohere2_moe"}
-        return super().from_dict(config_dict, **kwargs)
 
 
 __all__ = ["Cohere2MoeConfig"]

@@ -23,7 +23,6 @@ from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import auto_docstring
 from ..cohere2.modeling_cohere2 import (
     Cohere2Attention,
     Cohere2DecoderLayer,
@@ -41,6 +40,14 @@ from ..mixtral.modeling_mixtral import MixtralExperts
 from .configuration_cohere2_moe import Cohere2MoeConfig
 
 
+class Cohere2MoeRMSNorm(LlamaRMSNorm):
+    pass
+
+
+class Cohere2MoeLayerNorm(Cohere2LayerNorm):
+    pass
+
+
 class Cohere2MoeMLP(Cohere2MLP):
     def __init__(self, config: Cohere2MoeConfig, intermediate_size=None):
         super().__init__(config)
@@ -55,7 +62,6 @@ class Cohere2MoeExperts(MixtralExperts):
     def __init__(self, config):
         super().__init__(config)
         self.num_experts = config.num_experts
-        self.intermediate_dim = config.intermediate_size
 
 
 class Cohere2MoeSparseMoeBlock(nn.Module):
@@ -69,7 +75,6 @@ class Cohere2MoeSparseMoeBlock(nn.Module):
 
         self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
         self.experts = Cohere2MoeExperts(config)
-
         if self.num_shared_experts > 0:
             self.shared_experts = Cohere2MoeMLP(
                 config,
@@ -104,14 +109,6 @@ class Cohere2MoeSparseMoeBlock(nn.Module):
                 final_hidden_states = (final_hidden_states + shared_expert_output) / 2
 
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
-
-
-class Cohere2MoeRMSNorm(LlamaRMSNorm):
-    pass
-
-
-class Cohere2MoeLayerNorm(Cohere2LayerNorm):
-    pass
 
 
 class Cohere2MoeAttention(Cohere2Attention):
@@ -208,7 +205,10 @@ class Cohere2MoeDecoderLayer(Cohere2DecoderLayer):
         )
 
 
-@auto_docstring
+class Cohere2MoeRotaryEmbedding(Cohere2RotaryEmbedding):
+    pass
+
+
 class Cohere2MoePreTrainedModel(Cohere2PreTrainedModel):
     config_class = Cohere2MoeConfig
     _no_split_modules = ["Cohere2MoeDecoderLayer"]
@@ -218,11 +218,6 @@ class Cohere2MoePreTrainedModel(Cohere2PreTrainedModel):
     }
 
 
-class Cohere2MoeRotaryEmbedding(Cohere2RotaryEmbedding):
-    pass
-
-
-@auto_docstring
 class Cohere2MoeModel(Cohere2Model):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Cohere2MoeDecoderLayer`]
@@ -239,7 +234,6 @@ class Cohere2MoeModel(Cohere2Model):
         )
 
 
-@auto_docstring
 class Cohere2MoeForCausalLM(Cohere2ForCausalLM):
     _tp_plan = {"lm_head": "colwise_rep"}
 
