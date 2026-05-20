@@ -28,7 +28,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ... import initialization as init
-from ...cache_utils import Cache, DynamicCache
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutput
@@ -62,10 +61,6 @@ class CtsmOutput(BaseModelOutput):
         Number of patches (including the optional special token) preceding the fine-resolution block.
     num_fine_patches (`int`):
         Number of patches in the fine-resolution block of the concatenated sequence.
-    past_key_values (`Cache`, *optional*):
-        Key/value cache for the concatenated `[coarse, special, fine]` sequence. Populated when the
-        caller passes `use_cache=True` (and re-used across autoregressive decode steps). Typically only
-        the long-horizon AR loop in [`CtsmModelForPrediction`] needs this.
     """
 
     loc: torch.Tensor | None = None
@@ -77,7 +72,6 @@ class CtsmOutput(BaseModelOutput):
     scale_fine_patch: torch.Tensor | None = None
     num_coarse_patches: int | None = None
     num_fine_patches: int | None = None
-    past_key_values: Cache | None = None
 
 
 @auto_docstring
@@ -240,12 +234,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
 
 
 class CtsmAttention(nn.Module):
-    """TimesFM 2.0 style attention with learnable per-dimension Q scaling and rotary position embeddings.
-
-    Supports an optional `past_key_values` cache so that, during long-horizon autoregressive decoding,
-    each step only needs to compute K/V for the newly-appended fine patches and attends to the
-    previously-cached K/V for every earlier position.
-    """
+    """TimesFM 2.0 style attention with learnable per-dimension Q scaling and rotary position embeddings."""
 
     def __init__(self, config: CtsmConfig, layer_idx: int):
         super().__init__()
@@ -276,7 +265,6 @@ class CtsmAttention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -292,12 +280,6 @@ class CtsmAttention(nn.Module):
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        # Key difference vs `TimesFmAttention`: optionally append the new K/V to a running
-        # `past_key_values` cache so the long-horizon AR loop in `CtsmModelForPrediction`
-        # only has to compute K/V for the newly-appended fine patches.
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, simple_eager_attention_forward
@@ -378,7 +360,6 @@ class CtsmDecoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         paddings: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         # Self Attention
@@ -388,7 +369,6 @@ class CtsmDecoderLayer(nn.Module):
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -543,67 +523,113 @@ class CtsmModel(CtsmPreTrainedModel):
         past_values_coarse_padding: torch.LongTensor | None = None,
         past_values_fine_padding: torch.LongTensor | None = None,
         freq: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
-        use_cache: bool | None = None,
-        loc_fine: torch.Tensor | None = None,
-        scale_fine: torch.Tensor | None = None,
-        loc_fine_patch: torch.Tensor | None = None,
-        scale_fine_patch: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CtsmOutput:
         r"""
-        past_values_coarse (`torch.FloatTensor` of shape `(batch_size, coarse_length)`, *optional*):
-            Coarse-resolution context (e.g. hourly aggregates). Length must be a multiple of `patch_length` or
-            will be left-padded to one. Required when `past_key_values` is `None`.
+        past_values_coarse (`torch.FloatTensor` of shape `(batch_size, coarse_length)`):
+            Coarse-resolution context (e.g. hourly aggregates). Length must be a multiple of `patch_length`
+            or will be left-padded to one.
         past_values_fine (`torch.FloatTensor` of shape `(batch_size, fine_length)`):
-            Fine-resolution context (e.g. minute-level). In the normal / full-forward mode this is the entire
-            fine context; when `past_key_values` is supplied this should contain **only the new fine values**
-            to append — they must already be pre-normalized by the caller using `loc_fine` / `scale_fine`.
+            Fine-resolution context (e.g. minute-level).
         past_values_coarse_padding (`torch.LongTensor`, *optional*):
             Padding mask for the coarse stream, `1.0` for padded positions and `0.0` for real values.
         past_values_fine_padding (`torch.LongTensor`, *optional*):
             Padding mask for the fine stream.
         freq (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*):
             Frequency indices. Defaults to all zeros.
-        past_key_values (`Cache`, *optional*):
-            A [`Cache`] (typically a [`DynamicCache`]) holding K/V for the concatenated
-            `[coarse, special, fine_prefix]` sequence from a previous call. When supplied the model runs in
-            **incremental mode**: only the new fine patches are embedded, and their Q/K/V are added on top
-            of the cached K/V. `loc_fine` / `scale_fine` **must** also be supplied so the new fine values
-            are normalized on the same scale as the cached ones.
-        use_cache (`bool`, *optional*):
-            Whether to build and return a key/value cache in the `CtsmOutput`. Defaults to `False` unless
-            `past_key_values` is provided (in which case caching is always on).
-        loc_fine (`torch.Tensor` of shape `(batch_size,)`, *optional*):
-            Fine-stream mean used for stream normalization. Required in incremental mode.
-        scale_fine (`torch.Tensor` of shape `(batch_size,)`, *optional*):
-            Fine-stream standard deviation used for stream normalization. Required in incremental mode.
-        loc_fine_patch (`torch.Tensor` of shape `(batch_size,)`, *optional*):
-            Per-first-patch mean (TimesFM-style) frozen from the initial full forward. Required in
-            incremental mode so new fine patches share the cached K/V's normalized space.
-        scale_fine_patch (`torch.Tensor` of shape `(batch_size,)`, *optional*):
-            Per-first-patch standard deviation matching `loc_fine_patch`.
         """
-        if past_key_values is None:
-            return self._full_forward(
-                past_values_coarse=past_values_coarse,
-                past_values_fine=past_values_fine,
-                past_values_coarse_padding=past_values_coarse_padding,
-                past_values_fine_padding=past_values_fine_padding,
-                freq=freq,
-                use_cache=bool(use_cache),
+        if past_values_coarse_padding is None:
+            past_values_coarse_padding = torch.zeros_like(past_values_coarse)
+        if past_values_fine_padding is None:
+            past_values_fine_padding = torch.zeros_like(past_values_fine)
+        past_values_coarse_padding = past_values_coarse_padding.to(past_values_coarse.dtype)
+        past_values_fine_padding = past_values_fine_padding.to(past_values_fine.dtype)
+
+        patch_length = self.config.patch_length
+        past_values_coarse, past_values_coarse_padding = self._left_pad_to_patch_boundary(
+            past_values_coarse, past_values_coarse_padding, patch_length
+        )
+        past_values_fine, past_values_fine_padding = self._left_pad_to_patch_boundary(
+            past_values_fine, past_values_fine_padding, patch_length
+        )
+
+        coarse_normalized, loc_coarse, scale_coarse = self._normalize_with_pad(
+            past_values_coarse, past_values_coarse_padding, tolerance=self.config.tolerance
+        )
+        fine_normalized, loc_fine, scale_fine = self._normalize_with_pad(
+            past_values_fine, past_values_fine_padding, tolerance=self.config.tolerance
+        )
+
+        coarse_embeddings, coarse_patch_padding, _ = self._patchify(coarse_normalized, past_values_coarse_padding)
+        fine_embeddings, fine_patch_padding, (fine_patch_mu, fine_patch_sigma) = self._patchify(
+            fine_normalized, past_values_fine_padding
+        )
+
+        bsz, num_coarse_patches, hidden_size = coarse_embeddings.shape
+        num_fine_patches = fine_embeddings.shape[1]
+        device = coarse_embeddings.device
+        dtype = coarse_embeddings.dtype
+
+        if self.config.use_special_token:
+            special = self.special_token.to(device=device, dtype=dtype).expand(bsz, 1, hidden_size)
+            special_padding = torch.zeros(bsz, 1, device=device, dtype=coarse_patch_padding.dtype)
+            model_input = torch.cat([coarse_embeddings, special, fine_embeddings], dim=1)
+            patch_padding = torch.cat([coarse_patch_padding, special_padding, fine_patch_padding], dim=1)
+            num_special = 1
+        else:
+            model_input = torch.cat([coarse_embeddings, fine_embeddings], dim=1)
+            patch_padding = torch.cat([coarse_patch_padding, fine_patch_padding], dim=1)
+            num_special = 0
+
+        if self.config.use_resolution_embeddings:
+            mr_coarse = torch.zeros(num_coarse_patches, dtype=torch.long, device=device)
+            mr_special = torch.full((num_special,), 1, dtype=torch.long, device=device)
+            mr_fine = torch.full((num_fine_patches,), 2, dtype=torch.long, device=device)
+            mr_idx = torch.cat([mr_coarse, mr_special, mr_fine], dim=0).unsqueeze(0).expand(bsz, -1)
+            model_input = model_input + self.multi_resolution(mr_idx)
+
+        if freq is None:
+            freq = torch.zeros((bsz, 1), dtype=torch.long, device=device)
+        else:
+            freq = freq.to(device=device, dtype=torch.long)
+        model_input = model_input + self.freq_emb(freq)
+
+        position_ids = torch.arange(model_input.shape[1], device=device, dtype=torch.long).unsqueeze(0).expand(bsz, -1)
+        position_embeddings = self.rotary_emb(model_input, position_ids)
+
+        # Causal everywhere, with a bidirectional carve-out for the coarse block. The 2D `attention_mask`
+        # follows the HF convention (1 = real, 0 = padded) and is the inverse of our internal `patch_padding`.
+        attention_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=model_input,
+            attention_mask=(patch_padding == 0).to(torch.long),
+            past_key_values=None,
+            position_ids=position_ids,
+            block_sequence_ids=self._block_sequence_ids_for_full_forward(
+                bsz, num_coarse_patches, num_special, num_fine_patches, device
+            ),
+        )
+
+        hidden_states = model_input
+        for layer in self.layers[: self.config.num_hidden_layers]:
+            hidden_states = layer(
+                hidden_states,
+                attention_mask=attention_mask,
+                paddings=patch_padding,
+                position_embeddings=position_embeddings,
                 **kwargs,
             )
-        return self._incremental_forward(
-            past_values_fine=past_values_fine,
-            past_values_fine_padding=past_values_fine_padding,
-            freq=freq,
-            past_key_values=past_key_values,
-            loc_fine=loc_fine,
-            scale_fine=scale_fine,
-            loc_fine_patch=loc_fine_patch,
-            scale_fine_patch=scale_fine_patch,
-            **kwargs,
+
+        return CtsmOutput(
+            last_hidden_state=hidden_states,
+            loc=loc_fine,
+            scale=scale_fine,
+            loc_coarse=loc_coarse,
+            scale_coarse=scale_coarse,
+            loc_fine_patch=fine_patch_mu,
+            scale_fine_patch=fine_patch_sigma,
+            num_coarse_patches=num_coarse_patches + num_special,
+            num_fine_patches=num_fine_patches,
         )
 
     @staticmethod
@@ -772,18 +798,11 @@ class CtsmModel(CtsmPreTrainedModel):
         return normalized, mu.squeeze(-1), sigma.squeeze(-1)
 
     def _patchify(
-        self,
-        past_values: torch.Tensor,
-        past_values_padding: torch.Tensor,
-        external_patch_stats: tuple[torch.Tensor, torch.Tensor] | None = None,
+        self, past_values: torch.Tensor, past_values_padding: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         """Patchify a (stream-normalized) stream, apply TimesFM's per-first-patch normalization,
         and project through the input tokenizer. The per-first-patch ``(mu, sigma)`` are returned
-        so the horizon head's output can be denormalized through both levels later.
-
-        ``external_patch_stats`` lets the incremental decode path reuse the per-first-patch stats
-        frozen by the initial full forward, so new fine patches share the cached K/V's normalized space.
-        """
+        so the horizon head's output can be denormalized through both levels later."""
         bsz = past_values.shape[0]
         patched_inputs = past_values.view(bsz, -1, self.config.patch_length)
         patched_pads = past_values_padding.view(bsz, -1, self.config.patch_length)
@@ -791,12 +810,7 @@ class CtsmModel(CtsmPreTrainedModel):
         # CTSM's stream-normalized input is the analogue of TimesFM's raw input here, so we reuse the
         # parent's per-first-patch transform to match the reference's two-stage normalization.
         patched_inputs = patched_inputs * (1.0 - patched_pads)
-        if external_patch_stats is None:
-            patched_inputs, patch_stats = self._forward_transform(patched_inputs, patched_pads)
-        else:
-            mu, sigma = external_patch_stats
-            patched_inputs = (patched_inputs - mu[:, None, None]) / sigma[:, None, None]
-            patch_stats = external_patch_stats
+        patched_inputs, patch_stats = self._forward_transform(patched_inputs, patched_pads)
         patched_inputs = patched_inputs * (1.0 - patched_pads)
         concat_inputs = torch.cat([patched_inputs, patched_pads], dim=-1)
         embeddings = self.input_ff_layer(concat_inputs)
@@ -817,226 +831,17 @@ class CtsmModel(CtsmPreTrainedModel):
         )
         return block_ids.unsqueeze(0).expand(bsz, -1)
 
-    def _full_forward(
-        self,
-        past_values_coarse: torch.Tensor,
-        past_values_fine: torch.Tensor,
-        past_values_coarse_padding: torch.LongTensor | None,
-        past_values_fine_padding: torch.LongTensor | None,
-        freq: torch.Tensor | None,
-        use_cache: bool,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> CtsmOutput:
-        if past_values_coarse_padding is None:
-            past_values_coarse_padding = torch.zeros_like(past_values_coarse)
-        if past_values_fine_padding is None:
-            past_values_fine_padding = torch.zeros_like(past_values_fine)
-        past_values_coarse_padding = past_values_coarse_padding.to(past_values_coarse.dtype)
-        past_values_fine_padding = past_values_fine_padding.to(past_values_fine.dtype)
-
-        patch_length = self.config.patch_length
-        past_values_coarse, past_values_coarse_padding = self._left_pad_to_patch_boundary(
-            past_values_coarse, past_values_coarse_padding, patch_length
-        )
-        past_values_fine, past_values_fine_padding = self._left_pad_to_patch_boundary(
-            past_values_fine, past_values_fine_padding, patch_length
-        )
-
-        coarse_normalized, loc_coarse, scale_coarse = self._normalize_with_pad(
-            past_values_coarse, past_values_coarse_padding, tolerance=self.config.tolerance
-        )
-        fine_normalized, loc_fine, scale_fine = self._normalize_with_pad(
-            past_values_fine, past_values_fine_padding, tolerance=self.config.tolerance
-        )
-
-        coarse_embeddings, coarse_patch_padding, _ = self._patchify(coarse_normalized, past_values_coarse_padding)
-        fine_embeddings, fine_patch_padding, (fine_patch_mu, fine_patch_sigma) = self._patchify(
-            fine_normalized, past_values_fine_padding
-        )
-
-        bsz, num_coarse_patches, hidden_size = coarse_embeddings.shape
-        num_fine_patches = fine_embeddings.shape[1]
-        device = coarse_embeddings.device
-        dtype = coarse_embeddings.dtype
-
-        if self.config.use_special_token:
-            special = self.special_token.to(device=device, dtype=dtype).expand(bsz, 1, hidden_size)
-            special_padding = torch.zeros(bsz, 1, device=device, dtype=coarse_patch_padding.dtype)
-            model_input = torch.cat([coarse_embeddings, special, fine_embeddings], dim=1)
-            patch_padding = torch.cat([coarse_patch_padding, special_padding, fine_patch_padding], dim=1)
-            num_special = 1
-        else:
-            model_input = torch.cat([coarse_embeddings, fine_embeddings], dim=1)
-            patch_padding = torch.cat([coarse_patch_padding, fine_patch_padding], dim=1)
-            num_special = 0
-
-        if self.config.use_resolution_embeddings:
-            mr_coarse = torch.zeros(num_coarse_patches, dtype=torch.long, device=device)
-            mr_special = torch.full((num_special,), 1, dtype=torch.long, device=device)
-            mr_fine = torch.full((num_fine_patches,), 2, dtype=torch.long, device=device)
-            mr_idx = torch.cat([mr_coarse, mr_special, mr_fine], dim=0).unsqueeze(0).expand(bsz, -1)
-            model_input = model_input + self.multi_resolution(mr_idx)
-
-        if freq is None:
-            freq = torch.zeros((bsz, 1), dtype=torch.long, device=device)
-        else:
-            freq = freq.to(device=device, dtype=torch.long)
-        model_input = model_input + self.freq_emb(freq)
-
-        position_ids = torch.arange(model_input.shape[1], device=device, dtype=torch.long).unsqueeze(0).expand(bsz, -1)
-        position_embeddings = self.rotary_emb(model_input, position_ids)
-
-        past_key_values = DynamicCache(config=self.config) if use_cache else None
-
-        # Causal everywhere, with a bidirectional carve-out for the coarse block. The 2D `attention_mask` follows
-        # the HF convention (1 = real, 0 = padded) and is the inverse of our internal `patch_padding`.
-        attention_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=model_input,
-            attention_mask=(patch_padding == 0).to(torch.long),
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-            block_sequence_ids=self._block_sequence_ids_for_full_forward(
-                bsz, num_coarse_patches, num_special, num_fine_patches, device
-            ),
-        )
-
-        hidden_states = model_input
-        for layer in self.layers[: self.config.num_hidden_layers]:
-            hidden_states = layer(
-                hidden_states,
-                attention_mask=attention_mask,
-                paddings=patch_padding,
-                position_embeddings=position_embeddings,
-                past_key_values=past_key_values,
-                **kwargs,
-            )
-
-        return CtsmOutput(
-            last_hidden_state=hidden_states,
-            loc=loc_fine,
-            scale=scale_fine,
-            loc_coarse=loc_coarse,
-            scale_coarse=scale_coarse,
-            loc_fine_patch=fine_patch_mu,
-            scale_fine_patch=fine_patch_sigma,
-            num_coarse_patches=num_coarse_patches + num_special,
-            num_fine_patches=num_fine_patches,
-            past_key_values=past_key_values,
-        )
-
-    def _incremental_forward(
-        self,
-        past_values_fine: torch.Tensor,
-        past_values_fine_padding: torch.LongTensor | None,
-        freq: torch.Tensor | None,
-        past_key_values: Cache,
-        loc_fine: torch.Tensor | None,
-        scale_fine: torch.Tensor | None,
-        loc_fine_patch: torch.Tensor | None = None,
-        scale_fine_patch: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> CtsmOutput:
-        if loc_fine is None or scale_fine is None:
-            raise ValueError(
-                "`loc_fine` and `scale_fine` must be supplied together with `past_key_values` so that the new fine "
-                "values are normalized on the same scale as the cached ones."
-            )
-        if loc_fine_patch is None or scale_fine_patch is None:
-            raise ValueError(
-                "`loc_fine_patch` and `scale_fine_patch` must be supplied in incremental mode so the new fine "
-                "patches share the cached K/V's per-first-patch normalization."
-            )
-        if past_values_fine.shape[1] % self.config.patch_length != 0:
-            raise ValueError(
-                f"In incremental mode `past_values_fine` length must be a multiple of `patch_length="
-                f"{self.config.patch_length}`; got {past_values_fine.shape[1]}."
-            )
-
-        if past_values_fine_padding is None:
-            past_values_fine_padding = torch.zeros_like(past_values_fine)
-        past_values_fine_padding = past_values_fine_padding.to(past_values_fine.dtype)
-
-        tol = self.config.tolerance
-        fine_normalized = (past_values_fine - loc_fine.unsqueeze(-1)) / (scale_fine.unsqueeze(-1) + tol)
-        fine_normalized = fine_normalized * (1.0 - past_values_fine_padding)
-        fine_normalized = fine_normalized.clamp(-1000.0, 1000.0)
-
-        new_embeddings, new_patch_padding, _ = self._patchify(
-            fine_normalized,
-            past_values_fine_padding,
-            external_patch_stats=(loc_fine_patch, scale_fine_patch),
-        )
-        bsz, num_new, _ = new_embeddings.shape
-        device = new_embeddings.device
-
-        if self.config.use_resolution_embeddings:
-            mr_idx = torch.full((bsz, num_new), 2, dtype=torch.long, device=device)
-            new_embeddings = new_embeddings + self.multi_resolution(mr_idx)
-
-        if freq is None:
-            freq = torch.zeros((bsz, 1), dtype=torch.long, device=device)
-        else:
-            freq = freq.to(device=device, dtype=torch.long)
-        new_embeddings = new_embeddings + self.freq_emb(freq)
-
-        past_length = past_key_values.get_seq_length()
-        position_ids = (
-            torch.arange(past_length, past_length + num_new, dtype=torch.long, device=device)
-            .unsqueeze(0)
-            .expand(bsz, -1)
-        )
-        position_embeddings = self.rotary_emb(new_embeddings, position_ids)
-
-        # Plain causal mask: each new fine Q attends to all cached K/V (whose bidirectional coarse-block
-        # structure was baked in by the prior full forward) and causally within the newly-added block.
-        attention_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=new_embeddings,
-            attention_mask=None,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
-
-        hidden_states = new_embeddings
-        for layer in self.layers[: self.config.num_hidden_layers]:
-            hidden_states = layer(
-                hidden_states,
-                attention_mask=attention_mask,
-                paddings=new_patch_padding,
-                position_embeddings=position_embeddings,
-                past_key_values=past_key_values,
-                **kwargs,
-            )
-
-        return CtsmOutput(
-            last_hidden_state=hidden_states,
-            loc=loc_fine,
-            scale=scale_fine,
-            loc_fine_patch=loc_fine_patch,
-            scale_fine_patch=scale_fine_patch,
-            num_fine_patches=num_new,
-            past_key_values=past_key_values,
-        )
-
 
 class CtsmModelForPrediction(CtsmPreTrainedModel):
     """CTSM model with a multi-resolution prediction head and autoregressive multi-resolution decoding.
 
-    For horizons that require autoregressive decoding (``horizon_len > config.horizon_length``), the default
-    path follows the original implementation and recomputes the full multi-resolution context at each step.
-    The prediction class can optionally reuse a key/value cache across AR steps: the first step runs the full
-    forward and populates a [`DynamicCache`], subsequent steps feed only the newly-appended fine patches through
-    the stack and attend to the cached K/V for every earlier position. Two caveats, matching how a KV cache is
-    made to fit CTSM's architecture:
-
-    * Stream-level normalization statistics (``loc_fine``, ``scale_fine``) are frozen to the values
-      computed on the first step. This is a small approximation: in the untracked reference,
-      statistics are recomputed after each prediction is appended; in practice the drift is small
-      when forecasts stay in-distribution.
-    * If an AR step would grow the coarse block (a new coarse patch is formed once every
-      ``patch_length * aggregation_factor / output_patch_len`` steps, i.e. ~every 15 steps at the defaults),
-      the cache is discarded and a full forward is run, rebuilding the cache.
+    For horizons that require autoregressive decoding (``horizon_len > config.horizon_length``), the
+    full multi-resolution context is rebuilt at every step: predictions are appended to the raw fine
+    context, new coarse patches are aggregated every ``aggregation_factor`` fine values, and stream +
+    per-first-patch normalization statistics are recomputed on the current window. There is no KV
+    cache — the reference implementation also full-recomputes every step because the input
+    normalization is global over the current window, which makes any cached K/V from a prior step
+    stale by construction.
     """
 
     def __init__(self, config: CtsmConfig):
@@ -1125,7 +930,6 @@ class CtsmModelForPrediction(CtsmPreTrainedModel):
         future_values: torch.Tensor | None = None,
         horizon_len: int | None = None,
         freq: Sequence[int] | torch.Tensor | None = None,
-        use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CtsmOutputForPrediction:
         r"""
@@ -1136,13 +940,10 @@ class CtsmModelForPrediction(CtsmPreTrainedModel):
             Optional fine-resolution ground truth used to compute the loss.
         horizon_len (`int`, *optional*):
             Number of fine-resolution steps to forecast. Defaults to `config.horizon_length`. Values larger than
-            `config.horizon_length` trigger autoregressive decoding.
+            `config.horizon_length` trigger autoregressive decoding (the full multi-resolution context is
+            rebuilt at every step, matching the reference).
         freq (`Sequence[int]` or `torch.Tensor`, *optional*):
             Frequency indices. Defaults to zeros.
-        use_cache (`bool`, *optional*):
-            Whether to use a key/value cache across autoregressive decode steps. Defaults to `False`, matching
-            the original reference behavior: full recompute at every AR step. Set to `True` to opt into the
-            faster cached path with frozen stream-normalization statistics.
         """
         device = self.horizon_ff_layer.input_layer.weight.device
         horizon_len = horizon_len or self.config.horizon_length
@@ -1169,50 +970,23 @@ class CtsmModelForPrediction(CtsmPreTrainedModel):
         max_fine = self.config.context_length
         max_coarse = self.config.context_length
         aggregation_factor = self.config.aggregation_factor
-        new_fine_patches = self.config.horizon_length // self.config.patch_length
-
-        past_key_values: Cache | None = None
-        frozen_loc_fine: torch.Tensor | None = None
-        frozen_scale_fine: torch.Tensor | None = None
-        frozen_loc_fine_patch: torch.Tensor | None = None
-        frozen_scale_fine_patch: torch.Tensor | None = None
         coarse_buffer = torch.zeros((bsz, 0), dtype=torch.float32, device=device)
 
-        if use_cache is None:
-            use_cache = False
-        pending_new_fine: torch.Tensor | None = None
-
         for _ in range(num_decode_patches):
-            if past_key_values is None:
-                # First step (or after cache invalidation): full forward. The coarse block in the cache
-                # stays frozen at the initial state — only the fine block grows via subsequent incremental
-                # steps — which matches how KV caches work for append-only sequences.
-                mean_patch, quant_patch, last_outputs = self._decode_step_full(
-                    past_values_coarse=coarse,
-                    past_values_fine=fine,
-                    past_values_coarse_padding=coarse_pad,
-                    past_values_fine_padding=fine_pad,
-                    freq=freq_tensor,
-                    use_cache=use_cache,
-                    **kwargs,
-                )
-                past_key_values = last_outputs.past_key_values
-                frozen_loc_fine = last_outputs.loc
-                frozen_scale_fine = last_outputs.scale
-                frozen_loc_fine_patch = last_outputs.loc_fine_patch
-                frozen_scale_fine_patch = last_outputs.scale_fine_patch
-            else:
-                # Incremental: only the fine values newly appended last step go through the stack.
-                mean_patch, quant_patch, last_outputs = self._decode_step_incremental(
-                    new_fine_values=pending_new_fine,
-                    freq=freq_tensor,
-                    past_key_values=past_key_values,
-                    loc_fine=frozen_loc_fine,
-                    scale_fine=frozen_scale_fine,
-                    loc_fine_patch=frozen_loc_fine_patch,
-                    scale_fine_patch=frozen_scale_fine_patch,
-                    **kwargs,
-                )
+            # Full recompute at every AR step: stream stats, per-first-patch stats, and the
+            # coarse/fine windows are all refreshed by `CtsmModel.forward` from the current
+            # raw context. This matches the reference's `decode` loop exactly.
+            last_outputs: CtsmOutput = self.model(
+                past_values_coarse=coarse,
+                past_values_fine=fine,
+                past_values_coarse_padding=coarse_pad,
+                past_values_fine_padding=fine_pad,
+                freq=freq_tensor,
+                **kwargs,
+            )
+            mean_patch, quant_patch = self._project_last_fine(
+                last_outputs, last_outputs.last_hidden_state.shape[1] - 1
+            )
 
             take = min(remaining, output_patch_len)
             mean_chunks.append(mean_patch[:, :take])
@@ -1222,10 +996,10 @@ class CtsmModelForPrediction(CtsmPreTrainedModel):
                 break
 
             new_fine = mean_patch[:, :output_patch_len]
-            pending_new_fine = new_fine
 
-            # Track the raw contexts so the next full-forward (initial step or after cache
-            # invalidation) sees the right state. Mirrors the reference AR loop.
+            # Slide the fine window: append the new predictions, trim to the most recent
+            # `max_fine` values. The trimmed values may shift the "first patch" used by the
+            # per-first-patch normalization, which is intentional.
             fine = torch.cat([fine, new_fine], dim=1)
             fine_pad = torch.cat(
                 [fine_pad, torch.zeros((bsz, output_patch_len), device=device, dtype=fine_pad.dtype)], dim=1
@@ -1234,6 +1008,8 @@ class CtsmModelForPrediction(CtsmPreTrainedModel):
                 fine = fine[:, -max_fine:]
                 fine_pad = fine_pad[:, -max_fine:]
 
+            # Aggregate new fine predictions into the coarse stream as full blocks of length
+            # `aggregation_factor` become available; carry the remainder in `coarse_buffer`.
             coarse_buffer = torch.cat([coarse_buffer, new_fine], dim=1)
             full_blocks = coarse_buffer.shape[1] // aggregation_factor
             if full_blocks > 0:
@@ -1250,12 +1026,6 @@ class CtsmModelForPrediction(CtsmPreTrainedModel):
                 if coarse.shape[1] > max_coarse:
                     coarse = coarse[:, -max_coarse:]
                     coarse_pad = coarse_pad[:, -max_coarse:]
-
-            if past_key_values is not None:
-                projected_len = past_key_values.get_seq_length() + new_fine_patches
-                if projected_len >= self.config.max_position_embeddings:
-                    past_key_values = None
-                    pending_new_fine = None
 
         mean_predictions = torch.cat(mean_chunks, dim=1)[:, :horizon_len]
         full_predictions = torch.cat(
@@ -1381,54 +1151,6 @@ class CtsmModelForPrediction(CtsmPreTrainedModel):
         mean_patch = torch.nan_to_num(mean_patch, nan=0.0, posinf=0.0, neginf=0.0)
         quant_patch = torch.nan_to_num(quant_patch, nan=0.0, posinf=0.0, neginf=0.0)
         return mean_patch, quant_patch
-
-    def _decode_step_full(
-        self,
-        past_values_coarse: torch.Tensor,
-        past_values_fine: torch.Tensor,
-        past_values_coarse_padding: torch.Tensor,
-        past_values_fine_padding: torch.Tensor,
-        freq: torch.Tensor,
-        use_cache: bool,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor, CtsmOutput]:
-        """Full forward through the model. If `use_cache`, the returned outputs carry a fresh cache."""
-        outputs: CtsmOutput = self.model(
-            past_values_coarse=past_values_coarse,
-            past_values_fine=past_values_fine,
-            past_values_coarse_padding=past_values_coarse_padding,
-            past_values_fine_padding=past_values_fine_padding,
-            freq=freq,
-            use_cache=use_cache,
-            **kwargs,
-        )
-        mean_patch, quant_patch = self._project_last_fine(outputs, outputs.last_hidden_state.shape[1] - 1)
-        return mean_patch, quant_patch, outputs
-
-    def _decode_step_incremental(
-        self,
-        new_fine_values: torch.Tensor,
-        freq: torch.Tensor,
-        past_key_values: Cache,
-        loc_fine: torch.Tensor,
-        scale_fine: torch.Tensor,
-        loc_fine_patch: torch.Tensor,
-        scale_fine_patch: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor, CtsmOutput]:
-        """Append `new_fine_values` to the cached state and run only the new positions through the stack."""
-        outputs: CtsmOutput = self.model(
-            past_values_fine=new_fine_values,
-            freq=freq,
-            past_key_values=past_key_values,
-            loc_fine=loc_fine,
-            scale_fine=scale_fine,
-            loc_fine_patch=loc_fine_patch,
-            scale_fine_patch=scale_fine_patch,
-            **kwargs,
-        )
-        mean_patch, quant_patch = self._project_last_fine(outputs, outputs.last_hidden_state.shape[1] - 1)
-        return mean_patch, quant_patch, outputs
 
 
 __all__ = ["CtsmModel", "CtsmModelForPrediction", "CtsmPreTrainedModel"]

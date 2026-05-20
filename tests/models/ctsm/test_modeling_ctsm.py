@@ -251,38 +251,18 @@ class CtsmModelTest(ModelTesterMixin, unittest.TestCase):
             inputs_dict["future_values"] = floats_tensor([batch_size, self.model_tester.horizon_length], rng=rng)
         return inputs_dict
 
-    def test_kv_cache_matches_full_recompute(self):
-        """Cached autoregressive decoding should produce close-to-identical predictions to the
-        full-recompute path (the small gap is from the stream-stats-freezing approximation)."""
+    def test_ar_decode_runs_long_horizon(self):
+        """Autoregressive decoding (horizon > config.horizon_length) full-recomputes every step,
+        matching the reference's `decode` loop. No KV cache is used or exposed."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = CtsmModelForPrediction(config).to(torch_device).eval()
 
-        # Long enough to trigger AR (horizon > config.horizon_length).
         horizon_len = config.horizon_length * 3
         with torch.no_grad():
-            out_default = model(**inputs_dict, horizon_len=horizon_len)
-            out_full = model(**inputs_dict, horizon_len=horizon_len, use_cache=False)
-            out_cache = model(**inputs_dict, horizon_len=horizon_len, use_cache=True)
-
-        self.assertTrue(torch.allclose(out_default.mean_predictions, out_full.mean_predictions, atol=1e-5))
-        self.assertTrue(torch.allclose(out_default.full_predictions, out_full.full_predictions, atol=1e-5))
-        # First horizon_length predictions must match bit-exactly (step 1 is identical in both paths).
-        step1 = config.horizon_length
-        self.assertTrue(
-            torch.allclose(out_full.mean_predictions[:, :step1], out_cache.mean_predictions[:, :step1], atol=1e-5),
-            msg="Step-1 predictions must match bit-exactly between cached and non-cached paths.",
-        )
-        # On subsequent AR steps the stats-freezing approximation introduces a bounded drift.
-        # Both the stream-level statistics AND the TimesFM-style per-first-patch statistics are frozen
-        # at step 1 (so the new fine patches share the cache's normalization), while the full-recompute
-        # path refreshes both each step — so the gap compounds. With random weights, a horizon of 8,
-        # and a tiny batch, the relative error is dominated by noise; we only assert it stays bounded.
-        # (On the pretrained 250M checkpoint the drift on H=256 is ~7% relative, which is acceptable
-        # for an opt-in fast path.)
-        relative = (out_full.mean_predictions - out_cache.mean_predictions).abs().max() / (
-            out_full.mean_predictions.abs().max().clamp_min(1.0)
-        )
-        self.assertLess(relative.item(), 5.0, f"cached vs full-recompute AR drift {relative.item():.2e} too large")
+            out = model(**inputs_dict, horizon_len=horizon_len)
+        self.assertEqual(out.mean_predictions.shape[-1], horizon_len)
+        self.assertEqual(out.full_predictions.shape[1], horizon_len)
+        self.assertTrue(torch.isfinite(out.mean_predictions).all())
 
 
 @require_torch
