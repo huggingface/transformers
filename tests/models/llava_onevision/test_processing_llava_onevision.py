@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import json
-import os
 import unittest
 
 import torch
@@ -21,52 +20,17 @@ import torch
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_vision_available():
-    from transformers import (
-        LlavaOnevisionProcessor,
-    )
+    from transformers import LlavaOnevisionProcessor
 
 
 @require_vision
 @require_torch
 class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = LlavaOnevisionProcessor
-
-    @classmethod
-    def setUpClass(cls):
-        # Ensure local assets are used instead of remote URLs to avoid network access in tests
-        from tests.test_processing_common import MODALITY_INPUT_DATA
-
-        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-        local_image = os.path.join(repo_root, "coco_sample.png")
-        if not os.path.isfile(local_image):
-            import numpy as np
-            from PIL import Image
-
-            Image.fromarray((np.random.rand(64, 64, 3) * 255).astype("uint8")).save(local_image)
-
-        local_tiny_video = os.path.join(repo_root, "tiny_video.mp4")
-        if not os.path.isfile(local_tiny_video):
-            try:
-                import torchvision
-
-                frames = (torch.rand(8, 64, 64, 3) * 255).byte()
-                torchvision.io.write_video(local_tiny_video, frames, fps=4)
-            except Exception:
-                local_tiny_video = None
-
-        local_videos = [
-            os.path.join(repo_root, "Big_Buck_Bunny_720_10s_10MB.mp4"),
-            os.path.join(repo_root, "sample_demo_1.mp4"),
-        ]
-        cls.local_tiny_video = local_tiny_video
-        MODALITY_INPUT_DATA["images"] = [local_image, local_image]
-        MODALITY_INPUT_DATA["videos"] = local_videos
-
-        super().setUpClass()
 
     @classmethod
     def _setup_tokenizer(cls):
@@ -165,9 +129,6 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_apply_chat_template_video_frame_sampling(self):
         processor = self.get_processor()
 
-        if self.local_tiny_video is None:
-            self.skipTest("Local tiny video unavailable for sampling test")
-
         messages = [
             [
                 {
@@ -175,7 +136,9 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     "content": [
                         {
                             "type": "video",
-                            "url": self.local_tiny_video,
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"
+                            ),
                         },
                         {"type": "text", "text": "What is shown in this video?"},
                     ],

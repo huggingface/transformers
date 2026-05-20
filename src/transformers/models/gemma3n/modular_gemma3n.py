@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
+from collections import UserDict
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -115,17 +116,22 @@ class Gemma3nTextConfig(Gemma3TextConfig):
 
     model_type = "gemma3n_text"
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
-        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
-        "layers.*.self_attn.v_norm": "replicated_with_grad_allreduce",
-        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.q_proj": "colwise_allgather",
+        "layers.*.self_attn.k_proj": "colwise_allgather",
+        "layers.*.self_attn.v_proj": "colwise_allgather",
+        "layers.*.self_attn.o_proj": "vocab_allreduce",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.down_proj": "rowwise_allreduce",
     }
+    base_model_sp_plan = None
+
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
+
     default_theta = {"global": 1_000_000.0, "local": 10_000.0}
 
     vocab_size: int = 262_400
@@ -1973,8 +1979,10 @@ class Gemma3nTextModel(Gemma3TextModel):
         for layer_type in set(self.config.layer_types):
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
-        # Initialize as empty dict - it will be filled in the right layers
-        shared_kv_states = {}
+        # Initialize as empty dict - it will be filled in the right layers. We use a UserDict instead of built-in dict (it behaves
+        # the same) for fsdp2 support (otherwise, `_apply_to_tensors` rebuilds every dict it recurses into, and `shared_kv_states`
+        # is not correctly shared, see https://github.com/pytorch/pytorch/blob/v2.10.0/torch/distributed/utils.py#L223-L255)
+        shared_kv_states = UserDict()
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             causal_mask = causal_mask_mapping[self.config.layer_types[i]]

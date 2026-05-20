@@ -251,7 +251,7 @@ class Qwen2AudioPreTrainedModel(PreTrainedModel):
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen2AudioAttention"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -421,12 +421,6 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
         if padding_side not in ["left", "right"]:
             raise ValueError(f"{padding_side} is not `left` or `right`.")
         self._padding_side = padding_side
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
 
     def get_output_embeddings(self):
         return self.language_model.get_output_embeddings()

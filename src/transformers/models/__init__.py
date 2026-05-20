@@ -342,8 +342,13 @@ if TYPE_CHECKING:
     from .pp_doclayout_v3 import *
     from .pp_lcnet import *
     from .pp_lcnet_v3 import *
+    from .pp_lcnet_v4 import *
     from .pp_ocrv5_mobile_det import *
     from .pp_ocrv5_server_det import *
+    from .pp_ocrv6_medium_det import *
+    from .pp_ocrv6_small_det import *
+    from .pp_ocrv6_small_rec import *
+    from .pp_ocrv6_tiny_rec import *
     from .prompt_depth_anything import *
     from .prophetnet import *
     from .pvt import *
