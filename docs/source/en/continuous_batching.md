@@ -98,11 +98,31 @@ manager.start()
 # submit and retrieve requests...
 ```
 
-Call [`ContinuousBatchingManager.stop`] to terminate the manager.
+### Shutting down the manager
+
+The manager runs a background thread and holds distributed resources. Shutdown happens in two stages so you can choose what to do with in-flight work.
+
+Call [`~ContinuousBatchingManager.stop`] to halt the background thread. By default, the manager stops accepting new submissions and waits for queued and active requests to finish before the thread exits.
 
 ```py
 manager.stop()
 ```
+
+Pass `hard_stop=True` to abandon pending work immediately. Queued and active requests are failed with a `RuntimeError` instead of finishing.
+
+```py
+manager.stop(hard_stop=True)
+```
+
+Once `stop` is called, [`~ContinuousBatchingManager.add_request`] and [`~ContinuousBatchingManager.add_requests`] drop new submissions and log a warning. You can still call `start` again to run another generation session with the same manager.
+
+Call [`~ContinuousBatchingManager.destroy`] to release distributed resources. `destroy` stops the manager first if it's still running, and the manager cannot be restarted afterwards. Use it when you're done with continuous batching for the lifetime of the process.
+
+```py
+manager.destroy()
+```
+
+[`~ContinuousMixin.continuous_batching_context_manager`] handles this process. It calls `stop` on exit and `destroy` unless you pass `persistent_manager=True` to cache the manager on the model for the next session.
 
 ### Adding requests
 
@@ -284,6 +304,16 @@ cb_config = ContinuousBatchingConfig(cpu_offload_space=8.0)
 ```
 
 By default, `cpu_offload_space_safety_threshold=0.8` limits the requested space to 80% of available system RAM when `psutil` is installed. Set `cpu_offload_space=None` to size the swap pool from the safety threshold.
+
+### Tensor parallel timeout
+
+Under tensor parallelism, the manager creates a CPU communication group to coordinate request submissions, cancellations, and shutdown across ranks. `cpu_group_timeout` limits how long a collective on this group can block before the process crashes. If one rank stalls, the timeout prevents the others from waiting forever.
+
+Set a longer timeout for workloads that issue infrequent collectives, or pass `None` to disable it.
+
+```py
+cb_config = ContinuousBatchingConfig(cpu_group_timeout=600.0)
+```
 
 ### Prefix caching
 
