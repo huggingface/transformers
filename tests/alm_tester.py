@@ -16,6 +16,7 @@ import copy
 import random
 import unittest
 from inspect import signature
+from unittest.mock import patch
 
 from .multimodal_tester import MultiModalModelTest, MultiModalModelTester
 from .test_modeling_common import (
@@ -169,14 +170,15 @@ class ALMModelTest(MultiModalModelTest):
         # `test_sdpa_can_dispatch_on_flash` already pops the attention mask, but we cannot simply pop the
         # audio mask here since it will raise an error in `get_audio_features` (cf. `test_mismatching_num_audio_tokens`).
         # Therefore we substitute a full-ones mask instead.
-        original_create_audio_mask = self.model_tester.create_audio_mask
-        self.model_tester.create_audio_mask = lambda: torch.ones(
-            [self.model_tester.batch_size, self.model_tester.feat_seq_length], dtype=torch.bool, device=torch_device
-        )
-        try:
+        def full_ones_mask():
+            return torch.ones(
+                [self.model_tester.batch_size, self.model_tester.feat_seq_length],
+                dtype=torch.bool,
+                device=torch_device,
+            )
+
+        with patch.object(self.model_tester, "create_audio_mask", new=full_ones_mask):
             super().test_sdpa_can_dispatch_on_flash()
-        finally:
-            self.model_tester.create_audio_mask = original_create_audio_mask
 
     def test_mismatching_num_audio_tokens(self):
         """
