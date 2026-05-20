@@ -327,18 +327,17 @@ actually uses the key. It is installed with the `transformers["chat_template"]` 
 
 `open_pattern`, `close_pattern`, and `start_anchor_pattern` are regex strings. For most users, and even for most
 model authors, this shouldn't be a problem, but if you are a developer writing an implementation of response parsing
-in another language, you should be aware of our implementation details. We apologize
-to everyone who had to implement an entire Jinja parser to get chat templating to work - we hope that if you follow the
-simple guidelines below, then response templates should be much less painful:
+in another language, you should be aware of our implementation details. This section is dedicated to everyone
+who had to implement an entire Jinja parser to get non-Python chat templating to work - we hope that if you
+follow the simple guidelines below, then response templates should be much less painful:
 
 - We use Python's `re` module for regexes. Since all Python3 strings are unicode, this means **all of our regex matches
   are unicode-aware.** This particularly affects common characters like `\w`. Make sure you set the relevant
   unicode flags in your engine.
 - We compile all regexes with `re.DOTALL` enabled and `re.MULTILINE` disabled, so `.` matches `\n` but `^` and `$`
   only match the start/end of the whole input, not line breaks.
-- We use the `(?P<name>...)` syntax for named groups. In some regex implementations, angle brackets `<>` are treated
-  as part of the name, so this would capture a group called `"<name>"`. If your implementation of regex does this, you'll
-  need to get rid of the extra angle brackets somehow, or else the groups will not match later `transform` expressions.
+- We use `(?P<name>...)` syntax for named groups. Other regex implementations have very different named capture group
+  syntax, so you may need to search for this pattern in regexes and rewrite it to match your local implementation.
 - Your regex engine may (rarely) not support lookarounds like `(?!...)`. Although these aren't commonly used in response
   templates, they can appear and we do support them! You might need to either throw an error in those cases, or manually
   extract the lookarounds and enforce them in your code when the regex engine finds a possible match.
