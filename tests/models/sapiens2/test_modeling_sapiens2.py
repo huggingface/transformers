@@ -816,6 +816,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         config = Sapiens2Config(
             num_labels=4,
             hidden_size=1536,
+            intermediate_size=6144,
             num_hidden_layers=40,
             num_attention_heads=24,
             image_size=[1024, 768],
@@ -824,7 +825,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
             head_conv_out_channels=[64, 32, 16],
             head_conv_kernel_sizes=[3, 3, 3],
         )
-        config.transformers_weights = "sapiens2_1b_matting_gss_p3m_metasim.safetensors"
+        config.transformers_weights = "sapiens2_1b_matting.safetensors"
         model = (
             Sapiens2ForMatting.from_pretrained("facebook/sapiens2-matting-1b", config=config).eval().to(torch_device)
         )
@@ -844,40 +845,46 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
 
         expected_foregrounds = torch.tensor(
             [
-                [1.5178e-04, 3.9458e-05, 7.3572e-05],
-                [7.7809e-05, 2.2595e-05, 1.8961e-05],
-                [6.2418e-05, 3.4820e-05, 3.5919e-05],
+                [0.1432, 0.2051, 0.3043],
+                [0.1889, 0.2681, 0.3509],
+                [0.2511, 0.3076, 0.4047],
             ],
             device=torch_device,
         )
-        torch.testing.assert_close(outputs.foregrounds[0, 0, :3, :3], expected_foregrounds, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            outputs.foregrounds[0, 0, 100:103, 100:103], expected_foregrounds, rtol=1e-2, atol=1e-2
+        )
 
         result = image_processor.post_process_matting(outputs, target_sizes=[(image_height, image_width)])
         self.assertEqual(len(result), 1)
         alpha = result[0]["alpha"]
         foreground = result[0]["foreground"]
-        self.assertEqual(alpha.shape, torch.Size([1, image_height, image_width]))
-        self.assertEqual(foreground.shape, torch.Size([3, image_height, image_width]))
+        self.assertEqual(alpha.shape, (1, image_height, image_width))
+        self.assertEqual(foreground.shape, (3, image_height, image_width))
 
+        # TODO(guarin): Difference due to cv2 vs torchvision pre-processing. Model outputs are
+        # equal on same tensor input.
         expected_alpha = torch.tensor(
             [
-                [2.0024476e-05, 2.0769371e-06, 3.0109459e-06],
-                [9.7945522e-06, 2.6746864e-06, 3.6666975e-06],
-                [7.9275032e-06, 3.6702979e-06, 4.7998810e-06],
+                [0.99995, 0.9999123, 0.9997628],
+                [0.99991906, 0.9997431, 0.99754137],
+                [0.9997362, 0.99711365, 0.9444071],
             ],
             device=torch_device,
         )
-        torch.testing.assert_close(alpha[0, :3, :3], expected_alpha, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(torch.tensor(alpha[0, 300:303, 300:303]), expected_alpha, rtol=1e-3, atol=1e-3)
 
         expected_foreground = torch.tensor(
             [
-                [9.3778086e-05, 3.0378451e-05, 3.8602211e-05],
-                [1.2016910e-04, 4.7495283e-05, 4.9707534e-05],
-                [8.3139930e-05, 5.2547144e-05, 5.6263394e-05],
+                [0.7175647, 0.6906685, 0.65860075],
+                [0.7162684, 0.6867891, 0.64463294],
+                [0.6924842, 0.67141336, 0.5356377],
             ],
             device=torch_device,
         )
-        torch.testing.assert_close(foreground[0, :3, :3], expected_foreground, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            torch.tensor(foreground[0, 300:303, 300:303]), expected_foreground, rtol=1e-2, atol=1e-2
+        )
 
 
 @require_torch
