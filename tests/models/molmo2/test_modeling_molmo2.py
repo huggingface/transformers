@@ -111,8 +111,8 @@ class Molmo2VisionText2TextModelTester(VLMModelTester):
     def get_additional_inputs(self, config, input_ids, pixel_values):
         num_patches = (self.image_size // self.patch_size) ** 2
         # Mark image-patch positions; required by the training-mode mask path.
-        token_type_ids = torch.zeros_like(input_ids)
-        token_type_ids[input_ids == self.image_patch_id] = 1
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[input_ids == self.image_patch_id] = 1
         return {
             "image_token_pooling": torch.randint(
                 -1,
@@ -122,7 +122,7 @@ class Molmo2VisionText2TextModelTester(VLMModelTester):
             ),
             "image_grids": torch.tensor([[[4, 4, 4, 4]]] * self.batch_size, device=torch_device),
             "image_num_crops": torch.ones(self.batch_size, 1, dtype=torch.long, device=torch_device),
-            "token_type_ids": token_type_ids,
+            "mm_token_type_ids": mm_token_type_ids,
         }
 
     def get_config(self):
@@ -433,7 +433,7 @@ class Molmo2IntegrationTest(unittest.TestCase):
             "image_token_pooling",
             "image_grids",
             "image_num_crops",
-            "token_type_ids",
+            "mm_token_type_ids",
         ):
             self.assertIn(key, inputs)
 

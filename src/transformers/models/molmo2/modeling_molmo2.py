@@ -36,11 +36,11 @@ from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hu
 from ...masking_utils import create_causal_mask, create_masks_for_generate
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.generic import maybe_autocast
 from ...utils.output_capturing import capture_outputs
 from .configuration_molmo2 import Molmo2AdapterConfig, Molmo2Config, Molmo2TextConfig, Molmo2VitConfig
@@ -951,31 +951,15 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
         )
 
 
-def token_type_ids_mask_function(group_ids: torch.Tensor) -> Callable:
-    """
-    This function adds the correct offsets to the `q_idx` and `kv_idx` as the torch API can only accept lengths,
-    not start and end indices.
-    Args:
-        group_ids (`torch.Tensor`):
-            A tensor of shape `(bs, len)` assigning each token to a multimodal group. Tokens with the same group
-            come from the same input image or video span. Text is denoted by `-1`.
-    """
-
-    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        seq_length = group_ids.shape[-1]
-
-        # Clamp indices because with static cache they can go beyond `group_ids.shape[-1]`.
-        q_idx_clamped = q_idx.clamp(max=seq_length - 1)
-        kv_idx_clamped = kv_idx.clamp(max=seq_length - 1)
-
-        # Unmask if q and kv come from the same multimodal group, which is not -1 (i.e. non-text).
-        q_group = group_ids[batch_idx, q_idx_clamped]
-        kv_group = group_ids[batch_idx, kv_idx_clamped]
-        q_group = torch.where(q_idx < seq_length, q_group, -1)
-        kv_group = torch.where(kv_idx < seq_length, kv_group, -1)
-        return (q_group == kv_group) & (q_group >= 0)
-
-    return inner_mask
+def get_block_sequence_ids_for_mask(token_type_ids: torch.Tensor, device: torch.device | None = None) -> torch.Tensor:
+    # First find where a new image block starts: 1 if image and previous not image
+    # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
+    is_image = (token_type_ids == 1).to(device=device)
+    is_previous_image = nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
+    new_image_start = is_image & ~is_previous_image
+    group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
+    block_sequence_ids = torch.where(is_image, group_ids, -1)
+    return block_sequence_ids
 
 
 def create_causal_mask_mapping(
@@ -984,7 +968,7 @@ def create_causal_mask_mapping(
     attention_mask: torch.Tensor | None,
     past_key_values: Cache | None,
     position_ids: torch.Tensor | None,
-    token_type_ids: torch.Tensor | None = None,
+    mm_token_type_ids: torch.Tensor | None = None,
     has_multimodal_inputs: bool = False,
     is_training: bool = False,
     is_first_iteration: bool | None = None,
@@ -994,8 +978,8 @@ def create_causal_mask_mapping(
     Create the causal mask mapping for Molmo2 forward passes. Multimodal spans use bidirectional attention within
     each contiguous image/video group.
     """
-    if is_training and token_type_ids is None:
-        raise ValueError("`token_type_ids` is required as a model input when training")
+    if is_training and mm_token_type_ids is None:
+        raise ValueError("`mm_token_type_ids` is required as a model input when training")
 
     mask_kwargs = {
         "config": config.get_text_config(),
@@ -1010,13 +994,10 @@ def create_causal_mask_mapping(
         if is_first_iteration is not None
         else (past_key_values is None or not past_key_values.is_initialized or has_multimodal_inputs)
     )
-    if token_type_ids is not None and is_first_iteration:
-        is_multimodal = token_type_ids > 0
-        is_previous_multimodal = nn.functional.pad(is_multimodal, (1, 0), value=0)[:, :-1]
-        new_multimodal_start = is_multimodal & ~is_previous_multimodal
-        group_ids = torch.cumsum(new_multimodal_start.int(), dim=1) - 1
-        group_ids = torch.where(is_multimodal, group_ids, -1)
-        mask_kwargs["or_mask_function"] = token_type_ids_mask_function(group_ids)
+    if mm_token_type_ids is not None and is_first_iteration:
+        mask_kwargs["block_sequence_ids"] = get_block_sequence_ids_for_mask(
+            mm_token_type_ids, device=inputs_embeds.device
+        )
 
     return create_causal_mask(**mask_kwargs)
 
@@ -1119,7 +1100,7 @@ class Molmo2Model(Molmo2PreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        token_type_ids: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1159,7 +1140,7 @@ class Molmo2Model(Molmo2PreTrainedModel):
                 attention_mask,
                 past_key_values,
                 position_ids,
-                token_type_ids,
+                mm_token_type_ids,
                 has_multimodal_inputs=images is not None,
                 is_training=self.training,
             )
@@ -1212,7 +1193,7 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: list[torch.FloatTensor] | None = None,
-        token_type_ids: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -1254,7 +1235,7 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            token_type_ids=token_type_ids,
+            mm_token_type_ids=mm_token_type_ids,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -1291,7 +1272,7 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
         video_token_pooling: torch.Tensor | None = None,
         video_grids: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        token_type_ids: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor | None = None,
         is_first_iteration: bool = False,
         use_cache: bool = True,
@@ -1303,7 +1284,7 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             logits_to_keep=logits_to_keep,
-            token_type_ids=token_type_ids,
+            mm_token_type_ids=mm_token_type_ids,
             is_first_iteration=is_first_iteration,
             use_cache=use_cache,
             **kwargs,
@@ -1327,10 +1308,9 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None,
         position_ids: torch.Tensor | None,
-        token_type_ids: torch.Tensor | None = None,
+        mm_token_type_ids: torch.Tensor | None = None,
         **kwargs,
     ) -> dict:
-        # Prepare mask arguments
         mask_kwargs = {
             "config": config.get_text_config(),
             "inputs_embeds": inputs_embeds,
@@ -1338,14 +1318,10 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
             "past_key_values": past_key_values,
             "position_ids": position_ids,
         }
-        # Add the token type ids mask for generate as well
-        if token_type_ids is not None and inputs_embeds.shape[1] != 1:
-            is_multimodal = token_type_ids > 0
-            is_previous_multimodal = nn.functional.pad(is_multimodal, (1, 0), value=0)[:, :-1]
-            new_multimodal_start = is_multimodal & ~is_previous_multimodal
-            group_ids = torch.cumsum(new_multimodal_start.int(), dim=1) - 1
-            group_ids = torch.where(is_multimodal, group_ids, -1)
-            mask_kwargs["or_mask_function"] = token_type_ids_mask_function(group_ids)
+        if mm_token_type_ids is not None and inputs_embeds.shape[1] != 1:
+            mask_kwargs["block_sequence_ids"] = get_block_sequence_ids_for_mask(
+                mm_token_type_ids, device=inputs_embeds.device
+            )
 
         return create_masks_for_generate(**mask_kwargs)
 

@@ -18,15 +18,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput, make_flat_list_of_images, make_nested_list_of_images
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, logging
-from ...video_utils import VideoInput
-
-
-logger = logging.get_logger(__name__)
+from ...image_utils import make_nested_list_of_images
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, VideosKwargs
+from ...utils import auto_docstring
 
 
 class Molmo2ImagesKwargs(ImagesKwargs, total=False):
@@ -89,34 +83,37 @@ class Molmo2ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-IMAGE_PATCH_TOKEN = "<im_patch>"
-IMAGE_LOW_RES_TOKEN = "<im_low>"
-IM_START_TOKEN = "<im_start>"
-LOW_RES_IMAGE_START_TOKEN = "<low_res_im_start>"
-FRAME_START_TOKEN = "<frame_start>"
-IM_END_TOKEN = "<im_end>"
-FRAME_END_TOKEN = "<frame_end>"
-IM_COL_TOKEN = "<im_col>"
-IMAGE_PROMPT = "<|image|>"
-VIDEO_PROMPT = "<|video|>"
-
-IMAGE_TOKENS = [
-    IMAGE_PATCH_TOKEN,
-    IM_COL_TOKEN,
-    IM_START_TOKEN,
-    LOW_RES_IMAGE_START_TOKEN,
-    FRAME_START_TOKEN,
-    IM_END_TOKEN,
-    FRAME_END_TOKEN,
-    IMAGE_LOW_RES_TOKEN,
-]
-
-
 @auto_docstring
 class Molmo2Processor(ProcessorMixin):
+    valid_processor_kwargs = Molmo2ProcessorKwargs
+    image_token = "<|image|>"
+    video_token = "<|video|>"
+    image_patch_tokens = (
+        "<im_patch>",
+        "<im_col>",
+        "<im_start>",
+        "<low_res_im_start>",
+        "<frame_start>",
+        "<im_end>",
+        "<frame_end>",
+        "<im_low>",
+    )
+
     @property
     def model_input_names(self):
-        return super().model_input_names + ["token_type_ids"]
+        return super().model_input_names + ["mm_token_type_ids"]
+
+    @property
+    def image_token_id(self) -> int:
+        return self.tokenizer.convert_tokens_to_ids(self.image_token)
+
+    @property
+    def video_token_id(self) -> int:
+        return self.tokenizer.convert_tokens_to_ids(self.video_token)
+
+    @property
+    def image_token_ids(self) -> list[int]:
+        return [self.tokenizer.convert_tokens_to_ids(token) for token in self.image_patch_tokens]
 
     def __init__(
         self,
@@ -147,61 +144,90 @@ class Molmo2Processor(ProcessorMixin):
             Whether to wrap each video frame with `<frame_start>` / `<frame_end>` tokens. If `False`, falls back to
             `<im_start>` / `<im_end>`.
         """
-        super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template)
-
-        self.image_token = IMAGE_PROMPT
-        self.video_token = VIDEO_PROMPT
-        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
-        self.video_token_id = tokenizer.convert_tokens_to_ids(self.video_token)
-        self.image_token_ids = [tokenizer.convert_tokens_to_ids(token) for token in IMAGE_TOKENS]
-        self.image_ids = self.image_token_ids
         self.image_use_col_tokens = image_use_col_tokens
         self.use_single_crop_col_tokens = use_single_crop_col_tokens
         self.use_single_crop_start_token = use_single_crop_start_token
         self.video_use_col_tokens = video_use_col_tokens
         self.use_frame_special_tokens = use_frame_special_tokens
+        super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template)
 
-    def get_image_tokens(self, image_grid):
+    def get_image_tokens(self, image_grid) -> str:
         if hasattr(image_grid, "tolist"):
             image_grid = image_grid.tolist()
         resized_h, resized_w, height, width = image_grid
-        per_row = [IMAGE_PATCH_TOKEN] * width
+        per_row = ["<im_patch>"] * width
         if self.image_use_col_tokens:
-            per_row = per_row + [IM_COL_TOKEN]
-        high_res_tokens = [IM_START_TOKEN] + per_row * height + [IM_END_TOKEN]
+            per_row = per_row + ["<im_col>"]
+        high_res_tokens = ["<im_start>"] + per_row * height + ["<im_end>"]
 
-        per_row = [IMAGE_PATCH_TOKEN] * resized_w
+        per_row = ["<im_patch>"] * resized_w
         use_single_crop_col_tokens = (
             self.image_use_col_tokens if self.use_single_crop_col_tokens is None else self.use_single_crop_col_tokens
         )
-        image_start_token = LOW_RES_IMAGE_START_TOKEN if self.use_single_crop_start_token else IM_START_TOKEN
+        image_start_token = "<low_res_im_start>" if self.use_single_crop_start_token else "<im_start>"
         if use_single_crop_col_tokens:
-            per_row = per_row + [IM_COL_TOKEN]
-        low_res_tokens = [image_start_token] + per_row * resized_h + [IM_END_TOKEN]
+            per_row = per_row + ["<im_col>"]
+        low_res_tokens = [image_start_token] + per_row * resized_h + ["<im_end>"]
 
-        return low_res_tokens + high_res_tokens
+        return "".join(low_res_tokens + high_res_tokens)
 
-    def get_video_string(self, video_grid, timestamps):
+    def get_video_string(self, video_grid, timestamps) -> str:
         if hasattr(video_grid, "tolist"):
             video_grid = video_grid.tolist()
-        if self.use_frame_special_tokens:
-            start_token = FRAME_START_TOKEN
-            end_token = FRAME_END_TOKEN
-        else:
-            start_token = IM_START_TOKEN
-            end_token = IM_END_TOKEN
+        start_token = "<frame_start>" if self.use_frame_special_tokens else "<im_start>"
+        end_token = "<frame_end>" if self.use_frame_special_tokens else "<im_end>"
 
         num_frames, num_patch_rows, num_patch_cols = video_grid
         video_string = ""
         for frame_idx, frame_time in enumerate(timestamps):
             prev_space = " " if frame_idx > 0 else ""
             video_string += prev_space + f"{frame_time:.1f} "
-            per_row = [IMAGE_PATCH_TOKEN] * num_patch_cols
+            per_row = ["<im_patch>"] * num_patch_cols
             if self.video_use_col_tokens:
-                per_row = per_row + [IM_COL_TOKEN]
+                per_row = per_row + ["<im_col>"]
             video_string += "".join([start_token] + per_row * num_patch_rows + [end_token])
 
         return video_string
+
+    def validate_inputs(
+        self,
+        images=None,
+        text=None,
+        videos=None,
+        audio=None,
+        **kwargs,
+    ):
+        super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
+        if videos is not None and text is not None:
+            for sample in text:
+                if sample.count(self.video_token) > 1:
+                    raise ValueError("At most one video is supported per sample.")
+
+    def _process_images(self, images, **kwargs):
+        batched_images = make_nested_list_of_images(images)
+        image_inputs = self.image_processor(batched_images, **kwargs)
+        image_grids = image_inputs["image_grids"]
+        image_replacements = []
+        for batch_idx, sample_images in enumerate(batched_images):
+            for image_in_sample_idx in range(len(sample_images)):
+                image_replacements.append(self.get_image_tokens(image_grids[batch_idx, image_in_sample_idx]))
+        return image_inputs, image_replacements
+
+    def _process_videos(self, videos, **kwargs):
+        video_inputs = self.video_processor(videos=videos, **kwargs)
+        video_grids = video_inputs["video_grids"]
+        video_metadata = video_inputs.get("video_metadata", [])
+        video_replacements = []
+        for video_idx, video_grid in enumerate(video_grids):
+            metadata = video_metadata[video_idx] if video_idx < len(video_metadata) else None
+            if metadata is not None:
+                timestamps = metadata.timestamps
+            else:
+                fps = self.video_processor.max_fps or 2
+                num_frames = int(video_grid[0].item())
+                timestamps = [i / fps for i in range(num_frames)]
+            video_replacements.append(self.get_video_string(video_grid, timestamps))
+        return video_inputs, video_replacements
 
     def apply_chat_template(
         self,
@@ -229,139 +255,6 @@ class Molmo2Processor(ProcessorMixin):
             chat_template = "{{ bos_token }}" + chat_template
 
         return super().apply_chat_template(conversation, chat_template=chat_template, **kwargs)
-
-    @auto_docstring
-    def __call__(
-        self,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        images: ImageInput = None,
-        videos: VideoInput = None,
-        **kwargs: Unpack[Molmo2ProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-            - **image_token_pooling** -- Indices of the patches in `image_grids` to pool for each token.
-              Returned when `images` is not `None`.
-            - **image_grids** -- Grids of images. Returned when `images` is not `None`.
-            - **image_num_crops** -- Number of crops for each image. Returned when `images` is not `None`.
-            - **pixel_values_videos** -- Pixel values of videos. Returned when `videos` is not `None`.
-            - **video_token_pooling** -- Indices of the patches in `video_grids` to pool for each token.
-              Returned when `videos` is not `None`.
-            - **video_grids** -- Grids of videos. Returned when `videos` is not `None`.
-        """
-        output_kwargs = self._merge_kwargs(
-            Molmo2ProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        if not isinstance(text, list):
-            text = [text]
-
-        text = text.copy()
-
-        if images is not None:
-            image_counts = [sample.count(self.image_token) for sample in text]
-            fetched_images = self.image_processor.fetch_images(images)
-            batched_images = make_nested_list_of_images(fetched_images)
-            if sum(image_counts) == 0:
-                if len(batched_images) == len(text):
-                    image_counts = [len(sample_images) for sample_images in batched_images]
-                else:
-                    flat_images = make_flat_list_of_images(fetched_images)
-                    if len(flat_images) != len(text):
-                        raise ValueError(
-                            f"The number of images ({len(flat_images)}) does not match the batch size "
-                            f"({len(text)}). Please provide image placeholder tokens in text or pass a nested "
-                            "list of images per sample."
-                        )
-                    image_counts = [1] * len(text)
-            if len(batched_images) != len(text) and len(batched_images) == 1:
-                flat_images = make_flat_list_of_images(fetched_images)
-                if len(flat_images) != sum(image_counts):
-                    raise ValueError(
-                        f"The number of images ({len(flat_images)}) does not match the number of image tokens "
-                        f"in the text ({sum(image_counts)})."
-                    )
-                batched_images = []
-                image_offset = 0
-                for image_count in image_counts:
-                    batched_images.append(flat_images[image_offset : image_offset + image_count])
-                    image_offset += image_count
-
-            images_per_sample = [len(sample_images) for sample_images in batched_images]
-            if images_per_sample != image_counts:
-                raise ValueError(
-                    f"The number of images per sample ({images_per_sample}) must match the number of image tokens "
-                    f"in each text sample ({image_counts})."
-                )
-
-            image_inputs = self.image_processor(batched_images, **output_kwargs["images_kwargs"])
-            image_grids = image_inputs["image_grids"]
-        else:
-            image_inputs = {}
-            image_grids = None
-
-        if videos is not None:
-            videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
-            video_grids = videos_inputs["video_grids"]
-            if "return_metadata" not in kwargs:
-                video_metadata = videos_inputs.pop("video_metadata")
-            else:
-                video_metadata = videos_inputs["video_metadata"]
-        else:
-            videos_inputs = {}
-            video_grids = None
-
-        if image_grids is not None:
-            for i in range(len(text)):
-                num_images = text[i].count(self.image_token)
-                image_grids_i = image_grids[i, :num_images]
-                for image_grid in image_grids_i:
-                    image_string = "".join(self.get_image_tokens(image_grid))
-                    text[i] = text[i].replace(self.image_token, image_string, 1)
-
-        if video_grids is not None:
-            index = 0
-            for i in range(len(text)):
-                num_videos = text[i].count(self.video_token)
-                if num_videos > 1:
-                    raise ValueError("At most one video is supported per sample.")
-                video_grids_i = video_grids[index : index + num_videos]
-                metadata_i = video_metadata[index : index + num_videos]
-                for video_grid, metadata in zip(video_grids_i, metadata_i):
-                    if metadata.frames_indices is None:
-                        metadata.frames_indices = list(range(video_grid[0].item()))
-                    if metadata.fps is None:
-                        metadata.fps = self.video_processor.max_fps or 2
-                        logger.warning_once(
-                            "Molmo2 inserts frame timestamps into video prompts, but the input video's `fps` was not "
-                            f"provided or could not be inferred. Defaulting to `fps={metadata.fps}`. Please provide "
-                            "`video_metadata` for more accurate timestamps."
-                        )
-                    text[i] = text[i].replace(
-                        self.video_token, self.get_video_string(video_grid, metadata.timestamps), 1
-                    )
-                index += num_videos
-
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-
-        if return_mm_token_type_ids:
-            text_inputs["token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
-
-        return BatchFeature(
-            data={**text_inputs, **image_inputs, **videos_inputs},
-            tensor_type=return_tensors,
-        )
 
 
 __all__ = ["Molmo2Processor"]
