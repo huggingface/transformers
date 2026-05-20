@@ -32,8 +32,7 @@
         title: Contribute to Transformers
       - local: modular_transformers
         title: Add a model with modular transformers
-      - title: Multimodal models
-        isExpanded: false
+      - isExpanded: false
         sections:
         - local: multimodal_processing
           title: Multimodal processors
@@ -41,6 +40,7 @@
           title: Vision processing components
         - local: add_audio_processing_components
           title: Audio processing components
+        title: Multimodal models
       - local: modeling_rules
         title: Model structure rules
       - local: model_output_tracing
