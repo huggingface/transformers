@@ -208,6 +208,7 @@ class Molmo2Config(PreTrainedConfig):
     """
 
     model_type = "molmo2"
+    attribute_map = {"image_token_id": "image_patch_id"}
     sub_configs = {
         "text_config": Molmo2TextConfig,
         "vit_config": Molmo2VitConfig,

@@ -1064,25 +1064,28 @@ class Molmo2Model(Molmo2PreTrainedModel):
             pixel_values = pixel_values.view(B * T, N, D)
         return self.vision_backbone.image_vit(pixel_values, **kwargs)
 
+    # Copied from transformers.models.llava.modeling_llava.LlavaModel.get_placeholder_mask
     def get_placeholder_mask(
-        self,
-        input_ids: torch.LongTensor | None,
-        inputs_embeds: torch.FloatTensor,
-        image_features: torch.FloatTensor,
-    ) -> torch.Tensor:
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
         if input_ids is None:
-            image_patch_embed = self.language_model.wte(
-                torch.tensor(self.config.image_patch_id, dtype=torch.long, device=inputs_embeds.device)
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
-            special_image_mask = (inputs_embeds == image_patch_embed).all(-1)
+            special_image_mask = special_image_mask.all(-1)
         else:
-            special_image_mask = input_ids == self.config.image_patch_id
+            special_image_mask = input_ids == self.config.image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        n_image_features = image_features.shape[0] * image_features.shape[1]
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         torch_compilable_check(
-            special_image_mask.sum() == image_features.shape[0],
-            lambda: (
-                f"Image features and image tokens do not match: "
-                f"tokens: {int(special_image_mask.sum())}, features: {image_features.shape[0]}"
-            ),
+            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
         )
         return special_image_mask
 
@@ -1127,8 +1130,10 @@ class Molmo2Model(Molmo2PreTrainedModel):
         if images is not None:
             image_features = self.vision_backbone(images, token_pooling)
             special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
-            hidden_dim = inputs_embeds.shape[-1]
-            inputs_embeds.view(-1, hidden_dim)[special_image_mask.view(-1)] += image_features
+            inputs_embeds = inputs_embeds.masked_scatter(
+                special_image_mask,
+                inputs_embeds[special_image_mask] + image_features.reshape(-1),
+            )
 
         inputs_embeds = self.language_model.emb_drop(inputs_embeds)
 

@@ -20,7 +20,10 @@
 
 from ...image_utils import make_nested_list_of_images
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, VideosKwargs
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
+
+
+logger = logging.get_logger(__name__)
 
 
 class Molmo2ImagesKwargs(ImagesKwargs, total=False):
@@ -221,6 +224,15 @@ class Molmo2Processor(ProcessorMixin):
         for video_idx, video_grid in enumerate(video_grids):
             metadata = video_metadata[video_idx] if video_idx < len(video_metadata) else None
             if metadata is not None:
+                if metadata.frames_indices is None:
+                    metadata.frames_indices = list(range(int(video_grid[0].item())))
+                if metadata.fps is None:
+                    metadata.fps = self.video_processor.max_fps or 2
+                    logger.warning_once(
+                        "Molmo2 inserts frame timestamps into video prompts, but the input video's `fps` was not "
+                        f"provided or could not be inferred. Defaulting to `fps={metadata.fps}`. Please provide "
+                        "`video_metadata` for more accurate timestamps."
+                    )
                 timestamps = metadata.timestamps
             else:
                 fps = self.video_processor.max_fps or 2
