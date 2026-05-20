@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import re
 import unicodedata
 
 import numpy as np
 
-from ...audio_utils import AudioInput, make_list_of_audio, make_list_of_audio_chat_template
+from ...audio_utils import AudioInput, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
+from ...utils import auto_docstring
 from ...utils.import_utils import is_nagisa_available, is_soynlp_available
 
 
@@ -93,35 +93,6 @@ def resolve_language(language: str | None) -> str | None:
         f"Supported codes: {sorted(LANGUAGE_CODE_TO_NAME.keys())}. "
         f"Supported names: {sorted(SUPPORTED_LANGUAGE_NAMES)}."
     )
-
-
-class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "left",
-        },
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-            "padding": True,
-            "truncation": False,
-            "return_attention_mask": True,
-            "n_window": 50,  # should match config.n_window
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
-
-
-def _get_feat_extract_output_lengths(input_lengths, n_window=50):
-    """
-    Computes the output length of the convolutional layers and the output length of the audio encoder
-    """
-
-    chunk_len = n_window * 2
-    input_lengths_leave = input_lengths % chunk_len
-    feat_lengths = (input_lengths_leave - 1) // 2 + 1
-    output_lengths = ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // chunk_len) * 13
-    return output_lengths
 
 
 def _prepare_language_inputs(
@@ -312,23 +283,26 @@ def _fix_timestamps(raw: np.ndarray) -> list[int]:
     return [int(val) for val in result]
 
 
-class Qwen3ASRProcessor(ProcessorMixin):
-    r"""
-    Constructs a Qwen3ASR processor.
-    [`Qwen3ASRProcessor`] offers all the functionalities of [`WhisperFeatureExtractor`], and [`Qwen2TokenizerFast`]. See the
-    [`~Qwen3ASRProcessor.__call__`] and [`~Qwen3ASRProcessor.decode`] for more information.
+class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "padding": True,
+            "padding_side": "left",
+        },
+        "audio_kwargs": {
+            "sampling_rate": 16000,
+            "padding": True,
+            "truncation": False,
+            "return_attention_mask": True,
+            "n_window": 50,  # should match config.n_window
+        },
+        "common_kwargs": {"return_tensors": "pt"},
+    }
 
-    Args:
-        feature_extractor ([`WhisperFeatureExtractor`], *optional*):
-            The audio feature extractor.
-        tokenizer ([`Qwen2TokenizerFast`], *optional*):
-            The text tokenizer.
-        chat_template (`Optional[str]`, *optional*):
-            The Jinja template to use for formatting the conversation. If not provided, the default chat template is used.
-        timestamp_segment_time (`int`, *optional*, defaults to 80):
-            The segment time in milliseconds used for grouping timestamps during forced alignment. This should match the
-            value used during training of the forced aligner model.
-    """
+
+@auto_docstring
+class Qwen3ASRProcessor(ProcessorMixin):
+    valid_processor_kwargs = Qwen3ASRProcessorKwargs
 
     def __init__(self, feature_extractor=None, tokenizer=None, chat_template=None, timestamp_segment_time: int = 80):
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
@@ -340,65 +314,31 @@ class Qwen3ASRProcessor(ProcessorMixin):
         self.audio_eos_token = self.tokenizer.audio_eos_token
         self.audio_eos_token_id = self.tokenizer.convert_tokens_to_ids(self.audio_eos_token)
 
+    @auto_docstring
     def __call__(
         self,
         text: TextInput | list[TextInput],
         audio: AudioInput,
         output_labels: bool | None = False,
-        **kwargs,
+        **kwargs: Unpack[Qwen3ASRProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare one or several text sequence(s) and audio waveform(s) for the model.
+        r"""
+        output_labels (bool, *optional*, default=False):
+            Whether to return labels for training.
 
-        Args:
-            text (`str`, `List[str]`):
-                The sequence or batch of sequences to be encoded.
-            audio (`np.ndarray`, `List[np.ndarray]`):
-                The audio or batch of audio to be prepared. Must be as many ``text``
-                inputs as ``audio`` inputs.
-            output_labels (bool, *optional*, default=False):
-                Whether to return labels for training.
+        Returns:
+            [`BatchFeature`]: A dictionary with tokenized text (`input_ids`, `attention_mask`) and
+            audio features (`input_features`, `input_features_mask`).
         """
-        call_kwargs = self._merge_kwargs(
-            Qwen3ASRProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        text_kwargs = call_kwargs["text_kwargs"]
-        audio_kwargs = call_kwargs["audio_kwargs"]
-        return_tensors = text_kwargs.get("return_tensors")
-        if return_tensors != "pt":
+        if "return_tensors" in kwargs and kwargs["return_tensors"] != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
-        if isinstance(text, str):
-            text = [text]
-
-        audio = make_list_of_audio(audio)
-        if len(text) != len(audio):
-            raise ValueError(f"Got {len(text)} text but {len(audio)} audios; they must match 1:1.")
-
-        # Prepare audio
-        data = self.feature_extractor(audio, **audio_kwargs)
-        data["input_features_mask"] = data.pop("attention_mask")
-
-        # Replace audio tokens in text
-        audio_lengths = (
-            _get_feat_extract_output_lengths(data["input_features_mask"].sum(-1), audio_kwargs["n_window"])
-            .cpu()
-            .numpy()
-        )
-        audio_token_pattern = re.compile(re.escape(self.audio_token))
-        for sample_idx, num_tokens in enumerate(audio_lengths):
-            text[sample_idx] = audio_token_pattern.sub(self.audio_token * int(num_tokens), text[sample_idx])
-
-        # Prepare text
-        text_inputs = self.tokenizer(text, **text_kwargs)
-        data.update(text_inputs)
+        if output_labels:
+            kwargs["return_mm_token_type_ids"] = True
+        model_inputs = super().__call__(audio=audio, text=text, **kwargs)
 
         if output_labels:
-            labels = data["input_ids"].clone()
-            # skip special tokens
+            labels = model_inputs.pop("mm_token_type_ids")
             for token_id in [
                 self.audio_token_id,
                 self.tokenizer.pad_token_id,
@@ -406,9 +346,45 @@ class Qwen3ASRProcessor(ProcessorMixin):
                 self.audio_eos_token_id,
             ]:
                 labels[labels == token_id] = -100
-            data["labels"] = labels
+            model_inputs["labels"] = labels
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=model_inputs, tensor_type="pt")
+
+    def validate_inputs(
+        self,
+        audio: AudioInput | None = None,
+        text: TextInput | list[TextInput] | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        super().validate_inputs(audio=audio, text=text, **kwargs)
+
+        if text is not None and audio is not None and len(text) != len(audio):
+            raise ValueError(f"Got {len(text)} text but {len(audio)} audios; they must match 1:1.")
+
+    def _get_audio_token_length(self, audio_lengths, n_window=50):
+        chunk_len = n_window * 2
+        remainder = audio_lengths % chunk_len  # mel frames in the final partial chunk
+        feat_lengths = (remainder - 1) // 2 + 1  # after first conv (stride 2)
+        per_chunk_tokens = (feat_lengths - 1) // 2 + 1  # after second conv (stride 2)
+        token_lengths = (
+            (per_chunk_tokens - 1) // 2 + 1 + (audio_lengths // chunk_len) * 13
+        )  # after third conv + full chunks
+        return token_lengths.cpu().numpy()
+
+    def _process_audio(self, audio: AudioInput, **kwargs):
+        n_window = kwargs.get("n_window", 50)
+        audio_inputs = self.feature_extractor(audio, **kwargs)
+        audio_inputs["input_features_mask"] = audio_inputs.pop("attention_mask")
+
+        audio_lengths = self._get_audio_token_length(audio_inputs["input_features_mask"].sum(-1), n_window)
+        audio_inputs["num_audio_tokens"] = audio_lengths
+
+        audio_replacements = [self.replace_audio_token(audio_inputs, idx) for idx in range(len(audio))]
+        return audio_inputs, audio_replacements
+
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int) -> str:
+        num_tokens = int(audio_inputs["num_audio_tokens"][audio_idx])
+        return self.audio_token * num_tokens
 
     def apply_transcription_request(
         self,
@@ -714,6 +690,11 @@ class Qwen3ASRProcessor(ProcessorMixin):
             batch_results.append(items)
 
         return batch_results
+
+    @property
+    def unused_input_names(self) -> list[str]:
+        "Input names returned always by subprocessors but not used in model's `forward`"
+        return ["num_audio_tokens"]
 
     @property
     def model_input_names(self):
