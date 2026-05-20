@@ -309,26 +309,19 @@ class Mamba2Mixer(nn.Module):
             _, _, gate, hidden_states_B_C, dt = projected_states.split(
                 [d_mlp, d_mlp, self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
             )
-            # 2. Convolution: prepend cached left-context so causal conv sees correct history.
-            hidden_states_B_C_t = hidden_states_B_C.transpose(1, 2)
-            hidden_states_B_C_t = torch.cat(
-                [cache_params.layers[self.layer_idx].conv_states[:, :, 1:], hidden_states_B_C_t], dim=-1
+            # 2. Convolution: seed the causal conv with cached left-context via initial_states.
+            hidden_states_B_C, new_conv_state = causal_conv1d_fn(
+                x=hidden_states_B_C.transpose(1, 2),
+                weight=self.conv1d.weight.squeeze(1),
+                bias=self.conv1d.bias,
+                activation=self.activation,
+                initial_states=cache_params.layers[self.layer_idx].conv_states[:, :, 1:],
+                return_final_states=True,
             )
-            new_conv_state = nn.functional.pad(
-                hidden_states_B_C_t, (self.conv_kernel_size - hidden_states_B_C_t.shape[-1], 0)
+            hidden_states_B_C = hidden_states_B_C.transpose(1, 2)
+            cache_params.update_conv_state(
+                nn.functional.pad(new_conv_state, (1, 0)), layer_idx=self.layer_idx
             )
-            cache_params.update_conv_state(new_conv_state, layer_idx=self.layer_idx)
-            if causal_conv1d_fn is not None:
-                hidden_states_B_C = causal_conv1d_fn(
-                    x=hidden_states_B_C_t,
-                    weight=self.conv1d.weight.squeeze(1),
-                    bias=self.conv1d.bias,
-                    activation=self.activation,
-                ).transpose(1, 2)[:, -seq_len:, :]
-            else:
-                hidden_states_B_C = self.act(
-                    self.conv1d(hidden_states_B_C_t)[..., :hidden_states_B_C_t.shape[-1]]
-                ).transpose(1, 2)[:, -seq_len:, :]
             hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C, attention_mask)
             hidden_states, B, C = torch.split(
                 hidden_states_B_C,
