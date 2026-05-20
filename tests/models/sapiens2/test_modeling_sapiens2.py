@@ -167,7 +167,6 @@ class Sapiens2ModelTester:
         config.head_scale_conv_out_channels = [8, 4]
         config.head_scale_conv_kernel_sizes = [1, 1]
         config.head_scale_final_hidden_sizes = [8]
-        # flat_size = (32/2 / 2^2) * (32/2 / 2^2) * 4 = 4*4*4 = 64
         return config
 
     def create_and_check_backbone(self, config, pixel_values, labels):
@@ -289,13 +288,7 @@ class Sapiens2ModelTester:
         return config, pixel_values, labels
 
     def prepare_config_and_inputs_for_common(self):
-        config = self.get_config_for_semantic_segmentation()
-        # Add scale branch params so Sapiens2ForPointmapEstimation is fully instantiated.
-        # 3 layers to match the conversion mapping (indices 0, 3, 6 in the original Sequential).
-        # These fields are ignored by all other model classes.
-        config.head_scale_conv_out_channels = [8, 4, 4]
-        config.head_scale_conv_kernel_sizes = [1, 1, 1]
-        config.head_scale_final_hidden_sizes = [8]
+        config = self.get_config()
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict

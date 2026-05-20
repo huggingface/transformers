@@ -789,6 +789,7 @@ class Sapiens2Config(DINOv3ViTConfig):
                 else "grouped_query_attention"
                 for i in range(self.num_hidden_layers)
             ]
+        # TODO(guarin): Should we drop defaults for heads?
         if self.head_upsample_out_channels is None:
             self.head_upsample_out_channels = [512, 256, 128, 64]
         if self.head_upsample_kernel_sizes is None:
