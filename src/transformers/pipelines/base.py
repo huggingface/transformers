@@ -762,6 +762,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
     _load_image_processor = None
     _load_feature_extractor = None
     _load_tokenizer = None
+    _load_video_processor = None
 
     # Pipelines that call `generate` have shared logic, e.g. preparing the generation config.
     _pipeline_calls_generate = False
@@ -775,6 +776,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         feature_extractor: PreTrainedFeatureExtractor | None = None,
         image_processor: BaseImageProcessor | None = None,
         processor: ProcessorMixin | None = None,
+        video_processor=None,
         task: str = "",
         device: int | torch.device | None = None,
         binary_output: bool = False,
@@ -789,6 +791,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         self.feature_extractor = feature_extractor
         self.image_processor = image_processor
         self.processor = processor
+        self.video_processor = video_processor
 
         # `accelerate` device map
         hf_device_map = getattr(self.model, "hf_device_map", None)

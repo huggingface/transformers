@@ -51,14 +51,20 @@ class VideoClassificationPipeline(Pipeline):
     """
 
     _load_processor = False
-    _load_image_processor = True
+    _load_image_processor = None
     _load_feature_extractor = False
     _load_tokenizer = False
+    _load_video_processor = None
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         requires_backends(self, "av")
         self.check_model_type(MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES)
+        if self.video_processor is None and self.image_processor is None and self.feature_extractor is None:
+            raise ValueError(
+                "The VideoClassificationPipeline requires either a video processor, an image processor, or a feature "
+                "extractor. None were found for this model."
+            )
 
     def _sanitize_parameters(self, top_k=None, num_frames=None, frame_sampling_rate=None, function_to_apply=None):
         preprocess_params = {}
@@ -145,7 +151,8 @@ class VideoClassificationPipeline(Pipeline):
         video = read_video_pyav(container, indices)
         video = list(video)
 
-        model_inputs = self.image_processor(video, return_tensors="pt")
+        preprocessor = self.video_processor or self.image_processor or self.feature_extractor
+        model_inputs = preprocessor(video, return_tensors="pt")
         model_inputs = model_inputs.to(self.dtype)
         return model_inputs
 

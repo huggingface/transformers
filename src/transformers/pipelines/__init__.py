@@ -31,6 +31,7 @@ from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoIma
 from ..models.auto.modeling_auto import AutoModelForDepthEstimation, AutoModelForImageToImage
 from ..models.auto.processing_auto import PROCESSOR_MAPPING, AutoProcessor
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
+from ..models.auto.video_processing_auto import VIDEO_PROCESSOR_MAPPING, AutoVideoProcessor
 from ..processing_utils import ProcessorMixin
 from ..tokenization_python import PreTrainedTokenizer
 from ..utils import (
@@ -612,6 +613,28 @@ def _resolve_feature_extractor(
     return _load_pipeline_component(load_feature_extractor, feature_extractor, load)
 
 
+def _resolve_video_processor(
+    video_processor, load_video_processor, model_name, config, task, hub_kwargs, model_kwargs
+):
+    """Resolve and optionally load the video processor for video-capable pipelines."""
+
+    def load(video_processor):
+        video_processor = _infer_pipeline_component(
+            video_processor,
+            model_name,
+            config,
+            "Impossible to guess which video processor to use. "
+            "Please provide a BaseVideoProcessor class or a path/identifier to a pretrained video processor.",
+        )
+
+        if not isinstance(video_processor, (str, tuple)):
+            return video_processor
+
+        return AutoVideoProcessor.from_pretrained(video_processor, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+
+    return _load_pipeline_component(load_video_processor, video_processor, load)
+
+
 def _resolve_processor(processor, load_processor, model_name, config, task, hub_kwargs, model_kwargs):
     """Resolve and optionally load a multimodal processor."""
 
@@ -1018,6 +1041,7 @@ def pipeline(
     load_image_processor = getattr(pipeline_class, "_load_image_processor")
     load_feature_extractor = getattr(pipeline_class, "_load_feature_extractor")
     load_processor = getattr(pipeline_class, "_load_processor")
+    load_video_processor = getattr(pipeline_class, "_load_video_processor", None)
 
     tokenizer = _resolve_tokenizer(
         tokenizer=tokenizer,
@@ -1059,6 +1083,15 @@ def pipeline(
         hub_kwargs=hub_kwargs,
         model_kwargs=model_kwargs,
     )
+    video_processor = _resolve_video_processor(
+        video_processor=kwargs.pop("video_processor", None),
+        load_video_processor=load_video_processor,
+        model_name=model_name,
+        config=config,
+        task=task,
+        hub_kwargs=hub_kwargs,
+        model_kwargs=model_kwargs,
+    )
 
     if tokenizer is not None:
         kwargs["tokenizer"] = tokenizer
@@ -1077,5 +1110,8 @@ def pipeline(
 
     if processor is not None:
         kwargs["processor"] = processor
+
+    if video_processor is not None:
+        kwargs["video_processor"] = video_processor
 
     return pipeline_class(model=model, task=task, **kwargs)

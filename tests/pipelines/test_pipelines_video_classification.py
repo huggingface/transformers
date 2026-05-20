@@ -13,10 +13,15 @@
 # limitations under the License.
 
 import unittest
+from unittest.mock import MagicMock, patch
 
+import numpy as np
+import torch
 from huggingface_hub import VideoClassificationOutputElement, hf_hub_download
 
 from transformers import MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING, VideoMAEImageProcessor
+from transformers.feature_extraction_utils import BatchFeature
+from transformers.modeling_outputs import SequenceClassifierOutput
 from transformers.pipelines import VideoClassificationPipeline, pipeline
 from transformers.testing_utils import (
     compare_pipeline_output_to_hub_spec,
@@ -122,3 +127,41 @@ class VideoClassificationPipelineTests(unittest.TestCase):
         for output in outputs:
             for element in output:
                 compare_pipeline_output_to_hub_spec(element, VideoClassificationOutputElement)
+
+    @require_torch
+    def test_video_processor_path(self):
+        """VideoClassificationPipeline uses video_processor when present, falling back to image_processor."""
+        small_model = "hf-internal-testing/tiny-random-VideoMAEForVideoClassification"
+        video_file_path = hf_hub_download(repo_id="nateraw/video-demo", filename="archery.mp4", repo_type="dataset")
+
+        video_classifier = pipeline(
+            "video-classification",
+            model=small_model,
+            feature_extractor=VideoMAEImageProcessor(
+                size={"shortest_edge": 10}, crop_size={"height": 10, "width": 10}
+            ),
+            frame_sampling_rate=4,
+        )
+
+        # When no video_processor is set, image_processor or feature_extractor should be used
+        self.assertIsNone(video_classifier.video_processor)
+        self.assertIsNotNone(video_classifier.image_processor or video_classifier.feature_extractor)
+
+        # Swap in a fake video_processor and verify it takes priority
+        fake_video_processor = MagicMock()
+        fake_video_processor.return_value = BatchFeature({"pixel_values": torch.zeros(1, 16, 3, 10, 10)})
+        video_classifier.video_processor = fake_video_processor
+        video_classifier.image_processor = None
+
+        fake_model_output = SequenceClassifierOutput(logits=torch.tensor([[0.6, 0.4]]))
+        frames = np.stack([np.zeros((10, 10, 3), dtype=np.uint8) for _ in range(8)])
+        with (
+            patch("transformers.pipelines.video_classification.read_video_pyav", return_value=frames),
+            patch.object(video_classifier, "_forward", return_value=fake_model_output),
+        ):
+            output = video_classifier(video_file_path, top_k=2)
+
+        fake_video_processor.assert_called_once()
+        self.assertEqual(len(output), 2)
+        self.assertIn("score", output[0])
+        self.assertIn("label", output[0])
