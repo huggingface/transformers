@@ -31,6 +31,7 @@ from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoIma
 from ..models.auto.modeling_auto import AutoModelForDepthEstimation, AutoModelForImageToImage
 from ..models.auto.processing_auto import PROCESSOR_MAPPING, AutoProcessor
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
+from ..models.auto.video_processing_auto import AutoVideoProcessor
 from ..processing_utils import ProcessorMixin
 from ..tokenization_python import PreTrainedTokenizer
 from ..utils import (
@@ -44,6 +45,7 @@ from ..utils import (
     is_torch_available,
     logging,
 )
+from ..video_processing_utils import BaseVideoProcessor
 from .any_to_any import AnyToAnyPipeline
 from .audio_classification import AudioClassificationPipeline
 from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
@@ -545,6 +547,34 @@ def _resolve_image_processor(
     return _load_pipeline_component(load_image_processor, image_processor, load)
 
 
+def _resolve_video_processor(
+    video_processor,
+    load_video_processor,
+    model_name,
+    config,
+    task,
+    hub_kwargs,
+    model_kwargs,
+):
+    """Resolve and optionally load the video processor for video-capable pipelines."""
+
+    def load(video_processor):
+        video_processor = _infer_pipeline_component(
+            video_processor,
+            model_name,
+            config,
+            "Impossible to guess which video processor to use. "
+            "Please provide a BaseVideoProcessor class or a path/identifier to a pretrained video processor.",
+        )
+
+        if not isinstance(video_processor, (str, tuple)):
+            return video_processor
+
+        return AutoVideoProcessor.from_pretrained(video_processor, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+
+    return _load_pipeline_component(load_video_processor, video_processor, load)
+
+
 def _maybe_load_ctc_decoder(model_name, hub_kwargs, kwargs, pretrained_model_name_or_path):
     """Attach a pyctcdecode decoder when the loaded feature extractor declares an LM-backed processor."""
     config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(
@@ -1016,6 +1046,7 @@ def pipeline(
 
     load_tokenizer = getattr(pipeline_class, "_load_tokenizer")
     load_image_processor = getattr(pipeline_class, "_load_image_processor")
+    load_video_processor = getattr(pipeline_class, "_load_video_processor", None)
     load_feature_extractor = getattr(pipeline_class, "_load_feature_extractor")
     load_processor = getattr(pipeline_class, "_load_processor")
 
@@ -1059,6 +1090,15 @@ def pipeline(
         hub_kwargs=hub_kwargs,
         model_kwargs=model_kwargs,
     )
+    video_processor = _resolve_video_processor(
+        video_processor=kwargs.pop("video_processor", None),
+        load_video_processor=load_video_processor,
+        model_name=model_name,
+        config=config,
+        task=task,
+        hub_kwargs=hub_kwargs,
+        model_kwargs=model_kwargs,
+    )
 
     if tokenizer is not None:
         kwargs["tokenizer"] = tokenizer
@@ -1071,6 +1111,9 @@ def pipeline(
 
     if image_processor is not None:
         kwargs["image_processor"] = image_processor
+
+    if video_processor is not None:
+        kwargs["video_processor"] = video_processor
 
     if device is not None:
         kwargs["device"] = device
