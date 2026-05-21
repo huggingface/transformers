@@ -127,7 +127,8 @@ class MaskGenerationPipelineTests(unittest.TestCase):
         mock_pipeline._ensure_tensor_on_device.side_effect = lambda x, device: x
 
         with patch("transformers.pipelines.mask_generation.load_image", return_value=MagicMock()):
-            yielded = list(MaskGenerationPipeline.preprocess(mock_pipeline, "fake_image.png", points_per_batch=points_per_batch))
+            gen = MaskGenerationPipeline.preprocess(mock_pipeline, "fake_image.png", points_per_batch=points_per_batch)
+            yielded = list(gen)
 
         self.assertEqual(len(yielded), 2)
         self.assertFalse(yielded[0]["is_last"])
@@ -166,7 +167,8 @@ class MaskGenerationPipelineTests(unittest.TestCase):
         mock_pipeline._ensure_tensor_on_device.side_effect = lambda x, device: x
 
         with patch("transformers.pipelines.mask_generation.load_image", return_value=MagicMock()):
-            yielded = list(MaskGenerationPipeline.preprocess(mock_pipeline, "fake_image.png", points_per_batch=points_per_batch))
+            gen = MaskGenerationPipeline.preprocess(mock_pipeline, "fake_image.png", points_per_batch=points_per_batch)
+            yielded = list(gen)
 
         self.assertEqual(len(yielded), 2)
         self.assertFalse(yielded[0]["is_last"])
