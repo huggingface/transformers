@@ -819,6 +819,7 @@ class Sapiens2PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
+            # Backbone layers
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
@@ -844,6 +845,19 @@ class Sapiens2PreTrainedModel(PreTrainedModel):
                 2 * torch.arange(module.head_dim // 4, dtype=module.pos_embed_dtype) / (module.head_dim // 2)
             )
             init.copy_(module.periods, periods)
+        elif isinstance(
+            module,
+            (Sapiens2SegmentationHead, Sapiens2NormalHead, Sapiens2PointmapHead, Sapiens2PointmapScaleHead),
+        ):
+            for m in module.modules():
+                if isinstance(m, nn.Conv2d):
+                    init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
+                    if m.bias is not None:
+                        init.zeros_(m.bias)
+                elif isinstance(m, nn.Linear):
+                    init.kaiming_normal_(m.weight, mode="fan_in", nonlinearity="linear")
+                    if m.bias is not None:
+                        init.zeros_(m.bias)
 
 
 class Sapiens2Encoder(Sapiens2PreTrainedModel):
