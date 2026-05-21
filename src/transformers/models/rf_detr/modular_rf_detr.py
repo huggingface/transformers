@@ -268,6 +268,7 @@ class RfDetrImageProcessor(DetrImageProcessor):
         return_coco_annotation: bool = False,
         return_binary_maps: bool = False,
         top_k: int | None = None,
+        **kwargs,
     ) -> list[dict[str, Any]]:
         """
         Converts the output of [`RfDetrForInstanceSegmentation`] into instance segmentation predictions.

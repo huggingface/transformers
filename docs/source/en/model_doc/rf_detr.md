@@ -114,6 +114,22 @@ RF-DETR also supports instance segmentation via the `Roboflow/rf-detr-seg-*` che
   detected instance, with no overlap resolution. Instances can overlap freely. This matches the output format of the
   original [`rfdetr`](https://github.com/roboflow/rf-detr) library.
 
+<hfoptions id="segmentation-usage">
+<hfoption id="Pipeline">
+
+```python
+from transformers import pipeline
+
+pipe = pipeline("image-segmentation", model="Roboflow/rf-detr-seg-medium", device_map="auto")
+
+results = pipe("http://images.cocodataset.org/val2017/000000039769.jpg")
+for result in results:
+    print(f"{result['label']}: {result['score']:.2f}")
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
 ```python
 from transformers import AutoImageProcessor, AutoModelForInstanceSegmentation
 from PIL import Image
@@ -153,6 +169,9 @@ for result in results:
         label = model.config.id2label[segment["label_id"]]
         print(f"{label}: {segment['score']:.2f}, pixels={mask.sum().item()}")
 ```
+
+</hfoption>
+</hfoptions>
 
 ## Resources
 
