@@ -876,7 +876,16 @@ class ProcessorMixin(PushToHubMixin):
                 expanded_sample.append(text[batch_idx][last:start])
 
                 mm_type = m.lastgroup
-                replacement_text = next(replacements_iters[mm_type])
+                replacement_text = next(replacements_iters[mm_type], None)
+                if replacement_text is None:
+                    # No replacement available for this modality — leave the
+                    # placeholder in place so the tokenizer can still encode it
+                    # as a special token. This happens during text-only passes
+                    # (e.g. vLLM's dummy profiling) where the prompt contains
+                    # placeholders but no mm data is provided.
+                    expanded_sample.append(m.group())
+                    last = end
+                    continue
                 replacement_offsets.append(
                     {
                         "type": mm_type,
