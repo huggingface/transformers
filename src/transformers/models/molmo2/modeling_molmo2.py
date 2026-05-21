@@ -324,6 +324,7 @@ class Molmo2VisionModel(PreTrainedModel):
     def forward(self, pixel_values: torch.Tensor, **kwargs) -> BaseModelOutputWithPooling:
         target_dtype = self.patch_embedding.weight.dtype
         hidden_states = self.patch_embedding(pixel_values.to(dtype=target_dtype))
+        # patch count == image_num_pos, locked by config; only retraining with a different grid breaks this.
         hidden_states = hidden_states + self.positional_embedding[None, :, :].to(hidden_states.dtype)
 
         encoder_outputs = self.encoder(hidden_states, **kwargs)
@@ -573,7 +574,7 @@ class Molmo2Attention(nn.Module):
         kv_shape = (*input_shape, self.num_key_value_heads, self.head_dim)
 
         qkv = self.att_proj(hidden_states)
-        query_states, key_states, value_states = qkv.split(self.fused_dims, dim=-1)
+        query_states, key_states, value_states = torch.split(qkv, self.fused_dims, dim=-1)
 
         value_states = value_states.view(kv_shape)
 
