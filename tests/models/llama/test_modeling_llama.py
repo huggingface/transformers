@@ -35,6 +35,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        LlamaConfig,
         LlamaForCausalLM,
         LlamaModel,
         LlamaTokenizer,
@@ -56,6 +57,43 @@ class LlamaModelTest(CausalLMModelTest, unittest.TestCase):
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = LlamaForCausalLM if is_torch_available() else None
+
+    def test_config_explicit_head_dim_with_non_divisible_hidden_size(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/46082
+        # `LlamaAttention` sizes its projections from `num_attention_heads * head_dim`,
+        # so an explicit `head_dim` should be allowed even when `hidden_size` is not
+        # divisible by `num_attention_heads`.
+        config = LlamaConfig(
+            vocab_size=99,
+            hidden_size=512,
+            intermediate_size=1024,
+            num_hidden_layers=1,
+            num_attention_heads=9,
+            num_key_value_heads=1,
+            head_dim=56,
+        )
+        self.assertEqual(config.head_dim, 56)
+        # Model construction should succeed with the matching projection shapes.
+        model = LlamaForCausalLM(config)
+        self.assertEqual(
+            model.model.layers[0].self_attn.q_proj.weight.shape,
+            (config.num_attention_heads * config.head_dim, config.hidden_size),
+        )
+
+    def test_config_implicit_head_dim_with_non_divisible_hidden_size_still_raises(self):
+        # Regression preventer: omitting `head_dim` with non-divisible dims must
+        # still raise, since the auto-derived `head_dim = hidden_size // num_attention_heads`
+        # would silently truncate.
+        with self.assertRaises(Exception) as ctx:
+            LlamaConfig(
+                vocab_size=99,
+                hidden_size=512,
+                intermediate_size=1024,
+                num_hidden_layers=1,
+                num_attention_heads=9,
+                num_key_value_heads=1,
+            )
+        self.assertIn("not a multiple", str(ctx.exception))
 
 
 @require_torch_accelerator
