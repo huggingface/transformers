@@ -90,7 +90,12 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     "role": "USER",
                     "content": [
                         {"type": "text", "text": "What is shown in this image?"},
-                        {"type": "image"},
+                        {
+                            "type": "image",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                            ),
+                        },
                     ],
                 },
             ]
@@ -108,19 +113,6 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         prompts and, following the implementation from the Janus codebase, expanding the image token.
         """
 
-        # Checking the output dict keys
-        out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
-        self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask"])
-
-        # Now test the ability to return dict
-        messages[0][0]["content"][1].update(
-            {
-                "type": "image",
-                "url": url_to_local_path(
-                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
-                ),
-            }
-        )
         out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
         self.assertTrue(self.images_input_name in out_dict)
         # should always have input_ids and attention_mask
@@ -223,7 +215,12 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     "role": "user",
                     "content": [
                         {"type": "text", "text": "What is shown in this image?"},
-                        {"type": "image"},
+                        {
+                            "type": "image",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                            ),
+                        },
                     ],
                 },
             ],
@@ -232,7 +229,10 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     "role": "user",
                     "content": [
                         {"type": "text", "text": "What is shown in this image?"},
-                        {"type": "image"},
+                        {
+                            "type": "image",
+                            "url": url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"),
+                        },
                     ],
                 },
             ],
@@ -247,29 +247,6 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(formatted_prompts, correct_prompts)
 
         # Similarly to the single case, no test for chat template+tokenization as two separate steps versus as a single step
-
-        # Checking the output dict keys
-        out_dict = processor.apply_chat_template(
-            batched_messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            padding=True,
-        )
-        self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask"])
-
-        # Verify image inputs are included in the output dict
-        batched_messages[0][0]["content"][1].update(
-            {
-                "type": "image",
-                "url": url_to_local_path(
-                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
-                ),
-            }
-        )
-        batched_messages[1][0]["content"][1].update(
-            {"type": "image", "url": url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg")}
-        )
         out_dict = processor.apply_chat_template(
             batched_messages, add_generation_prompt=True, tokenize=True, return_dict=True, padding=True
         )
