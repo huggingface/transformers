@@ -38,7 +38,12 @@ class Sam3VideoConfig(PreTrainedConfig):
     score_threshold_detection (`float`, *optional*, defaults to 0.5):
         Probability threshold for detection outputs - only keep detections above this threshold.
     det_nms_thresh (`float`, *optional*, defaults to 0.1):
-        IoU threshold for detection NMS (Non-Maximum Suppression).
+        IoU/IoM threshold for detection NMS (Non-Maximum Suppression). The choice of metric is
+        controlled by `det_nms_use_iom`.
+    det_nms_use_iom (`bool`, *optional*, defaults to `False`):
+        Whether to use IoM (Intersection over Minimum) instead of IoU as the NMS overlap metric.
+        IoM is more aggressive at suppressing nested duplicates than IoU; SAM3.1 multiplex video
+        tracking enables this by default.
     assoc_iou_thresh (`float`, *optional*, defaults to 0.1):
         IoU threshold for detection-to-track matching. A detection is considered "matched" to a tracklet if
         it overlaps with the tracklet above this threshold. Often a loose threshold like 0.1.
@@ -81,6 +86,24 @@ class Sam3VideoConfig(PreTrainedConfig):
         High confidence threshold for reconditioning. Only detections above this threshold can recondition tracklets.
     high_iou_thresh (`float`, *optional*, defaults to 0.8):
         High IoU threshold for reconditioning. Only detections with IoU above this threshold can recondition tracklets.
+        Ignored when `use_iom_recondition=True`; in that case `iom_thresh_recondition` is used instead.
+    use_iom_recondition (`bool`, *optional*, defaults to `False`):
+        Whether to use IoM (Intersection over Minimum) instead of IoU as the detection-to-track
+        association metric in `_associate_dets_to_trks_and_get_new_dets`. When True, the same IoM
+        matrix is used to drive new-detection / unmatched-track determination and reconditioning,
+        which is more robust when tracked masks are shrinking or partially occluded. SAM3.1
+        multiplex video tracking enables this by default.
+    iom_thresh_recondition (`float`, *optional*, defaults to 0.5):
+        IoM threshold for reconditioning (and for the ambiguity-filter on detection / track matches
+        that have many candidates). Used only when `use_iom_recondition=True`.
+    suppress_det_close_to_boundary (`bool`, *optional*, defaults to `False`):
+        Whether to suppress detections whose bounding-box center lies within `margin` (2.5% by
+        default) of the image border. Applied both when filtering detections for the tracker and
+        when admitting new objects. SAM3.1 multiplex video tracking enables this by default.
+    masklet_confirmation_enable (`bool`, *optional*, defaults to `False`):
+        Whether to require consecutive detection-track matches before publishing a masklet.
+    masklet_confirmation_consecutive_det_thresh (`int`, *optional*, defaults to 3):
+        Number of consecutive matched frames required to confirm a masklet.
 
     Example:
     ```python
@@ -115,6 +138,7 @@ class Sam3VideoConfig(PreTrainedConfig):
     low_res_mask_size: int = 288
     score_threshold_detection: float = 0.5
     det_nms_thresh: float = 0.1
+    det_nms_use_iom: bool = False
     assoc_iou_thresh: float = 0.1
     trk_assoc_iou_thresh: float = 0.5
     new_det_thresh: float = 0.7
@@ -133,6 +157,11 @@ class Sam3VideoConfig(PreTrainedConfig):
     recondition_every_nth_frame: int = 16
     high_conf_thresh: float = 0.8
     high_iou_thresh: float = 0.8
+    use_iom_recondition: bool = False
+    iom_thresh_recondition: float = 0.5
+    suppress_det_close_to_boundary: bool = False
+    masklet_confirmation_enable: bool = False
+    masklet_confirmation_consecutive_det_thresh: int = 3
 
     def __post_init__(self, **kwargs):
         if self.detector_config is None:

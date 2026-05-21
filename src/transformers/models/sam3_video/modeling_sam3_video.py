@@ -203,6 +203,10 @@ class Sam3VideoInferenceSession:
         self.removed_obj_ids = set()  # Set of removed object IDs
         self.suppressed_obj_ids = defaultdict(set)  # Suppressed object IDs per frame
         self.hotstart_removed_obj_ids = set()  # Set of removed object IDs during hotstart
+        # Per-frame unconfirmed IDs for masklet confirmation (Meta uses a lookahead delay at postprocess)
+        self.unconfirmed_obj_ids_per_frame: dict[int, list[int]] = {}
+        # Persistent masklet confirmation state (must survive across frames; see `run_tracker_update_planning_phase`)
+        self.masklet_confirmation: dict[str, Any] = {"status": {}, "consecutive_det_num": {}}
 
         # Output buffering for hotstart delay
         self.output_buffer = []
@@ -408,6 +412,8 @@ class Sam3VideoInferenceSession:
         self.obj_ids.clear()
         self.output_dict_per_obj.clear()
         self.frames_tracked_per_obj.clear()
+        if hasattr(self, "propagation_image_snapshots_per_frame"):
+            self.propagation_image_snapshots_per_frame.clear()
         # Note: cache and video data are preserved
 
         # Reset prompt mappings for objects (but keep prompts themselves)
@@ -421,6 +427,8 @@ class Sam3VideoInferenceSession:
         self.output_dict_per_obj.clear()
         self.frames_tracked_per_obj.clear()
         self.cache.clear_all()
+        if hasattr(self, "propagation_image_snapshots_per_frame"):
+            self.propagation_image_snapshots_per_frame.clear()
 
         # Reset prompt mappings for objects (but keep prompts themselves)
         self.obj_id_to_prompt_id.clear()
@@ -474,6 +482,8 @@ class Sam3VideoSegmentationOutput(ModelOutput):
         Set of object IDs that have been removed (e.g., via hotstart heuristics).
     suppressed_obj_ids (`set[int]`, *optional*):
         Set of object IDs that have been suppressed in the current frame.
+    unconfirmed_obj_ids (`list[int]`, *optional*):
+        Object IDs that are tracked but not yet confirmed by masklet confirmation heuristics.
     frame_idx (`int`, *optional*):
         The frame index of the video.
     """
@@ -484,7 +494,13 @@ class Sam3VideoSegmentationOutput(ModelOutput):
     obj_id_to_tracker_score: dict[int, float] | None = None
     removed_obj_ids: set[int] | None = None
     suppressed_obj_ids: set[int] | None = None
+    unconfirmed_obj_ids: list[int] | None = None
     frame_idx: int | None = None
+
+
+# Matches Meta `MaskletConfirmationStatus` in facebook_sam3/sam3/model/sam3_video_base.py
+_MASKLET_UNCONFIRMED = 1
+_MASKLET_CONFIRMED = 2
 
 
 class Sam3VideoPreTrainedModel(PreTrainedModel):
@@ -513,6 +529,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         self.low_res_mask_size = config.low_res_mask_size
         self.score_threshold_detection = config.score_threshold_detection
         self.det_nms_thresh = config.det_nms_thresh
+        self.det_nms_use_iom = config.det_nms_use_iom
         self.assoc_iou_thresh = config.assoc_iou_thresh
         self.trk_assoc_iou_thresh = config.trk_assoc_iou_thresh
         self.new_det_thresh = config.new_det_thresh
@@ -537,6 +554,11 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         self.recondition_every_nth_frame = config.recondition_every_nth_frame
         self.high_conf_thresh = config.high_conf_thresh
         self.high_iou_thresh = config.high_iou_thresh
+        self.use_iom_recondition = config.use_iom_recondition
+        self.iom_thresh_recondition = config.iom_thresh_recondition
+        self.suppress_det_close_to_boundary = config.suppress_det_close_to_boundary
+        self.masklet_confirmation_enable = config.masklet_confirmation_enable
+        self.masklet_confirmation_consecutive_det_thresh = config.masklet_confirmation_consecutive_det_thresh
 
         self.tracker_neck = Sam3VisionNeck(config.detector_config.vision_config)
 
@@ -563,6 +585,65 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             for feature_map_position_embedding in fpn_position_encoding[:-1]
         ]
         return feature_maps, feature_maps_position_embeddings
+
+    def _update_masklet_confirmation_status(
+        self,
+        extra_metadata: dict[str, Any],
+        obj_ids_prev: list[int],
+        obj_ids_updated: list[int],
+        det_to_matched_trk_obj_ids: dict[int, list[int]],
+        new_det_obj_ids: list[int],
+    ) -> list[int]:
+        """Mirror Meta `Sam3VideoBase.update_masklet_confirmation_status`. Returns unconfirmed obj ids."""
+        confirmation = extra_metadata.setdefault(
+            "masklet_confirmation",
+            {"status": {}, "consecutive_det_num": {}},
+        )
+        status = confirmation["status"]
+        consecutive = confirmation["consecutive_det_num"]
+
+        for obj_id in obj_ids_updated:
+            if obj_id not in status:
+                status[obj_id] = _MASKLET_UNCONFIRMED
+                consecutive[obj_id] = 0
+
+        matched_obj_ids = set(new_det_obj_ids)
+        for matched_trk_obj_ids in det_to_matched_trk_obj_ids.values():
+            matched_obj_ids.update(int(x) for x in matched_trk_obj_ids)
+
+        thresh = self.masklet_confirmation_consecutive_det_thresh
+        unconfirmed = []
+        for obj_id in obj_ids_updated:
+            if obj_id in matched_obj_ids:
+                consecutive[obj_id] = consecutive.get(obj_id, 0) + 1
+            else:
+                consecutive[obj_id] = 0
+            # Mirror Meta's `update_masklet_confirmation_status`: confirmation is
+            # one-way — promote to CONFIRMED once `consecutive_det_num >= thresh`,
+            # but never demote a previously-CONFIRMED masklet back to UNCONFIRMED
+            # on a single unmatched frame. Demoting causes the postprocessor to
+            # hide a stable masklet whenever the detector momentarily misses it,
+            # producing the disappearing-then-reappearing object IDs that
+            # destabilise long propagations.
+            if consecutive[obj_id] >= thresh:
+                status[obj_id] = _MASKLET_CONFIRMED
+            if status[obj_id] == _MASKLET_UNCONFIRMED:
+                unconfirmed.append(obj_id)
+
+        # Drop metadata for objects no longer tracked
+        for obj_id in set(status.keys()) - set(obj_ids_updated):
+            status.pop(obj_id, None)
+            consecutive.pop(obj_id, None)
+
+        return unconfirmed
+
+    @staticmethod
+    def _suppress_detections_close_to_boundary(boxes: torch.Tensor, margin: float = 0.025) -> torch.Tensor:
+        """Drop detections whose box center is too close to the image border (normalized xyxy boxes)."""
+        x_min, y_min, x_max, y_max = boxes.unbind(-1)
+        x_c = (x_min + x_max) / 2
+        y_c = (y_min + y_max) / 2
+        return (x_c > margin) & (x_c < 1.0 - margin) & (y_c > margin) & (y_c < 1.0 - margin)
 
     def run_detection(
         self,
@@ -605,11 +686,16 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             )
 
             pred_logits = detector_outputs.pred_logits
-            presence_logits = detector_outputs.presence_logits
-
+            # NOTE: Meta's video detection path uses pure `sigmoid(pred_logits)` without
+            # multiplying by `sigmoid(presence_logits)` (see facebook_sam3/sam3/model/
+            # sam3_multiplex_detector.py:515 and sam3_video_base.py:590). The presence
+            # multiplication only appears in Meta's *image* processor
+            # (sam3_image_processor.py:195). Multiplying by presence here changes both the
+            # NMS keep mask and the published detection scores in ways that disagree with
+            # Meta's video pipeline: for harder concepts (e.g. "shoe") where the per-image
+            # presence score is well below 1, the multiplication shifts which detections
+            # pass `score_threshold_detection` and changes downstream tracker association.
             pred_probs = pred_logits.sigmoid()
-            presence_scores = presence_logits.sigmoid()
-            pred_probs = pred_probs * presence_scores
 
             run_nms = self.det_nms_thresh > 0.0
             if run_nms:
@@ -618,19 +704,31 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
                     pred_masks=detector_outputs.pred_masks[0],
                     prob_threshold=self.score_threshold_detection,
                     iou_threshold=self.det_nms_thresh,
+                    use_iom=self.det_nms_use_iom,
                 )
                 # Set suppressed detections' probabilities to 0
                 pred_probs[0][~keep] = 0.0
 
             pred_boxes_xyxy = detector_outputs.pred_boxes
             pred_masks = detector_outputs.pred_masks
-            # get the positive detection outputs above threshold
-            pos_pred_idx = torch.where(pred_probs > self.score_threshold_detection)
-            det_out = {
-                "bbox": pred_boxes_xyxy[pos_pred_idx[0], pos_pred_idx[1]],
-                "mask": pred_masks[pos_pred_idx[0], pos_pred_idx[1]],
-                "scores": pred_probs[pos_pred_idx[0], pos_pred_idx[1]],
-            }
+            # Positive detections: score threshold, optionally filtered by boundary proximity
+            # (matches Meta `sam3_multiplex_base.run_backbone_and_detection`).
+            pos_pred_mask = pred_probs[0] > self.score_threshold_detection
+            if self.suppress_det_close_to_boundary:
+                pos_pred_mask = pos_pred_mask & self._suppress_detections_close_to_boundary(pred_boxes_xyxy[0])
+            pos_query_inds = torch.where(pos_pred_mask)[0]
+            if pos_query_inds.numel() == 0:
+                det_out = {
+                    "bbox": pred_boxes_xyxy[0, :0],
+                    "mask": pred_masks[0, :0],
+                    "scores": pred_probs[0, :0],
+                }
+            else:
+                det_out = {
+                    "bbox": pred_boxes_xyxy[0, pos_query_inds],
+                    "mask": pred_masks[0, pos_query_inds],
+                    "scores": pred_probs[0, pos_query_inds],
+                }
 
             all_detections[prompt_id] = det_out
 
@@ -722,8 +820,13 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             else torch.empty(0, dtype=torch.long, device=det_masks.device)
         )
         if trk_masks.size(0) == 0:
-            # all detections are new
-            new_det_out_inds = list(range(det_masks.size(0)))
+            # Cond frame / no existing tracks: only detections whose score is above
+            # `new_det_thresh` are admitted as new masklets. Meta applies the same filter
+            # here (see facebook_sam3/sam3/model/sam3_multiplex_base.py:1875-1878). Without
+            # this filter, harder targets (e.g. "shoe") that yield middling detection
+            # scores get published on the cond frame and then diverge from Meta's tracker.
+            is_new_det = det_scores >= new_det_thresh
+            new_det_out_inds = torch.where(is_new_det)[0].tolist()
             unmatched_trk_obj_ids = []
             empty_trk_obj_ids = []
             det_to_matched_trk_obj_ids = {}
@@ -752,11 +855,41 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
                 empty_trk_obj_ids,
             )
 
-        det_masks_binary = det_masks > 0
-        trk_masks_binary = trk_masks > 0
-        ious = mask_iou(det_masks_binary, trk_masks_binary)  # (N, M) tensor
+        # Meta resizes det/trk masks to the smaller spatial size (bilinear on float logits)
+        # before binarizing for association. See `sam3_multiplex_base._associate_det_trk`.
+        det_masks_assoc = det_masks.float()
+        trk_masks_assoc = trk_masks.float()
+        if det_masks_assoc.shape[-2:] != trk_masks_assoc.shape[-2:]:
+            if det_masks_assoc.shape[-2] * det_masks_assoc.shape[-1] < trk_masks_assoc.shape[-2] * trk_masks_assoc.shape[-1]:
+                trk_masks_assoc = torch.nn.functional.interpolate(
+                    trk_masks_assoc.unsqueeze(1),
+                    size=det_masks_assoc.shape[-2:],
+                    mode="bilinear",
+                    align_corners=False,
+                ).squeeze(1)
+            else:
+                det_masks_assoc = torch.nn.functional.interpolate(
+                    det_masks_assoc.unsqueeze(1),
+                    size=trk_masks_assoc.shape[-2:],
+                    mode="bilinear",
+                    align_corners=False,
+                ).squeeze(1)
+        det_masks_binary = det_masks_assoc > 0
+        trk_masks_binary = trk_masks_assoc > 0
 
-        # Prevent cross-prompt associations by zeroing IoUs between different prompt groups.
+        # SAM3.1 multiplex tracking uses IoM (Intersection over Minimum) instead of IoU as the
+        # association metric, which is more permissive when one mask is nested inside another
+        # (e.g. a shrinking tracked mask vs. its current detection). The same metric drives
+        # detection-track matching, new-detection determination, and reconditioning.
+        # See `facebook_sam3/sam3/model/sam3_video_base.py::_associate_det_trk_compilable`.
+        if self.use_iom_recondition:
+            ious = mask_iom(det_masks_binary, trk_masks_binary)  # (N, M)
+            recondition_thresh = self.iom_thresh_recondition
+        else:
+            ious = mask_iou(det_masks_binary, trk_masks_binary)  # (N, M)
+            recondition_thresh = self.high_iou_thresh
+
+        # Prevent cross-prompt associations by zeroing IoUs/IoMs between different prompt groups.
         prompt_match = det_prompt_ids.unsqueeze(1) == trk_prompt_ids.unsqueeze(0)
         ious = torch.where(prompt_match, ious, torch.zeros_like(ious))
 
@@ -775,13 +908,30 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         is_new_det = (det_scores >= new_det_thresh) & ~det_matches_any_trk  # (N,)
         new_det_out_inds = torch.where(is_new_det)[0].tolist()
 
+        # Reconditioning ambiguity filter (matches Meta's _associate_det_trk_compilable):
+        # if a detection matches many tracks at the reconditioning threshold (or a track matches
+        # many detections), the pair is ambiguous and should not trigger reconditioning. We zero
+        # those entries in a *copy* of the metric used solely for the high-iou / high-iom check;
+        # the original `ious` matrix continues to drive new-detection and unmatched-track logic.
+        recondition_metric = ious
+        if self.use_iom_recondition:
+            recondition_mask = ious >= recondition_thresh
+            det_match_to_many_trk = recondition_mask.sum(dim=1) > 1  # (N,)
+            trk_match_to_many_det = recondition_mask.sum(dim=0) > 1  # (M,)
+            recondition_metric = torch.where(
+                trk_match_to_many_det.unsqueeze(0), torch.zeros_like(ious), ious
+            )
+            recondition_metric = torch.where(
+                det_match_to_many_trk.unsqueeze(1), torch.zeros_like(ious), recondition_metric
+            )
+
         # Build detection-to-track mappings using tensor operations
         det_to_matched_trk_obj_ids = {}
         trk_id_to_max_iou_high_conf_det = {}  # trk id --> exactly one detection idx
-        det_to_max_iou_trk_idx = ious.argmax(dim=1)  # (N,)
+        det_to_max_iou_trk_idx = recondition_metric.argmax(dim=1)  # (N,)
         det_is_high_conf = (det_scores >= self.high_conf_thresh) & ~is_new_det  # (N,)
-        det_max_iou = ious.max(dim=1)[0]  # (N,)
-        det_is_high_iou = det_max_iou >= self.high_iou_thresh  # (N,)
+        det_max_iou = recondition_metric.max(dim=1)[0]  # (N,)
+        det_is_high_iou = det_max_iou >= recondition_thresh  # (N,)
         det_is_high_conf_and_iou = det_is_high_conf & det_is_high_iou  # (N,)
         high_conf_and_iou_mask = det_is_high_conf_and_iou  # Keep as tensor
 
@@ -1313,6 +1463,12 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             trk_prompt_ids=trk_prompt_ids,
         )
 
+        # Meta additionally filters new detections near the image boundary after association.
+        if self.suppress_det_close_to_boundary and len(new_det_out_inds) > 0 and det_out["bbox"].numel() > 0:
+            new_det_inds_t = torch.tensor(new_det_out_inds, dtype=torch.long, device=det_out["bbox"].device)
+            boundary_keep = self._suppress_detections_close_to_boundary(det_out["bbox"][new_det_inds_t])
+            new_det_out_inds = [new_det_out_inds[i] for i in torch.where(boundary_keep)[0].tolist()]
+
         # check whether we've hit the maximum number of objects we can track (and if so, drop some detections)
         prev_obj_num = len(inference_session.obj_ids)
         new_det_num = len(new_det_out_inds)
@@ -1346,6 +1502,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
                 "overlap_pair_to_frame_inds": inference_session.overlap_pair_to_frame_inds,
                 "removed_obj_ids": inference_session.removed_obj_ids,
                 "suppressed_obj_ids": inference_session.suppressed_obj_ids,
+                "masklet_confirmation": deepcopy(inference_session.masklet_confirmation),
             }
         )
 
@@ -1361,6 +1518,18 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             streaming=streaming,
         )
         tracker_metadata_new["extra_metadata"] = extra_metadata_new
+
+        unconfirmed_obj_ids: list[int] = []
+        if self.masklet_confirmation_enable:
+            updated_obj_ids_pre = tracker_metadata_new["obj_ids"] + new_det_obj_ids
+            unconfirmed_obj_ids = self._update_masklet_confirmation_status(
+                extra_metadata=extra_metadata_new,
+                obj_ids_prev=inference_session.obj_ids,
+                obj_ids_updated=updated_obj_ids_pre,
+                det_to_matched_trk_obj_ids=det_to_matched_trk_obj_ids,
+                new_det_obj_ids=new_det_obj_ids,
+            )
+        tracker_metadata_new["unconfirmed_obj_ids"] = unconfirmed_obj_ids
 
         # Step 3 (optional): prepare reconditioned masks based on high-confidence detections
         reconditioned_masks = {}
@@ -1752,6 +1921,10 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         inference_session.overlap_pair_to_frame_inds = extra_metadata["overlap_pair_to_frame_inds"]
         inference_session.removed_obj_ids = removed_obj_ids
         inference_session.suppressed_obj_ids[frame_idx] = extra_metadata["suppressed_obj_ids"][frame_idx]
+        if "masklet_confirmation" in extra_metadata:
+            inference_session.masklet_confirmation = extra_metadata["masklet_confirmation"]
+        unconfirmed = tracker_metadata_new.get("unconfirmed_obj_ids", [])
+        inference_session.unconfirmed_obj_ids_per_frame[frame_idx] = list(unconfirmed)
 
         return Sam3VideoSegmentationOutput(
             object_ids=list(tracker_metadata_new["obj_ids"]),
@@ -1760,6 +1933,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             obj_id_to_tracker_score=tracker_metadata_new["obj_id_to_tracker_score_frame_wise"][frame_idx],
             removed_obj_ids=removed_obj_ids,
             suppressed_obj_ids=extra_metadata["suppressed_obj_ids"][frame_idx],
+            unconfirmed_obj_ids=tracker_metadata_new.get("unconfirmed_obj_ids", []),
             frame_idx=frame_idx,
         )
 
@@ -1886,18 +2060,74 @@ def mask_iou(pred_masks: torch.Tensor, gt_masks: torch.Tensor) -> torch.Tensor:
     return ious  # shape: (N, M)
 
 
+def mask_iom(pred_masks: torch.Tensor, gt_masks: torch.Tensor) -> torch.Tensor:
+    """
+    Compute the IoM (Intersection over Minimum-area) between predicted masks and ground truth masks.
+
+    IoM is more permissive than IoU when one mask is contained inside the other (e.g. a smaller,
+    partially occluded object inside a larger one), which makes it better suited to track-detection
+    matching when the tracked mask may shrink or grow across frames. SAM3.1 multiplex video tracking
+    uses IoM for both NMS and reconditioning by default.
+
+    Args:
+      - pred_masks: (N, H, W) bool Tensor, containing binary predicted segmentation masks
+      - gt_masks: (M, H, W) bool Tensor, containing binary ground truth segmentation masks
+    Returns:
+      - ioms: (N, M) float Tensor, containing IoMs for each pair of masks
+    """
+    N, H, W = pred_masks.shape
+    M, _, _ = gt_masks.shape
+
+    pred_flat = pred_masks.view(N, 1, H * W)
+    gt_flat = gt_masks.view(1, M, H * W)
+
+    intersection = (pred_flat & gt_flat).sum(dim=2).float()
+    area_pred = pred_flat.sum(dim=2).float()  # (N, 1)
+    area_gt = gt_flat.sum(dim=2).float()  # (1, M)
+    min_area = torch.minimum(area_pred, area_gt)
+    ioms = intersection / min_area.clamp(min=1)
+    return ioms  # shape: (N, M)
+
+
+def _greedy_nms_from_overlap_matrix(
+    overlaps: torch.Tensor,
+    scores: torch.Tensor,
+    overlap_threshold: float,
+) -> torch.Tensor:
+    """Greedy NMS given a pre-computed pairwise overlap matrix (IoU or IoM).
+
+    Mirrors `torch_generic_nms.generic_nms` semantics so we can switch the metric between IoU and
+    IoM without depending on the kernel build, which only exposes an IoU-matrix entry point.
+    """
+    order = scores.argsort(descending=True)
+    n = order.numel()
+    suppressed = torch.zeros(n, dtype=torch.bool, device=overlaps.device)
+    kept = []
+    overlaps_sorted = overlaps[order][:, order]
+    for i in range(n):
+        if suppressed[i]:
+            continue
+        kept.append(int(order[i].item()))
+        # Suppress later boxes whose overlap with i is above threshold
+        suppressed |= overlaps_sorted[i] > overlap_threshold
+    return torch.tensor(kept, dtype=torch.long, device=overlaps.device)
+
+
 def nms_masks(
     pred_probs: torch.Tensor,
     pred_masks: torch.Tensor,
     prob_threshold: float,
     iou_threshold: float,
+    use_iom: bool = False,
 ) -> torch.Tensor:
     """
     Args:
       - pred_probs: (num_det,) float Tensor, containing the score (probability) of each detection
       - pred_masks: (num_det, H_mask, W_mask) float Tensor, containing the binary segmentation mask of each detection
       - prob_threshold: float, score threshold to prefilter detections (NMS is performed on detections above threshold)
-      - iou_threshold: float, mask IoU threshold for NMS
+      - iou_threshold: float, mask IoU/IoM threshold for NMS
+      - use_iom: bool, if True, use IoM instead of IoU as the overlap metric for NMS. This matches
+        Meta's SAM3.1 multiplex tracking, which sets `det_nms_use_iom=True`.
 
     Returns:
      - keep: (num_det,) bool Tensor, indicating whether each detection is kept after score thresholding + NMS
@@ -1909,18 +2139,26 @@ def nms_masks(
     if probs.numel() == 0:
         return is_valid  # no valid detection, return empty keep mask
 
-    ious = mask_iou(masks_binary, masks_binary)  # (num_valid, num_valid)
+    if use_iom:
+        # The cv_utils kernel only exposes an IoU-matrix entry point; for IoM we fall back to a
+        # vectorised PyTorch NMS that takes any precomputed overlap matrix.
+        overlaps = mask_iom(masks_binary, masks_binary)  # (num_valid, num_valid)
+        kept_inds = _greedy_nms_from_overlap_matrix(overlaps, probs, iou_threshold)
+    else:
+        ious = mask_iou(masks_binary, masks_binary)  # (num_valid, num_valid)
 
-    # Try to use kernels for NMS, fallback to keeping all valid detections if unavailable
-    _load_cv_utils_kernel_once()
-    if not cv_utils_kernel:
-        return is_valid  # Fallback: keep all valid detections without NMS
-
-    try:
-        kept_inds = cv_utils_kernel.generic_nms(ious, probs, iou_threshold, use_iou_matrix=True)
-    except Exception as e:
-        logger.warning_once(f"Failed to run NMS using kernels library: {e}. NMS post-processing will be skipped.")
-        return is_valid  # Fallback: keep all valid detections without NMS
+        # Try to use kernels for NMS, fallback to a pure-PyTorch greedy NMS if unavailable
+        _load_cv_utils_kernel_once()
+        if not cv_utils_kernel:
+            kept_inds = _greedy_nms_from_overlap_matrix(ious, probs, iou_threshold)
+        else:
+            try:
+                kept_inds = cv_utils_kernel.generic_nms(ious, probs, iou_threshold, use_iou_matrix=True)
+            except Exception as e:
+                logger.warning_once(
+                    f"Failed to run NMS using kernels library: {e}. Falling back to PyTorch NMS."
+                )
+                kept_inds = _greedy_nms_from_overlap_matrix(ious, probs, iou_threshold)
 
     # valid_inds are the indices among `probs` of valid detections before NMS (or -1 for invalid)
     valid_inds = torch.where(is_valid, is_valid.cumsum(dim=0) - 1, -1)  # (num_det,)

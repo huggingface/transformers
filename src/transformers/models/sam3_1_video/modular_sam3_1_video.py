@@ -15,7 +15,9 @@
 from dataclasses import dataclass
 
 import torch
+import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
+from torch import nn
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
@@ -33,6 +35,7 @@ from ..sam3_video.modeling_sam3_video import (
     Sam3VideoModel,
     Sam3VideoPreTrainedModel,
     Sam3VideoSegmentationOutput,
+    fill_holes_in_mask_scores,
 )
 
 
@@ -57,13 +60,17 @@ class Sam31VideoConfig(Sam3VideoConfig):
     score_threshold_detection (`float`, *optional*, defaults to 0.5):
         Probability threshold for detection outputs - only keep detections above this threshold.
     det_nms_thresh (`float`, *optional*, defaults to 0.1):
-        IoU threshold for detection NMS (Non-Maximum Suppression).
+        IoM threshold for detection NMS (the metric is IoM because `det_nms_use_iom=True`).
+    det_nms_use_iom (`bool`, *optional*, defaults to `True`):
+        SAM3.1 multiplex tracking uses IoM (Intersection over Minimum) instead of IoU for NMS,
+        which is more aggressive at removing nested duplicates.
     assoc_iou_thresh (`float`, *optional*, defaults to 0.1):
-        IoU threshold for detection-to-track matching. A detection is considered "matched" to a tracklet if
-        it overlaps with the tracklet above this threshold. Often a loose threshold like 0.1.
+        IoU/IoM threshold for detection-to-track matching. A detection is considered "matched" to a
+        tracklet if it overlaps with the tracklet above this threshold. Often a loose threshold like
+        0.1.
     trk_assoc_iou_thresh (`float`, *optional*, defaults to 0.5):
-        IoU threshold for detection-to-track matching, used to determine whether a masklet is "unmatched"
-        by any detections. Often a stricter threshold like 0.5.
+        IoU/IoM threshold for detection-to-track matching, used to determine whether a masklet is
+        "unmatched" by any detections. Often a stricter threshold like 0.5.
     new_det_thresh (`float`, *optional*, defaults to 0.7):
         Probability threshold for a detection to be added as a new object.
     recondition_on_trk_masks (`bool`, *optional*, defaults to `True`):
@@ -76,9 +83,11 @@ class Sam31VideoConfig(Sam3VideoConfig):
         Number of unmatched frames required to remove a tracklet during hotstart period.
     hotstart_dup_thresh (`int`, *optional*, defaults to 8):
         Number of overlapping frames required to remove a duplicate tracklet during hotstart period.
-    suppress_unmatched_only_within_hotstart (`bool`, *optional*, defaults to `True`):
+    suppress_unmatched_only_within_hotstart (`bool`, *optional*, defaults to `False`):
         Whether to suppress masks only within hotstart period. If False, we can suppress masks even if
-        they start before hotstart period.
+        they start before hotstart period. SAM3.1 multiplex disables this gate so that stale tracks
+        (e.g. detections that lose their object) keep getting suppressed across the whole video instead
+        of accumulating into ghost tracks.
     init_trk_keep_alive (`int`, *optional*, defaults to 30):
         Initial keep-alive counter for new tracks.
     max_trk_keep_alive (`int`, *optional*, defaults to 30):
@@ -90,8 +99,11 @@ class Sam31VideoConfig(Sam3VideoConfig):
         IoU above this threshold are suppressed based on which was most recently occluded.
     decrease_trk_keep_alive_for_empty_masklets (`bool`, *optional*, defaults to `False`):
         Whether to decrease keep-alive counter for masklets with zero area in SAM2 prediction.
-    fill_hole_area (`int`, *optional*, defaults to 16):
+    fill_hole_area (`int`, *optional*, defaults to 0):
         Minimum area (in pixels) for filling holes in masks and removing small sprinkles.
+        SAM3.1 multiplex uses 0 (disabled) in Meta's reference config.
+    suppress_det_close_to_boundary (`bool`, *optional*, defaults to `True`):
+        Suppress detections whose box center is within 2.5% of the image border.
     max_num_objects (`int`, *optional*, defaults to 10000):
         Maximum number of objects to track. Default 10000 effectively turns off this limit.
     recondition_every_nth_frame (`int`, *optional*, defaults to 16):
@@ -99,7 +111,18 @@ class Sam31VideoConfig(Sam3VideoConfig):
     high_conf_thresh (`float`, *optional*, defaults to 0.8):
         High confidence threshold for reconditioning. Only detections above this threshold can recondition tracklets.
     high_iou_thresh (`float`, *optional*, defaults to 0.8):
-        High IoU threshold for reconditioning. Only detections with IoU above this threshold can recondition tracklets.
+        High IoU threshold for reconditioning. Ignored when `use_iom_recondition=True`; in that case
+        `iom_thresh_recondition` is used instead.
+    use_iom_recondition (`bool`, *optional*, defaults to `True`):
+        SAM3.1 multiplex tracking uses IoM instead of IoU as the detection-to-track association
+        metric, which is more robust to partial occlusions and shrinking tracked masks.
+    iom_thresh_recondition (`float`, *optional*, defaults to 0.5):
+        IoM threshold for reconditioning. Lower than IoU's 0.8 default because IoM scores are
+        intrinsically larger when one mask is nested inside the other.
+    masklet_confirmation_enable (`bool`, *optional*, defaults to `True`):
+        Require consecutive detection-track matches before publishing a masklet.
+    masklet_confirmation_consecutive_det_thresh (`int`, *optional*, defaults to 3):
+        Consecutive matched frames required to confirm a masklet.
 
     Example:
     ```python
@@ -112,6 +135,31 @@ class Sam31VideoConfig(Sam3VideoConfig):
     """
 
     model_type = "sam3_1_video"
+
+    # Overrides for SAM3.1 multiplex tracking, matching Meta's `_create_multiplex_pcs_video_predictor`
+    # in `facebook_sam3/sam3/model_builder.py`:
+    #   * IoM (Intersection over Minimum) for both NMS and detection-track
+    #     association/reconditioning. IoM is more aggressive than IoU at suppressing nested
+    #     duplicates and more permissive at associating a partially-occluded / shrinking tracked
+    #     mask with its current detection, which is what SAM3.1's multiplex tracker is tuned for.
+    #   * `suppress_unmatched_only_within_hotstart=False` so stale tracks keep getting suppressed
+    #     across the entire video instead of being held forever once hotstart ends.
+    #
+    # NOTE: Meta also lowers `score_threshold_detection` to 0.4 and `new_det_thresh` to 0.65 for
+    # this predictor, but the HF detection-score distribution is slightly compressed compared to
+    # Meta's (residual text-feature norm and bf16/fp32 differences), so adopting those thresholds
+    # admits noticeably more false-positive tracks (mean HF precision drops by ~0.07 on the
+    # `foot.mp4 / "shoe"` benchmark). We therefore keep the SAM3 defaults (0.5 / 0.7) here; the
+    # values can still be overridden through the config for users who want exact Meta parity.
+    det_nms_use_iom: bool = True
+    use_iom_recondition: bool = True
+    iom_thresh_recondition: float = 0.5
+    suppress_unmatched_only_within_hotstart: bool = False
+    suppress_det_close_to_boundary: bool = True
+    fill_hole_area: int = 0
+    masklet_confirmation_enable: bool = True
+    score_threshold_detection: float = 0.4
+    new_det_thresh: float = 0.65
 
     def __post_init__(self, **kwargs):
         if self.detector_config is None:
@@ -153,6 +201,25 @@ class Sam31VideoInferenceSession(Sam3VideoInferenceSession):
 @auto_docstring(custom_intro="Base class for the SAM3.1 Video model's output.")
 @dataclass
 class Sam31VideoSegmentationOutput(Sam3VideoSegmentationOutput):
+    r"""
+    object_ids (`list[int]`, *optional*):
+        List of object IDs being tracked in the current frame.
+    obj_id_to_mask (`dict[int, torch.FloatTensor]`, *optional*):
+        Dictionary mapping object IDs to their predicted low-resolution masks.
+    obj_id_to_score (`dict[int, float]`, *optional*):
+        Dictionary mapping object IDs to their detection scores.
+    obj_id_to_tracker_score (`dict[int, float]`, *optional*):
+        Dictionary mapping object IDs to their tracker scores for the current frame.
+    removed_obj_ids (`set[int]`, *optional*):
+        Set of object IDs that have been removed (e.g., via hotstart heuristics).
+    suppressed_obj_ids (`set[int]`, *optional*):
+        Set of object IDs that have been suppressed in the current frame.
+    unconfirmed_obj_ids (`list[int]`, *optional*):
+        Object IDs that are tracked but not yet confirmed by masklet confirmation heuristics.
+    frame_idx (`int`, *optional*):
+        The frame index of the video.
+    """
+
     pass
 
 
@@ -193,6 +260,8 @@ class Sam31VideoModel(Sam3VideoModel):
         self.low_res_mask_size = config.low_res_mask_size
         self.score_threshold_detection = config.score_threshold_detection
         self.det_nms_thresh = config.det_nms_thresh
+        self.det_nms_use_iom = config.det_nms_use_iom
+        self.suppress_det_close_to_boundary = config.suppress_det_close_to_boundary
         self.assoc_iou_thresh = config.assoc_iou_thresh
         self.trk_assoc_iou_thresh = config.trk_assoc_iou_thresh
         self.new_det_thresh = config.new_det_thresh
@@ -216,6 +285,10 @@ class Sam31VideoModel(Sam3VideoModel):
         self.recondition_every_nth_frame = config.recondition_every_nth_frame
         self.high_conf_thresh = config.high_conf_thresh
         self.high_iou_thresh = config.high_iou_thresh
+        self.use_iom_recondition = config.use_iom_recondition
+        self.iom_thresh_recondition = config.iom_thresh_recondition
+        self.masklet_confirmation_enable = config.masklet_confirmation_enable
+        self.masklet_confirmation_consecutive_det_thresh = config.masklet_confirmation_consecutive_det_thresh
 
         self.post_init()
 
@@ -302,6 +375,231 @@ class Sam31VideoModel(Sam3VideoModel):
         )
         return interactive_feats, interactive_pos
 
+    def _refresh_recondition_object_pointer(
+        self,
+        inference_session: Sam31VideoInferenceSession,
+        frame_idx: int,
+        obj_idx: int,
+        recond_mask_high_res: torch.Tensor,
+    ) -> None:
+        """Re-derive the object pointer for a reconditioned frame from the detector mask.
+
+        Meta's `recondition_masks_in_existing_state` (`video_tracking_multiplex.py:3267`)
+        runs `_use_mask_as_output(mask_inputs=new_masks)` for every reconditioned object
+        and writes the resulting `obj_ptr` into the cond-frame `prev_output["obj_ptr"]`
+        slot before re-encoding the spatial memory. The HF planning-phase recondition only
+        replaces `high_res_masks` and re-encodes memory — so the stored
+        `object_pointer` still reflects the (drifting) tracker prediction, and the
+        memory-attention object-pointer stream keeps pulling the model toward the old
+        location even though the spatial memory was corrected. This helper closes that
+        gap by running `Sam31TrackerVideoModel._use_mask_as_output` with the detector
+        mask as input on the interactive feature pyramid and overwriting
+        `object_pointer`, `pred_masks`, and `object_score_logits` in the stored
+        cond/non_cond entry for `frame_idx`.
+
+        Mirrors Meta's per-object path (one call per reconditioned obj_idx) since
+        HF's `_use_mask_as_output` is not multiplex-aware.
+        """
+        output_dict = inference_session.output_dict_per_obj[obj_idx]
+        storage_key = (
+            "cond_frame_outputs"
+            if frame_idx in output_dict["cond_frame_outputs"]
+            else ("non_cond_frame_outputs" if frame_idx in output_dict["non_cond_frame_outputs"] else None)
+        )
+        if storage_key is None:
+            return
+
+        current_out = output_dict[storage_key][frame_idx]
+        if "object_pointer" not in current_out:
+            return
+
+        tracker = self.tracker_model
+        (
+            _propagation_feats,
+            _propagation_pos,
+            interactive_vision_feats,
+            _interactive_vision_pos,
+        ) = tracker._prepare_vision_features(inference_session, frame_idx, batch_size=1)
+
+        interactive_high_res = None
+        if len(interactive_vision_feats) > 1:
+            interactive_high_res = [
+                x.permute(1, 2, 0).view(x.size(1), x.size(2), *s)
+                for x, s in zip(interactive_vision_feats[:-1], tracker.backbone_feature_sizes[:-1])
+            ]
+
+        pix_feat = (
+            interactive_vision_feats[-1]
+            .permute(1, 2, 0)
+            .view(-1, tracker.hidden_dim, *tracker.backbone_feature_sizes[-1])
+        )
+        no_mem_embed = tracker.no_memory_embedding.to(dtype=pix_feat.dtype, device=pix_feat.device)
+        pix_feat = pix_feat + no_mem_embed.view(1, -1, 1, 1)
+
+        # Pass the bilinearly-upsampled detector LOGIT mask through. Binarising
+        # (matching Meta's `_recondition_masklets > 0` branch) helps deer slightly but
+        # regresses foot/shoe by ~0.04 IoU; keeping the logit signal yields the best
+        # combined improvement vs no-refresh baseline.
+        mask_inputs = recond_mask_high_res.float()
+        while mask_inputs.dim() < 4:
+            mask_inputs = mask_inputs.unsqueeze(0)
+        if mask_inputs.dtype != pix_feat.dtype:
+            mask_inputs = mask_inputs.to(pix_feat.dtype)
+
+        sam_output = tracker._use_mask_as_output(pix_feat, interactive_high_res, mask_inputs)
+
+        target_device = current_out["object_pointer"].device
+        target_dtype = current_out["object_pointer"].dtype
+        current_out["object_pointer"] = sam_output.object_pointer.to(
+            device=target_device, dtype=target_dtype
+        )
+        if "pred_masks" in current_out and current_out["pred_masks"] is not None:
+            current_out["pred_masks"] = sam_output.pred_masks.to(
+                device=current_out["pred_masks"].device,
+                dtype=current_out["pred_masks"].dtype,
+            )
+        if "object_score_logits" in current_out and current_out["object_score_logits"] is not None:
+            current_out["object_score_logits"] = sam_output.object_score_logits.to(
+                device=current_out["object_score_logits"].device,
+                dtype=current_out["object_score_logits"].dtype,
+            )
+
+    def _tracker_update_memories(
+        self,
+        inference_session: Sam31VideoInferenceSession,
+        frame_idx: int,
+        low_res_masks: torch.Tensor,
+        reconditioned_masks: dict[int, torch.Tensor] | None = None,
+    ) -> None:
+        r"""SAM3.1 multiplex memory encoding for the full PCS video pipeline.
+
+        Why this needs to override `Sam3VideoModel._tracker_update_memories`
+        ------------------------------------------------------------------
+        The inherited SAM3 implementation batches per-object masks as
+        `(num_objects, 1, H, W)` and feeds them directly into
+        `tracker_model._encode_new_memory(...)` via `run_memory_encoder(...)`. That works
+        for the SAM3 video tracker (which encodes one mask per object), but is silently
+        **incorrect** for the SAM3.1 multiplex tracker:
+
+          * `Sam31TrackerVideoModel._encode_new_memory` expects bucketed multiplex input
+            shaped `(num_buckets, multiplex_count, H, W)` (one channel per multiplex slot)
+            followed by a parallel `(num_buckets, multiplex_count, 1, 1)`
+            `conditioning_slots_mask` indicating which slots host conditioning objects on
+            this frame. The mask downsampler's first conv was trained against
+            `multiplex_count * mask_downsampler_input_channel_multiplier` channels (16 mask
+            channels + 16 cond indicator channels for the default config).
+          * When the inherited path passes `(num_objects, 1, H, W)`,
+            `_encode_new_memory`'s shape-adapt branch zero-pads the missing channels (one
+            real mask + 31 zero channels per object) and runs the encoder, producing
+            memory features that have no relation to Meta's multiplex memory.
+          * In addition, the inherited path doesn't store
+            `propagation_image_features` / `propagation_image_pos_enc` next to the
+            memory tensors — the propagation memory cross-attention path in
+            `Sam31TrackerVideoModel._prepare_memory_conditioned_features_batched_for_propagation`
+            then has to fall back to the per-frame vision-feature cache.
+
+        Both issues are resolved by routing the per-object masks/scores through the
+        tracker's own `_batch_encode_memories`, which already implements Meta's bucketed
+        multiplex encoding (and writes the propagation FPN snapshot per object). We keep
+        the SAM3-video heuristics that run before encoding (recondition override,
+        per-prompt non-overlapping suppression, area-derived score logits) so the
+        detector/tracker association behaviour stays unchanged.
+
+        """
+        if len(inference_session.obj_ids) == 0:
+            return
+
+        if reconditioned_masks is None:
+            reconditioned_masks = {}
+
+        # Match the multiplex memory encoder's input grid: SAM3.1 trains the multiplex
+        # `_encode_new_memory` on masks at `image_size` (1008x1008 for the default config)
+        # — that's the shape of `current_out["high_res_masks"]` the standalone PVS tracker
+        # feeds into `_batch_encode_memories`. Interpolating up to `image_size` here means
+        # `_encode_new_memory` will NOT hit its internal `shape != mask_mem_size` branch
+        # (which would otherwise add a `bilinear + antialias` downsample to 1008, then the
+        # `mask_downsampler` would upsample back to its 1152x1152 `interpol_size`).
+        # Avoiding that round-trip restores the same single-resolution flow Meta runs
+        # (where suppression is applied at the same resolution the memory encoder sees)
+        # while staying compatible with HF's `_encode_new_memory`.
+        target_h = target_w = self.tracker_model.image_size
+        high_res_masks = nn.functional.interpolate(
+            low_res_masks.unsqueeze(1).float(),
+            size=(target_h, target_w),
+            mode="bilinear",
+            align_corners=False,
+        )
+
+        # Recondition override: detector mask replaces tracker mask for high-confidence
+        # IoU-matched objects at memory-encode time.
+        #
+        # Promote the reconditioned frame entry from `non_cond_frame_outputs` to
+        # `cond_frame_outputs` BEFORE memory encoding so the new memory features land
+        # in `cond_frame_outputs` (see `_batch_encode_memories`, which writes to whichever
+        # storage_key already holds `frame_idx`). This mirrors Meta's
+        # `_recondition_masklets`, which calls `add_new_masks(reconditioning=True)` —
+        # that path always writes the recondition output to `cond_frame_outputs`
+        # (`storage_key = "cond_frame_outputs" if is_cond else ...`) and removes it
+        # from `non_cond_frame_outputs`. Without this promotion, recondition memory
+        # features get evicted from the rolling `non_cond` window after
+        # `num_maskmem - 1 = 6` frames and the model has no permanent anchors against
+        # drift over long propagations (catastrophic past frames 60-100).
+        #
+        # Keep `is_mask_from_pts_per_obj=[False]*num_objects` below: Meta's
+        # `_tracker_update_memories` always passes `is_mask_from_pts=False`. Promotion
+        # (storage key) and is_mask_from_pts (memory-channel conditioning indicator)
+        # are independent — Meta does both: promote AND `is_mask_from_pts=False`.
+        for obj_idx, recond_mask in reconditioned_masks.items():
+            recond = recond_mask.float()
+            while recond.dim() < 4:
+                recond = recond.unsqueeze(0)
+            if recond.shape[-2:] != (target_h, target_w):
+                recond = nn.functional.interpolate(
+                    recond, size=(target_h, target_w), mode="bilinear", align_corners=False
+                )
+            high_res_masks[obj_idx] = recond.squeeze(0)
+
+            output_dict = inference_session.output_dict_per_obj[obj_idx]
+            # Mirror Meta's `recondition_masks_in_existing_state`: refresh object_pointer
+            # / pred_masks / object_score_logits from the detector mask via
+            # `_use_mask_as_output` before promoting the entry to `cond_frame_outputs`.
+            # See `_refresh_recondition_object_pointer` for full rationale.
+            self._refresh_recondition_object_pointer(
+                inference_session=inference_session,
+                frame_idx=frame_idx,
+                obj_idx=obj_idx,
+                recond_mask_high_res=recond.squeeze(0),
+            )
+            if frame_idx in output_dict["non_cond_frame_outputs"]:
+                current_out = output_dict["non_cond_frame_outputs"].pop(frame_idx)
+                output_dict["cond_frame_outputs"][frame_idx] = current_out
+
+        prompt_ids_for_objects = [
+            inference_session.obj_id_to_prompt_id[obj_id] for obj_id in inference_session.obj_ids
+        ]
+        high_res_masks = self._suppress_object_pw_area_shrinkage(high_res_masks, prompt_ids_for_objects)
+        object_score_logits = torch.where((high_res_masks > 0).any(dim=(-1, -2)), 10.0, -10.0)
+
+        num_objects = len(inference_session.obj_ids)
+        objects_needing_memory_encoding = list(range(num_objects))
+        high_res_masks_for_memory = [high_res_masks[i : i + 1] for i in range(num_objects)]
+        object_score_logits_for_memory = [object_score_logits[i : i + 1] for i in range(num_objects)]
+        # PCS planning-phase memory encoding runs before new detections are added to the
+        # session and only for propagated masklets. Meta always uses
+        # `is_mask_from_pts=False` here (see `Sam3MultiplexVideoBase._tracker_update_memories`).
+        # New objects receive click/mask conditioning memory in `run_tracker_update_execution_phase`.
+        is_mask_from_pts_per_obj = [False] * num_objects
+
+        self.tracker_model._batch_encode_memories(
+            inference_session=inference_session,
+            frame_idx=frame_idx,
+            objects_needing_memory_encoding=objects_needing_memory_encoding,
+            high_res_masks_for_memory=high_res_masks_for_memory,
+            object_score_logits_for_memory=object_score_logits_for_memory,
+            is_mask_from_pts_per_obj=is_mask_from_pts_per_obj,
+        )
+        self.tracker_model._prune_stale_tracker_outputs(inference_session, frame_idx)
+
     def _det_track_one_frame(
         self,
         inference_session: Sam31VideoInferenceSession,
@@ -359,6 +657,12 @@ class Sam31VideoModel(Sam3VideoModel):
         )
 
         # Step 4: execution phase (memory encoding for new conditioning frames).
+        # SAM3.1-specific multiplex bucketed memory encoding happens upstream of this
+        # call: `Sam3VideoModel.run_tracker_update_planning_phase` invokes
+        # `_tracker_update_memories`, which we override above to route through
+        # `Sam31TrackerVideoModel._batch_encode_memories` (and which writes the
+        # `propagation_image_features` snapshot the multiplex memory cross-attention
+        # path looks up in `_get_stored_or_cached_propagation_image_features`).
         self.run_tracker_update_execution_phase(
             inference_session=inference_session,
             frame_idx=frame_idx,
@@ -390,6 +694,110 @@ class Sam31VideoModel(Sam3VideoModel):
             tracker_metadata_new,
             tracker_obj_scores_global,
         )
+
+    def _prepare_recondition_masks(
+        self,
+        inference_session: Sam31VideoInferenceSession,
+        frame_idx: int,
+        det_out: dict[str, torch.Tensor],
+        trk_masks: torch.Tensor,
+        trk_id_to_max_iou_high_conf_det: dict[int, int],
+        tracker_obj_scores_global: torch.Tensor,
+    ) -> tuple[dict[int, torch.Tensor], set[int]]:
+        r"""Meta `_recondition_masklets` low-res merge + memory-encode overrides for PCS.
+
+        Updates `trk_masks` in-place (binary agreement with detector, hole fill) and
+        returns high-res detector masks for `_tracker_update_memories`. Does not call
+        `add_new_masks(reconditioning=True)` here — that path marks frames as
+        click-conditioning and breaks multiplex propagation memory.
+        """
+        reconditioned_masks: dict[int, torch.Tensor] = {}
+        reconditioned_obj_ids: set[int] = set()
+        if len(trk_id_to_max_iou_high_conf_det) == 0:
+            return reconditioned_masks, reconditioned_obj_ids
+
+        for trk_obj_id, det_idx in trk_id_to_max_iou_high_conf_det.items():
+            obj_idx = inference_session.obj_id_to_idx(trk_obj_id)
+            if tracker_obj_scores_global[obj_idx].sigmoid() <= self.high_conf_thresh:
+                continue
+
+            new_mask = det_out["mask"][det_idx : det_idx + 1]
+            old_mask = trk_masks[obj_idx : obj_idx + 1]
+            if new_mask.shape[-2:] != old_mask.shape[-2:]:
+                new_mask = F.interpolate(
+                    new_mask.unsqueeze(1),
+                    size=old_mask.shape[-2:],
+                    mode="bilinear",
+                    align_corners=False,
+                ).squeeze(1)
+
+            binary_agreement = (new_mask > 0) == (old_mask > 0)
+            merged = torch.where(binary_agreement, old_mask, new_mask)
+            merged = fill_holes_in_mask_scores(
+                merged.unsqueeze(1),
+                max_area=self.fill_hole_area,
+                fill_holes=True,
+                remove_sprinkles=True,
+            ).squeeze(1)
+            trk_masks[obj_idx] = merged.squeeze(0)
+
+            # Pass the detector low-res LOGIT mask straight through (not binarised).
+            # `_tracker_update_memories` bilinearly upsamples this to `image_size` and
+            # then `_batch_encode_memories` feeds the result into `_encode_new_memory`,
+            # which expects the same low-res-logits-upsampled-via-bilinear input shape
+            # that the standalone PVS tracker produces. Binarising before bilinear
+            # interpolation collapses the boundary into a smooth [0,1] gradient that
+            # the encoder (trained on mask-logit input) doesn't see in non-recondition
+            # frames — empirically losing ~0.5 IoU on the deer 60+ regime.
+            det_for_mem = det_out["mask"][det_idx : det_idx + 1].unsqueeze(1)
+            reconditioned_masks[obj_idx] = det_for_mem
+            reconditioned_obj_ids.add(trk_obj_id)
+
+        return reconditioned_masks, reconditioned_obj_ids
+
+    def build_outputs(
+        self,
+        inference_session: Sam31VideoInferenceSession,
+        det_out: dict[str, torch.Tensor],
+        tracker_low_res_masks_global: torch.Tensor,
+        tracker_update_plan: dict,
+        reconditioned_obj_ids: set | None = None,
+    ):
+        """Meta-parity build_outputs for SAM3.1 multiplex video.
+
+        Identical to `Sam3VideoModel.build_outputs` except for Part 3: we do not
+        overwrite the reconditioned objects' masks with the raw detector logits.
+        `_prepare_recondition_masks` already wrote Meta's agreement-preserving merge
+        (`torch.where((det>0)==(trk>0), trk, det)` + `fill_holes_in_mask_scores`) into
+        `tracker_low_res_masks_global[obj_idx]` (see Meta `_recondition_masklets`
+        `facebook_sam3/sam3/model/sam3_multiplex_base.py:925-938`). Overriding here
+        with the raw detector mask discards that merge and degrades the output (~+0.04
+        IoU on the deer 30-79 / 60+ regime). Part 1 picks the merged mask up via
+        `tracker_low_res_masks_global`.
+        """
+        new_det_out_inds: list[int] = tracker_update_plan["new_det_out_inds"]
+        new_det_obj_ids: list[int] = tracker_update_plan["new_det_obj_ids"]
+        obj_id_to_mask: dict[int, torch.Tensor] = {}
+
+        existing_masklet_obj_ids = inference_session.obj_ids
+        for obj_id, mask in zip(existing_masklet_obj_ids, tracker_low_res_masks_global):
+            obj_id_to_mask[int(obj_id)] = mask.unsqueeze(0)
+
+        if len(new_det_out_inds) > 0:
+            new_det_out_inds_t = torch.tensor(
+                new_det_out_inds, dtype=torch.long, device=det_out["mask"].device
+            )
+            new_det_low_res_masks = det_out["mask"][new_det_out_inds_t]
+            new_det_low_res_masks = fill_holes_in_mask_scores(
+                new_det_low_res_masks.unsqueeze(1),
+                max_area=self.fill_hole_area,
+                fill_holes=True,
+                remove_sprinkles=True,
+            ).squeeze(1)
+            for obj_id, mask in zip(new_det_obj_ids, new_det_low_res_masks):
+                obj_id_to_mask[int(obj_id)] = mask.unsqueeze(0)
+
+        return obj_id_to_mask
 
 
 __all__ = [

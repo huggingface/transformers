@@ -149,6 +149,21 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING: dict[str, str] = {
     r"^detector\.geometry_encoder\.img_pre_norm\.":                                   r"detector_model.geometry_encoder.vision_layer_norm.",
     r"^detector\.geometry_encoder\.norm\.":                                           r"detector_model.geometry_encoder.prompt_layer_norm.",
     r"^detector\.geometry_encoder\.encode_norm\.":                                    r"detector_model.geometry_encoder.output_layer_norm.",
+    # CLS embedding (always added to prompt, even text-only), final projection, label embedding,
+    # and box-projection parameters. These were silently dropped by the catch-all rule below,
+    # leaving them randomly initialised and producing "ghost" detections at inference time.
+    r"^detector\.geometry_encoder\.cls_embed\.":                                      r"detector_model.geometry_encoder.cls_embed.",
+    r"^detector\.geometry_encoder\.final_proj\.":                                     r"detector_model.geometry_encoder.final_proj.",
+    r"^detector\.geometry_encoder\.label_embed\.":                                    r"detector_model.geometry_encoder.label_embed.",
+    r"^detector\.geometry_encoder\.boxes_direct_project\.":                           r"detector_model.geometry_encoder.boxes_direct_project.",
+    r"^detector\.geometry_encoder\.boxes_pool_project\.":                             r"detector_model.geometry_encoder.boxes_pool_project.",
+    r"^detector\.geometry_encoder\.boxes_pos_enc_project\.":                          r"detector_model.geometry_encoder.boxes_pos_enc_project.",
+    # Point-prompt projections exist in Meta but not in the current HF geometry encoder (which only
+    # supports box prompts). Explicitly drop them so they don't slip past the catch-all and trigger
+    # confusing warnings at load time.
+    r"^detector\.geometry_encoder\.points_direct_project\.":                          r"__DROP__.detector.geometry_encoder.points_direct_project.",
+    r"^detector\.geometry_encoder\.points_pool_project\.":                            r"__DROP__.detector.geometry_encoder.points_pool_project.",
+    r"^detector\.geometry_encoder\.points_pos_enc_project\.":                         r"__DROP__.detector.geometry_encoder.points_pos_enc_project.",
 
     # =====================================================================================
     # Detector heads — DETR Encoder

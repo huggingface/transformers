@@ -390,6 +390,21 @@ class Sam3VideoProcessor(ProcessorMixin):
                 obj_ids_to_hide.extend(list(model_outputs["suppressed_obj_ids"]))
             if len(inference_session.hotstart_removed_obj_ids) > 0:
                 obj_ids_to_hide.extend(list(inference_session.hotstart_removed_obj_ids))
+            # Meta hides masklets using unconfirmed status from a *future* frame index
+            # (`unconfirmed_status_delay = consecutive_thresh - 1`). See
+            # facebook_sam3/sam3/model/sam3_multiplex_tracking.py propagate_in_video.
+            frame_idx = model_outputs.get("frame_idx")
+            unconfirmed_to_hide = model_outputs.get("unconfirmed_obj_ids")
+            if frame_idx is not None and hasattr(inference_session, "unconfirmed_obj_ids_per_frame"):
+                delay = max(
+                    0,
+                    int(getattr(inference_session, "masklet_confirmation_consecutive_det_thresh", 3)) - 1,
+                )
+                num_frames = inference_session.num_frames or (frame_idx + delay + 1)
+                lookup_idx = min(int(frame_idx) + delay, num_frames - 1)
+                unconfirmed_to_hide = inference_session.unconfirmed_obj_ids_per_frame.get(lookup_idx, [])
+            if unconfirmed_to_hide:
+                obj_ids_to_hide.extend(list(unconfirmed_to_hide))
             if len(obj_ids_to_hide) > 0:
                 obj_ids_to_hide_t = torch.tensor(obj_ids_to_hide, dtype=torch.int64)
                 keep &= ~torch.isin(out_obj_ids, obj_ids_to_hide_t)

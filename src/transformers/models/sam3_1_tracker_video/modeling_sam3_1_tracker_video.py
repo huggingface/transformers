@@ -88,12 +88,16 @@ class Sam31SinePositionEmbedding(nn.Module):
     """
 
     def __init__(
-        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: float | None = None
+        self,
+        num_position_features: int = 64,
+        temperature: int = 10000,
+        normalize: bool = False,
+        scale: float | None = None,
     ):
         super().__init__()
         if scale is not None and normalize is False:
             raise ValueError("normalize should be True if scale is passed")
-        self.num_pos_feats = num_pos_feats
+        self.num_position_features = num_position_features
         self.temperature = temperature
         self.normalize = normalize
         self.scale = 2 * math.pi if scale is None else scale
@@ -112,8 +116,8 @@ class Sam31SinePositionEmbedding(nn.Module):
         x_embed = x * self.scale
         y_embed = y * self.scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=x.device).to(x.dtype)
-        dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_pos_feats)
+        dim_t = torch.arange(self.num_position_features, dtype=torch.int64, device=x.device).to(x.dtype)
+        dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_position_features)
 
         pos_x = x_embed[:, None] / dim_t
         pos_y = y_embed[:, None] / dim_t
@@ -129,11 +133,11 @@ class Sam31SinePositionEmbedding(nn.Module):
             boxes: Box coordinates [batch_size, num_queries, 4] in (x, y, w, h) format
 
         Returns:
-            Position embeddings [batch_size, num_queries, num_pos_feats*4]
+            Position embeddings [batch_size, num_queries, num_position_features*4]
         """
         assert boxes.size(-1) == 4, f"Expected 4D box coordinates (x, y, w, h), got shape {boxes.shape}"
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=boxes.device).to(boxes.dtype)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
+        dim_t = torch.arange(self.num_position_features, dtype=torch.int64, device=boxes.device).to(boxes.dtype)
+        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_position_features)
 
         x_embed = boxes[:, :, 0] * self.scale
         y_embed = boxes[:, :, 1] * self.scale
@@ -154,26 +158,29 @@ class Sam31SinePositionEmbedding(nn.Module):
 
         return pos
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=4)
-    def forward(
-        self,
+    def build_sine_position_embedding(
         shape: torch.Size,
         device: torch.device | str,
         dtype: torch.dtype,
-        mask: Tensor | None = None,
-    ) -> Tensor:
+        num_position_features: int,
+        normalize: bool = False,
+        scale: float | None = None,
+        temperature: int = 10000,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         if mask is None:
-            mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
-        not_mask = (~mask).to(dtype)
-        y_embed = not_mask.cumsum(1)
-        x_embed = not_mask.cumsum(2)
-        if self.normalize:
+            mask = torch.ones((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
+        y_embed = mask.cumsum(1, dtype=dtype)
+        x_embed = mask.cumsum(2, dtype=dtype)
+        if normalize:
             eps = 1e-6
-            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
+            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * scale
+            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=device).to(dtype)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
+        dim_t = torch.arange(num_position_features, dtype=torch.int64, device=device).to(dtype)
+        dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_position_features)
 
         pos_x = x_embed[:, :, :, None] / dim_t
         pos_y = y_embed[:, :, :, None] / dim_t
@@ -181,6 +188,17 @@ class Sam31SinePositionEmbedding(nn.Module):
         pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
         return pos
+
+    def forward(
+        self,
+        shape: torch.Size,
+        device: torch.device | str,
+        dtype: torch.dtype,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        return self.build_sine_position_embedding(
+            shape, device, dtype, self.num_position_features, self.normalize, self.scale, self.temperature, mask
+        )
 
 
 class Sam31FPNLayer(nn.Module):
@@ -226,7 +244,9 @@ class Sam31VisionNeck(nn.Module):
         super().__init__()
         self.config = config
 
-        self.position_encoding = Sam31SinePositionEmbedding(num_pos_feats=config.fpn_hidden_size // 2, normalize=True)
+        self.position_encoding = Sam31SinePositionEmbedding(
+            num_position_features=config.fpn_hidden_size // 2, normalize=True
+        )
 
         self.sam3_fpn_layers = nn.ModuleList(
             [
@@ -897,8 +917,6 @@ class Sam31TrackerVideoInferenceSession:
         self.output_dict_per_obj.clear()
         self.frames_tracked_per_obj.clear()
         self.obj_with_new_inputs = []
-        if hasattr(self, "propagation_image_snapshots_per_frame"):
-            self.propagation_image_snapshots_per_frame.clear()
         # Note: cache and video data are preserved
 
     def reset_inference_session(self):
@@ -912,8 +930,6 @@ class Sam31TrackerVideoInferenceSession:
         self.frames_tracked_per_obj.clear()
         self.obj_with_new_inputs = []
         self.cache.clear_all()
-        if hasattr(self, "propagation_image_snapshots_per_frame"):
-            self.propagation_image_snapshots_per_frame.clear()
 
 
 class Sam31TrackerVideoLayerNorm(nn.LayerNorm):
@@ -942,7 +958,6 @@ class Sam31TrackerVideoLayerNorm(nn.LayerNorm):
         return features
 
 
-# copied and adapted from original implementation, also practically equal to DetrSinePositionEmbedding
 class Sam31TrackerVideoPositionEmbeddingSine(nn.Module):
     """
     This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
@@ -950,36 +965,43 @@ class Sam31TrackerVideoPositionEmbeddingSine(nn.Module):
     """
 
     def __init__(
-        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: float | None = None
+        self,
+        num_position_features: int = 64,
+        temperature: int = 10000,
+        normalize: bool = False,
+        scale: float | None = None,
     ):
         super().__init__()
         if scale is not None and normalize is False:
             raise ValueError("normalize should be True if scale is passed")
-        self.num_pos_feats = num_pos_feats
+        self.num_position_features = num_position_features
         self.temperature = temperature
         self.normalize = normalize
         self.scale = 2 * math.pi if scale is None else scale
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=1)
-    def forward(
-        self,
+    def build_sine_position_embedding(
         shape: torch.Size,
         device: torch.device | str,
         dtype: torch.dtype,
-        mask: Tensor | None = None,
-    ) -> Tensor:
+        num_position_features: int,
+        normalize: bool = False,
+        scale: float | None = None,
+        temperature: int = 10000,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         if mask is None:
-            mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
-        not_mask = (~mask).to(dtype)
-        y_embed = not_mask.cumsum(1)
-        x_embed = not_mask.cumsum(2)
-        if self.normalize:
+            mask = torch.ones((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
+        y_embed = mask.cumsum(1, dtype=dtype)
+        x_embed = mask.cumsum(2, dtype=dtype)
+        if normalize:
             eps = 1e-6
-            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
+            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * scale
+            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=device).to(dtype)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
+        dim_t = torch.arange(num_position_features, dtype=torch.int64, device=device).to(dtype)
+        dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_position_features)
 
         pos_x = x_embed[:, :, :, None] / dim_t
         pos_y = y_embed[:, :, :, None] / dim_t
@@ -987,6 +1009,17 @@ class Sam31TrackerVideoPositionEmbeddingSine(nn.Module):
         pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
         return pos
+
+    def forward(
+        self,
+        shape: torch.Size,
+        device: torch.device | str,
+        dtype: torch.dtype,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        return self.build_sine_position_embedding(
+            shape, device, dtype, self.num_position_features, self.normalize, self.scale, self.temperature, mask
+        )
 
 
 def eager_attention_forward(
@@ -1868,7 +1901,7 @@ class Sam31TrackerVideoMemoryEncoder(nn.Module):
         self.feature_projection = nn.Conv2d(hidden_size, hidden_size, kernel_size=1)
         self.memory_fuser = Sam31TrackerVideoMemoryFuser(config)
         self.position_encoding = Sam31TrackerVideoPositionEmbeddingSine(
-            num_pos_feats=output_channels // 2, normalize=True
+            num_position_features=output_channels // 2, normalize=True
         )
         self.projection = nn.Conv2d(hidden_size, output_channels, kernel_size=1)
 
@@ -2102,8 +2135,8 @@ class Sam31TrackerVideoTwoWayTransformer(nn.Module):
         if image_embeddings is None:
             raise ValueError("You have to specify an image_embedding")
 
-        image_embeddings = image_embeddings.flatten(2).permute(0, 2, 1).unsqueeze(1)
-        image_positional_embeddings = image_positional_embeddings.flatten(2).permute(0, 2, 1).unsqueeze(1)
+        image_embeddings = image_embeddings.flatten(2).transpose(1, 2).unsqueeze(1)
+        image_positional_embeddings = image_positional_embeddings.flatten(2).transpose(1, 2).unsqueeze(1)
 
         # Prepare queries
         queries = point_embeddings
@@ -2980,23 +3013,46 @@ class Sam31TrackerVideoModel(Sam31TrackerVideoPreTrainedModel):
         cached_obj_idxs: list[int] = []
         interactive_obj_idxs: list[int] = []
         propagation_obj_idxs: list[int] = []
+        # Map each object to the storage key that already holds a stored output for this
+        # frame (cond_frame_outputs has priority). `cached_storage_key_per_obj` lets us
+        # short-circuit the second tracker forward triggered by
+        # `Sam3VideoModel._tracker_add_new_objects` (PCS new-object admission): when that
+        # path re-enters this forward to encode the new detection masks, existing objects
+        # already have pred_masks / maskmem_features stored at `frame_idx` (from the
+        # planning-phase propagation + `_tracker_update_memories`). Re-propagating them
+        # would overwrite those stored memories with a second forward that reads from a
+        # different memory bank (the planning phase may have just promoted reconditioned
+        # frames into `cond_frame_outputs` and encoded new mem features), drifting
+        # existing masklets right when a new detection joins the session. Meta's
+        # `add_new_masks_to_existing_state` only encodes the new object's mask in place
+        # and never touches existing objects' memory; the per-frame `has_*_output` cached
+        # branch reproduces that behaviour. On the first forward of a frame (called from
+        # `run_tracker_propagation`) neither storage key holds `frame_idx` yet, so
+        # existing objects still fall through to `propagation_obj_idxs` as before.
+        cached_storage_key_per_obj: dict[int, str] = {}
         for obj_idx in range(num_objects):
             obj_id = inference_session.obj_idx_to_id(obj_idx)
             has_new_inputs = obj_id in inference_session.obj_with_new_inputs
-            has_cond_output = frame_idx in inference_session.output_dict_per_obj[obj_idx]["cond_frame_outputs"]
-            if (not has_new_inputs) and has_cond_output:
+            output_dict = inference_session.output_dict_per_obj[obj_idx]
+            has_cond_output = frame_idx in output_dict["cond_frame_outputs"]
+            has_non_cond_output = frame_idx in output_dict["non_cond_frame_outputs"]
+            if (not has_new_inputs) and (has_cond_output or has_non_cond_output):
                 cached_obj_idxs.append(obj_idx)
+                cached_storage_key_per_obj[obj_idx] = (
+                    "cond_frame_outputs" if has_cond_output else "non_cond_frame_outputs"
+                )
             elif has_new_inputs:
                 interactive_obj_idxs.append(obj_idx)
             else:
                 propagation_obj_idxs.append(obj_idx)
 
         for obj_idx in cached_obj_idxs:
+            is_cond = cached_storage_key_per_obj[obj_idx] == "cond_frame_outputs"
             pred_masks_per_obj[obj_idx] = inference_session.get_output(
-                obj_idx, frame_idx, "pred_masks", is_conditioning_frame=True
+                obj_idx, frame_idx, "pred_masks", is_conditioning_frame=is_cond
             )
             object_score_logits_per_obj[obj_idx] = inference_session.get_output(
-                obj_idx, frame_idx, "object_score_logits", is_conditioning_frame=True
+                obj_idx, frame_idx, "object_score_logits", is_conditioning_frame=is_cond
             )
 
         for obj_idx in interactive_obj_idxs:
@@ -4133,21 +4189,27 @@ class Sam31TrackerVideoModel(Sam31TrackerVideoPreTrainedModel):
         if not objects_needing_memory_encoding:
             return
 
+        encode_device = inference_session.inference_device
+        param_dtype = next(self.parameters()).dtype
+
         current_vision_feats, current_vision_pos_embeds, _, _ = self._prepare_vision_features(
             inference_session, frame_idx, batch_size=1
         )
-        pix_feat_stream = current_vision_feats[-1]
-        pix_pos_stream = current_vision_pos_embeds[-1]
+        pix_feat_stream = current_vision_feats[-1].to(device=encode_device, non_blocking=True)
+        pix_pos_stream = current_vision_pos_embeds[-1].to(device=encode_device, non_blocking=True)
         save_pi = getattr(self.config, "save_propagation_image_features", True)
 
-        high_res_masks_batched = torch.cat(high_res_masks_for_memory, dim=0)
+        # Masks/scores are often on `inference_state_device` (CPU) after `store_output`;
+        # the memory encoder and vision features must run on `inference_device` (GPU).
+        high_res_masks_batched = torch.cat(high_res_masks_for_memory, dim=0).float().to(
+            device=encode_device, non_blocking=True
+        )
         object_score_logits_batched = torch.cat(
             [self._batch_object_score_logits(s) for s in object_score_logits_for_memory], dim=0
-        )
+        ).to(device=encode_device, non_blocking=True)
 
         num_objs = len(objects_needing_memory_encoding)
-        device = high_res_masks_batched.device
-        param_dtype = next(self.parameters()).dtype
+        device = encode_device
 
         multiplex_state = self.multiplex_controller.get_state(
             num_valid_entries=num_objs,
@@ -4795,37 +4857,50 @@ class Sam31TrackerVideoModel(Sam31TrackerVideoPreTrainedModel):
             cond_frame_indices.update(inference_session.output_dict_per_obj[obj_idx]["cond_frame_outputs"].keys())
 
         for frame_idx in sorted(cond_frame_indices):
-            obj_idxs_on_frame: list[int] = []
-            high_res_masks: list[torch.Tensor] = []
-            object_score_logits: list[torch.Tensor] = []
-            for obj_idx in range(num_objs):
-                stored = inference_session.output_dict_per_obj[obj_idx]["cond_frame_outputs"].get(frame_idx)
-                if stored is None:
-                    continue
-                hr = stored.get("high_res_masks")
-                osl = stored.get("object_score_logits")
-                if hr is None or osl is None:
-                    continue
-                obj_idxs_on_frame.append(obj_idx)
-                high_res_masks.append(hr)
-                object_score_logits.append(osl)
+            self._consolidate_conditioning_memories_at_frame(inference_session, frame_idx)
 
-            if len(obj_idxs_on_frame) < 2:
+    def _consolidate_conditioning_memories_at_frame(
+        self,
+        inference_session: Sam31TrackerVideoInferenceSession,
+        frame_idx: int,
+    ) -> None:
+        """Re-encode conditioning memories on one frame when multiple objects are conditioned."""
+        if self.num_maskmem == 0:
+            return
+        num_objs = inference_session.get_obj_num()
+        if num_objs <= 1:
+            return
+
+        obj_idxs_on_frame: list[int] = []
+        high_res_masks: list[torch.Tensor] = []
+        object_score_logits: list[torch.Tensor] = []
+        for obj_idx in range(num_objs):
+            stored = inference_session.output_dict_per_obj[obj_idx]["cond_frame_outputs"].get(frame_idx)
+            if stored is None:
                 continue
+            hr = stored.get("high_res_masks")
+            osl = stored.get("object_score_logits")
+            if hr is None or osl is None:
+                continue
+            obj_idxs_on_frame.append(obj_idx)
+            high_res_masks.append(hr)
+            object_score_logits.append(osl)
 
-            stacked = torch.cat(high_res_masks, dim=0)
-            stacked = self._apply_non_overlapping_constraints(stacked)
-            masks_per_obj = [stacked[i : i + 1] for i in range(len(obj_idxs_on_frame))]
+        if len(obj_idxs_on_frame) < 2:
+            return
 
-            self._batch_encode_memories(
-                inference_session=inference_session,
-                frame_idx=frame_idx,
-                objects_needing_memory_encoding=obj_idxs_on_frame,
-                high_res_masks_for_memory=masks_per_obj,
-                object_score_logits_for_memory=object_score_logits,
-                # Conditioning frames are always driven by user point/mask inputs.
-                is_mask_from_pts_per_obj=[True] * len(obj_idxs_on_frame),
-            )
+        stacked = torch.cat(high_res_masks, dim=0)
+        stacked = self._apply_non_overlapping_constraints(stacked)
+        masks_per_obj = [stacked[i : i + 1] for i in range(len(obj_idxs_on_frame))]
+
+        self._batch_encode_memories(
+            inference_session=inference_session,
+            frame_idx=frame_idx,
+            objects_needing_memory_encoding=obj_idxs_on_frame,
+            high_res_masks_for_memory=masks_per_obj,
+            object_score_logits_for_memory=object_score_logits,
+            is_mask_from_pts_per_obj=[True] * len(obj_idxs_on_frame),
+        )
 
 
 __all__ = [

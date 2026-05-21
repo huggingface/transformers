@@ -46,13 +46,17 @@ class Sam31VideoConfig(PreTrainedConfig):
     score_threshold_detection (`float`, *optional*, defaults to 0.5):
         Probability threshold for detection outputs - only keep detections above this threshold.
     det_nms_thresh (`float`, *optional*, defaults to 0.1):
-        IoU threshold for detection NMS (Non-Maximum Suppression).
+        IoM threshold for detection NMS (the metric is IoM because `det_nms_use_iom=True`).
+    det_nms_use_iom (`bool`, *optional*, defaults to `True`):
+        SAM3.1 multiplex tracking uses IoM (Intersection over Minimum) instead of IoU for NMS,
+        which is more aggressive at removing nested duplicates.
     assoc_iou_thresh (`float`, *optional*, defaults to 0.1):
-        IoU threshold for detection-to-track matching. A detection is considered "matched" to a tracklet if
-        it overlaps with the tracklet above this threshold. Often a loose threshold like 0.1.
+        IoU/IoM threshold for detection-to-track matching. A detection is considered "matched" to a
+        tracklet if it overlaps with the tracklet above this threshold. Often a loose threshold like
+        0.1.
     trk_assoc_iou_thresh (`float`, *optional*, defaults to 0.5):
-        IoU threshold for detection-to-track matching, used to determine whether a masklet is "unmatched"
-        by any detections. Often a stricter threshold like 0.5.
+        IoU/IoM threshold for detection-to-track matching, used to determine whether a masklet is
+        "unmatched" by any detections. Often a stricter threshold like 0.5.
     new_det_thresh (`float`, *optional*, defaults to 0.7):
         Probability threshold for a detection to be added as a new object.
     recondition_on_trk_masks (`bool`, *optional*, defaults to `True`):
@@ -65,9 +69,11 @@ class Sam31VideoConfig(PreTrainedConfig):
         Number of unmatched frames required to remove a tracklet during hotstart period.
     hotstart_dup_thresh (`int`, *optional*, defaults to 8):
         Number of overlapping frames required to remove a duplicate tracklet during hotstart period.
-    suppress_unmatched_only_within_hotstart (`bool`, *optional*, defaults to `True`):
+    suppress_unmatched_only_within_hotstart (`bool`, *optional*, defaults to `False`):
         Whether to suppress masks only within hotstart period. If False, we can suppress masks even if
-        they start before hotstart period.
+        they start before hotstart period. SAM3.1 multiplex disables this gate so that stale tracks
+        (e.g. detections that lose their object) keep getting suppressed across the whole video instead
+        of accumulating into ghost tracks.
     init_trk_keep_alive (`int`, *optional*, defaults to 30):
         Initial keep-alive counter for new tracks.
     max_trk_keep_alive (`int`, *optional*, defaults to 30):
@@ -79,8 +85,11 @@ class Sam31VideoConfig(PreTrainedConfig):
         IoU above this threshold are suppressed based on which was most recently occluded.
     decrease_trk_keep_alive_for_empty_masklets (`bool`, *optional*, defaults to `False`):
         Whether to decrease keep-alive counter for masklets with zero area in SAM2 prediction.
-    fill_hole_area (`int`, *optional*, defaults to 16):
+    fill_hole_area (`int`, *optional*, defaults to 0):
         Minimum area (in pixels) for filling holes in masks and removing small sprinkles.
+        SAM3.1 multiplex uses 0 (disabled) in Meta's reference config.
+    suppress_det_close_to_boundary (`bool`, *optional*, defaults to `True`):
+        Suppress detections whose box center is within 2.5% of the image border.
     max_num_objects (`int`, *optional*, defaults to 10000):
         Maximum number of objects to track. Default 10000 effectively turns off this limit.
     recondition_every_nth_frame (`int`, *optional*, defaults to 16):
@@ -88,7 +97,18 @@ class Sam31VideoConfig(PreTrainedConfig):
     high_conf_thresh (`float`, *optional*, defaults to 0.8):
         High confidence threshold for reconditioning. Only detections above this threshold can recondition tracklets.
     high_iou_thresh (`float`, *optional*, defaults to 0.8):
-        High IoU threshold for reconditioning. Only detections with IoU above this threshold can recondition tracklets.
+        High IoU threshold for reconditioning. Ignored when `use_iom_recondition=True`; in that case
+        `iom_thresh_recondition` is used instead.
+    use_iom_recondition (`bool`, *optional*, defaults to `True`):
+        SAM3.1 multiplex tracking uses IoM instead of IoU as the detection-to-track association
+        metric, which is more robust to partial occlusions and shrinking tracked masks.
+    iom_thresh_recondition (`float`, *optional*, defaults to 0.5):
+        IoM threshold for reconditioning. Lower than IoU's 0.8 default because IoM scores are
+        intrinsically larger when one mask is nested inside the other.
+    masklet_confirmation_enable (`bool`, *optional*, defaults to `True`):
+        Require consecutive detection-track matches before publishing a masklet.
+    masklet_confirmation_consecutive_det_thresh (`int`, *optional*, defaults to 3):
+        Consecutive matched frames required to confirm a masklet.
 
     Example:
     ```python
@@ -111,26 +131,48 @@ class Sam31VideoConfig(PreTrainedConfig):
     tracker_config: dict | PreTrainedConfig | None = None
     initializer_range: float = 0.02
     low_res_mask_size: int = 288
-    score_threshold_detection: float = 0.5
+    score_threshold_detection: float = 0.4
     det_nms_thresh: float = 0.1
+
+    # Overrides for SAM3.1 multiplex tracking, matching Meta's `_create_multiplex_pcs_video_predictor`
+    # in `facebook_sam3/sam3/model_builder.py`:
+    #   * IoM (Intersection over Minimum) for both NMS and detection-track
+    #     association/reconditioning. IoM is more aggressive than IoU at suppressing nested
+    #     duplicates and more permissive at associating a partially-occluded / shrinking tracked
+    #     mask with its current detection, which is what SAM3.1's multiplex tracker is tuned for.
+    #   * `suppress_unmatched_only_within_hotstart=False` so stale tracks keep getting suppressed
+    #     across the entire video instead of being held forever once hotstart ends.
+    #
+    # NOTE: Meta also lowers `score_threshold_detection` to 0.4 and `new_det_thresh` to 0.65 for
+    # this predictor, but the HF detection-score distribution is slightly compressed compared to
+    # Meta's (residual text-feature norm and bf16/fp32 differences), so adopting those thresholds
+    # admits noticeably more false-positive tracks (mean HF precision drops by ~0.07 on the
+    # `foot.mp4 / "shoe"` benchmark). We therefore keep the SAM3 defaults (0.5 / 0.7) here; the
+    # values can still be overridden through the config for users who want exact Meta parity.
+    det_nms_use_iom: bool = True
     assoc_iou_thresh: float = 0.1
     trk_assoc_iou_thresh: float = 0.5
-    new_det_thresh: float = 0.7
+    new_det_thresh: float = 0.65
     recondition_on_trk_masks: bool = True
     hotstart_delay: int = 15
     hotstart_unmatch_thresh: int = 8
     hotstart_dup_thresh: int = 8
-    suppress_unmatched_only_within_hotstart: bool = True
+    suppress_unmatched_only_within_hotstart: bool = False
     init_trk_keep_alive: int = 30
     max_trk_keep_alive: int = 30
     min_trk_keep_alive: int = -1
     suppress_overlapping_based_on_recent_occlusion_threshold: float = 0.7
     decrease_trk_keep_alive_for_empty_masklets: bool = False
-    fill_hole_area: int = 16
+    fill_hole_area: int = 0
     max_num_objects: int = 10000
     recondition_every_nth_frame: int = 16
     high_conf_thresh: float = 0.8
     high_iou_thresh: float = 0.8
+    use_iom_recondition: bool = True
+    iom_thresh_recondition: float = 0.5
+    suppress_det_close_to_boundary: bool = True
+    masklet_confirmation_enable: bool = True
+    masklet_confirmation_consecutive_det_thresh: int = 3
 
     def __post_init__(self, **kwargs):
         if self.detector_config is None:
