@@ -429,6 +429,11 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 )
                 self.assertEqual(hidden_state.shape, expected_shape)
 
+    def test_batching_equivalence(self, atol=1e-4, rtol=1e-4):
+        # InstanceNorm2d in the decoder heads computes per-instance statistics; different batch
+        # sizes can trigger different parallelisation paths on CPU, producing O(1e-5) FP differences.
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
+
     @unittest.skip(reason="Sapiens2 does not support feedforward chunking")
     def test_feed_forward_chunking(self):
         pass
