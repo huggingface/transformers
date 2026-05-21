@@ -45,6 +45,7 @@ from .configuration_roformer import RoFormerConfig
 logger = logging.get_logger(__name__)
 
 
+# Copied from transformers.models.bert.modeling_bert.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -58,14 +59,18 @@ def eager_attention_forward(
     if scaling is None:
         scaling = query.size(-1) ** -0.5
 
+    # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
+
     return attn_output, attn_weights
 
 
@@ -231,6 +236,10 @@ class RoFormerSelfAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.dropout.p,
             scaling=self.scaling,
+            # RoFormer precomputes a (bidirectional) mask in `RoFormerModel`, so the backend
+            # must not apply an additional causal mask.
+            is_causal=False,
+            output_attentions=output_attentions,
             **kwargs,
         )
         context_layer = context_layer.reshape(*input_shape, -1).contiguous()
@@ -638,6 +647,10 @@ class RoFormerPreTrainedModel(PreTrainedModel):
     config: RoFormerConfig
     base_model_prefix = "roformer"
     supports_gradient_checkpointing = True
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
 
     @torch.no_grad()
     def _init_weights(self, module):
