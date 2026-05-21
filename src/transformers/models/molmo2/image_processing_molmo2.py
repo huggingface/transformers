@@ -208,80 +208,54 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         image_patch_size: int,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Tile `image_chw` into overlapping square crops and return per-patch global indices with overlap patches collapsed to a single owner."""
-        _, original_image_h, original_image_w = image_chw.shape
-        crop_size = base_image_input_size[0]
         if base_image_input_size[0] != base_image_input_size[1]:
             raise ValueError(f"Expected square base_image_input_size, got {base_image_input_size}")
-
+        crop_size = base_image_input_size[0]
         left_margin, right_margin = overlap_margins
-        total_margin_pixels = image_patch_size * (right_margin + left_margin)
-        crop_patches = base_image_input_size[0] // image_patch_size
-        crop_window_patches = crop_patches - (right_margin + left_margin)
-        crop_window_size = crop_window_patches * image_patch_size
-        crop_patch_w = base_image_input_size[1] // image_patch_size
-        crop_patch_h = base_image_input_size[0] // image_patch_size
+        crop_patches = crop_size // image_patch_size
+        window_patches = crop_patches - (left_margin + right_margin)
+        window_size = window_patches * image_patch_size
+        margin_size = (left_margin + right_margin) * image_patch_size
 
-        effective_image_size = (original_image_h - total_margin_pixels, original_image_w - total_margin_pixels)
+        _, original_h, original_w = image_chw.shape
         tiling_w, tiling_h = get_optimal_tiled_canvas(
-            original_image_size=effective_image_size,
-            target_tile_size=(crop_window_size, crop_window_size),
+            original_image_size=(original_h - margin_size, original_w - margin_size),
+            target_tile_size=(window_size, window_size),
             min_image_tiles=1,
             max_image_tiles=max_crops,
         )
+        src_h = tiling_h * window_size + margin_size
+        src_w = tiling_w * window_size + margin_size
 
-        src_h = tiling_h * crop_window_size + total_margin_pixels
-        src_w = tiling_w * crop_window_size + total_margin_pixels
         if image_chw.dtype == torch.uint8:
             image_chw = image_chw.to(torch.float32)
-        chw_resized = self.resize(
-            image_chw,
-            size=SizeDict(height=src_h, width=src_w),
-            resample=resample,
-            antialias=False,
-        )
-        chw_normalized = self.rescale_and_normalize(
-            chw_resized,
+        src = self.resize(image_chw, size=SizeDict(height=src_h, width=src_w), resample=resample, antialias=False)
+        src = self.rescale_and_normalize(
+            src,
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
             do_normalize=do_normalize,
             image_mean=image_mean,
             image_std=image_std,
         )
-        src = chw_normalized.permute(1, 2, 0)  # → HWC
 
-        n_crops = tiling_h * tiling_w
-        crop_arr = torch.empty((n_crops, crop_size, crop_size, 3), dtype=src.dtype, device=src.device)
-        patch_idx_arr = torch.empty((n_crops, crop_patch_h, crop_patch_w), dtype=torch.int32)
-        on_crop = 0
-        for i in range(tiling_h):
-            y0 = i * crop_window_size
-            for j in range(tiling_w):
-                x0 = j * crop_window_size
-                crop_arr[on_crop] = src[y0 : y0 + crop_size, x0 : x0 + crop_size]
-                patch_idx = torch.arange(crop_patch_w * crop_patch_h, dtype=torch.int32).reshape(
-                    crop_patch_h, crop_patch_w
-                )
-                patch_idx += on_crop * crop_patch_h * crop_patch_w
+        crops = src.unfold(1, crop_size, window_size).unfold(2, crop_size, window_size)
+        crops = crops.permute(1, 2, 3, 4, 0).reshape(tiling_h * tiling_w, crop_size, crop_size, 3).contiguous()
 
-                if i != 0:
-                    patch_idx[:left_margin, :] = -1
-                if j != 0:
-                    patch_idx[:, :left_margin] = -1
-                if i != tiling_h - 1:
-                    patch_idx[-right_margin:, :] = -1
-                if j != tiling_w - 1:
-                    patch_idx[:, -right_margin:] = -1
-                patch_idx_arr[on_crop] = patch_idx
-                on_crop += 1
-
-        patch_idx_arr = patch_idx_arr.reshape(tiling_h, tiling_w, crop_patch_h, crop_patch_w)
-        patch_idx_arr = patch_idx_arr.permute(0, 2, 1, 3)
-        patch_idx_arr = patch_idx_arr.reshape(-1)
-        patch_idx_arr = patch_idx_arr[patch_idx_arr >= 0].reshape(
-            src.shape[0] // image_patch_size,
-            src.shape[1] // image_patch_size,
+        patch_idx = torch.arange(tiling_h * tiling_w * crop_patches * crop_patches, dtype=torch.int32).reshape(
+            tiling_h, tiling_w, crop_patches, crop_patches
         )
-        return crop_arr, patch_idx_arr
+        if left_margin:
+            patch_idx[1:, :, :left_margin, :] = -1
+            patch_idx[:, 1:, :, :left_margin] = -1
+        if right_margin:
+            patch_idx[:-1, :, -right_margin:, :] = -1
+            patch_idx[:, :-1, :, -right_margin:] = -1
+
+        patch_idx = patch_idx.permute(0, 2, 1, 3).reshape(-1)
+        patch_idx = patch_idx[patch_idx >= 0].reshape(src_h // image_patch_size, src_w // image_patch_size)
+
+        return crops, patch_idx
 
     def _image_to_patches_and_grids(
         self,
