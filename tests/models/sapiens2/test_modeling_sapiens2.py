@@ -136,11 +136,6 @@ class Sapiens2ModelTester:
             head_scale_final_hidden_sizes=[8],
         )
 
-    def get_config_for_matting(self):
-        config = self.get_config()
-        config.num_labels = 4
-        return config
-
     def create_and_check_backbone(self, config, pixel_values, labels):
         config.out_features = ["stage1", "stage2"]
         config.reshape_hidden_states = True
@@ -266,24 +261,6 @@ class Sapiens2ModelTester:
         labels = ids_tensor([self.batch_size, self.image_size, self.image_size], config.num_labels)
         return config, pixel_values, labels
 
-    def prepare_config_and_inputs_for_pose_estimation(self):
-        config = self.get_config()
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
-        labels = ids_tensor([self.batch_size, self.image_size, self.image_size], config.num_labels)
-        return config, pixel_values, labels
-
-    def prepare_config_and_inputs_for_normal_estimation(self):
-        config = self.get_config()
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, config.image_size, config.image_size])
-        labels = None
-        return config, pixel_values, labels
-
-    def prepare_config_and_inputs_for_matting(self):
-        config = self.get_config_for_matting()
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, config.image_size, config.image_size])
-        labels = None
-        return config, pixel_values, labels
-
     def prepare_config_and_inputs_for_pointmap_estimation(self):
         config = self.get_config()
         pixel_values = floats_tensor([self.batch_size, self.num_channels, config.image_size, config.image_size])
@@ -369,20 +346,20 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         self.model_tester.create_and_check_for_semantic_segmentation(*config_and_inputs)
 
     def test_for_pose_estimation(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_pose_estimation()
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_semantic_segmentation()
         self.model_tester.create_and_check_for_pose_estimation(*config_and_inputs)
-
-    def test_for_normal_estimation(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_normal_estimation()
-        self.model_tester.create_and_check_for_normal_estimation(*config_and_inputs)
-
-    def test_for_matting(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_matting()
-        self.model_tester.create_and_check_for_matting(*config_and_inputs)
 
     def test_for_pointmap_estimation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_pointmap_estimation()
         self.model_tester.create_and_check_for_pointmap_estimation(*config_and_inputs)
+
+    def test_for_normal_estimation(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_pointmap_estimation()
+        self.model_tester.create_and_check_for_normal_estimation(*config_and_inputs)
+
+    def test_for_matting(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_pointmap_estimation()
+        self.model_tester.create_and_check_for_matting(*config_and_inputs)
 
     def test_output_hidden_states(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
