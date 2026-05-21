@@ -199,6 +199,47 @@ scores = results[0]["scores"]         # (num_keypoints,) — per-keypoint confid
 print("Keypoints shape:", keypoints.shape)
 ```
 
+### Pose estimation with flip augmentation
+
+Horizontal flip augmentation (test-time augmentation) improves keypoint accuracy by averaging
+predictions from the original and mirrored image. Pass `flip_pairs` — a tensor of
+`[left_keypoint, right_keypoint]` pairs — to the second forward pass. The model flips the heatmaps
+back to the original orientation before returning them, so you can average both outputs directly.
+
+```python
+import torch
+from transformers import Sapiens2Config, Sapiens2ImageProcessor, Sapiens2ForPoseEstimation
+from transformers.image_utils import load_image
+
+url = "http://images.cocodataset.org/val2017/000000004016.jpg"
+image = load_image(url)
+
+image_processor = Sapiens2ImageProcessor()
+
+config = Sapiens2Config(num_labels=308)
+config.transformers_weights = "sapiens2_0.4b_pose.safetensors"
+model = Sapiens2ForPoseEstimation.from_pretrained("facebook/sapiens2-pose-0.4b", config=config)
+
+boxes = [[[270.8, 0.6, 294.1, 379.5]]]
+inputs = image_processor(image, boxes=boxes, return_tensors="pt")
+pixel_values = inputs["pixel_values"]
+
+# flip_pairs lists [left, right] index pairs for symmetric keypoints.
+# The full 308-keypoint list ships with the model card; this is a short illustration.
+flip_pairs = torch.tensor([[1, 2], [3, 4], [5, 6], [7, 8], [9, 10], [11, 12], ...])
+
+with torch.inference_mode():
+    outputs = model(pixel_values)
+    outputs_flipped = model(pixel_values.flip(-1), flip_pairs=flip_pairs)
+
+# Average original and flip-augmented heatmaps
+outputs.heatmaps = (outputs.heatmaps + outputs_flipped.heatmaps) / 2
+
+results = image_processor.post_process_pose_estimation(outputs, boxes=boxes)[0]
+keypoints = results[0]["keypoints"]
+scores = results[0]["scores"]
+```
+
 ### Semantic segmentation
 
 The example below shows how to perform body-part segmentation with [`Sapiens2ForSemanticSegmentation`].

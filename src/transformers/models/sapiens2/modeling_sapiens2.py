@@ -1036,6 +1036,46 @@ class Sapiens2ForSemanticSegmentation(Sapiens2PreTrainedModel):
         )
 
 
+def flip_back(output_flipped, flip_pairs, target_type="gaussian-heatmap"):
+    """Flip the flipped heatmaps back to the original form.
+
+    Args:
+        output_flipped (`torch.tensor` of shape `(batch_size, num_keypoints, height, width)`):
+            The output heatmaps obtained from the flipped images.
+        flip_pairs (`torch.Tensor` of shape `(num_keypoints, 2)`):
+            Pairs of keypoints which are mirrored (for example, left ear -- right ear).
+        target_type (`str`, *optional*, defaults to `"gaussian-heatmap"`):
+            Target type to use. Can be gaussian-heatmap or combined-target.
+            gaussian-heatmap: Classification target with gaussian distribution.
+            combined-target: The combination of classification target (response map) and regression target (offset map).
+            Paper ref: Huang et al. The Devil is in the Details: Delving into Unbiased Data Processing for Human Pose Estimation (CVPR 2020).
+
+    Returns:
+        torch.Tensor: heatmaps that flipped back to the original image
+    """
+    if target_type not in ["gaussian-heatmap", "combined-target"]:
+        raise ValueError("target_type should be gaussian-heatmap or combined-target")
+
+    if output_flipped.ndim != 4:
+        raise ValueError("output_flipped should be [batch_size, num_keypoints, height, width]")
+    batch_size, num_keypoints, height, width = output_flipped.shape
+    channels = 1
+    if target_type == "combined-target":
+        channels = 3
+        output_flipped[:, 1::3, ...] = -output_flipped[:, 1::3, ...]
+    output_flipped = output_flipped.reshape(batch_size, -1, channels, height, width)
+    output_flipped_back = output_flipped.clone()
+
+    # Swap left-right parts
+    for left, right in flip_pairs.tolist():
+        output_flipped_back[:, left, ...] = output_flipped[:, right, ...]
+        output_flipped_back[:, right, ...] = output_flipped[:, left, ...]
+    output_flipped_back = output_flipped_back.reshape((batch_size, num_keypoints, height, width))
+    # Flip horizontally
+    output_flipped_back = output_flipped_back.flip(-1)
+    return output_flipped_back
+
+
 @auto_docstring(
     checkpoint="facebook/sapiens2-pose-0.4b",
     custom_intro="""
@@ -1055,10 +1095,25 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
+        flip_pairs: torch.Tensor | None = None,
         labels: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Sapiens2PoseEstimatorOutput:
         r"""
+        flip_pairs (`torch.Tensor` of shape `(num_pairs, 2)`, *optional*):
+            Pairs of keypoints which are mirrored (for example, left ear -- right ear), used for
+            test-time flip augmentation. When provided, the model assumes `pixel_values` contains
+            horizontally-flipped images and calls `flip_back` on the output heatmaps to restore the
+            original orientation.
+
+            Typical usage: run a second forward pass on `pixel_values.flip(-1)` with this argument,
+            then average the two heatmap outputs:
+
+            ```python
+            outputs = model(pixel_values)
+            outputs_flipped = model(pixel_values.flip(-1), flip_pairs=flip_pairs)
+            heatmaps = (outputs.heatmaps + outputs_flipped.heatmaps) / 2
+            ```
         labels (`torch.FloatTensor` of shape `(batch_size, num_keypoints, height, width)`, *optional*):
             Heatmap ground truth for computing the loss.
         """
@@ -1072,6 +1127,8 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
         feature_map = patch_tokens.transpose(1, 2).reshape(batch_size, -1, patch_height, patch_width)
 
         heatmaps = self.decode_head(feature_map)
+        if flip_pairs is not None:
+            heatmaps = flip_back(heatmaps, flip_pairs)
 
         loss = None
         if labels is not None:

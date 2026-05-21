@@ -58,6 +58,7 @@ from ..dinov3_vit.modeling_dinov3_vit import (
 )
 from ..gemma2.modeling_gemma2 import eager_attention_forward
 from ..vitpose.image_processing_vitpose import get_keypoint_predictions, get_warp_matrix
+from ..vitpose.modeling_vitpose import flip_back
 
 
 # TODO(guarin): Check if we can drop cv2 dependency. Ideally re-use as much as possible from ViTPoseProcessor.
@@ -1349,10 +1350,25 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
+        flip_pairs: torch.Tensor | None = None,
         labels: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Sapiens2PoseEstimatorOutput:
         r"""
+        flip_pairs (`torch.Tensor` of shape `(num_pairs, 2)`, *optional*):
+            Pairs of keypoints which are mirrored (for example, left ear -- right ear), used for
+            test-time flip augmentation. When provided, the model assumes `pixel_values` contains
+            horizontally-flipped images and calls `flip_back` on the output heatmaps to restore the
+            original orientation.
+
+            Typical usage: run a second forward pass on `pixel_values.flip(-1)` with this argument,
+            then average the two heatmap outputs:
+
+            ```python
+            outputs = model(pixel_values)
+            outputs_flipped = model(pixel_values.flip(-1), flip_pairs=flip_pairs)
+            heatmaps = (outputs.heatmaps + outputs_flipped.heatmaps) / 2
+            ```
         labels (`torch.FloatTensor` of shape `(batch_size, num_keypoints, height, width)`, *optional*):
             Heatmap ground truth for computing the loss.
         """
@@ -1366,6 +1382,8 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
         feature_map = patch_tokens.transpose(1, 2).reshape(batch_size, -1, patch_height, patch_width)
 
         heatmaps = self.decode_head(feature_map)
+        if flip_pairs is not None:
+            heatmaps = flip_back(heatmaps, flip_pairs)
 
         loss = None
         if labels is not None:
