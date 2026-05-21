@@ -441,6 +441,24 @@ class Sam3ViTRotaryEmbedding(nn.Module):
         return self.rope_embeddings_cos, self.rope_embeddings_sin
 
 
+def rotate_pairwise(x):
+    """
+    pairwise rotation of the hidden dims of the input. Differerent from Llama Half-Tensor Rotation.
+
+    This is an optimized version of the following more explicit implementation:
+    ```python
+    x_rotated = torch.zeros_like(x, dtype=x.dtype, device=x.device)
+    x_rotated[..., ::2] = -x[..., 1::2]
+    x_rotated[..., 1::2] = x[..., ::2]
+    return x_rotated
+    ```
+    """
+    x = x.view(*x.shape[:-1], -1, 2)
+    x1, x2 = x.unbind(dim=-1)
+    x = torch.stack((-x2, x1), dim=-1)
+    return x.flatten(start_dim=-2)
+
+
 def apply_rotary_pos_emb_2d(
     q: torch.Tensor,
     k: torch.Tensor,
@@ -448,41 +466,24 @@ def apply_rotary_pos_emb_2d(
     sin: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """
-    Apply rotary position embedding to query and key tensors via complex multiplication.
-
-    cos/sin are stored with repeat_interleave(2), so every unique frequency value appears
-    twice. We extract the unique half via ``[..., ::2]`` and use ``torch.view_as_complex``
-    to fuse the rotation into a single complex multiply — equivalent to the pairwise rotate
-    formulation but with fewer intermediate tensor allocations.
+    Apply rotary position embedding to query and key tensors for self-attention.
 
     Args:
-        q: Query tensor of shape (..., seq_len, head_dim)
-        k: Key tensor of shape (..., seq_len, head_dim)
-        cos: Cosine embedding of shape (..., head_dim) — each value repeated twice
-        sin: Sine embedding of shape (..., head_dim) — each value repeated twice
+        q: Query tensor of shape (batch_size, num_windows, seq_len, num_heads, head_dim)
+        k: Key tensor of shape (batch_size, num_windows, seq_len, num_heads, head_dim)
+        cos: Cosine position embedding of shape (seq_len, head_dim)
+        sin: Sine position embedding of shape (seq_len, head_dim)
 
     Returns:
-        Rotated (q, k) tensors with the same dtype as the inputs.
+        Rotated (q, k) tensors
     """
-    # cos/sin have repeat_interleave(2) applied; recover unique half values.
-    cos_h = cos[..., ::2]  # [..., head_dim//2]
-    sin_h = sin[..., ::2]  # [..., head_dim//2]
-    # Build complex frequency tensor: e^{iθ} = cos θ + i sin θ
-    # torch.stack creates a contiguous [..., head_dim//2, 2] tensor, required by view_as_complex.
-    freqs = torch.view_as_complex(torch.stack([cos_h, sin_h], dim=-1).float())
+    q_embed = q.float()
+    q_embed = (q_embed * cos) + (rotate_pairwise(q_embed) * sin)
 
-    # Rotate q and k via complex multiplication (avoids allocating rotate_pairwise temporaries).
-    q_out = (
-        torch.view_as_real(torch.view_as_complex(q.float().reshape(*q.shape[:-1], -1, 2)) * freqs)
-        .flatten(-2)
-        .type_as(q)
-    )
-    k_out = (
-        torch.view_as_real(torch.view_as_complex(k.float().reshape(*k.shape[:-1], -1, 2)) * freqs)
-        .flatten(-2)
-        .type_as(k)
-    )
-    return q_out, k_out
+    k_embed = k.float()
+    k_embed = (k_embed * cos) + (rotate_pairwise(k_embed) * sin)
+
+    return q_embed.type_as(q), k_embed.type_as(k)
 
 
 class Sam3ViTRoPEAttention(nn.Module):
