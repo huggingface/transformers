@@ -580,6 +580,20 @@ def _build_checkpoint_conversion_mapping():
                 operations=[Transpose(1, 2, check_dims=True)],
             ),
         ],
+        "cosmos3_omni": [
+            # Cosmos3 unified checkpoints store the Reasoner LLM under a flat `model.*` namespace
+            # (no `language_model.` nesting) and the ViT under flat `blocks.*` / `merger.*` /
+            # `patch_embed.*` / `pos_embed.*` / `deepstack_merger_list.*`. Re-target both to the
+            # nested Qwen3-VL layout (`model.language_model.*` and `model.visual.*`).
+            WeightRenaming(
+                source_patterns=r"^model\.(?!language_model\.)(.+)$",
+                target_patterns=r"model.language_model.\1",
+            ),
+            WeightRenaming(
+                source_patterns=r"^(blocks\.|merger\.|patch_embed\.|pos_embed\.|deepstack_merger_list\.)(.*)$",
+                target_patterns=r"model.visual.\1\2",
+            ),
+        ],
         "phimoe": [
             WeightRenaming(".block_sparse_moe.", ".mlp."),
             WeightRenaming(".gate.weight", ".router.weight"),
