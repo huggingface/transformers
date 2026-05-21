@@ -25,7 +25,6 @@ from functools import lru_cache
 import numpy as np
 import torch
 from torch.nn import functional as F
-from torch.nn.utils.rnn import pad_sequence
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
@@ -208,6 +207,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         image_std: list[float],
         image_patch_size: int,
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Tile `image_chw` into overlapping square crops and return per-patch global indices with overlap patches collapsed to a single owner."""
         _, original_image_h, original_image_w = image_chw.shape
         crop_size = base_image_input_size[0]
         if base_image_input_size[0] != base_image_input_size[1]:
@@ -357,54 +357,6 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         images = self.fetch_images(images)
         return make_nested_list_of_images(images, expected_ndims=expected_ndims)
 
-    def _pad_for_batching(
-        self,
-        batch_crops: list[torch.Tensor | None],
-        batch_pooled_patches_idx: list[torch.Tensor | None],
-        batch_grids: list[torch.Tensor | None],
-        batch_num_crops: list[torch.Tensor | None],
-    ) -> dict[str, torch.Tensor]:
-        reference_crops = next(crops for crops in batch_crops if crops is not None)
-        reference_pooled_idx = next(pooled_idx for pooled_idx in batch_pooled_patches_idx if pooled_idx is not None)
-        _, n_patches, pixels_per_patch = reference_crops.shape
-        pool_dim = reference_pooled_idx.shape[-1]
-        device = reference_crops.device
-
-        return {
-            "pixel_values": pad_sequence(
-                [
-                    crops if crops is not None else reference_crops.new_empty((0, n_patches, pixels_per_patch))
-                    for crops in batch_crops
-                ],
-                batch_first=True,
-                padding_value=-1,
-            ),
-            "image_token_pooling": pad_sequence(
-                [
-                    pooled_idx if pooled_idx is not None else reference_pooled_idx.new_empty((0, pool_dim))
-                    for pooled_idx in batch_pooled_patches_idx
-                ],
-                batch_first=True,
-                padding_value=-1,
-            ),
-            "image_grids": pad_sequence(
-                [
-                    grids.to(device) if grids is not None else torch.empty((0, 4), dtype=torch.int64, device=device)
-                    for grids in batch_grids
-                ],
-                batch_first=True,
-                padding_value=0,
-            ),
-            "image_num_crops": pad_sequence(
-                [
-                    num_crops.to(device) if num_crops is not None else torch.empty(0, dtype=torch.int64, device=device)
-                    for num_crops in batch_num_crops
-                ],
-                batch_first=True,
-                padding_value=0,
-            ),
-        }
-
     @auto_docstring
     def preprocess(
         self,
@@ -435,18 +387,13 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         base_image_input_size = [size.height, size.width]
         image_pooling_h, image_pooling_w = pooling_size
 
-        batch_grids: list[torch.Tensor | None] = []
-        batch_crops: list[torch.Tensor | None] = []
-        batch_pooled_patches_idx: list[torch.Tensor | None] = []
-        batch_num_crops: list[torch.Tensor | None] = []
+        all_grids: list[torch.Tensor] = []
+        all_crops: list[torch.Tensor] = []
+        all_pooled: list[torch.Tensor] = []
+        all_num_crops: list[int] = []
+        patch_offset = 0
 
         for sample_images in images:
-            sample_grids = []
-            sample_crops = []
-            sample_pooled_patches_idx = []
-            sample_num_crops = []
-            patch_offset = 0
-
             for image in sample_images:
                 image_grid, crops, pooled_idx = self._image_to_patches_and_grids(
                     image,
@@ -466,27 +413,18 @@ class Molmo2ImageProcessor(TorchvisionBackend):
                 pooled_idx = torch.where(pooled_idx >= 0, pooled_idx + patch_offset, pooled_idx)
                 patch_offset += crops.shape[0] * crops.shape[1]
 
-                sample_grids.append(image_grid)
-                sample_crops.append(crops)
-                sample_pooled_patches_idx.append(pooled_idx)
-                sample_num_crops.append(crops.shape[0])
+                all_grids.append(image_grid)
+                all_crops.append(crops)
+                all_pooled.append(pooled_idx)
+                all_num_crops.append(crops.shape[0])
 
-            if len(sample_crops) == 0:
-                batch_grids.append(None)
-                batch_crops.append(None)
-                batch_pooled_patches_idx.append(None)
-                batch_num_crops.append(None)
-                continue
-
-            batch_grids.append(torch.cat(sample_grids, 0))
-            batch_crops.append(torch.cat(sample_crops, 0))
-            batch_pooled_patches_idx.append(torch.cat(sample_pooled_patches_idx, 0))
-            batch_num_crops.append(torch.tensor(sample_num_crops, dtype=torch.int64))
-
-        return BatchFeature(
-            data=self._pad_for_batching(batch_crops, batch_pooled_patches_idx, batch_grids, batch_num_crops),
-            tensor_type=return_tensors,
-        )
+        data = {
+            "pixel_values": torch.cat(all_crops, dim=0),
+            "image_token_pooling": torch.cat(all_pooled, dim=0),
+            "image_grids": torch.cat(all_grids, dim=0),
+            "image_num_crops": torch.tensor(all_num_crops, dtype=torch.int64),
+        }
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> int:
         if images_kwargs is None:

@@ -21,7 +21,6 @@
 
 import torch
 from torch.nn import functional as F
-from torch.nn.utils.rnn import pad_sequence
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
@@ -215,14 +214,12 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         base_image_input_size = [size.height, size.width]
         image_pooling_h, image_pooling_w = pooling_size
 
-        batch_grids = []
-        batch_crops = []
-        batch_pooled_patches_idx = []
+        all_crops: list[torch.Tensor] = []
+        all_pooled: list[torch.Tensor] = []
+        all_grids: list[torch.Tensor] = []
+        patch_offset = 0
 
         for video in videos:
-            all_crops = []
-            pooled_patches_idx = []
-
             for frame_chw in video:
                 image_grid, crops, pooled_idx = self._build_frame_patches(
                     frame_chw,
@@ -237,19 +234,16 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
                     image_pooling_h,
                     image_pooling_w,
                 )
-                offset = sum(c.shape[0] * c.shape[1] for c in all_crops) if all_crops else 0
-                pooled_patches_idx.append(torch.where(pooled_idx >= 0, pooled_idx + offset, pooled_idx))
+                all_pooled.append(torch.where(pooled_idx >= 0, pooled_idx + patch_offset, pooled_idx))
                 all_crops.append(crops)
+                patch_offset += crops.shape[0] * crops.shape[1]
 
-            video_grid = torch.tensor([len(video), image_grid[0], image_grid[1]], dtype=torch.int64)
-            batch_grids.append(video_grid)
-            batch_crops.append(torch.cat(all_crops, 0))
-            batch_pooled_patches_idx.append(torch.cat(pooled_patches_idx, 0))
+            all_grids.append(torch.tensor([len(video), image_grid[0], image_grid[1]], dtype=torch.int64))
 
         data = {
-            "pixel_values_videos": pad_sequence(batch_crops, batch_first=True, padding_value=-1),
-            "video_token_pooling": pad_sequence(batch_pooled_patches_idx, batch_first=True, padding_value=-1),
-            "video_grids": torch.stack(batch_grids, 0),
+            "pixel_values_videos": torch.cat(all_crops, dim=0),
+            "video_token_pooling": torch.cat(all_pooled, dim=0),
+            "video_grids": torch.stack(all_grids, dim=0),
         }
         return BatchFeature(data, tensor_type=return_tensors)
 

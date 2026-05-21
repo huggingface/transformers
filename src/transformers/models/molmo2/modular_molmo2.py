@@ -20,7 +20,6 @@ from collections.abc import Callable
 import torch
 from torch import nn
 from torch.nn import functional as F
-from torch.nn.utils.rnn import pad_sequence
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -213,6 +212,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         image_std: list[float],
         image_patch_size: int,
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Tile `image_chw` into overlapping square crops and return per-patch global indices with overlap patches collapsed to a single owner."""
         _, original_image_h, original_image_w = image_chw.shape
         crop_size = base_image_input_size[0]
         if base_image_input_size[0] != base_image_input_size[1]:
@@ -362,53 +362,6 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         images = self.fetch_images(images)
         return make_nested_list_of_images(images, expected_ndims=expected_ndims)
 
-    def _pad_for_batching(
-        self,
-        batch_crops: list[torch.Tensor | None],
-        batch_pooled_patches_idx: list[torch.Tensor | None],
-        batch_grids: list[torch.Tensor | None],
-        batch_num_crops: list[torch.Tensor | None],
-    ) -> dict[str, torch.Tensor]:
-        reference_crops = next(crops for crops in batch_crops if crops is not None)
-        reference_pooled_idx = next(pooled_idx for pooled_idx in batch_pooled_patches_idx if pooled_idx is not None)
-        _, n_patches, pixels_per_patch = reference_crops.shape
-        pool_dim = reference_pooled_idx.shape[-1]
-        device = reference_crops.device
-
-        return {
-            "pixel_values": pad_sequence(
-                [
-                    crops if crops is not None else reference_crops.new_empty((0, n_patches, pixels_per_patch))
-                    for crops in batch_crops
-                ],
-                batch_first=True,
-                padding_value=-1,
-            ),
-            "image_token_pooling": pad_sequence(
-                [
-                    pooled_idx if pooled_idx is not None else reference_pooled_idx.new_empty((0, pool_dim))
-                    for pooled_idx in batch_pooled_patches_idx
-                ],
-                batch_first=True,
-                padding_value=-1,
-            ),
-            "image_grids": pad_sequence(
-                [
-                    grids.to(device) if grids is not None else torch.empty((0, 4), dtype=torch.int64, device=device)
-                    for grids in batch_grids
-                ],
-                batch_first=True,
-                padding_value=0,
-            ),
-            "image_num_crops": pad_sequence(
-                [
-                    num_crops.to(device) if num_crops is not None else torch.empty(0, dtype=torch.int64, device=device)
-                    for num_crops in batch_num_crops
-                ],
-                batch_first=True,
-                padding_value=0,
-            ),
-        }
 
     @auto_docstring
     def preprocess(
@@ -440,18 +393,13 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         base_image_input_size = [size.height, size.width]
         image_pooling_h, image_pooling_w = pooling_size
 
-        batch_grids: list[torch.Tensor | None] = []
-        batch_crops: list[torch.Tensor | None] = []
-        batch_pooled_patches_idx: list[torch.Tensor | None] = []
-        batch_num_crops: list[torch.Tensor | None] = []
+        all_grids: list[torch.Tensor] = []
+        all_crops: list[torch.Tensor] = []
+        all_pooled: list[torch.Tensor] = []
+        all_num_crops: list[int] = []
+        patch_offset = 0
 
         for sample_images in images:
-            sample_grids = []
-            sample_crops = []
-            sample_pooled_patches_idx = []
-            sample_num_crops = []
-            patch_offset = 0
-
             for image in sample_images:
                 image_grid, crops, pooled_idx = self._image_to_patches_and_grids(
                     image,
@@ -471,27 +419,18 @@ class Molmo2ImageProcessor(TorchvisionBackend):
                 pooled_idx = torch.where(pooled_idx >= 0, pooled_idx + patch_offset, pooled_idx)
                 patch_offset += crops.shape[0] * crops.shape[1]
 
-                sample_grids.append(image_grid)
-                sample_crops.append(crops)
-                sample_pooled_patches_idx.append(pooled_idx)
-                sample_num_crops.append(crops.shape[0])
+                all_grids.append(image_grid)
+                all_crops.append(crops)
+                all_pooled.append(pooled_idx)
+                all_num_crops.append(crops.shape[0])
 
-            if len(sample_crops) == 0:
-                batch_grids.append(None)
-                batch_crops.append(None)
-                batch_pooled_patches_idx.append(None)
-                batch_num_crops.append(None)
-                continue
-
-            batch_grids.append(torch.cat(sample_grids, 0))
-            batch_crops.append(torch.cat(sample_crops, 0))
-            batch_pooled_patches_idx.append(torch.cat(sample_pooled_patches_idx, 0))
-            batch_num_crops.append(torch.tensor(sample_num_crops, dtype=torch.int64))
-
-        return BatchFeature(
-            data=self._pad_for_batching(batch_crops, batch_pooled_patches_idx, batch_grids, batch_num_crops),
-            tensor_type=return_tensors,
-        )
+        data = {
+            "pixel_values": torch.cat(all_crops, dim=0),
+            "image_token_pooling": torch.cat(all_pooled, dim=0),
+            "image_grids": torch.cat(all_grids, dim=0),
+            "image_num_crops": torch.tensor(all_num_crops, dtype=torch.int64),
+        }
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> int:
         if images_kwargs is None:
@@ -652,14 +591,12 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         base_image_input_size = [size.height, size.width]
         image_pooling_h, image_pooling_w = pooling_size
 
-        batch_grids = []
-        batch_crops = []
-        batch_pooled_patches_idx = []
+        all_crops: list[torch.Tensor] = []
+        all_pooled: list[torch.Tensor] = []
+        all_grids: list[torch.Tensor] = []
+        patch_offset = 0
 
         for video in videos:
-            all_crops = []
-            pooled_patches_idx = []
-
             for frame_chw in video:
                 image_grid, crops, pooled_idx = self._build_frame_patches(
                     frame_chw,
@@ -674,19 +611,16 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
                     image_pooling_h,
                     image_pooling_w,
                 )
-                offset = sum(c.shape[0] * c.shape[1] for c in all_crops) if all_crops else 0
-                pooled_patches_idx.append(torch.where(pooled_idx >= 0, pooled_idx + offset, pooled_idx))
+                all_pooled.append(torch.where(pooled_idx >= 0, pooled_idx + patch_offset, pooled_idx))
                 all_crops.append(crops)
+                patch_offset += crops.shape[0] * crops.shape[1]
 
-            video_grid = torch.tensor([len(video), image_grid[0], image_grid[1]], dtype=torch.int64)
-            batch_grids.append(video_grid)
-            batch_crops.append(torch.cat(all_crops, 0))
-            batch_pooled_patches_idx.append(torch.cat(pooled_patches_idx, 0))
+            all_grids.append(torch.tensor([len(video), image_grid[0], image_grid[1]], dtype=torch.int64))
 
         data = {
-            "pixel_values_videos": pad_sequence(batch_crops, batch_first=True, padding_value=-1),
-            "video_token_pooling": pad_sequence(batch_pooled_patches_idx, batch_first=True, padding_value=-1),
-            "video_grids": torch.stack(batch_grids, 0),
+            "pixel_values_videos": torch.cat(all_crops, dim=0),
+            "video_token_pooling": torch.cat(all_pooled, dim=0),
+            "video_grids": torch.stack(all_grids, dim=0),
         }
         return BatchFeature(data, tensor_type=return_tensors)
 
@@ -777,26 +711,6 @@ class Molmo2Processor(ProcessorMixin):
         self.use_frame_special_tokens = use_frame_special_tokens
         super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template)
 
-    def get_image_tokens(self, image_grid) -> str:
-        if hasattr(image_grid, "tolist"):
-            image_grid = image_grid.tolist()
-        resized_h, resized_w, height, width = image_grid
-        per_row = ["<im_patch>"] * width
-        if self.image_use_col_tokens:
-            per_row = per_row + ["<im_col>"]
-        high_res_tokens = ["<im_start>"] + per_row * height + ["<im_end>"]
-
-        per_row = ["<im_patch>"] * resized_w
-        use_single_crop_col_tokens = (
-            self.image_use_col_tokens if self.use_single_crop_col_tokens is None else self.use_single_crop_col_tokens
-        )
-        image_start_token = "<low_res_im_start>" if self.use_single_crop_start_token else "<im_start>"
-        if use_single_crop_col_tokens:
-            per_row = per_row + ["<im_col>"]
-        low_res_tokens = [image_start_token] + per_row * resized_h + ["<im_end>"]
-
-        return "".join(low_res_tokens + high_res_tokens)
-
     def get_video_string(self, video_grid, timestamps) -> str:
         if hasattr(video_grid, "tolist"):
             video_grid = video_grid.tolist()
@@ -829,15 +743,27 @@ class Molmo2Processor(ProcessorMixin):
                 if sample.count(self.video_token) > 1:
                     raise ValueError("At most one video is supported per sample.")
 
-    def _process_images(self, images, **kwargs):
-        batched_images = make_nested_list_of_images(images)
-        image_inputs = self.image_processor(batched_images, **kwargs)
-        image_grids = image_inputs["image_grids"]
-        image_replacements = []
-        for batch_idx, sample_images in enumerate(batched_images):
-            for image_in_sample_idx in range(len(sample_images)):
-                image_replacements.append(self.get_image_tokens(image_grids[batch_idx, image_in_sample_idx]))
-        return image_inputs, image_replacements
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        image_grid = image_inputs["image_grids"][image_idx]
+        if hasattr(image_grid, "tolist"):
+            image_grid = image_grid.tolist()
+        resized_h, resized_w, height, width = image_grid
+
+        per_row = ["<im_patch>"] * width
+        if self.image_use_col_tokens:
+            per_row = per_row + ["<im_col>"]
+        high_res_tokens = ["<im_start>"] + per_row * height + ["<im_end>"]
+
+        per_row = ["<im_patch>"] * resized_w
+        use_single_crop_col_tokens = (
+            self.image_use_col_tokens if self.use_single_crop_col_tokens is None else self.use_single_crop_col_tokens
+        )
+        image_start_token = "<low_res_im_start>" if self.use_single_crop_start_token else "<im_start>"
+        if use_single_crop_col_tokens:
+            per_row = per_row + ["<im_col>"]
+        low_res_tokens = [image_start_token] + per_row * resized_h + ["<im_end>"]
+
+        return "".join(low_res_tokens + high_res_tokens)
 
     def _process_videos(self, videos, **kwargs):
         video_inputs = self.video_processor(videos=videos, **kwargs)
@@ -1101,21 +1027,10 @@ class Molmo2VisionBackbone(PreTrainedModel):
         self.post_init()
 
     def encode_image(self, images: torch.Tensor) -> torch.Tensor:
-        """
-        : param images: (batch_size, num_crops, num_patch, n_pixels)
-        """
-        B, T, N, D = images.shape
-        images = images.view(B * T, N, D)
         image_outputs = self.image_vit(images, output_hidden_states=True)
         image_features = image_outputs.hidden_states
-
-        features = []
-        for layer in self.vit_layers:
-            features.append(image_features[layer + 1])
-        image_features = torch.cat(features, dim=-1)
-
-        image_features = image_features.view(B, T, N, -1)
-        return image_features
+        features = [image_features[layer + 1] for layer in self.vit_layers]
+        return torch.cat(features, dim=-1)
 
     def forward(
         self,
@@ -1123,39 +1038,30 @@ class Molmo2VisionBackbone(PreTrainedModel):
         pooled_patches_idx: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        # image_features: (batch_size, num_crops(=num_image), num_patch, nximage_emb_dim)
-        batch_size, num_image = images.shape[:2]
         image_features = self.encode_image(images)
-
         image_features = self.image_feature_dropout(image_features)
         dim = image_features.shape[-1]
+        flat_features = image_features.reshape(-1, dim)
+
         valid = pooled_patches_idx >= 0
         valid_token = torch.any(valid, -1)
 
-        # Use `pooled_patches_idx` to arange the features for image pooling
-        batch_idx = torch.arange(pooled_patches_idx.shape[0], dtype=torch.long, device=pooled_patches_idx.device)
-        batch_idx = torch.tile(
-            batch_idx.view(batch_size, 1, 1), [1, pooled_patches_idx.shape[1], pooled_patches_idx.shape[2]]
-        )
+        to_pool = flat_features[torch.clip(pooled_patches_idx, 0)]
+        to_pool = to_pool * valid.to(to_pool.dtype)[..., None]
 
-        # Now [batch, num_high_res_features, pool_dim, dim]
-        to_pool = image_features.reshape(batch_size, -1, dim)[batch_idx, torch.clip(pooled_patches_idx, 0)]
-        to_pool = to_pool * valid.to(to_pool.dtype)[:, :, :, None]
-        to_pool = to_pool.reshape([-1, pooled_patches_idx.shape[-1], dim])
         if self.pooling_attention_mask:
-            attn_mask = valid.reshape([-1, 1, 1, valid.shape[-1]])
-            denom = valid.view(-1, to_pool.shape[-2]).float().sum(-1)
+            attn_mask = valid.reshape(-1, 1, 1, valid.shape[-1])
+            denom = valid.float().sum(-1)
             denom = torch.where(denom == 0, 1, denom)
             query = to_pool.sum(-2, keepdim=True) / denom[:, None, None].to(to_pool.dtype)
         else:
             attn_mask = None
             query = to_pool.mean(-2, keepdim=True)
-        pooled_features, _ = self.image_pooling_2d(query, to_pool, attention_mask=attn_mask)
-        pooled_features = pooled_features.reshape([batch_size, -1, pooled_features.shape[-1]])
 
-        # MLP layer to map the feature.
+        pooled_features, _ = self.image_pooling_2d(query, to_pool, attention_mask=attn_mask)
+        pooled_features = pooled_features.squeeze(1)
         pooled_features = self.image_projector(pooled_features)
-        return pooled_features.view(-1, pooled_features.shape[-1])[valid_token.flatten()]
+        return pooled_features[valid_token]
 
 
 class Molmo2RotaryEmbedding(LlamaRotaryEmbedding):
@@ -1648,23 +1554,11 @@ class Molmo2Model(Molmo2PreTrainedModel):
     ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
         if pixel_values is not None and pixel_values_videos is not None:
             raise ValueError("pixel_values and pixel_values_videos are provided at the same time")
-        elif pixel_values is not None:
+        if pixel_values is not None:
             if image_token_pooling is None:
                 raise ValueError("`image_token_pooling` must be provided when `pixel_values` is passed.")
-            if pixel_values.dim() != 4:
-                raise ValueError(
-                    "`pixel_values` must have shape [batch_size, max_num_crops, num_patches, pixels_per_patch]."
-                )
-            if image_token_pooling.dim() != 3:
-                raise ValueError(
-                    "`image_token_pooling` must have shape [batch_size, max_num_pooled_patches, pooling_size]."
-                )
             return pixel_values, image_token_pooling
-        elif pixel_values_videos is not None:
-            if pixel_values_videos.dim() != 4:
-                raise ValueError(
-                    "`pixel_values_videos` must have shape [batch_size, max_num_frames, num_patches, pixels_per_patch]."
-                )
+        if pixel_values_videos is not None:
             return pixel_values_videos, video_token_pooling
         return None, None
 
@@ -1675,9 +1569,6 @@ class Molmo2Model(Molmo2PreTrainedModel):
         image_token_pooling: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        if pixel_values.dim() == 4:
-            B, T, N, D = pixel_values.shape
-            pixel_values = pixel_values.view(B * T, N, D)
         return self.vision_backbone.image_vit(pixel_values, **kwargs)
 
     # Copied from transformers.models.llava.modeling_llava.LlavaModel.get_placeholder_mask
@@ -1745,6 +1636,15 @@ class Molmo2Model(Molmo2PreTrainedModel):
         image_features: torch.FloatTensor | None = None
         if images is not None:
             image_features = self.vision_backbone(images, token_pooling)
+            sample_count = image_grids.shape[0] if pixel_values is not None else video_grids.shape[0]
+            if input_ids.shape[0] != sample_count:
+                num_beams = input_ids.shape[0] // sample_count
+                features_per_sample = image_features.shape[0] // sample_count
+                image_features = (
+                    image_features.view(sample_count, features_per_sample, -1)
+                    .repeat_interleave(num_beams, dim=0)
+                    .view(-1, image_features.shape[-1])
+                )
             special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
             inputs_embeds = inputs_embeds.masked_scatter(
                 special_image_mask,
@@ -1879,6 +1779,32 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
+
+    def _expand_inputs_for_generation(
+        self,
+        expand_size: int = 1,
+        is_encoder_decoder: bool = False,
+        input_ids: torch.LongTensor | None = None,
+        **model_kwargs,
+    ):
+        visual_keys = (
+            "pixel_values",
+            "image_token_pooling",
+            "image_grids",
+            "image_num_crops",
+            "pixel_values_videos",
+            "video_token_pooling",
+            "video_grids",
+        )
+        visual = {k: model_kwargs.pop(k) for k in visual_keys if k in model_kwargs}
+        input_ids, model_kwargs = super()._expand_inputs_for_generation(
+            expand_size=expand_size,
+            is_encoder_decoder=is_encoder_decoder,
+            input_ids=input_ids,
+            **model_kwargs,
+        )
+        model_kwargs.update(visual)
+        return input_ids, model_kwargs
 
     def prepare_inputs_for_generation(
         self,

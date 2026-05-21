@@ -15,6 +15,9 @@
 import tempfile
 import unittest
 
+import numpy as np
+import torch
+
 from transformers import Molmo2Processor
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 
@@ -82,6 +85,103 @@ class Molmo2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             ),
         }
 
+    @require_torch
+    def _test_apply_chat_template(
+        self,
+        modality: str,
+        batch_size: int,
+        return_tensors: str,
+        input_name: str,
+        processor_name: str,
+        input_data: list,
+    ):
+        processor = self.get_processor()
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        if processor_name not in self.processor_class.get_attributes():
+            self.skipTest(f"{processor_name} attribute not present in {self.processor_class}")
+
+        if getattr(processor, processor_name).__class__.__name__.endswith("Fast"):
+            return_tensors = "pt"
+
+        batch_messages = [
+            [
+                {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
+                {"role": "user", "content": [{"type": "text", "text": "Describe this."}]},
+            ]
+        ] * batch_size
+
+        formatted_prompt = processor.apply_chat_template(batch_messages, add_generation_prompt=True, tokenize=False)
+        self.assertEqual(len(formatted_prompt), batch_size)
+
+        formatted_prompt_tokenized = processor.apply_chat_template(
+            batch_messages, add_generation_prompt=True, tokenize=True, return_tensors=return_tensors
+        )
+        add_special_tokens = True
+        if processor.tokenizer.bos_token is not None and formatted_prompt[0].startswith(processor.tokenizer.bos_token):
+            add_special_tokens = False
+        tok_output = processor.tokenizer(
+            formatted_prompt, return_tensors=return_tensors, add_special_tokens=add_special_tokens
+        )
+        self.assertListEqual(tok_output.input_ids.tolist(), formatted_prompt_tokenized.tolist())
+
+        tokenized_prompt_100 = processor.apply_chat_template(
+            batch_messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_tensors=return_tensors,
+            processor_kwargs={
+                "padding": "max_length",
+                "truncation": True,
+                "max_length": self.chat_template_max_length,
+            },
+        )
+        self.assertEqual(len(tokenized_prompt_100[0]), self.chat_template_max_length)
+
+        out_dict_text = processor.apply_chat_template(
+            batch_messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors=return_tensors,
+        )
+        self.assertTrue(all(key in out_dict_text for key in ["input_ids", "attention_mask"]))
+        self.assertEqual(len(out_dict_text["input_ids"]), batch_size)
+        self.assertEqual(len(out_dict_text["attention_mask"]), batch_size)
+
+        for idx, url in enumerate(input_data[:batch_size]):
+            batch_messages[idx][1]["content"] = [batch_messages[idx][1]["content"][0], {"type": modality, "url": url}]
+
+        out_dict = processor.apply_chat_template(
+            batch_messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors=return_tensors,
+            processor_kwargs={"num_frames": 2},
+        )
+        input_name = getattr(self, input_name)
+        self.assertTrue(input_name in out_dict)
+        self.assertEqual(len(out_dict["input_ids"]), batch_size)
+        self.assertEqual(len(out_dict["attention_mask"]), batch_size)
+        if modality == "video":
+            expected_len = int(out_dict["video_grids"][:, 0].sum().item())
+        else:
+            expected_len = int(out_dict["image_num_crops"].sum().item())
+        self.assertEqual(len(out_dict[input_name]), expected_len)
+
+        return_tensor_to_type = {"pt": torch.Tensor, "np": np.ndarray, None: list}
+        for k in out_dict:
+            self.assertIsInstance(out_dict[k], return_tensor_to_type[return_tensors])
+
+        assistant_message = {"role": "assistant", "content": [{"type": "text", "text": "It is the sound of"}]}
+        for idx, url in enumerate(input_data[:batch_size]):
+            batch_messages[idx] = batch_messages[idx] + [assistant_message]
+        continue_prompt = processor.apply_chat_template(batch_messages, continue_final_message=True, tokenize=False)
+        for prompt in continue_prompt:
+            self.assertTrue(prompt.endswith("It is the sound of"))
+
     def test_apply_chat_template_video_frame_sampling(self):
         processor = self.get_processor()
         if processor.chat_template is None:
@@ -110,8 +210,8 @@ class Molmo2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             processor_kwargs={"num_frames": 3, "fps": None},
         )
         self.assertIn(self.videos_input_name, out_capped)
-        self.assertEqual(len(out_capped[self.videos_input_name]), 1)
-        self.assertEqual(len(out_capped[self.videos_input_name][0]), 1)
+        self.assertEqual(out_capped["video_grids"].shape[0], 1)
+        self.assertEqual(int(out_capped["video_grids"][0, 0].item()), 1)
 
         # Raising the cap above the video's native fps restores the requested `num_frames`.
         out_uncapped = processor.apply_chat_template(
@@ -122,7 +222,7 @@ class Molmo2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_tensors="pt",
             processor_kwargs={"num_frames": 3, "fps": None, "max_fps": 1000},
         )
-        self.assertEqual(len(out_uncapped[self.videos_input_name][0]), 3)
+        self.assertEqual(int(out_uncapped["video_grids"][0, 0].item()), 3)
 
         # `fps` mode bypasses the cap entirely (different code path in sample_frames).
         out_fps = processor.apply_chat_template(
@@ -133,7 +233,7 @@ class Molmo2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_tensors="pt",
             processor_kwargs={"fps": 10, "num_frames": None},
         )
-        self.assertGreaterEqual(len(out_fps[self.videos_input_name][0]), 1)
+        self.assertGreaterEqual(int(out_fps["video_grids"][0, 0].item()), 1)
 
         # `fps` and `num_frames` are mutually exclusive.
         with self.assertRaises(ValueError):

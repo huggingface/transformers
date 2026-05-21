@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...image_utils import make_nested_list_of_images
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, VideosKwargs
 from ...utils import auto_docstring, logging
 
@@ -154,26 +153,6 @@ class Molmo2Processor(ProcessorMixin):
         self.use_frame_special_tokens = use_frame_special_tokens
         super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template)
 
-    def get_image_tokens(self, image_grid) -> str:
-        if hasattr(image_grid, "tolist"):
-            image_grid = image_grid.tolist()
-        resized_h, resized_w, height, width = image_grid
-        per_row = ["<im_patch>"] * width
-        if self.image_use_col_tokens:
-            per_row = per_row + ["<im_col>"]
-        high_res_tokens = ["<im_start>"] + per_row * height + ["<im_end>"]
-
-        per_row = ["<im_patch>"] * resized_w
-        use_single_crop_col_tokens = (
-            self.image_use_col_tokens if self.use_single_crop_col_tokens is None else self.use_single_crop_col_tokens
-        )
-        image_start_token = "<low_res_im_start>" if self.use_single_crop_start_token else "<im_start>"
-        if use_single_crop_col_tokens:
-            per_row = per_row + ["<im_col>"]
-        low_res_tokens = [image_start_token] + per_row * resized_h + ["<im_end>"]
-
-        return "".join(low_res_tokens + high_res_tokens)
-
     def get_video_string(self, video_grid, timestamps) -> str:
         if hasattr(video_grid, "tolist"):
             video_grid = video_grid.tolist()
@@ -206,15 +185,27 @@ class Molmo2Processor(ProcessorMixin):
                 if sample.count(self.video_token) > 1:
                     raise ValueError("At most one video is supported per sample.")
 
-    def _process_images(self, images, **kwargs):
-        batched_images = make_nested_list_of_images(images)
-        image_inputs = self.image_processor(batched_images, **kwargs)
-        image_grids = image_inputs["image_grids"]
-        image_replacements = []
-        for batch_idx, sample_images in enumerate(batched_images):
-            for image_in_sample_idx in range(len(sample_images)):
-                image_replacements.append(self.get_image_tokens(image_grids[batch_idx, image_in_sample_idx]))
-        return image_inputs, image_replacements
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        image_grid = image_inputs["image_grids"][image_idx]
+        if hasattr(image_grid, "tolist"):
+            image_grid = image_grid.tolist()
+        resized_h, resized_w, height, width = image_grid
+
+        per_row = ["<im_patch>"] * width
+        if self.image_use_col_tokens:
+            per_row = per_row + ["<im_col>"]
+        high_res_tokens = ["<im_start>"] + per_row * height + ["<im_end>"]
+
+        per_row = ["<im_patch>"] * resized_w
+        use_single_crop_col_tokens = (
+            self.image_use_col_tokens if self.use_single_crop_col_tokens is None else self.use_single_crop_col_tokens
+        )
+        image_start_token = "<low_res_im_start>" if self.use_single_crop_start_token else "<im_start>"
+        if use_single_crop_col_tokens:
+            per_row = per_row + ["<im_col>"]
+        low_res_tokens = [image_start_token] + per_row * resized_h + ["<im_end>"]
+
+        return "".join(low_res_tokens + high_res_tokens)
 
     def _process_videos(self, videos, **kwargs):
         video_inputs = self.video_processor(videos=videos, **kwargs)

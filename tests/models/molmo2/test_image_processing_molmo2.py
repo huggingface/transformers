@@ -136,13 +136,12 @@ class Molmo2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def _assert_patchified_output(self, outputs, expected_num_images):
         pixel_values = outputs.pixel_values
-        self.assertEqual(pixel_values.ndim, 4)
-        self.assertEqual(pixel_values.shape[0], expected_num_images)
+        self.assertEqual(pixel_values.ndim, 3)
         pixels_per_patch = self.image_processor_tester.patch_size**2 * self.image_processor_tester.num_channels
         self.assertEqual(pixel_values.shape[-1], pixels_per_patch)
         image_num_crops = outputs.image_num_crops
         self.assertEqual(image_num_crops.shape[0], expected_num_images)
-        self.assertGreaterEqual(pixel_values.shape[1], int(image_num_crops.sum(dim=1).max().item()))
+        self.assertEqual(pixel_values.shape[0], int(image_num_crops.sum().item()))
 
     def test_call_pil(self):
         for image_processing_class in [self.image_processing_class]:
@@ -179,9 +178,8 @@ class Molmo2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             outputs = image_processing(nested_images, return_tensors="pt")
 
             self._assert_patchified_output(outputs, 3)
-            self.assertEqual(outputs.image_num_crops[0].sum().item(), 0)
-            self.assertGreater(outputs.image_num_crops[1].sum().item(), 0)
-            self.assertGreater(outputs.image_num_crops[2].sum().item(), outputs.image_num_crops[1].sum().item())
+            for crops in outputs.image_num_crops.tolist():
+                self.assertGreater(crops, 0)
 
     @unittest.skip(
         reason="Molmo2ImageProcessor expects channels-last (HWC) numpy input; CHW torch tensors are not supported."

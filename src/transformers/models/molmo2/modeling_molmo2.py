@@ -403,21 +403,10 @@ class Molmo2VisionBackbone(PreTrainedModel):
         self.post_init()
 
     def encode_image(self, images: torch.Tensor) -> torch.Tensor:
-        """
-        : param images: (batch_size, num_crops, num_patch, n_pixels)
-        """
-        B, T, N, D = images.shape
-        images = images.view(B * T, N, D)
         image_outputs = self.image_vit(images, output_hidden_states=True)
         image_features = image_outputs.hidden_states
-
-        features = []
-        for layer in self.vit_layers:
-            features.append(image_features[layer + 1])
-        image_features = torch.cat(features, dim=-1)
-
-        image_features = image_features.view(B, T, N, -1)
-        return image_features
+        features = [image_features[layer + 1] for layer in self.vit_layers]
+        return torch.cat(features, dim=-1)
 
     def forward(
         self,
@@ -425,39 +414,30 @@ class Molmo2VisionBackbone(PreTrainedModel):
         pooled_patches_idx: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        # image_features: (batch_size, num_crops(=num_image), num_patch, nximage_emb_dim)
-        batch_size, num_image = images.shape[:2]
         image_features = self.encode_image(images)
-
         image_features = self.image_feature_dropout(image_features)
         dim = image_features.shape[-1]
+        flat_features = image_features.reshape(-1, dim)
+
         valid = pooled_patches_idx >= 0
         valid_token = torch.any(valid, -1)
 
-        # Use `pooled_patches_idx` to arange the features for image pooling
-        batch_idx = torch.arange(pooled_patches_idx.shape[0], dtype=torch.long, device=pooled_patches_idx.device)
-        batch_idx = torch.tile(
-            batch_idx.view(batch_size, 1, 1), [1, pooled_patches_idx.shape[1], pooled_patches_idx.shape[2]]
-        )
+        to_pool = flat_features[torch.clip(pooled_patches_idx, 0)]
+        to_pool = to_pool * valid.to(to_pool.dtype)[..., None]
 
-        # Now [batch, num_high_res_features, pool_dim, dim]
-        to_pool = image_features.reshape(batch_size, -1, dim)[batch_idx, torch.clip(pooled_patches_idx, 0)]
-        to_pool = to_pool * valid.to(to_pool.dtype)[:, :, :, None]
-        to_pool = to_pool.reshape([-1, pooled_patches_idx.shape[-1], dim])
         if self.pooling_attention_mask:
-            attn_mask = valid.reshape([-1, 1, 1, valid.shape[-1]])
-            denom = valid.view(-1, to_pool.shape[-2]).float().sum(-1)
+            attn_mask = valid.reshape(-1, 1, 1, valid.shape[-1])
+            denom = valid.float().sum(-1)
             denom = torch.where(denom == 0, 1, denom)
             query = to_pool.sum(-2, keepdim=True) / denom[:, None, None].to(to_pool.dtype)
         else:
             attn_mask = None
             query = to_pool.mean(-2, keepdim=True)
-        pooled_features, _ = self.image_pooling_2d(query, to_pool, attention_mask=attn_mask)
-        pooled_features = pooled_features.reshape([batch_size, -1, pooled_features.shape[-1]])
 
-        # MLP layer to map the feature.
+        pooled_features, _ = self.image_pooling_2d(query, to_pool, attention_mask=attn_mask)
+        pooled_features = pooled_features.squeeze(1)
         pooled_features = self.image_projector(pooled_features)
-        return pooled_features.view(-1, pooled_features.shape[-1])[valid_token.flatten()]
+        return pooled_features[valid_token]
 
 
 class Molmo2RotaryEmbedding(nn.Module):
@@ -1032,23 +1012,11 @@ class Molmo2Model(Molmo2PreTrainedModel):
     ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
         if pixel_values is not None and pixel_values_videos is not None:
             raise ValueError("pixel_values and pixel_values_videos are provided at the same time")
-        elif pixel_values is not None:
+        if pixel_values is not None:
             if image_token_pooling is None:
                 raise ValueError("`image_token_pooling` must be provided when `pixel_values` is passed.")
-            if pixel_values.dim() != 4:
-                raise ValueError(
-                    "`pixel_values` must have shape [batch_size, max_num_crops, num_patches, pixels_per_patch]."
-                )
-            if image_token_pooling.dim() != 3:
-                raise ValueError(
-                    "`image_token_pooling` must have shape [batch_size, max_num_pooled_patches, pooling_size]."
-                )
             return pixel_values, image_token_pooling
-        elif pixel_values_videos is not None:
-            if pixel_values_videos.dim() != 4:
-                raise ValueError(
-                    "`pixel_values_videos` must have shape [batch_size, max_num_frames, num_patches, pixels_per_patch]."
-                )
+        if pixel_values_videos is not None:
             return pixel_values_videos, video_token_pooling
         return None, None
 
@@ -1059,9 +1027,6 @@ class Molmo2Model(Molmo2PreTrainedModel):
         image_token_pooling: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        if pixel_values.dim() == 4:
-            B, T, N, D = pixel_values.shape
-            pixel_values = pixel_values.view(B * T, N, D)
         return self.vision_backbone.image_vit(pixel_values, **kwargs)
 
     # Copied from transformers.models.llava.modeling_llava.LlavaModel.get_placeholder_mask
@@ -1129,6 +1094,15 @@ class Molmo2Model(Molmo2PreTrainedModel):
         image_features: torch.FloatTensor | None = None
         if images is not None:
             image_features = self.vision_backbone(images, token_pooling)
+            sample_count = image_grids.shape[0] if pixel_values is not None else video_grids.shape[0]
+            if input_ids.shape[0] != sample_count:
+                num_beams = input_ids.shape[0] // sample_count
+                features_per_sample = image_features.shape[0] // sample_count
+                image_features = (
+                    image_features.view(sample_count, features_per_sample, -1)
+                    .repeat_interleave(num_beams, dim=0)
+                    .view(-1, image_features.shape[-1])
+                )
             special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
             inputs_embeds = inputs_embeds.masked_scatter(
                 special_image_mask,
@@ -1263,6 +1237,32 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
+
+    def _expand_inputs_for_generation(
+        self,
+        expand_size: int = 1,
+        is_encoder_decoder: bool = False,
+        input_ids: torch.LongTensor | None = None,
+        **model_kwargs,
+    ):
+        visual_keys = (
+            "pixel_values",
+            "image_token_pooling",
+            "image_grids",
+            "image_num_crops",
+            "pixel_values_videos",
+            "video_token_pooling",
+            "video_grids",
+        )
+        visual = {k: model_kwargs.pop(k) for k in visual_keys if k in model_kwargs}
+        input_ids, model_kwargs = super()._expand_inputs_for_generation(
+            expand_size=expand_size,
+            is_encoder_decoder=is_encoder_decoder,
+            input_ids=input_ids,
+            **model_kwargs,
+        )
+        model_kwargs.update(visual)
+        return input_ids, model_kwargs
 
     def prepare_inputs_for_generation(
         self,
