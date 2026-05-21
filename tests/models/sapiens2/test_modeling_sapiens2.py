@@ -125,7 +125,8 @@ class Sapiens2ModelTester:
             stage_names=["stem"] + [f"stage{i}" for i in range(1, self.num_hidden_layers + 1)],
             out_indices=[0, 1],
             reshape_hidden_states=True,
-            # Head config sized to satisfy all model conversion patterns in test_reverse_loading_mapping:
+            num_labels=3,
+            # Head config sized to satisfy all model conversion patterns in test_reverse_loading_mapping
             head_upsample_out_channels=[8, 4, 4, 4],
             head_upsample_kernel_sizes=[4, 4, 4, 4],
             head_conv_out_channels=[4, 4, 4],
@@ -135,56 +136,9 @@ class Sapiens2ModelTester:
             head_scale_final_hidden_sizes=[8],
         )
 
-    # TODO(guarin): Check if multiple get_config methods is the best approach here.
-    def get_config_for_semantic_segmentation(self):
-        config = self.get_config()
-        config.num_labels = 3
-        config.head_upsample_out_channels = [32, 16, 8, 8]
-        config.head_upsample_kernel_sizes = [4, 4, 4, 4]
-        config.head_conv_out_channels = [8, 8, 8]
-        config.head_conv_kernel_sizes = [1, 1, 1]
-        return config
-
-    def get_config_for_pose_estimation(self):
-        config = self.get_config()
-        config.num_labels = 3
-        config.head_upsample_out_channels = [32, 16]
-        config.head_upsample_kernel_sizes = [4, 4]
-        config.head_conv_out_channels = [16, 16, 16]
-        config.head_conv_kernel_sizes = [1, 1, 1]
-        return config
-
-    def get_config_for_normal_estimation(self):
-        config = self.get_config()
-        config.num_labels = 3
-        config.image_size = 32
-        config.head_upsample_out_channels = [8, 4]
-        config.head_upsample_kernel_sizes = [3, 3]
-        config.head_conv_out_channels = [4]
-        config.head_conv_kernel_sizes = [3]
-        return config
-
     def get_config_for_matting(self):
         config = self.get_config()
         config.num_labels = 4
-        config.image_size = 32
-        config.head_upsample_out_channels = [8, 4]
-        config.head_upsample_kernel_sizes = [3, 3]
-        config.head_conv_out_channels = [4]
-        config.head_conv_kernel_sizes = [3]
-        return config
-
-    def get_config_for_pointmap_estimation(self):
-        config = self.get_config()
-        config.num_labels = 3
-        config.image_size = 32  # patch_size=2 → patch grid 16×16
-        config.head_upsample_out_channels = [8, 4]
-        config.head_upsample_kernel_sizes = [3, 3]
-        config.head_conv_out_channels = [4]
-        config.head_conv_kernel_sizes = [3]
-        config.head_scale_conv_out_channels = [8, 4]
-        config.head_scale_conv_kernel_sizes = [1, 1]
-        config.head_scale_final_hidden_sizes = [8]
         return config
 
     def create_and_check_backbone(self, config, pixel_values, labels):
@@ -252,9 +206,11 @@ class Sapiens2ModelTester:
         model.eval()
         with torch.no_grad():
             result = model(pixel_values)
-        # PixelShuffle with scale_factor=2 doubles spatial dims per block
-        patch_height = config.image_size // self.patch_size
-        expected_h = patch_height * (2 ** len(config.head_upsample_out_channels))
+        # PixelShuffle: Conv2d(padding=(ks-1)//2) then shuffle(2) — size per layer: (h + 2p - ks + 1) * 2
+        expected_h = config.image_size // self.patch_size
+        for ks in config.head_upsample_kernel_sizes:
+            padding = (ks - 1) // 2
+            expected_h = (expected_h + 2 * padding - ks + 1) * 2
         self.parent.assertEqual(
             result.normals.shape,
             (self.batch_size, config.num_labels, expected_h, expected_h),
@@ -269,8 +225,10 @@ class Sapiens2ModelTester:
         model.eval()
         with torch.no_grad():
             result = model(pixel_values)
-        patch_height = config.image_size // self.patch_size
-        expected_h = patch_height * (2 ** len(config.head_upsample_out_channels))
+        expected_h = config.image_size // self.patch_size
+        for ks in config.head_upsample_kernel_sizes:
+            padding = (ks - 1) // 2
+            expected_h = (expected_h + 2 * padding - ks + 1) * 2
         self.parent.assertEqual(result.foregrounds.shape, (self.batch_size, 3, expected_h, expected_h))
         self.parent.assertEqual(result.alphas.shape, (self.batch_size, 1, expected_h, expected_h))
         # outputs are sigmoid-activated
@@ -288,9 +246,11 @@ class Sapiens2ModelTester:
         model.eval()
         with torch.no_grad():
             result = model(pixel_values)
-        # PixelShuffle with scale_factor=2 doubles spatial dims per block
-        patch_height = config.image_size // self.patch_size
-        expected_h = patch_height * (2 ** len(config.head_upsample_out_channels))
+        # PixelShuffle: Conv2d(padding=(ks-1)//2) then shuffle(2) — size per layer: (h + 2p - ks + 1) * 2
+        expected_h = config.image_size // self.patch_size
+        for ks in config.head_upsample_kernel_sizes:
+            padding = (ks - 1) // 2
+            expected_h = (expected_h + 2 * padding - ks + 1) * 2
         self.parent.assertEqual(
             result.pointmaps.shape,
             (self.batch_size, config.num_labels, expected_h, expected_h),
@@ -301,19 +261,19 @@ class Sapiens2ModelTester:
             model(pixel_values, labels=torch.randn_like(result.pointmaps))
 
     def prepare_config_and_inputs_for_semantic_segmentation(self):
-        config = self.get_config_for_semantic_segmentation()
+        config = self.get_config()
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         labels = ids_tensor([self.batch_size, self.image_size, self.image_size], config.num_labels)
         return config, pixel_values, labels
 
     def prepare_config_and_inputs_for_pose_estimation(self):
-        config = self.get_config_for_pose_estimation()
+        config = self.get_config()
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         labels = ids_tensor([self.batch_size, self.image_size, self.image_size], config.num_labels)
         return config, pixel_values, labels
 
     def prepare_config_and_inputs_for_normal_estimation(self):
-        config = self.get_config_for_normal_estimation()
+        config = self.get_config()
         pixel_values = floats_tensor([self.batch_size, self.num_channels, config.image_size, config.image_size])
         labels = None
         return config, pixel_values, labels
@@ -325,7 +285,7 @@ class Sapiens2ModelTester:
         return config, pixel_values, labels
 
     def prepare_config_and_inputs_for_pointmap_estimation(self):
-        config = self.get_config_for_pointmap_estimation()
+        config = self.get_config()
         pixel_values = floats_tensor([self.batch_size, self.num_channels, config.image_size, config.image_size])
         labels = None
         return config, pixel_values, labels
