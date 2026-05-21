@@ -685,7 +685,7 @@ class Sapiens2SegmentationHead(nn.Module):
         return self.predictor(hidden_states)
 
 
-class Sapiens2NormalHead(nn.Module):
+class Sapiens2PointmapHead(nn.Module):
     def __init__(self, config: Sapiens2Config):
         super().__init__()
         self.input_conv = Sapiens2ConvLayer(config.hidden_size, config.hidden_size, kernel_size=3, padding=1)
@@ -764,40 +764,6 @@ class Sapiens2PointmapScaleHead(nn.Module):
         return self.predictor(hidden_states)
 
 
-class Sapiens2PointmapHead(nn.Module):
-    def __init__(self, config: Sapiens2Config):
-        super().__init__()
-        self.input_conv = Sapiens2ConvLayer(config.hidden_size, config.hidden_size, kernel_size=3, padding=1)
-        upsample_in_channels = [config.hidden_size] + config.head_upsample_out_channels[:-1]
-        self.upsample_layers = nn.ModuleList(
-            Sapiens2PixelShuffleLayer(in_ch, out_ch, kernel_size=ks, padding=(ks - 1) // 2)
-            for in_ch, out_ch, ks in zip(
-                upsample_in_channels, config.head_upsample_out_channels, config.head_upsample_kernel_sizes
-            )
-        )
-        conv_in_channels = [config.head_upsample_out_channels[-1]] + config.head_conv_out_channels[:-1]
-        self.conv_layers = nn.ModuleList(
-            Sapiens2ConvLayer(in_ch, out_ch, kernel_size=ks, padding=(ks - 1) // 2)
-            for in_ch, out_ch, ks in zip(
-                conv_in_channels, config.head_conv_out_channels, config.head_conv_kernel_sizes
-            )
-        )
-        predictor_in = (
-            config.head_conv_out_channels[-1]
-            if config.head_conv_out_channels
-            else config.head_upsample_out_channels[-1]
-        )
-        self.predictor = nn.Conv2d(predictor_in, config.num_labels, kernel_size=1)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.input_conv(hidden_states)
-        for block in self.upsample_layers:
-            hidden_states = block(hidden_states)
-        for layer in self.conv_layers:
-            hidden_states = layer(hidden_states)
-        return self.predictor(hidden_states)
-
-
 @auto_docstring
 class Sapiens2PreTrainedModel(PreTrainedModel):
     config: Sapiens2Config
@@ -847,7 +813,7 @@ class Sapiens2PreTrainedModel(PreTrainedModel):
             init.copy_(module.periods, periods)
         elif isinstance(
             module,
-            (Sapiens2SegmentationHead, Sapiens2NormalHead, Sapiens2PointmapHead, Sapiens2PointmapScaleHead),
+            (Sapiens2SegmentationHead, Sapiens2PointmapHead, Sapiens2PointmapScaleHead),
         ):
             for m in module.modules():
                 if isinstance(m, nn.Conv2d):
@@ -1129,7 +1095,7 @@ class Sapiens2ForNormalEstimation(Sapiens2PreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.sapiens2 = Sapiens2Model(config)
-        self.decode_head = Sapiens2NormalHead(config)
+        self.decode_head = Sapiens2PointmapHead(config)
         self.post_init()
 
     @can_return_tuple
@@ -1232,7 +1198,7 @@ class Sapiens2ForMatting(Sapiens2PreTrainedModel):
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
         self.sapiens2 = Sapiens2Model(config)
-        self.decode_head = Sapiens2NormalHead(config)  # config.num_labels = 4
+        self.decode_head = Sapiens2PointmapHead(config)  # config.num_labels = 4
         self.post_init()
 
     @can_return_tuple
@@ -1274,17 +1240,12 @@ class Sapiens2ForMatting(Sapiens2PreTrainedModel):
 
 
 __all__ = [
-    "Sapiens2Model",
-    "Sapiens2PreTrainedModel",
-    "Sapiens2Backbone",
     "Sapiens2ForSemanticSegmentation",
     "Sapiens2ForPoseEstimation",
     "Sapiens2ForNormalEstimation",
     "Sapiens2ForPointmapEstimation",
     "Sapiens2ForMatting",
-    "Sapiens2PointmapScaleHead",
-    "Sapiens2NormalEstimatorOutput",
-    "Sapiens2PoseEstimatorOutput",
-    "Sapiens2PointmapEstimatorOutput",
-    "Sapiens2MattingOutput",
+    "Sapiens2Model",
+    "Sapiens2PreTrainedModel",
+    "Sapiens2Backbone",
 ]

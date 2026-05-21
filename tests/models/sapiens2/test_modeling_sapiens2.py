@@ -38,16 +38,14 @@ if is_torch_available():
         Sapiens2ForPointmapEstimation,
         Sapiens2ForPoseEstimation,
         Sapiens2ForSemanticSegmentation,
-        Sapiens2MattingOutput,
         Sapiens2Model,
+    )
+    from transformers.modeling_outputs import SemanticSegmenterOutput
+    from transformers.models.sapiens2.modeling_sapiens2 import (
+        Sapiens2MattingOutput,
         Sapiens2NormalEstimatorOutput,
         Sapiens2PointmapEstimatorOutput,
     )
-    from transformers.modeling_outputs import SemanticSegmenterOutput
-
-
-if is_vision_available():
-    pass
 
 
 class Sapiens2ModelTester:
