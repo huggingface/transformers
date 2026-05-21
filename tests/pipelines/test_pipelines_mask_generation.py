@@ -96,30 +96,16 @@ class MaskGenerationPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_preprocess_is_last_partial_batch(self):
-        """
-        Regression test for the is_last flag in MaskGenerationPipeline.preprocess.
-
-        When n_points is not a multiple of points_per_batch, the old formula
-        ``i == n_points - points_per_batch`` never evaluates to True on the final
-        iteration, so PipelinePackIterator's ``while not is_last`` loop can never
-        terminate cleanly and the accumulated results for the last batch are lost.
-
-        The fix ``i + points_per_batch >= n_points`` always marks the last batch
-        correctly regardless of whether n_points is an exact multiple.
-        """
+        """is_last must be True on the final batch when n_points is not a multiple of points_per_batch."""
         import torch
 
         n_points = 100  # not a multiple of points_per_batch=64
         points_per_batch = 64
 
-        # Build a lightweight mock pipeline that skips model/image-processor I/O
-        # and jumps straight to the batching loop.
-        # No spec= so dynamically-set Pipeline attributes like image_processor are accessible.
         mock_pipeline = MagicMock()
         mock_pipeline.dtype = torch.float32
         mock_pipeline.device = torch.device("cpu")
 
-        # Fake outputs from image_processor.generate_crop_boxes
         crop_boxes = torch.zeros(1, 4)
         grid_points = torch.zeros(1, n_points, 1, 2)
         input_labels = torch.zeros(1, n_points)
@@ -132,15 +118,8 @@ class MaskGenerationPipelineTests(unittest.TestCase):
             cropped_images,
             input_labels,
         )
-
-        # image_processor(images=...) → dict with pixel_values tensor
-        fake_model_inputs = {"pixel_values": torch.zeros(1, 3, 16, 16)}
-        mock_pipeline.image_processor.return_value.to.return_value = fake_model_inputs
-
-        # model.get_image_embeddings → plain embedding tensor (SAM-style single output)
+        mock_pipeline.image_processor.return_value.to.return_value = {"pixel_values": torch.zeros(1, 3, 16, 16)}
         mock_pipeline.model.get_image_embeddings.return_value = torch.zeros(1, 256, 16, 16)
-
-        # device_placement / inference_context are no-op context managers
         mock_pipeline.device_placement.return_value.__enter__ = MagicMock(return_value=None)
         mock_pipeline.device_placement.return_value.__exit__ = MagicMock(return_value=False)
         mock_pipeline.get_inference_context.return_value.return_value.__enter__ = MagicMock(return_value=None)
@@ -148,24 +127,18 @@ class MaskGenerationPipelineTests(unittest.TestCase):
         mock_pipeline._ensure_tensor_on_device.side_effect = lambda x, device: x
 
         with patch("transformers.pipelines.mask_generation.load_image", return_value=MagicMock()):
-            gen = MaskGenerationPipeline.preprocess(mock_pipeline, "fake_image.png", points_per_batch=points_per_batch)
-            yielded = list(gen)
+            yielded = list(MaskGenerationPipeline.preprocess(mock_pipeline, "fake_image.png", points_per_batch=points_per_batch))
 
-        # With n_points=100, points_per_batch=64 we expect 2 batches (i=0 and i=64)
-        self.assertEqual(len(yielded), 2, "Expected exactly 2 batches for 100 points with batch_size=64")
-
-        # The first batch must NOT be flagged as last
-        self.assertFalse(yielded[0]["is_last"], "First batch should not be is_last")
-
-        # The second (final, partial) batch MUST be flagged as last
-        self.assertTrue(yielded[1]["is_last"], "Final partial batch must have is_last=True")
+        self.assertEqual(len(yielded), 2)
+        self.assertFalse(yielded[0]["is_last"])
+        self.assertTrue(yielded[1]["is_last"])
 
     @require_torch
     def test_preprocess_is_last_exact_multiple(self):
         """is_last is also correct when n_points is an exact multiple of points_per_batch."""
         import torch
 
-        n_points = 128  # exact multiple: 128 / 64 == 2
+        n_points = 128  # exact multiple of points_per_batch=64
         points_per_batch = 64
 
         mock_pipeline = MagicMock()
@@ -184,9 +157,7 @@ class MaskGenerationPipelineTests(unittest.TestCase):
             cropped_images,
             input_labels,
         )
-
-        fake_model_inputs = {"pixel_values": torch.zeros(1, 3, 16, 16)}
-        mock_pipeline.image_processor.return_value.to.return_value = fake_model_inputs
+        mock_pipeline.image_processor.return_value.to.return_value = {"pixel_values": torch.zeros(1, 3, 16, 16)}
         mock_pipeline.model.get_image_embeddings.return_value = torch.zeros(1, 256, 16, 16)
         mock_pipeline.device_placement.return_value.__enter__ = MagicMock(return_value=None)
         mock_pipeline.device_placement.return_value.__exit__ = MagicMock(return_value=False)
@@ -195,8 +166,7 @@ class MaskGenerationPipelineTests(unittest.TestCase):
         mock_pipeline._ensure_tensor_on_device.side_effect = lambda x, device: x
 
         with patch("transformers.pipelines.mask_generation.load_image", return_value=MagicMock()):
-            gen = MaskGenerationPipeline.preprocess(mock_pipeline, "fake_image.png", points_per_batch=points_per_batch)
-            yielded = list(gen)
+            yielded = list(MaskGenerationPipeline.preprocess(mock_pipeline, "fake_image.png", points_per_batch=points_per_batch))
 
         self.assertEqual(len(yielded), 2)
         self.assertFalse(yielded[0]["is_last"])
