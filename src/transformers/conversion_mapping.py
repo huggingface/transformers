@@ -49,7 +49,6 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "glm4_moe": "qwen2_moe",
     "glm4_moe_lite": "qwen2_moe",
     "glm_moe_dsa": "qwen2_moe",
-    "glm5_next": "qwen2_moe",
     "glm4v_moe": "qwen2_moe",
     "longcat_flash": "qwen2_moe",
     "solar_open": "qwen2_moe",
@@ -1008,6 +1007,14 @@ def _build_checkpoint_conversion_mapping():
     mapping["laguna"] += [
         WeightRenaming("mlp.experts.e_score_correction_bias", "mlp.gate.e_score_correction_bias"),
         WeightRenaming("mlp.shared_expert.", "mlp.shared_experts."),
+    ]
+    mapping["glm5_next"] = [
+        WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_attn_fn$", target_patterns=r"layers.\1.attn_hc.fn"),
+        WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_attn_base$", target_patterns=r"layers.\1.attn_hc.base"),
+        WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_attn_scale$", target_patterns=r"layers.\1.attn_hc.scale"),
+        WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_ffn_fn$", target_patterns=r"layers.\1.ffn_hc.fn"),
+        WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_ffn_base$", target_patterns=r"layers.\1.ffn_hc.base"),
+        WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_ffn_scale$", target_patterns=r"layers.\1.ffn_hc.scale"),
     ]
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:

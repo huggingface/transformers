@@ -128,6 +128,7 @@ class Glm5NextLinearAttention(nn.Module):
     Architecture (checkpoint naming):
       - Q/K/V: x -> q_proj/k_proj/v_proj -> causal_conv1d via q_conv1d/k_conv1d/v_conv1d
       - Forget gate: x -> f_a_proj -> f_b_proj -> g = -exp(A_log) * softplus(gate + dt_bias)
+        or safe lower-bound gate when `linear_attn_config["lower_bound"]` is set
       - Input gate: x -> b_proj -> sigmoid -> beta [B, S, H]
       - Recurrence: o = kda_sequential(q, k, v, g, beta)  [pure PyTorch]
       - Output gate: x -> g_a_proj -> g_b_proj -> sigmoid -> gated RMSNorm via o_norm
@@ -151,6 +152,7 @@ class Glm5NextLinearAttention(nn.Module):
         self.v_head_dim = linear_attn_config["v_head_dim"]
         self.num_heads = linear_attn_config["num_heads"]
         self.conv_kernel_size = linear_attn_config.get("short_conv_kernel_size", 4)
+        self.safe_gate_lower_bound = linear_attn_config.get("lower_bound")
 
         qk_projection_size = self.head_dim * self.num_heads
         v_projection_size = self.v_head_dim * self.num_heads
@@ -240,10 +242,13 @@ class Glm5NextLinearAttention(nn.Module):
         return F.pad(x_t, (self.conv_kernel_size - x_t.shape[-1], 0))
 
     def _compute_gate(self, forget_gate: torch.Tensor) -> torch.Tensor:
-        """g = -exp(A_log) * softplus(forget_gate + dt_bias)."""
+        """Compute the KDA forget gate."""
         batch_size, seq_len = forget_gate.shape[:2]
         g = forget_gate.float() + self.dt_bias.view(1, 1, -1)
         g = g.view(batch_size, seq_len, self.num_heads, self.head_dim)
+
+        if self.safe_gate_lower_bound is not None:
+            return self.safe_gate_lower_bound * torch.sigmoid(torch.exp(self.A_log.float()) * g)
 
         # Numerically stable softplus
         threshold = 20.0
@@ -434,7 +439,7 @@ class Glm5NextAttention(nn.Module):
         self.kv_lora_rank = config.kv_lora_rank
         self.v_head_dim = config.v_head_dim
         self.qk_nope_head_dim = config.qk_nope_head_dim
-        self.qk_head_dim = config.qk_head_dim
+        self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
         self.is_causal = True
 
         # Query projection
