@@ -166,10 +166,13 @@ class Sapiens2MattingOutput(ModelOutput):
         Alpha matte predictions in `[0, 1]` (sigmoid-activated).
     foregrounds (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
         Pre-multiplied RGB foreground predictions in `[0, 1]` (sigmoid-activated).
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, ...):
-        ...
-    attentions (`tuple(torch.FloatTensor)`, *optional*, ...):
-        ...
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage)
+        of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
+        each layer plus the initial embedding outputs.
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one per layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`. Attentions weights after the attention softmax.
     """
 
     loss: torch.FloatTensor | None = None
@@ -558,7 +561,6 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
                 Original `(height, width)` of each image before preprocessing. When provided,
                 the padding added during preprocessing is removed and predictions are resized back
                 to the original image size (unless `target_sizes` overrides the final size).
-                Can be passed directly as `inputs["original_sizes"]`.
             target_sizes (`list[tuple]` of length `batch_size`, *optional*):
                 Requested final `(height, width)` for each prediction. Overrides `source_sizes`
                 as the resize target. Resized with bilinear interpolation before normalization.
