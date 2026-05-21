@@ -2674,6 +2674,10 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
         mask_for_mem = mask_for_mem * self.config.sigmoid_scale_for_mem_enc
         mask_for_mem = mask_for_mem + self.config.sigmoid_bias_for_mem_enc
 
+        mem_dtype = next(self.memory_encoder.parameters()).dtype
+        pix_feat = pix_feat.to(dtype=mem_dtype)
+        mask_for_mem = mask_for_mem.to(dtype=mem_dtype)
+
         maskmem_features, maskmem_pos_enc = self.memory_encoder(
             pix_feat,
             mask_for_mem,

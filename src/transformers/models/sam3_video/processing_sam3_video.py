@@ -137,7 +137,7 @@ class Sam3VideoProcessor(ProcessorMixin):
         inference_state_device: Union[str, "torch.device"] | None = None,
         processing_device: Union[str, "torch.device"] | None = None,
         video_storage_device: Union[str, "torch.device"] | None = None,
-        max_vision_features_cache_size: int = 1,
+        max_vision_features_cache_size: int | None = None,
         dtype: torch.dtype = torch.float32,
     ):
         """
@@ -155,8 +155,10 @@ class Sam3VideoProcessor(ProcessorMixin):
                 The device to use for video processing.
             video_storage_device (`str` or `torch.device`, *optional*):
                 The device to store the processed video frames on.
-            max_vision_features_cache_size (`int`, *optional*, defaults to 1):
-                The maximum number of vision features to cache.
+            max_vision_features_cache_size (`int`, *optional*, defaults to `None`):
+                Maximum number of per-frame vision-feature cache entries. ``None`` caches one
+                slot per pre-loaded frame (recommended for multi-frame propagation); use ``1``
+                for streaming or minimal memory.
             dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
                 The torch dtype to use for the whole session.
         """
@@ -166,11 +168,15 @@ class Sam3VideoProcessor(ProcessorMixin):
         pixel_values_video = None
         video_height = None
         video_width = None
+        num_frames_for_cache = 1
         if video is not None:
             processed_video = self.video_processor(videos=video, device=processing_device, return_tensors="pt")
             pixel_values_video = processed_video.pixel_values_videos[0]
             video_height = processed_video.original_sizes[0][0]
             video_width = processed_video.original_sizes[0][1]
+            num_frames_for_cache = int(pixel_values_video.shape[0])
+        if max_vision_features_cache_size is None:
+            max_vision_features_cache_size = num_frames_for_cache
         inference_session = Sam3VideoInferenceSession(
             video=pixel_values_video,
             video_height=video_height,
@@ -182,6 +188,65 @@ class Sam3VideoProcessor(ProcessorMixin):
             max_vision_features_cache_size=max_vision_features_cache_size,
         )
         return inference_session
+
+    def propagate_in_video_iterator_kwargs(
+        self,
+        inference_session: Sam3VideoInferenceSession,
+        *,
+        conditioning_frame_idx: int = 0,
+        max_frame_num_to_track: int | None = None,
+        reverse: bool = False,
+    ) -> dict:
+        """
+        Build keyword arguments for `Sam3VideoModel.propagate_in_video_iterator` / `Sam31VideoModel.propagate_in_video_iterator`.
+
+        Standard PCS flow (see model docs): register prompts with `add_text_prompt`, then call
+        `propagate_in_video_iterator` starting at the conditioning frame — do **not** call
+        `model.forward` on that frame first.
+
+        If you **did** run `model.forward(..., frame_idx=conditioning_frame_idx)` (e.g. to
+        inspect the conditioning frame before propagation), the session records that index in
+        `inference_session.frames_processed`. This helper advances `start_frame_idx` by one
+        so the conditioning frame is not processed twice (which would corrupt tracker memory).
+
+        Applies to both `Sam3VideoModel` and `Sam31VideoModel` (same iterator implementation).
+
+        Args:
+            inference_session (`Sam3VideoInferenceSession`):
+                Active session (also `Sam31VideoInferenceSession`).
+            conditioning_frame_idx (`int`, *optional*, defaults to 0):
+                Frame where text prompts were added / detection was run manually.
+            max_frame_num_to_track (`int`, *optional*):
+                Passed through to the iterator. When the conditioning frame was already
+                processed, this is still the number of frames to walk **from** the computed
+                `start_frame_idx` (same semantics as the iterator).
+            reverse (`bool`, *optional*, defaults to `False`):
+                Propagation direction.
+
+        Returns:
+            `dict` with keys `start_frame_idx`, `max_frame_num_to_track`, and `reverse`.
+        """
+        num_frames = inference_session.num_frames
+        already_processed = conditioning_frame_idx in inference_session.frames_processed
+
+        if reverse:
+            start_frame_idx = (
+                conditioning_frame_idx - 1 if already_processed else conditioning_frame_idx
+            )
+            if max_frame_num_to_track is None:
+                max_frame_num_to_track = start_frame_idx + 1
+        else:
+            start_frame_idx = (
+                conditioning_frame_idx + 1 if already_processed else conditioning_frame_idx
+            )
+            if max_frame_num_to_track is None:
+                max_frame_num_to_track = max(0, num_frames - start_frame_idx)
+
+        return {
+            "start_frame_idx": start_frame_idx,
+            "max_frame_num_to_track": max_frame_num_to_track,
+            "reverse": reverse,
+        }
 
     def _apply_non_overlapping_constraints(self, pred_masks):
         """

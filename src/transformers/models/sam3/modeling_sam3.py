@@ -441,24 +441,6 @@ class Sam3ViTRotaryEmbedding(nn.Module):
         return self.rope_embeddings_cos, self.rope_embeddings_sin
 
 
-def rotate_pairwise(x):
-    """
-    pairwise rotation of the hidden dims of the input. Differerent from Llama Half-Tensor Rotation.
-
-    This is an optimized version of the following more explicit implementation:
-    ```python
-    x_rotated = torch.zeros_like(x, dtype=x.dtype, device=x.device)
-    x_rotated[..., ::2] = -x[..., 1::2]
-    x_rotated[..., 1::2] = x[..., ::2]
-    return x_rotated
-    ```
-    """
-    x = x.view(*x.shape[:-1], -1, 2)
-    x1, x2 = x.unbind(dim=-1)
-    x = torch.stack((-x2, x1), dim=-1)
-    return x.flatten(start_dim=-2)
-
-
 def apply_rotary_pos_emb_2d(
     q: torch.Tensor,
     k: torch.Tensor,
@@ -466,24 +448,41 @@ def apply_rotary_pos_emb_2d(
     sin: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """
-    Apply rotary position embedding to query and key tensors for self-attention.
+    Apply rotary position embedding to query and key tensors via complex multiplication.
+
+    cos/sin are stored with repeat_interleave(2), so every unique frequency value appears
+    twice. We extract the unique half via ``[..., ::2]`` and use ``torch.view_as_complex``
+    to fuse the rotation into a single complex multiply — equivalent to the pairwise rotate
+    formulation but with fewer intermediate tensor allocations.
 
     Args:
-        q: Query tensor of shape (batch_size, num_windows, seq_len, num_heads, head_dim)
-        k: Key tensor of shape (batch_size, num_windows, seq_len, num_heads, head_dim)
-        cos: Cosine position embedding of shape (seq_len, head_dim)
-        sin: Sine position embedding of shape (seq_len, head_dim)
+        q: Query tensor of shape (..., seq_len, head_dim)
+        k: Key tensor of shape (..., seq_len, head_dim)
+        cos: Cosine embedding of shape (..., head_dim) — each value repeated twice
+        sin: Sine embedding of shape (..., head_dim) — each value repeated twice
 
     Returns:
-        Rotated (q, k) tensors
+        Rotated (q, k) tensors with the same dtype as the inputs.
     """
-    q_embed = q.float()
-    q_embed = (q_embed * cos) + (rotate_pairwise(q_embed) * sin)
+    # cos/sin have repeat_interleave(2) applied; recover unique half values.
+    cos_h = cos[..., ::2]  # [..., head_dim//2]
+    sin_h = sin[..., ::2]  # [..., head_dim//2]
+    # Build complex frequency tensor: e^{iθ} = cos θ + i sin θ
+    # torch.stack creates a contiguous [..., head_dim//2, 2] tensor, required by view_as_complex.
+    freqs = torch.view_as_complex(torch.stack([cos_h, sin_h], dim=-1).float())
 
-    k_embed = k.float()
-    k_embed = (k_embed * cos) + (rotate_pairwise(k_embed) * sin)
-
-    return q_embed.type_as(q), k_embed.type_as(k)
+    # Rotate q and k via complex multiplication (avoids allocating rotate_pairwise temporaries).
+    q_out = (
+        torch.view_as_real(torch.view_as_complex(q.float().reshape(*q.shape[:-1], -1, 2)) * freqs)
+        .flatten(-2)
+        .type_as(q)
+    )
+    k_out = (
+        torch.view_as_real(torch.view_as_complex(k.float().reshape(*k.shape[:-1], -1, 2)) * freqs)
+        .flatten(-2)
+        .type_as(k)
+    )
+    return q_out, k_out
 
 
 class Sam3ViTRoPEAttention(nn.Module):
@@ -2125,7 +2124,14 @@ class Sam3Model(Sam3PreTrainedModel):
         r"^tracker_neck.",
     ]
 
-    def __init__(self, config: Sam3Config):
+    def __init__(self, config: Sam3Config, remove_vision_encoder: bool = False):
+        r"""
+        remove_vision_encoder (`bool`, *optional*, defaults to `False`):
+            Whether to skip allocating the vision encoder. Useful when the encoder is provided
+            externally (e.g. when `Sam3Model` is composed inside a video model that owns a
+            shared vision encoder). When `True`, callers must pass pre-computed `vision_embeds`
+            to `forward`.
+        """
         # loading from a sam3_video config
         if hasattr(config, "detector_config") and config.detector_config is not None:
             detector_config = config.detector_config
@@ -2133,7 +2139,7 @@ class Sam3Model(Sam3PreTrainedModel):
                 detector_config = Sam3Config(**detector_config)
             config = detector_config
         super().__init__(config)
-        self.vision_encoder = Sam3VisionModel(config.vision_config)
+        self.vision_encoder = None if remove_vision_encoder else Sam3VisionModel(config.vision_config)
         self.text_encoder = CLIPTextModelWithProjection(config.text_config)
         self.vocab_size = config.text_config.vocab_size
 
@@ -2426,4 +2432,10 @@ class Sam3Model(Sam3PreTrainedModel):
         )
 
 
-__all__ = ["Sam3Model", "Sam3VisionModel", "Sam3ViTModel", "Sam3PreTrainedModel"]
+__all__ = [
+    "Sam3Model",
+    "Sam3VisionModel",
+    "Sam3VisionEncoderOutput",
+    "Sam3ViTModel",
+    "Sam3PreTrainedModel",
+]

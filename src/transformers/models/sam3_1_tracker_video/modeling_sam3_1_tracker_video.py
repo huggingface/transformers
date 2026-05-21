@@ -2432,6 +2432,13 @@ class Sam31TrackerVideoMultiplexMaskDecoder(nn.Module):
         extra_per_object_embeddings: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
         batch_size = image_embeddings.shape[0]
+        compute_dtype = self.mask_tokens.weight.dtype
+        image_embeddings = image_embeddings.to(dtype=compute_dtype)
+        image_positional_embeddings = image_positional_embeddings.to(dtype=compute_dtype)
+        if high_resolution_features is not None:
+            high_resolution_features = [feat.to(dtype=compute_dtype) for feat in high_resolution_features]
+        if extra_per_object_embeddings is not None:
+            extra_per_object_embeddings = extra_per_object_embeddings.to(dtype=compute_dtype)
 
         token_list = []
         if self.pred_obj_scores and not self.decode_mask_attribute_with_shared_tokens:
@@ -3043,7 +3050,9 @@ class Sam31TrackerVideoModel(Sam31TrackerVideoPreTrainedModel):
             if run_mem_encoder and self.num_maskmem > 0:
                 objects_needing_memory_encoding.append(obj_idx)
                 high_res_masks_for_memory.append(current_out["high_res_masks"])
-                object_score_logits_for_memory.append(current_out["object_score_logits"])
+                object_score_logits_for_memory.append(
+                    self._batch_object_score_logits(current_out["object_score_logits"])
+                )
                 is_mask_from_pts_per_obj.append(point_inputs is not None or mask_inputs is not None)
             if not is_init_cond_frame:
                 inference_session.frames_tracked_per_obj[obj_idx][frame_idx] = {"reverse": reverse}
@@ -3068,7 +3077,9 @@ class Sam31TrackerVideoModel(Sam31TrackerVideoPreTrainedModel):
                 if run_mem_encoder and self.num_maskmem > 0:
                     objects_needing_memory_encoding.append(obj_idx)
                     high_res_masks_for_memory.append(current_out["high_res_masks"])
-                    object_score_logits_for_memory.append(current_out["object_score_logits"])
+                    object_score_logits_for_memory.append(
+                        self._batch_object_score_logits(current_out["object_score_logits"])
+                    )
                     is_mask_from_pts_per_obj.append(False)
                 inference_session.frames_tracked_per_obj[obj_idx][frame_idx] = {"reverse": reverse}
 
@@ -3083,7 +3094,8 @@ class Sam31TrackerVideoModel(Sam31TrackerVideoPreTrainedModel):
 
         squeezed_scores: list[torch.Tensor] = []
         for score in object_score_logits_per_obj:
-            squeezed_scores.append(score.squeeze(-1) if score is not None and score.dim() > 1 else score)
+            if score is not None:
+                squeezed_scores.append(self._scalar_object_score_logits(score))
         if len(pred_masks_per_obj) > 1:
             all_pred_masks = torch.cat(pred_masks_per_obj, dim=0)
             all_object_score_logits = torch.cat(squeezed_scores, dim=0)
@@ -3962,7 +3974,7 @@ class Sam31TrackerVideoModel(Sam31TrackerVideoPreTrainedModel):
             "high_res_masks": sam_outputs.high_res_masks,
         }
         if not self.training:
-            current_out["object_score_logits"] = sam_outputs.object_score_logits
+            current_out["object_score_logits"] = self._batch_object_score_logits(sam_outputs.object_score_logits)
 
         return current_out
 
@@ -4060,6 +4072,10 @@ class Sam31TrackerVideoModel(Sam31TrackerVideoPreTrainedModel):
         if pix_feat.shape[0] != mask_for_mem.shape[0]:
             pix_feat = pix_feat.expand(mask_for_mem.shape[0], -1, -1, -1).contiguous()
 
+        mem_dtype = next(self.memory_encoder.parameters()).dtype
+        pix_feat = pix_feat.to(dtype=mem_dtype)
+        mask_for_mem = mask_for_mem.to(dtype=mem_dtype)
+
         maskmem_features, maskmem_pos_enc = self.memory_encoder(pix_feat, mask_for_mem)
 
         # Per-slot Meta `no_obj_embed_spatial` application. See the modeling file for the
@@ -4118,15 +4134,18 @@ class Sam31TrackerVideoModel(Sam31TrackerVideoPreTrainedModel):
         save_pi = getattr(self.config, "save_propagation_image_features", True)
 
         high_res_masks_batched = torch.cat(high_res_masks_for_memory, dim=0)
-        object_score_logits_batched = torch.cat(object_score_logits_for_memory, dim=0)
+        object_score_logits_batched = torch.cat(
+            [self._batch_object_score_logits(s) for s in object_score_logits_for_memory], dim=0
+        )
 
         num_objs = len(objects_needing_memory_encoding)
         device = high_res_masks_batched.device
+        param_dtype = next(self.parameters()).dtype
 
         multiplex_state = self.multiplex_controller.get_state(
             num_valid_entries=num_objs,
             device=device,
-            dtype=torch.float32,
+            dtype=param_dtype,
             random=False,
         )
         multiplex_count = multiplex_state.multiplex_count
@@ -4256,6 +4275,16 @@ class Sam31TrackerVideoModel(Sam31TrackerVideoPreTrainedModel):
         for frame_idx in tqdm(processing_order, desc="propagate in video", disable=not show_progress_bar):
             sam3_1_tracker_video_output = self(inference_session, frame_idx=frame_idx, reverse=reverse)
             yield sam3_1_tracker_video_output
+
+    @staticmethod
+    def _scalar_object_score_logits(scores: torch.Tensor) -> torch.Tensor:
+        """One logit per object, shape ``(1,)``, for stacking across objects."""
+        return scores.reshape(-1).amax(dim=0, keepdim=True)
+
+    @staticmethod
+    def _batch_object_score_logits(scores: torch.Tensor) -> torch.Tensor:
+        """Shape ``(1, 1)`` for per-object rows in memory-encoding ``torch.cat``."""
+        return scores.reshape(-1).amax(dim=0, keepdim=True).reshape(1, 1)
 
     def _blend_no_object_pointer(
         self,
@@ -4558,7 +4587,7 @@ class Sam31TrackerVideoModel(Sam31TrackerVideoPreTrainedModel):
         multiplex_state = self.multiplex_controller.get_state(
             num_valid_entries=num_objs,
             device=device,
-            dtype=torch.float32,
+            dtype=param_dtype,
             random=False,
         )
         num_buckets = multiplex_state.num_buckets
@@ -4582,15 +4611,19 @@ class Sam31TrackerVideoModel(Sam31TrackerVideoPreTrainedModel):
         high_res_features = None
         if len(current_vision_feats) > 1:
             high_res_features = [
-                x.permute(1, 2, 0).view(x.size(1), x.size(2), *s).expand(num_buckets, -1, -1, -1).contiguous()
+                x.permute(1, 2, 0)
+                .view(x.size(1), x.size(2), *s)
+                .expand(num_buckets, -1, -1, -1)
+                .contiguous()
+                .to(dtype=param_dtype)
                 for x, s in zip(current_vision_feats[:-1], self.backbone_feature_sizes[:-1])
             ]
 
-        image_pos = self.get_image_wide_positional_embeddings()
+        image_pos = self.get_image_wide_positional_embeddings().to(dtype=param_dtype)
 
         extra_per_object_embeddings = None
         if self.output_valid_embed is not None:
-            valid_m = multiplex_state.get_valid_object_mask().to(device=device, dtype=torch.float32).unsqueeze(-1)
+            valid_m = multiplex_state.get_valid_object_mask().to(device=device, dtype=param_dtype).unsqueeze(-1)
             ov = self.output_valid_embed.unsqueeze(0)
             oi = self.output_invalid_embed.unsqueeze(0)
             extra_per_object_embeddings = valid_m * ov + (1.0 - valid_m) * oi
@@ -4654,7 +4687,7 @@ class Sam31TrackerVideoModel(Sam31TrackerVideoPreTrainedModel):
                     "pred_masks": low_res_masks_per_obj[i : i + 1].unsqueeze(1),
                     "object_pointer": object_pointers_per_obj[i : i + 1],
                     "high_res_masks": high_res_masks_per_obj[i : i + 1].unsqueeze(1),
-                    "object_score_logits": object_score_logits_per_obj[i : i + 1],
+                    "object_score_logits": self._batch_object_score_logits(object_score_logits_per_obj[i : i + 1]),
                 }
             )
         return per_obj_outputs

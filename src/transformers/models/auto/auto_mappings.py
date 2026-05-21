@@ -516,6 +516,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("sam2_vision_model", "Sam2VisionConfig"),
         ("sam3", "Sam3Config"),
         ("sam3_1_tracker_video", "Sam31TrackerVideoConfig"),
+        ("sam3_1_video", "Sam31VideoConfig"),
         ("sam3_1_vision_model", "Sam31VisionConfig"),
         ("sam3_detr_decoder", "Sam3DETRDecoderConfig"),
         ("sam3_detr_encoder", "Sam3DETREncoderConfig"),
