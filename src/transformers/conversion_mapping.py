@@ -60,6 +60,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "flex_olmo": "qwen2_moe",
     "olmoe": "qwen2_moe",
     "exaone_moe": "qwen2_moe",
+    "cohere2_moe": "qwen2_moe",
     "rt_detr_v2": "rt_detr",
     "pp_doclayout_v2": "rt_detr",
     "pp_doclayout_v3": "rt_detr",
@@ -104,11 +105,126 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "MllamaModel": "LlavaModel",
     "MaskFormerDetrDecoder": "DetrModel",
     "Qwen2_5_VLForConditionalGeneration": "Qwen2VLForConditionalGeneration",
+    # ViT-style vision models (old HuggingFace checkpoint format → new modular format)
+    "ASTModel": "ViTModel",
+    "BeitModel": "ViTModel",
+    "DeiTModel": "ViTModel",
+    "IJepaModel": "ViTModel",
+    "ViTMAEModel": "ViTModel",
+    "ViTMSNModel": "ViTModel",
+    "VivitModel": "ViTModel",
 }
 
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "hrm_text": [
+            WeightConverter(
+                source_patterns="mlp.gate_up_proj.weight",
+                target_patterns=["mlp.gate_proj.weight", "mlp.up_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns="attn.gqkv_proj.weight",
+                target_patterns=[
+                    "self_attn.gate_proj.weight",
+                    "self_attn.q_proj.weight",
+                    "self_attn.k_proj.weight",
+                    "self_attn.v_proj.weight",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightRenaming(source_patterns=r"\.attn\.o_proj\.", target_patterns=".self_attn.o_proj."),
+        ],
+        "ViTModel": [
+            WeightRenaming(r"encoder\.layer\.", "layers."),
+            WeightRenaming("attention.query", "q_proj"),
+            WeightRenaming("attention.key", "k_proj"),
+            WeightRenaming("attention.value", "v_proj"),
+            WeightRenaming("attention.output.dense", "attention.o_proj"),
+            WeightRenaming("intermediate.dense", "mlp.fc1"),
+            WeightRenaming("output.dense", "mlp.fc2"),
+        ],
+        "ViTMSNForImageClassification": [
+            WeightRenaming(r"^encoder\.", "vit.encoder."),
+        ],
+        "ViTMAEForPreTraining": [
+            WeightRenaming("attention.query", "q_proj"),
+            WeightRenaming("attention.key", "k_proj"),
+            WeightRenaming("attention.value", "v_proj"),
+            WeightRenaming("attention.output.dense", "attention.o_proj"),
+            WeightRenaming("intermediate.dense", "mlp.fc1"),
+            WeightRenaming("output.dense", "mlp.fc2"),
+        ],
+        "BeitBackbone": [
+            WeightRenaming(r"^fpn1\.0\.", "fpn.fpn1.conv_transpose1."),
+            WeightRenaming(r"^fpn1\.1\.", "fpn.fpn1.normalization."),
+            WeightRenaming(r"^fpn1\.3\.", "fpn.fpn1.conv_transpose2."),
+            WeightRenaming(r"^fpn2\.0\.", "fpn.fpn2."),
+            WeightRenaming(r"^encoder\.layer\.", "beit.encoder.layer."),
+            WeightRenaming(r"^embeddings\.", "beit.embeddings."),
+            WeightRenaming("attention.query", "q_proj"),
+            WeightRenaming("attention.key", "k_proj"),
+            WeightRenaming("attention.value", "v_proj"),
+            WeightRenaming("attention.output.dense", "attention.o_proj"),
+            WeightRenaming("intermediate.dense", "mlp.fc1"),
+            WeightRenaming("output.dense", "mlp.fc2"),
+        ],
+        "BeitForSemanticSegmentation": [
+            WeightRenaming(r"(?<!psp_modules\.[0-9]\.1\.)bn\.", "normalization."),
+            WeightRenaming(r"(?<!psp_modules\.[0-9]\.1\.)conv\.weight", "convolution.weight"),
+            WeightRenaming(r"^fpn1\.0\.", "fpn.fpn1.conv_transpose1."),
+            WeightRenaming(r"^fpn1\.1\.", "fpn.fpn1.normalization."),
+            WeightRenaming(r"^fpn1\.3\.", "fpn.fpn1.conv_transpose2."),
+            WeightRenaming(r"^fpn2\.0\.", "fpn.fpn2."),
+            WeightRenaming("decode_head.bottleneck.", "decode_head.psp_bottleneck."),
+            WeightRenaming(
+                r"decode_head\.psp_modules\.(\d+)\.1\.conv\.weight",
+                r"decode_head.psp_modules.blocks.\1.conv.convolution.weight",
+            ),
+            WeightRenaming(
+                r"decode_head\.psp_modules\.(\d+)\.1\.bn\.",
+                r"decode_head.psp_modules.blocks.\1.conv.normalization.",
+            ),
+        ],
+        "lw_detr": [
+            WeightRenaming("attention.attention.query", "attention.q_proj"),
+            WeightRenaming("attention.attention.key", "attention.k_proj"),
+            WeightRenaming("attention.attention.value", "attention.v_proj"),
+            WeightRenaming("attention.output", "attention.o_proj"),
+        ],
+        "SegformerModel": [
+            WeightRenaming(r"encoder.patch_embeddings.(\d+).", r"stages.\1.patch_embeddings."),
+            WeightRenaming(r"encoder.block.(\d+).", r"stages.\1.blocks."),
+            WeightRenaming(r"encoder.layer_norm.(\d+)", r"stages.\1.layer_norm"),
+            WeightRenaming("attention.self.query", "attention.q_proj"),
+            WeightRenaming("attention.self.key", "attention.k_proj"),
+            WeightRenaming("attention.self.value", "attention.v_proj"),
+            WeightRenaming("attention.self.sr", "attention.sequence_reduction.sequence_reduction"),
+            WeightRenaming("attention.self.layer_norm", "attention.sequence_reduction.layer_norm"),
+            WeightRenaming("attention.output.dense", "attention.o_proj"),
+            WeightRenaming("mlp.dense1", "mlp.fc1"),
+            WeightRenaming("mlp.dense2", "mlp.fc2"),
+            WeightRenaming("layer_norm_1", "layernorm_before"),
+            WeightRenaming("layer_norm_2", "layernorm_after"),
+        ],
+        "SegformerForSemanticSegmentation": [WeightRenaming("decode_head.linear_c", "decode_head.linear_projections")],
+        "swin": [
+            WeightRenaming("attention.self.query", "attention.q_proj"),
+            WeightRenaming("attention.self.key", "attention.k_proj"),
+            WeightRenaming("attention.self.value", "attention.v_proj"),
+            WeightRenaming(
+                "attention.self.relative_position_bias_table",
+                "attention.relative_position_bias.relative_position_bias_table",
+            ),
+            WeightRenaming("attention.output.dense", "attention.o_proj"),
+            WeightRenaming("intermediate.dense", "mlp.fc1"),
+            WeightRenaming("output.dense", "mlp.fc2"),
+        ],
+        "SwinBackbone": [
+            WeightRenaming(r"^encoder\.", "swin.encoder."),
+            WeightRenaming(r"^embeddings\.", "swin.embeddings."),
+        ],
         "altclip": [
             WeightRenaming(source_patterns=r"layer\.", target_patterns="layers."),
         ],
@@ -286,12 +402,12 @@ def _build_checkpoint_conversion_mapping():
                     "mlp.experts.*.w1.weight",
                     "mlp.experts.*.w3.weight",
                 ],
-                target_patterns="mlp.experts.gate_up_proj",
+                target_patterns="mlp.experts.gate_up_proj$",
                 operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
             ),
             WeightConverter(
                 source_patterns="mlp.experts.*.w2.weight",
-                target_patterns="mlp.experts.down_proj",
+                target_patterns="mlp.experts.down_proj$",
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
@@ -548,6 +664,17 @@ def _build_checkpoint_conversion_mapping():
                 operations=[ErnieFuseAndSplitTextVisionExperts(stack_dim=0, concat_dim=1)],
             ),
         ],
+        # MaskFormer embeds both a Swin backbone (model_type="swin") and a DETR decoder
+        # (model_type="detr") as submodules. Both get their mappings collected automatically, but
+        # the Swin reverse mapping "mlp.fc1 → intermediate.dense" would corrupt DETR decoder keys
+        # if it runs before the DETR reverse "layers.N.mlp.fc1 → layers.N.fc1".
+        # By adding a "maskformer"-level mapping with the DETR fc1 rename, it is collected first
+        # (model-level before submodule-level), so its reverse runs first and removes "mlp.fc1"
+        # from DETR decoder paths before the Swin reverse can match them.
+        "maskformer": [
+            WeightRenaming(r"layers.(\d+).fc1", r"layers.\1.mlp.fc1"),
+            WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.fc2"),
+        ],
         "DetrModel": [
             WeightRenaming("backbone.conv_encoder", "backbone"),
             WeightRenaming("out_proj", "o_proj"),
@@ -559,6 +686,68 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"layers.(\d+).fc1", r"layers.\1.mlp.fc1"),
             WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.fc2"),
             WeightRenaming(r"encoder.encoder.(\d+).layers", r"encoder.aifi.\1.layers"),
+        ],
+        "RfDetrModel": [
+            # RfDetrConvEncoder — backbone checkpoint layout + projector stages
+            WeightRenaming(r"backbone.0.encoder.encoder", r"backbone.backbone"),
+            WeightRenaming(r"backbone.0.projector", r"backbone.projector"),
+            WeightRenaming(r"projector.stages.0.0.cv1.conv", r"projector.projector_layer.conv1.conv"),
+            WeightRenaming(r"projector.stages.0.0.cv1.bn", r"projector.projector_layer.conv1.norm"),
+            WeightRenaming(r"projector.stages.0.0.cv2.conv", r"projector.projector_layer.conv2.conv"),
+            WeightRenaming(r"projector.stages.0.0.cv2.bn", r"projector.projector_layer.conv2.norm"),
+            WeightRenaming(r"projector.stages.0.1", r"projector.layer_norm"),
+            WeightRenaming(
+                r"projector.stages.0.0.m.(\d+).cv1.conv", r"projector.projector_layer.bottlenecks.\1.conv1.conv"
+            ),
+            WeightRenaming(
+                r"projector.stages.0.0.m.(\d+).cv1.bn", r"projector.projector_layer.bottlenecks.\1.conv1.norm"
+            ),
+            WeightRenaming(
+                r"projector.stages.0.0.m.(\d+).cv2.conv", r"projector.projector_layer.bottlenecks.\1.conv2.conv"
+            ),
+            WeightRenaming(
+                r"projector.stages.0.0.m.(\d+).cv2.bn", r"projector.projector_layer.bottlenecks.\1.conv2.norm"
+            ),
+            # RfDetrDecoder
+            WeightRenaming(r"transformer.decoder", r"decoder"),
+            WeightRenaming(r"decoder.layers.(\d+).norm1", r"decoder.layers.\1.self_attn_layer_norm"),
+            WeightRenaming(r"decoder.layers.(\d+).norm2", r"decoder.layers.\1.cross_attn_layer_norm"),
+            WeightRenaming(r"decoder.layers.(\d+).linear1", r"decoder.layers.\1.mlp.fc1"),
+            WeightRenaming(r"decoder.layers.(\d+).linear2", r"decoder.layers.\1.mlp.fc2"),
+            WeightRenaming(r"decoder.layers.(\d+).norm3", r"decoder.layers.\1.layer_norm"),
+            WeightRenaming(r"decoder.norm", r"decoder.layernorm"),
+            WeightRenaming(r"^transformer\.enc_output_norm", r"enc_output_norm"),
+            WeightRenaming(r"^transformer\.enc_output", r"enc_output"),
+            WeightRenaming(r"transformer.enc_out_class_embed", r"enc_out_class_embed"),
+            WeightRenaming(r"transformer.enc_out_bbox_embed", r"enc_out_bbox_embed"),
+            WeightRenaming(r"refpoint_embed\.weight", r"reference_point_embed.weight"),
+            # RfDetrAttention
+            WeightRenaming(r"self_attn.out_proj", r"self_attn.o_proj"),
+            WeightConverter(
+                source_patterns=r"self_attn.in_proj_bias",
+                target_patterns=[r"self_attn.q_proj.bias", r"self_attn.k_proj.bias", r"self_attn.v_proj.bias"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=r"self_attn.in_proj_weight",
+                target_patterns=[r"self_attn.q_proj.weight", r"self_attn.k_proj.weight", r"self_attn.v_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+        ],
+        "RfDetrForObjectDetection": [
+            WeightRenaming(source_patterns="^", target_patterns="model."),
+        ],
+        "RfDetrForInstanceSegmentation": [
+            WeightRenaming(source_patterns="^(?!segmentation_head)", target_patterns="model."),
+            WeightRenaming(r"segmentation_head\.query_features_block\.layers\.0", r"query_features_block.mlp.fc1"),
+            WeightRenaming(r"segmentation_head\.query_features_block\.layers\.2", r"query_features_block.mlp.fc2"),
+            WeightRenaming(r"segmentation_head\.query_features_block\.norm_in", r"query_features_block.norm"),
+            WeightRenaming(r"segmentation_head\.blocks\.(\d+)\.norm", r"blocks.\1.layernorm"),
+            WeightRenaming(r"segmentation_head\.blocks\.(\d+)\.dwconv", r"blocks.\1.depthwise_conv"),
+            WeightRenaming(r"segmentation_head\.blocks\.(\d+)\.pwconv1", r"blocks.\1.pointwise_conv"),
+            WeightRenaming(r"segmentation_head\.spatial_features_proj", r"spatial_features_proj"),
+            WeightRenaming(r"segmentation_head\.query_features_proj", r"query_features_proj"),
+            WeightRenaming(r"segmentation_head\.bias", r"segmentation_bias"),
         ],
         "ConditionalDetrModel": [
             WeightRenaming("backbone.conv_encoder", "backbone"),
@@ -774,6 +963,20 @@ def _build_checkpoint_conversion_mapping():
     mapping["ernie4_5_moe"] += [
         WeightRenaming("mlp.moe_statics.e_score_correction_bias", "mlp.gate.moe_statics.e_score_correction_bias")
     ]
+    mapping["BeitModel"] = mapping["ViTModel"].copy() + [
+        WeightRenaming("encoder.relative_position_bias", "shared_position_bias"),
+        WeightRenaming(
+            "attention.attention.relative_position_bias.relative_position_bias_table",
+            "relative_position_bias.relative_position_bias_table",
+        ),
+    ]
+
+    mapping["pixio"] = mapping["ViTModel"].copy()
+    mapping["pixio"] += [
+        WeightRenaming("norm1", "layernorm_before"),
+        WeightRenaming("norm2", "layernorm_after"),
+        WeightRenaming(r"^encoder\.", "pixio."),
+    ]
 
     mapping["minimax_m2"] = mapping["mixtral"].copy()
     mapping["minimax_m2"] += [
@@ -876,6 +1079,8 @@ def get_model_conversion_mapping(
     seen to prevent `XForY` / `XModel` pairs from applying the same mapping
     twice via different lookup paths.
     """
+    from .modeling_utils import PreTrainedModel
+
     # note: this function is used in PEFT, so changing the API requires coordination
     weight_conversions = []
 
@@ -891,8 +1096,11 @@ def get_model_conversion_mapping(
     # prevents a parent's transforms from being duplicated with a scoped copy for the child.
     seen_identifiers: defaultdict[str, list[str]] = defaultdict(list)
 
-    named_pretrained = model._named_pretrained_submodules
-    for module_name, submodule in named_pretrained:
+    for module_name, submodule in model.named_modules():
+        # Skip if it's not a submodel
+        if not isinstance(submodule, PreTrainedModel):
+            continue
+
         class_name = type(submodule).__name__
         model_type = submodule.config.model_type
 

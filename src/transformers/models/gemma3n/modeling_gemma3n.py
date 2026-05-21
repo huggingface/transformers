@@ -19,6 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
+from collections import UserDict
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Optional
@@ -1747,8 +1748,10 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
         for layer_type in set(self.config.layer_types):
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
-        # Initialize as empty dict - it will be filled in the right layers
-        shared_kv_states = {}
+        # Initialize as empty dict - it will be filled in the right layers. We use a UserDict instead of built-in dict (it behaves
+        # the same) for fsdp2 support (otherwise, `_apply_to_tensors` rebuilds every dict it recurses into, and `shared_kv_states`
+        # is not correctly shared, see https://github.com/pytorch/pytorch/blob/v2.10.0/torch/distributed/utils.py#L223-L255)
+        shared_kv_states = UserDict()
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             causal_mask = causal_mask_mapping[self.config.layer_types[i]]
@@ -1824,8 +1827,10 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
 @auto_docstring(custom_intro="The base Gemma 3n language model with a language modeling head.")
 class Gemma3nForCausalLM(Gemma3nPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _tp_plan = {"lm_head": "colwise_allgather"}
+    _sp_plan = {"lm_head": "colwise_loss_parallel"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
     config: Gemma3nTextConfig
 
     def __init__(self, config: Gemma3nTextConfig):
@@ -1833,10 +1838,6 @@ class Gemma3nForCausalLM(Gemma3nPreTrainedModel, GenerationMixin):
         self.model = Gemma3nTextModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        # Grab the ones from the child
-        self._keys_to_ignore_on_load_unexpected = [
-            f"model.{name}" for name in self.model._keys_to_ignore_on_load_unexpected
-        ]
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1976,18 +1977,7 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
         self.audio_tower = AutoModel.from_config(config.audio_config)
         self.embed_vision = Gemma3nMultimodalEmbedder(config.vision_config, config.text_config)
         self.embed_audio = Gemma3nMultimodalEmbedder(config.audio_config, config.text_config)
-
-        # Grab the ones from the child
-        self._keys_to_ignore_on_load_unexpected = [
-            f"language_model.{name}" for name in self.language_model._keys_to_ignore_on_load_unexpected
-        ]
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
@@ -2235,10 +2225,6 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.model = Gemma3nModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        # Grab the ones from the child
-        self._keys_to_ignore_on_load_unexpected = [
-            f"model.{name}" for name in self.model._keys_to_ignore_on_load_unexpected
-        ]
         self.post_init()
 
     @auto_docstring

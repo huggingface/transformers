@@ -40,11 +40,11 @@ Checkpoint File → from_pretrained() → convert_and_load_state_dict_in_model()
                          │  1. Match renamed/processed source key to model parameter │
                          │  2. Shard the weight and send to device (async)           │
                          │  3. Collect tensors with the same source_pattern together │
-                         │     (e.g. MoE experts, gate_up_proj)                     │
+                         │     (e.g. MoE experts, gate_up_proj)                      │
                          │  4. Apply dequantization/deserialization (if pre-quant)   │
-                         │  5. Apply conversion (if defined)                        │
-                         │  6. Apply quantization (if enabled and step 4 not used)  │
-                         │  7. Set parameter on model                               │
+                         │  5. Apply conversion (if defined)                         │
+                         │  6. Apply quantization (if enabled and step 4 not used)   │
+                         │  7. Set parameter on model                                │
                          └───────────────────────────────────────────────────────────┘
 ```
 
@@ -134,7 +134,7 @@ The base class that handles pattern matching and tensor collection:
 
 ### WeightRenaming
 
-[`WeightRenaming`] is a specialized [`WeightTransform`] for pure key renames without tensor operations. Unlike [`WeightConverter`], a `WeightRenaming` does not **claim** the key (it does not occupy the "at most one converter per key" slot), so multiple renames may chain freely both before and after a [`WeightConverter`] has fired.
+[`WeightRenaming`] is a specialized [`WeightTransform`] for pure key renames without tensor operations. Unlike [`WeightConverter`], a `WeightRenaming` does not **claim** the key, so multiple renames may chain freely. On the load path all renames run before the converter; on the save path (inverted list) all inverted renames run after the inverted converter — see ordering rule above.
 
 ```py
 # Legacy checkpoint compatibility

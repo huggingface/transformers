@@ -1,4 +1,4 @@
-FROM rocm/pytorch:rocm7.1_ubuntu22.04_py3.10_pytorch_release_2.8.0
+FROM rocm/pytorch:rocm7.2.2_ubuntu22.04_py3.10_pytorch_release_2.10.0
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -45,16 +45,15 @@ RUN python3 -m pip uninstall py3nvml pynvml nvidia-ml-py apex -y
 # `kernels` may causes many failing tests
 RUN python3 -m pip uninstall -y kernels
 
-# On ROCm, torchcodec is required to decode audio files and 0.4 or 0.6 fails
-RUN python3 -m pip install --no-cache-dir "torchcodec==0.7"
+# On ROCm, torchcodec is required to decode audio files. 0.10 matches the
+# torch 2.10 C++ ABI in the base image above;
+RUN python3 -m pip install --no-cache-dir "torchcodec==0.10"
 
-# Install flash attention from source. Pinned to commit 6387433156558135a998d5568a9d74c1778666d8
-# to avoid compilation time exceeding the 6h GitHub Actions job limit.
-RUN git clone https://github.com/ROCm/flash-attention/ -b tridao && \
-    cd flash-attention && \
-    git checkout 6387433156558135a998d5568a9d74c1778666d8 && \
-    GPU_ARCHS="gfx942" python setup.py install
-# GPU_ARCHS builds for MI300, MI325 but not MI355: we would need to add `;gfx950` but it takes too long to build.
+# Install pre-built flash-attention wheel from AMD's mirror. Wheel is pinned
+# to the (ROCm, Ubuntu, Python, torch) ABI of the base image above; bumping
+# the base image generally requires a matching wheel from AMD.
+RUN python3 -m pip install --no-cache-dir \
+    https://rocm.frameworks-devreleases.amd.com/whl/gfx942-gfx950/flash_attn-2.8.3-cp310-cp310-linux_x86_64.whl
 
 RUN python3 -m pip install --no-cache-dir einops blobfile num2words
 
