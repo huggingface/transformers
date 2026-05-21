@@ -329,6 +329,15 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def setUp(self):
         self.model_tester = Sapiens2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Sapiens2Config, has_text_modality=False, hidden_size=32)
+        # The decoder heads contain ConvTranspose2d layers which are non-deterministic on CUDA.
+        # This non-deterministic behavior is amplified by the InstanceNorm2d layers and results in up
+        # to 6e-3 output differences with identical head inputs. We set cudnn.deterministic = True
+        # for test stability.
+        self._original_cudnn_deterministic = torch.backends.cudnn.deterministic
+        torch.backends.cudnn.deterministic = True
+
+    def tearDown(self):
+        torch.backends.cudnn.deterministic = self._original_cudnn_deterministic
 
     def test_backbone(self):
         config, pixel_values, labels = self.model_tester.prepare_config_and_inputs()
@@ -530,6 +539,17 @@ def prepare_img():
 @require_torch
 @require_vision
 class Sapiens2ModelIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        # The decoder heads contain ConvTranspose2d layers which are non-deterministic on CUDA.
+        # This non-deterministic behavior is amplified by the InstanceNorm2d layers and results in up
+        # to 6e-3 output differences with identical head inputs. We set cudnn.deterministic = True
+        # for test stability.
+        self._original_cudnn_deterministic = torch.backends.cudnn.deterministic
+        torch.backends.cudnn.deterministic = True
+
+    def tearDown(self):
+        torch.backends.cudnn.deterministic = self._original_cudnn_deterministic
+
     @cached_property
     def default_image_processor(self):
         # TODO(guarin): switch to AutoImageProcessor once it works properly
