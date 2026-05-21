@@ -89,41 +89,6 @@ print("CLS token shape:", cls_token.shape)           # [1, 1024]
 print("Patch features shape:", patch_features.shape) # [1, H/patch, W/patch, 1024]
 ```
 
-### Semantic segmentation
-
-The example below shows how to perform body-part segmentation with [`Sapiens2ForSemanticSegmentation`].
-The segmentation checkpoints use 29 body-part labels and are named `sapiens2_0.4b_seg.safetensors`
-rather than `model.safetensors`, so `transformers_weights` must be set on the config.
-
-```python
-import torch
-from transformers import Sapiens2Config, Sapiens2ImageProcessor, Sapiens2ForSemanticSegmentation
-from transformers.image_utils import load_image
-
-url = "http://images.cocodataset.org/val2017/000000004016.jpg"
-image = load_image(url)
-
-image_processor = Sapiens2ImageProcessor()
-
-config = Sapiens2Config(num_labels=29)
-config.transformers_weights = "sapiens2_0.4b_seg.safetensors"
-model = Sapiens2ForSemanticSegmentation.from_pretrained("facebook/sapiens2-seg-0.4b", config=config)
-
-inputs = image_processor(image, return_tensors="pt")
-with torch.inference_mode():
-    outputs = model(**inputs)
-
-# outputs.logits shape: (batch_size, num_labels, height, width)
-print("Logits shape:", outputs.logits.shape)  # [1, 29, 1024, 768]
-
-# Get per-pixel class predictions, optionally resized to the original image size
-original_size = (image.height, image.width)
-segmentation = image_processor.post_process_semantic_segmentation(
-    outputs, target_sizes=[original_size]
-)[0]
-print("Segmentation map shape:", segmentation.shape)  # [original_height, original_width]
-```
-
 ### Normal estimation
 
 The example below shows how to estimate surface normals with [`Sapiens2ForNormalEstimation`].
@@ -160,6 +125,115 @@ normal_maps = image_processor.post_process_normal_estimation(
 print("Normal map shape:", normal_maps.shape)   # [3, original_height, original_width]
 ```
 
+### Pointmap estimation
+
+The example below shows how to estimate per-pixel 3D coordinates with [`Sapiens2ForPointmapEstimation`].
+The pointmap checkpoints are named `sapiens2_0.4b_pointmap.safetensors`, so `transformers_weights`
+must be set on the config. Use `post_process_pointmap` to remove preprocessing padding, resize to the
+original image size, and apply the predicted focal-length scale.
+
+```python
+import torch
+from transformers import Sapiens2Config, Sapiens2ImageProcessor, Sapiens2ForPointmapEstimation
+from transformers.image_utils import load_image
+
+url = "http://images.cocodataset.org/val2017/000000004016.jpg"
+image = load_image(url)
+
+image_processor = Sapiens2ImageProcessor()
+
+config = Sapiens2Config(num_labels=3)
+config.transformers_weights = "sapiens2_0.4b_pointmap.safetensors"
+model = Sapiens2ForPointmapEstimation.from_pretrained("facebook/sapiens2-pointmap-0.4b", config=config)
+
+inputs = image_processor(image, return_tensors="pt")
+with torch.inference_mode():
+    outputs = model(**inputs)
+
+# outputs.pointmaps shape: (batch_size, 3, height, width) — raw XYZ in canonical camera space
+print("Pointmaps shape:", outputs.pointmaps.shape)  # [1, 3, 1024, 768]
+
+# Remove preprocessing padding, resize to original size, and apply focal-length scale
+original_size = (image.height, image.width)
+pointmaps = image_processor.post_process_pointmap(
+    outputs, source_sizes=[original_size], target_sizes=[original_size]
+)[0]
+print("Pointmap shape:", pointmaps.shape)  # [3, original_height, original_width]
+```
+
+### Pose estimation
+
+The example below shows how to run pose estimation with [`Sapiens2ForPoseEstimation`].
+The pose estimation checkpoints are named `sapiens2_0.4b_pose.safetensors`, so `transformers_weights`
+must be set on the config. The model predicts per-keypoint heatmaps; use
+`post_process_pose_estimation` to decode them back to image-space keypoint coordinates. It requires
+`opencv-python` (`pip install opencv-python`).
+
+```python
+import torch
+from transformers import Sapiens2Config, Sapiens2ImageProcessor, Sapiens2ForPoseEstimation
+from transformers.image_utils import load_image
+
+url = "http://images.cocodataset.org/val2017/000000004016.jpg"
+image = load_image(url)
+
+image_processor = Sapiens2ImageProcessor()
+
+config = Sapiens2Config(num_labels=308)
+config.transformers_weights = "sapiens2_0.4b_pose.safetensors"
+model = Sapiens2ForPoseEstimation.from_pretrained("facebook/sapiens2-pose-0.4b", config=config)
+
+# Provide bounding boxes in COCO format (x, y, width, height) for each person
+boxes = [[[270.8, 0.6, 294.1, 379.5]]]
+inputs = image_processor(image, boxes=boxes, return_tensors="pt")
+with torch.inference_mode():
+    outputs = model(**inputs)
+
+# outputs.heatmaps shape: (num_persons, num_keypoints, heatmap_height, heatmap_width)
+print("Heatmaps shape:", outputs.heatmaps.shape)  # [1, 308, 256, 192]
+
+# Decode heatmaps to image-space keypoint coordinates
+results = image_processor.post_process_pose_estimation(outputs, boxes=boxes)[0]
+keypoints = results[0]["keypoints"]   # (num_keypoints, 2) — x/y in image coordinates
+scores = results[0]["scores"]         # (num_keypoints,) — per-keypoint confidence
+print("Keypoints shape:", keypoints.shape)
+```
+
+### Semantic segmentation
+
+The example below shows how to perform body-part segmentation with [`Sapiens2ForSemanticSegmentation`].
+The segmentation checkpoints use 29 body-part labels and are named `sapiens2_0.4b_seg.safetensors`
+rather than `model.safetensors`, so `transformers_weights` must be set on the config.
+
+```python
+import torch
+from transformers import Sapiens2Config, Sapiens2ImageProcessor, Sapiens2ForSemanticSegmentation
+from transformers.image_utils import load_image
+
+url = "http://images.cocodataset.org/val2017/000000004016.jpg"
+image = load_image(url)
+
+image_processor = Sapiens2ImageProcessor()
+
+config = Sapiens2Config(num_labels=29)
+config.transformers_weights = "sapiens2_0.4b_seg.safetensors"
+model = Sapiens2ForSemanticSegmentation.from_pretrained("facebook/sapiens2-seg-0.4b", config=config)
+
+inputs = image_processor(image, return_tensors="pt")
+with torch.inference_mode():
+    outputs = model(**inputs)
+
+# outputs.logits shape: (batch_size, num_labels, height, width)
+print("Logits shape:", outputs.logits.shape)  # [1, 29, 1024, 768]
+
+# Get per-pixel class predictions, optionally resized to the original image size
+original_size = (image.height, image.width)
+segmentation = image_processor.post_process_semantic_segmentation(
+    outputs, target_sizes=[original_size]
+)[0]
+print("Segmentation map shape:", segmentation.shape)  # [original_height, original_width]
+```
+
 ### Matting
 
 The example below shows how to run image matting with [`Sapiens2ForMatting`].
@@ -190,11 +264,23 @@ original_size = (image.height, image.width)
 result = image_processor.post_process_matting(outputs, target_sizes=[original_size])[0]
 print("Alpha shape:", result["alpha"].shape)        # [1, original_height, original_width]
 print("Foreground shape:", result["foreground"].shape)  # [3, original_height, original_width]
+
+# Combine foreground and alpha with a green background image for final matting result
+foreground = result["foreground"]  # (3, H, W)
+alpha = result["alpha"]            # (1, H, W)
+background = torch.tensor([0, 177 / 255, 64 / 255]).view(3, 1, 1)  # chroma green in RGB
+composite = foreground + (1 - alpha) * background  # (3, H, W)
+composite = composite.clamp(0, 1)
 ```
 
 ## Sapiens2Config
 
 [[autodoc]] Sapiens2Config
+
+## Sapiens2ImageProcessor
+
+[[autodoc]] Sapiens2ImageProcessor
+    - preprocess
 
 ## Sapiens2Model
 
@@ -206,9 +292,9 @@ print("Foreground shape:", result["foreground"].shape)  # [3, original_height, o
 [[autodoc]] Sapiens2Backbone
     - forward
 
-## Sapiens2ForSemanticSegmentation
+## Sapiens2ForMatting
 
-[[autodoc]] Sapiens2ForSemanticSegmentation
+[[autodoc]] Sapiens2ForMatting
     - forward
 
 ## Sapiens2ForNormalEstimation
@@ -216,12 +302,17 @@ print("Foreground shape:", result["foreground"].shape)  # [3, original_height, o
 [[autodoc]] Sapiens2ForNormalEstimation
     - forward
 
-## Sapiens2ForMatting
+## Sapiens2ForPointmapEstimation
 
-[[autodoc]] Sapiens2ForMatting
+[[autodoc]] Sapiens2ForPointmapEstimation
     - forward
 
-## Sapiens2ImageProcessor
+## Sapiens2ForPoseEstimation
 
-[[autodoc]] Sapiens2ImageProcessor
-    - preprocess
+[[autodoc]] Sapiens2ForPoseEstimation
+    - forward
+
+## Sapiens2ForSemanticSegmentation
+
+[[autodoc]] Sapiens2ForSemanticSegmentation
+    - forward
