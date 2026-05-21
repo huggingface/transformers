@@ -43,7 +43,6 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     TensorType,
     TransformersKwargs,
@@ -54,7 +53,7 @@ from ...utils import (
 )
 from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BaseVideoProcessor
-from ...video_utils import VideoInput, VideoMetadata
+from ...video_utils import VideoMetadata
 from ..cohere2_vision.image_processing_cohere2_vision import get_optimal_tiled_canvas
 from ..gemma3.modeling_gemma3 import get_block_sequence_ids_for_mask
 from ..llama.modeling_llama import (
@@ -335,7 +334,6 @@ class Molmo2ImageProcessor(TorchvisionBackend):
     ) -> ImageInput:
         images = self.fetch_images(images)
         return make_nested_list_of_images(images, expected_ndims=expected_ndims)
-
 
     @auto_docstring
     def preprocess(
@@ -631,7 +629,16 @@ class Molmo2Processor(ProcessorMixin):
     valid_processor_kwargs = Molmo2ProcessorKwargs
     image_token = "<|image|>"
     video_token = "<|video|>"
-    image_patch_tokens = ("<im_patch>", "<im_col>", "<im_start>", "<low_res_im_start>", "<frame_start>", "<im_end>", "<frame_end>", "<im_low>")
+    image_patch_tokens = (
+        "<im_patch>",
+        "<im_col>",
+        "<im_start>",
+        "<low_res_im_start>",
+        "<frame_start>",
+        "<im_end>",
+        "<frame_end>",
+        "<im_low>",
+    )
 
     @property
     def model_input_names(self):
