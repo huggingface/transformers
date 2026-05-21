@@ -377,13 +377,13 @@ class Molmo2VisionModel(PreTrainedModel):
 class Molmo2ImageProjectorMLP(nn.Module):
     def __init__(self, config: Molmo2AdapterConfig):
         super().__init__()
-        self.w1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
-        self.w2 = nn.Linear(config.intermediate_size, config.text_hidden_size, bias=False)
-        self.w3 = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
-        self.act = ACT2FN[config.hidden_act]
+        self.gate_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(config.intermediate_size, config.text_hidden_size, bias=False)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.w2(self.act(self.w1(x)) * self.w3(x))
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
 
 
 class Molmo2VisionBackbone(PreTrainedModel):
@@ -668,16 +668,15 @@ class Molmo2Attention(nn.Module):
 class Molmo2MLP(nn.Module):
     def __init__(self, input_dim: int, intermediate_size: int, hidden_act: str):
         super().__init__()
-        self.ff_proj = nn.Linear(input_dim, intermediate_size * 2, bias=False)
-        self.ff_out = nn.Linear(intermediate_size, input_dim, bias=False)
-        self.act = ACT2FN[hidden_act]
+        self.gate_up_proj = nn.Linear(input_dim, intermediate_size * 2, bias=False)
+        self.down_proj = nn.Linear(intermediate_size, input_dim, bias=False)
+        self.activation_fn = ACT2FN[hidden_act]
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.ff_proj(x)
-        x, gate = x.chunk(2, dim=-1)
-        x = self.act(gate) * x
-        x = self.ff_out(x)
-        return x
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.gate_up_proj(hidden_states)
+        up_states, gate = hidden_states.chunk(2, dim=-1)
+        hidden_states = self.activation_fn(gate) * up_states
+        return self.down_proj(hidden_states)
 
 
 class Molmo2DecoderLayer(GradientCheckpointingLayer):
@@ -772,8 +771,8 @@ class Molmo2Embedding(nn.Module):
         self.embedding = nn.Parameter(torch.zeros(num_embeddings, features))
         self.new_embedding = nn.Parameter(torch.zeros(num_new_embeddings, features))
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return F.embedding(x, torch.cat([self.embedding, self.new_embedding], dim=0))
+    def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
+        return F.embedding(input_ids, torch.cat([self.embedding, self.new_embedding], dim=0))
 
 
 @auto_docstring
@@ -801,34 +800,13 @@ class Molmo2PreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         std = self.config.initializer_range
-        if isinstance(module, (nn.Linear,)):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, Molmo2Embedding):
+        if isinstance(module, Molmo2Embedding):
             init.normal_(module.embedding, mean=0.0, std=std)
             init.normal_(module.new_embedding, mean=0.0, std=std)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.padding_idx is not None:
-                init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, Molmo2RMSNorm):
-            init.ones_(module.weight)
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            if module.bias is not None:
-                init.zeros_(module.bias)
         elif isinstance(module, Molmo2VisionModel):
             init.normal_(module.positional_embedding, mean=0.0, std=std)
-        elif isinstance(module, Molmo2RotaryEmbedding):
-            rope_fn = (
-                ROPE_INIT_FUNCTIONS[module.rope_type]
-                if module.rope_type != "default"
-                else module.compute_default_rope_parameters
-            )
-            buffer_value, _ = rope_fn(module.config)
-            init.copy_(module.inv_freq, buffer_value)
-            init.copy_(module.original_inv_freq, buffer_value)
+        else:
+            super()._init_weights(module)
 
 
 class Molmo2TextModel(Molmo2PreTrainedModel):
