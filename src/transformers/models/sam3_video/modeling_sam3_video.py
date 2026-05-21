@@ -592,7 +592,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
                     input_ids=inference_session.prompt_input_ids[prompt_id],
                     attention_mask=inference_session.prompt_attention_masks[prompt_id],
                     return_dict=True,
-                ).pooler_output
+                )
                 inference_session.prompt_embeddings[prompt_id] = text_embeds
             else:
                 text_embeds = inference_session.prompt_embeddings[prompt_id]

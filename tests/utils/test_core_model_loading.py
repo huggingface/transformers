@@ -17,6 +17,7 @@ from types import SimpleNamespace
 
 import torch
 import torch.nn as nn
+from torch.distributed.tensor.placement_types import Shard
 
 from transformers import PretrainedConfig, PreTrainedModel
 from transformers.conversion_mapping import (
@@ -39,11 +40,13 @@ from transformers.core_model_loading import (
     convert_and_load_state_dict_in_model,
     rename_source_key,
     revert_weight_conversion,
+    spawn_materialize,
 )
 from transformers.modeling_utils import LoadStateDictConfig
 from transformers.utils.import_utils import is_triton_available
 
 from ..test_modeling_common import compare_state_dicts
+from .test_distributed_sharding_utils import FakeMesh, _make_dtensor_shard_op
 
 
 class TestWeightGlobMatching(unittest.TestCase):
@@ -225,6 +228,99 @@ class DummyRoot(PreTrainedModel):
 
 
 class TestConvertAndLoadStateDict(unittest.TestCase):
+    def test_dtensor_shard_aware_mixtral_conversion_uses_only_local_experts(self):
+        """Integration test: FSDP-sharded expert loading + WeightConverter.
+
+        The problem: Mixtral has 8 experts. The checkpoint stores them separately::
+
+            experts.0.w1.weight  (2x2)
+            experts.0.w3.weight  (2x2)
+            experts.1.w1.weight  (2x2)
+            experts.1.w3.weight  (2x2)
+
+        The model stores them packed into one tensor::
+
+            experts.gate_up_proj.weight  (2, 4, 2)
+                                          ^  ^  ^
+                                          |  |  +-- features
+                                          |  +-- w1 (2) + w3 (2) concatenated
+                                          +-- num_experts
+
+        The conversion (without FSDP) is: load all expert w1/w3 tensors,
+        MergeModulelist(dim=0) stacks experts, Concatenate(dim=1) joins w1+w3.
+
+        With FSDP, Shard(0) splits the expert dim across ranks. Rank 0 owns
+        expert 0, rank 1 owns expert 1. So rank 0 should skip loading expert 1
+        entirely -- not load it then discard it.
+
+        What the test checks::
+
+            checkpoint files              shard_tensor              rank 0 gets
+            ----------------              ------------              -----------
+            experts.0.w1  [[0,1],[2,3]]   idx=0 -> kept            [[0,1],[2,3]]
+            experts.1.w1  [[10,11],...]   idx=1 -> None (not owned)
+            experts.0.w3  [[4,5],[6,7]]   idx=0 -> kept            [[4,5],[6,7]]
+            experts.1.w3  [[14,15],...]   idx=1 -> None (not owned)
+
+        WeightConverter then combines only the kept tensors::
+
+            MergeModulelist(dim=0): stack owned experts  -> shape (1, 2, 2) each
+            Concatenate(dim=1):     cat w1 + w3 along dim 1
+
+            gate_up_proj = [[[0,1],[2,3],[4,5],[6,7]]]   shape (1, 4, 2)
+                              ~~~~~~~~~~  ~~~~~~~~~~
+                                  w1          w3
+
+        The key point: DtensorShardOperation.shard_tensor(tensor_idx=1) returns
+        None for rank 0, so the converter never even processes expert 1's data.
+        This saves memory during loading.
+        """
+        shard_op = _make_dtensor_shard_op(
+            FakeMesh(shape=(2,), rank=0),
+            [Shard(0)],
+            param_shape=(2, 4, 2),
+            local_shape=(1, 4, 2),
+        )
+        converter = WeightConverter(
+            ["experts.*.w1.weight", "experts.*.w3.weight"],
+            "experts.gate_up_proj.weight",
+            operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+        )
+
+        for idx, tensor in enumerate(
+            [
+                torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
+                torch.tensor([[10.0, 11.0], [12.0, 13.0]]),
+            ]
+        ):
+            converter.add_tensor(
+                "model.layers.0.experts.gate_up_proj.weight",
+                f"model.layers.0.experts.{idx}.w1.weight",
+                "experts.*.w1.weight",
+                spawn_materialize(None, tensor, device="cpu", dtype=None, sharding_op=shard_op, tensor_idx=idx),
+            )
+
+        for idx, tensor in enumerate(
+            [
+                torch.tensor([[4.0, 5.0], [6.0, 7.0]]),
+                torch.tensor([[14.0, 15.0], [16.0, 17.0]]),
+            ]
+        ):
+            converter.add_tensor(
+                "model.layers.0.experts.gate_up_proj.weight",
+                f"model.layers.0.experts.{idx}.w3.weight",
+                "experts.*.w3.weight",
+                spawn_materialize(None, tensor, device="cpu", dtype=None, sharding_op=shard_op, tensor_idx=idx),
+            )
+
+        converted = converter.convert("model.layers.0.experts.gate_up_proj.weight")
+
+        self.assertEqual(list(converted), ["model.layers.0.experts.gate_up_proj.weight"])
+        torch.testing.assert_close(
+            converted["model.layers.0.experts.gate_up_proj.weight"],
+            torch.tensor([[[0.0, 1.0], [2.0, 3.0], [4.0, 5.0], [6.0, 7.0]]]),
+        )
+
     def test_moe_and_qkv_conversion(self):
         model = DummyRoot(PretrainedConfig())
 
@@ -509,11 +605,11 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
         model_state = model.state_dict()
         self.assertFalse(torch.allclose(raw_k, expected_k))
-        torch.testing.assert_close(model_state["model.layers.0.self_attn.k_proj.weight"], expected_k)
-        torch.testing.assert_close(model_state["model.layers.0.self_attn.v_proj.weight"], expected_v)
+        torch.testing.assert_close(model_state["layers.0.self_attn.k_proj.weight"], expected_k)
+        torch.testing.assert_close(model_state["layers.0.self_attn.v_proj.weight"], expected_v)
 
-        q_weight_key = "model.layers.0.self_attn.q_proj.weight"
-        scale_key = "model.layers.0.self_attn.q_proj.weight_scale_inv"
+        q_weight_key = "layers.0.self_attn.q_proj.weight"
+        scale_key = "layers.0.self_attn.q_proj.weight_scale_inv"
         self.assertIn(scale_key, model_state)
         expected_dtype = torch.float8_e4m3fn if hasattr(torch, "float8_e4m3fn") else torch.int8
         self.assertEqual(model_state[q_weight_key].dtype, expected_dtype)
@@ -524,11 +620,14 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             torch.Size((out_dim // block_size[0], in_dim // block_size[1])),
         )
 
-        dequant = Fp8Dequantize(block_size=block_size)
+        dequant = Fp8Dequantize(quantizer)
         dequantized_q = dequant.convert(
-            [model_state[q_weight_key], model_state[scale_key]],
-            context={"quantization_config": quantizer.quantization_config},
-        )
+            {
+                "weight$": [model_state[q_weight_key]],
+                "weight_scale_inv": [model_state[scale_key]],
+            },
+            full_layer_name=q_weight_key,
+        )[q_weight_key]
         torch.testing.assert_close(dequantized_q, expected_q, rtol=1e-2, atol=1e-2)
 
     def test_scoped_renaming_does_not_leak_to_sibling_or_parent(self):
@@ -1161,20 +1260,20 @@ class TestConversionMapping(unittest.TestCase):
             "_tst_mtype", [WeightRenaming(r"^type_key", "type_renamed")], overwrite=True
         )
 
-        def make_mock(class_name):
-            m = type(class_name, (), {})()
-            m.config = SimpleNamespace(model_type="_tst_mtype")
-            m._named_pretrained_submodules = [("", m)]
-            return m
+        class _TstCls(PreTrainedModel): ...
+
+        class _TstOther(PreTrainedModel): ...
 
         # A module whose class name has a registry entry → class entry wins.
-        transforms = get_model_conversion_mapping(make_mock("_TstCls"), add_legacy=False)
+        transforms = get_model_conversion_mapping(_TstCls(PretrainedConfig(model_type="_tst_mtype")), add_legacy=False)
         patterns = [t.source_patterns for t in transforms]
         self.assertIn(["^cls_key"], patterns)
         self.assertNotIn(["^type_key"], patterns)
 
         # A module with no class entry falls through to the model_type entry.
-        transforms = get_model_conversion_mapping(make_mock("_TstOther"), add_legacy=False)
+        transforms = get_model_conversion_mapping(
+            _TstOther(PretrainedConfig(model_type="_tst_mtype")), add_legacy=False
+        )
         patterns = [t.source_patterns for t in transforms]
         self.assertIn(["^type_key"], patterns)
         self.assertNotIn(["^cls_key"], patterns)
@@ -1190,22 +1289,19 @@ class TestConversionMapping(unittest.TestCase):
             "_tst_shared_type", [WeightRenaming(r"^w", "renamed_w")], overwrite=True
         )
 
-        def make_root_with_siblings(cls_a, cls_b):
-            """Root model with two children of different classes but the same model_type."""
-            child_a = type(cls_a, (), {})()
-            child_a.config = SimpleNamespace(model_type="_tst_shared_type")
+        class _TstEncCls(PreTrainedModel): ...
 
-            child_b = type(cls_b, (), {})()
-            child_b.config = SimpleNamespace(model_type="_tst_shared_type")
+        class _TstDecCls(PreTrainedModel): ...
 
-            root = type("_TstRoot", (), {})()
-            root.config = SimpleNamespace(model_type="_tst_root_only")
-            root._named_pretrained_submodules = [("encoder", child_a), ("decoder", child_b)]
-            return root
+        class _TstRoot(PreTrainedModel): ...
 
-        transforms = get_model_conversion_mapping(
-            make_root_with_siblings("_TstEncCls", "_TstDecCls"), add_legacy=False
-        )
+        child_a = _TstEncCls(PretrainedConfig(model_type="_tst_shared_type"))
+        child_b = _TstDecCls(PretrainedConfig(model_type="_tst_shared_type"))
+        root = _TstRoot(PretrainedConfig(model_type="_tst_root_only"))
+        root.encoder = child_a
+        root.decoder = child_b
+
+        transforms = get_model_conversion_mapping(root, add_legacy=False)
         scope_prefixes = [t.scope_prefix for t in transforms]
 
         # Both siblings must be represented with their own scoped transforms.
@@ -1216,15 +1312,15 @@ class TestConversionMapping(unittest.TestCase):
         """Two sibling sub-models of the *same* class must each get their own scoped transforms."""
         register_checkpoint_conversion_mapping("_TstSharedCls", [WeightRenaming(r"^w", "renamed_w")], overwrite=True)
 
-        child_a = type("_TstSharedCls", (), {})()
-        child_a.config = SimpleNamespace(model_type="_tst_shared_cls_mtype")
+        class _TstSharedCls(PreTrainedModel): ...
 
-        child_b = type("_TstSharedCls", (), {})()
-        child_b.config = SimpleNamespace(model_type="_tst_shared_cls_mtype")
+        class _TstRootSharedCls(PreTrainedModel): ...
 
-        root = type("_TstRootSharedCls", (), {})()
-        root.config = SimpleNamespace(model_type="_tst_root_only2")
-        root._named_pretrained_submodules = [("encoder", child_a), ("decoder", child_b)]
+        child_a = _TstSharedCls(PretrainedConfig(model_type="_tst_shared_cls_mtype"))
+        child_b = _TstSharedCls(PretrainedConfig(model_type="_tst_shared_cls_mtype"))
+        root = _TstRootSharedCls(PretrainedConfig(model_type="_tst_root_only2"))
+        root.encoder = child_a
+        root.decoder = child_b
 
         transforms = get_model_conversion_mapping(root, add_legacy=False)
         scope_prefixes = [t.scope_prefix for t in transforms]
@@ -1236,17 +1332,18 @@ class TestConversionMapping(unittest.TestCase):
         """When the root model claims a model_type unscoped, a nested child with the
         same model_type must NOT produce a second (incorrectly scoped) copy of those
         transforms — the root's unscoped transforms already cover all keys."""
+
+        class _TstChildSame(PreTrainedModel): ...
+
+        class _TstRootSame(PreTrainedModel): ...
+
         register_checkpoint_conversion_mapping(
             "_tst_root_child_shared", [WeightRenaming(r"^w", "renamed_w")], overwrite=True
         )
 
-        child = type("_TstChildSame", (), {})()
-        child.config = SimpleNamespace(model_type="_tst_root_child_shared")
-
-        root = type("_TstRootSame", (), {})()
-        root.config = SimpleNamespace(model_type="_tst_root_child_shared")
-        # Root ("") appears before child ("submodel") — mirrors DFS order.
-        root._named_pretrained_submodules = [("", root), ("submodel", child)]
+        child = _TstChildSame(PretrainedConfig(model_type="_tst_root_child_shared"))
+        root = _TstRootSame(PretrainedConfig(model_type="_tst_root_child_shared"))
+        root.submodel = child
 
         transforms = get_model_conversion_mapping(root, add_legacy=False)
         # Only one unscoped transform (from the root); child must be suppressed.
