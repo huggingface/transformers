@@ -125,6 +125,14 @@ class Sapiens2ModelTester:
             stage_names=["stem"] + [f"stage{i}" for i in range(1, self.num_hidden_layers + 1)],
             out_indices=[0, 1],
             reshape_hidden_states=True,
+            # pointmap estimation head config
+            head_upsample_out_channels=[8, 4],
+            head_upsample_kernel_sizes=[4, 4],
+            head_conv_out_channels=[4],
+            head_conv_kernel_sizes=[1],
+            head_scale_conv_out_channels=[8, 4],
+            head_scale_conv_kernel_sizes=[1, 1],
+            head_scale_final_hidden_sizes=[8],
         )
 
     # TODO(guarin): Check if multiple get_config methods is the best approach here.
