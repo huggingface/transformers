@@ -871,7 +871,22 @@ def get_checkpoint_shard_files(
 
     # First, let's deal with local folder.
     if os.path.isdir(pretrained_model_name_or_path):
-        shard_filenames = [os.path.join(pretrained_model_name_or_path, subfolder, f) for f in shard_filenames]
+        # `shard_filenames` come from the user-provided index file's `weight_map` values.
+        # Treat them as untrusted: reject path-traversal and absolute paths, and verify the
+        # resolved path stays inside the model directory. Legitimate shard filenames are
+        # flat names like `model-00001-of-00003.safetensors` and never need to escape the
+        # snapshot directory. See https://github.com/huggingface/transformers/issues/46097.
+        base_dir = os.path.realpath(os.path.join(pretrained_model_name_or_path, subfolder))
+        safe_shard_filenames = []
+        for f in shard_filenames:
+            resolved = os.path.realpath(os.path.join(base_dir, f))
+            if resolved != base_dir and not resolved.startswith(base_dir + os.sep):
+                raise OSError(
+                    f"Shard filename {f!r} in {index_filename} resolves outside the model "
+                    f"directory ({base_dir}). The checkpoint index may be malformed or malicious."
+                )
+            safe_shard_filenames.append(resolved)
+        shard_filenames = safe_shard_filenames
         return shard_filenames, sharded_metadata
 
     # At this stage pretrained_model_name_or_path is a model identifier on the Hub. Try to get everything from cache,

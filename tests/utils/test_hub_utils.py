@@ -22,6 +22,7 @@ from huggingface_hub import constants, hf_hub_download
 from huggingface_hub.errors import HfHubHTTPError, LocalEntryNotFoundError, OfflineModeIsEnabled
 
 from transformers.utils import CONFIG_NAME, WEIGHTS_NAME, cached_file, has_file, list_repo_templates
+from transformers.utils.hub import get_checkpoint_shard_files
 
 
 RANDOM_BERT = "hf-internal-testing/tiny-random-bert"
@@ -202,3 +203,106 @@ class OfflineModeTests(unittest.TestCase):
                 "transformers.utils.hub.snapshot_download", side_effect=LocalEntryNotFoundError("no snapshot found")
             ):
                 self.assertEqual(list_repo_templates(RANDOM_BERT, local_files_only=False), [])
+
+
+class GetCheckpointShardFilesPathTraversalTest(unittest.TestCase):
+    """Tests that ``get_checkpoint_shard_files`` rejects shard filenames that
+    resolve outside the model directory, preventing arbitrary file reads via
+    a crafted index file (CWE-22). See
+    https://github.com/huggingface/transformers/issues/46097.
+    """
+
+    def _write_index(self, directory, weight_map):
+        index_path = os.path.join(directory, "model.safetensors.index.json")
+        with open(index_path, "w") as f:
+            json.dump({"metadata": {"total_size": 0}, "weight_map": weight_map}, f)
+        return index_path
+
+    def test_relative_traversal_is_rejected(self):
+        with tempfile.TemporaryDirectory() as model_dir:
+            index_path = self._write_index(
+                model_dir,
+                {
+                    "model.layer.weight": "../../etc/passwd",
+                    "model.embed.weight": "../../etc/hostname",
+                },
+            )
+            with self.assertRaises(OSError) as ctx:
+                get_checkpoint_shard_files(model_dir, index_path)
+            self.assertIn("outside the model directory", str(ctx.exception))
+
+    def test_absolute_path_is_rejected(self):
+        with tempfile.TemporaryDirectory() as model_dir:
+            index_path = self._write_index(
+                model_dir,
+                {"model.layer.weight": "/etc/passwd"},
+            )
+            with self.assertRaises(OSError) as ctx:
+                get_checkpoint_shard_files(model_dir, index_path)
+            self.assertIn("outside the model directory", str(ctx.exception))
+
+    def test_symlink_escape_is_rejected(self):
+        with tempfile.TemporaryDirectory() as parent:
+            model_dir = os.path.join(parent, "model")
+            outside_dir = os.path.join(parent, "outside")
+            os.makedirs(model_dir)
+            os.makedirs(outside_dir)
+            target = os.path.join(outside_dir, "secret.bin")
+            with open(target, "w") as f:
+                f.write("secret")
+            os.symlink(target, os.path.join(model_dir, "shard.safetensors"))
+
+            index_path = self._write_index(
+                model_dir,
+                {"model.layer.weight": "shard.safetensors"},
+            )
+            with self.assertRaises(OSError) as ctx:
+                get_checkpoint_shard_files(model_dir, index_path)
+            self.assertIn("outside the model directory", str(ctx.exception))
+
+    def test_legitimate_flat_shard_filenames_are_accepted(self):
+        with tempfile.TemporaryDirectory() as model_dir:
+            shard_names = [
+                "model-00001-of-00003.safetensors",
+                "model-00002-of-00003.safetensors",
+                "model-00003-of-00003.safetensors",
+            ]
+            # The shard files don't need to actually exist on disk for this
+            # function; it returns the joined paths without opening them.
+            index_path = self._write_index(
+                model_dir,
+                {f"layer.{i}.weight": name for i, name in enumerate(shard_names)},
+            )
+            resolved, metadata = get_checkpoint_shard_files(model_dir, index_path)
+            base = os.path.realpath(model_dir)
+            self.assertEqual(len(resolved), len(shard_names))
+            for path in resolved:
+                self.assertTrue(
+                    path == base or path.startswith(base + os.sep),
+                    f"Resolved path {path} escaped base directory {base}",
+                )
+            self.assertEqual(set(metadata["weight_map"].values()), set(shard_names))
+
+    def test_subfolder_paths_are_accepted(self):
+        with tempfile.TemporaryDirectory() as model_dir:
+            subfolder = "weights"
+            os.makedirs(os.path.join(model_dir, subfolder))
+            index_path = self._write_index(
+                model_dir,
+                {"layer.0.weight": "model-00001-of-00001.safetensors"},
+            )
+            resolved, _ = get_checkpoint_shard_files(model_dir, index_path, subfolder=subfolder)
+            base = os.path.realpath(os.path.join(model_dir, subfolder))
+            self.assertEqual(len(resolved), 1)
+            self.assertTrue(resolved[0].startswith(base + os.sep))
+
+    def test_traversal_through_subfolder_is_rejected(self):
+        with tempfile.TemporaryDirectory() as model_dir:
+            os.makedirs(os.path.join(model_dir, "weights"))
+            index_path = self._write_index(
+                model_dir,
+                {"layer.0.weight": "../../../etc/passwd"},
+            )
+            with self.assertRaises(OSError) as ctx:
+                get_checkpoint_shard_files(model_dir, index_path, subfolder="weights")
+            self.assertIn("outside the model directory", str(ctx.exception))
