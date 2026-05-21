@@ -302,16 +302,16 @@ with torch.inference_mode():
 
 # outputs.foregrounds: (1, 3, H, W), outputs.alphas: (1, 1, H, W) — both in [0, 1]
 original_size = (image.height, image.width)
-result = image_processor.post_process_matting(outputs, target_sizes=[original_size])[0]
+
+# Pass an optional background to composite the foreground over it.
+# A (3, 1, 1) tensor broadcasts as a uniform color; PIL images and numpy arrays are also accepted.
+background = torch.tensor([0, 177, 64], dtype=torch.uint8).view(3, 1, 1)  # chroma green in RGB
+result = image_processor.post_process_matting(
+    outputs, target_sizes=[original_size], backgrounds=background
+)[0]
 print("Alpha shape:", result["alpha"].shape)        # [1, original_height, original_width]
 print("Foreground shape:", result["foreground"].shape)  # [3, original_height, original_width]
-
-# Combine foreground and alpha with a green background image for final matting result
-foreground = result["foreground"]  # (3, H, W)
-alpha = result["alpha"]            # (1, H, W)
-background = torch.tensor([0, 177 / 255, 64 / 255]).view(3, 1, 1)  # chroma green in RGB
-composite = foreground + (1 - alpha) * background  # (3, H, W)
-composite = composite.clamp(0, 1)
+print("Composite shape:", result["composite"].shape)    # [3, original_height, original_width] — uint8 [0, 255]
 ```
 
 ## Sapiens2Config

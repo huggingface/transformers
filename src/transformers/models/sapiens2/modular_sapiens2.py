@@ -35,6 +35,7 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
     get_image_size_for_max_height_width,
+    make_list_of_images,
 )
 from ...modeling_outputs import ModelOutput, SemanticSegmenterOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -702,6 +703,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         self,
         outputs: Sapiens2MattingOutput,
         target_sizes: list[tuple] | None = None,
+        backgrounds: ImageInput | None = None,
     ) -> list[dict[str, torch.Tensor]]:
         """
         Converts the output of [`Sapiens2ForMatting`] into alpha mattes and foreground maps.
@@ -712,11 +714,19 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             target_sizes (`list[tuple]` of length `batch_size`, *optional*):
                 Requested final `(height, width)` for each prediction. Resized with bilinear
                 interpolation. If unset, predictions are returned at the model output resolution.
+            backgrounds (`ImageInput`, *optional*):
+                Background image(s) to composite over. Can be a single image (applied to every item
+                in the batch) or a list of images, one per batch item. Accepts PIL images, numpy
+                arrays, or torch tensors of any dtype; integer types (e.g. uint8) are scaled to
+                `[0, 1]` automatically. When provided, each result dict gains a `"composite"` key
+                with the composited image as a uint8 tensor in `[0, 255]`.
 
         Returns:
             `list[dict]` of length `batch_size`. Each dict has:
             - `"alpha"` (`torch.Tensor` of shape `(1, height, width)`): alpha values in `[0, 1]`.
             - `"foreground"` (`torch.Tensor` of shape `(3, height, width)`): pre-multiplied RGB in `[0, 1]`.
+            - `"composite"` (`torch.Tensor` of shape `(3, height, width)` or `None`): foreground composited
+              over `backgrounds` as a uint8 tensor in `[0, 255]`; `None` when `backgrounds` is not provided.
         """
         matting = torch.cat([outputs.foregrounds, outputs.alphas], dim=1)  # (B, 4, H, W)
 
@@ -725,6 +735,19 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
                 raise ValueError(
                     "Make sure that you pass in as many target sizes as the batch dimension of the matting output"
                 )
+
+        background_tensors = None
+        if backgrounds is not None:
+            background_list = make_list_of_images(backgrounds)
+            if len(background_list) != 1 and len(background_list) != len(matting):
+                raise ValueError(
+                    "Make sure that you pass in as many backgrounds as the batch dimension of the matting output"
+                )
+            device = matting.device
+            dtype = matting.dtype
+            background_tensors = [
+                tvF.to_dtype_image(tvF.to_image(bg), dtype=dtype, scale=True).to(device) for bg in background_list
+            ]
 
         result = []
         for idx in range(len(matting)):
@@ -740,7 +763,25 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
                 )[0]
 
             mat = mat.clamp(0.0, 1.0)
-            result.append({"foreground": mat[:3], "alpha": mat[3:]})
+            foreground = mat[:3]
+            alpha = mat[3:]
+            composite = None
+
+            if background_tensors is not None:
+                background = background_tensors[0] if len(background_tensors) == 1 else background_tensors[idx]
+                if background.shape[-2:] != mat.shape[-2:]:
+                    background = F.interpolate(
+                        background.unsqueeze(0),
+                        size=mat.shape[-2:],
+                        mode="bilinear",
+                        align_corners=False,
+                        antialias=False,
+                    )[0]
+                composite = tvF.to_dtype_image(
+                    (foreground + (1 - alpha) * background).clamp(0.0, 1.0), dtype=torch.uint8, scale=True
+                )
+
+            result.append({"foreground": foreground, "alpha": alpha, "composite": composite})
 
         return result
 
