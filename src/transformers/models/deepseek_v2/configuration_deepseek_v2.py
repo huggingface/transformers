@@ -139,6 +139,11 @@ class DeepseekV2Config(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         self.head_dim = self.qk_rope_head_dim
+        # Track whether `head_dim` was explicitly provided so `validate_architecture`
+        # can allow non-divisible `hidden_size`/`num_attention_heads` when the user
+        # has supplied an explicit `head_dim` (DeepseekV2Attention sizes its projections
+        # from `num_attention_heads * head_dim`, so this case is well-defined).
+        self._head_dim_was_explicit = self.head_dim is not None
         if self.head_dim is None:
             self.head_dim = self.hidden_size // self.num_attention_heads
         if self.num_key_value_heads is None:
@@ -148,7 +153,7 @@ class DeepseekV2Config(PreTrainedConfig):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if self.hidden_size % self.num_attention_heads != 0:
+        if self.hidden_size % self.num_attention_heads != 0 and not self._head_dim_was_explicit:
             raise ValueError(
                 f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({self.num_attention_heads})."

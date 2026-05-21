@@ -127,6 +127,11 @@ class CwmConfig(PreTrainedConfig):
         self.sliding_window = int(self.sliding_window) if self.sliding_window else None
         self.layer_types = list(self.layer_types)
         self.eos_token_id = self.eos_token_id if self.eos_token_id is not None else [128001, 128008, 128009]
+        # Track whether `head_dim` was explicitly provided so `validate_architecture`
+        # can allow non-divisible `hidden_size`/`num_attention_heads` when the user
+        # has supplied an explicit `head_dim` (CwmAttention sizes its projections
+        # from `num_attention_heads * head_dim`, so this case is well-defined).
+        self._head_dim_was_explicit = self.head_dim is not None
         if self.head_dim is None:
             self.head_dim = self.hidden_size // self.num_attention_heads
         if self.num_key_value_heads is None:
@@ -136,7 +141,7 @@ class CwmConfig(PreTrainedConfig):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if self.hidden_size % self.num_attention_heads != 0:
+        if self.hidden_size % self.num_attention_heads != 0 and not self._head_dim_was_explicit:
             raise ValueError(
                 f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({self.num_attention_heads})."
