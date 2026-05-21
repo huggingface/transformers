@@ -11,22 +11,49 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import pathlib
 from dataclasses import dataclass
+from typing import Any
 
 import torch
+import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch import Tensor, nn
-from torch.nn import functional as F
+from torchvision.transforms.v2 import functional as tvF
 
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneConfigMixin, consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
+from ...image_processing_utils import BatchFeature
+from ...image_transforms import (
+    center_to_corners_format,
+)
+from ...image_utils import (
+    AnnotationFormat,
+    AnnotationType,
+    ChannelDimension,
+    PILImageResampling,
+    SizeDict,
+    get_max_height_width,
+    validate_annotations,
+)
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, logging, torch_int
+from ...utils import (
+    TensorType,
+    auto_docstring,
+    logging,
+    torch_int,
+)
 from ...utils.generic import ModelOutput, TransformersKwargs, can_return_tuple
 from ..clip.modeling_clip import CLIPMLP
 from ..convnext.modeling_convnext import ConvNextLayer
+from ..detr.image_processing_detr import (
+    SUPPORTED_ANNOTATION_FORMATS,
+    DetrImageProcessor,
+    convert_segmentation_to_rle,
+    prepare_coco_detection_annotation,
+)
 from ..dinov2.configuration_dinov2 import Dinov2Config
 from ..dinov2.modeling_dinov2 import (
     Dinov2Backbone,
@@ -52,7 +79,312 @@ from ..lw_detr.modeling_lw_detr import (
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="stevenbucaille/rf-detr-base")
+class RfDetrImageProcessor(DetrImageProcessor):
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        annotations: AnnotationType | list[AnnotationType] | None,
+        return_segmentation_masks: bool,
+        masks_path: str | pathlib.Path | None,
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        do_convert_annotations: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool,
+        pad_size: SizeDict | None,
+        format: str | AnnotationFormat | None,
+        return_tensors: str | TensorType | None,
+        **kwargs,
+    ) -> BatchFeature:
+        """
+        Preprocess an image or a batch of images so that it can be used by the model.
+        """
+        if annotations is not None and isinstance(annotations, dict):
+            annotations = [annotations]
+
+        if annotations is not None and len(images) != len(annotations):
+            raise ValueError(
+                f"The number of images ({len(images)}) and annotations ({len(annotations)}) do not match."
+            )
+
+        format = AnnotationFormat(format)
+        if annotations is not None:
+            validate_annotations(format, SUPPORTED_ANNOTATION_FORMATS, annotations)
+
+        if (
+            masks_path is not None
+            and format == AnnotationFormat.COCO_PANOPTIC
+            and not isinstance(masks_path, (pathlib.Path, str))
+        ):
+            raise ValueError(
+                "The path to the directory containing the mask PNG files should be provided as a"
+                f" `pathlib.Path` or string object, but is {type(masks_path)} instead."
+            )
+
+        data = {}
+
+        processed_images = []
+        processed_annotations = []
+        pixel_masks = []  # Initialize pixel_masks here
+        for image, annotation in zip(images, annotations if annotations is not None else [None] * len(images)):
+            # prepare (COCO annotations as a list of Dict -> DETR target as a single Dict per image)
+            if annotations is not None:
+                annotation = self.prepare_annotation(
+                    image,
+                    annotation,
+                    format,
+                    return_segmentation_masks=return_segmentation_masks,
+                    masks_path=masks_path,
+                    input_data_format=ChannelDimension.FIRST,
+                )
+            # Rescale then resize like in the original RF-DETR implementation
+            if do_rescale:
+                image = self.rescale(image, rescale_factor)
+            if do_resize:
+                resized_image = self.resize(image, size=size, resample=resample)
+                if annotations is not None:
+                    annotation = self.resize_annotation(
+                        annotation,
+                        orig_size=image.size()[-2:],
+                        target_size=resized_image.size()[-2:],
+                    )
+                image = resized_image
+            if do_normalize:
+                image = self.normalize(image, image_mean, image_std)
+            if do_convert_annotations and annotations is not None:
+                annotation = self.normalize_annotation(annotation, image.shape[-2:])
+
+            processed_images.append(image)
+            processed_annotations.append(annotation)
+        images = processed_images
+        annotations = processed_annotations if annotations is not None else None
+
+        if do_pad:
+            # depends on all resized image shapes so we need another loop
+            if pad_size is not None:
+                padded_size = (pad_size.height, pad_size.width)
+            else:
+                padded_size = get_max_height_width(images)
+
+            padded_images = []
+            padded_annotations = []
+            for image, annotation in zip(images, annotations if annotations is not None else [None] * len(images)):
+                # Pads images and returns their mask: {'pixel_values': ..., 'pixel_mask': ...}
+                if padded_size == image.size()[-2:]:
+                    padded_images.append(image)
+                    pixel_masks.append(torch.ones(padded_size, dtype=torch.int64, device=image.device))
+                    padded_annotations.append(annotation)
+                    continue
+                image, pixel_mask, annotation = self.pad(
+                    image, padded_size, annotation=annotation, update_bboxes=do_convert_annotations
+                )
+                padded_images.append(image)
+                padded_annotations.append(annotation)
+                pixel_masks.append(pixel_mask)
+            images = padded_images
+            annotations = padded_annotations if annotations is not None else None
+            data.update({"pixel_mask": torch.stack(pixel_masks, dim=0)})
+
+        data.update({"pixel_values": torch.stack(images, dim=0)})
+        encoded_inputs = BatchFeature(data, tensor_type=return_tensors)
+        if annotations is not None:
+            encoded_inputs["labels"] = [
+                BatchFeature(annotation, tensor_type=return_tensors) for annotation in annotations
+            ]
+        return encoded_inputs
+
+    def prepare_annotation(
+        self,
+        image: torch.Tensor,
+        target: dict,
+        format: AnnotationFormat | None = None,
+        return_segmentation_masks: bool | None = None,
+        masks_path: str | pathlib.Path | None = None,
+        input_data_format: str | ChannelDimension | None = None,
+    ) -> dict:
+        """
+        Prepare an annotation for feeding into RF_DETR model.
+        """
+        format = format if format is not None else self.format
+
+        if format == AnnotationFormat.COCO_DETECTION:
+            return_segmentation_masks = False if return_segmentation_masks is None else return_segmentation_masks
+            target = prepare_coco_detection_annotation(
+                image, target, return_segmentation_masks, input_data_format=input_data_format
+            )
+        else:
+            raise ValueError(f"Format {format} is not supported.")
+        return target
+
+    def post_process_object_detection(
+        self,
+        outputs,
+        threshold: float = 0.5,
+        target_sizes: TensorType | list[tuple] | None = None,
+        top_k: int | None = None,
+    ):
+        out_logits, out_bbox = outputs.logits, outputs.pred_boxes
+        if target_sizes is not None:
+            if len(out_logits) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+        top_k = top_k if top_k is not None else out_logits.shape[1]
+        prob = out_logits.sigmoid()
+        batch_size, num_queries, num_classes = prob.shape
+        k_value = min(top_k, num_queries * num_classes)
+        scores, topk_indexes = torch.topk(prob.view(batch_size, -1), k_value, dim=1)
+        topk_boxes = topk_indexes // num_classes
+        labels = topk_indexes % num_classes
+        boxes = center_to_corners_format(out_bbox)
+        boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
+
+        if target_sizes is not None:
+            if isinstance(target_sizes, list):
+                img_h = torch.tensor([i[0] for i in target_sizes], device=boxes.device)
+                img_w = torch.tensor([i[1] for i in target_sizes], device=boxes.device)
+            else:
+                img_h, img_w = target_sizes.to(boxes.device).unbind(1)
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
+            boxes = boxes * scale_fct[:, None, :]
+
+        results = []
+        for score, label, box in zip(scores, labels, boxes):
+            keep = score > threshold
+            results.append({"scores": score[keep], "labels": label[keep], "boxes": box[keep]})
+        return results
+
+    def post_process_instance_segmentation(
+        self,
+        outputs,
+        threshold: float = 0.5,
+        mask_threshold: float = 0.0,
+        target_sizes: list[tuple[int, int]] | None = None,
+        return_coco_annotation: bool = False,
+        return_binary_maps: bool = False,
+        top_k: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """
+        Converts the output of [`RfDetrForInstanceSegmentation`] into instance segmentation predictions.
+
+        Args:
+            outputs ([`RfDetrInstanceSegmentationOutput`]):
+                Raw outputs of the model.
+            threshold (`float`, *optional*, defaults to 0.5):
+                Score threshold to keep predicted instance masks.
+            mask_threshold (`float`, *optional*, defaults to 0.0):
+                Threshold to binarize predicted masks.
+            target_sizes (`list[tuple[int, int]]`, *optional*):
+                Target ``(height, width)`` for each image. If unset, masks are not resized.
+            return_coco_annotation (`bool`, *optional*, defaults to `False`):
+                If `True`, return segmentation maps as COCO run-length encoding instead of tensors.
+                Mutually exclusive with `return_binary_maps`.
+            return_binary_maps (`bool`, *optional*, defaults to `False`):
+                If `True`, return segmentation maps as a stacked tensor of binary instance masks
+                (one per detected instance), without overlap resolution. This matches the output
+                format of the original ``rfdetr`` package. Mutually exclusive with
+                `return_coco_annotation`.
+            top_k (`int`, *optional*):
+                Maximum number of candidate queries evaluated before score thresholding.
+                Defaults to the total number of queries.
+
+        Returns:
+            `list[dict]`: One dict per image with keys:
+            - **segmentation** -- `Tensor[H, W]` of ``int32`` segment ids (``-1`` = background),
+              `Tensor[num_instances, H, W]` of bool binary masks when `return_binary_maps=True`,
+              or a list of RLE encodings when `return_coco_annotation=True`.
+            - **segments_info** -- List of dicts with keys ``id``, ``label_id``, and ``score``.
+        """
+        if return_coco_annotation and return_binary_maps:
+            raise ValueError("`return_coco_annotation` and `return_binary_maps` cannot both be `True`.")
+        out_logits, out_masks = outputs.logits, outputs.pred_masks
+        top_k = top_k if top_k is not None else out_logits.shape[1]
+
+        prob = out_logits.sigmoid()
+        batch_size, num_queries, num_classes = prob.shape
+        top_k = min(top_k, num_queries * num_classes)
+
+        scores, topk_indexes = torch.topk(prob.view(batch_size, -1), top_k, dim=1)
+        topk_queries = topk_indexes // num_classes
+        labels = topk_indexes % num_classes
+        masks = torch.gather(
+            out_masks,
+            1,
+            topk_queries.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, out_masks.shape[-2], out_masks.shape[-1]),
+        )
+
+        results: list[dict[str, Any]] = []
+        for batch_idx, (batch_scores, batch_labels, batch_masks) in enumerate(zip(scores, labels, masks)):
+            keep = batch_scores > threshold
+            pred_scores = batch_scores[keep]
+            pred_labels = batch_labels[keep]
+            mask_logits = batch_masks[keep]
+
+            if target_sizes is not None:
+                height, width = int(target_sizes[batch_idx][0]), int(target_sizes[batch_idx][1])
+            else:
+                height, width = mask_logits.shape[-2], mask_logits.shape[-1]
+
+            if pred_scores.shape[0] == 0:
+                segmentation = torch.full((height, width), -1, dtype=torch.int32, device=out_logits.device)
+                results.append({"segmentation": segmentation, "segments_info": []})
+                continue
+
+            mask_logits_resized = F.interpolate(
+                mask_logits.unsqueeze(1).float(),
+                size=(height, width),
+                mode="bilinear",
+                align_corners=False,
+            ).squeeze(1)
+
+            segmentation = torch.full((height, width), -1, dtype=torch.int32, device=out_logits.device)
+            segments: list[dict] = []
+            instance_maps: list = []
+            current_id = 0
+
+            for i in range(pred_scores.shape[0]):
+                binary_mask = mask_logits_resized[i] > mask_threshold
+                if not binary_mask.any():
+                    continue
+                if return_binary_maps:
+                    instance_maps.append(binary_mask)
+                else:
+                    pixels_to_paint = binary_mask & (segmentation == -1)
+                    if not pixels_to_paint.any():
+                        continue
+                current_id += 1
+                if not return_binary_maps:
+                    segmentation[pixels_to_paint] = current_id
+                segments.append(
+                    {"id": current_id, "label_id": int(pred_labels[i]), "score": round(pred_scores[i].item(), 6)}
+                )
+
+            if return_coco_annotation:
+                segmentation = convert_segmentation_to_rle(segmentation)
+            elif return_binary_maps:
+                segmentation = (
+                    torch.stack(instance_maps, dim=0)
+                    if instance_maps
+                    else torch.zeros(0, height, width, dtype=torch.bool, device=out_logits.device)
+                )
+
+            results.append({"segmentation": segmentation, "segments_info": segments})
+
+        return results
+
+    def post_process_panoptic_segmentation(self):
+        raise NotImplementedError("Panoptic segmentation is not supported for RF-DETR.")
+
+    def post_process_semantic_segmentation(self):
+        raise NotImplementedError("Semantic segmentation is not supported for RF-DETR.")
+
+
+@auto_docstring(checkpoint="Roboflow/rf-detr-base")
 @strict
 class RfDetrDinov2Config(Dinov2Config):
     r"""
@@ -103,7 +435,7 @@ class RfDetrDinov2Config(Dinov2Config):
         BackboneConfigMixin.__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="stevenbucaille/rf-detr-base")
+@auto_docstring(checkpoint="Roboflow/rf-detr-base")
 @strict
 class RfDetrConfig(LwDetrConfig):
     r"""
@@ -159,10 +491,10 @@ class RfDetrConfig(LwDetrConfig):
     ```python
     >>> from transformers import RfDetrConfig, RfDetrModel
 
-    >>> # Initializing a LW-DETR stevenbucaille/RfDetr_small_60e_coco style configuration
+    >>> # Initializing a RF-DETR roboflow/rf-detr-base style configuration
     >>> configuration = RfDetrConfig()
 
-    >>> # Initializing a model (with random weights) from the stevenbucaille/RfDetr_small_60e_coco style configuration
+    >>> # Initializing a model (with random weights) from the Roboflow/rf-detr-base style configuration
     >>> model = RfDetrModel(configuration)
 
     >>> # Accessing the model configuration
@@ -548,12 +880,12 @@ class RfDetrPreTrainedModel(LwDetrPreTrainedModel):
             nn.init.constant_(module.segmentation_bias, 0.0)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the RfDetr backbone-decoder model.
     """
 )
+@dataclass
 class RfDetrModelOutput(ModelOutput):
     r"""
     init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
@@ -610,8 +942,10 @@ class RfDetrModel(LwDetrModel):
 
         # Step 2.
         enc_outputs_class_proposals = self.enc_out_class_embed[group_id](object_query)
-        enc_outputs_class_proposals = enc_outputs_class_proposals.masked_fill(invalid_mask, float("-inf"))
         delta_bbox = self.enc_out_bbox_embed[group_id](object_query)
+        enc_outputs_class_proposals = enc_outputs_class_proposals.masked_fill(
+            invalid_mask.to(enc_outputs_class_proposals.device), float("-inf")
+        )
 
         # Step 3.
         enc_outputs_coord = refine_bboxes(output_proposals, delta_bbox)
@@ -667,8 +1001,8 @@ class RfDetrModel(LwDetrModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("stevenbucaille/rfdetr_small_60e_coco")
-        >>> model = RfDetrModel.from_pretrained("stevenbucaille/rfdetr_small_60e_coco")
+        >>> image_processor = AutoImageProcessor.from_pretrained("Roboflow/rf-detr-base")
+        >>> model = RfDetrModel.from_pretrained("Roboflow/rf-detr-base")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
@@ -862,8 +1196,8 @@ class RfDetrForObjectDetection(LwDetrForObjectDetection):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("stevenbucaille/rf-detr-base")
-        >>> model = RfDetrForObjectDetection.from_pretrained("stevenbucaille/rf-detr-base")
+        >>> image_processor = AutoImageProcessor.from_pretrained("Roboflow/rf-detr-base")
+        >>> model = RfDetrForObjectDetection.from_pretrained("Roboflow/rf-detr-base")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -934,12 +1268,12 @@ class RfDetrForObjectDetection(LwDetrForObjectDetection):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`RfDetrForInstanceSegmentation`].
     """
 )
+@dataclass
 class RfDetrInstanceSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
@@ -957,10 +1291,7 @@ class RfDetrInstanceSegmentationOutput(ModelOutput):
         unnormalized bounding boxes.
     pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height/4, width/4)`):
         Segmentation masks logits for all queries. See also
-        [`~DetrImageProcessor.post_process_semantic_segmentation`] or
-        [`~DetrImageProcessor.post_process_instance_segmentation`]
-        [`~DetrImageProcessor.post_process_panoptic_segmentation`] to evaluate semantic, instance and panoptic
-        segmentation masks respectively.
+        [`~RfDetrImageProcessor.post_process_instance_segmentation`] to obtain instance segmentation maps.
     auxiliary_outputs (`list[Dict]`, *optional*):
         Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
         and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
@@ -1223,4 +1554,5 @@ __all__ = [
     "RfDetrDinov2Config",
     "RfDetrDinov2Backbone",
     "RfDetrDinov2PreTrainedModel",
+    "RfDetrImageProcessor",
 ]
