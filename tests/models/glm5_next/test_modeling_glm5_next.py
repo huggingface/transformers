@@ -65,7 +65,6 @@ class Glm5NextModelTester(CausalLMModelTester):
         topk_group=1,
         num_experts_per_tok=8,
         linear_attn_config=None,
-        mhc=False,
     ):
         super().__init__(parent=parent, num_hidden_layers=num_hidden_layers)
         self.n_routed_experts = n_routed_experts
@@ -85,7 +84,6 @@ class Glm5NextModelTester(CausalLMModelTester):
             "num_heads": self.num_attention_heads,
             "short_conv_kernel_size": 4,
         }
-        self.mhc = mhc
 
 
 @require_torch
@@ -121,6 +119,13 @@ class Glm5NextModelTest(CausalLMModelTest, unittest.TestCase):
             config.mlp_layer_types, ["dense", "dense", "dense", "sparse", "sparse", "sparse", "sparse", "sparse"]
         )
 
+    def test_mlp_layer_types_validates_explicit_schedule(self):
+        with self.assertRaisesRegex(ValueError, "mlp_layer_types"):
+            Glm5NextConfig(num_hidden_layers=2, mlp_layer_types=["dense"])
+
+        with self.assertRaisesRegex(ValueError, "mlp_layer_types"):
+            Glm5NextConfig(num_hidden_layers=2, mlp_layer_types=["dense", "moe"])
+
     def test_default_linear_attn_config(self):
         config = Glm5NextConfig(num_hidden_layers=8)
         self.assertEqual(config.linear_attn_config["kda_layers"], [0, 1, 2, 4, 5, 6])
@@ -128,6 +133,7 @@ class Glm5NextModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertEqual(config.linear_attn_config["head_dim"], 128)
         self.assertEqual(config.linear_attn_config["num_heads"], 64)
         self.assertEqual(config.linear_attn_config["short_conv_kernel_size"], 4)
+        self.assertEqual(config.linear_attn_config["v_head_dim"], 128)
         self.assertEqual(
             config.layer_types,
             [
@@ -152,10 +158,10 @@ class Glm5NextModelTest(CausalLMModelTest, unittest.TestCase):
 
     @parameterized.expand(["linear", "dynamic", "yarn"])
     def test_model_rope_scaling_from_config(self, scaling_type):
-        self.skipTest("GLM-5-Next full-attention checkpoints use mla_nope=True, so RoPE scaling is not exercised")
+        self.skipTest("GLM-5-Next full-attention checkpoints use no-RoPE MLA, so RoPE scaling is not exercised")
 
     def test_model_rope_scaling_frequencies(self):
-        self.skipTest("GLM-5-Next full-attention checkpoints use mla_nope=True, so RoPE scaling is not exercised")
+        self.skipTest("GLM-5-Next full-attention checkpoints use no-RoPE MLA, so RoPE scaling is not exercised")
 
     def test_reverse_loading_mapping(self):
         super().test_reverse_loading_mapping(check_keys_were_modified=False)
@@ -229,7 +235,6 @@ class Glm5NextModelTest(CausalLMModelTest, unittest.TestCase):
                 "short_conv_kernel_size": 4,
             },
             mlp_layer_types=["dense", "dense"],
-            mhc=False,
             pad_token_id=0,
         )
         model = Glm5NextForCausalLM(config).to(torch_device).eval()

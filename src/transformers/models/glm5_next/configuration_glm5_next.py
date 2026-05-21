@@ -29,9 +29,6 @@ from ...utils import auto_docstring
 @strict
 class Glm5NextConfig(PreTrainedConfig):
     r"""
-    mla_nope (`bool`, *optional*, defaults to `True`):
-        Whether MLA full-attention layers use the no-RoPE key path shipped by
-        the current checkpoint layout.
     n_group (`int`, *optional*, defaults to 1):
         Number of routed expert groups.
     swiglu_limit (`float`, *optional*, defaults to 10.0):
@@ -39,11 +36,8 @@ class Glm5NextConfig(PreTrainedConfig):
     linear_attn_config (`dict`, *optional*):
         KDA linear attention layout and dimensions. Layers listed in
         `kda_layers` use KDA; layers listed in `full_attn_layers` use MLA.
-    mhc (`bool`, *optional*, defaults to `True`):
-        Whether to use Manifold-Constrained Hyper-Connection residual streams.
     hc_mult (`int`, *optional*, defaults to 4):
-        Number of MHC residual streams. Set `mhc=False` or `hc_mult=0` to
-        use the standard residual path in tiny tests or ablations.
+        Number of MHC residual streams.
     hc_eps (`float`, *optional*, defaults to 1e-6):
         Numerical floor used by MHC Sinkhorn normalization.
     hc_sinkhorn_iters (`int`, *optional*, defaults to 20):
@@ -112,7 +106,6 @@ class Glm5NextConfig(PreTrainedConfig):
     qk_nope_head_dim: int = 256
     qk_rope_head_dim: int = 0
     v_head_dim: int = 256
-    mla_nope: bool = True
     moe_intermediate_size: int = 2048
     num_experts_per_tok: int = 8
     n_shared_experts: int = 1
@@ -123,14 +116,13 @@ class Glm5NextConfig(PreTrainedConfig):
     norm_topk_prob: bool = True
     swiglu_limit: float = 10.0
     linear_attn_config: dict | None = None
-    mhc: bool = True
     hc_mult: int = 4
     hc_eps: float = 1e-6
     hc_sinkhorn_iters: int = 20
     mhc_post_mult_value: float = 2.0
     index_head_dim: int = 128
     index_n_heads: int = 32
-    index_topk: int = 2048
+    index_topk: int | None = 2048
     enable_dsa_indexer: bool = False
     indexer_types: list[str] | None = None
     bos_token_id: int | None = None
@@ -159,6 +151,7 @@ class Glm5NextConfig(PreTrainedConfig):
                 "kda_layers": kda_layers,
                 "num_heads": 64,
                 "short_conv_kernel_size": 4,
+                "v_head_dim": 128,
             }
 
         if self.layer_types is None:
@@ -167,17 +160,6 @@ class Glm5NextConfig(PreTrainedConfig):
                 "linear_attention" if layer_idx in kda_layers else "full_attention"
                 for layer_idx in range(self.num_hidden_layers)
             ]
-
-        self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
-        if self.qk_head_dim <= 0:
-            raise ValueError("qk_nope_head_dim + qk_rope_head_dim must be > 0")
-        if self.num_experts_per_tok > self.n_routed_experts:
-            raise ValueError("num_experts_per_tok must be <= n_routed_experts")
-
-        if self.mlp_layer_types is None:
-            self.mlp_layer_types = ["dense"] * min(3, self.num_hidden_layers) + ["sparse"] * (
-                self.num_hidden_layers - 3
-            )
 
         if self.indexer_types is None:
             pattern = kwargs.pop("index_topk_pattern", None)
