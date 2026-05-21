@@ -156,9 +156,9 @@ class Sam3VideoProcessor(ProcessorMixin):
             video_storage_device (`str` or `torch.device`, *optional*):
                 The device to store the processed video frames on.
             max_vision_features_cache_size (`int`, *optional*, defaults to `None`):
-                Maximum number of per-frame vision-feature cache entries. ``None`` caches one
-                slot per pre-loaded frame (recommended for multi-frame propagation); use ``1``
-                for streaming or minimal memory.
+                Maximum number of per-frame vision-feature cache entries (LRU). ``None`` uses
+                ``min(4, num_frames)`` to limit GPU memory; use ``1`` for streaming or the
+                smallest footprint, or a larger value if you need more temporal look-back.
             dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
                 The torch dtype to use for the whole session.
         """
@@ -176,7 +176,9 @@ class Sam3VideoProcessor(ProcessorMixin):
             video_width = processed_video.original_sizes[0][1]
             num_frames_for_cache = int(pixel_values_video.shape[0])
         if max_vision_features_cache_size is None:
-            max_vision_features_cache_size = num_frames_for_cache
+            # Default to a small LRU (Meta keeps ~1 frame). Caching every preloaded frame stores
+            # full interactive + propagation FPN tensors per frame and causes GPU OOM on long videos.
+            max_vision_features_cache_size = min(4, num_frames_for_cache)
         inference_session = Sam3VideoInferenceSession(
             video=pixel_values_video,
             video_height=video_height,

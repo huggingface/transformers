@@ -897,6 +897,8 @@ class Sam31TrackerVideoInferenceSession:
         self.output_dict_per_obj.clear()
         self.frames_tracked_per_obj.clear()
         self.obj_with_new_inputs = []
+        if hasattr(self, "propagation_image_snapshots_per_frame"):
+            self.propagation_image_snapshots_per_frame.clear()
         # Note: cache and video data are preserved
 
     def reset_inference_session(self):
@@ -910,6 +912,8 @@ class Sam31TrackerVideoInferenceSession:
         self.frames_tracked_per_obj.clear()
         self.obj_with_new_inputs = []
         self.cache.clear_all()
+        if hasattr(self, "propagation_image_snapshots_per_frame"):
+            self.propagation_image_snapshots_per_frame.clear()
 
 
 class Sam31TrackerVideoLayerNorm(nn.LayerNorm):
@@ -3092,6 +3096,9 @@ class Sam31TrackerVideoModel(Sam31TrackerVideoPreTrainedModel):
             is_mask_from_pts_per_obj=is_mask_from_pts_per_obj,
         )
 
+        if run_mem_encoder and frame_idx is not None:
+            self._prune_stale_tracker_outputs(inference_session, frame_idx, reverse=reverse)
+
         squeezed_scores: list[torch.Tensor] = []
         for score in object_score_logits_per_obj:
             if score is not None:
@@ -4205,8 +4212,18 @@ class Sam31TrackerVideoModel(Sam31TrackerVideoPreTrainedModel):
                 stored["maskmem_features"] = maskmem_features
                 stored["maskmem_pos_enc"] = maskmem_pos_enc
                 if save_pi:
-                    stored["propagation_image_features"] = pix_feat_stream.detach()
-                    stored["propagation_image_pos_enc"] = pix_pos_stream.detach()
+                    snapshots = getattr(inference_session, "propagation_image_snapshots_per_frame", None)
+                    if snapshots is None:
+                        inference_session.propagation_image_snapshots_per_frame = {}
+                        snapshots = inference_session.propagation_image_snapshots_per_frame
+                    if frame_idx not in snapshots:
+                        snapshots[frame_idx] = (
+                            pix_feat_stream.detach().to(inference_session.inference_state_device),
+                            pix_pos_stream.detach().to(inference_session.inference_state_device),
+                        )
+                    snap_pi, snap_pp = snapshots[frame_idx]
+                    stored["propagation_image_features"] = snap_pi
+                    stored["propagation_image_pos_enc"] = snap_pp
 
     @torch.inference_mode()
     @auto_docstring(
@@ -4285,6 +4302,40 @@ class Sam31TrackerVideoModel(Sam31TrackerVideoPreTrainedModel):
     def _batch_object_score_logits(scores: torch.Tensor) -> torch.Tensor:
         """Shape ``(1, 1)`` for per-object rows in memory-encoding ``torch.cat``."""
         return scores.reshape(-1).amax(dim=0, keepdim=True).reshape(1, 1)
+
+    def _prune_stale_tracker_outputs(
+        self,
+        inference_session: Sam31TrackerVideoInferenceSession,
+        frame_idx: int,
+        reverse: bool = False,
+    ) -> None:
+        """Drop non-conditioning frame outputs outside the temporal memory window.
+
+        Propagation reads at most ``num_maskmem - 1`` prior non-conditioning frames via
+        ``_gather_memory_frame_outputs``; older ``non_cond_frame_outputs`` entries are never
+        used again. Conditioning frames are left intact (Meta keeps them for fallback lookups).
+        After memory encoding, ``high_res_masks`` are stripped from retained entries since only
+        ``maskmem_features`` / ``pred_masks`` are needed going forward.
+        """
+        if self.num_maskmem <= 0:
+            return
+
+        mem_span = self.num_maskmem - 1
+
+        for obj_idx in range(inference_session.get_obj_num()):
+            output_dict = inference_session.output_dict_per_obj[obj_idx]
+            non_cond = output_dict["non_cond_frame_outputs"]
+            stale_non_cond = [
+                f
+                for f in non_cond
+                if (not reverse and f < frame_idx - mem_span) or (reverse and f > frame_idx + mem_span)
+            ]
+            for f in stale_non_cond:
+                non_cond.pop(f, None)
+
+            for stored in list(non_cond.values()) + list(output_dict["cond_frame_outputs"].values()):
+                if isinstance(stored, dict) and stored.get("maskmem_features") is not None:
+                    stored.pop("high_res_masks", None)
 
     def _blend_no_object_pointer(
         self,
