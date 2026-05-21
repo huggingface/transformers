@@ -709,7 +709,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         _, _, height, width = inputs["pixel_values"].shape
         self.assertEqual(outputs.normals.shape, torch.Size([1, 3, height, width]))
 
-        # TODO(guarin): We can get closer to expected values by using cv2 resize instead of torchvision.
+        # We can get closer to expected values by using cv2 resize instead of torchvision.
         expected_normals = torch.tensor(
             [[0.9577, 1.8808, 0.9826], [1.6904, 1.7351, 1.9120], [2.4828, 1.9887, 2.5168]],
             device=torch_device,
@@ -812,8 +812,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.foregrounds.shape, torch.Size([1, 3, height, width]))
         self.assertEqual(outputs.alphas.shape, torch.Size([1, 1, height, width]))
 
-        # TODO(guarin): Difference due to cv2 vs torchvision pre-processing. Model outputs are
-        # equal on same tensor input.
+        # Difference due to cv2 vs torchvision pre-processing. Model outputs are equal on same tensor input.
         expected_foregrounds = torch.tensor(
             [
                 [0.1432, 0.2051, 0.3043],

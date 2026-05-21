@@ -47,7 +47,6 @@ from .modeling_sapiens2 import (
 )
 
 
-# TODO(guarin): Check if we can drop cv2 dependency. Ideally re-use as much as possible from ViTPoseProcessor.
 if is_cv2_available():
     import cv2
 
@@ -531,7 +530,6 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
 
         normals = F.normalize(normals, p=2, dim=1, eps=1e-8)
 
-        # TODO(guarin): Group by shape and resize in batch instead of looping, like in `preprocess`.
         for idx in range(len(normals)):
             normal = normals[idx]
 
