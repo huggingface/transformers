@@ -694,6 +694,58 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 # after loading, no meta device should be remaining
                 self.assertFalse(any((p.device.type == "meta") for p in model.parameters()))
 
+    def test_peft_load_adapter_warmup_uses_adapter_expected_keys(self):
+        """
+        Check that adapter loading only warms up memory for adapter parameters.
+        """
+        from peft import LoraConfig
+
+        import transformers.modeling_utils as modeling_utils
+
+        adapter_name = "warmup_test_adapter"
+        adapter_key_markers = (adapter_name, "lora")
+
+        for model_id in self.transformers_test_model_ids:
+            for transformers_class in self.transformers_test_model_classes:
+                model = transformers_class.from_pretrained(model_id).to(torch_device)
+
+                peft_config = LoraConfig()
+                template_model = transformers_class.from_pretrained(model_id)
+                template_model.add_adapter(LoraConfig(), adapter_name=adapter_name)
+                dummy_state_dict = {
+                    name: torch.zeros_like(param)
+                    for name, param in template_model.named_parameters()
+                    if any(marker in name for marker in adapter_key_markers)
+                }
+                del template_model
+                self.assertTrue(dummy_state_dict)
+
+                captured_device_maps = []
+                original_warmup = modeling_utils.caching_allocator_warmup
+
+                def capture_warmup(model, expanded_device_map, hf_quantizer):
+                    captured_device_maps.append(dict(expanded_device_map))
+
+                modeling_utils.caching_allocator_warmup = capture_warmup
+                try:
+                    with CaptureLogger(logging.get_logger("transformers.integrations.peft")):
+                        model.load_adapter(
+                            adapter_state_dict=dummy_state_dict,
+                            adapter_name=adapter_name,
+                            peft_config=peft_config,
+                        )
+                finally:
+                    modeling_utils.caching_allocator_warmup = original_warmup
+
+                self.assertTrue(captured_device_maps)
+                warmed_keys = set().union(*(device_map.keys() for device_map in captured_device_maps))
+                self.assertTrue(warmed_keys)
+
+                unexpected_base_keys = [
+                    key for key in warmed_keys if not any(marker in key for marker in adapter_key_markers)
+                ]
+                self.assertEqual(unexpected_base_keys, [])
+
     def test_peft_from_pretrained_hub_kwargs(self):
         """
         Tests different combinations of PEFT model + from_pretrained + hub kwargs
