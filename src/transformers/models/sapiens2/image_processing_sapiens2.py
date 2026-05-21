@@ -501,7 +501,6 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
                 Original `(height, width)` of each image before preprocessing. When provided,
                 the padding added during preprocessing is removed and predictions are resized back
                 to the original image size (unless `target_sizes` overrides the final size).
-                Can be passed directly as `inputs["original_sizes"]`.
             target_sizes (`list[tuple]` of length `batch_size`, *optional*):
                 Requested final `(height, width)` for each prediction. Overrides `source_sizes`
                 as the resize target. Resized with bilinear interpolation before normalization.
