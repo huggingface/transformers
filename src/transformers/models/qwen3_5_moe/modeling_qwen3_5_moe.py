@@ -1327,12 +1327,20 @@ class Qwen3_5MoeTextModel(Qwen3_5MoePreTrainedModel):
         NOTE: Left-padding is used for linear attention mask.
         No need for zeroing states when
             1. Cached forward
-            2. Attending to all inputs
+            2. Attending to all inputs (eager-mode only — the
+               ``torch.all(attention_mask == 1)`` check is data-dependent
+               and isn't traceable by ``torch.export``)
         """
         linear_attn_mask = attention_mask
-        if (past_key_values is not None and past_key_values.has_previous_state()) or (
-            attention_mask is not None and torch.all(attention_mask == 1)
-        ):
+        if past_key_values is not None and past_key_values.has_previous_state():
+            return None
+        if torch.compiler.is_compiling():
+            # Skip the data-dependent optimization under torch.compile /
+            # torch.export. The downstream linear-attention layer handles
+            # an all-1s mask as a cheap no-op, so runtime behavior of the
+            # exported graph is unchanged for no-padding inputs.
+            return linear_attn_mask
+        if attention_mask is not None and torch.all(attention_mask == 1):
             linear_attn_mask = None
         return linear_attn_mask
 
