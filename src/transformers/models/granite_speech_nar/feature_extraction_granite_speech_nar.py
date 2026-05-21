@@ -51,7 +51,7 @@ class GraniteSpeechNarFeatureExtractor(FeatureExtractionMixin):
         self.win_length = win_length
         self.hop_length = hop_length
         self.n_mels = n_mels
-        self.mel_transform = torchaudio.transforms.MelSpectrogram(
+        self.mel_filters = torchaudio.transforms.MelSpectrogram(
             sample_rate=sampling_rate,
             n_fft=n_fft,
             win_length=win_length,
@@ -61,10 +61,10 @@ class GraniteSpeechNarFeatureExtractor(FeatureExtractionMixin):
 
     def _extract_features(self, raw_audio: "torch.Tensor") -> "torch.Tensor":
         with torch.no_grad():
-            mel_transform = self.mel_transform.to(raw_audio.device)
+            mel_filters = self.mel_filters.to(raw_audio.device)
             B, T = raw_audio.shape
             l = 2 * (T // (2 * self.hop_length))
-            mel = mel_transform(raw_audio.float())[..., :l]
+            mel = mel_filters(raw_audio.float())[..., :l]
             logmel = mel.transpose(-1, -2).clamp_min_(1e-10).log10_()
             mx = logmel.amax(dim=(-2, -1), keepdim=True)
             logmel = torch.maximum(logmel, mx - 8.0).div_(4).add_(1)

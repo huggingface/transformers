@@ -42,9 +42,11 @@ class GraniteSpeechNarEncoderConfig(PreTrainedConfig):
         Layer index at which self-conditioning (mid-layer CTC feedback) is applied.
         Defaults to `num_layers // 2`.
     bpe_output_dim (`int`, *optional*):
-        Vocabulary size for the BPE CTC head (shifted by +1 for blank). If None, BPE head is disabled.
+        Vocabulary size for the BPE CTC head (same as LLM vocab, blank reuses eos_token_id). If None, BPE head is disabled.
     bpe_pooling_window (`int`, *optional*, defaults to 4):
         Window size for posterior-weighted pooling before the BPE CTC head.
+    blank_token_id (`int`, *optional*):
+        Token ID used as the CTC blank symbol. Defaults to the language model's `eos_token_id` if not set.
 
     Example:
 
@@ -80,6 +82,7 @@ class GraniteSpeechNarEncoderConfig(PreTrainedConfig):
     self_conditioning_layer: int | None = None
     bpe_output_dim: int | None = None
     bpe_pooling_window: int = 4
+    blank_token_id: int | None = None
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):
@@ -211,6 +214,9 @@ class GraniteSpeechNarConfig(PreTrainedConfig):
 
         if self.blank_token_id is None:
             self.blank_token_id = self.text_config.eos_token_id
+
+        # Propagate blank_token_id to encoder config
+        self.encoder_config.blank_token_id = self.blank_token_id
 
         super().__post_init__(**kwargs)
 

@@ -846,10 +846,10 @@ class GraniteSpeechNarCTCEncoder(GraniteSpeechNarPreTrainedModel):
                 loss = (
                     F.ctc_loss(
                         log_probs.transpose(0, 1),
-                        labels + 1,
+                        labels,
                         lengths,
                         label_lengths,
-                        blank=0,
+                        blank=self.config.blank_token_id,
                         reduction="sum",
                         zero_infinity=True,
                     )
@@ -971,10 +971,11 @@ class GraniteSpeechNarForASR(GraniteSpeechNarPreTrainedModel):
         bpe_logits_flat: torch.Tensor,
         bpe_lengths: list[int],
     ) -> list[torch.Tensor]:
-        """GPU CTC greedy decode: argmax -> unique_consecutive -> remove blank -> shift."""
+        """GPU CTC greedy decode: argmax -> unique_consecutive -> remove blank."""
+        blank_id = self.config.blank_token_id
         preds_flat = bpe_logits_flat.argmax(dim=-1)
         per_sample = preds_flat.split(bpe_lengths)
-        return [(collapsed := torch.unique_consecutive(seq))[collapsed != 0] - 1 for seq in per_sample]
+        return [(collapsed := torch.unique_consecutive(seq))[collapsed != blank_id] for seq in per_sample]
 
     def _add_insertion_slots(self, token_ids: torch.Tensor) -> torch.Tensor:
         """Insert blank tokens between each CTC token as editing slots for the LLM."""
