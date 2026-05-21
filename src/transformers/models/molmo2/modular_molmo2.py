@@ -840,13 +840,11 @@ class Molmo2GQAAttention(nn.Module):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
-        self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = config.head_dim
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.scale = self.head_dim**-0.5
-        self.dropout = config.attention_dropout
+        self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = False
 
@@ -863,17 +861,16 @@ class Molmo2GQAAttention(nn.Module):
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        key_states = hidden_states if key_value_states is None else key_value_states
-        value_states = hidden_states if key_value_states is None else key_value_states
+        key_value_states = hidden_states if key_value_states is None else key_value_states
 
         batch_size = hidden_states.shape[0]
-        queries = self.q_proj(hidden_states)
-        keys = self.k_proj(key_states)
-        values = self.v_proj(value_states)
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(key_value_states)
+        value_states = self.v_proj(key_value_states)
 
-        queries = queries.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        keys = keys.view(batch_size, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        values = values.view(batch_size, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(batch_size, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(batch_size, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -881,13 +878,13 @@ class Molmo2GQAAttention(nn.Module):
 
         attn_output, attn_weights = attention_interface(
             self,
-            queries,
-            keys,
-            values,
+            query_states,
+            key_states,
+            value_states,
             attention_mask,
             is_causal=self.is_causal,
-            scaling=self.scale,
-            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            dropout=0.0 if not self.training else self.attention_dropout,
         )
 
         attn_output = attn_output.reshape(batch_size, -1, self.num_heads * self.head_dim).contiguous()
@@ -948,47 +945,11 @@ class Molmo2VisionModel(PreTrainedModel):
 
         self.post_init()
 
-    def add_pos_emb(self, x: torch.Tensor, patch_num: int) -> torch.Tensor:
-        pos_emb = self.positional_embedding
-
-        pos_emb = pos_emb.reshape(
-            (int(math.sqrt(pos_emb.shape[0])), int(math.sqrt(pos_emb.shape[0])), pos_emb.shape[1])
-        )
-
-        (patch_num_0, patch_num_1) = patch_num
-
-        if pos_emb.shape[0] != patch_num_0 or pos_emb.shape[1] != patch_num_1:
-            # Dervied from https://github.com/facebookresearch/mae/blob/main/util/pos_embed.py
-            # antialias: default True in jax.image.resize
-            pos_emb = pos_emb.unsqueeze(0).permute(0, 3, 1, 2)
-            pos_emb = F.interpolate(
-                pos_emb,
-                size=(patch_num_0, patch_num_1),
-                mode="bicubic",
-                align_corners=False,
-                antialias=True,
-            )
-            pos_emb = pos_emb.permute(0, 2, 3, 1).squeeze(0)
-
-        pos_emb = pos_emb.reshape(-1, pos_emb.shape[-1])
-        x = x + pos_emb[None, :, :].to(x.dtype)
-        return x
-
     @capture_outputs(tie_last_hidden_states=False)
-    def forward(
-        self, pixel_values: torch.Tensor, patch_num: tuple[int, int] | None = None, **kwargs
-    ) -> BaseModelOutputWithPooling:
-        """
-        : param pixel_values: (batch_size, num_patch, n_pixels)
-        """
-        if patch_num is None:
-            patch_num = self.config.image_num_patch
-
+    def forward(self, pixel_values: torch.Tensor, **kwargs) -> BaseModelOutputWithPooling:
         target_dtype = self.patch_embedding.weight.dtype
         hidden_states = self.patch_embedding(pixel_values.to(dtype=target_dtype))
-
-        # class embeddings and positional embeddings
-        hidden_states = self.add_pos_emb(hidden_states, patch_num)
+        hidden_states = hidden_states + self.positional_embedding[None, :, :].to(hidden_states.dtype)
 
         encoder_outputs = self.encoder(hidden_states, **kwargs)
         last_hidden_state = encoder_outputs.last_hidden_state
@@ -1066,42 +1027,19 @@ class Molmo2VisionBackbone(PreTrainedModel):
 
 class Molmo2RotaryEmbedding(LlamaRotaryEmbedding):
     def __init__(self, config: Molmo2TextConfig, rope_type: str | None = None):
-        # Molmo2 has custom rope_type handling (not using config.rope_parameters)
-        if rope_type is not None:
-            self.rope_type = rope_type
-        elif hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
-            # BC: "rope_type" was originally "type"
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
-
         nn.Module.__init__(self)
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
-
         self.config = config
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-
-        inv_freq, self.attention_scaling = rope_init_fn(self.config)
+        self.rope_type = rope_type or config.rope_parameters["rope_type"]
+        rope_init_fn = (
+            self.compute_default_rope_parameters
+            if self.rope_type == "default"
+            else ROPE_INIT_FUNCTIONS[self.rope_type]
+        )
+        inv_freq, self.attention_scaling = rope_init_fn(config)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
-
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: Molmo2TextConfig | None = None,
-        device: torch.device | None = None,
-        seq_len: int | None = None,
-    ) -> tuple[torch.Tensor, float]:
-        base = config.rope_theta
-        head_dim = config.head_dim or config.hidden_size // config.num_attention_heads
-        dim = int(head_dim)
-        attention_factor = 1.0
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
 
 
 class Molmo2RMSNorm(LlamaRMSNorm):
@@ -1223,15 +1161,15 @@ class Molmo2Attention(Olmo2Attention):
 class Molmo2MLP(Phi3MLP):
     def __init__(self, input_dim: int, intermediate_size: int, hidden_act: str):
         nn.Module.__init__(self)
-        self.gate_up_proj = nn.Linear(input_dim, intermediate_size * 2, bias=False)
-        self.down_proj = nn.Linear(intermediate_size, input_dim, bias=False)
-        self.activation_fn = ACT2FN[hidden_act]
+        self.ff_proj = nn.Linear(input_dim, intermediate_size * 2, bias=False)
+        self.ff_out = nn.Linear(intermediate_size, input_dim, bias=False)
+        self.act = ACT2FN[hidden_act]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.gate_up_proj(hidden_states)
+        hidden_states = self.ff_proj(hidden_states)
         up_states, gate = hidden_states.chunk(2, dim=-1)
-        hidden_states = self.activation_fn(gate) * up_states
-        return self.down_proj(hidden_states)
+        hidden_states = self.act(gate) * up_states
+        return self.ff_out(hidden_states)
 
 
 class Molmo2DecoderLayer(Phi3DecoderLayer):
