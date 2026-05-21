@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import unittest
-from unittest.mock import MagicMock, patch
 
 import numpy as np
 from huggingface_hub.utils import insecure_hashlib
@@ -94,85 +93,15 @@ class MaskGenerationPipelineTests(unittest.TestCase):
     def run_pipeline_test(self, mask_generator, examples):
         pass
 
-    @require_torch
-    def test_preprocess_is_last_partial_batch(self):
-        """is_last must be True on the final batch when n_points is not a multiple of points_per_batch."""
-        import torch
-
-        n_points = 100  # not a multiple of points_per_batch=64
-        points_per_batch = 64
-
-        mock_pipeline = MagicMock()
-        mock_pipeline.dtype = torch.float32
-        mock_pipeline.device = torch.device("cpu")
-
-        crop_boxes = torch.zeros(1, 4)
-        grid_points = torch.zeros(1, n_points, 1, 2)
-        input_labels = torch.zeros(1, n_points)
-        cropped_images = [MagicMock()]
-
-        mock_pipeline.image_processor.size = {"longest_edge": 1024}
-        mock_pipeline.image_processor.generate_crop_boxes.return_value = (
-            crop_boxes,
-            grid_points,
-            cropped_images,
-            input_labels,
-        )
-        mock_pipeline.image_processor.return_value.to.return_value = {"pixel_values": torch.zeros(1, 3, 16, 16)}
-        mock_pipeline.model.get_image_embeddings.return_value = torch.zeros(1, 256, 16, 16)
-        mock_pipeline.device_placement.return_value.__enter__ = MagicMock(return_value=None)
-        mock_pipeline.device_placement.return_value.__exit__ = MagicMock(return_value=False)
-        mock_pipeline.get_inference_context.return_value.return_value.__enter__ = MagicMock(return_value=None)
-        mock_pipeline.get_inference_context.return_value.return_value.__exit__ = MagicMock(return_value=False)
-        mock_pipeline._ensure_tensor_on_device.side_effect = lambda x, device: x
-
-        with patch("transformers.pipelines.mask_generation.load_image", return_value=MagicMock()):
-            gen = MaskGenerationPipeline.preprocess(mock_pipeline, "fake_image.png", points_per_batch=points_per_batch)
-            yielded = list(gen)
-
-        self.assertEqual(len(yielded), 2)
-        self.assertFalse(yielded[0]["is_last"])
-        self.assertTrue(yielded[1]["is_last"])
-
-    @require_torch
-    def test_preprocess_is_last_exact_multiple(self):
-        """is_last is also correct when n_points is an exact multiple of points_per_batch."""
-        import torch
-
-        n_points = 128  # exact multiple of points_per_batch=64
-        points_per_batch = 64
-
-        mock_pipeline = MagicMock()
-        mock_pipeline.dtype = torch.float32
-        mock_pipeline.device = torch.device("cpu")
-
-        crop_boxes = torch.zeros(1, 4)
-        grid_points = torch.zeros(1, n_points, 1, 2)
-        input_labels = torch.zeros(1, n_points)
-        cropped_images = [MagicMock()]
-
-        mock_pipeline.image_processor.size = {"longest_edge": 1024}
-        mock_pipeline.image_processor.generate_crop_boxes.return_value = (
-            crop_boxes,
-            grid_points,
-            cropped_images,
-            input_labels,
-        )
-        mock_pipeline.image_processor.return_value.to.return_value = {"pixel_values": torch.zeros(1, 3, 16, 16)}
-        mock_pipeline.model.get_image_embeddings.return_value = torch.zeros(1, 256, 16, 16)
-        mock_pipeline.device_placement.return_value.__enter__ = MagicMock(return_value=None)
-        mock_pipeline.device_placement.return_value.__exit__ = MagicMock(return_value=False)
-        mock_pipeline.get_inference_context.return_value.return_value.__enter__ = MagicMock(return_value=None)
-        mock_pipeline.get_inference_context.return_value.return_value.__exit__ = MagicMock(return_value=False)
-        mock_pipeline._ensure_tensor_on_device.side_effect = lambda x, device: x
-
-        with patch("transformers.pipelines.mask_generation.load_image", return_value=MagicMock()):
-            gen = MaskGenerationPipeline.preprocess(mock_pipeline, "fake_image.png", points_per_batch=points_per_batch)
-            yielded = list(gen)
-
-        self.assertEqual(len(yielded), 2)
-        self.assertFalse(yielded[0]["is_last"])
-        self.assertTrue(yielded[1]["is_last"])
+    def test_preprocess_is_last(self):
+        mask_generator = pipeline("mask-generation", model="hf-internal-testing/tiny-random-SamModel")
+        mask_generator.image_processor.pad_size = {"height": 24, "width": 24}
+        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
+        for points_per_batch in (100, 64):
+            with self.subTest(points_per_batch=points_per_batch):
+                batches = list(mask_generator.preprocess(image, points_per_batch=points_per_batch))
+                self.assertTrue(batches[-1]["is_last"])
+                self.assertFalse(any(b["is_last"] for b in batches[:-1]))
 
     @slow
     @require_torch
