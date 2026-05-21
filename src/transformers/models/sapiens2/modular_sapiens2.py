@@ -781,18 +781,11 @@ class Sapiens2Config(DINOv3ViTConfig):
         Whether to use a mask token in the embeddings (needed for masked image modeling pretraining).
     use_qk_norm (`bool`, *optional*, defaults to `True`):
         Whether to apply RMSNorm to queries and keys before RoPE in attention layers.
-    num_key_value_heads (`int`, *optional*):
-        Number of key/value heads for GQA layers. Defaults to `num_attention_heads // 2`.
-        Set to `None` to disable GQA and use full multi-head attention everywhere.
-    layer_types (`list[str]`, *optional*):
-        Per-layer attention type, one of `"full_attention"` or `"grouped_query_attention"`. Computed automatically
-        from `num_first_full_attention_layers` and `num_last_full_attention_layers` if not provided.
-    num_first_full_attention_layers (`int`, *optional*, defaults to 8):
-        Number of initial transformer layers that use full multi-head attention.
-        Layers at or after this index switch to GQA with `num_key_value_heads`.
-    num_last_full_attention_layers (`int`, *optional*, defaults to 8):
-        Number of final transformer layers that use full multi-head attention.
-        Layers before `num_hidden_layers - num_last_full_attention_layers` use GQA with `num_key_value_heads`.
+    num_key_value_heads_per_layer (`list[int]`, *optional*):
+        Number of key/value heads for each transformer layer. Setting a layer's value equal to
+        `num_attention_heads` gives full multi-head attention; a smaller value gives grouped-query
+        attention. Defaults to `num_attention_heads` for the first 8 and last 8 layers and
+        `num_attention_heads // 2` for all other layers.
     pos_embed_dtype (`str`, *optional*, defaults to `"bfloat16"`):
         Dtype used for positional embedding computations (RoPE angles, cos/sin).
     semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
@@ -835,10 +828,7 @@ class Sapiens2Config(DINOv3ViTConfig):
     num_register_tokens: int = 8
     key_bias: bool = True
     use_qk_norm: bool = True
-    num_key_value_heads: int | None = None
-    layer_types: list[str] | None = None
-    num_first_full_attention_layers: int = 8
-    num_last_full_attention_layers: int = 8
+    num_key_value_heads_per_layer: list[int] | None = None
     pos_embed_dtype: str = "bfloat16"
     semantic_loss_ignore_index: int = 255
     head_upsample_out_channels: list[int] | None = None
@@ -850,16 +840,11 @@ class Sapiens2Config(DINOv3ViTConfig):
     head_scale_final_hidden_sizes: list[int] | None = None
 
     def __post_init__(self, **kwargs):
-        if self.num_key_value_heads is None:
-            self.num_key_value_heads = self.num_attention_heads // 2
-        if self.layer_types is None:
-            self.layer_types = [
-                "full_attention"
-                if (
-                    i < self.num_first_full_attention_layers
-                    or i >= self.num_hidden_layers - self.num_last_full_attention_layers
-                )
-                else "grouped_query_attention"
+        if self.num_key_value_heads_per_layer is None:
+            self.num_key_value_heads_per_layer = [
+                self.num_attention_heads
+                if (i < 8 or i >= self.num_hidden_layers - 8)
+                else self.num_attention_heads // 2
                 for i in range(self.num_hidden_layers)
             ]
         # TODO(guarin): Should we drop defaults for heads?
@@ -977,9 +962,7 @@ class Sapiens2Attention(DINOv3ViTAttention):
         super().__init__(config)
         del self.k_proj
         del self.v_proj
-        self.num_key_value_heads = (
-            self.num_heads if config.layer_types[layer_idx] == "full_attention" else config.num_key_value_heads
-        )
+        self.num_key_value_heads = config.num_key_value_heads_per_layer[layer_idx]
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         kv_dim = self.num_key_value_heads * self.head_dim
 

@@ -409,9 +409,7 @@ class Sapiens2Attention(nn.Module):
 
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.query_bias)
         self.o_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.proj_bias)
-        self.num_key_value_heads = (
-            self.num_heads if config.layer_types[layer_idx] == "full_attention" else config.num_key_value_heads
-        )
+        self.num_key_value_heads = config.num_key_value_heads_per_layer[layer_idx]
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         kv_dim = self.num_key_value_heads * self.head_dim
 

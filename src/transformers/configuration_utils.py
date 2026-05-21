@@ -61,7 +61,6 @@ _FLOAT_TAG_VALUES = {"Infinity": float("inf"), "-Infinity": float("-inf"), "NaN"
 
 ALLOWED_LAYER_TYPES = (
     "full_attention",
-    "grouped_query_attention",  # used in Sapiens2
     "sliding_attention",
     "chunked_attention",
     "compressed_sparse_attention",  # CSA, used in deepseek_v4
