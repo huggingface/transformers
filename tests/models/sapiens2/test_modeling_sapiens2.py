@@ -125,7 +125,7 @@ class Sapiens2ModelTester:
             stage_names=["stem"] + [f"stage{i}" for i in range(1, self.num_hidden_layers + 1)],
             out_indices=[0, 1],
             reshape_hidden_states=True,
-            num_labels=3,
+            num_labels=4,
             # Head config sized to satisfy all model conversion patterns in test_reverse_loading_mapping
             head_upsample_out_channels=[8, 4, 4, 4],
             head_upsample_kernel_sizes=[4, 4, 4, 4],
@@ -308,10 +308,11 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         (
             Sapiens2Model,
             Sapiens2Backbone,
-            Sapiens2ForSemanticSegmentation,
-            Sapiens2ForPoseEstimation,
+            Sapiens2ForMatting,
             Sapiens2ForNormalEstimation,
             Sapiens2ForPointmapEstimation,
+            Sapiens2ForPoseEstimation,
+            Sapiens2ForSemanticSegmentation,
         )
         if is_torch_available()
         else ()
