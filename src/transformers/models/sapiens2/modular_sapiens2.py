@@ -984,19 +984,12 @@ def apply_rotary_pos_emb(
     num_patches = sin.shape[-2]
     num_prefix_tokens = num_tokens - num_patches
 
-    q_prefix_tokens, q_patches = q.split((num_prefix_tokens, num_patches), dim=-2)
-    k_prefix_tokens, k_patches = k.split((num_prefix_tokens, num_patches), dim=-2)
+    q_patches = q[..., num_prefix_tokens:, :]
+    k_patches = k[..., num_prefix_tokens:, :]
+    q[..., num_prefix_tokens:, :] = q_patches * cos + rotate_half(q_patches) * sin
+    k[..., num_prefix_tokens:, :] = k_patches * cos + rotate_half(k_patches) * sin
 
-    q_patches = (q_patches * cos) + (rotate_half(q_patches) * sin)
-    k_patches = (k_patches * cos) + (rotate_half(k_patches) * sin)
-
-    q = torch.cat((q_prefix_tokens, q_patches), dim=-2)
-    k = torch.cat((k_prefix_tokens, k_patches), dim=-2)
-
-    q = q.to(q_dtype)
-    k = k.to(k_dtype)
-
-    return q, k
+    return q.to(q_dtype), k.to(k_dtype)
 
 
 class Sapiens2Attention(DINOv3ViTAttention):
