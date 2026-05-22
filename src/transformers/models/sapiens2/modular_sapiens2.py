@@ -832,16 +832,18 @@ class Sapiens2Config(DINOv3ViTConfig):
         Dtype used for positional embedding computations (RoPE angles, cos/sin).
     semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
         Label index ignored when computing the segmentation loss.
-    head_upsample_out_channels (`list[int]`, *optional*, defaults to `[512, 256, 128, 64]`):
+    head_upsample_out_channels (`list[int]`, *optional*):
         Output channel counts for each upsample block in the decode head.
         The first block takes `hidden_size` channels as input; subsequent blocks use the previous output.
     head_upsample_kernel_sizes (`list[int]`, *optional*):
-        Kernel size for each upsample block. Defaults to `4` for every block.
+        Kernel size for each upsample block. Auto-filled with `[4, ...]` when
+        `head_upsample_out_channels` is set but this is `None`.
         Must have the same length as `head_upsample_out_channels`.
-    head_conv_out_channels (`list[int]`, *optional*, defaults to `[64, 64]`):
+    head_conv_out_channels (`list[int]`, *optional*):
         Output channel counts for the refinement conv layers that follow the upsample blocks.
     head_conv_kernel_sizes (`list[int]`, *optional*):
-        Kernel size for each refinement conv layer. Defaults to `1` for every layer.
+        Kernel size for each refinement conv layer. Auto-filled with `[1, ...]` when
+        `head_conv_out_channels` is set but this is `None`.
         Must have the same length as `head_conv_out_channels`.
     head_scale_conv_out_channels (`list[int]`, *optional*):
         Output channel counts for the stride-2 conv layers used to predict the focal-length scale.
@@ -886,14 +888,9 @@ class Sapiens2Config(DINOv3ViTConfig):
                 else self.num_attention_heads // 2
                 for i in range(self.num_hidden_layers)
             ]
-        # TODO(guarin): Should we drop defaults for heads?
-        if self.head_upsample_out_channels is None:
-            self.head_upsample_out_channels = [512, 256, 128, 64]
-        if self.head_upsample_kernel_sizes is None:
+        if self.head_upsample_out_channels is not None and self.head_upsample_kernel_sizes is None:
             self.head_upsample_kernel_sizes = [4] * len(self.head_upsample_out_channels)
-        if self.head_conv_out_channels is None:
-            self.head_conv_out_channels = [64, 64]
-        if self.head_conv_kernel_sizes is None:
+        if self.head_conv_out_channels is not None and self.head_conv_kernel_sizes is None:
             self.head_conv_kernel_sizes = [1] * len(self.head_conv_out_channels)
         if self.head_scale_conv_out_channels is not None and self.head_scale_conv_kernel_sizes is None:
             self.head_scale_conv_kernel_sizes = [1] * len(self.head_scale_conv_out_channels)
