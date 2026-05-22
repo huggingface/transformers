@@ -3,3 +3,7 @@
     title: Transformers
   - local: installation
     title: Instalare
+  - local: quicktour
+    title: Pornire rapidă
+  title: Începe
+- isExpanded: true
