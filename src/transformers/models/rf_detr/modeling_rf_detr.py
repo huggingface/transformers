@@ -25,8 +25,8 @@ from dataclasses import dataclass
 from typing import Any
 
 import torch
+import torch.nn.functional as F
 from torch import Tensor, nn
-from torch.nn import functional as F
 
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
@@ -1486,7 +1486,6 @@ class RfDetrModel(RfDetrPreTrainedModel):
             _cur += height * width
         output_proposals = torch.cat(proposals, 1)
         output_proposals_valid = ((output_proposals > 0.01) & (output_proposals < 0.99)).all(-1, keepdim=True)
-        invalid_mask = padding_mask | ~output_proposals_valid.squeeze(-1)
         invalid_mask = padding_mask.unsqueeze(-1) | ~output_proposals_valid
         output_proposals = output_proposals.masked_fill(invalid_mask, float(0))
 
@@ -1531,8 +1530,8 @@ class RfDetrModel(RfDetrPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("stevenbucaille/rfdetr_small_60e_coco")
-        >>> model = RfDetrModel.from_pretrained("stevenbucaille/rfdetr_small_60e_coco")
+        >>> image_processor = AutoImageProcessor.from_pretrained("Roboflow/rf-detr-base")
+        >>> model = RfDetrModel.from_pretrained("Roboflow/rf-detr-base")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
@@ -1647,9 +1646,10 @@ class RfDetrModel(RfDetrPreTrainedModel):
 
         # Step 2.
         enc_outputs_class_proposals = self.enc_out_class_embed[group_id](object_query)
-        invalid_mask = invalid_mask.to(enc_outputs_class_proposals.device)
-        enc_outputs_class_proposals = enc_outputs_class_proposals.masked_fill(invalid_mask, float("-inf"))
         delta_bbox = self.enc_out_bbox_embed[group_id](object_query)
+        enc_outputs_class_proposals = enc_outputs_class_proposals.masked_fill(
+            invalid_mask.to(enc_outputs_class_proposals.device), float("-inf")
+        )
 
         # Step 3.
         enc_outputs_coord = refine_bboxes(output_proposals, delta_bbox)
@@ -1786,8 +1786,8 @@ class RfDetrForObjectDetection(RfDetrPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("stevenbucaille/rf-detr-base")
-        >>> model = RfDetrForObjectDetection.from_pretrained("stevenbucaille/rf-detr-base")
+        >>> image_processor = AutoImageProcessor.from_pretrained("Roboflow/rf-detr-base")
+        >>> model = RfDetrForObjectDetection.from_pretrained("Roboflow/rf-detr-base")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1904,10 +1904,7 @@ class RfDetrInstanceSegmentationOutput(ModelOutput):
         unnormalized bounding boxes.
     pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height/4, width/4)`):
         Segmentation masks logits for all queries. See also
-        [`~DetrImageProcessor.post_process_semantic_segmentation`] or
-        [`~DetrImageProcessor.post_process_instance_segmentation`]
-        [`~DetrImageProcessor.post_process_panoptic_segmentation`] to evaluate semantic, instance and panoptic
-        segmentation masks respectively.
+        [`~RfDetrImageProcessor.post_process_instance_segmentation`] to obtain instance segmentation maps.
     auxiliary_outputs (`list[Dict]`, *optional*):
         Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
         and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
