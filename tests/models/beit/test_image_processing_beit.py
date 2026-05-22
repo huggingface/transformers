@@ -17,6 +17,7 @@ import unittest
 
 from datasets import load_dataset
 
+from transformers.modeling_outputs import SemanticSegmenterOutput
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available
 
@@ -61,6 +62,7 @@ class BeitImageProcessingTester:
         self.image_mean = image_mean
         self.image_std = image_std
         self.do_reduce_labels = do_reduce_labels
+        self.num_classes = 5
 
     def prepare_image_processor_dict(self):
         return {
@@ -307,3 +309,56 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         for backend_name in backend_names[1:]:
             self._assert_tensors_equivalence(reference_pixel_values, encodings[backend_name].pixel_values)
             self._assert_tensors_equivalence(reference_labels, encodings[backend_name].labels.float())
+
+    def test_post_process_semantic_segmentation(self):
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            outputs = SemanticSegmenterOutput(
+                logits=torch.randn(
+                    self.image_processor_tester.batch_size,
+                    self.image_processor_tester.num_classes,
+                    self.image_processor_tester.crop_size["height"],
+                    self.image_processor_tester.crop_size["width"],
+                )
+            )
+
+            segmentation = image_processor.post_process_semantic_segmentation(outputs)
+
+            self.assertEqual(len(segmentation), self.image_processor_tester.batch_size)
+            self.assertEqual(
+                segmentation[0].shape,
+                (self.image_processor_tester.crop_size["height"], self.image_processor_tester.crop_size["width"]),
+            )
+
+            target_sizes = [(1, 4) for _ in range(self.image_processor_tester.batch_size)]
+            segmentation = image_processor.post_process_semantic_segmentation(outputs, target_sizes=target_sizes)
+
+            self.assertEqual(segmentation[0].shape, target_sizes[0])
+
+            # return_logits=True: returns list of dicts
+            segmentation = image_processor.post_process_semantic_segmentation(outputs, return_logits=True)
+            self.assertEqual(len(segmentation), self.image_processor_tester.batch_size)
+            self.assertIsInstance(segmentation[0], dict)
+            self.assertEqual(
+                segmentation[0]["segmentation"].shape,
+                (self.image_processor_tester.crop_size["height"], self.image_processor_tester.crop_size["width"]),
+            )
+            self.assertEqual(
+                segmentation[0]["logits"].shape,
+                (
+                    self.image_processor_tester.num_classes,
+                    self.image_processor_tester.crop_size["height"],
+                    self.image_processor_tester.crop_size["width"],
+                ),
+            )
+
+            # return_logits=True with target_sizes
+            segmentation = image_processor.post_process_semantic_segmentation(
+                outputs, target_sizes=target_sizes, return_logits=True
+            )
+            self.assertIsInstance(segmentation[0], dict)
+            self.assertEqual(segmentation[0]["segmentation"].shape, target_sizes[0])
+            self.assertEqual(
+                segmentation[0]["logits"].shape,
+                (self.image_processor_tester.num_classes,) + target_sizes[0],
+            )

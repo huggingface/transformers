@@ -257,7 +257,9 @@ class DPTImageProcessor(TorchvisionBackend):
 
         return processed_images
 
-    def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple] | None = None):
+    def post_process_semantic_segmentation(
+        self, outputs, target_sizes: list[tuple] | None = None, return_logits: bool = False
+    ) -> "list[torch.Tensor] | list[dict[str, torch.Tensor]]":
         """
         Converts the output of [`DPTForSemanticSegmentation`] into semantic segmentation maps.
 
@@ -267,11 +269,16 @@ class DPTImageProcessor(TorchvisionBackend):
             target_sizes (`list[Tuple]` of length `batch_size`, *optional*):
                 List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
                 predictions will not be resized.
+            return_logits (`bool`, *optional*, defaults to `False`):
+                Whether to return the pre-argmax logits alongside the segmentation map. When `True`, each element of
+                the returned list is a dict with keys `"segmentation"` (argmax map, shape `(height, width)`) and
+                `"logits"` (pre-argmax tensor, shape `(num_classes, height, width)`).
 
         Returns:
-            semantic_segmentation: `list[torch.Tensor]` of length `batch_size`, where each item is a semantic
-            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
-            specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
+            `list[torch.Tensor]` or `list[dict]`: When `return_logits=False` (default), a list of length
+            `batch_size` where each item is a semantic segmentation map of shape `(height, width)` with class IDs.
+            When `return_logits=True`, a list of dicts, each with keys `"segmentation"` (shape `(height, width)`)
+            and `"logits"` (shape `(num_classes, height, width)`).
         """
         if not is_torch_available():
             raise ImportError("PyTorch is required for post_process_semantic_segmentation")
@@ -295,10 +302,18 @@ class DPTImageProcessor(TorchvisionBackend):
                     logits[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
                 )
                 semantic_map = resized_logits[0].argmax(dim=0)
-                semantic_segmentation.append(semantic_map)
+                if return_logits:
+                    semantic_segmentation.append({"segmentation": semantic_map, "logits": resized_logits[0]})
+                else:
+                    semantic_segmentation.append(semantic_map)
         else:
-            semantic_segmentation = logits.argmax(dim=1)
-            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
+            seg_maps = logits.argmax(dim=1)
+            if return_logits:
+                semantic_segmentation = [
+                    {"segmentation": seg_maps[i], "logits": logits[i]} for i in range(logits.shape[0])
+                ]
+            else:
+                semantic_segmentation = [seg_maps[i] for i in range(logits.shape[0])]
 
         return semantic_segmentation
 

@@ -444,6 +444,34 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
 
             self.assertEqual(segmentation[0].shape, target_sizes[0])
 
+            # return_logits=True: returns list of dicts
+            segmentation = feature_extractor.post_process_semantic_segmentation(outputs, return_logits=True)
+            self.assertEqual(len(segmentation), self.image_processor_tester.batch_size)
+            self.assertIsInstance(segmentation[0], dict)
+            self.assertEqual(
+                segmentation[0]["segmentation"].shape,
+                (self.image_processor_tester.height, self.image_processor_tester.width),
+            )
+            self.assertEqual(
+                segmentation[0]["logits"].shape,
+                (
+                    self.image_processor_tester.num_classes,
+                    self.image_processor_tester.height,
+                    self.image_processor_tester.width,
+                ),
+            )
+
+            # return_logits=True with target_sizes
+            segmentation = feature_extractor.post_process_semantic_segmentation(
+                outputs, target_sizes=target_sizes, return_logits=True
+            )
+            self.assertIsInstance(segmentation[0], dict)
+            self.assertEqual(segmentation[0]["segmentation"].shape, target_sizes[0])
+            self.assertEqual(
+                segmentation[0]["logits"].shape,
+                (self.image_processor_tester.num_classes,) + target_sizes[0],
+            )
+
     def test_post_process_instance_segmentation(self):
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(num_labels=self.image_processor_tester.num_classes)
