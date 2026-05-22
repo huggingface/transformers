@@ -997,8 +997,6 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     def test_pt_ignore_subwords_slow_tokenizer_raises(self):
         model_name = "sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=False)
-        if tokenizer.is_fast:
-            self.skipTest("This test requires a slow tokenizer.")
 
         with self.assertRaises(ValueError):
             pipeline(task="ner", model=model_name, tokenizer=tokenizer, aggregation_strategy=AggregationStrategy.FIRST)
