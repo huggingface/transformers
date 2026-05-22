@@ -43,7 +43,6 @@ Tips:
 
 - Sapiens2 uses Rotary Position Embeddings (RoPE) and supports arbitrary input resolutions. The default image processor resizes images to 1024×768 (height×width).
 - The model uses Grouped Query Attention (GQA) for middle layers and full multi-head attention for the first and last 8 layers.
-- The original checkpoint files are named `sapiens2_Xb_pretrain.safetensors` (e.g., `sapiens2_0.4b_pretrain.safetensors`) rather than `model.safetensors`. Set `transformers_weights` on the config before calling `from_pretrained` to load them correctly (see usage example below).
 - Register tokens (8 by default) reduce high-norm artifacts in patch tokens, yielding cleaner attention maps and better performance on dense prediction tasks.
 
 This model was contributed by [guarin](https://huggingface.co/guarin).
@@ -53,25 +52,20 @@ The original code can be found [here](https://github.com/facebookresearch/sapien
 
 ### Image feature extraction
 
-The example below shows how to obtain image features with [`Sapiens2Model`]. The original checkpoint
-files are named `sapiens2_0.4b_pretrain.safetensors` rather than `model.safetensors`, so you must set
-`transformers_weights` on the config to point `from_pretrained` to the correct file.
+The example below shows how to obtain image features with [`Sapiens2Model`].
 
 ```python
 import torch
-from transformers import Sapiens2Config, Sapiens2ImageProcessor, Sapiens2Model
+from transformers import Sapiens2ImageProcessor, Sapiens2Model
 from transformers.image_utils import load_image
 
 url = "http://images.cocodataset.org/val2017/000000004016.jpg"
 image = load_image(url)
 
-image_processor = Sapiens2ImageProcessor()
+image_processor = Sapiens2ImageProcessor.from_pretrained("facebook/sapiens2-pretrain-0.4b", revision="refs/pr/1")
+model = Sapiens2Model.from_pretrained("facebook/sapiens2-pretrain-0.4b", revision="refs/pr/1")
 
-config = Sapiens2Config()
-config.transformers_weights = "sapiens2_0.4b_pretrain.safetensors"
-model = Sapiens2Model.from_pretrained("facebook/sapiens2-pretrain-0.4b", config=config)
-
-inputs = image_processor(image, return_tensors="pt")
+inputs = image_processor(images=image, return_tensors="pt")
 with torch.inference_mode():
     outputs = model(**inputs)
 
@@ -92,23 +86,18 @@ print("Patch features shape:", patch_features.shape) # [1, H/patch, W/patch, 102
 ### Normal estimation
 
 The example below shows how to estimate surface normals with [`Sapiens2ForNormalEstimation`].
-The normal estimation checkpoints are named `sapiens2_0.4b_normal.safetensors` rather than
-`model.safetensors`, so `transformers_weights` must be set on the config. The output normals
-are raw (unnormalized); use `post_process_normal_estimation` to resize and L2-normalize them.
+The output normals are raw (unnormalized); use `post_process_normal_estimation` to resize and L2-normalize them.
 
 ```python
 import torch
-from transformers import Sapiens2Config, Sapiens2ImageProcessor, Sapiens2ForNormalEstimation
+from transformers import Sapiens2ImageProcessor, Sapiens2ForNormalEstimation
 from transformers.image_utils import load_image
 
 url = "http://images.cocodataset.org/val2017/000000004016.jpg"
 image = load_image(url)
 
-image_processor = Sapiens2ImageProcessor()
-
-config = Sapiens2Config(num_labels=3)
-config.transformers_weights = "sapiens2_0.4b_normal.safetensors"
-model = Sapiens2ForNormalEstimation.from_pretrained("facebook/sapiens2-normal-0.4b", config=config)
+image_processor = Sapiens2ImageProcessor.from_pretrained("facebook/sapiens2-normal-0.4b", revision="refs/pr/1")
+model = Sapiens2ForNormalEstimation.from_pretrained("facebook/sapiens2-normal-0.4b", revision="refs/pr/1")
 
 inputs = image_processor(image, return_tensors="pt")
 with torch.inference_mode():
@@ -128,23 +117,18 @@ print("Normal map shape:", normal_maps.shape)   # [3, original_height, original_
 ### Pointmap estimation
 
 The example below shows how to estimate per-pixel 3D coordinates with [`Sapiens2ForPointmapEstimation`].
-The pointmap checkpoints are named `sapiens2_0.4b_pointmap.safetensors`, so `transformers_weights`
-must be set on the config. Use `post_process_pointmap` to remove preprocessing padding, resize to the
-original image size, and apply the predicted focal-length scale.
+Use `post_process_pointmap` to remove preprocessing padding, resize to the original image size, and apply the predicted focal-length scale.
 
 ```python
 import torch
-from transformers import Sapiens2Config, Sapiens2ImageProcessor, Sapiens2ForPointmapEstimation
+from transformers import Sapiens2ImageProcessor, Sapiens2ForPointmapEstimation
 from transformers.image_utils import load_image
 
 url = "http://images.cocodataset.org/val2017/000000004016.jpg"
 image = load_image(url)
 
-image_processor = Sapiens2ImageProcessor()
-
-config = Sapiens2Config(num_labels=3)
-config.transformers_weights = "sapiens2_0.4b_pointmap.safetensors"
-model = Sapiens2ForPointmapEstimation.from_pretrained("facebook/sapiens2-pointmap-0.4b", config=config)
+image_processor = Sapiens2ImageProcessor.from_pretrained("facebook/sapiens2-pointmap-0.4b", revision="refs/pr/1")
+model = Sapiens2ForPointmapEstimation.from_pretrained("facebook/sapiens2-pointmap-0.4b", revision="refs/pr/1")
 
 inputs = image_processor(image, return_tensors="pt")
 with torch.inference_mode():
@@ -164,24 +148,19 @@ print("Pointmap shape:", pointmaps.shape)  # [3, original_height, original_width
 ### Pose estimation
 
 The example below shows how to run pose estimation with [`Sapiens2ForPoseEstimation`].
-The pose estimation checkpoints are named `sapiens2_0.4b_pose.safetensors`, so `transformers_weights`
-must be set on the config. The model predicts per-keypoint heatmaps; use
-`post_process_pose_estimation` to decode them back to image-space keypoint coordinates. It requires
-`opencv-python` (`pip install opencv-python`).
+The model predicts per-keypoint heatmaps; use `post_process_pose_estimation` to decode them back to
+image-space keypoint coordinates. It requires `opencv-python` (`pip install opencv-python`).
 
 ```python
 import torch
-from transformers import Sapiens2Config, Sapiens2ImageProcessor, Sapiens2ForPoseEstimation
+from transformers import Sapiens2ImageProcessor, Sapiens2ForPoseEstimation
 from transformers.image_utils import load_image
 
 url = "http://images.cocodataset.org/val2017/000000004016.jpg"
 image = load_image(url)
 
-image_processor = Sapiens2ImageProcessor()
-
-config = Sapiens2Config(num_labels=308)
-config.transformers_weights = "sapiens2_0.4b_pose.safetensors"
-model = Sapiens2ForPoseEstimation.from_pretrained("facebook/sapiens2-pose-0.4b", config=config)
+image_processor = Sapiens2ImageProcessor.from_pretrained("facebook/sapiens2-pose-0.4b", revision="refs/pr/1")
+model = Sapiens2ForPoseEstimation.from_pretrained("facebook/sapiens2-pose-0.4b", revision="refs/pr/1")
 
 # Provide bounding boxes in COCO format (x, y, width, height) for each person
 boxes = [[[270.8, 0.6, 294.1, 379.5]]]
@@ -208,17 +187,14 @@ back to the original orientation before returning them, so you can average both 
 
 ```python
 import torch
-from transformers import Sapiens2Config, Sapiens2ImageProcessor, Sapiens2ForPoseEstimation
+from transformers import Sapiens2ImageProcessor, Sapiens2ForPoseEstimation
 from transformers.image_utils import load_image
 
 url = "http://images.cocodataset.org/val2017/000000004016.jpg"
 image = load_image(url)
 
-image_processor = Sapiens2ImageProcessor()
-
-config = Sapiens2Config(num_labels=308)
-config.transformers_weights = "sapiens2_0.4b_pose.safetensors"
-model = Sapiens2ForPoseEstimation.from_pretrained("facebook/sapiens2-pose-0.4b", config=config)
+image_processor = Sapiens2ImageProcessor.from_pretrained("facebook/sapiens2-pose-0.4b", revision="refs/pr/1")
+model = Sapiens2ForPoseEstimation.from_pretrained("facebook/sapiens2-pose-0.4b", revision="refs/pr/1")
 
 boxes = [[[270.8, 0.6, 294.1, 379.5]]]
 inputs = image_processor(image, boxes=boxes, return_tensors="pt")
@@ -243,22 +219,17 @@ scores = results[0]["scores"]
 ### Semantic segmentation
 
 The example below shows how to perform body-part segmentation with [`Sapiens2ForSemanticSegmentation`].
-The segmentation checkpoints use 29 body-part labels and are named `sapiens2_0.4b_seg.safetensors`
-rather than `model.safetensors`, so `transformers_weights` must be set on the config.
 
 ```python
 import torch
-from transformers import Sapiens2Config, Sapiens2ImageProcessor, Sapiens2ForSemanticSegmentation
+from transformers import Sapiens2ImageProcessor, Sapiens2ForSemanticSegmentation
 from transformers.image_utils import load_image
 
 url = "http://images.cocodataset.org/val2017/000000004016.jpg"
 image = load_image(url)
 
-image_processor = Sapiens2ImageProcessor()
-
-config = Sapiens2Config(num_labels=29)
-config.transformers_weights = "sapiens2_0.4b_seg.safetensors"
-model = Sapiens2ForSemanticSegmentation.from_pretrained("facebook/sapiens2-seg-0.4b", config=config)
+image_processor = Sapiens2ImageProcessor.from_pretrained("facebook/sapiens2-seg-0.4b", revision="refs/pr/1")
+model = Sapiens2ForSemanticSegmentation.from_pretrained("facebook/sapiens2-seg-0.4b", revision="refs/pr/1")
 
 inputs = image_processor(image, return_tensors="pt")
 with torch.inference_mode():
@@ -278,23 +249,20 @@ print("Segmentation map shape:", segmentation.shape)  # [original_height, origin
 ### Matting
 
 The example below shows how to run image matting with [`Sapiens2ForMatting`].
-The matting checkpoints are named `sapiens2_0.4b_matting.safetensors`, so `transformers_weights`
-must be set on the config. Outputs are sigmoid-activated and already in `[0, 1]`; use
-`post_process_matting` to resize and split into `alphas` and `foregrounds`.
+Outputs are sigmoid-activated and already in `[0, 1]`; use `post_process_matting` to resize and split
+into `alphas`, `foregrounds`, and an optional `composite` image. The composite image shows
+the foreground overlaid over the background with the formula: `composite = foreground * (1 - alpha) * background`.
 
 ```python
 import torch
-from transformers import Sapiens2Config, Sapiens2ImageProcessor, Sapiens2ForMatting
+from transformers import Sapiens2ImageProcessor, Sapiens2ForMatting
 from transformers.image_utils import load_image
 
 url = "http://images.cocodataset.org/val2017/000000004016.jpg"
 image = load_image(url)
 
-image_processor = Sapiens2ImageProcessor()
-
-config = Sapiens2Config(num_labels=4)
-config.transformers_weights = "sapiens2_0.4b_matting.safetensors"
-model = Sapiens2ForMatting.from_pretrained("facebook/sapiens2-matting-1b", config=config)
+image_processor = Sapiens2ImageProcessor.from_pretrained("facebook/sapiens2-matting-1b", revision="refs/pr/1")
+model = Sapiens2ForMatting.from_pretrained("facebook/sapiens2-matting-1b", revision="refs/pr/1")
 
 inputs = image_processor(image, return_tensors="pt")
 with torch.inference_mode():
@@ -322,6 +290,11 @@ print("Composite shape:", result["composite"].shape)    # [3, original_height, o
 
 [[autodoc]] Sapiens2ImageProcessor
     - preprocess
+    - post_process_pose_estimation
+    - post_process_semantic_segmentation
+    - post_process_normal_estimation
+    - post_process_pointmap
+    - post_process_matting
 
 ## Sapiens2Model
 
