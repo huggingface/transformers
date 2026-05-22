@@ -927,7 +927,6 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"^cls_token$", r"embeddings.cls_token"),
             WeightRenaming(r"^storage_tokens$", r"embeddings.register_tokens"),
             WeightRenaming(r"^patch_embed\.projection\.", r"embeddings.patch_embeddings."),
-            WeightRenaming(r"^rope_embed\.", r"rope_embeddings."),
             WeightRenaming(r"blocks\.(\d+)\.", r"model.layer.\1."),
             WeightRenaming(r"attn\.proj\.", r"attention.o_proj."),
             WeightRenaming(r"attn\.wq\.", r"attention.q_proj."),
