@@ -1018,7 +1018,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
             outputs, target_sizes=[(image_height, image_width)], backgrounds=background
         )
         self.assertEqual(len(result), 1)
-        
+
         alpha = result[0]["alpha"]
         foreground = result[0]["foreground"]
         composite = result[0]["composite"]
@@ -1053,9 +1053,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
             dtype=torch.uint8,
             device=torch_device,
         )
-        torch.testing.assert_close(
-            torch.tensor(composite[:, 300:303, 300:303]), expected_composite, rtol=1e-2, atol=1e-2
-        )
+        torch.testing.assert_close(torch.tensor(composite[0, 300:303, 300:303]), expected_composite, rtol=0, atol=1)
 
 
 @require_torch
