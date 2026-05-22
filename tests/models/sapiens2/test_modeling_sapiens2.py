@@ -866,7 +866,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(final_keypoints[:3], expected_final_keypoints, rtol=1e-3, atol=1e-3)
 
         final_scores = final_person["scores"]
-        expected_final_scores = torch.tensor([1.0064079, 0.98746514, 0.99821794], device=torch_device)
+        expected_final_scores = torch.tensor([1.0064079, 0.98746514, 0.99821794])
         torch.testing.assert_close(final_scores[:3], expected_final_scores, rtol=1e-3, atol=1e-3)
 
     @slow
