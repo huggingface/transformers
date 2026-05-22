@@ -862,7 +862,6 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         final_keypoints = final_person["keypoints"]
         expected_final_keypoints = torch.tensor(
             [[364.14644305, 97.99268751], [373.66756367, 81.19966519], [353.4574526, 83.647911]],
-            device=torch_device,
         )
         torch.testing.assert_close(final_keypoints[:3], expected_final_keypoints, rtol=1e-3, atol=1e-3)
 
