@@ -264,8 +264,6 @@ class Sapiens2RopePositionEmbedding(nn.Module):
         self.config = config
         self.base = config.rope_theta
         self.head_dim = config.hidden_size // config.num_attention_heads
-        self.num_patches_h = config.image_size // config.patch_size
-        self.num_patches_w = config.image_size // config.patch_size
         inv_freq = 1 / self.base ** (
             2 * torch.arange(self.head_dim // 4, dtype=getattr(torch, config.pos_embed_dtype)) / (self.head_dim // 2)
         )

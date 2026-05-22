@@ -53,7 +53,6 @@ from ..dinov3_vit.modeling_dinov3_vit import (
     DINOv3ViTLayerScale,
     DINOv3ViTModel,
     DINOv3ViTPreTrainedModel,
-    DINOv3ViTRopePositionEmbedding,
     augment_patches_center_coordinates,
     get_patches_center_coordinates,
     rotate_half,
@@ -916,9 +915,15 @@ class Sapiens2Embeddings(DINOv3ViTEmbeddings):
         return super().forward(pixel_values, bool_masked_pos)
 
 
-class Sapiens2RopePositionEmbedding(DINOv3ViTRopePositionEmbedding):
+class Sapiens2RopePositionEmbedding(nn.Module):
+    inv_freq: torch.Tensor
+
     def __init__(self, config: Sapiens2Config):
-        super().__init__(config)
+        super().__init__()
+
+        self.config = config
+        self.base = config.rope_theta
+        self.head_dim = config.hidden_size // config.num_attention_heads
         inv_freq = 1 / self.base ** (
             2 * torch.arange(self.head_dim // 4, dtype=getattr(torch, config.pos_embed_dtype)) / (self.head_dim // 2)
         )
