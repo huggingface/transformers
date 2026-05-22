@@ -261,41 +261,38 @@ class Sapiens2RopePositionEmbedding(nn.Module):
     def __init__(self, config: Sapiens2Config):
         super().__init__()
 
-        self.patch_size = config.patch_size
-        self.pos_embed_shift = config.pos_embed_shift
-        self.pos_embed_jitter = config.pos_embed_jitter
-        self.pos_embed_rescale = config.pos_embed_rescale
+        self.config = config
         self.base = config.rope_theta
         self.head_dim = config.hidden_size // config.num_attention_heads
-        self.pos_embed_dtype = getattr(torch, config.pos_embed_dtype)
-
+        self.num_patches_h = config.image_size // config.patch_size
+        self.num_patches_w = config.image_size // config.patch_size
         inv_freq = 1 / self.base ** (
-            2 * torch.arange(self.head_dim // 4, dtype=self.pos_embed_dtype) / (self.head_dim // 2)
+            2 * torch.arange(self.head_dim // 4, dtype=getattr(torch, config.pos_embed_dtype)) / (self.head_dim // 2)
         )
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         _, _, height, width = pixel_values.shape
-        num_patches_h = height // self.patch_size
-        num_patches_w = width // self.patch_size
+        num_patches_h = height // self.config.patch_size
+        num_patches_w = width // self.config.patch_size
 
         device = pixel_values.device
         device_type = device.type if isinstance(device.type, str) and device.type != "mps" else "cpu"
 
         with maybe_autocast(device_type=device_type, enabled=False):
             patch_coords = get_patches_center_coordinates(
-                num_patches_h, num_patches_w, dtype=self.pos_embed_dtype, device=device
+                num_patches_h, num_patches_w, dtype=self.inv_freq.dtype, device=device
             )
             if self.training:
                 patch_coords = augment_patches_center_coordinates(
                     patch_coords,
-                    shift=self.pos_embed_shift,
-                    jitter=self.pos_embed_jitter,
-                    rescale=self.pos_embed_rescale,
+                    shift=self.config.pos_embed_shift,
+                    jitter=self.config.pos_embed_jitter,
+                    rescale=self.config.pos_embed_rescale,
                 )
 
             # (height * width, 2, head_dim / 4) -> (height * width, head_dim / 2) -> (height * width, head_dim)
-            angles = 2 * math.pi * patch_coords[:, :, None] * self.inv_freq[None, None, :].to(self.pos_embed_dtype)
+            angles = 2 * math.pi * patch_coords[:, :, None] * self.inv_freq[None, None, :]
             angles = angles.flatten(1, 2)
             angles = angles.tile(2)
 
