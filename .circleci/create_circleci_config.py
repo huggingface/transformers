@@ -147,7 +147,7 @@ class CircleCIJob:
         env = COMMON_ENV_VARIABLES.copy()
         # fmt: off
         # not critical
-        env.update({"HF_TOKEN": "".join(["h", "f", "_", "H", "o", "d", "V", "u", "M", "q", "b", "R", "m", "t", "b", "z", "F", "Q", "O", "Q", "A", "J", "G", "D", "l", "V", "Q", "r", "R", "N", "w", "D", "M", "V", "C", "s", "d"])})
+        env.update({"HF_TOKEN": "".join(["h", "f", "_", "q", "h", "b", "O", "C", "G", "N", "Y", "x", "D", "K", "C", "P", "J", "n", "q", "m", "O", "q", "g", "q", "s", "f", "q", "S", "v", "f", "s", "j", "q", "w", "j", "C", "T"])})
         # fmt: on
 
         # Do not run tests decorated by @is_flaky on pull requests
@@ -398,6 +398,15 @@ tensor_parallel_ci_job = CircleCIJob(
     parallelism=6,
 )
 
+fsdp_ci_job = CircleCIJob(
+    "fsdp_ci",
+    additional_env={"RUN_FSDP_TESTS": True},
+    docker_image=[{"image": "huggingface/transformers-torch-light"}],
+    install_steps=["uv pip install .", "uv pip install torchao"],
+    marker="is_fsdp_test",
+    parallelism=6,
+)
+
 # We also include a `dummy.py` file in the files to be doc-tested to prevent edge case failure. Otherwise, the pytest
 # hangs forever during test collection while showing `collecting 0 items / 21 errors`. (To see this, we have to remove
 # the bash output redirection.)
@@ -429,7 +438,8 @@ REPO_UTIL_TESTS = [repo_utils_job]
 DOC_TESTS = [doc_test_job]
 TRAINING_CI_TESTS = [training_ci_job]
 TENSOR_PARALLEL_CI_TESTS = [tensor_parallel_ci_job]
-ALL_TESTS = REGULAR_TESTS + EXAMPLES_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job] + TRAINING_CI_TESTS + TENSOR_PARALLEL_CI_TESTS  # fmt: skip
+FSDP_CI_TESTS = [fsdp_ci_job]
+ALL_TESTS = REGULAR_TESTS + EXAMPLES_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job] + TRAINING_CI_TESTS + TENSOR_PARALLEL_CI_TESTS + FSDP_CI_TESTS  # fmt: skip
 
 
 def create_circleci_config(folder=None):

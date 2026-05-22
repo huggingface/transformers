@@ -33,28 +33,30 @@ The original code can be found [here](https://github.com/Peterande/D-FINE).
 ## Usage tips
 
 ```python
->>> import torch
->>> from transformers.image_utils import load_image
->>> from transformers import DFineForObjectDetection, AutoImageProcessor
+import torch
 
->>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
->>> image = load_image(url)
+from transformers import AutoImageProcessor, DFineForObjectDetection
+from transformers.image_utils import load_image
 
->>> image_processor = AutoImageProcessor.from_pretrained("ustc-community/dfine_x_coco")
->>> model = DFineForObjectDetection.from_pretrained("ustc-community/dfine_x_coco")
 
->>> inputs = image_processor(images=image, return_tensors="pt")
+url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+image = load_image(url)
 
->>> with torch.no_grad():
-...     outputs = model(**inputs)
+image_processor = AutoImageProcessor.from_pretrained("ustc-community/dfine_x_coco")
+model = DFineForObjectDetection.from_pretrained("ustc-community/dfine_x_coco", device_map="auto")
 
->>> results = image_processor.post_process_object_detection(outputs, target_sizes=[(image.height, image.width)], threshold=0.5)
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 
->>> for result in results:
-...     for score, label_id, box in zip(result["scores"], result["labels"], result["boxes"]):
-...         score, label = score.item(), label_id.item()
-...         box = [round(i, 2) for i in box.tolist()]
-...         print(f"{model.config.id2label[label]}: {score:.2f} {box}")
+with torch.no_grad():
+    outputs = model(**inputs)
+
+results = image_processor.post_process_object_detection(outputs, target_sizes=[(image.height, image.width)], threshold=0.5)
+
+for result in results:
+    for score, label_id, box in zip(result["scores"], result["labels"], result["boxes"]):
+        score, label = score.item(), label_id.item()
+        box = [round(i, 2) for i in box.tolist()]
+        print(f"{model.config.id2label[label]}: {score:.2f} {box}")
 cat: 0.96 [344.49, 23.4, 639.84, 374.27]
 cat: 0.96 [11.71, 53.52, 316.64, 472.33]
 remote: 0.95 [40.46, 73.7, 175.62, 117.57]

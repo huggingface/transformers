@@ -46,12 +46,12 @@ from .generation_csm import CsmGenerationMixin
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for the model autoregressive outputs.
     """
 )
+@dataclass
 class CsmOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -274,6 +274,7 @@ class CsmCodebooksHead(nn.Module):
 class CsmDepthDecoderForCausalLM(LlamaForCausalLM, GenerationMixin):
     _tied_weights_keys = None
     _tp_plan = None
+    _sp_plan = None
     _pp_plan = None
 
     def __init__(self, config):

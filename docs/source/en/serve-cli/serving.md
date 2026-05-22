@@ -24,6 +24,7 @@ The `transformers serve` CLI is a lightweight option for local or self-hosted se
 The `transformers serve` command spawns a local server compatible with the [OpenAI SDK](https://platform.openai.com/docs/overview). The server works with many third-party applications and supports the REST APIs below.
 
 - `/v1/chat/completions` for text, image, audio, and video requests
+- `/v1/completions` for legacy text completions from a freeform prompt
 - `/v1/responses` supports the [Responses API](https://platform.openai.com/docs/api-reference/responses)
 - `/v1/audio/transcriptions` for audio transcriptions
 - `/v1/models` lists available models for third-party integrations
@@ -453,9 +454,9 @@ data: {"id":"f47ac10b-58cc-4372-a567-0e02b2c3d479","choices":[{"delta":{"content
 </hfoption>
 </hfoptions>
 
-### Audio completions
+### Audio-based completions
 
-Multimodal models like [Gemma 4](https://huggingface.co/google/gemma-4-E2B-it) and [Qwen2.5-Omni](https://huggingface.co/Qwen/Qwen2.5-Omni-3B) accept audio input using the OpenAI `input_audio` content type. The audio must be base64-encoded and the format (`mp3` or `wav`) must be specified.
+Multimodal models like [Gemma 4](https://huggingface.co/google/gemma-4-E2B-it) and [Qwen2.5-Omni](https://huggingface.co/Qwen/Qwen2.5-Omni-3B) accept audio input through the OpenAI `input_audio` content type. Base64-encode the audio and specify the format (`mp3` or `wav`).
 
 <hfoptions id="audio-completions">
 <hfoption id="huggingface_hub">
@@ -694,7 +695,7 @@ data: {"id":"cb997e1d-98b9-414a-be89-1880288610ef","choices":[{"delta":{"content
 > [!WARNING]
 > The `audio_url` content type is an extension not part of the OpenAI standard and may change in future versions.
 
-As a convenience, audio can also be passed by URL using the `audio_url` content type, avoiding the need for base64 encoding.
+You can also pass audio by URL with the `audio_url` content type to skip base64 encoding.
 
 ```python
 completion = client.chat.completions.create(
@@ -711,12 +712,12 @@ completion = client.chat.completions.create(
 )
 ```
 
-### Video completions
+### Video-based completions
 
 > [!WARNING]
 > The `video_url` content type is an extension not part of the OpenAI standard and may change in future versions.
 
-Video input is supported using the `video_url` content type. If the model supports audio (e.g. Gemma 4, Qwen2.5-Omni), the audio track is automatically extracted from the video and processed alongside the visual frames.
+Use the `video_url` content type for video input. If the model supports audio (e.g. Gemma 4, Qwen2.5-Omni), the server extracts the audio track from the video and processes it with the visual frames.
 
 > [!TIP]
 > Video processing requires [torchcodec](https://github.com/pytorch/torchcodec). Install it with `pip install torchcodec`.
@@ -933,6 +934,112 @@ data: {"id":"cb997e1d-98b9-414a-be89-1880288610ef","choices":[{"delta":{"content
 </hfoption>
 </hfoptions>
 
+### Multi-turn conversations[[completions]]
+
+To have a multi-turn conversation, include the full conversation history in the `messages` list with alternating `user` and `assistant` roles. Like all OpenAI-compatible servers, the API is stateless, so every request must contain the complete conversation history.
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
+
+completion = client.chat.completions.create(
+    model="Qwen/Qwen2.5-0.5B-Instruct",
+    messages=[
+        {"role": "user", "content": "What is the capital of France?"},
+        {"role": "assistant", "content": "The capital of France is Paris."},
+        {"role": "user", "content": "How many people live there?"},
+    ],
+)
+print(completion.choices[0].message.content)
+```
+
+The follow-up question "How many people live there?" relies on the prior context, so the model answers about Paris.
+
+```
+As of 2021, the population of Paris is approximately 2.2 million people.
+```
+
+## v1/completions
+
+The `v1/completions` API is based on the [legacy Completions API](https://platform.openai.com/docs/api-reference/completions). Unlike `/v1/chat/completions`, it takes a freeform text `prompt` instead of chat messages and returns generated text in `choices[].text`. This is useful for base (non-instruct) models and text completion tasks where a chat template is not needed. It also supports `suffix` for fill-in-the-middle text insertion.
+
+<hfoptions id="legacy-completion">
+<hfoption id="curl">
+
+```shell
+curl -X POST http://localhost:8000/v1/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen/Qwen2.5-0.5B",
+    "prompt": "The capital of France is",
+    "max_tokens": 20
+  }'
+```
+
+The command returns the following response.
+
+```json
+{
+  "id": "chatcmpl-abc123",
+  "object": "text_completion",
+  "created": 1234567890,
+  "model": "Qwen/Qwen2.5-0.5B@main",
+  "choices": [
+    {
+      "text": " Paris, and the capital of the United States is Washington, D.C.",
+      "index": 0,
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 5,
+    "completion_tokens": 16,
+    "total_tokens": 21
+  }
+}
+```
+
+</hfoption>
+<hfoption id="openai">
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
+
+# Non-streaming
+completion = client.completions.create(
+    model="Qwen/Qwen2.5-0.5B",
+    prompt="The capital of France is",
+    max_tokens=20,
+)
+print(completion.choices[0].text)
+```
+
+The [OpenAI](https://platform.openai.com/docs/quickstart) client returns the following.
+
+```shell
+ Paris, and the capital of the United States is Washington, D.C.
+```
+
+Streaming is also supported.
+
+```python
+stream = client.completions.create(
+    model="Qwen/Qwen2.5-0.5B",
+    prompt="The capital of France is",
+    max_tokens=20,
+    stream=True,
+)
+for chunk in stream:
+    print(chunk.choices[0].text, end="")
+```
+
+</hfoption>
+</hfoptions>
+
 ## v1/responses
 
 The [Responses API](https://platform.openai.com/docs/api-reference/responses) is OpenAI's latest API endpoint for generation. It supports stateful interactions and integrates built-in tools to extend a model's capabilities. OpenAI [recommends](https://platform.openai.com/docs/guides/migrate-to-responses) using the Responses API over the Chat Completions API for new projects.
@@ -1062,7 +1169,7 @@ data: {"content_index":0,"delta":"upon ","item_id":"msg_req_0","output_index":0,
 
 ### Image-based responses
 
-The Responses API also supports image, audio, and video inputs. Pass them as a list of messages using the same content types as [v1/chat/completions](#text-and-image-based-completions).
+The Responses API also supports image, audio, and video inputs.
 
 <hfoptions id="responses-images">
 <hfoption id="openai">
@@ -1075,18 +1182,11 @@ client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
 response = client.responses.create(
     model="Qwen/Qwen2.5-VL-7B-Instruct",
     input=[
+        {"type": "input_text", "text": "What's in this image?"},
         {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "What's in this image?"},
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg",
-                    }
-                },
-            ],
-        }
+            "type": "input_image",
+            "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg",
+        },
     ],
     max_output_tokens=256,
     stream=False,
@@ -1111,18 +1211,11 @@ client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
 response = client.responses.create(
     model="Qwen/Qwen2.5-VL-7B-Instruct",
     input=[
+        {"type": "input_text", "text": "What's in this image?"},
         {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "What's in this image?"},
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg",
-                    }
-                },
-            ],
-        }
+            "type": "input_image",
+            "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg",
+        },
     ],
     max_output_tokens=256,
     stream=True,
@@ -1148,13 +1241,8 @@ curl http://localhost:8000/v1/responses \
   -d '{
     "model": "Qwen/Qwen2.5-VL-7B-Instruct",
     "input": [
-      {
-        "role": "user",
-        "content": [
-          {"type": "text", "text": "What'\''s in this image?"},
-          {"type": "image_url", "image_url": {"url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg"}}
-        ]
-      }
+      {"type": "input_text", "text": "What'\''s in this image?"},
+      {"type": "input_image", "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg"}
     ],
     "max_output_tokens": 256,
     "stream": false
@@ -1198,13 +1286,8 @@ curl http://localhost:8000/v1/responses \
     "model": "Qwen/Qwen2.5-VL-7B-Instruct",
     "stream": true,
     "input": [
-      {
-        "role": "user",
-        "content": [
-          {"type": "text", "text": "What'\''s in this image?"},
-          {"type": "image_url", "image_url": {"url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg"}}
-        ]
-      }
+      {"type": "input_text", "text": "What'\''s in this image?"},
+      {"type": "input_image", "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg"}
     ],
     "max_output_tokens": 256
   }'
@@ -1241,13 +1324,8 @@ audio_b64 = base64.b64encode(httpx.get(audio_url, follow_redirects=True).content
 response = client.responses.create(
     model="google/gemma-4-E2B-it",
     input=[
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "Transcribe this audio."},
-                {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
-            ],
-        }
+        {"type": "input_text", "text": "Transcribe this audio."},
+        {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
     ],
     max_output_tokens=256,
     stream=False,
@@ -1277,11 +1355,8 @@ audio_b64 = base64.b64encode(httpx.get(audio_url, follow_redirects=True).content
 response = client.responses.create(
     model="google/gemma-4-E2B-it",
     input=[
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "Transcribe this audio."},
-                {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
+        {"type": "input_text", "text": "Transcribe this audio."},
+        {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
             ],
         }
     ],
@@ -1311,13 +1386,8 @@ cat <<EOF > /tmp/audio_request.json
 {
   "model": "google/gemma-4-E2B-it",
   "input": [
-    {
-      "role": "user",
-      "content": [
-        {"type": "text", "text": "Transcribe this audio."},
-        {"type": "input_audio", "input_audio": {"data": "$AUDIO_B64", "format": "mp3"}}
-      ]
-    }
+    {"type": "input_text", "text": "Transcribe this audio."},
+    {"type": "input_audio", "input_audio": {"data": "$AUDIO_B64", "format": "mp3"}}
   ],
   "max_output_tokens": 256,
   "stream": false
@@ -1368,13 +1438,8 @@ cat <<EOF > /tmp/audio_request.json
   "model": "google/gemma-4-E2B-it",
   "stream": true,
   "input": [
-    {
-      "role": "user",
-      "content": [
-        {"type": "text", "text": "Transcribe this audio."},
-        {"type": "input_audio", "input_audio": {"data": "$AUDIO_B64", "format": "mp3"}}
-      ]
-    }
+    {"type": "input_text", "text": "Transcribe this audio."},
+    {"type": "input_audio", "input_audio": {"data": "$AUDIO_B64", "format": "mp3"}}
   ],
   "max_output_tokens": 256
 }
@@ -1401,19 +1466,14 @@ data: {"content_index":0,"delta":"This ","item_id":"msg_a1b2c3d4","output_index"
 > [!WARNING]
 > The `audio_url` content type is an extension not part of the OpenAI standard and may change in future versions.
 
-As a convenience, audio can also be passed by URL using the `audio_url` content type, avoiding the need for base64 encoding.
+You can also pass audio by URL with the `audio_url` content type to skip base64 encoding.
 
 ```python
 response = client.responses.create(
     model="google/gemma-4-E2B-it",
     input=[
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "Transcribe this audio."},
-                {"type": "audio_url", "audio_url": {"url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3"}},
-            ],
-        }
+        {"type": "input_text", "text": "Transcribe this audio."},
+        {"type": "audio_url", "audio_url": {"url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3"}},
     ],
     max_output_tokens=256,
     stream=False,
@@ -1439,13 +1499,8 @@ client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
 response = client.responses.create(
     model="google/gemma-4-E2B-it",
     input=[
-        {
-            "role": "user",
-            "content": [
-                {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}},
-                {"type": "text", "text": "What is happening in the video and what is the song about?"},
-            ],
-        }
+        {"type": "input_text", "text": "What is happening in the video and what is the song about?"},
+        {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}},
     ],
     max_output_tokens=256,
     stream=False,
@@ -1472,13 +1527,8 @@ client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
 response = client.responses.create(
     model="google/gemma-4-E2B-it",
     input=[
-        {
-            "role": "user",
-            "content": [
-                {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}},
-                {"type": "text", "text": "What is happening in the video and what is the song about?"},
-            ],
-        }
+        {"type": "input_text", "text": "What is happening in the video and what is the song about?"},
+        {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}},
     ],
     max_output_tokens=256,
     stream=True,
@@ -1506,13 +1556,8 @@ curl http://localhost:8000/v1/responses \
   -d '{
     "model": "google/gemma-4-E2B-it",
     "input": [
-      {
-        "role": "user",
-        "content": [
-          {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}},
-          {"type": "text", "text": "What is happening in the video and what is the song about?"}
-        ]
-      }
+      {"type": "input_text", "text": "What is happening in the video and what is the song about?"},
+      {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}}
     ],
     "max_output_tokens": 256,
     "stream": false
@@ -1556,13 +1601,8 @@ curl http://localhost:8000/v1/responses \
     "model": "google/gemma-4-E2B-it",
     "stream": true,
     "input": [
-      {
-        "role": "user",
-        "content": [
-          {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}},
-          {"type": "text", "text": "What is happening in the video and what is the song about?"}
-        ]
-      }
+      {"type": "input_text", "text": "What is happening in the video and what is the song about?"},
+      {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}}
     ],
     "max_output_tokens": 256
   }'
@@ -1580,6 +1620,34 @@ data: {"content_index":0,"delta":"Based ","item_id":"msg_b2c3d4e5","output_index
 
 </hfoption>
 </hfoptions>
+
+### Multi-turn conversations[[responses]]
+
+For multi-turn conversations, pass a list of messages with `role` keys in the `input` field. Like all OpenAI-compatible servers, the API is stateless, so every request must contain the complete conversation history.
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
+
+response = client.responses.create(
+    model="Qwen/Qwen2.5-0.5B-Instruct",
+    input=[
+        {"role": "user", "content": "What is the capital of France?"},
+        {"role": "assistant", "content": "The capital of France is Paris."},
+        {"role": "user", "content": "How many people live there?"},
+    ],
+    max_output_tokens=256,
+    stream=False,
+)
+print(response.output[0].content[0].text)
+```
+
+The follow-up question "How many people live there?" relies on the prior context, so the model answers about Paris.
+
+```
+As of 2021, Paris has a population of approximately 2.8 million people.
+```
 
 ## v1/audio/transcriptions
 
@@ -1666,7 +1734,7 @@ The stream ends with exactly one terminal event, `ready` (success) or `error` (f
 
 ## Timeout
 
-`transformers serve` supports different requests by different models. Each model loads on demand and stays in GPU memory. Models unload automatically after 300 seconds of inactivity to free up GPU memory. Set `--model-timeout` to a different value in seconds, or `-1` to disable unloading entirely.
+`transformers serve` handles requests for any model. Each model loads on demand and stays in GPU memory. Models unload automatically after 300 seconds of inactivity to free GPU memory. Set `--model-timeout` to a different value in seconds, or `-1` to disable unloading.
 
 ```shell
 transformers serve --model-timeout 400
@@ -1674,7 +1742,7 @@ transformers serve --model-timeout 400
 
 ### Loading examples
 
-See the example responses below for a freshly downloaded model, a model loaded from your local cache (skips the download stage), and a model that already exists in memory.
+The examples below show responses for a freshly downloaded model, a model loaded from your local cache (skips the download stage), and a model already in memory.
 
 <hfoptions id="load-model-examples">
 <hfoption id="fresh load">
@@ -1716,7 +1784,7 @@ data: {"status": "ready", "model": "org/model@main", "cached": true}
 The `transformers serve` server supports OpenAI-style function calling. Models trained for tool-use generate structured function calls that your application executes.
 
 > [!NOTE]
-> Tool calling is currently limited to the Qwen model family.
+> Tool calling works with any model whose tokenizer declares tool call tokens. Qwen and Gemma 4 work out of the box. Open an [issue](https://github.com/huggingface/transformers/issues/new/choose) to request support for a specific model.
 
 Define tools as a list of function specifications following the OpenAI format.
 
@@ -1778,6 +1846,287 @@ for event in response:
   print(event)
 ```
 
+### Multi-turn tool calling
+
+After the model returns a tool call, execute the function locally, then send the result back in a follow-up request to get the model's final answer. The pattern differs slightly between the two APIs. See the [OpenAI function calling guide](https://developers.openai.com/api/docs/guides/function-calling?api-mode=chat) for the full spec.
+
+The examples below reuse the `tools` list defined above.
+
+<hfoptions id="multi-turn-tool-calling">
+<hfoption id="v1/chat/completions">
+
+Pass the tool result as a `role: "tool"` message with the matching `tool_call_id`.
+
+```py
+# Model returns a tool call
+messages = [{"role": "user", "content": "What's the weather like in San Francisco?"}]
+response = client.chat.completions.create(
+    model="Qwen/Qwen2.5-7B-Instruct",
+    messages=messages,
+    tools=tools,
+)
+assistant_message = response.choices[0].message
+
+# Execute the tool locally
+tool_call = assistant_message.tool_calls[0]
+result = {"temperature": 22, "condition": "sunny"}  # your actual function call here
+
+# Send the tool result back
+messages.append(assistant_message)
+messages.append({
+    "role": "tool",
+    "tool_call_id": tool_call.id,
+    "content": json.dumps(result),
+})
+final_response = client.chat.completions.create(
+    model="Qwen/Qwen2.5-7B-Instruct",
+    messages=messages,
+    tools=tools,
+)
+print(final_response.choices[0].message.content)
+```
+
+</hfoption>
+<hfoption id="v1/responses">
+
+Pass the tool result as a `function_call_output` item in the `input` list of the follow-up request.
+
+```py
+user_message = {"role": "user", "content": "What's the weather like in San Francisco?"}
+response = client.responses.create(
+    model="Qwen/Qwen2.5-7B-Instruct",
+    input=[user_message],
+    tools=tools,
+    stream=False,
+)
+tool_call = next(item for item in response.output if item.type == "function_call")
+
+result = {"temperature": 22, "condition": "sunny"}
+
+final_response = client.responses.create(
+    model="Qwen/Qwen2.5-7B-Instruct",
+    input=[
+        user_message,
+        tool_call.model_dump(exclude_none=True),
+        {"type": "function_call_output", "call_id": tool_call.call_id, "output": json.dumps(result)},
+    ],
+    tools=tools,
+    stream=False,
+)
+print(final_response.output_text)
+```
+
+</hfoption>
+</hfoptions>
+
+## Reasoning
+
+Reasoning models emit a hidden chain-of-thought before the final answer. The server detects these thinking spans, strips the delimiters from the visible answer, and surfaces the reasoning text in a dedicated field so clients can render it separately.
+
+- Chat Completions returns reasoning as `reasoning_content` on the assistant message.
+- The Responses API returns reasoning as a `reasoning` output item that precedes the `message` item.
+
+Reasoning detection relies on the model's chat template and tokenizer. Models with custom thinking delimiters (Gemma 4) declare them with the tokenizer's `response_schema`. Models with inline `<think>...</think>` tags (Qwen3, DeepSeek-R1) work with the default schema.
+
+### Enable reasoning on the server
+
+Use `--reasoning` to control whether the chat template emits thinking tokens.
+
+| Value | Behavior |
+|---|---|
+| `auto` (default) | Defer to the chat template's default. |
+| `on` | Force thinking on by setting `enable_thinking=True` in the chat template kwargs. |
+| `off` | Force thinking off by setting `enable_thinking=False`. |
+
+```sh
+transformers serve Qwen/Qwen3-1.7B --reasoning on
+```
+
+> [!WARNING]
+> Not all models support reasoning. `--reasoning` only works when the model's chat template handles the `enable_thinking` variable (or when its tokenizer declares thinking delimiters). For other models, the flag is silently ignored.
+
+`--reasoning on` and `--reasoning off` work by setting the chat template variable `enable_thinking`. Some chat templates use a different variable name to toggle thinking, or accept extra variables that change how the prompt is rendered. Pass any chat template variable directly with `--chat-template-kwargs` as a JSON object.
+
+```sh
+transformers serve Qwen/Qwen3-1.7B \
+  --chat-template-kwargs '{"enable_thinking": true}'
+```
+
+Clients can also send `chat_template_kwargs` in the request body to override the server defaults for a single request, without restarting the server.
+
+### Chat Completions
+
+Non-streaming responses include `reasoning_content` alongside `content` on the assistant message.
+
+<hfoptions id="reasoning-chat">
+<hfoption id="openai">
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<KEY>")
+
+completion = client.chat.completions.create(
+    model="Qwen/Qwen3-1.7B",
+    messages=[{"role": "user", "content": "What is 17 * 23?"}],
+)
+message = completion.choices[0].message
+print("reasoning:", message.reasoning_content)
+print("answer:", message.content)
+```
+
+</hfoption>
+<hfoption id="openai (stream)">
+
+Streaming emits `reasoning_content` deltas before `content` deltas. Concatenate each field separately.
+
+```python
+chunks = list(
+    client.chat.completions.create(
+        model="Qwen/Qwen3-1.7B",
+        messages=[{"role": "user", "content": "What is 17 * 23?"}],
+        stream=True,
+    )
+)
+reasoning = "".join(getattr(c.choices[0].delta, "reasoning_content", None) or "" for c in chunks)
+content = "".join(c.choices[0].delta.content or "" for c in chunks)
+```
+
+</hfoption>
+<hfoption id="curl">
+
+```shell
+curl -X POST http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen/Qwen3-1.7B",
+    "messages": [{"role": "user", "content": "What is 17 * 23?"}],
+    "chat_template_kwargs": {"enable_thinking": true}
+  }'
+```
+
+The response includes `reasoning_content` on the assistant message.
+
+```json
+{
+  "choices": [
+    {
+      "message": {
+        "role": "assistant",
+        "content": "17 * 23 = 391.",
+        "reasoning_content": "Let me compute 17 * 23. 17 * 20 = 340, 17 * 3 = 51, so 340 + 51 = 391."
+      },
+      "finish_reason": "stop",
+      "index": 0
+    }
+  ]
+}
+```
+
+</hfoption>
+</hfoptions>
+
+### Responses API
+
+The Responses API returns reasoning as a separate `reasoning` output item that precedes the `message` item.
+
+<hfoptions id="reasoning-responses">
+<hfoption id="openai">
+
+```python
+response = client.responses.create(
+    model="Qwen/Qwen3-1.7B",
+    input="What is 17 * 23?",
+    stream=False,
+)
+reasoning_item = next(i for i in response.output if i.type == "reasoning")
+message_item = next(i for i in response.output if i.type == "message")
+print("reasoning:", reasoning_item.content[0].text)
+print("answer:", message_item.content[0].text)
+```
+
+</hfoption>
+<hfoption id="openai (stream)">
+
+Streaming opens the reasoning item first and emits `response.reasoning_text.delta` events, then closes it and opens the message item to emit `response.output_text.delta` events.
+
+```python
+stream = client.responses.create(
+    model="Qwen/Qwen3-1.7B",
+    input="What is 17 * 23?",
+    stream=True,
+)
+
+for event in stream:
+    if event.type == "response.reasoning_text.delta":
+        print(event.delta, end="")
+    elif event.type == "response.output_text.delta":
+        print(event.delta, end="")
+```
+
+</hfoption>
+</hfoptions>
+
+### Multi-turn round trip
+
+For multi-turn conversations, include the reasoning text from the previous response in the next request. The server passes it to the chat template, which can render it as part of the prior assistant turn so the model sees its own earlier thought process.
+
+<hfoptions id="reasoning-multiturn">
+<hfoption id="v1/chat/completions">
+
+Attach `reasoning_content` to the prior assistant message.
+
+```python
+first = client.chat.completions.create(
+    model="Qwen/Qwen3-1.7B",
+    messages=[{"role": "user", "content": "What is 17 * 23?"}],
+).choices[0].message
+
+second = client.chat.completions.create(
+    model="Qwen/Qwen3-1.7B",
+    messages=[
+        {"role": "user", "content": "What is 17 * 23?"},
+        {
+            "role": "assistant",
+            "content": first.content,
+            "reasoning_content": first.reasoning_content,
+        },
+        {"role": "user", "content": "Now multiply that result by 2."},
+    ],
+)
+print(second.choices[0].message.content)
+```
+
+</hfoption>
+<hfoption id="v1/responses">
+
+Pass the prior `reasoning` item back as an input item before the assistant message.
+
+```python
+first = client.responses.create(
+    model="Qwen/Qwen3-1.7B",
+    input="What is 17 * 23?",
+    stream=False,
+)
+reasoning_item = next(i for i in first.output if i.type == "reasoning")
+message_item = next(i for i in first.output if i.type == "message")
+
+second = client.responses.create(
+    model="Qwen/Qwen3-1.7B",
+    input=[
+        {"role": "user", "content": "What is 17 * 23?"},
+        reasoning_item.model_dump(exclude_none=True),
+        {"role": "assistant", "content": message_item.content[0].text},
+        {"role": "user", "content": "Now multiply that result by 2."},
+    ],
+    stream=False,
+)
+print(second.output_text)
+```
+
+</hfoption>
+</hfoptions>
+
 ## Port forwarding
 
 Port forwarding lets you serve models from a remote server. Make sure you have SSH access to the server, then run this command on your local machine.
@@ -1788,11 +2137,10 @@ ssh -N -f -L 8000:localhost:8000 your_server_account@your_server_IP -p port_to_s
 
 ## Reproducibility
 
-Use `--force-model <repo_id>` to avoid per-request model hints and produce stable, repeatable runs.
+Pass a model as a positional argument to avoid per-request model hints and produce stable, repeatable runs.
 
 ```sh
-transformers serve \
-  --force-model Qwen/Qwen2.5-0.5B-Instruct \
+transformers serve Qwen/Qwen2.5-0.5B-Instruct \
   --continuous-batching \
   --dtype "bfloat16"
 ```

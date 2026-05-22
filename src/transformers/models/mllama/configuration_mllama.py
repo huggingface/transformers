@@ -197,4 +197,4 @@ class MllamaConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["MllamaConfig"]
+__all__ = ["MllamaConfig", "MllamaTextConfig", "MllamaVisionConfig"]

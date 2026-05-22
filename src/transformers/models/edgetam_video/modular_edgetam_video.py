@@ -574,9 +574,10 @@ class EdgeTamVideoTwoWayAttentionBlock(Sam2VideoTwoWayAttentionBlock):
 
 class EdgeTamVideoPositionEmbeddingSine(Sam2VideoPositionEmbeddingSine):
     # maxsize=2 because we need to cache the forward method for both memory encoder and perceiver resampler
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=2)
-    def forward(self, **super_kwargs):
-        return super().forward(**super_kwargs)
+    def build_sine_position_embedding(**super_kwargs) -> torch.Tensor:
+        return super().build_sine_position_embedding(**super_kwargs)
 
 
 class EdgeTamVideoMemoryEncoder(Sam2VideoMemoryEncoder):
@@ -873,7 +874,7 @@ class EdgeTamVideoPerceiverResampler(nn.Module):
             self.latents_2d = nn.Parameter(torch.randn(self.num_latents_2d, self.hidden_size))
 
         self.positional_encoding = EdgeTamVideoPositionEmbeddingSine(
-            num_pos_feats=self.hidden_size // 2, normalize=True
+            num_position_features=self.hidden_size // 2, normalize=True
         )
 
         self.layers = nn.ModuleList([EdgeTamVideoPerceiverEncoderLayer(config) for _ in range(self.num_layers)])
@@ -1130,7 +1131,7 @@ class EdgeTamVideoModel(Sam2VideoModel):
 
         # Reshape from (Batch, H*W, Channels) to (Batch, Channels, Height, Width)
         conditioned_feature_map = (
-            conditioned_feature_map_flat.squeeze(1).permute(0, 2, 1).view(batch_size, num_channels, height, width)
+            conditioned_feature_map_flat.squeeze(1).transpose(1, 2).view(batch_size, num_channels, height, width)
         )
         return conditioned_feature_map
 

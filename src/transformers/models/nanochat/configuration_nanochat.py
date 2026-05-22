@@ -15,14 +15,14 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="karpathy/nanochat-d32")
 @strict
-class NanoChatConfig(PretrainedConfig):
+class NanoChatConfig(PreTrainedConfig):
     r"""
     Example:
 
@@ -46,10 +46,11 @@ class NanoChatConfig(PretrainedConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.o_proj": "rowwise_allreduce",
         "layers.*.mlp.fc1": "colwise",
-        "layers.*.mlp.fc2": "rowwise",
+        "layers.*.mlp.fc2": "rowwise_allreduce",
     }
+    base_model_sp_plan = None
 
     vocab_size: int = 50304
     hidden_size: int = 768

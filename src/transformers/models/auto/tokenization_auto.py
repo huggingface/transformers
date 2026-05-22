@@ -147,10 +147,10 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("gpt_neox", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("gpt_neox_japanese", "GPTNeoXJapaneseTokenizer"),
         ("gptj", "GPT2Tokenizer" if is_tokenizers_available() else None),
-        ("granite", "GPT2Tokenizer"),
-        ("granitemoe", "GPT2Tokenizer"),
-        ("granitemoehybrid", "GPT2Tokenizer"),
-        ("granitemoeshared", "GPT2Tokenizer"),
+        ("granite", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("granitemoe", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("granitemoehybrid", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("granitemoeshared", "TokenizersBackend" if is_tokenizers_available() else None),
         ("grounding-dino", "BertTokenizer" if is_tokenizers_available() else None),
         ("groupvit", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("herbert", "HerbertTokenizer" if is_tokenizers_available() else None),
@@ -187,6 +187,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("megatron-bert", "BertTokenizer" if is_tokenizers_available() else None),
         ("metaclip_2", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("mgp-str", "MgpstrTokenizer"),
+        ("minicpmv4_6", "TokenizersBackend" if is_tokenizers_available() else None),
         (
             "ministral",
             "MistralCommonBackend"
@@ -246,6 +247,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("ovis2", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("owlv2", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("owlvit", "CLIPTokenizer" if is_tokenizers_available() else None),
+        ("parakeet_ctc", "ParakeetTokenizer" if is_tokenizers_available() else None),
+        ("parakeet_tdt", "ParakeetTokenizer" if is_tokenizers_available() else None),
         ("pegasus", "PegasusTokenizer" if is_tokenizers_available() else None),
         ("pegasus_x", "PegasusTokenizer" if is_tokenizers_available() else None),
         ("perceiver", "PerceiverTokenizer"),
@@ -259,8 +262,10 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
             else ("TokenizersBackend" if is_tokenizers_available() else None),
         ),
         ("plbart", "PLBartTokenizer" if is_tokenizers_available() else None),
+        ("pp_formulanet", "NougatTokenizer" if is_tokenizers_available() else None),
         ("prophetnet", "ProphetNetTokenizer"),
         ("qdqbert", "BertTokenizer" if is_tokenizers_available() else None),
+        ("qianfan_ocr", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen2", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen2_5_omni", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen2_5_vl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
@@ -349,9 +354,12 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "chatlm",
     "deepseek_v2",
     "deepseek_v3",
+    "deepseek_v4",
     "deepseek_vl",
     "deepseek_vl_hybrid",
     "deepseek_vl_v2",
+    "deepseek_ocr",
+    "deepseek_ocr2",
     "fuyu",
     "h2ovl_chat",
     "hyperclovax_vlm",
@@ -373,6 +381,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "phi3",
     "phi3_v",
     "phimoe",
+    "qwen2",
     "step3p5",
     "step3_vl",
     "vipllava",
@@ -704,8 +713,8 @@ class AutoTokenizer:
             else:
                 tokenizer_auto_map = tokenizer_config["auto_map"].get("AutoTokenizer", None)
 
-        # if there is a config, we can check that the tokenizer class != than model class and can thus assume we need to use TokenizersBackend
-        # Skip this early exit if auto_map is present (custom tokenizer with trust_remote_code)
+        # if there is a config, we can check that the tokenizer class != than model class.
+        # Use the config class if it's a specialized tokenizer, otherwise fall back to TokenizersBackend.
         if (
             tokenizer_auto_map is None
             and tokenizer_config_class is not None
@@ -715,15 +724,28 @@ class AutoTokenizer:
             and (TOKENIZER_MAPPING_NAMES.get(config_model_type).removesuffix("Fast"))
             != (tokenizer_config_class.removesuffix("Fast"))
         ):
-            # new model, but we ignore it unless the model type is the same
-            if TokenizersBackend is not None:
-                try:
-                    return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-                except Exception as e:
-                    logger.debug(f"Failed to use TokenizersBackend: {e}")
+            registered_class_name = TOKENIZER_MAPPING_NAMES.get(config_model_type).removesuffix("Fast")
+            if registered_class_name not in ("TokenizersBackend", "PythonBackend", "PreTrainedTokenizerFast"):
+                # If the hub class is known incorrect for this model type, use the registered class; otherwise trust the hub.
+                class_name = (
+                    registered_class_name
+                    if config_model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS
+                    else tokenizer_config_class
+                )
+                tokenizer_class = tokenizer_class_from_name(class_name)
+                if tokenizer_class is not None and tokenizer_class.__name__ not in (
+                    "TokenizersBackend",
+                    "PythonBackend",
+                    "PreTrainedTokenizerFast",
+                ):
+                    return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
-            return tokenizer_class_from_name(tokenizer_config_class).from_pretrained(
-                pretrained_model_name_or_path, *inputs, **kwargs
+            if TokenizersBackend is not None:
+                return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
+            raise ValueError(
+                f"Tokenizer class '{tokenizer_config_class}' specified in the tokenizer config was not found. "
+                f"The tokenizer may need to be converted or re-saved."
             )
 
         if "_commit_hash" in tokenizer_config:

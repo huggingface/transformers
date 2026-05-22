@@ -17,9 +17,6 @@ rendered properly in your Markdown viewer.
 
 # MGP-STR
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -49,22 +46,24 @@ into a single instance to both extract the input features and decode the predict
 
 - Step-by-step Optical Character Recognition (OCR)
 
-```py
->>> from transformers import MgpstrProcessor, MgpstrForSceneTextRecognition
->>> import requests
->>> from PIL import Image
+```python
+import requests
+from PIL import Image
 
->>> processor = MgpstrProcessor.from_pretrained('alibaba-damo/mgp-str-base')
->>> model = MgpstrForSceneTextRecognition.from_pretrained('alibaba-damo/mgp-str-base')
+from transformers import MgpstrForSceneTextRecognition, MgpstrProcessor
 
->>> # load image from the IIIT-5k dataset
->>> url = "https://i.postimg.cc/ZKwLg2Gw/367-14.png"
->>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
->>> pixel_values = processor(images=image, return_tensors="pt").pixel_values
->>> outputs = model(pixel_values)
+processor = MgpstrProcessor.from_pretrained('alibaba-damo/mgp-str-base')
+model = MgpstrForSceneTextRecognition.from_pretrained('alibaba-damo/mgp-str-base', device_map="auto")
 
->>> generated_text = processor.batch_decode(outputs.logits)['generated_text']
+# load image from the IIIT-5k dataset
+url = "https://i.postimg.cc/ZKwLg2Gw/367-14.png"
+image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+
+pixel_values = processor(images=image, return_tensors="pt").to(model.device).pixel_values
+outputs = model(pixel_values)
+
+generated_text = processor.batch_decode(outputs.logits)['generated_text']
 ```
 
 ## MgpstrConfig

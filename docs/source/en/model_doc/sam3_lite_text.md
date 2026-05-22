@@ -20,11 +20,6 @@ limitations under the License.
 
 # SAM3-LiteText
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
 
 ## Overview
 
@@ -55,8 +50,10 @@ SAM3-LiteText is a drop-in replacement for SAM3 with a lightweight text encoder.
 from io import BytesIO
 
 import httpx
-from transformers import AutoModel, AutoProcessor
 from PIL import Image
+
+from transformers import AutoModel, AutoProcessor
+
 
 model = AutoModel.from_pretrained("yonigozlan/sam3-litetext-s0", device_map="auto")
 processor = AutoProcessor.from_pretrained("yonigozlan/sam3-litetext-s0")

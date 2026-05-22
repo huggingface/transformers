@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -86,7 +86,7 @@ class PeAudioVideoEncoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="facebook/pe-av-large")
 @strict
-class PeAudioVideoConfig(PretrainedConfig):
+class PeAudioVideoConfig(PreTrainedConfig):
     r"""
     audio_video_config (`dict` or `PreTrainedConfig`, *optional*):
         Configuration for the audio-video encoder component.
@@ -117,6 +117,7 @@ class PeAudioVideoConfig(PretrainedConfig):
 
     text_config: dict | PreTrainedConfig | None = None
     audio_video_config: dict | PreTrainedConfig | None = None
+    tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
         if isinstance(self.text_config, dict):

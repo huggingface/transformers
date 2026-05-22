@@ -222,14 +222,28 @@ def is_cuda_platform() -> bool:
 def get_cuda_runtime_version() -> tuple[int, int]:
     """Return the CUDA runtime version as (major, minor).
 
-    Unlike ``torch.version.cuda`` which reports the compile-time version,
-    this queries ``cudaRuntimeGetVersion`` from ``libcudart.so`` to get the
-    actual runtime version installed on the system.
+    Prefers a direct query of ``cudaRuntimeGetVersion`` via ``libcudart.so``. If that's
+    not on the system loader path (common with pip-installed torch that bundles its own
+    CUDA runtime), falls back to ``torch.version.cuda`` — which equals the bundled
+    runtime's version for pip wheels. Returns ``(0, 0)`` for CPU-only torch.
     """
     import ctypes
 
+    try:
+        cudart = ctypes.CDLL("libcudart.so")
+    except OSError:
+        if not is_torch_available():
+            return 0, 0
+        import torch
+
+        cuda_version = getattr(torch.version, "cuda", None)
+        if cuda_version is None:
+            return 0, 0
+
+        major, minor, *_ = cuda_version.split(".")
+        return int(major), int(minor)
+
     version = ctypes.c_int()
-    cudart = ctypes.CDLL("libcudart.so")
     cudart.cudaRuntimeGetVersion(ctypes.byref(version))
     return version.value // 1000, (version.value % 1000) // 10
 
@@ -505,6 +519,26 @@ def is_torch_neuron_available(check_device: bool = False) -> bool:
 
 
 @lru_cache
+def is_torch_tpu_available(check_device: bool = False) -> bool:
+    import torch
+
+    if importlib.util.find_spec("torch_tpu") is None:
+        return False
+
+    if check_device:
+        try:
+            import torch_tpu  # noqa: F401
+
+            if hasattr(torch, "tpu") and torch.tpu.is_available():
+                return torch.tpu.device_count() >= 1
+            return False
+        except RuntimeError:
+            return False
+
+    return hasattr(torch, "tpu") and torch.tpu.is_available()
+
+
+@lru_cache
 def is_torch_bf16_gpu_available() -> bool:
     if not is_torch_available():
         return False
@@ -528,6 +562,9 @@ def is_torch_bf16_gpu_available() -> bool:
         return torch.mlu.is_bf16_supported()
     if is_torch_neuron_available() and hasattr(torch, "neuron"):
         return torch.neuron.is_bf16_supported()
+    if is_torch_tpu_available():
+        # bfloat16 is always supported on TPUs; torch.tpu has no is_bf16_supported()
+        return True
     return False
 
 
@@ -1338,16 +1375,6 @@ def is_mistral_common_available() -> bool:
 
 
 @lru_cache
-def is_opentelemetry_available() -> bool:
-    try:
-        return _is_package_available("opentelemetry")[0] and version.parse(
-            importlib.metadata.version("opentelemetry-api")
-        ) >= version.parse("1.30.0")
-    except Exception as _:
-        return False
-
-
-@lru_cache
 def is_pynvml_available() -> bool:
     return _is_package_available("pynvml")[0]
 
@@ -1521,6 +1548,16 @@ def torch_compilable_check(cond: Any, msg: str | Callable[[], str], error_type: 
         return
 
     import torch
+
+    # When tracing, msg may be an f-string with tensor values that dynamo can't trace
+    # (callable/isinstance on it breaks). Check compilation first and use torch._check
+    # without msg (it only serves as a compiler hint in that case).
+    if is_tracing():
+        if isinstance(cond, torch.Tensor):
+            torch._check_tensor_all(cond)
+        else:
+            torch._check(cond)
+        return
 
     if not callable(msg):
         # torch._check requires msg to be a callable but we want to keep the API simple for users
