@@ -662,9 +662,18 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(scores[:3], expected_scores, rtol=1e-3, atol=1e-3)
 
         bbox = person["bbox"]
-        self.assertEqual(bbox.shape, torch.Size([4]))
-        self.assertLess(bbox[0].item(), bbox[2].item())
-        self.assertLess(bbox[1].item(), bbox[3].item())
+        # Padded, aspect-ratio-corrected xyxy box derived from center ± scale/2
+        expected_bbox = torch.tensor([234.04503, -54.76801, 601.65761, 435.38211])
+        torch.testing.assert_close(bbox, expected_bbox, rtol=1e-3, atol=1e-3)
+
+        # Passing normalised boxes + target_sizes must produce identical results
+        img_w, img_h = 640, 432
+        norm_boxes = [[[b / s for b, s in zip(boxes[0][0], [img_w, img_h, img_w, img_h])]]]
+        results_norm = image_processor.post_process_pose_estimation(
+            outputs, boxes=norm_boxes, target_sizes=[(img_w, img_h)]
+        )
+        torch.testing.assert_close(results_norm[0][0]["keypoints"], keypoints)
+        torch.testing.assert_close(results_norm[0][0]["bbox"], bbox)
 
         # Test flipping
         flipped_inputs = {"pixel_values": inputs["pixel_values"].flip(-1)}
@@ -853,9 +862,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(final_scores[:3], expected_final_scores, rtol=1e-3, atol=1e-3)
 
         final_bbox = final_person["bbox"]
-        self.assertEqual(final_bbox.shape, torch.Size([4]))
-        # Same input box → same bbox for both passes
-        torch.testing.assert_close(final_bbox, bbox)
+        torch.testing.assert_close(final_bbox, expected_bbox, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_inference_normal_estimation(self):

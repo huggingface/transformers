@@ -433,6 +433,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         boxes: list[list[list[float]]] | np.ndarray,
         blur_kernel_size: int = 11,
         threshold: float | None = None,
+        target_sizes: TensorType | list[tuple] | None = None,
     ) -> list[list[dict[str, torch.Tensor]]]:
         """
         Converts the output of [`Sapiens2ForPoseEstimation`] into keypoint predictions in image space.
@@ -452,6 +453,11 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             threshold (`float`, *optional*):
                 Score threshold. Keypoints with scores at or below this value are
                 filtered out from the result dictionaries.
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(N_total, 2)` or list of `(width, height)` tuples, one per person (i.e. one
+                per flattened box). When provided, each box is multiplied by
+                `[width, height, width, height]` before processing, which is useful when boxes are given in
+                normalized [0, 1] coordinates.
 
         Returns:
             `list[list[dict]]`: Outer list is over images, inner list is over persons.
@@ -465,14 +471,23 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         requires_backends(self, ["cv2"])
 
         heatmaps_np = outputs.heatmaps.cpu().numpy()  # (N_total, K, H_hm, W_hm)
-        flattened_boxes = [bbox for image_boxes in boxes for bbox in image_boxes]
+        flattened_boxes = [np.array(bbox, dtype=np.float32) for image_boxes in boxes for bbox in image_boxes]
+
+        if target_sizes is not None and len(flattened_boxes) != len(target_sizes):
+            raise ValueError(
+                "Make sure that you pass in as many target sizes as the total number of persons "
+                "(i.e. the sum of boxes across all images)."
+            )
 
         _, K, H_hm, W_hm = heatmaps_np.shape
         heatmap_size = np.array([W_hm - 1, H_hm - 1], dtype=np.float32)
 
         person_results = []
         for i, bbox in enumerate(flattened_boxes):
-            center, scale = box_to_center_and_scale(np.array(bbox, dtype=np.float32))
+            if target_sizes is not None:
+                image_width, image_height = target_sizes[i][0], target_sizes[i][1]
+                bbox = bbox * np.array([image_width, image_height, image_width, image_height], dtype=np.float32)
+            center, scale = box_to_center_and_scale(bbox)
             scale = fix_aspect_ratio(scale, self.size["width"], self.size["height"])
             heatmap_i = heatmaps_np[i].copy()  # copy to avoid mutating caller's tensor
 
