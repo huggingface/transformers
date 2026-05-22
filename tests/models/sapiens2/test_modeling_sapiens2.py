@@ -45,6 +45,7 @@ if is_torch_available():
         Sapiens2MattingOutput,
         Sapiens2NormalEstimatorOutput,
         Sapiens2PointmapEstimatorOutput,
+        Sapiens2PoseEstimatorOutput,
     )
 
 
@@ -655,13 +656,13 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(heatmaps.shape, torch.Size([1, model.config.num_labels, 256, 192]))
         expected_heatmaps = torch.tensor(
             [
-                [6.52787e-05, 9.09248e-05, 2.26033e-04],
-                [7.08279e-04, 4.39873e-04, 7.57689e-04],
-                [9.51157e-05, 1.61983e-04, -5.80908e-05],
+                [0.26140, 0.24656, 0.21673],
+                [0.33708, 0.31597, 0.28028],
+                [0.41624, 0.39270, 0.35014],
             ],
             device=torch_device,
         )
-        torch.testing.assert_close(heatmaps[0, 0, :3, :3], expected_heatmaps, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(heatmaps[0, 0, 70:73, 70:73], expected_heatmaps, rtol=1e-3, atol=1e-3)
 
         results = image_processor.post_process_pose_estimation(outputs, boxes=boxes)
         self.assertEqual(len(results), 1)
@@ -681,6 +682,193 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         scores = person["scores"]
         expected_scores = torch.tensor([1.0007433, 0.9987416, 1.0015154])
         torch.testing.assert_close(scores[:3], expected_scores, rtol=1e-3, atol=1e-3)
+
+        # Test flipping
+        flipped_inputs = {"pixel_values": inputs["pixel_values"].flip(-1)}
+        flip_pairs = torch.tensor(
+            [
+                [1, 2],
+                [3, 4],
+                [5, 6],
+                [7, 8],
+                [9, 10],
+                [11, 12],
+                [13, 14],
+                [15, 18],
+                [16, 19],
+                [17, 20],
+                [21, 42],
+                [22, 43],
+                [23, 44],
+                [24, 45],
+                [25, 46],
+                [26, 47],
+                [27, 48],
+                [28, 49],
+                [29, 50],
+                [30, 51],
+                [31, 52],
+                [32, 53],
+                [33, 54],
+                [34, 55],
+                [35, 56],
+                [36, 57],
+                [37, 58],
+                [38, 59],
+                [39, 60],
+                [40, 61],
+                [41, 62],
+                [63, 64],
+                [65, 66],
+                [67, 68],
+                [78, 87],
+                [79, 88],
+                [80, 89],
+                [81, 90],
+                [82, 91],
+                [83, 93],
+                [84, 92],
+                [85, 95],
+                [86, 94],
+                [96, 120],
+                [97, 121],
+                [98, 122],
+                [99, 123],
+                [100, 124],
+                [101, 125],
+                [102, 126],
+                [103, 127],
+                [104, 128],
+                [105, 129],
+                [106, 130],
+                [107, 131],
+                [108, 132],
+                [109, 133],
+                [110, 134],
+                [111, 135],
+                [112, 136],
+                [113, 137],
+                [114, 138],
+                [115, 139],
+                [116, 140],
+                [117, 141],
+                [118, 142],
+                [119, 143],
+                [144, 161],
+                [145, 162],
+                [146, 163],
+                [147, 164],
+                [148, 165],
+                [149, 166],
+                [150, 167],
+                [151, 168],
+                [152, 169],
+                [153, 170],
+                [154, 171],
+                [155, 172],
+                [156, 173],
+                [157, 174],
+                [158, 175],
+                [159, 176],
+                [160, 177],
+                [180, 181],
+                [182, 185],
+                [183, 186],
+                [184, 187],
+                [188, 189],
+                [192, 193],
+                [194, 195],
+                [196, 199],
+                [197, 198],
+                [200, 203],
+                [201, 202],
+                [204, 205],
+                [208, 209],
+                [210, 211],
+                [212, 215],
+                [213, 214],
+                [216, 219],
+                [217, 218],
+                [220, 246],
+                [221, 247],
+                [222, 248],
+                [223, 249],
+                [224, 250],
+                [225, 251],
+                [226, 252],
+                [227, 253],
+                [228, 254],
+                [229, 255],
+                [230, 256],
+                [231, 257],
+                [232, 258],
+                [233, 259],
+                [234, 260],
+                [235, 261],
+                [236, 262],
+                [237, 263],
+                [238, 264],
+                [239, 265],
+                [240, 266],
+                [241, 267],
+                [242, 268],
+                [243, 269],
+                [244, 270],
+                [245, 271],
+                [272, 281],
+                [273, 286],
+                [274, 285],
+                [275, 284],
+                [276, 283],
+                [277, 282],
+                [278, 289],
+                [279, 288],
+                [280, 287],
+                [290, 299],
+                [291, 304],
+                [292, 303],
+                [293, 302],
+                [294, 301],
+                [295, 300],
+                [296, 307],
+                [297, 306],
+                [298, 305],
+            ]
+        )
+
+        with torch.no_grad():
+            flipped_outputs = model(**flipped_inputs, flip_pairs=flip_pairs)
+
+        flipped_heatmaps = flipped_outputs.heatmaps
+        expected_flipped_heatmaps = torch.tensor(
+            [
+                [0.27348, 0.25426, 0.22496],
+                [0.34877, 0.32563, 0.28418],
+                [0.43967, 0.40607, 0.35721],
+            ],
+            device=torch_device,
+        )
+        torch.testing.assert_close(
+            flipped_heatmaps[0, 0, 70:73, 70:73], expected_flipped_heatmaps, rtol=1e-3, atol=1e-3
+        )
+
+        final_heatmaps = (heatmaps + flipped_heatmaps) / 2.0
+        final_outputs = Sapiens2PoseEstimatorOutput(heatmaps=final_heatmaps)
+        final_results = image_processor.post_process_pose_estimation(final_outputs, boxes=boxes)
+        self.assertEqual(len(final_results), 1)
+        self.assertEqual(len(final_results[0]), 1)
+
+        final_person = final_results[0][0]
+        final_keypoints = final_person["keypoints"]
+        expected_final_keypoints = torch.tensor(
+            [[364.14644305, 97.99268751], [373.66756367, 81.19966519], [353.4574526, 83.647911]],
+            device=torch_device,
+        )
+        torch.testing.assert_close(final_keypoints[:3], expected_final_keypoints, rtol=1e-3, atol=1e-3)
+
+        final_scores = final_person["scores"]
+        expected_final_scores = torch.tensor([1.0064079, 0.98746514, 0.99821794], device=torch_device)
+        torch.testing.assert_close(final_scores[:3], expected_final_scores, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_inference_normal_estimation(self):
