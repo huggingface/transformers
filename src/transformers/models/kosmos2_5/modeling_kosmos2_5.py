@@ -703,7 +703,7 @@ class Kosmos2_5TextSinusoidalPositionalEmbedding(nn.Module):
                 )
 
         # expand embeddings if needed
-        max_pos = int(position_ids.max().item()) + 1
+        max_pos = self.padding_idx + 1 + seq_len + past_key_values_length
         if max_pos > self.weights.size(0):
             self.make_weights(max_pos + self.offset, self.embedding_dim, self.padding_idx)
 
@@ -970,10 +970,11 @@ class Kosmos2_5TextTransformer(Kosmos2_5PreTrainedModel):
         inputs_embeds = inputs_embeds * self.embed_scale
 
         # embed positions
+        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         positions = self.embed_positions(
             input_ids=input_ids,
             inputs_embeds=inputs_embeds,
-            past_key_values_length=0,
+            past_key_values_length=past_key_values_length,
             position_ids=position_ids,
         )
         positions = positions.to(inputs_embeds.device)
@@ -1401,11 +1402,6 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel, GenerationMixin):
             model_inputs["image_embeds"] = None
             model_inputs["image_embeds_position_mask"] = None
 
-            # Kosmos2.5 starts position_ids at `pad_token_id`...
-            if model_inputs.get("position_ids") is not None:
-                # NOTE: we need this op out-of-place, otherwise it modifies the `model_kwargs` dict used in `generate` in-place!
-                model_inputs["position_ids"] = model_inputs["position_ids"] + 1 + self.config.pad_token_id
-
         # appending `False` to `image_embeds_position_mask` (because `input_ids` grows during generation)
         elif image_embeds_position_mask is not None:
             batch_size, seq_len = inputs_embeds.size()[:-1] if inputs_embeds is not None else input_ids.size()
@@ -1417,8 +1413,10 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel, GenerationMixin):
                 ),
                 dim=1,
             )
-            # Kosmos2.5 has offset for position ids, so we need to create them correctly in PositionEmbedding layer
-            model_inputs.pop("position_ids", None)
+
+        # Kosmos2.5 position ids have a padding-idx-based offset, so we always let the PositionEmbedding layer
+        # recompute them from input_ids using the correct past_key_values_length.
+        model_inputs.pop("position_ids", None)
 
         return model_inputs
 
