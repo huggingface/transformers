@@ -398,7 +398,8 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             - `keypoints` (`torch.FloatTensor` of shape `(num_keypoints, 2)`): x/y in image coords.
             - `scores` (`torch.FloatTensor` of shape `(num_keypoints,)`): per-keypoint confidence.
             - `labels` (`torch.LongTensor` of shape `(num_keypoints,)`): keypoint indices.
-            - `bbox` (`torch.FloatTensor` of shape `(4,)`): the COCO input bounding box.
+            - `bbox` (`torch.FloatTensor` of shape `(4,)`): the padded, aspect-ratio-corrected input bounding box
+              in xyxy format (x_min, y_min, x_max, y_max), i.e. the actual image region used for preprocessing.
         """
         requires_backends(self, ["cv2"])
 
@@ -424,7 +425,15 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             keypoints = torch.tensor(locs, dtype=torch.float32)
             scores = torch.tensor(scores_i, dtype=torch.float32)
             labels = torch.arange(0, K)
-            bbox_tensor = torch.tensor(bbox, dtype=torch.float32)
+            bbox_tensor = torch.tensor(
+                [
+                    center[0] - scale[0] / 2,
+                    center[1] - scale[1] / 2,
+                    center[0] + scale[0] / 2,
+                    center[1] + scale[1] / 2,
+                ],
+                dtype=torch.float32,
+            )
 
             if threshold is not None:
                 keep = scores > threshold

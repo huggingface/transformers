@@ -661,6 +661,11 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         expected_scores = torch.tensor([1.0007433, 0.9987416, 1.0015154])
         torch.testing.assert_close(scores[:3], expected_scores, rtol=1e-3, atol=1e-3)
 
+        bbox = person["bbox"]
+        self.assertEqual(bbox.shape, torch.Size([4]))
+        self.assertLess(bbox[0].item(), bbox[2].item())
+        self.assertLess(bbox[1].item(), bbox[3].item())
+
         # Test flipping
         flipped_inputs = {"pixel_values": inputs["pixel_values"].flip(-1)}
         flip_pairs = torch.tensor(
@@ -846,6 +851,11 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         final_scores = final_person["scores"]
         expected_final_scores = torch.tensor([1.0064079, 0.98746514, 0.99821794])
         torch.testing.assert_close(final_scores[:3], expected_final_scores, rtol=1e-3, atol=1e-3)
+
+        final_bbox = final_person["bbox"]
+        self.assertEqual(final_bbox.shape, torch.Size([4]))
+        # Same input box → same bbox for both passes
+        torch.testing.assert_close(final_bbox, bbox)
 
     @slow
     def test_inference_normal_estimation(self):
