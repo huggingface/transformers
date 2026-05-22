@@ -916,7 +916,7 @@ class Sapiens2Embeddings(DINOv3ViTEmbeddings):
 
 
 class Sapiens2RopePositionEmbedding(nn.Module):
-    periods: torch.Tensor
+    inv_freq: torch.Tensor
 
     def __init__(self, config: Sapiens2Config):
         super().__init__()
@@ -929,10 +929,10 @@ class Sapiens2RopePositionEmbedding(nn.Module):
         self.head_dim = config.hidden_size // config.num_attention_heads
         self.pos_embed_dtype = getattr(torch, config.pos_embed_dtype)
 
-        periods = self.base ** (
+        inv_freq = 1 / self.base ** (
             2 * torch.arange(self.head_dim // 4, dtype=self.pos_embed_dtype) / (self.head_dim // 2)
         )
-        self.register_buffer("periods", periods, persistent=True)  # persistent=True to match original checkpoints
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         _, _, height, width = pixel_values.shape
@@ -955,7 +955,7 @@ class Sapiens2RopePositionEmbedding(nn.Module):
                 )
 
             # (height * width, 2, head_dim / 4) -> (height * width, head_dim / 2) -> (height * width, head_dim)
-            angles = 2 * math.pi * patch_coords[:, :, None] / self.periods[None, None, :].to(self.pos_embed_dtype)
+            angles = 2 * math.pi * patch_coords[:, :, None] * self.inv_freq[None, None, :].to(self.pos_embed_dtype)
             angles = angles.flatten(1, 2)
             angles = angles.tile(2)
 
@@ -1248,6 +1248,7 @@ class Sapiens2PointmapScaleHead(nn.Module):
 
 class Sapiens2PreTrainedModel(DINOv3ViTPreTrainedModel):
     base_model_prefix = "sapiens2"
+    _keys_to_ignore_on_load_unexpected = [r"periods"]
 
     @torch.no_grad()
     def _init_weights(self, module) -> None:
@@ -1274,10 +1275,10 @@ class Sapiens2PreTrainedModel(DINOv3ViTPreTrainedModel):
         elif isinstance(module, Sapiens2LayerScale):
             init.constant_(module.lambda1, self.config.layerscale_value)
         elif isinstance(module, Sapiens2RopePositionEmbedding):
-            periods = module.base ** (
+            inv_freq = 1 / module.base ** (
                 2 * torch.arange(module.head_dim // 4, dtype=module.pos_embed_dtype) / (module.head_dim // 2)
             )
-            init.copy_(module.periods, periods)
+            init.copy_(module.inv_freq, inv_freq)
         elif isinstance(
             module,
             (Sapiens2SegmentationHead, Sapiens2PointmapHead, Sapiens2PointmapScaleHead),
