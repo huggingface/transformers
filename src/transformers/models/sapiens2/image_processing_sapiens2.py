@@ -526,8 +526,9 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
                 the padding added during preprocessing is removed and predictions are resized back
                 to the original image size (unless `target_sizes` overrides the final size).
             target_sizes (`list[tuple]` of length `batch_size`, *optional*):
-                Requested final `(height, width)` for each prediction. Overrides `source_sizes`
-                as the resize target. Resized with bilinear interpolation before normalization.
+                Requested final `(height, width)` for each prediction. When provided, used as the
+                resize target instead of `source_sizes`. Resized with bilinear interpolation after
+                L2 normalization.
             do_remove_padding (`bool`, *optional*):
                 Whether to crop away the zero-padding added during preprocessing before resizing.
                 Defaults to `True` when `source_sizes` is provided, `False` otherwise.
