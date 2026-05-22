@@ -15,6 +15,7 @@
 
 import copy
 import math
+from collections.abc import Callable
 
 import torch
 from torch import nn
@@ -35,12 +36,47 @@ from ...modeling_outputs import (
     Seq2SeqSequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import DUMMY_INPUTS, DUMMY_MASK, auto_docstring, logging, torch_compilable_check
 from .configuration_t5 import T5Config
 
 
 logger = logging.get_logger(__name__)
+
+
+def _get_mask_config(config: T5Config) -> T5Config:
+    if config._attn_implementation == "sdpa":
+        mask_config = copy.copy(config)
+        mask_config._attn_implementation_internal = "eager"
+        return mask_config
+    return config
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    if scaling is None:
+        scaling = 1.0
+
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights.float(), dim=-1).type_as(attn_weights)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
 
 
 class T5LayerNorm(nn.Module):
@@ -145,6 +181,7 @@ class T5Attention(nn.Module):
         layer_idx: int | None = None,
     ):
         super().__init__()
+        self.config = config
         self.is_decoder = config.is_decoder
         self.has_relative_attention_bias = has_relative_attention_bias
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
@@ -291,36 +328,49 @@ class T5Attention(nn.Module):
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
 
-        # compute scores, equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
-        scores = torch.matmul(query_states, key_states.transpose(3, 2))
-
         if position_bias is None:
             key_length = key_states.shape[-2]
             if not self.has_relative_attention_bias:
                 position_bias = torch.zeros(
-                    (1, query_states.shape[1], input_shape[1], key_length), device=scores.device, dtype=scores.dtype
+                    (1, query_states.shape[1], input_shape[1], key_length),
+                    device=query_states.device,
+                    dtype=query_states.dtype,
                 )
                 if self.gradient_checkpointing and self.training:
                     position_bias.requires_grad = True
             else:
                 position_bias = self.compute_bias(
-                    input_shape[1], key_length, device=scores.device, past_seen_tokens=past_seen_tokens
+                    input_shape[1], key_length, device=query_states.device, past_seen_tokens=past_seen_tokens
                 )
 
             if mask is not None:
                 causal_mask = mask[:, :, :, : key_states.shape[-2]]
+                if causal_mask.dtype == torch.bool:
+                    causal_mask = torch.where(
+                        causal_mask,
+                        torch.tensor(0.0, device=position_bias.device, dtype=position_bias.dtype),
+                        torch.finfo(position_bias.dtype).min,
+                    )
+                else:
+                    causal_mask = causal_mask.to(dtype=position_bias.dtype, device=position_bias.device)
                 position_bias = position_bias + causal_mask
 
-        position_bias_masked = position_bias
-        scores += position_bias_masked
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
-        # (batch_size, n_heads, seq_length, key_length)
-        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(scores)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            position_bias,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=1.0,
+            output_attentions=output_attentions,
+            **kwargs,
+        )
 
-        attn_output = torch.matmul(attn_weights, value_states)
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.reshape(*input_shape, -1)
         attn_output = self.o(attn_output)
 
@@ -509,6 +559,7 @@ class T5PreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _can_compile_fullgraph = True
+    _supports_sdpa = True
 
     _no_split_modules = ["T5Block"]
     _keep_in_fp32_modules = ["wo"]
@@ -523,6 +574,17 @@ class T5PreTrainedModel(PreTrainedModel):
             "decoder_attention_mask": input_mask,
         }
         return dummy_inputs
+
+    def set_attn_implementation(self, attn_implementation: str | dict, allow_all_kernels: bool = False):
+        super().set_attn_implementation(attn_implementation, allow_all_kernels=allow_all_kernels)
+
+        for submodule in self.modules():
+            if (
+                submodule is not self
+                and isinstance(submodule, T5PreTrainedModel)
+                and submodule.config is not self.config
+            ):
+                submodule.config._attn_implementation_internal = self.config._attn_implementation
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -687,9 +749,11 @@ class T5Stack(T5PreTrainedModel):
             # it messes indexing later in decoder-stack because cache object is modified in-place
             past_key_values = None
 
+        mask_config = _get_mask_config(self.config)
+
         if self.config.is_decoder:
             attention_mask = create_causal_mask(
-                config=self.config,
+                config=mask_config,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 past_key_values=past_key_values.self_attention_cache
@@ -698,7 +762,7 @@ class T5Stack(T5PreTrainedModel):
             )
         else:
             attention_mask = create_bidirectional_mask(
-                config=self.config,
+                config=mask_config,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
             )
@@ -706,7 +770,7 @@ class T5Stack(T5PreTrainedModel):
         encoder_extended_attention_mask = None
         if self.is_decoder and encoder_hidden_states is not None:
             encoder_extended_attention_mask = create_bidirectional_mask(
-                config=self.config,
+                config=mask_config,
                 inputs_embeds=inputs_embeds,
                 attention_mask=encoder_attention_mask,
                 encoder_hidden_states=encoder_hidden_states,

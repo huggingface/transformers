@@ -947,7 +947,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 model = model_class.from_pretrained(
                     tmpdirname,
                     dtype=torch.float16,
-                    attn_implementation={"decoder": "sdpa", "audio_encoder": None, "text_encoder": None},
+                    attn_implementation={"decoder": "sdpa", "audio_encoder": None, "text_encoder": "eager"},
                 )
                 model.to(torch_device)
 

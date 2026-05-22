@@ -695,6 +695,10 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
     def test_model_base_model_prefix(self):
         pass
 
+    @unittest.skip(reason="T5 relative position bias prevents forcing the SDPA flash kernel.")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
 
 class T5EncoderOnlyModelTester:
     def __init__(
@@ -857,6 +861,10 @@ class T5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     def test_with_token_classification_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_with_token_classification_head(*config_and_inputs)
+
+    @unittest.skip(reason="T5 relative position bias prevents forcing the SDPA flash kernel.")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
 
     def is_pipeline_test_to_skip(
         self,
