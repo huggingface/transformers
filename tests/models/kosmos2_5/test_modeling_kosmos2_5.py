@@ -492,6 +492,18 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         pass
 
     @pytest.mark.generate
+    def test_generate_with_cache_matches_no_cache(self):
+        """Verify that greedy generation with cache produces the same token IDs as without cache"""
+        config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+        model = Kosmos2_5ForConditionalGeneration(config).to(torch_device).eval()
+
+        with torch.no_grad():
+            output_no_cache = model.generate(**inputs_dict, use_cache=False, max_new_tokens=5, do_sample=False)
+            output_with_cache = model.generate(**inputs_dict, use_cache=True, max_new_tokens=5, do_sample=False)
+
+        self.assertEqual(output_no_cache.tolist(), output_with_cache.tolist())
+
+    @pytest.mark.generate
     @parameterized.expand([("greedy", 1), ("beam search", 2)])
     @unittest.skip(
         "KOSMOS-2.5 doesn't support inputs embeds. The test isn't skipped by checking input args because KOSMOS-2 has `generate()` overwritten",
