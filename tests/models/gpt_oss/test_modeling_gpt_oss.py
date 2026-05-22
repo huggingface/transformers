@@ -158,9 +158,11 @@ RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/gpt_oss/integrati
 # ------------------------
 def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
     """This is the function that will be executed by torchrun workers."""
+    import difflib
     import os
 
     from transformers import AutoModelForCausalLM, AutoTokenizer
+    from transformers.distributed import DistributedConfig
     from transformers.testing_utils import torch_device
     from transformers.utils import is_rocm_platform
 
@@ -180,19 +182,20 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
 
     # Distributed model loading
     model_id = f"openai/gpt-oss-{model_size}"
+    world_size = int(os.environ.get("WORLD_SIZE", 1))
     model = AutoModelForCausalLM.from_pretrained(
         model_id,
         dtype="auto",
-        tp_plan="auto",  # distributed inference
+        distributed_config=DistributedConfig(tp_size=world_size),
         use_kernels=kernels,
-    ).to(torch_device)
+    )
     model.set_attn_implementation(attn_impl)
     tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
     # Inference
     inputs = tokenizer(input_text, return_tensors="pt", padding=True).to(torch_device)
     output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-    output_texts = tokenizer.batch_decode(output, skip_special_tokens=False)
+    output_texts = tokenizer.batch_decode(output, skip_special_tokens=True)
 
     # Only rank 0 writes results and validates against expected outputs
     if int(os.environ.get("RANK", "0")) == 0:
