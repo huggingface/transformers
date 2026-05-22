@@ -856,9 +856,6 @@ class Sapiens2Config(DINOv3ViTConfig):
 
     model_type = "sapiens2"
 
-    # TODO(guarin): This is needed to load the original checkpoints but makes unit tests fail.
-    # transformers_weights = "sapiens2_0.4b_pretrain.safetensors"
-
     hidden_size: int = 1024
     num_hidden_layers: int = 24
     num_attention_heads: int = 16

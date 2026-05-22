@@ -49,6 +49,9 @@ if is_torch_available():
     )
 
 
+REVISION = "refs/pr/1"
+
+
 class Sapiens2ModelTester:
     def __init__(
         self,
@@ -501,12 +504,7 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "facebook/sapiens2-pretrain-0.4b"
-        # TODO(guarin): remove config. transformers_weights required for now because original checkpoints are called
-        # "sapiens2_0.4b_pretrain.safetensors" instead of "model.safetensors"
-        config = Sapiens2Config()
-        config.transformers_weights = "sapiens2_0.4b_pretrain.safetensors"
-        model = Sapiens2Model.from_pretrained(model_name, config=config)
+        model = Sapiens2Model.from_pretrained("facebook/sapiens2-pretrain-0.4b", revision=REVISION)
         self.assertIsNotNone(model)
 
 
@@ -531,17 +529,17 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
 
     @cached_property
     def default_image_processor(self):
-        # TODO(guarin): switch to AutoImageProcessor once it works properly
-        # return AutoImageProcessor.from_pretrained("facebook/sapiens2-pretrain-0.4b") if is_vision_available() else None
-        return Sapiens2ImageProcessor() if is_vision_available() else None
+        return (
+            Sapiens2ImageProcessor.from_pretrained("facebook/sapiens2-pretrain-0.4b", revision=REVISION)
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_no_head(self):
-        # TODO(guarin): remove config. transformers_weights required for now because original checkpoints are called
-        # "sapiens2_0.4b_pretrain.safetensors" instead of "model.safetensors"
-        config = Sapiens2Config()
-        config.transformers_weights = "sapiens2_0.4b_pretrain.safetensors"
-        model = Sapiens2Model.from_pretrained("facebook/sapiens2-pretrain-0.4b", config=config).eval().to(torch_device)
+        model = (
+            Sapiens2Model.from_pretrained("facebook/sapiens2-pretrain-0.4b", revision=REVISION).eval().to(torch_device)
+        )
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -573,18 +571,8 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_semantic_segmentation(self):
-        # TODO(guarin): remove config. transformers_weights required for now because original checkpoints are called
-        # "sapiens2_0.4b_seg.safetensors" instead of "model.safetensors"
-        config = Sapiens2Config(
-            num_labels=29,
-            head_upsample_out_channels=[512, 256, 128, 64],
-            head_upsample_kernel_sizes=[4, 4, 4, 4],
-            head_conv_out_channels=[64, 64],
-            head_conv_kernel_sizes=[1, 1],
-        )
-        config.transformers_weights = "sapiens2_0.4b_seg.safetensors"
         model = (
-            Sapiens2ForSemanticSegmentation.from_pretrained("facebook/sapiens2-seg-0.4b", config=config)
+            Sapiens2ForSemanticSegmentation.from_pretrained("facebook/sapiens2-seg-0.4b", revision=REVISION)
             .eval()
             .to(torch_device)
         )
@@ -626,18 +614,8 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
     @require_cv2
     @slow
     def test_inference_pose_estimation(self):
-        # TODO(guarin): remove config. transformers_weights required for now because original checkpoints are called
-        # "sapiens2_0.4b_pose.safetensors" instead of "model.safetensors"
-        config = Sapiens2Config(
-            num_labels=308,
-            head_upsample_out_channels=[1024, 768],
-            head_upsample_kernel_sizes=[4, 4],
-            head_conv_out_channels=[512, 512, 256],
-            head_conv_kernel_sizes=[1, 1, 1],
-        )
-        config.transformers_weights = "sapiens2_0.4b_pose.safetensors"
         model = (
-            Sapiens2ForPoseEstimation.from_pretrained("facebook/sapiens2-pose-0.4b", config=config)
+            Sapiens2ForPoseEstimation.from_pretrained("facebook/sapiens2-pose-0.4b", revision=REVISION)
             .eval()
             .to(torch_device)
         )
@@ -871,24 +849,16 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_normal_estimation(self):
-        config = Sapiens2Config(
-            num_labels=3,
-            head_upsample_out_channels=[768, 512, 256, 128],
-            head_upsample_kernel_sizes=[3, 3, 3, 3],
-            head_conv_out_channels=[64, 32, 16],
-            head_conv_kernel_sizes=[3, 3, 3],
-        )
-        config.transformers_weights = "sapiens2_0.4b_normal.safetensors"
         model = (
-            Sapiens2ForNormalEstimation.from_pretrained("facebook/sapiens2-normal-0.4b", config=config)
+            Sapiens2ForNormalEstimation.from_pretrained("facebook/sapiens2-normal-0.4b", revision=REVISION)
             .eval()
             .to(torch_device)
         )
 
-        image_processor = self.default_image_processor
+        image_processor = Sapiens2ImageProcessor.from_pretrained("facebook/sapiens2-normal-0.4b", revision=REVISION)
         image = prepare_img()
         image_height, image_width = image.shape[-2:]
-        inputs = image_processor(image, do_pad=True, return_tensors="pt").to(torch_device)
+        inputs = image_processor(image, return_tensors="pt").to(torch_device)
 
         with torch.no_grad():
             outputs = model(**inputs)
@@ -915,28 +885,16 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_pointmap_estimation(self):
-        config = Sapiens2Config(
-            num_labels=3,
-            image_size=[1024, 768],
-            head_upsample_out_channels=[1536, 768, 512, 256],
-            head_upsample_kernel_sizes=[3, 3, 3, 3],
-            head_conv_out_channels=[64, 32, 16],
-            head_conv_kernel_sizes=[3, 3, 3],
-            head_scale_conv_out_channels=[1536, 512, 128],
-            head_scale_conv_kernel_sizes=[1, 1, 1],
-            head_scale_final_hidden_sizes=[512, 128],
-        )
-        config.transformers_weights = "sapiens2_0.4b_pointmap.safetensors"
         model = (
-            Sapiens2ForPointmapEstimation.from_pretrained("facebook/sapiens2-pointmap-0.4b", config=config)
+            Sapiens2ForPointmapEstimation.from_pretrained("facebook/sapiens2-pointmap-0.4b", revision=REVISION)
             .eval()
             .to(torch_device)
         )
 
-        image_processor = self.default_image_processor
+        image_processor = Sapiens2ImageProcessor.from_pretrained("facebook/sapiens2-pointmap-0.4b", revision=REVISION)
         image = prepare_img()
         image_height, image_width = image.shape[-2:]
-        inputs = image_processor(image, do_pad=True, return_tensors="pt").to(torch_device)
+        inputs = image_processor(image, return_tensors="pt").to(torch_device)
 
         with torch.no_grad():
             outputs = model(**inputs)
@@ -969,21 +927,10 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_matting(self):
-        config = Sapiens2Config(
-            num_labels=4,
-            hidden_size=1536,
-            intermediate_size=6144,
-            num_hidden_layers=40,
-            num_attention_heads=24,
-            image_size=[1024, 768],
-            head_upsample_out_channels=[768, 512, 256, 128],
-            head_upsample_kernel_sizes=[3, 3, 3, 3],
-            head_conv_out_channels=[64, 32, 16],
-            head_conv_kernel_sizes=[3, 3, 3],
-        )
-        config.transformers_weights = "sapiens2_1b_matting.safetensors"
         model = (
-            Sapiens2ForMatting.from_pretrained("facebook/sapiens2-matting-1b", config=config).eval().to(torch_device)
+            Sapiens2ForMatting.from_pretrained("facebook/sapiens2-matting-1b", revision=REVISION)
+            .eval()
+            .to(torch_device)
         )
 
         image_processor = self.default_image_processor

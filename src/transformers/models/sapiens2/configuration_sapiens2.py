@@ -96,9 +96,6 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
 
     patch_size: int | list[int] | tuple[int, int] = 16
 
-    # TODO(guarin): This is needed to load the original checkpoints but makes unit tests fail.
-    # transformers_weights = "sapiens2_0.4b_pretrain.safetensors"
-
     hidden_size: int = 1024
     intermediate_size: int = 4096
     num_hidden_layers: int = 24
