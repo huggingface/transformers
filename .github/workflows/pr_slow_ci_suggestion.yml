@@ -3,6 +3,9 @@ on:
   pull_request_target:
     types: [opened, synchronize, reopened]
 
+permissions:
+  contents: read
+
 jobs:
   get-pr-number:
     name: Get PR number
@@ -24,46 +27,64 @@ jobs:
       jobs: ${{ steps.get_jobs.outputs.jobs_to_run }}
     steps:
       # This checkout to the main branch
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: "0"
+          persist-credentials: false
 
-      # We need to use `${{ ... }}` here to avoid `Argument list too long` error when a PR changes a lot of files.
-      # (We could also try to use artifact approach, but it's more involved).
-      # `CodeQL` doesn't identify any security issue here. Also `PR_FILES` is from `get-pr-info.yml` by using an api
-      # `github.rest.pulls.listFiles`, which is fine.
+      # Refetch the PR file list from the API instead of receiving it as an
+      # input from `get-pr-info.yml`. The previous approaches either expanded
+      # attacker-controlled content into a shell/JS source via `${{ ... }}`
+      # (template injection, fixed in #45956) or passed the full JSON through
+      # an env var (`E2BIG` / "Argument list too long" once the patch payload
+      # exceeds the per-env-var kernel limit, ~128KB). Fetching inside the
+      # action keeps the JSON in Node heap memory and writes it straight to
+      # disk, so it never crosses an execve argv/envp boundary.
       - name: Write pr_files file
-        run: |
-          cat > pr_files.txt << 'EOF'
-          ${{ needs.get-pr-info.outputs.PR_FILES }}
-          EOF
-
-      - name: Get repository content
-        id: repo_content
-        uses: actions/github-script@v6
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6.4.1
+        env:
+          PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
         with:
           script: |
             const fs = require('node:fs');
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: parseInt(process.env.PR_NUMBER, 10),
+            });
+            fs.writeFileSync('pr_files.txt', JSON.stringify(files));
+
+      - name: Get repository content
+        id: repo_content
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6.4.1
+        env:
+          PR_HEAD_REPO_OWNER: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_OWNER }}
+          PR_HEAD_REPO_NAME: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_NAME }}
+          PR_HEAD_SHA: ${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const { PR_HEAD_REPO_OWNER, PR_HEAD_REPO_NAME, PR_HEAD_SHA } = process.env;
 
             const { data: tests_dir } = await github.rest.repos.getContent({
-              owner: '${{ needs.get-pr-info.outputs.PR_HEAD_REPO_OWNER }}',
-              repo: '${{ needs.get-pr-info.outputs.PR_HEAD_REPO_NAME }}',
+              owner: PR_HEAD_REPO_OWNER,
+              repo: PR_HEAD_REPO_NAME,
               path: 'tests',
-              ref: '${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}',
+              ref: PR_HEAD_SHA,
             });
 
             const { data: tests_models_dir } = await github.rest.repos.getContent({
-              owner: '${{ needs.get-pr-info.outputs.PR_HEAD_REPO_OWNER }}',
-              repo: '${{ needs.get-pr-info.outputs.PR_HEAD_REPO_NAME }}',
+              owner: PR_HEAD_REPO_OWNER,
+              repo: PR_HEAD_REPO_NAME,
               path: 'tests/models',
-              ref: '${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}',
+              ref: PR_HEAD_SHA,
             });
 
             const { data: tests_quantization_dir } = await github.rest.repos.getContent({
-              owner: '${{ needs.get-pr-info.outputs.PR_HEAD_REPO_OWNER }}',
-              repo: '${{ needs.get-pr-info.outputs.PR_HEAD_REPO_NAME }}',
+              owner: PR_HEAD_REPO_OWNER,
+              repo: PR_HEAD_REPO_NAME,
               path: 'tests/quantization',
-              ref: '${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}',
+              ref: PR_HEAD_SHA,
             });
 
             // Write to files instead of outputs
@@ -90,45 +111,46 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Check and update comment if needed
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         env:
           BODY: "\n\nrun-slow: ${{ needs.get-jobs.outputs.jobs }}"
+          PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
         with:
           script: |
-            const prNumber = ${{ needs.get-pr-number.outputs.PR_NUMBER }};
+            const prNumber = parseInt(process.env.PR_NUMBER, 10);
             const commentPrefix = "**[For maintainers]** Suggested jobs to run (before merge)";
             const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000); // 30 minutes ago
             const newBody = `${commentPrefix}${process.env.BODY}`;
-            
+
             // Get all comments on the PR
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: prNumber
             });
-            
+
             // Find existing comments that start with our prefix
-            const existingComments = comments.filter(comment => 
-              comment.user.login === 'github-actions[bot]' && 
+            const existingComments = comments.filter(comment =>
+              comment.user.login === 'github-actions[bot]' &&
               comment.body.startsWith(commentPrefix)
             );
-            
+
             let shouldCreateNewComment = true;
             let commentsToDelete = [];
-            
+
             if (existingComments.length > 0) {
               // Get the most recent comment
               const mostRecentComment = existingComments
                 .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
-              
+
               const commentDate = new Date(mostRecentComment.created_at);
               const isOld = commentDate < thirtyMinutesAgo;
               const isDifferentContent = mostRecentComment.body !== newBody;
-              
+
               console.log(`Most recent comment created: ${mostRecentComment.created_at}`);
               console.log(`Is older than 30 minutes: ${isOld}`);
               console.log(`Has different content: ${isDifferentContent}`);
-              
+
               if (isOld || isDifferentContent) {
                 // Delete all existing comments and create new one
                 commentsToDelete = existingComments;
@@ -141,7 +163,7 @@ jobs:
             } else {
               console.log('No existing comments found, will create new one');
             }
-            
+
             // Delete old comments if needed
             for (const comment of commentsToDelete) {
               console.log(`Deleting comment #${comment.id} (created: ${comment.created_at})`);
@@ -151,7 +173,7 @@ jobs:
                 comment_id: comment.id
               });
             }
-            
+
             // Create new comment if needed
             if (shouldCreateNewComment) {
               await github.rest.issues.createComment({
