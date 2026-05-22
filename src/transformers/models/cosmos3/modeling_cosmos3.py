@@ -17,20 +17,23 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Cosmos3 model — loads the Reasoner tower of a Cosmos3 MoT checkpoint into Qwen3-VL."""
+"""Cosmos3 model loads the Reasoner tower of a Cosmos3 MoT checkpoint into Qwen3-VL."""
 
 from ..qwen3_vl.modeling_qwen3_vl import Qwen3VLForConditionalGeneration, Qwen3VLModel
 from .configuration_cosmos3 import Cosmos3Config
 
 
 _COSMOS3_DROPPED_UNIFIED_CHECKPOINT_KEYS = [
+    # Generator (image / video diffusion) MoT expert + cross-modal projections
     r"_moe_gen",
     r"^llm2vae\.",
     r"^vae2llm\.",
     r"^time_embedder\.",
+    # Sound tower
     r"^llm2sound\.",
     r"^sound2llm\.",
     r"^sound_modality_embed$",
+    # Action tower
     r"^llm2action\.",
     r"^action2llm\.",
     r"^action_modality_embed$",
@@ -47,7 +50,7 @@ class Cosmos3Model(Qwen3VLModel):
     ]
 
 
-class Cosmos3ForConditionalGeneration(Qwen3VLForConditionalGeneration):
+class Cosmos3ReasonerForConditionalGeneration(Qwen3VLForConditionalGeneration):
     config: Cosmos3Config
 
     # The unified Cosmos3 checkpoint stores both the Reasoner tower (loaded here) and the
@@ -57,6 +60,6 @@ class Cosmos3ForConditionalGeneration(Qwen3VLForConditionalGeneration):
 
 
 __all__ = [
-    "Cosmos3ForConditionalGeneration",
+    "Cosmos3ReasonerForConditionalGeneration",
     "Cosmos3Model",
 ]

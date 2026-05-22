@@ -23,7 +23,7 @@ from transformers.testing_utils import require_torch
 
 
 if is_torch_available():
-    from transformers import AutoModel, AutoModelForImageTextToText, Cosmos3ForConditionalGeneration, Cosmos3Model
+    from transformers import AutoModel, AutoModelForImageTextToText, Cosmos3ReasonerForConditionalGeneration, Cosmos3Model
 
 
 def get_tiny_cosmos3_config():
@@ -104,11 +104,11 @@ class Cosmos3ModelTest(unittest.TestCase):
 
         self.assertIsInstance(AutoModel.from_config(copy.deepcopy(config)), Cosmos3Model)
         self.assertIsInstance(
-            AutoModelForImageTextToText.from_config(copy.deepcopy(config)), Cosmos3ForConditionalGeneration
+            AutoModelForImageTextToText.from_config(copy.deepcopy(config)), Cosmos3ReasonerForConditionalGeneration
         )
 
     def test_unified_checkpoint_unexpected_keys_are_ignored(self):
         self.assertIn(r"_moe_gen", Cosmos3Model._keys_to_ignore_on_load_unexpected)
-        self.assertIn(r"^llm2sound\.", Cosmos3ForConditionalGeneration._keys_to_ignore_on_load_unexpected)
+        self.assertIn(r"^llm2sound\.", Cosmos3ReasonerForConditionalGeneration._keys_to_ignore_on_load_unexpected)
         self.assertIn(r"^lm_head\.weight$", Cosmos3Model._keys_to_ignore_on_load_unexpected)
-        self.assertNotIn(r"^lm_head\.weight$", Cosmos3ForConditionalGeneration._keys_to_ignore_on_load_unexpected)
+        self.assertNotIn(r"^lm_head\.weight$", Cosmos3ReasonerForConditionalGeneration._keys_to_ignore_on_load_unexpected)
