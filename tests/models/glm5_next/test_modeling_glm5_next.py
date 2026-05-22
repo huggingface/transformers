@@ -229,6 +229,7 @@ class Glm5NextModelTest(CausalLMModelTest, unittest.TestCase):
                 "num_heads": 2,
                 "short_conv_kernel_size": 4,
                 "v_head_dim": 4,
+                "lower_bound": -5.0,
             },
             mlp_layer_types=["dense", "dense"],
             pad_token_id=0,

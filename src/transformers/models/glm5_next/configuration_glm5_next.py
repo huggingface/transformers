@@ -152,6 +152,7 @@ class Glm5NextConfig(PreTrainedConfig):
                 "num_heads": 64,
                 "short_conv_kernel_size": 4,
                 "v_head_dim": 128,
+                "lower_bound": -5.0,
             }
 
         if self.layer_types is None:
