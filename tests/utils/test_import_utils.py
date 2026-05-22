@@ -1,7 +1,9 @@
 import sys
+from types import ModuleType
+from unittest.mock import patch
 
 from transformers.testing_utils import run_test_using_subprocess
-from transformers.utils.import_utils import clear_import_cache
+from transformers.utils.import_utils import _is_package_available, clear_import_cache
 
 
 @run_test_using_subprocess
@@ -24,3 +26,14 @@ def test_clear_import_cache():
 
     assert "transformers.models.auto.modeling_auto" in sys.modules
     assert modeling_auto.__name__ == "transformers.models.auto.modeling_auto"
+
+
+def test_is_package_available_namespace_shadow_marked_unavailable():
+    pkg_name = "definitely_not_a_real_pkg_xyz"
+    fake_module = ModuleType(pkg_name)
+
+    with (
+        patch("transformers.utils.import_utils.importlib.util.find_spec", return_value=object()),
+        patch("transformers.utils.import_utils.importlib.import_module", return_value=fake_module),
+    ):
+        assert _is_package_available(pkg_name, return_version=True) == (False, "N/A")
