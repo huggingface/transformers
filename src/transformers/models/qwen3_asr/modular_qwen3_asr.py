@@ -27,6 +27,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPa
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils.output_capturing import capture_outputs
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..qwen2_audio.modeling_qwen2_audio import Qwen2AudioPreTrainedModel
 from ..qwen3_omni_moe.configuration_qwen3_omni_moe import Qwen3OmniMoeAudioEncoderConfig
@@ -43,18 +44,18 @@ from ..voxtral.modeling_voxtral import VoxtralMultiModalProjector
 @strict
 class Qwen3ASREncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
     r"""
-    max_source_positions (`int`, *optional*, defaults to 1500):
+    max_source_positions (`int`, *optional*, defaults to 13):
         The maximum sequence length that this model might ever be used with.
     n_window (`int`, *optional*, defaults to 50):
         Half the number of mel frames in one encoder chunk. Each chunk processed by the conv stack has
         ``2 * n_window`` mel frames (1 second of audio at 16 kHz with a 10 ms hop).
+    output_dim (`int`, *optional*, defaults to 3584):
+        Dimensionality of the output.
     n_window_infer (`int`, *optional*, defaults to 800):
         Number of mel frames worth of audio over which each attention window spans. Must be a multiple
         of ``n_window * 2`` so attention windows align with encoder chunks.
     downsample_hidden_size (`int`, *optional*, defaults to 480):
         Hidden size of the convolutional downsampling stack.
-    output_dim (`int`, *optional*, defaults to 3584):
-        Dimensionality of the output.
     """
 
     model_type = "qwen3_asr_encoder"
@@ -62,7 +63,8 @@ class Qwen3ASREncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
     encoder_attention_heads: int = 16
     encoder_ffn_dim: int = 4096
     d_model: int = 1024
-    attention_bias: bool = True
+    max_source_positions: int = 13
+    conv_chunksize = AttributeError()
 
 
 @auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B")
@@ -174,6 +176,8 @@ class Qwen3ASREncoder(Qwen3OmniMoeAudioEncoder):
             lengths = torch.where(lengths > 0, (lengths - 1) // 2 + 1, torch.zeros_like(lengths))
         return lengths
 
+    @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(
         self,
         input_features: torch.Tensor,
@@ -181,16 +185,18 @@ class Qwen3ASREncoder(Qwen3OmniMoeAudioEncoder):
         **kwargs,
     ) -> BaseModelOutputWithPooling:
         r"""
-        Args:
-            input_features (`torch.FloatTensor` of shape `(batch_size, num_mel_bins, padded_feature_length)`):
-                Log-mel features. `padded_feature_length` must be a multiple of `self.n_window * 2`.
-            input_features_mask (`torch.LongTensor` of shape `(batch_size, padded_feature_length)`):
-                1 for valid mel frames and 0 for padding.
+        input_features_mask (`torch.LongTensor` of shape `(batch_size, padded_feature_length)`):
+            1 for valid mel frames and 0 for padding.
         """
-
-        # Unlike `Qwen3OmniMoeAudioEncoder`, padding of chunks is moved to feature extractor
         batch_size, num_mel_bins, padded_feature_length = input_features.shape
         chunk_len = self.n_window * 2
+
+        if padded_feature_length % chunk_len != 0:
+            raise ValueError(
+                f"Qwen3ASREncoder expects `padded_feature_length` to be a multiple of "
+                f"`n_window * 2` ({chunk_len}), but got {padded_feature_length}."
+            )
+
         num_chunks = padded_feature_length // chunk_len
 
         # Compute cu_seqlens for windowed attention
@@ -214,7 +220,7 @@ class Qwen3ASREncoder(Qwen3OmniMoeAudioEncoder):
         conv_out = self.conv_out(
             conv_out.permute(0, 3, 1, 2).contiguous().view(total_chunks, time_steps, conv_channels * freq_bins)
         )
-        conv_out = conv_out + self.positional_embedding.positional_embedding[:time_steps, :].to(conv_out.dtype)
+        conv_out += self.positional_embedding.positional_embedding.to(conv_out.dtype)
 
         # Select only valid (non-padding) post-CNN positions into a flat packed sequence
         chunk_post_cnn_lens = self._post_cnn_length(

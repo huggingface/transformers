@@ -35,7 +35,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPa
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
-from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
+from ...utils.generic import is_flash_attention_requested
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_qwen3_asr import Qwen3ASRConfig, Qwen3ASREncoderConfig
@@ -366,7 +366,6 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
     def set_input_embeddings(self, value):
         self.conv2d1 = value
 
-    @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
@@ -376,16 +375,18 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
         **kwargs,
     ) -> BaseModelOutputWithPooling:
         r"""
-        Args:
-            input_features (`torch.FloatTensor` of shape `(batch_size, num_mel_bins, padded_feature_length)`):
-                Log-mel features. `padded_feature_length` must be a multiple of `self.n_window * 2`.
-            input_features_mask (`torch.LongTensor` of shape `(batch_size, padded_feature_length)`):
-                1 for valid mel frames and 0 for padding.
+        input_features_mask (`torch.LongTensor` of shape `(batch_size, padded_feature_length)`):
+            1 for valid mel frames and 0 for padding.
         """
-
-        # Unlike `Qwen3OmniMoeAudioEncoder`, padding of chunks is moved to feature extractor
         batch_size, num_mel_bins, padded_feature_length = input_features.shape
         chunk_len = self.n_window * 2
+
+        if padded_feature_length % chunk_len != 0:
+            raise ValueError(
+                f"Qwen3ASREncoder expects `padded_feature_length` to be a multiple of "
+                f"`n_window * 2` ({chunk_len}), but got {padded_feature_length}."
+            )
+
         num_chunks = padded_feature_length // chunk_len
 
         # Compute cu_seqlens for windowed attention
@@ -409,7 +410,7 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
         conv_out = self.conv_out(
             conv_out.permute(0, 3, 1, 2).contiguous().view(total_chunks, time_steps, conv_channels * freq_bins)
         )
-        conv_out = conv_out + self.positional_embedding.positional_embedding[:time_steps, :].to(conv_out.dtype)
+        conv_out += self.positional_embedding.positional_embedding.to(conv_out.dtype)
 
         # Select only valid (non-padding) post-CNN positions into a flat packed sequence
         chunk_post_cnn_lens = self._post_cnn_length(

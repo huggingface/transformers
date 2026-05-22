@@ -159,6 +159,10 @@ def clean_config(src_root: Path, model_type: str) -> dict:
         if "num_key_value_heads" not in config_dict["audio_config"] and "num_attention_heads" in config_dict["audio_config"]:
             config_dict["audio_config"]["num_key_value_heads"] = config_dict["audio_config"]["num_attention_heads"]
 
+        # Override max_source_positions: the original checkpoint uses 1500 (inherited from Whisper/OmniMoe),
+        # but Qwen3ASR chunks are fixed at n_window*2=100 mel frames → 13 post-CNN positions.
+        config_dict["audio_config"]["max_source_positions"] = 13
+
     # Audio config: strip non-standard fields
     if "audio_config" in config_dict:
         audio_unused = [

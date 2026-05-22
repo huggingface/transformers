@@ -29,18 +29,18 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 @strict
 class Qwen3ASREncoderConfig(PreTrainedConfig):
     r"""
-    max_source_positions (`int`, *optional*, defaults to 1500):
+    max_source_positions (`int`, *optional*, defaults to 13):
         The maximum sequence length that this model might ever be used with.
     n_window (`int`, *optional*, defaults to 50):
         Half the number of mel frames in one encoder chunk. Each chunk processed by the conv stack has
         ``2 * n_window`` mel frames (1 second of audio at 16 kHz with a 10 ms hop).
+    output_dim (`int`, *optional*, defaults to 3584):
+        Dimensionality of the output.
     n_window_infer (`int`, *optional*, defaults to 800):
         Number of mel frames worth of audio over which each attention window spans. Must be a multiple
         of ``n_window * 2`` so attention windows align with encoder chunks.
     downsample_hidden_size (`int`, *optional*, defaults to 480):
         Hidden size of the convolutional downsampling stack.
-    output_dim (`int`, *optional*, defaults to 3584):
-        Dimensionality of the output.
     """
 
     model_type = "qwen3_asr_encoder"
@@ -62,14 +62,12 @@ class Qwen3ASREncoderConfig(PreTrainedConfig):
     activation_dropout: float | int = 0.0
     scale_embedding: bool = False
     initializer_range: float = 0.02
-    max_source_positions: int = 1500
+    max_source_positions: int = 13
 
     n_window: int = 50
     output_dim: int = 3584
     n_window_infer: int = 800
-    conv_chunksize: int = 500
     downsample_hidden_size: int = 480
-    attention_bias: bool = True
 
 
 @auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B")
