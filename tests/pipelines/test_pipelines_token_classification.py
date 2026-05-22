@@ -360,6 +360,10 @@ class TokenClassificationPipelineTests(unittest.TestCase):
                     {"end": 39, "entity_group": "MISC", "score": 0.115, "start": 31, "word": "city was"},
                     {"end": 79, "entity_group": "MISC", "score": 0.115, "start": 66, "word": "entrepreneurs"},
                 ],
+                ("xpu", None): [
+                    {"end": 39, "entity_group": "MISC", "score": 0.115, "start": 31, "word": "city was"},
+                    {"end": 79, "entity_group": "MISC", "score": 0.115, "start": 66, "word": "entrepreneurs"},
+                ],
                 # ROCm produces different output due to precision differences
                 ("rocm", (9, 4)): [
                     {"end": 3, "entity_group": "MISC", "score": 0.115, "start": 0, "word": "The"},
@@ -374,6 +378,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
         expected_decode = Expectations(
             {
                 ("cuda", 8): "[CLS] the company, based in new york city was [SEP]",
+                ("xpu", None): "[CLS] the company, based in new york city was [SEP]",
                 # ROCm tokenizer produces different output (preserves case and includes more tokens)
                 ("rocm", (9, 4)): "[CLS] The company, based in New York City was founded [SEP]",
             }
@@ -388,6 +393,13 @@ class TokenClassificationPipelineTests(unittest.TestCase):
         expected_stride_results = Expectations(
             {
                 ("cuda", 8): [
+                    {"end": 39, "entity_group": "MISC", "score": 0.115, "start": 31, "word": "city was"},
+                    # This is an extra entity found by this random model, but at least both original
+                    # entities are there
+                    {"end": 58, "entity_group": "MISC", "score": 0.115, "start": 56, "word": "by"},
+                    {"end": 79, "entity_group": "MISC", "score": 0.115, "start": 66, "word": "entrepreneurs"},
+                ],
+                ("xpu", None): [
                     {"end": 39, "entity_group": "MISC", "score": 0.115, "start": 31, "word": "city was"},
                     # This is an extra entity found by this random model, but at least both original
                     # entities are there
@@ -842,6 +854,10 @@ class TokenClassificationPipelineTests(unittest.TestCase):
                     {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": None, "end": None},
                     {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": None, "end": None},
                 ],
+                ("xpu", None): [
+                    {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
+                    {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
+                ],
                 # ROCm tokenizer provides offsets and detects different tokens
                 ("rocm", (9, 4)): [
                     {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
@@ -858,6 +874,10 @@ class TokenClassificationPipelineTests(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("cuda", 8): [
+                    {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
+                    {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
+                ],
+                ("xpu", None): [
                     {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
                     {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
                 ],
@@ -886,6 +906,10 @@ class TokenClassificationPipelineTests(unittest.TestCase):
                     {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 1},
                     {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 0, "end": 2},
                 ],
+                ("xpu", None): [
+                    {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 1},
+                    {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 0, "end": 2},
+                ],
                 ("rocm", (9, 4)): [
                     {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 0, "end": 2},
                 ],
@@ -902,6 +926,13 @@ class TokenClassificationPipelineTests(unittest.TestCase):
         expected_batched_outputs = Expectations(
             {
                 ("cuda", 8): [
+                    [
+                        {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
+                        {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
+                    ],
+                    [],
+                ],
+                ("xpu", None): [
                     [
                         {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
                         {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
@@ -929,6 +960,10 @@ class TokenClassificationPipelineTests(unittest.TestCase):
                     {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
                     {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
                 ],
+                ("xpu", None): [
+                    {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
+                    {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
+                ],
                 ("rocm", (9, 4)): [
                     {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
                 ],
@@ -947,6 +982,10 @@ class TokenClassificationPipelineTests(unittest.TestCase):
                     {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
                     {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
                 ],
+                ("xpu", None): [
+                    {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
+                    {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
+                ],
                 ("rocm", (9, 4)): [
                     {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
                 ],
@@ -958,6 +997,8 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     def test_pt_ignore_subwords_slow_tokenizer_raises(self):
         model_name = "sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=False)
+        if tokenizer.is_fast:
+            self.skipTest("This test requires a slow tokenizer.")
 
         with self.assertRaises(ValueError):
             pipeline(task="ner", model=model_name, tokenizer=tokenizer, aggregation_strategy=AggregationStrategy.FIRST)
