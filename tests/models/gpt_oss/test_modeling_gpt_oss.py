@@ -87,11 +87,16 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
         """
         from kernels import get_kernel
 
+        from transformers.utils import is_aiter_available, is_rocm_platform
+
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         expected_kernel = "kernels-community/vllm-flash-attn3"
-        flash = get_kernel(expected_kernel)
-        if flash is None:
-            self.skipTest(f"{expected_kernel} is not available, skipping auto-correction test.")
+
+        # On ROCm, AITER provides the backend — the hub kernel is never fetched.
+        if not (is_rocm_platform() and is_aiter_available()):
+            flash = get_kernel(expected_kernel)
+            if flash is None:
+                self.skipTest(f"{expected_kernel} is not available, skipping auto-correction test.")
 
         # Option 1: Auto correction on setting config on init
         config._attn_implementation = "flash_attention_2"

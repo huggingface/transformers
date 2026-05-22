@@ -1023,6 +1023,11 @@ def is_flash_attn_4_available() -> bool:
 
 
 @lru_cache
+def is_aiter_available() -> bool:
+    return _is_package_available("aiter")[0]
+
+
+@lru_cache
 def is_flash_attn_greater_or_equal(library_version: str) -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
     # FA4 is also distributed under "flash_attn", hence we need to check the naming here

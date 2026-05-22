@@ -55,6 +55,13 @@ RUN python3 -m pip install --no-cache-dir "torchcodec==0.10"
 RUN python3 -m pip install --no-cache-dir \
     https://rocm.frameworks-devreleases.amd.com/whl/gfx942-gfx950/flash_attn-2.8.3-cp310-cp310-linux_x86_64.whl
 
+# Install AITER (AMD AI Tensor Engine for ROCm): Triton-based attention kernels
+# with learnable-sink support, used as the ROCm backend for models that rely on
+# hub kernels with no ROCm build (e.g. kernels-community/vllm-flash-attn3).
+# Wheel is pinned to ROCm 7.2 / Python 3.10 to match the base image.
+RUN python3 -m pip install --no-cache-dir \
+    "https://github.com/ROCm/aiter/releases/download/v0.1.13/amd_aiter-0.1.13%2Brocm7.2.manylinux.2.28-cp310-cp310-manylinux_2_27_x86_64.whl"
+
 RUN python3 -m pip install --no-cache-dir einops blobfile num2words
 
 # timm is required for many vision models tests

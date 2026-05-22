@@ -22,9 +22,11 @@ import torch
 import torch.nn.functional as F
 
 from .utils import (
+    is_aiter_available,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_flash_attn_4_available,
+    is_rocm_platform,
     is_torch_cuda_available,
     is_torch_mlu_available,
     is_torch_npu_available,
@@ -176,30 +178,45 @@ def _lazy_imports(
             kernel_repo = FLASH_ATTN_KERNEL_FALLBACK.get(implementation, implementation)
             # We want to explicitly register the name with `paged|` if found
             kernel_implementation = f"paged|{implementation}" if is_paged else kernel_repo
-            kernel = load_and_register_attn_kernel(
-                kernel_implementation, attention_wrapper, allow_all_kernels=allow_all_kernels
-            )
 
-            flash_attn_func = getattr(kernel, "flash_attn_func", None)
-            flash_attn_varlen_func = getattr(kernel, "flash_attn_varlen_func", None)
-            flash_attn_with_kvcache = getattr(kernel, "flash_attn_with_kvcache", None)
-            if flash_attn_varlen_func is None:
-                raise ValueError(
-                    f"Could not find the currently requested flash attention implementation at `{implementation}`."
-                    "Make sure that you request a valid kernel from the hub, e.g. `kernels-community/flash-attn2`."
+            # Hub kernels have no ROCm builds; AITER provides an equivalent Triton backend.
+            if is_rocm_platform() and is_aiter_available():
+                from .integrations.aiter_flash_attention import aiter_flash_attn_func as flash_attn_func
+                from .integrations.aiter_flash_attention import aiter_flash_attn_varlen_func as flash_attn_varlen_func
+                from .integrations.flash_attention import flash_attention_forward
+                from .masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
+                from .modeling_utils import ALL_ATTENTION_FUNCTIONS
+
+                ALL_ATTENTION_FUNCTIONS.register(kernel_implementation, flash_attention_forward)
+                ALL_MASK_ATTENTION_FUNCTIONS.register(
+                    kernel_implementation, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"]
                 )
-            if flash_attn_func is None:
-                logger.warning(
-                    f"The loaded flash attention implementation at `{implementation}` only supports varlen, i.e. "
-                    "it can only be used with continuous batching and does not support the full functionality for "
-                    "the base transformers generation methods."
+                flash_attn_with_kvcache = None
+            else:
+                kernel = load_and_register_attn_kernel(
+                    kernel_implementation, attention_wrapper, allow_all_kernels=allow_all_kernels
                 )
-            if flash_attn_with_kvcache is None:
-                logger.warning(
-                    f"The loaded flash attention implementation at `{implementation}` does not support block tables, so"
-                    " the full performances of continuous batching will not be achieved, only the varlen path will be "
-                    "used."
-                )
+
+                flash_attn_func = getattr(kernel, "flash_attn_func", None)
+                flash_attn_varlen_func = getattr(kernel, "flash_attn_varlen_func", None)
+                flash_attn_with_kvcache = getattr(kernel, "flash_attn_with_kvcache", None)
+                if flash_attn_varlen_func is None:
+                    raise ValueError(
+                        f"Could not find the currently requested flash attention implementation at `{implementation}`."
+                        "Make sure that you request a valid kernel from the hub, e.g. `kernels-community/flash-attn2`."
+                    )
+                if flash_attn_func is None:
+                    logger.warning(
+                        f"The loaded flash attention implementation at `{implementation}` only supports varlen, i.e. "
+                        "it can only be used with continuous batching and does not support the full functionality for "
+                        "the base transformers generation methods."
+                    )
+                if flash_attn_with_kvcache is None:
+                    logger.warning(
+                        f"The loaded flash attention implementation at `{implementation}` does not support block tables, so"
+                        " the full performances of continuous batching will not be achieved, only the varlen path will be "
+                        "used."
+                    )
 
     return flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache, pad_input, unpad_input
 
