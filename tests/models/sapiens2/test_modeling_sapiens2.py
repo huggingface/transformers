@@ -1013,12 +1013,18 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
             outputs.foregrounds[0, 0, 100:103, 100:103], expected_foregrounds, rtol=1e-2, atol=1e-2
         )
 
-        result = image_processor.post_process_matting(outputs, target_sizes=[(image_height, image_width)])
+        background = torch.tensor([177, 64, 0], device=torch_device).view(3, 1, 1)
+        result = image_processor.post_process_matting(
+            outputs, target_sizes=[(image_height, image_width)], backgrounds=background
+        )
         self.assertEqual(len(result), 1)
+        
         alpha = result[0]["alpha"]
         foreground = result[0]["foreground"]
+        composite = result[0]["composite"]
         self.assertEqual(alpha.shape, (1, image_height, image_width))
         self.assertEqual(foreground.shape, (3, image_height, image_width))
+        self.assertEqual(composite.shape, (3, image_height, image_width))
 
         expected_alpha = torch.tensor(
             [
@@ -1040,6 +1046,15 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         )
         torch.testing.assert_close(
             torch.tensor(foreground[0, 300:303, 300:303]), expected_foreground, rtol=1e-2, atol=1e-2
+        )
+
+        expected_composite = torch.tensor(
+            [[182, 176, 167], [182, 175, 164], [176, 171, 136]],
+            dtype=torch.uint8,
+            device=torch_device,
+        )
+        torch.testing.assert_close(
+            torch.tensor(composite[:, 300:303, 300:303]), expected_composite, rtol=1e-2, atol=1e-2
         )
 
 
