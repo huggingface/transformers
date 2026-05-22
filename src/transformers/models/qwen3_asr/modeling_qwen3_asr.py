@@ -98,7 +98,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class Qwen3ASRAttention(nn.Module):
+class Qwen3ASRAudioAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config):
@@ -192,11 +192,11 @@ class Qwen3ASRAttention(nn.Module):
         return attn_output
 
 
-class Qwen3ASREncoderLayer(GradientCheckpointingLayer):
+class Qwen3ASRAudioEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Qwen3ASREncoderConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        self.self_attn = Qwen3ASRAttention(config=config)
+        self.self_attn = Qwen3ASRAudioAttention(config)
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -326,8 +326,8 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
     _no_split_modules = ["Qwen3ASREncoderLayer"]
     _supports_sdpa = True
     _can_record_outputs = {
-        "hidden_states": Qwen3ASREncoderLayer,
-        "attentions": Qwen3ASRAttention,
+        "hidden_states": Qwen3ASRAudioEncoderLayer,
+        "attentions": Qwen3ASRAudioAttention,
     }
 
     def __init__(self, config: Qwen3ASREncoderConfig):
@@ -340,7 +340,7 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
         self.n_window = config.n_window
         self.positional_embedding = SinusoidsPositionEmbedding(self.max_source_positions, embed_dim)
-        self.layers = nn.ModuleList([Qwen3ASREncoderLayer(config) for _ in range(config.encoder_layers)])
+        self.layers = nn.ModuleList([Qwen3ASRAudioEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.ln_post = nn.LayerNorm(config.d_model)
         self.gradient_checkpointing = False
         self.conv2d1 = nn.Conv2d(1, config.downsample_hidden_size, 3, 2, padding=1)
@@ -351,9 +351,6 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
             config.d_model,
             bias=False,
         )
-        self.proj1 = nn.Linear(config.d_model, config.d_model)
-        self.act = ACT2FN[config.activation_function]
-        self.proj2 = nn.Linear(config.d_model, config.output_dim)
         self.n_window_infer = self.config.n_window_infer
         # Initialize weights and apply final processing
         self.post_init()
@@ -427,9 +424,6 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
             hidden_states = layer_outputs[0]
 
         hidden_states = self.ln_post(hidden_states)
-        hidden_states = self.proj1(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.proj2(hidden_states)
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
     @staticmethod
@@ -440,10 +434,25 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
         return lengths
 
 
+class Qwen3ASRMultiModalProjector(nn.Module):
+    def __init__(self, config: Qwen3ASRConfig):
+        super().__init__()
+        self.linear_1 = nn.Linear(config.audio_config.d_model, config.audio_config.d_model)
+        self.act = ACT2FN[config.audio_config.activation_function]
+        self.linear_2 = nn.Linear(config.audio_config.d_model, config.audio_config.output_dim)
+
+    def forward(self, audio_features):
+        hidden_states = self.linear_1(audio_features)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
+        return hidden_states
+
+
 class Qwen3ASRModel(Qwen3ASRPreTrainedModel):
     def __init__(self, config: Qwen3ASRConfig):
         super().__init__(config)
         self.audio_tower = AutoModel.from_config(config.audio_config)
+        self.multi_modal_projector = Qwen3ASRMultiModalProjector(config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
@@ -472,7 +481,7 @@ class Qwen3ASRModel(Qwen3ASRPreTrainedModel):
             input_features_mask=input_features_mask,
             **kwargs,
         )
-        audio_output.pooler_output = audio_output.last_hidden_state
+        audio_output.pooler_output = self.multi_modal_projector(audio_output.last_hidden_state)
         return audio_output
 
     def get_placeholder_mask(

@@ -81,12 +81,16 @@ STATE_DICT_MAPPING_ASR = {
     "thinker.model.": "model.language_model.",
     "thinker.lm_head.": "lm_head.",
     "thinker.": "model.",
+    "model.audio_tower.proj1.": "model.multi_modal_projector.linear_1.",
+    "model.audio_tower.proj2.": "model.multi_modal_projector.linear_2.",
 }
 
 STATE_DICT_MAPPING_FORCED_ALIGNER = {
     "thinker.model.": "model.language_model.",
     "thinker.lm_head.": "score.",
     "thinker.": "model.",
+    "model.audio_tower.proj1.": "model.multi_modal_projector.linear_1.",
+    "model.audio_tower.proj2.": "model.multi_modal_projector.linear_2.",
 }
 # fmt: on
 

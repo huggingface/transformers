@@ -18,6 +18,7 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
+from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
@@ -30,12 +31,12 @@ from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..qwen2_audio.modeling_qwen2_audio import Qwen2AudioPreTrainedModel
 from ..qwen3_omni_moe.configuration_qwen3_omni_moe import Qwen3OmniMoeAudioEncoderConfig
 from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
-    Qwen3OmniMoeAudioAttention,
     Qwen3OmniMoeAudioEncoder,
     Qwen3OmniMoeAudioEncoderLayer,
     SinusoidsPositionEmbedding,
     get_audio_cu_seqlens,
 )
+from ..voxtral.modeling_voxtral import VoxtralMultiModalProjector
 
 
 @auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B")
@@ -146,14 +147,9 @@ class Qwen3ASRPreTrainedModel(Qwen2AudioPreTrainedModel):
             init.copy_(module.positional_embedding, position_embeddings)
 
 
-class Qwen3ASRAttention(Qwen3OmniMoeAudioAttention):
-    pass
-
-
-class Qwen3ASREncoderLayer(Qwen3OmniMoeAudioEncoderLayer):
+class Qwen3ASRAudioEncoderLayer(Qwen3OmniMoeAudioEncoderLayer):
     def __init__(self, config: Qwen3ASREncoderConfig):
         super().__init__(config)
-        self.self_attn = Qwen3ASRAttention(config=config)
 
 
 @auto_docstring(
@@ -163,15 +159,13 @@ class Qwen3ASREncoderLayer(Qwen3OmniMoeAudioEncoderLayer):
 )
 class Qwen3ASREncoder(Qwen3OmniMoeAudioEncoder):
     config: Qwen3ASREncoderConfig
-    _can_record_outputs = {
-        "hidden_states": Qwen3ASREncoderLayer,
-        "attentions": Qwen3ASRAttention,
-    }
 
     def __init__(self, config: Qwen3ASREncoderConfig):
         super().__init__(config)
         del self.conv_chunksize
-        self.layers = nn.ModuleList([Qwen3ASREncoderLayer(config) for _ in range(config.encoder_layers)])
+        del self.proj1
+        del self.act
+        del self.proj2
 
     @staticmethod
     def _post_cnn_length(lengths: torch.Tensor) -> torch.Tensor:
@@ -201,7 +195,9 @@ class Qwen3ASREncoder(Qwen3OmniMoeAudioEncoder):
 
         # Compute cu_seqlens for windowed attention
         feature_lens = input_features_mask.sum(-1).to(torch.long)
-        chunk_lengths = input_features_mask.view(batch_size, num_chunks, chunk_len).sum(dim=-1).reshape(-1).to(torch.long)
+        chunk_lengths = (
+            input_features_mask.view(batch_size, num_chunks, chunk_len).sum(dim=-1).reshape(-1).to(torch.long)
+        )
         cu_seqlens = get_audio_cu_seqlens(chunk_lengths, feature_lens, self.n_window_infer, self.n_window)
 
         # Chunk and process through CNN
@@ -226,25 +222,29 @@ class Qwen3ASREncoder(Qwen3OmniMoeAudioEncoder):
         )
         valid_mask = torch.arange(time_steps, device=input_features.device) < chunk_post_cnn_lens.unsqueeze(1)
         valid_indices = valid_mask.flatten().nonzero().squeeze(-1)
-        hidden_states = torch.index_select(
-            conv_out.reshape(-1, conv_out.shape[-1]), 0, valid_indices
-        )
+        hidden_states = torch.index_select(conv_out.reshape(-1, conv_out.shape[-1]), 0, valid_indices)
 
         for encoder_layer in self.layers:
             layer_outputs = encoder_layer(hidden_states, cu_seqlens, **kwargs)
             hidden_states = layer_outputs[0]
 
         hidden_states = self.ln_post(hidden_states)
-        hidden_states = self.proj1(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.proj2(hidden_states)
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
+
+
+class Qwen3ASRMultiModalProjector(VoxtralMultiModalProjector):
+    def __init__(self, config: Qwen3ASRConfig):
+        super().__init__(config)
+        self.linear_1 = nn.Linear(config.audio_config.d_model, config.audio_config.d_model)
+        self.act = ACT2FN[config.audio_config.activation_function]
+        self.linear_2 = nn.Linear(config.audio_config.d_model, config.audio_config.output_dim)
 
 
 class Qwen3ASRModel(Qwen3ASRPreTrainedModel):
     def __init__(self, config: Qwen3ASRConfig):
         super().__init__(config)
         self.audio_tower = AutoModel.from_config(config.audio_config)
+        self.multi_modal_projector = Qwen3ASRMultiModalProjector(config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
@@ -273,7 +273,7 @@ class Qwen3ASRModel(Qwen3ASRPreTrainedModel):
             input_features_mask=input_features_mask,
             **kwargs,
         )
-        audio_output.pooler_output = audio_output.last_hidden_state
+        audio_output.pooler_output = self.multi_modal_projector(audio_output.last_hidden_state)
         return audio_output
 
     def get_placeholder_mask(
