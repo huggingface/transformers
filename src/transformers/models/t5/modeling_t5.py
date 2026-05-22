@@ -44,12 +44,21 @@ from .configuration_t5 import T5Config
 logger = logging.get_logger(__name__)
 
 
-def _get_mask_config(config: T5Config) -> T5Config:
-    if config._attn_implementation == "sdpa":
-        mask_config = copy.copy(config)
-        mask_config._attn_implementation_internal = "eager"
-        return mask_config
-    return config
+class _T5MaskConfig:
+    # T5 always adds relative position bias to the mask, so materialize masks while keeping the attention implementation.
+    def __init__(self, config: T5Config):
+        self._config = config
+
+    def __getattr__(self, attr):
+        return getattr(self._config, attr)
+
+    def __deepcopy__(self, memo):
+        return type(self)(copy.deepcopy(self._config, memo))
+
+    @property
+    def _attn_implementation(self):
+        attn_implementation = self._config._attn_implementation
+        return "eager" if attn_implementation == "sdpa" else attn_implementation
 
 
 def eager_attention_forward(
@@ -679,6 +688,7 @@ class T5Stack(T5PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
         self.gradient_checkpointing = False
+        self.mask_config = _T5MaskConfig(config)
 
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
@@ -749,11 +759,9 @@ class T5Stack(T5PreTrainedModel):
             # it messes indexing later in decoder-stack because cache object is modified in-place
             past_key_values = None
 
-        mask_config = _get_mask_config(self.config)
-
         if self.config.is_decoder:
             attention_mask = create_causal_mask(
-                config=mask_config,
+                config=self.mask_config,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 past_key_values=past_key_values.self_attention_cache
@@ -762,7 +770,7 @@ class T5Stack(T5PreTrainedModel):
             )
         else:
             attention_mask = create_bidirectional_mask(
-                config=mask_config,
+                config=self.mask_config,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
             )
@@ -770,7 +778,7 @@ class T5Stack(T5PreTrainedModel):
         encoder_extended_attention_mask = None
         if self.is_decoder and encoder_hidden_states is not None:
             encoder_extended_attention_mask = create_bidirectional_mask(
-                config=mask_config,
+                config=self.mask_config,
                 inputs_embeds=inputs_embeds,
                 attention_mask=encoder_attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
