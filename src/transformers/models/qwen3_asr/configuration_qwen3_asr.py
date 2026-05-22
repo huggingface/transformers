@@ -44,9 +44,16 @@ class Qwen3ASREncoderConfig(PreTrainedConfig):
     """
 
     model_type = "qwen3_asr_encoder"
+    attribute_map = {
+        "num_hidden_layers": "encoder_layers",
+        "hidden_size": "d_model",
+        "num_attention_heads": "encoder_attention_heads",
+        "intermediate_size": "encoder_ffn_dim",
+    }
 
     num_mel_bins: int = 128
     encoder_layers: int = 24
+    encoder_attention_heads: int = 16
     encoder_ffn_dim: int = 4096
     d_model: int = 1024
     dropout: float | int = 0.0
@@ -60,9 +67,8 @@ class Qwen3ASREncoderConfig(PreTrainedConfig):
     n_window: int = 50
     output_dim: int = 3584
     n_window_infer: int = 800
+    conv_chunksize: int = 500
     downsample_hidden_size: int = 480
-    num_attention_heads: int = 16
-    num_key_value_heads: int = 16
     attention_bias: bool = True
 
 

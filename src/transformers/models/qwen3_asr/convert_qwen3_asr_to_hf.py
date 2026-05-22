@@ -81,14 +81,12 @@ STATE_DICT_MAPPING_ASR = {
     "thinker.model.": "model.language_model.",
     "thinker.lm_head.": "lm_head.",
     "thinker.": "model.",
-    ".out_proj.": ".o_proj.",
 }
 
 STATE_DICT_MAPPING_FORCED_ALIGNER = {
     "thinker.model.": "model.language_model.",
     "thinker.lm_head.": "score.",
     "thinker.": "model.",
-    ".out_proj.": ".o_proj.",
 }
 # fmt: on
 

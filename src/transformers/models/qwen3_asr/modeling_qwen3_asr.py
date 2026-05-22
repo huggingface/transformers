@@ -30,13 +30,12 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GenericForTokenClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_qwen3_asr import Qwen3ASRConfig, Qwen3ASREncoderConfig
@@ -82,7 +81,7 @@ def eager_attention_forward(
     attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
+    **kwargs,
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
@@ -100,58 +99,97 @@ def eager_attention_forward(
 
 
 class Qwen3ASRAttention(nn.Module):
-    """Bidirectional multi-head attention with no RoPE"""
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: Qwen3ASREncoderConfig, layer_idx: int | None = None):
+    def __init__(self, config):
         super().__init__()
+        self.embed_dim = config.d_model
+        self.num_heads = config.encoder_attention_heads
+        self.dropout = config.attention_dropout
+        self.head_dim = self.embed_dim // self.num_heads
+        self.num_key_value_groups = 1  # needed for eager attention
         self.config = config
-        self.layer_idx = layer_idx
-        self.head_dim = config.d_model // config.num_attention_heads
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
-        self.is_causal = False
 
-        self.q_proj = nn.Linear(config.d_model, config.num_attention_heads * self.head_dim, bias=config.attention_bias)
-        self.k_proj = nn.Linear(config.d_model, config.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.v_proj = nn.Linear(config.d_model, config.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.d_model, bias=config.attention_bias)
+        if (self.head_dim * self.num_heads) != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
+                f" and `num_heads`: {self.num_heads})."
+            )
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = 0.0
+        self.is_decoder = False
+        self.is_causal = False
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
+        cu_seqlens: torch.Tensor,
+        **kwargs,
+    ) -> torch.Tensor:
+        """Input shape: Batch x Time x Channel"""
 
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        seq_length, _ = hidden_states.size()
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        query_states = self.q_proj(hidden_states).reshape(seq_length, self.num_heads, -1)
+        key_states = self.k_proj(hidden_states).reshape(seq_length, self.num_heads, -1)
+        value_states = self.v_proj(hidden_states).reshape(seq_length, self.num_heads, -1)
+
+        query_states = query_states.transpose(0, 1).unsqueeze(0)
+        key_states = key_states.transpose(0, 1).unsqueeze(0)
+        value_states = value_states.transpose(0, 1).unsqueeze(0)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
 
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
+        if is_flash_attention_requested(self.config):
+            # Flash Attention: Use cu_seqlens for variable length attention
+            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            attn_output, _ = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask=None,
+                scaling=self.scaling,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                cu_seq_lens_q=cu_seqlens,
+                cu_seq_lens_k=cu_seqlens,
+                max_length_q=max_seqlen,
+                max_length_k=max_seqlen,
+                is_causal=False,
+                **kwargs,
+            )
+        else:
+            # Other implementations: Process each chunk separately
+            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
+            splits = [
+                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
+            ]
+            attn_outputs = [
+                attention_interface(
+                    self,
+                    q,
+                    k,
+                    v,
+                    attention_mask=None,
+                    scaling=self.scaling,
+                    dropout=0.0 if not self.training else self.attention_dropout,
+                    is_causal=False,
+                    **kwargs,
+                )[0]
+                for q, k, v in zip(*splits)
+            ]
+            attn_output = torch.cat(attn_outputs, dim=1)
 
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
+        attn_output = attn_output.reshape(seq_length, -1).contiguous()
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output
 
 
 class Qwen3ASREncoderLayer(GradientCheckpointingLayer):
@@ -170,8 +208,8 @@ class Qwen3ASREncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
+        cu_seqlens: torch.Tensor,
+        **kwargs,
     ) -> torch.Tensor:
         """
         Args:
@@ -181,27 +219,26 @@ class Qwen3ASREncoderLayer(GradientCheckpointingLayer):
         """
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
-        hidden_states, _ = self.self_attn(
+        hidden_states = self.self_attn(
             hidden_states=hidden_states,
-            attention_mask=attention_mask,
+            cu_seqlens=cu_seqlens,
             **kwargs,
         )
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-
         residual = hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
 
         if hidden_states.dtype == torch.float16:
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
-        return hidden_states
+        outputs = (hidden_states,)
+
+        return outputs
 
 
 class SinusoidsPositionEmbedding(nn.Module):
@@ -223,6 +260,58 @@ class SinusoidsPositionEmbedding(nn.Module):
 
     def forward(self, seqlen: int):
         return self.positional_embedding[:seqlen, :]
+
+
+def _get_feat_extract_output_lengths(input_lengths, n_window=50):
+    """
+    Computes the output length of the convolutional layers and the output length of the audio encoder
+    """
+    chunk_len = n_window * 2
+    input_lengths_leave = input_lengths % chunk_len
+    feat_lengths = (input_lengths_leave - 1) // 2 + 1
+    return ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // chunk_len) * 13
+
+
+def get_audio_cu_seqlens(
+    chunk_lengths: torch.Tensor,
+    feature_lens: torch.Tensor,
+    n_window_infer: int,
+    n_window: int,
+    kwargs: dict | None = None,
+) -> torch.Tensor:
+    """Compute cumulative sequence lengths for audio attention windowing, or pop `"cu_seqlens"` from `kwargs` if precomputed.
+
+    Splits each sample's post-CNN features into inference windows and returns
+    cumulative boundaries for flash-attention-style sequence packing.
+
+    Args:
+        chunk_lengths: `(num_chunks,)` pre-CNN chunk lengths.
+        feature_lens: `(batch_size,)` per-sample frame counts.
+        n_window_infer: inference window size (in raw frames).
+        n_window: half the chunk size (in raw frames).
+        kwargs: optional caller kwargs — if it contains `"cu_seqlens"` it is popped and returned.
+
+    Returns:
+        `(num_windows + 1,)` int32 cumulative sequence boundaries.
+    """
+    if kwargs is not None and (cu_seqlens := kwargs.pop("cu_seqlens", None)) is not None:
+        return cu_seqlens
+
+    aftercnn_lens = _get_feat_extract_output_lengths(feature_lens, n_window)
+    feature_lens_after_cnn = _get_feat_extract_output_lengths(chunk_lengths, n_window)
+    max_len_after_cnn = feature_lens_after_cnn.max().item()
+
+    n_window_ratio = n_window_infer // (n_window * 2)
+    window_aftercnn = max_len_after_cnn * n_window_ratio
+
+    cu_chunk_lens = [0]
+    for cnn_len in aftercnn_lens:
+        cu_chunk_lens += [window_aftercnn] * (cnn_len // window_aftercnn)
+        remainder = cnn_len % window_aftercnn
+        if remainder != 0:
+            cu_chunk_lens += [remainder]
+
+    return torch.tensor(cu_chunk_lens, device=feature_lens.device).cumsum(-1, dtype=torch.int32)
 
 
 @auto_docstring(
@@ -296,11 +385,20 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
             input_features_mask (`torch.LongTensor` of shape `(batch_size, padded_feature_length)`):
                 1 for valid mel frames and 0 for padding.
         """
+
+        # Unlike `Qwen3OmniMoeAudioEncoder`, padding of chunks is moved to feature extractor
         batch_size, num_mel_bins, padded_feature_length = input_features.shape
         chunk_len = self.n_window * 2
         num_chunks = padded_feature_length // chunk_len
 
-        # Unlike `Qwen3OmniMoeAudioEncoder`, padding of chunks is moved to feature extractor
+        # Compute cu_seqlens for windowed attention
+        feature_lens = input_features_mask.sum(-1).to(torch.long)
+        chunk_lengths = (
+            input_features_mask.view(batch_size, num_chunks, chunk_len).sum(dim=-1).reshape(-1).to(torch.long)
+        )
+        cu_seqlens = get_audio_cu_seqlens(chunk_lengths, feature_lens, self.n_window_infer, self.n_window)
+
+        # Chunk and process through CNN
         chunked = (
             input_features.view(batch_size, num_mel_bins, num_chunks, chunk_len)
             .permute(0, 2, 1, 3)
@@ -315,26 +413,18 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
             conv_out.permute(0, 3, 1, 2).contiguous().view(total_chunks, time_steps, conv_channels * freq_bins)
         )
         conv_out = conv_out + self.positional_embedding.positional_embedding[:time_steps, :].to(conv_out.dtype)
-        chunk_embeds = conv_out.view(batch_size, num_chunks, time_steps, -1)
 
-        # Mask out post-cnn positions that came from zero-padded mel frames.
-        chunk_mel_lens = input_features_mask.view(batch_size, num_chunks, chunk_len).sum(dim=-1)
-        chunk_post_cnn_lens = self._post_cnn_length(chunk_mel_lens)
-        post_cnn_positions = torch.arange(time_steps, device=input_features.device)
-        valid_post_cnn_mask = post_cnn_positions[None, None, :] < chunk_post_cnn_lens[:, :, None]
-        sequence_length = num_chunks * time_steps
-        hidden_states = chunk_embeds.reshape(batch_size, sequence_length, -1)
-        sequence_mask = valid_post_cnn_mask.reshape(batch_size, sequence_length).to(dtype=torch.long)
-
-        attention_mask = create_bidirectional_mask(
-            config=self.config,
-            inputs_embeds=hidden_states,
-            attention_mask=sequence_mask,
+        # Select only valid (non-padding) post-CNN positions into a flat packed sequence
+        chunk_post_cnn_lens = self._post_cnn_length(
+            input_features_mask.view(batch_size, num_chunks, chunk_len).sum(dim=-1).reshape(-1).to(torch.long)
         )
+        valid_mask = torch.arange(time_steps, device=input_features.device) < chunk_post_cnn_lens.unsqueeze(1)
+        valid_indices = valid_mask.flatten().nonzero().squeeze(-1)
+        hidden_states = torch.index_select(conv_out.reshape(-1, conv_out.shape[-1]), 0, valid_indices)
 
         for encoder_layer in self.layers:
-            hidden_states = encoder_layer(hidden_states, attention_mask=attention_mask, **kwargs)
-            hidden_states = hidden_states * sequence_mask.to(hidden_states.dtype).unsqueeze(-1)
+            layer_outputs = encoder_layer(hidden_states, cu_seqlens, **kwargs)
+            hidden_states = layer_outputs[0]
 
         hidden_states = self.ln_post(hidden_states)
         hidden_states = self.proj1(hidden_states)
@@ -348,16 +438,6 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
         for _ in range(3):
             lengths = torch.where(lengths > 0, (lengths - 1) // 2 + 1, torch.zeros_like(lengths))
         return lengths
-
-
-def _get_feat_extract_output_lengths(input_lengths, n_window=50):
-    """
-    Computes the output length of the convolutional layers and the output length of the audio encoder
-    """
-    chunk_len = n_window * 2
-    input_lengths_leave = input_lengths % chunk_len
-    feat_lengths = (input_lengths_leave - 1) // 2 + 1
-    return ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // chunk_len) * 13
 
 
 class Qwen3ASRModel(Qwen3ASRPreTrainedModel):
@@ -392,13 +472,7 @@ class Qwen3ASRModel(Qwen3ASRPreTrainedModel):
             input_features_mask=input_features_mask,
             **kwargs,
         )
-        audio_embeds = audio_output.last_hidden_state
-        input_lengths = input_features_mask.sum(-1).to(torch.long)
-        audio_token_lengths = _get_feat_extract_output_lengths(input_lengths, self.config.audio_config.n_window)
-        valid_mask = (
-            torch.arange(audio_embeds.shape[1], device=audio_embeds.device)[None, :] < audio_token_lengths[:, None]
-        )
-        audio_output.pooler_output = audio_embeds[valid_mask]
+        audio_output.pooler_output = audio_output.last_hidden_state
         return audio_output
 
     def get_placeholder_mask(
