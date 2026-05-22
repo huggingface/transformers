@@ -61,6 +61,21 @@ class AXK2RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
+class AXK2GatedRMSNorm(nn.Module):
+    """RMSNorm wrapped with a low-rank input-dependent gate (Megatron GatedNormWrapper)."""
+
+    def __init__(self, hidden_size: int, rank: int, eps: float):
+        super().__init__()
+        self.norm = AXK2RMSNorm(hidden_size, eps=eps)
+        self.W_down = nn.Linear(hidden_size, rank, bias=False)
+        self.W_up = nn.Linear(rank, hidden_size, bias=False)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        y = self.norm(x)
+        raw_gate = self.W_up(F.silu(self.W_down(y)))
+        return (y * torch.sigmoid(raw_gate.float())).to(y.dtype)
+
+
 class AXK2RotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
@@ -220,21 +235,24 @@ class AXK2MoE(nn.Module):
     def route_tokens_to_experts(self, router_logits):
         router_logits = router_logits.sigmoid()
         router_logits_for_choice = router_logits + self.gate.e_score_correction_bias
-        group_scores = (
-            router_logits_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
-            .topk(2, dim=-1)[0]
-            .sum(dim=-1)
-        )
-        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
-        group_mask = torch.zeros_like(group_scores)
-        group_mask.scatter_(1, group_idx, 1)
-        score_mask = (
-            group_mask.unsqueeze(-1)
-            .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
-            .reshape(-1, self.n_routed_experts)
-        )
-        scores_for_choice = router_logits_for_choice.masked_fill(~score_mask.bool(), 0.0)
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        if self.n_group is None or self.topk_group is None:
+            topk_indices = torch.topk(router_logits_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        else:
+            group_scores = (
+                router_logits_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
+                .topk(2, dim=-1)[0]
+                .sum(dim=-1)
+            )
+            group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
+            group_mask = torch.zeros_like(group_scores)
+            group_mask.scatter_(1, group_idx, 1)
+            score_mask = (
+                group_mask.unsqueeze(-1)
+                .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
+                .reshape(-1, self.n_routed_experts)
+            )
+            scores_for_choice = router_logits_for_choice.masked_fill(~score_mask.bool(), 0.0)
+            topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
         topk_weights = router_logits.gather(1, topk_indices)
         if self.norm_topk_prob:
             denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
@@ -405,6 +423,12 @@ class AXK2Attention(nn.Module):
             bias=config.attention_bias,
         )
 
+        if getattr(config, "attention_output_gate", False):
+            gate_in = self.q_lora_rank if self.q_lora_rank is not None else config.hidden_size
+            self.linear_gate = nn.Linear(gate_in, self.num_heads * self.v_head_dim, bias=False)
+        else:
+            self.linear_gate = None
+
         self.scaling = self.qk_head_dim ** (-0.5)
         if self.config.rope_parameters.get("rope_type", "default") != "default":
             mscale_all_dim = self.config.rope_parameters.get("mscale_all_dim", 0)
@@ -426,9 +450,11 @@ class AXK2Attention(nn.Module):
         key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
 
         if self.q_lora_rank is None:
+            q_compressed = hidden_states
             q_states = self.q_proj(hidden_states)
         else:
-            q_states = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
+            q_compressed = self.q_a_proj(hidden_states)
+            q_states = self.q_b_proj(self.q_a_layernorm(q_compressed))
         q_states = q_states.view(query_shape).transpose(1, 2)
         q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
@@ -475,6 +501,9 @@ class AXK2Attention(nn.Module):
             attn_output = attn_output[:, :, :, : self.v_head_dim]
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
+        if self.linear_gate is not None:
+            gate = self.linear_gate(q_compressed)
+            attn_output = (attn_output * torch.sigmoid(gate.float())).to(attn_output.dtype)
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
@@ -498,9 +527,20 @@ class AXK2DecoderLayer(GradientCheckpointingLayer):
         else:
             self.mlp = AXK2MLP(config)
 
-        self.input_layernorm = AXK2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = AXK2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_mlp_layernorm = AXK2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        use_gated = getattr(config, "gated_norm", False)
+        gate_rank = getattr(config, "gated_norm_rank", 16)
+
+        if use_gated:
+            self.input_layernorm = AXK2GatedRMSNorm(config.hidden_size, rank=gate_rank, eps=config.rms_norm_eps)
+        else:
+            self.input_layernorm = AXK2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        if use_gated and self.is_moe_layer:
+            self.post_attention_layernorm = AXK2GatedRMSNorm(
+                config.hidden_size, rank=gate_rank, eps=config.rms_norm_eps
+            )
+        else:
+            self.post_attention_layernorm = AXK2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -529,8 +569,6 @@ class AXK2DecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        if self.is_moe_layer:
-            hidden_states = self.post_mlp_layernorm(hidden_states)
         hidden_states = residual + hidden_states
         return hidden_states
 

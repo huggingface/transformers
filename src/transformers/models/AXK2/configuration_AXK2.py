@@ -107,6 +107,15 @@ class AXK2Config(PreTrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        gated_norm (`bool`, *optional*, defaults to `False`):
+            Whether to wrap input/post-attention layernorms with a low-rank input-dependent gate
+            (see `AXK2GatedRMSNorm`). When enabled, the gate is applied to `input_layernorm` for all
+            layers and to `post_attention_layernorm` only for MoE layers.
+        gated_norm_rank (`int`, *optional*, defaults to 16):
+            Bottleneck rank for the low-rank gate used by `AXK2GatedRMSNorm` when `gated_norm=True`.
+        attention_output_gate (`bool`, *optional*, defaults to `False`):
+            Whether to apply an input-dependent sigmoid gate to the attention output (computed from
+            the compressed q representation) before the output projection.
 
     ```python
     >>> from transformers import AXK2Model, AXK2Config
@@ -178,6 +187,9 @@ class AXK2Config(PreTrainedConfig):
         rope_interleave: bool | None = True,
         attention_bias: bool | None = False,
         attention_dropout: float | None = 0.0,
+        gated_norm: bool | None = False,
+        gated_norm_rank: int | None = 16,
+        attention_output_gate: bool | None = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -224,6 +236,9 @@ class AXK2Config(PreTrainedConfig):
         self.use_cache = use_cache
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+        self.gated_norm = gated_norm
+        self.gated_norm_rank = gated_norm_rank
+        self.attention_output_gate = attention_output_gate
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -240,7 +255,7 @@ class AXK2Config(PreTrainedConfig):
 
         self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", self.default_theta))
         self.standardize_rope_params()
-        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
+        self.validate_rope()
 
         for key in ["beta_fast", "beta_slow", "factor"]:
             if key in self.rope_parameters:
