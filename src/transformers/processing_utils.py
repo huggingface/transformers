@@ -1739,16 +1739,42 @@ class ProcessorMixin(PushToHubMixin):
 
         if is_primary:
             # Primary tokenizer: load from root
-            tokenizer = auto_processor_class.from_pretrained(
-                pretrained_model_name_or_path, subfolder=subfolder, **kwargs
+            return auto_processor_class.from_pretrained(pretrained_model_name_or_path, subfolder=subfolder, **kwargs)
+        candidate_subfolder = os.path.join(subfolder, sub_processor_type) if subfolder else sub_processor_type
+
+        # Backward compatibility
+        # older/custom preprocessors may use non-primary tokenizer attribute
+        # names while still storing tokenizer assets at repo root
+        # In such cases  v5 subfolder inference incorrectly looks for  repo/bpe_tokenizer
+        # probe whether tokenizer assets actually exist in the inferred subfolder
+        # before attempting to load from it
+
+        probe_kwargs = {
+            k: kwargs[k] for k in ("cache_dir", "token", "proxies", "revision", "local_files_only") if k in kwargs
+        }
+
+        tokenizer_probe_files = ("tokenizer_config.json", "tokenizer.json")
+
+        sub_folder_has_tokenizer = any(
+            cached_file(
+                pretrained_model_name_or_path,
+                file_name,
+                subfolder=candidate_subfolder,
+                _raise_exceptions_for_missing_entries=False,
+                _raise_exceptions_for_connection_errors=False,
+                **probe_kwargs,
             )
-        else:
-            # Additional tokenizer: load from subfolder (e.g., "decoder_tokenizer")
-            tokenizer_subfolder = os.path.join(subfolder, sub_processor_type) if subfolder else sub_processor_type
-            tokenizer = auto_processor_class.from_pretrained(
-                pretrained_model_name_or_path, subfolder=tokenizer_subfolder, **kwargs
-            )
-        return tokenizer
+            is not None
+            for file_name in tokenizer_probe_files
+        )
+
+        # fallback to root/current subfolder when tokenizer assets are
+        # not present in the inferred tokenizer subfolder
+        effective_subfolder = candidate_subfolder if sub_folder_has_tokenizer else subfolder
+
+        return auto_processor_class.from_pretrained(
+            pretrained_model_name_or_path, subfolder=effective_subfolder, **kwargs
+        )
 
     @classmethod
     def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, processor_dict=None, **kwargs):
