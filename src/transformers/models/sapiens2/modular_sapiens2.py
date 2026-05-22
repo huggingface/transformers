@@ -1266,7 +1266,7 @@ class Sapiens2PreTrainedModel(DINOv3ViTPreTrainedModel):
             init.constant_(module.lambda1, self.config.layerscale_value)
         elif isinstance(module, Sapiens2RopePositionEmbedding):
             inv_freq = 1 / module.base ** (
-                2 * torch.arange(module.head_dim // 4, dtype=module.pos_embed_dtype) / (module.head_dim // 2)
+                2 * torch.arange(module.head_dim // 4, dtype=module.inv_freq.dtype) / (module.head_dim // 2)
             )
             init.copy_(module.inv_freq, inv_freq)
         elif isinstance(
