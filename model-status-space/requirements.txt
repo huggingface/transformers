@@ -1,0 +1,4 @@
+gradio>=4.0
+transformers>=4.40
+huggingface_hub>=0.22
+requests>=2.28
