@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 [Cosmos3](https://huggingface.co/nvidia/Cosmos3-Nano) is a mixture-of-transformers (MoT) Vision Foundation Model from NVIDIA, composed of a *Reasoner* tower and a *Generator* tower. The two towers share the same input embedding and visual encoder but use disjoint MoT experts for understanding vs. generation, plus cross-modal adapters (`llm2vae`, `llm2sound`, `llm2action`, etc.) that connect the language model to image / audio / action heads.
 
-The transformers integration loads **only the Reasoner tower** from a unified Cosmos3 checkpoint. The Reasoner is architecturally identical to [Qwen3-VL](./qwen3_vl) — `Cosmos3ReasonerForConditionalGeneration` is a thin subclass of `Qwen3VLForConditionalGeneration`. Loading is driven by two transformations registered automatically when `model_type` is `"cosmos3_omni"`:
+The transformers integration loads **only the Reasoner tower** from a unified Cosmos3 checkpoint. The Reasoner is architecturally identical to [Qwen3-VL](./qwen3_vl) — `Cosmos3ForConditionalGeneration` is a thin subclass of `Qwen3VLForConditionalGeneration`. Loading is driven by two transformations registered automatically when `model_type` is `"cosmos3_omni"`:
 
 1. The checkpoint's flat namespaces are re-targeted to Qwen3-VL's nested layout: `model.<*>` → `model.language_model.<*>` and `blocks.*` / `merger.*` / `patch_embed.*` / `pos_embed.*` / `deepstack_merger_list.*` → `model.visual.<*>`.
 2. Generator / sound / action parameters (`*_moe_gen`, `llm2vae`, `vae2llm`, `time_embedder`, `llm2sound`, `sound2llm`, `sound_modality_embed`, `llm2action`, `action2llm`, `action_modality_embed`) are skipped on load.
@@ -33,9 +33,9 @@ The transformers integration loads **only the Reasoner tower** from a unified Co
 
 ```python
 import torch
-from transformers import AutoProcessor, Cosmos3ReasonerForConditionalGeneration
+from transformers import AutoProcessor, Cosmos3ForConditionalGeneration
 
-model = Cosmos3ReasonerForConditionalGeneration.from_pretrained(
+model = Cosmos3ForConditionalGeneration.from_pretrained(
     "nvidia/Cosmos3-Nano",
     dtype=torch.float16,
     device_map="auto",
@@ -81,9 +81,9 @@ print(output[0])
     - get_video_features
     - get_image_features
 
-## Cosmos3ReasonerForConditionalGeneration
+## Cosmos3ForConditionalGeneration
 
-[[autodoc]] Cosmos3ReasonerForConditionalGeneration
+[[autodoc]] Cosmos3ForConditionalGeneration
     - forward
     - get_video_features
     - get_image_features

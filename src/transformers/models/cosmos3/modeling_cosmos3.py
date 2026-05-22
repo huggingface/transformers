@@ -50,7 +50,7 @@ class Cosmos3Model(Qwen3VLModel):
     ]
 
 
-class Cosmos3ReasonerForConditionalGeneration(Qwen3VLForConditionalGeneration):
+class Cosmos3ForConditionalGeneration(Qwen3VLForConditionalGeneration):
     config: Cosmos3Config
 
     # The unified Cosmos3 checkpoint stores both the Reasoner tower (loaded here) and the
@@ -60,6 +60,6 @@ class Cosmos3ReasonerForConditionalGeneration(Qwen3VLForConditionalGeneration):
 
 
 __all__ = [
-    "Cosmos3ReasonerForConditionalGeneration",
+    "Cosmos3ForConditionalGeneration",
     "Cosmos3Model",
 ]
