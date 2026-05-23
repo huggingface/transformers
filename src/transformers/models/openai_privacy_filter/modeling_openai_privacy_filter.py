@@ -130,18 +130,6 @@ class OpenAIPrivacyFilterRotaryEmbedding(nn.Module):
         return cos.to(x.dtype), sin.to(x.dtype)
 
 
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
 @use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     cos = cos.unsqueeze(unsqueeze_dim)
@@ -171,27 +159,110 @@ def eager_attention_forward(
     attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float | int = 0.0,
+    sliding_window: int | None = None,
     **kwargs,
 ):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    """Banded sliding-window attention with learnable sinks.
+
+    Memory is O(N*W) in the token dimension rather than O(N*N): keys and values
+    are extracted with `F.pad` + `Tensor.unfold` into per-query windows of width
+    `sliding_window`, and scores are computed only inside the band. This matches
+    the production attention path in OpenAI's `privacy-filter` reference
+    implementation (Apache-2.0; see `opf/_model/model.py::sdpa`), the bidirectional
+    branch at lines ~431-473.
+
+    Notes on parity with the previous quadratic implementation:
+      * Sinks: HF's checkpoint converter pre-multiplies sinks by `log(2)` at load
+        time (see `convert_openai_privacy_filter_weights_to_hf.py`), so
+        `module.sinks` is already in natural-log space. We concatenate them as a
+        single extra column to scores before softmax and drop the column after,
+        matching the previous behaviour bit-for-bit.
+      * Sliding window: the caller (`OpenAIPrivacyFilterAttention`) passes
+        `sliding_window = config.sliding_window + 1`. HF's convention is that
+        FA receives `window_size = (sliding_window - 1, sliding_window - 1)`,
+        i.e. `sliding_window - 1` tokens on each side, for a total bidirectional
+        band of `2*(sliding_window - 1) + 1` tokens (including self). The eager
+        mask in `sliding_window_bidirectional_overlay` matches: it attends to
+        keys with `abs(q - kv) <= config.sliding_window`. We use the same
+        `L = R = sliding_window - 1` half-width here for exact parity.
+      * Padding: when an additive band+padding mask is supplied, per-key
+        validity is recovered from the mask's diagonal (the diagonal lies inside
+        the band for any bidi-SWA mask, so a non-`-inf` value implies the key is
+        not padded). This is O(B*N) and never materialises the full N*N tensor.
+      * `attn_weights`: the banded path does not materialise the full N*N
+        attention matrix, so `attn_weights` is returned as `None`. Models that
+        require `output_attentions=True` against this kernel will not receive
+        per-pair weights from eager; use `attn_implementation="flash_attention_2"`
+        (which never exposed weights either) or fall back via an upstream issue
+        if a banded-form attention output is needed.
+    """
+    bsz, n_heads, n_tokens, head_dim = query.shape
+    n_kv = key.shape[1]
+    q_mult = n_heads // n_kv
+
+    # HF convention: `sliding_window` arrives as `config.sliding_window + 1`,
+    # producing `L = R = sliding_window - 1` per side and a total band of
+    # `2*(sliding_window - 1) + 1`. Clamp the half-width by `n_tokens - 1` so a
+    # sequence shorter than the band degenerates to full attention.
+    if sliding_window is None or int(sliding_window) <= 0:
+        half = max(0, n_tokens - 1)
+    else:
+        half = min(int(sliding_window) - 1, n_tokens - 1)
+    left_ctx = right_ctx = half
+    window = left_ctx + right_ctx + 1
+
+    # Reshape into [B, N, KV, Q, D] / [B, N, KV, D] for cheap windowed einsum.
+    q5 = query.permute(0, 2, 1, 3).reshape(bsz, n_tokens, n_kv, q_mult, head_dim)
+    k4 = key.permute(0, 2, 1, 3)
+    v4 = value.permute(0, 2, 1, 3)
+
+    # Pad K/V along the token dim then sliding-window unfold to get per-query bands.
+    # F.pad's pad-spec is last-dim-first; for a [B, N, KV, D] tensor padding dim 1
+    # corresponds to the third pair of (left, right) entries.
+    kp = F.pad(k4, (0, 0, 0, 0, left_ctx, right_ctx))
+    vp = F.pad(v4, (0, 0, 0, 0, left_ctx, right_ctx))
+    kwin = kp.unfold(1, window, 1).permute(0, 1, 4, 2, 3)  # [B, N, W, KV, D]
+    vwin = vp.unfold(1, window, 1).permute(0, 1, 4, 2, 3)
+
+    # Scores: einsum is O(N*W*KV*Q*D) memory and FLOPs, never N*N.
+    scores = torch.einsum("bthqd,btwhd->bthqw", q5, kwin) * scaling
+
+    # Boundary validity: positions that fall outside [0, N) due to the F.pad above.
+    idx = torch.arange(window, device=query.device) - left_ctx
+    pos = torch.arange(n_tokens, device=query.device)[:, None] + idx[None, :]  # [N, W]
+    valid = (pos >= 0) & (pos < n_tokens)
+    valid_b = valid[None, :, None, None, :]  # broadcast over [B, KV, Q]
+
     if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
+        # Recover the per-key padding mask from the 4D additive mask's diagonal.
+        # For bidi-SWA the diagonal is always in-band, so `mask[b, h, j, j]` is 0
+        # for a valid token and -inf for a padded one.
+        diag_mask = attention_mask.diagonal(dim1=-2, dim2=-1)  # [B, H_or_1, N]
+        if diag_mask.dim() > 2:
+            diag_mask = diag_mask[:, 0]  # any head will do; bidi-SWA mask is head-broadcastable
+        key_valid_per_seq = diag_mask > torch.finfo(diag_mask.dtype).min  # [B, N]
+        padded_valid = F.pad(key_valid_per_seq, (left_ctx, right_ctx), value=False)
+        key_valid_win = padded_valid.unfold(-1, window, 1)  # [B, N, W]
+        valid_full = valid_b & key_valid_win[:, :, None, None, :]
+    else:
+        valid_full = valid_b
 
-    sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
-    combined_logits = torch.cat([attn_weights, sinks], dim=-1)
+    scores = scores.masked_fill(~valid_full, -float("inf"))
 
-    # This was not in the original implementation and slightly affect results; it prevents overflow in BF16/FP16
-    # when training with bsz>1 we clamp max values.
+    # Sinks: HF stores them in natural-log space (see convert script).
+    sinks = module.sinks.view(n_kv, q_mult)
+    sink_scores = sinks[None, None, :, :, None].to(scores.dtype).expand(bsz, n_tokens, n_kv, q_mult, 1)
+    scores = torch.cat([scores, sink_scores], dim=-1)
 
-    combined_logits = combined_logits - combined_logits.max(dim=-1, keepdim=True).values
-    probs = nn.functional.softmax(combined_logits, dim=-1, dtype=torch.float32)  # Softmax in fp32
-    scores = probs[..., :-1]  # we drop the sink here
-    attn_weights = nn.functional.dropout(scores, p=dropout, training=module.training).to(value_states.dtype)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-    return attn_output, attn_weights
+    # Subtract max for fp16/bf16 overflow safety, then softmax in fp32, then drop sink col.
+    scores = scores - scores.max(dim=-1, keepdim=True).values
+    probs = nn.functional.softmax(scores, dim=-1, dtype=torch.float32)
+    probs = probs[..., :-1].to(value.dtype)
+    probs = nn.functional.dropout(probs, p=dropout, training=module.training)
+
+    attn = torch.einsum("bthqw,btwhd->bthqd", probs, vwin)  # [B, N, KV, Q, D]
+    attn_output = attn.reshape(bsz, n_tokens, n_heads, head_dim)
+    return attn_output, None
 
 
 @use_kernelized_func(apply_rotary_pos_emb)

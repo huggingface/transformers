@@ -82,6 +82,15 @@ print(predicted_token_classes)
 - Model weights: https://huggingface.co/openai/privacy-filter
 - Demo: https://huggingface.co/spaces/openai/privacy-filter
 
+## Attention backends
+
+OpenAI Privacy Filter is a bidirectional banded model: every query attends only to keys within `[q - config.sliding_window, q + config.sliding_window]`. Both the eager and flash-attention backends respect that band.
+
+- `attn_implementation="flash_attention_2"` is the fastest option on CUDA Ampere+ with `torch_dtype` set to `torch.bfloat16` or `torch.float16`. It uses Flash-Attention's native sliding-window kernel and the model's learnable attention sinks.
+- `attn_implementation="eager"` is portable across `cpu`, `mps`, and `cuda` for any dtype the model supports (`torch.float32` or `torch.bfloat16`). The eager kernel materialises K/V windows of width `2*config.sliding_window + 1` via `torch.nn.functional.pad` + `Tensor.unfold`, so memory is `O(N * window)` rather than `O(N^2)`. This matches the production attention path in OpenAI's reference implementation (see [`opf/_model/model.py::sdpa`](https://github.com/openai/privacy-filter/blob/main/opf/_model/model.py)).
+
+Because the eager kernel never materialises the full `N x N` attention matrix, `output_attentions=True` returns `None` for per-pair attention weights. Use `flash_attention_2` for the same trade-off, or open an issue if a banded-form attention output would be useful.
+
 ## Resources
 
 - [Token classification task guide](../tasks/token_classification)

@@ -200,6 +200,76 @@ class OpenAIPrivacyFilterModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
             self.skipTest("Bf16 may cause biggers fluctuations when used in combination with float casting")
         _test_eager_matches_batched_and_grouped_inference(self, name, dtype)
 
+    def test_eager_banded_swa_locality(self):
+        """The banded eager kernel must only attend within `[t - L, t + R]` (where
+        `L = R = config.sliding_window`). With a single layer, changing a token
+        outside the band must leave the target token's hidden state untouched.
+        """
+        config = OpenAIPrivacyFilterConfig(
+            vocab_size=32,
+            pad_token_id=0,
+            hidden_size=32,
+            intermediate_size=16,
+            num_hidden_layers=1,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=8,
+            num_local_experts=4,
+            num_experts_per_tok=2,
+            sliding_window=2,  # band L = R = 2 -> 5 keys per query
+            max_position_embeddings=32,
+            rope_parameters={
+                "rope_type": "yarn",
+                "rope_theta": 150000.0,
+                "factor": 1.0,
+                "beta_fast": 32.0,
+                "beta_slow": 1.0,
+                "truncate": False,
+                "original_max_position_embeddings": 32,
+            },
+            initializer_range=0.02,
+            classifier_dropout=0.0,
+        )
+        config._attn_implementation = "eager"
+
+        torch.manual_seed(0)
+        model = OpenAIPrivacyFilterModel(config=config).to(torch_device).eval()
+
+        seq_len = 20
+        target_pos = 10
+        far_pos = target_pos + 3  # distance 3 > L = 2, outside the band
+        in_band_pos = target_pos + 1  # distance 1, inside the band (sanity)
+
+        torch.manual_seed(1)
+        input_ids = torch.randint(1, config.vocab_size, (1, seq_len), device=torch_device)
+
+        def flip(ids: torch.Tensor, pos: int) -> torch.Tensor:
+            flipped = ids.clone()
+            new_val = (int(ids[0, pos]) + 1) % config.vocab_size
+            flipped[0, pos] = new_val if new_val != config.pad_token_id else (new_val + 1) % config.vocab_size
+            return flipped
+
+        outside_ids = flip(input_ids, far_pos)
+        inside_ids = flip(input_ids, in_band_pos)
+
+        with torch.no_grad():
+            base = model(input_ids).last_hidden_state[0, target_pos]
+            outside = model(outside_ids).last_hidden_state[0, target_pos]
+            inside = model(inside_ids).last_hidden_state[0, target_pos]
+
+        outside_diff = (base - outside).abs().max().item()
+        inside_diff = (base - inside).abs().max().item()
+        self.assertLess(
+            outside_diff,
+            1e-5,
+            msg=f"SWA locality violated: flipping a token at distance 3 changed target by {outside_diff:.2e}",
+        )
+        self.assertGreater(
+            inside_diff,
+            1e-5,
+            msg=f"In-band token flip had no effect (max diff {inside_diff:.2e}); test is not exercising attention.",
+        )
+
 
 @slow
 @require_torch
