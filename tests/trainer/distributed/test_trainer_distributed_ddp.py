@@ -58,7 +58,9 @@ if is_torch_fp16_available_on_device(torch_device):
 
 pure_dtype_params = ["fp32"] + dtypes
 mixed_precision_params = list(dtypes)
-basic_model_params = [(model_name, dtype) for _, model_name, _ in AXOLOTL_PRETRAINED_CAUSAL_MODELS for dtype in pure_dtype_params]
+basic_model_params = [
+    (model_name, dtype) for _, model_name, _ in AXOLOTL_PRETRAINED_CAUSAL_MODELS for dtype in pure_dtype_params
+]
 loss_decrease_params = [
     (model_name, expected_loss, gradient_accumulation_steps)
     for _, model_name, expected_loss in AXOLOTL_PRETRAINED_CAUSAL_MODELS
