@@ -14,10 +14,10 @@
 
 import json
 import os
+import shutil
 import sys
 import tempfile
 import unittest
-import shutil
 from pathlib import Path
 from shutil import copyfile
 
@@ -558,11 +558,9 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             self.assertIsInstance(loaded_processor.image_processor, SiglipImageProcessor)
             self.assertIsInstance(loaded_processor.encoder_image_processor, CLIPImageProcessor)
 
-
     def test_non_primary_tokenizer_root_fallback(self):
         """
-            Regression test for v5 tokenizer subfolder inference.
-
+        Regression test for v5 tokenizer subfolder inference.
         Non-primary tokenizer attributes used to load successfully even when
         tokenizer assets lived at repo root.
 
@@ -577,9 +575,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             def __init__(self, bpe_tokenizer, image_processor):
                 super().__init__(bpe_tokenizer, image_processor)
 
-        tokenizer = AutoTokenizer.from_pretrained(
-            "openai-community/gpt2"
-        )
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
 
         image_processor = SiglipImageProcessor()
 
@@ -730,4 +726,3 @@ class ProcessorPushToHubTester(unittest.TestCase):
                 # When we save as single files, tokenizers and processors share a chat template, which means
                 # the reloaded tokenizer should get the chat template as well
                 self.assertEqual(reloaded_processor.chat_template, reloaded_processor.tokenizer.chat_template)
-
