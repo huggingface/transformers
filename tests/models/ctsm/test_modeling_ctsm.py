@@ -279,3 +279,25 @@ class CtsmModelIntegrationTests(unittest.TestCase):
 
         self.assertEqual(output.mean_predictions.shape, (1, 128))
         self.assertEqual(output.full_predictions.shape, (1, 128, 1 + len(model.config.quantiles)))
+
+        # Reference values produced by the official `cisco-ai/cisco-time-series-model-1.0` checkpoint
+        # (the converted transformers model matches the original `cisco_tsm` implementation to fp32
+        # precision; see the conversion script). Guards against silent regressions in normalization,
+        # RoPE/scaling order, or the multi-resolution assembly.
+        mean = output.mean_predictions[0].float().cpu()
+        full = output.full_predictions[0].float().cpu()
+
+        expected_mean_head = torch.tensor(
+            [-0.883732, -0.873975, -0.879177, -0.866200, -0.856937, -0.859743, -0.854263, -0.845513]
+        )
+        torch.testing.assert_close(mean[:8], expected_mean_head, rtol=1e-3, atol=2e-3)
+
+        expected_full_h0 = torch.tensor([-0.883732, -1.020437, -0.977952, -0.957534, -0.933551])
+        torch.testing.assert_close(full[0, :5], expected_full_h0, rtol=1e-3, atol=2e-3)
+
+        # The first channel of `full_predictions` is the mean forecast.
+        torch.testing.assert_close(full[:, 0], mean, rtol=1e-5, atol=1e-5)
+
+        # Quantile predictions at each horizon step should be (weakly) monotone increasing in level.
+        quantiles = full[:, 1:]
+        self.assertGreaterEqual(quantiles.diff(dim=-1).min().item(), -1e-3)
