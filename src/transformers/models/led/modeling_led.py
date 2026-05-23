@@ -365,7 +365,7 @@ class LEDEncoderSelfAttention(nn.Module):
         # ONNX export path: `unfold` is now supported by the ONNX exporter,
         # so we use the view-based implementation instead of a Python for-loop.
         return hidden_states.unfold(dimension=1, size=window_overlap * 2, step=window_overlap).transpose(2, 3)
-    
+
     @staticmethod
     def _mask_invalid_locations(input_tensor, affected_seq_len) -> torch.Tensor:
         beginning_mask_2d = input_tensor.new_ones(affected_seq_len, affected_seq_len + 1).tril().flip(dims=[0])

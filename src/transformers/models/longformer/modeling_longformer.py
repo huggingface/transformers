@@ -718,10 +718,6 @@ class LongformerSelfAttention(nn.Module):
             chunk_stride[1] = chunk_stride[1] // 2
             return hidden_states.as_strided(size=chunk_size, stride=chunk_stride)
 
-        # When exporting to ONNX, use this separate logic
-        # have to use slow implementation since as_strided, unfold and 2d-tensor indexing aren't supported (yet) in ONNX export
-
-        
         # ONNX export path: `unfold` is now supported by the ONNX exporter,
         # so we use the view-based implementation instead of a Python for-loop.
         return hidden_states.unfold(dimension=1, size=window_overlap * 2, step=window_overlap).transpose(2, 3)
