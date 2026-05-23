@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-11-25 and added to Hugging Face Transformers on 2026-05-16.*
+*This model was released on 2025-11-25 and added to Hugging Face Transformers on 2026-05-23.*
 
 # CTSM
 
@@ -79,8 +79,8 @@ outputs = model(past_values=[(coarse, fine)], horizon_len=128)
 
 ## Usage tips
 
-- For `horizon_len > config.horizon_length`, [`CtsmModelForPrediction`] runs an autoregressive multi-resolution decode loop. By default it matches the original implementation and recomputes the full multi-resolution context at each step.
-- Set `use_cache=True` to opt into a faster [`DynamicCache`] path. In that path, stream-normalization statistics are frozen to their step-1 values so cached K/V remains valid; the coarse block is pinned and the cache is rebuilt if the concatenated sequence would outgrow `max_position_embeddings`.
+- For `horizon_len > config.horizon_length`, [`CtsmModelForPrediction`] runs an autoregressive multi-resolution decode loop. At every step it rebuilds the full multi-resolution context — predictions are appended to the fine stream, new coarse patches are aggregated every `aggregation_factor` points, and the stream / per-first-patch normalization statistics are recomputed — exactly matching the original implementation.
+- There is no key/value cache: CTSM's normalization is global over the current window, so cached K/V from an earlier step would be stale. The reference implementation full-recomputes for the same reason.
 
 ## CtsmConfig
 

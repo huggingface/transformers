@@ -28,6 +28,20 @@ from ...utils import auto_docstring
 @strict
 class CtsmConfig(PreTrainedConfig):
     r"""
+    patch_length (`int`, *optional*, defaults to 32):
+        Length of one patch in the input sequence for each resolution stream.
+    context_length (`int`, *optional*, defaults to 512):
+        Length of the input context for each resolution stream.
+    horizon_length (`int`, *optional*, defaults to 128):
+        Length of the prediction horizon produced per autoregressive step.
+    freq_size (`int`, *optional*, defaults to 3):
+        Number of frequency embeddings.
+    tolerance (`float`, *optional*, defaults to 1e-06):
+        Numerical tolerance used in normalization.
+    pad_val (`float`, *optional*, defaults to 1123581321.0):
+        Sentinel value marking padded positions in the input series.
+    use_positional_embedding (`bool`, *optional*, defaults to `False`):
+        CTSM uses rotary position embeddings and does not add sinusoidal positional embeddings.
     num_hidden_layers (`int`, *optional*, defaults to 25):
         Number of decoder layers (CTSM 1.0 uses 25 instead of TimesFM 2.0's 50).
     quantiles (`list[float]`, *optional*, defaults to 15 values between 0.01 and 0.99):
