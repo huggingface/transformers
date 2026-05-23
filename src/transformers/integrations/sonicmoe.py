@@ -26,7 +26,7 @@ from dataclasses import dataclass
 
 import torch
 
-from ..utils import logging
+from ..utils import is_rocm_platform, logging
 from .hub_kernels import lazy_load_kernel
 
 
@@ -57,6 +57,9 @@ def _load_sonicmoe_kernel() -> SonicMoE:
         raise ImportError(
             "sonic-moe kernel requires CUDA, but CUDA is not available. Use a different `experts_implementation`."
         )
+
+    if is_rocm_platform():
+        raise ImportError("sonic-moe kernel is not available on ROCm. Use a different `experts_implementation`.")
 
     # sonic-moe requires Hopper (SM90) or newer
     major = torch.cuda.get_device_capability()[0]

@@ -115,6 +115,7 @@ from transformers.utils import (
     SAFE_WEIGHTS_NAME,
     ModelOutput,
     is_kernels_available,
+    is_rocm_platform,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
 )
@@ -601,6 +602,7 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
             dtype != torch.float32
             and is_kernels_available()
             and torch.cuda.is_available()
+            and not is_rocm_platform()
             and torch.cuda.get_device_capability() >= (9, 0)
         ):
             # we also need nvidia-cutlass-dsl and apache-tvm-ffi
