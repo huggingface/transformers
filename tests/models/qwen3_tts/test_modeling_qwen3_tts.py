@@ -273,16 +273,6 @@ class Qwen3TTSForConditionalGenerationIntegrationTest(unittest.TestCase):
             )
 
         hf_codes = talker_codes_list[0].cpu().tolist()
-        exp_codes = expected["generated_codes"]
-        matches = sum(1 for h, e in zip(hf_codes[0], exp_codes[0]) if h == e)
-        print(f"\n[single] row 0: {matches}/16 values match")
-        print(f"  HF:       {hf_codes[0]}")
-        print(f"  expected: {exp_codes[0]}")
-        for row_idx, (h_row, e_row) in enumerate(zip(hf_codes, exp_codes)):
-            row_matches = sum(1 for h, e in zip(h_row, e_row) if h == e)
-            if row_matches < 16:
-                print(f"  first mismatch at row {row_idx}, {row_matches}/16 match")
-                break
 
         # Compare only the first 6 codes of row 0 — the code predictor has near-tied logits
         # in bfloat16 (top-2 logits collapse to identical values), causing argmax to differ
