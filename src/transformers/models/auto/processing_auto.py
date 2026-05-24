@@ -52,6 +52,7 @@ else:
             ("aimv2", "CLIPProcessor"),
             ("diffusion_gemma", "Gemma4Processor"),
             ("edgetam", "Sam2Processor"),
+            ("fun_asr_nano", "FunAsrNanoProcessor"),
             ("glm4v_moe", "Glm4vProcessor"),
             ("granite_speech_plus", "GraniteSpeechProcessor"),
             ("groupvit", "CLIPProcessor"),
