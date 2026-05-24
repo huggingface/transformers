@@ -69,7 +69,7 @@ class FunAsrNanoProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         audio=None,
         sampling_rate: int | None = None,
         return_tensors: str | None = None,

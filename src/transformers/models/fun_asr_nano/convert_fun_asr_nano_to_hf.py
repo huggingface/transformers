@@ -226,14 +226,16 @@ def convert_checkpoint(
     # Copy tokenizer
     print("Copying tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(qwen3_path)
-    tokenizer.save_pretrained(output_path)
+    if tokenizer is not None:
+        tokenizer.save_pretrained(output_path)
 
     print("Done!")
 
     if push_to_hub and hub_model_id:
         print(f"Pushing to hub: {hub_model_id}")
         model.push_to_hub(hub_model_id)
-        tokenizer.push_to_hub(hub_model_id)
+        if tokenizer is not None:
+            tokenizer.push_to_hub(hub_model_id)
 
 
 if __name__ == "__main__":
