@@ -25,6 +25,7 @@ import json
 import os
 import re
 import warnings
+import requests
 from collections import OrderedDict, UserDict
 from collections.abc import Callable, Collection, Mapping, Sequence, Sized
 from dataclasses import dataclass
@@ -3421,8 +3422,10 @@ def find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs):
                 local_files_only=kwargs.get("local_files_only", False),
             ):
                 return candidate
-        except Exception:
-            # TODO: tighten to OSError / ProxyError
+        except OSError:
+            continue
+        except requests.exceptions.ProxyError:
+            logger.debug(f"Proxy error while checking for {candidate}, skipping.")
             continue
 
     subfolder = kwargs.get("subfolder", "")
@@ -3453,9 +3456,11 @@ def find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs):
             for entry in entries:
                 if entry.path.endswith(".model"):
                     return entry.path if not subfolder else entry.path.removeprefix(f"{subfolder}/")
-        except Exception as e:
-            # TODO: tighten exception class
-            logger.debug(f"Could not list Hub repository files: {e}")
+        except OSError as e:
+            logger.debug(f"OS error listing Hub files: {e}")
+        except requests.exceptions.ProxyError as e:
+            logger.debug(f"Proxy error listing Hub files: {e}")
+            
 
     return None
 
