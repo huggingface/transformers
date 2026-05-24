@@ -1375,6 +1375,11 @@ def is_mistral_common_available() -> bool:
 
 
 @lru_cache
+def is_tensorflow_text_available() -> bool:
+    return _is_package_available("tensorflow_text")[0]
+
+
+@lru_cache
 def is_pynvml_available() -> bool:
     return _is_package_available("pynvml")[0]
 
@@ -1977,6 +1982,9 @@ MISTRAL_COMMON_IMPORT_ERROR = """
 {0} requires the mistral-common library but it was not found in your environment. You can install it with pip: `pip install mistral-common`. Please note that you may need to restart your runtime after installation.
 """
 
+TENSORFLOW_TEXT_IMPORT_ERROR = """
+{0} requires the tensorflow-text library but it was not found in your environment. You can install it with:
+"""
 
 BACKENDS_MAPPING = OrderedDict(
     [
@@ -2025,6 +2033,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("uvicorn", (is_uvicorn_available, UVICORN_IMPORT_ERROR)),
         ("openai", (is_openai_available, OPENAI_IMPORT_ERROR)),
         ("mistral-common", (is_mistral_common_available, MISTRAL_COMMON_IMPORT_ERROR)),
+        ("tensorflow_text", (is_tensorflow_text_available, "{0} requires the tensorflow_text library but it was not found in your environment.")),
     ]
 )
 
