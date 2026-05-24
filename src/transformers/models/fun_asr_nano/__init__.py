@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from .configuration_fun_asr_nano import *
     from .feature_extraction_fun_asr_nano import *
     from .modeling_fun_asr_nano import *
+    from .processing_fun_asr_nano import *
 else:
     import sys
 
