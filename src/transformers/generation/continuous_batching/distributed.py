@@ -16,7 +16,16 @@ from typing import TypeVar
 
 import torch
 import torch.distributed as dist
-from torch.distributed.tensor.device_mesh import DeviceMesh
+
+
+# `torch.distributed.tensor.device_mesh` is unavailable on some PyTorch builds where the distributed package is
+# incomplete (notably AMD ROCm on Windows, see #46170). `DeviceMesh` is only referenced as a type annotation in this
+# file -- the runtime paths use duck typing -- so we tolerate its absence and fall back to `None`. If a real
+# `DeviceMesh` is ever passed in such an environment (impossible without the class), we raise a clear ImportError.
+try:
+    from torch.distributed.tensor.device_mesh import DeviceMesh
+except (ImportError, AttributeError):
+    DeviceMesh = None
 
 from .requests import logger
 
@@ -27,7 +36,13 @@ T = TypeVar("T")
 class DistributedHelper:
     """A helper class to handle distributed-related operations. Notably, it does not crash when distributed is off."""
 
-    def __init__(self, device_mesh: DeviceMesh | None) -> None:
+    def __init__(self, device_mesh: "DeviceMesh | None") -> None:
+        if device_mesh is not None and DeviceMesh is None:
+            raise ImportError(
+                "torch.distributed.tensor.device_mesh.DeviceMesh is not available on this PyTorch build "
+                "(e.g., AMD ROCm on Windows). Continuous batching distributed/tensor-parallel features are not "
+                "supported in this environment."
+            )
         self.device_mesh = device_mesh
         self.dist_on = dist.is_available() and dist.is_initialized()
 
