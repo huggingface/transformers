@@ -863,3 +863,55 @@ class Gemma4IntegrationTest(unittest.TestCase):
 
         eager_generated_text = tokenizer.decode(eager_outputs[0], skip_special_tokens=True)
         self.assertEqual(export_generated_text, eager_generated_text)
+
+
+@require_torch
+class Gemma4VisionPatchEmbedderTest(unittest.TestCase):
+    """Unit tests for Gemma4VisionPatchEmbedder._position_embeddings."""
+
+    def _make_embedder(self, position_embedding_size=64, hidden_size=32):
+        from transformers import Gemma4VisionConfig
+        from transformers.models.gemma4.modeling_gemma4 import Gemma4VisionPatchEmbedder
+
+        config = Gemma4VisionConfig(
+            position_embedding_size=position_embedding_size,
+            hidden_size=hidden_size,
+            patch_size=14,
+        )
+        return Gemma4VisionPatchEmbedder(config)
+
+    def test_no_one_hot_intermediate(self):
+        """Ensure _position_embeddings does not allocate a one-hot tensor."""
+        embedder = self._make_embedder(position_embedding_size=10240, hidden_size=16)
+        batch, num_patches = 2, 100
+        pixel_position_ids = torch.randint(0, 10240, (batch, num_patches, 2))
+        padding_positions = torch.zeros(batch, num_patches, dtype=torch.bool)
+        result = embedder._position_embeddings(pixel_position_ids, padding_positions)
+        self.assertEqual(result.shape, (batch, num_patches, 16))
+
+    def test_padding_zeroed(self):
+        """Padding positions must produce all-zero embeddings."""
+        embedder = self._make_embedder()
+        batch, num_patches = 1, 4
+        pixel_position_ids = torch.randint(0, 64, (batch, num_patches, 2))
+        padding_positions = torch.tensor([[False, True, False, True]])
+        result = embedder._position_embeddings(pixel_position_ids, padding_positions)
+        torch.testing.assert_close(result[0, 1], torch.zeros(32))
+        torch.testing.assert_close(result[0, 3], torch.zeros(32))
+        self.assertTrue((result[0, 0] != 0).any())
+
+    def test_negative_positions_clamped(self):
+        """Negative position IDs (padding) must not raise."""
+        embedder = self._make_embedder()
+        pixel_position_ids = torch.tensor([[[-1, -1], [0, 5]]])
+        padding_positions = torch.tensor([[True, False]])
+        result = embedder._position_embeddings(pixel_position_ids, padding_positions)
+        self.assertEqual(result.shape, (1, 2, 32))
+
+    def test_oob_positions_clamped(self):
+        """Out-of-bounds position IDs must be clamped, not crash."""
+        embedder = self._make_embedder(position_embedding_size=64)
+        pixel_position_ids = torch.tensor([[[999, 999], [0, 0]]])
+        padding_positions = torch.tensor([[False, False]])
+        result = embedder._position_embeddings(pixel_position_ids, padding_positions)
+        self.assertEqual(result.shape, (1, 2, 32))
