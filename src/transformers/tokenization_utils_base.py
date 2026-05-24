@@ -25,7 +25,6 @@ import json
 import os
 import re
 import warnings
-import requests
 from collections import OrderedDict, UserDict
 from collections.abc import Callable, Collection, Mapping, Sequence, Sized
 from dataclasses import dataclass
@@ -33,6 +32,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Generic, NamedTuple, Union, overload
 
 import numpy as np
+import requests
 from huggingface_hub import create_repo, is_offline_mode, list_repo_files
 from packaging import version
 from typing_extensions import TypeVar
@@ -3460,7 +3460,7 @@ def find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs):
             logger.debug(f"OS error listing Hub files: {e}")
         except requests.exceptions.ProxyError as e:
             logger.debug(f"Proxy error listing Hub files: {e}")
-            
+
 
     return None
 
