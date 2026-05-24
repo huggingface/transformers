@@ -55,7 +55,7 @@ from .configuration_qwen3_tts_tokenizer_multi_codebook import (
 logger = logging.get_logger(__name__)
 
 
-# ─── Component Aliases ────────────────────────────────────────────────────────
+#  Component Aliases
 
 
 class Qwen3TTSTokenizerMultiCodebookCausalConvNet(Qwen3OmniMoeCausalConvNet):
@@ -63,7 +63,17 @@ class Qwen3TTSTokenizerMultiCodebookCausalConvNet(Qwen3OmniMoeCausalConvNet):
 
 
 class Qwen3TTSTokenizerMultiCodebookCausalTransConvNet(Qwen3OmniMoeCausalTransConvNet):
-    pass
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1):
+        super().__init__(in_channels, out_channels, kernel_size, stride)
+        pad = kernel_size - stride
+        self.left_pad = 0
+        self.right_pad = int(pad)
+
+    def forward(self, hidden_state):
+        hidden_state = self.conv(hidden_state)
+        if self.right_pad > 0:
+            hidden_state = hidden_state[..., : hidden_state.shape[-1] - self.right_pad]
+        return hidden_state.contiguous()
 
 
 class Qwen3TTSTokenizerMultiCodebookConvNeXtBlock(Qwen3OmniMoeConvNeXtBlock):
@@ -98,7 +108,7 @@ class Qwen3TTSTokenizerMultiCodebookBlock(Qwen3OmniMoeCode2WavTransformerLayer):
     pass
 
 
-# ─── Output dataclasses ───────────────────────────────────────────────────────
+#  Output dataclasses
 
 
 class Qwen3TTSTokenizerMultiCodebookEncoderOutput(MimiEncoderOutput):
@@ -117,7 +127,7 @@ class Qwen3TTSTokenizerMultiCodebookOutput(ModelOutput):
     audio_values: list[torch.FloatTensor] = None
 
 
-# ─── PreTrainedModel base ─────────────────────────────────────────────────────
+#  PreTrainedModel base
 
 
 class Qwen3TTSTokenizerMultiCodebookPreTrainedModel(MimiPreTrainedModel):
@@ -130,15 +140,15 @@ class Qwen3TTSTokenizerMultiCodebookPreTrainedModel(MimiPreTrainedModel):
     _can_compile_fullgraph = False
 
 
-class Qwen3TTSTokenizerMultiCodebookDecoderPreTrainedModel(Qwen3TTSTokenizerMultiCodebookPreTrainedModel):
+class Qwen3TTSTokenizerMultiCodebookCode2WavPreTrainedModel(Qwen3TTSTokenizerMultiCodebookPreTrainedModel):
     config_class = Qwen3TTSTokenizerMultiCodebookCode2WavConfig
     _no_split_modules = ["Qwen3TTSTokenizerMultiCodebookBlock"]
 
 
-# ─── Transformer model (decoder side) ────────────────────────────────────────
+#  Transformer model (decoder side)
 
 
-class Qwen3TTSTokenizerMultiCodebookDecoderTransformerModel(Qwen3TTSTokenizerMultiCodebookDecoderPreTrainedModel):
+class Qwen3TTSTokenizerMultiCodebookDecoderTransformerModel(Qwen3TTSTokenizerMultiCodebookCode2WavPreTrainedModel):
     def __init__(self, config: Qwen3TTSTokenizerMultiCodebookCode2WavConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
@@ -188,9 +198,8 @@ class Qwen3TTSTokenizerMultiCodebookDecoderTransformerModel(Qwen3TTSTokenizerMul
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "cache_position": cache_position,
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
@@ -221,14 +230,14 @@ class Qwen3TTSTokenizerMultiCodebookDecoderTransformerModel(Qwen3TTSTokenizerMul
         )
 
 
-# ─── Decoder block ────────────────────────────────────────────────────────────
+#  Decoder block
 
 
 class Qwen3TTSTokenizerMultiCodebookDecoderBlock(Qwen3OmniMoeCode2WavDecoderBlock):
     pass
 
 
-# ─── VQ / RVQ classes ────────────────────────────────────────────────────────
+#  VQ / RVQ classes
 
 
 class Qwen3TTSTokenizerMultiCodebookEuclideanCodebook(MimiEuclideanCodebook):
@@ -247,13 +256,13 @@ class Qwen3TTSTokenizerMultiCodebookSplitResidualVectorQuantizer(MimiSplitResidu
     pass
 
 
-# ─── Decoder ─────────────────────────────────────────────────────────────────
+#  Decoder
 
 
-class Qwen3TTSTokenizerMultiCodebookDecoder(Qwen3TTSTokenizerMultiCodebookDecoderPreTrainedModel):
+class Qwen3TTSTokenizerMultiCodebookDecoder(Qwen3TTSTokenizerMultiCodebookCode2WavPreTrainedModel):
     config_class = Qwen3TTSTokenizerMultiCodebookCode2WavConfig
 
-    def __init__(self, config: Qwen3TTSTokenizerMultiCodebookCode2WavConfig):
+    def __init__(self, config: config_class):
         super().__init__(config)
         self.total_upsample = int(np.prod(list(config.upsample_rates) + list(config.upsampling_ratios)))
         self.pre_transformer = Qwen3TTSTokenizerMultiCodebookDecoderTransformerModel._from_config(config)
@@ -327,7 +336,7 @@ class Qwen3TTSTokenizerMultiCodebookDecoder(Qwen3TTSTokenizerMultiCodebookDecode
         return torch.cat(wavs, dim=-1)
 
 
-# ─── Encoder (Mimi-based, encoder-only) ──────────────────────────────────────
+#  Encoder (Mimi-based, encoder-only)
 
 
 @auto_docstring(
@@ -346,7 +355,7 @@ class Qwen3TTSTokenizerMultiCodebookEncoderModel(MimiModel):
         self.upsample = None
 
 
-# ─── Top-level Model ──────────────────────────────────────────────────────────
+#  Top-level Model
 
 
 @auto_docstring
