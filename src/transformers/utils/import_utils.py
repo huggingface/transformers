@@ -1984,6 +1984,8 @@ MISTRAL_COMMON_IMPORT_ERROR = """
 
 TENSORFLOW_TEXT_IMPORT_ERROR = """
 {0} requires the tensorflow-text library but it was not found in your environment. You can install it with:
+`pip install tensorflow-text`
+Please note that you may need to restart your runtime after installation.
 """
 
 BACKENDS_MAPPING = OrderedDict(
@@ -2033,7 +2035,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("uvicorn", (is_uvicorn_available, UVICORN_IMPORT_ERROR)),
         ("openai", (is_openai_available, OPENAI_IMPORT_ERROR)),
         ("mistral-common", (is_mistral_common_available, MISTRAL_COMMON_IMPORT_ERROR)),
-        ("tensorflow_text", (is_tensorflow_text_available, "{0} requires the tensorflow_text library but it was not found in your environment.")),
+        ("tensorflow_text", (is_tensorflow_text_available, TENSORFLOW_TEXT_IMPORT_ERROR)),
     ]
 )
 
