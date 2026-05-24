@@ -154,8 +154,8 @@ if TYPE_CHECKING:
     from .fnet import *
     from .focalnet import *
     from .fsmt import *
-    from .funnel import *
     from .fun_asr_nano import *
+    from .funnel import *
     from .fuyu import *
     from .gemma import *
     from .gemma2 import *

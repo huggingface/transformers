@@ -13,10 +13,13 @@
 # limitations under the License.
 """Fun-ASR-Nano model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ..auto import CONFIG_MAPPING
 
 
+@strict
 class FunAsrNanoEncoderConfig(PreTrainedConfig):
     r"""
     Configuration class for the Fun-ASR-Nano audio encoder (SenseVoiceEncoderSmall / SANM architecture).
@@ -91,6 +94,7 @@ class FunAsrNanoEncoderConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
 
 
+@strict
 class FunAsrNanoAdaptorConfig(PreTrainedConfig):
     r"""
     Configuration class for the Fun-ASR-Nano audio adaptor (Transformer-based projector).
@@ -122,8 +126,6 @@ class FunAsrNanoAdaptorConfig(PreTrainedConfig):
     ```
     """
 
-    model_type = "fun_asr_nano_adaptor"
-
     def __init__(
         self,
         downsample_rate=1,
@@ -147,6 +149,7 @@ class FunAsrNanoAdaptorConfig(PreTrainedConfig):
         self.use_low_frame_rate = use_low_frame_rate
 
 
+@strict
 class FunAsrNanoCtcConfig(PreTrainedConfig):
     r"""
     Configuration class for the Fun-ASR-Nano CTC decoder (used for timestamp prediction).
@@ -178,8 +181,6 @@ class FunAsrNanoCtcConfig(PreTrainedConfig):
     ```
     """
 
-    model_type = "fun_asr_nano_ctc"
-
     def __init__(
         self,
         vocab_size=60515,
@@ -203,6 +204,7 @@ class FunAsrNanoCtcConfig(PreTrainedConfig):
         self.dropout_rate = dropout_rate
 
 
+@strict
 class FunAsrNanoConfig(PreTrainedConfig):
     r"""
     Configuration class for the Fun-ASR-Nano model.
